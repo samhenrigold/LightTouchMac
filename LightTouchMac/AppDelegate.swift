@@ -2,24 +2,37 @@
 
 import Cocoa
 
-@main
-class AppDelegate: NSObject, NSApplicationDelegate {
-
-    @IBOutlet var window: NSWindow!
-
-
-    func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Insert code here to initialize your application
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    
+    private var windowController: MainWindowController?
+    private var emulator: EmulatorController?
+    
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        MainMenuBuilder.install()
     }
-
-    func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
+    
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let emulator = EmulatorController(options: .resolved())
+        // Start before showing the window: the inspector checks the usbmux
+        // session in its viewDidLoad, which runs during showWindow.
+        emulator.start()
+        
+        let controller = MainWindowController(emulator: emulator)
+        controller.showWindow(nil)
+        
+        self.emulator = emulator
+        self.windowController = controller
     }
-
+    
+    func applicationWillTerminate(_ notification: Notification) {
+        emulator?.stop()
+    }
+    
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+    
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-        return true
+        true
     }
-
-
 }
-
