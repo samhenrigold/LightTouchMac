@@ -191,6 +191,8 @@ enum MainMenuBuilder {
         menu.addItem(.separator())
         menu.addItem(item("Save State Now", #selector(MainWindowController.saveStateNow(_:)), "s", [.control, .command]))
         menu.addItem(item("Discard Saved State", #selector(MainWindowController.discardSavedState(_:))))
+        menu.addItem(.separator())
+        menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
         return menu
     }
     

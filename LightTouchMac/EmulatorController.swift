@@ -52,7 +52,15 @@ final class EmulatorController {
 
         // One overlay per base image, so an overlay is never replayed onto a
         // different NAND (which would shadow unrelated blocks).
-        let overlay = stateDir.appendingPathComponent("nandrw-\(options.nand)", isDirectory: true)
+        let overlay = overlayURL
+        // A factory reset requested by the previous process: wipe the overlay
+        // (and any snapshot) now, in this fresh process, before it is reopened.
+        if FileManager.default.fileExists(atPath: resetMarkerURL.path) {
+            NSLog("reset: wiping device overlay back to the base image")
+            try? FileManager.default.removeItem(at: overlay)
+            try? FileManager.default.removeItem(at: resetMarkerURL)
+            discardSavedState()
+        }
         try? FileManager.default.createDirectory(at: overlay, withIntermediateDirectories: true)
 
         setBootEnv()
@@ -263,6 +271,10 @@ final class EmulatorController {
     private var snapshotURL: URL { stateDir.appendingPathComponent("snapshot-\(options.nand)") }
     private var snapshotTmpURL: URL { snapshotURL.appendingPathExtension("tmp") }
     private var snapshotBadURL: URL { snapshotURL.appendingPathExtension("bad") }
+    private var overlayURL: URL { stateDir.appendingPathComponent("nandrw-\(options.nand)", isDirectory: true) }
+    /// Set by a factory reset; the NEXT launch wipes the overlay before opening
+    /// it (the current process holds it open, so it can't wipe it itself).
+    private var resetMarkerURL: URL { stateDir.appendingPathComponent(".reset-\(options.nand)") }
     private var restoringFromSnapshot = false
 
     /// `-incoming file:…` when a trusted snapshot exists — unless ⌥Option is
@@ -362,9 +374,23 @@ final class EmulatorController {
     func discardSavedState() {
         try? FileManager.default.removeItem(at: snapshotURL)
         try? FileManager.default.removeItem(at: snapshotTmpURL)
+        try? FileManager.default.removeItem(at: snapshotBadURL)
     }
 
-    var hasSavedState: Bool { FileManager.default.fileExists(atPath: snapshotURL.path) }
+    var hasSavedState: Bool {
+        FileManager.default.fileExists(atPath: snapshotURL.path)
+            || FileManager.default.fileExists(atPath: snapshotBadURL.path)
+    }
+
+    /// The full nuke: erase the device back to the base image. The overlay is
+    /// open in this process, so mark it for the next launch, drop any snapshot,
+    /// and cold-relaunch — start() does the wipe before reopening. Destructive
+    /// and deliberate (caller confirms); the base NAND image is never touched.
+    func requestFactoryReset() {
+        discardSavedState()
+        try? "reset".write(to: resetMarkerURL, atomically: true, encoding: .utf8)
+        coldRelaunch()
+    }
 
     private func quarantineSnapshot() {
         try? FileManager.default.removeItem(at: snapshotBadURL)

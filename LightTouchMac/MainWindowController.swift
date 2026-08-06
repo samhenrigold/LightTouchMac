@@ -337,6 +337,23 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         alert.informativeText = "The next launch will cold-boot the device. The device's own data is untouched."
         alert.beginSheetModal(for: window!) { _ in }
     }
+
+    /// Factory-reset the device — the "nuke everything" button. Wipes the NAND
+    /// overlay (all installed apps + settings) and any snapshot, back to the
+    /// base image, then relaunches. The base image is never touched.
+    @objc func eraseDevice(_ sender: Any?) {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Erase all content and settings?"
+        alert.informativeText = "This wipes everything on the device — installed apps, settings, saved state — back to a clean iOS 3.1.3, and relaunches the app. This cannot be undone."
+        alert.addButton(withTitle: "Erase")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.beginSheetModal(for: window!) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.emulator.requestFactoryReset()
+        }
+    }
     
     @objc func installApp(_ sender: Any?) {
         let panel = NSOpenPanel()
@@ -467,6 +484,7 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState
+        case #selector(eraseDevice(_:)): return !emulator.isDead
         case #selector(copyScreen(_:)):   return !emulator.isDead
         case #selector(pasteToGuest(_:)):
             return emulator.acceptsInput && NSPasteboard.general.string(forType: .string) != nil
