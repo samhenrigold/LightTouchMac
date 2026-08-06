@@ -148,17 +148,30 @@ def check_snapshot_roundtrip():
         check("snap-restore", ok and dt < 60,
               f"home in {dt:.0f}s (restored)" if ok else f"restore failed: {detail}")
 
-        # Negative: a truncated snapshot must be DETECTABLE (qemu exits / never
-        # reaches home) — the app keys its quarantine on exactly this, so a bad
-        # snapshot can never silently loop.
+        # Negative: a truncated snapshot must be DETECTABLE — the app keys its
+        # quarantine on exactly this, so a bad snapshot can never silently loop.
+        # A bad -incoming makes qemu exit almost immediately (so QMP never even
+        # accepts a connection); that early exit IS the detection. Spawn qemu
+        # directly and assert it dies rather than reaching a live home screen.
         bad = os.path.join(out, "bad.migrate")
         with open(snapshot, "rb") as f, open(bad, "wb") as g:
             g.write(f.read(4096))   # header only — not a valid stream
-        b = boot(cfg, procs, "badrestore", incoming=bad)
-        ok, _, _ = b.wait_for_home(45)
-        check("snap-bad-detected", not ok,
-              "truncated snapshot fails to reach home (quarantinable)"
-              if not ok else "BAD: a truncated snapshot reached home")
+        machine = ("iPod-Touch,bootrom=%s/bootrom_240_4,nand=%s,nor=%s,nandrw=%s"
+                   % (cfg.files, cfg.base_nand, cfg.nor, cfg.overlay))
+        argv = [cfg.qemu, "-M", machine, "-m", cfg.mem, "-display", "none",
+                "-audio", "driver=none",
+                "-serial", "file:" + os.path.join(out, "badrestore-serial.log"),
+                "-incoming", "file:" + bad]
+        bp = procs.spawn(argv, os.path.join(out, "badrestore-qemu.log"), env=R.boot_env(cfg))
+        exited = False
+        for _ in range(45):
+            if bp.poll() is not None:
+                exited = True
+                break
+            time.sleep(1)
+        check("snap-bad-detected", exited,
+              "truncated snapshot makes qemu exit (quarantinable — no silent loop)"
+              if exited else "BAD: qemu stayed up on a truncated snapshot")
     finally:
         procs.stop_all()
 
