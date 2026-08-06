@@ -20,7 +20,11 @@ import Foundation
 final class GuestNotifications {
 
     /// What the guest actually publishes on 3.1.3.
-    private static let observed = [
+    ///
+    /// nonisolated, like everything else the session touches: `observeOnce`
+    /// runs on a detached thread and the C callback on libimobiledevice's own,
+    /// so none of this may be main-actor bound.
+    nonisolated private static let observed = [
         "com.apple.mobile.application_installed",
         "com.apple.mobile.application_uninstalled",
     ]
@@ -29,7 +33,7 @@ final class GuestNotifications {
     private let socket: String
     /// Handed to the C callback; retained for the session's whole life and
     /// released only after np_client_free has joined the callback thread.
-    private final class Sink: @unchecked Sendable {
+    nonisolated private final class Sink: @unchecked Sendable {
         let fire: @Sendable () -> Void
         init(_ fire: @escaping @Sendable () -> Void) { self.fire = fire }
     }
@@ -38,7 +42,7 @@ final class GuestNotifications {
 
     /// The C callback runs on libimobiledevice's own thread: decode nothing,
     /// block on nothing, just hand off.
-    private static let callback: IMobileDevice.NpNotifyCB = { _, userData in
+    nonisolated private static let callback: IMobileDevice.NpNotifyCB = { _, userData in
         guard let userData else { return }
         Unmanaged<Sink>.fromOpaque(userData).takeUnretainedValue().fire()
     }
