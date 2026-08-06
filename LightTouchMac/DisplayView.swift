@@ -166,19 +166,6 @@ final class DisplayView: NSView {
     override var isFlipped: Bool { true }          // y-down, matching the guest
     override var acceptsFirstResponder: Bool { true }
 
-    // A focus ring so keyboard-only users can tell the device has focus (key
-    // events forward to the guest only when it does). Layer-backed, so the ring
-    // is a mask and must be re-noted when first-responder status changes.
-    override func becomeFirstResponder() -> Bool { noteFocusRingMaskChanged(); return true }
-    override func resignFirstResponder() -> Bool { noteFocusRingMaskChanged(); return true }
-    override var focusRingMaskBounds: NSRect {
-        window?.firstResponder === self ? bounds : .zero
-    }
-    override func drawFocusRingMask() {
-        guard window?.firstResponder === self else { return }
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8).fill()
-    }
-
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard window != nil, displayLink == nil else { return }

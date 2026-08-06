@@ -105,8 +105,11 @@ final class EmulatorController {
             cargs.append(nil)
             let rc = qemu_ios_main(Int32(argv.count), &cargs)
             // qemu_ios_main only returns when the VM stops. Observe it — a
-            // discarded return is why a dead emulator looked alive.
-            DispatchQueue.main.async { [weak self] in self?.qemuDidExit(code: rc) }
+            // discarded return is why a dead emulator looked alive. self is the
+            // app-lifetime controller and the thread ends right after this, so a
+            // strong capture just bridges the hop to main (weak here only warred
+            // with the outer closure's implicit strong capture).
+            DispatchQueue.main.async { self.qemuDidExit(code: rc) }
         }
         thread.name = "qemu-main"
         thread.qualityOfService = .userInteractive
@@ -277,9 +280,27 @@ final class EmulatorController {
     private var resetMarkerURL: URL { stateDir.appendingPathComponent(".reset-\(options.nand)") }
     private var restoringFromSnapshot = false
 
+    /// UserDefaults key for the Settings toggle. Default OFF: restoring a
+    /// snapshot re-attaches a guest whose host-side USB session is gone, which
+    /// wedges it a few seconds in — a worse failure than a cold boot. Resume is
+    /// opt-in until that host/guest USB-coherence gap is closed.
+    static let resumeDefaultsKey = "resumeOnLaunch"
+    static var resumeOnLaunch: Bool {
+        UserDefaults.standard.object(forKey: resumeDefaultsKey) as? Bool ?? false
+    }
+    /// Set when the user explicitly discards saved state, so the very next quit
+    /// doesn't silently re-save the current guest and drop them right back into
+    /// the state they just cleared (the "discard doesn't stick" bug).
+    private var skipNextQuitSnapshot = false
+
     /// `-incoming file:…` when a trusted snapshot exists — unless ⌥Option is
     /// held at launch, the muscle-memory escape from a bad saved state.
     private func restoreArgs(overlay: URL) -> [String] {
+        if !EmulatorController.resumeOnLaunch {
+            NSLog("snapshot: resume disabled in Settings — cold boot, discarding saved state")
+            discardSavedState()
+            return []
+        }
         if NSEvent.modifierFlags.contains(.option) {
             NSLog("snapshot: Option held at launch — cold boot, ignoring saved state")
             discardSavedState()
@@ -300,8 +321,16 @@ final class EmulatorController {
             while Date() < deadline {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
-                if self.framesRecentlyAdvanced { return }        // alive
-                if await self.deviceReady() { return }           // alive
+                // deviceReady ONLY — deliberately not framesRecentlyAdvanced.
+                // Consuming the incoming stream repaints the framebuffer, which
+                // advances the frame serial at t≈0 of the restore, so the frame
+                // signal reported "alive" on the first poll before the vCPU had
+                // proven it can execute at all. That made the self-heal a no-op
+                // for the exact failure it was written for (restore paints the
+                // home screen, then wedges), so a bad snapshot looped forever
+                // instead of healing. Answering the device probe requires the
+                // guest to actually be running code.
+                if await self.deviceReady() { return }
             }
             guard let self, !self.isDead else { return }
             NSLog("snapshot: restored state never came alive — quarantining, cold-booting")
@@ -324,7 +353,17 @@ final class EmulatorController {
             if self.framesRecentlyAdvanced { healthy = true }
             else { healthy = await self.deviceReady() }
             guard healthy else {
-                NSLog("snapshot: guest not healthy — skipping save, keeping last good snapshot")
+                // Do NOT keep the older snapshot. The NAND overlay is not part
+                // of the snapshot and every guest write since it was taken is
+                // already durable (fmss_store_page renames per page), so an old
+                // snapshot restored now would put stale RAM — stale HFS journal,
+                // buffer cache, inode state — on top of a NAND that has moved
+                // on. That is corruption, not just a wedge. qemuDidExit already
+                // discards for exactly this reason; the health-gate path must
+                // agree. Quarantine (never delete the overlay) so it stays
+                // diagnosable and the next launch cold-boots.
+                NSLog("snapshot: guest not healthy — quarantining stale snapshot, next launch cold-boots")
+                self.quarantineSnapshot()
                 completion(false); return
             }
             self.state = .snapshotting
@@ -336,6 +375,16 @@ final class EmulatorController {
                 var buf = [CChar](repeating: 0, count: 256)
                 let status = qemu_ios_snapshot_status(&buf, 256)
                 if status == QEMU_IOS_SNAPSHOT_DONE {
+                    // Never destroy a good snapshot for a save that produced no
+                    // file: a premature DONE once deleted the saved state and
+                    // renamed a .tmp that did not exist, reporting success.
+                    // Promote only what actually exists and has bytes.
+                    let size = (try? FileManager.default
+                        .attributesOfItem(atPath: self.snapshotTmpURL.path))?[.size] as? Int ?? 0
+                    guard size > 0 else {
+                        NSLog("snapshot: reported DONE with no output — keeping existing snapshot")
+                        completion(false); return
+                    }
                     // Atomic promote: a torn snapshot must never shadow a good one.
                     try? FileManager.default.removeItem(at: self.snapshotURL)
                     try? FileManager.default.moveItem(at: self.snapshotTmpURL, to: self.snapshotURL)
@@ -358,19 +407,46 @@ final class EmulatorController {
     /// or not a snapshot was written (worst case is today's behaviour: a cold
     /// boot next launch).
     func beginQuitSnapshot(completion: @escaping (Bool) -> Void) {
+        // Respect the user's intent: resume turned off, or a just-issued discard.
+        // Either way, saving now would resurrect exactly the state they don't want.
+        guard EmulatorController.resumeOnLaunch, !skipNextQuitSnapshot else {
+            NSLog("snapshot: skipping quit-save (resume off or state discarded)")
+            completion(false); return
+        }
         performSnapshot(completion: completion)
     }
 
     /// Menu ▸ Save State Now: save, then resume the vCPU (the save stops it).
     func saveSnapshotNow() {
+        skipNextQuitSnapshot = false   // an explicit save clears a prior discard
         performSnapshot { [weak self] _ in
+            guard let self else { return }
+            // Only un-stop what THIS save stopped. Flipping to .running
+            // unconditionally resurrected a VM that died during the save: the
+            // dead-overlay vanished and input went to a process with no VM —
+            // exactly the "dead emulator looked alive" failure .dead exists to
+            // prevent. It also silently un-paused a deliberately paused guest.
+            guard self.state == .snapshotting else { return }
             qemu_ios_snapshot_resume()
-            self?.state = .running
+            self.state = .running
         }
     }
 
-    /// Menu ▸ Discard Saved State, and the ⌥/coherence paths. Removes the
-    /// snapshot and its quarantine — never the overlay.
+    /// The user explicitly chose Discard Saved State. Arms the quit guard so the
+    /// next quit won't re-save — otherwise discarding then quitting recreates
+    /// the snapshot and the next launch resumes it anyway.
+    ///
+    /// Separate from `discardSavedState()` on purpose: the automatic callers
+    /// (resume-off at launch, ⌥, the exited-VM coherence rule) must NOT latch
+    /// it. When resume-off latched the flag at launch, ticking "resume" on in
+    /// Settings couldn't take effect until the launch after next — the setting
+    /// read as broken and the log blamed a discard the user never performed.
+    func discardSavedStateByUser() {
+        skipNextQuitSnapshot = true
+        discardSavedState()
+    }
+
+    /// Removes the snapshot and its quarantine — never the overlay.
     func discardSavedState() {
         try? FileManager.default.removeItem(at: snapshotURL)
         try? FileManager.default.removeItem(at: snapshotTmpURL)
@@ -397,12 +473,23 @@ final class EmulatorController {
         try? FileManager.default.moveItem(at: snapshotURL, to: snapshotBadURL)
     }
 
+    /// Relaunch, with THIS process fully gone before the next one starts.
+    ///
+    /// Launching first and terminating in the completion handler overlapped the
+    /// two: the callback fires only after the new instance is up, by which point
+    /// its start() has already wiped and reopened the overlay — while this
+    /// process's QEMU was still writing pages into that same directory. A
+    /// factory reset could therefore keep orphan pages from the pre-erase
+    /// filesystem, and the new instance's usbmuxd reaper would SIGTERM the old,
+    /// still-live daemon. `open -n` detached with a short delay lets us exit
+    /// first; the successor owns the overlay alone.
     private func coldRelaunch() {
-        let config = NSWorkspace.OpenConfiguration()
-        config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
-            DispatchQueue.main.async { NSApp.terminate(nil) }
-        }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c",
+                          "sleep 1; open -n \"$1\"", "sh", Bundle.main.bundleURL.path]
+        try? task.run()
+        NSApp.terminate(nil)
     }
     
     // MARK: - App management
@@ -422,9 +509,19 @@ final class EmulatorController {
     
     /// Cheap in-process check that the guest is attached and lockdownd is
     /// answering, without spawning a tool to find out the hard way.
+    /// Bounded and gated. A bare `Task.detached` here had neither: `idevice_new`
+    /// against a half-open usbmuxd socket blocks with no timeout, and this is
+    /// called from the quit-time snapshot health gate and the restore verifier —
+    /// so a wedged socket hung the quit itself. `withDeadline` abandons the
+    /// blocked thread; the gate keeps it from racing other device work.
     func deviceReady() async -> Bool {
         guard let socket = usbmux.session?.clientSocket else { return false }
-        return await Task.detached { IMobileDevice.deviceReady(socket: socket) }.value
+        let ok = try? await DeviceGate.shared.serialized {
+            try await withDeadline(Timeouts.serviceProbe, "device probe") {
+                IMobileDevice.deviceReady(socket: socket)
+            }
+        }
+        return ok ?? false
     }
 
     func installedApps() async throws -> [InstalledApp] { try await tools().installedApps() }

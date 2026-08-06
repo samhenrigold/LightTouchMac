@@ -42,9 +42,8 @@ enum MainMenuBuilder {
         let menu = NSMenu(title: appName)
         menu.addItem(item("About \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
         menu.addItem(.separator())
-        // No "Settings…": there is no preferences window (the app is configured
-        // by launch options / env), and a permanently-disabled item bound to
-        // ⌘, reads as broken.
+        menu.addItem(item("Settings…", #selector(AppDelegate.showSettings(_:)), ","))
+        menu.addItem(.separator())
         let services = NSMenu(title: "Services")
         menu.addItem(submenu(services, title: "Services"))
         NSApp.servicesMenu = services

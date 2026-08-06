@@ -109,7 +109,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.alignment = .right
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        let host = NSView()
+        // A real starting width, so the autoresizing mask contributes width==180
+        // (not width==0) and never fights the label's edge pins at first layout.
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 180, height: 24))
         host.addSubview(statusLabel)
         NSLayoutConstraint.activate([
             statusLabel.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 8),
@@ -331,7 +333,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     // so a menu item for it is a trap that wedges the guest at 100% CPU.
     @objc func saveStateNow(_ sender: Any?) { emulator.saveSnapshotNow() }
     @objc func discardSavedState(_ sender: Any?) {
-        emulator.discardSavedState()
+        emulator.discardSavedStateByUser()
         let alert = NSAlert()
         alert.messageText = "Saved state discarded"
         alert.informativeText = "The next launch will cold-boot the device. The device's own data is untouched."

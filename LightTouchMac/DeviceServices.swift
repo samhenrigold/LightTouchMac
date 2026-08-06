@@ -118,7 +118,11 @@ struct DeviceServices: Sendable {
     /// Upload the .ipa into the AFC jail and return its device-relative path,
     /// which is what instproxy_install wants. Chunked so progress is live.
     func stage(_ ipa: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> String {
-        let data = try Data(contentsOf: ipa)
+        // Mapped, not read: this line runs on the main actor (the type is
+        // implicitly @MainActor), so a plain read beachballed the UI for the
+        // whole of a large .ipa and spiked resident memory by its full size.
+        // Mapping defers the I/O to page faults taken on the detached AFC thread.
+        let data = try Data(contentsOf: ipa, options: .mappedIfSafe)
         let remote = "PublicStaging/\(Self.stagingName(ipa))"
         return try await run(Timeouts.stage, "upload") { imd, device in
             guard let start = imd.afc_client_start_service,
@@ -195,7 +199,7 @@ struct DeviceServices: Sendable {
         }
     }
 
-    private final class InstallContext {
+    nonisolated private final class InstallContext {
         let box: SyncBox
         let progress: @Sendable (Int, String) -> Void
         init(_ box: SyncBox, _ progress: @escaping @Sendable (Int, String) -> Void) {
@@ -205,7 +209,7 @@ struct DeviceServices: Sendable {
 
     /// The C status callback runs on libimobiledevice's updater thread. It only
     /// decodes and hands off — nothing that could block or throw.
-    private static let installCallback: IMobileDevice.InstproxyStatusCB = { _, status, userData in
+    nonisolated private static let installCallback: IMobileDevice.InstproxyStatusCB = { _, status, userData in
         guard let userData, let status else { return }
         let ctx = Unmanaged<InstallContext>.fromOpaque(userData).takeUnretainedValue()
         let imd = IMobileDevice.self
@@ -235,8 +239,8 @@ struct DeviceServices: Sendable {
         ctx.progress(Int(percent), name)
     }
 
-    private static func blockingInstall(socket: String, stagedPath: String,
-                                        progress: @escaping @Sendable (Int, String) -> Void) throws {
+    nonisolated private static func blockingInstall(socket: String, stagedPath: String,
+                                                    progress: @escaping @Sendable (Int, String) -> Void) throws {
         let imd = IMobileDevice.self
         guard imd.isAvailable, let idevice_new = imd.idevice_new,
               let start = imd.instproxy_client_start_service,
@@ -267,12 +271,16 @@ struct DeviceServices: Sendable {
         // handles are leaked deliberately rather than freed under it.
         let terminal = box.wait(idle: Timeouts.installIdle, absolute: Timeouts.installAbsolute)
         switch terminal {
+        // Free the client FIRST: that is what joins libimobiledevice's status
+        // updater thread. Releasing the context before the join deallocates it
+        // under a thread that may still fire one more callback, and the callback
+        // does takeUnretainedValue → a write through a freed NSCondition.
         case .done:
-            Unmanaged<InstallContext>.fromOpaque(ctxPtr).release()
             _ = imd.instproxy_client_free?(client); _ = imd.idevice_free?(device)
+            Unmanaged<InstallContext>.fromOpaque(ctxPtr).release()
         case .failed(let e, let desc):
-            Unmanaged<InstallContext>.fromOpaque(ctxPtr).release()
             _ = imd.instproxy_client_free?(client); _ = imd.idevice_free?(device)
+            Unmanaged<InstallContext>.fromOpaque(ctxPtr).release()
             throw DeviceError.instproxy(e, phase: desc)
         case nil:
             throw DeviceError.timedOut(operation: "install")   // leak; gate bounds it
@@ -333,16 +341,52 @@ struct DeviceServices: Sendable {
 /// call ignores cancellation, so on a timeout the detached task keeps running
 /// until the call returns and its result is discarded — the deliberate leak the
 /// serial gate bounds to one.
+/// The race MUST be unstructured. A task group awaits every child before its
+/// scope unwinds — and `await Task.detached{}.value` is not interrupted by
+/// cancellation — so racing inside a group produced the timeout error but then
+/// blocked until the C call returned anyway: the deadline never actually fired,
+/// and a wedged guest held the serial gate forever (every later device op
+/// queued behind it with no error, looking like "buttons do nothing").
+/// Resume-once + a detached worker is what genuinely leaves the thread behind.
 func withDeadline<T: Sendable>(_ seconds: Double, _ operation: String,
                                _ work: @escaping @Sendable () throws -> T) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask { try await Task.detached { try work() }.value }
-        group.addTask {
-            try await Task.sleep(for: .seconds(seconds))
-            throw DeviceError.timedOut(operation: operation)
+    let once = ResumeOnce<T>()
+    Task.detached {
+        do { once.resume(.success(try work())) }
+        catch { once.resume(.failure(error)) }
+    }
+    Task.detached {
+        try? await Task.sleep(for: .seconds(seconds))
+        once.resume(.failure(DeviceError.timedOut(operation: operation)))
+    }
+    return try await withCheckedThrowingContinuation { once.attach($0) }
+}
+
+/// First result wins; the rest are dropped. Handles the result landing before
+/// the continuation attaches (a fast op) and vice versa (the normal case).
+private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pending: Result<T, Error>?
+    private var cont: CheckedContinuation<T, Error>?
+    private var done = false
+
+    func attach(_ c: CheckedContinuation<T, Error>) {
+        lock.lock()
+        if let pending, !done {
+            done = true; lock.unlock(); c.resume(with: pending); return
         }
-        defer { group.cancelAll() }
-        return try await group.next()!
+        cont = c
+        lock.unlock()
+    }
+
+    func resume(_ result: Result<T, Error>) {
+        lock.lock()
+        guard !done else { lock.unlock(); return }
+        if let c = cont {
+            done = true; cont = nil; lock.unlock(); c.resume(with: result); return
+        }
+        if pending == nil { pending = result }
+        lock.unlock()
     }
 }
 
@@ -352,7 +396,7 @@ func withDeadline<T: Sendable>(_ seconds: Double, _ operation: String,
 /// install thread. `wait` blocks until a terminal result or until the callback
 /// has gone quiet for `idle` seconds — the watchdog that bounds the otherwise
 /// unbounded installd wait. NSCondition, because both sides are plain threads.
-final class SyncBox: @unchecked Sendable {
+nonisolated final class SyncBox: @unchecked Sendable {
     enum Terminal { case done, failed(InstproxyError, String) }
     private let cond = NSCondition()
     private var lastActivity = Date()
@@ -402,7 +446,7 @@ actor DeviceGate {
 
 // MARK: - Errors
 
-enum DeviceError: Error, LocalizedError {
+nonisolated enum DeviceError: Error, LocalizedError {
     case unavailable                                   // library not loaded
     case notAttached                                   // idevice_new failed
     case lockdown(Int32)
@@ -446,7 +490,7 @@ enum DeviceError: Error, LocalizedError {
 
 /// installation_proxy error codes (installation_proxy.h). Only the ones the
 /// retry policy keys on are named; everything else is `.other`.
-enum InstproxyError: Equatable, CustomStringConvertible {
+nonisolated enum InstproxyError: Equatable, CustomStringConvertible {
     case success, connFailed, opInProgress, opFailed, receiveTimeout
     case packageExtractionFailed, alreadyInstalled
     case other(Int32)
@@ -483,7 +527,7 @@ enum InstproxyError: Equatable, CustomStringConvertible {
 }
 
 /// AFC error codes (afc.h). Named subset; the rest is `.other`.
-enum AFCError: Equatable, CustomStringConvertible {
+nonisolated enum AFCError: Equatable, CustomStringConvertible {
     case success, opTimeout, noMem, internalError, other(Int32)
     init(code: Int32) {
         switch code {
@@ -508,7 +552,7 @@ enum AFCError: Equatable, CustomStringConvertible {
 
 // MARK: - Timeouts (the calibration knob — emulated-hardware speed varies)
 
-enum Timeouts {
+nonisolated enum Timeouts {
     static var serviceProbe: Double = 5
     static var browse: Double = 20
     static var uninstall: Double = 120

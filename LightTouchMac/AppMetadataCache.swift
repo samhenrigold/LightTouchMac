@@ -123,6 +123,18 @@ final class AppMetadataCache {
         return name
     }
     
+    /// The archive path of the app's main binary, e.g.
+    /// "Payload/CubeRunner.app/CubeRunner" — what the exec-bit repair needs to
+    /// know before staging. Same Info.plist read as learn().
+    static func executableMember(of ipa: URL) async -> String? {
+        let members = await Self.members(ipa)
+        guard let root = Self.appRoot(members),
+              let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let exe = info["CFBundleExecutable"] as? String else { return nil }
+        return root + exe
+    }
+
     /// The SDK the .ipa was built against (e.g. "iphoneos6.1"), for the
     /// too-new-to-launch check. Reuses the same Info.plist read as learn().
     func sdkName(from ipa: URL) async -> String? {

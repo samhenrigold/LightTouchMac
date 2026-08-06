@@ -89,6 +89,13 @@ struct DeviceTools: Sendable {
         let sdkMarker = Self.sdkTooNew(sdk) ? "\nnewer than the device's SDK" : ""
 
         if bakedGuestTools {
+            // An .ipa whose binary is archived 0644 installs fine and then never
+            // launches: posix_spawn fails EACCES, SpringBoard logs only "exited
+            // abnormally", the icon bounces once and NO crash report is written
+            // — it reads as an emulator bug. install-ipa.sh repacks it 0755;
+            // the in-process path skipped that, so every 2009-era .ipa of this
+            // shape (Cube Runner among them) regressed on the default image.
+            let ipa = await Self.execBitRepaired(ipa) ?? ipa
             let bytes = (try? FileManager.default.attributesOfItem(atPath: ipa.path)[.size] as? Int) ?? 0
             let free = try await services.freeSpaceBytes()
             let needed = Int64(bytes) * 2 + (16 << 20)
@@ -108,6 +115,38 @@ struct DeviceTools: Sendable {
             return "installed" + sdkMarker
         }
         return try await installViaScript(ipa, progress: progress) + sdkMarker
+    }
+
+    /// If the .ipa stores its main binary without the exec bit, a copy repacked
+    /// 0755 (via the bundled ipod-helper, the same tool install-ipa.sh uses);
+    /// nil if no repair is needed or anything is unreadable — callers fall back
+    /// to the original, which is exactly today's behaviour.
+    private static func execBitRepaired(_ ipa: URL) async -> URL? {
+        guard let member = await AppMetadataCache.executableMember(of: ipa),
+              let helper = Bundled.tool("ipod-helper") else { return nil }
+        // `unzip -Z` long listing: the mode string is the first field and the
+        // member the last, e.g. "-rw-r--r--  2.0 unx  … Payload/X.app/X".
+        guard let listing = try? await run(
+            .path(FilePath("/usr/bin/unzip")), arguments: ["-Z", ipa.path],
+            output: .string(limit: 1 << 22), error: .discarded).standardOutput,
+              let line = listing.split(separator: "\n").first(where: {
+                  $0.hasSuffix(" " + member)
+              }),
+              let mode = line.split(separator: " ").first,
+              mode.count >= 4, !mode.contains("x")
+        else { return nil }
+
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ltm-fixed-\(UUID().uuidString)")
+            .appendingPathExtension("ipa")
+        guard let rc = try? await run(
+            .path(FilePath(helper)),
+            arguments: ["ipa-chmod", ipa.path, out.path, member],
+            output: .discarded, error: .discarded).terminationStatus,
+              rc.isSuccess,
+              FileManager.default.fileExists(atPath: out.path) else { return nil }
+        NSLog("install: \(member) archived non-executable — repacked 0755")
+        return out
     }
 
     /// Whether a DTSDKName like "iphoneos6.1" is newer than 3.1.3. iOS refuses
