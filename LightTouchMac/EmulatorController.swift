@@ -728,57 +728,74 @@ final class EmulatorController {
         performSnapshot(completion: completion)
     }
 
-    /// Shut the guest down properly on quit. `completion(true)` means the guest
-    /// really did unmount, not that we asked it to.
+    /// Shut the guest's filesystem down on quit. `completion(true)` means it
+    /// actually happened, not that we asked.
     ///
-    /// This works now, which it did not for the whole life of this project. The
-    /// guest always ran its full shutdown -- gesture, rails down, interrupts
-    /// masked, root volume UNMOUNTED -- and then waited for the power to go;
-    /// nothing in the emulated PMU answered the standby write it ends on, so it
-    /// waited forever and was killed on a live filesystem. qemu-ios commit
-    /// feb556f4 answers it, and the guest now halts by itself in about 14
-    /// seconds. qemu-ios' regression suite went green on the same change:
-    /// `persist` -- a file surviving a clean shutdown and a reboot -- passes for
-    /// the first time.
+    /// Through the KERNEL, not the UI. The machine model turns
+    /// `system_powerdown` into a synthetic press-and-hold plus a slide across
+    /// SpringBoard's power-off sheet, and that only works while the UI is
+    /// healthy — which is not when a shutdown gets asked for. Measured: a
+    /// powerdown requested while a full-screen GL app was foreground never
+    /// completed; the same build powers off in 14s from the home screen. A game
+    /// that has hung is not going to draw the slider, and that is exactly when
+    /// the user reaches for ⌘Q.
     ///
-    /// So the order here is: `sync` first, then the powerdown.
+    /// `ithalt` (contrib/it-halt) calls reboot(RB_HALT): XNU syncs, runs
+    /// vfs_unmountall(), and halts. Nothing has to cooperate and nothing has to
+    /// be drawn. Verified on nand-ultimate — the helper reports "syncing and
+    /// halting", the guest takes the system down (ssh is closed from the remote
+    /// end), and an app installed that session is still installed after the VM
+    /// is killed and rebooted.
     ///
-    /// The sync is not redundant. Measured on nand-ultimate, install an app
-    /// through installd and then SIGKILL: without a sync the app is GONE on the
-    /// next boot (0/1), with one it survives (1/1) -- 74 MB of its data was on
-    /// flash the whole time and only the directory entry was missing. That is
-    /// the failure mode if anything goes wrong with the shutdown below, so it
-    /// costs a few seconds to make the unmount unnecessary rather than critical.
+    /// The unmount is what commits the HFS+ catalog, which 3.1.3 otherwise
+    /// keeps in memory: without one, an app installed this session can be GONE
+    /// next boot (measured 0/1) even though all 74 MB of it reached flash.
     ///
-    /// Waiting for `.dead` is the honest signal: QEMU exits on its own once the
-    /// PMU cuts the rails, and that transition is already observed. An earlier
-    /// version watched for the framebuffer to go quiet instead and called that
-    /// "flushed", which was a guess dressed up as a measurement.
+    /// Order of preference, best first:
+    ///   1. ithalt — kernel unmount, no UI involvement at all.
+    ///   2. sync — no unmount, but enough to keep this session's installs
+    ///      (measured 1/1). Reached when the helper is missing.
+    ///   3. the powerdown gesture — needs a healthy SpringBoard, so it is the
+    ///      last resort, not the plan. Only when there is no ssh channel at all.
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
         guard !isDead, state != .notStarted else { completion(false); return }
-        // A stopped vCPU cannot run the shutdown. Pause, or a save that stopped
+        // A stopped vCPU cannot run any of this. Pause, or a save that stopped
         // it, used to make this give up silently — and giving up here is the one
         // failure that costs the user data.
         qemu_ios_snapshot_resume()   // no-op if already running
         state = .running
+
         Task { [weak self] in
             guard let self else { completion(false); return }
 
             if self.canManageApps {
-                let synced = await withSoftDeadline(20) { () -> Bool in
-                    do { try await self.syncFilesystem(); return true }
+                let halted = await withSoftDeadline(30) { () -> Bool in
+                    do { try await self.haltFilesystem(); return true }
                     catch {
-                        NSLog("quit: sync failed (\(error.localizedDescription))")
+                        NSLog("quit: halt helper unavailable (\(error.localizedDescription))")
                         return false
                     }
                 } ?? false
-                NSLog(synced ? "quit: guest sync complete" : "quit: guest sync did not complete")
+                if halted {
+                    // The helper does not return until the guest is going down;
+                    // give the unmount a moment to finish behind it.
+                    NSLog("quit: guest halted — volume unmounted")
+                    try? await Task.sleep(for: .seconds(2))
+                    completion(true); return
+                }
+                let synced = await withSoftDeadline(20) { () -> Bool in
+                    (try? await self.syncFilesystem()) != nil
+                } ?? false
+                if synced {
+                    NSLog("quit: no halt helper, but the guest synced — installs are safe")
+                    completion(true); return
+                }
             }
 
-            NSLog("quit: powering the guest down so it unmounts")
+            // No ssh channel at all. Fall back to the gesture, which is the only
+            // remaining option and needs SpringBoard to be alive and drawing.
+            NSLog("quit: falling back to the power-off gesture (needs a healthy UI)")
             qemu_ios_ui_powerdown()
-            // ~14s in practice; 40 leaves room for a loaded host without being a
-            // wait the user cannot predict the end of.
             let deadline = Date().addingTimeInterval(40)
             while Date() < deadline {
                 try? await Task.sleep(for: .milliseconds(200))
@@ -787,8 +804,7 @@ final class EmulatorController {
                     completion(true); return
                 }
             }
-            // The sync above is why this is a disappointment rather than a loss.
-            NSLog("quit: guest did not power off in time — quitting anyway")
+            NSLog("quit: guest did not shut down — this session's writes may be lost")
             completion(false)
         }
     }
@@ -941,6 +957,7 @@ final class EmulatorController {
     func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
     func openTerminal() async throws                     { try await tools().openTerminal() }
     func syncFilesystem() async throws                   { try await tools().syncFilesystem() }
+    func haltFilesystem() async throws                   { try await tools().haltFilesystem() }
     func restartSpringBoard() async throws               { try await tools().restartSpringBoard() }
 
     /// True while any install is running — the quit guard reads this so ⌘Q

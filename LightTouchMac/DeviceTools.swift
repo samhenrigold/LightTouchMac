@@ -335,11 +335,44 @@ struct DeviceTools: Sendable {
         try await guestRun("killall SpringBoard")
     }
 
-    /// Push the guest's dirty buffers to flash. The one durability step on the
-    /// quit path that is actually known to execute — see
-    /// EmulatorController.beginCleanShutdown for why the powerdown is not.
+    /// Push the guest's dirty buffers to flash.
     func syncFilesystem() async throws {
         try await guestRun("sync")
+    }
+
+    /// Shut the guest's filesystem down through the kernel: sync, unmount
+    /// everything, halt. No SpringBoard, no gesture, nothing drawn.
+    ///
+    /// The alternative — the machine model's synthetic press-and-hold plus a
+    /// slide across the power-off sheet — only works while the UI is healthy,
+    /// which is not when a shutdown gets asked for. Measured: a powerdown
+    /// requested while a full-screen GL app was foreground never completed,
+    /// while the same build powers off in 14s from the home screen. A hung game
+    /// is not going to draw the slider.
+    ///
+    /// `reboot(2)` needs nobody's cooperation: XNU syncs, calls
+    /// vfs_unmountall() and halts. /sbin/halt does not exist on these images,
+    /// so the helper is a 20-line armv6 binary streamed in and exec'd from
+    /// /tmp, exactly the way the orientation reporter is.
+    ///
+    /// Throws if the helper is missing or ssh cannot reach the guest — the
+    /// caller falls back from there. Note that a SUCCESSFUL halt kills the
+    /// connection, so a non-zero exit from ssh is the expected outcome, not a
+    /// failure: `guestRun` is asked to tolerate it and the caller checks the
+    /// guest instead.
+    func haltFilesystem() async throws {
+        guard let helper = Self.haltHelperPath else {
+            throw DeviceToolsError.toolMissing("ithalt")
+        }
+        try await guestRun("cat > /tmp/ithalt && chmod 755 /tmp/ithalt && exec /tmp/ithalt",
+                           stdinPath: helper, toleratingFailure: true)
+    }
+
+    /// The bundled guest-side halt helper, or the checkout's copy in a dev build.
+    static var haltHelperPath: String? {
+        Bundled.resolve("ithalt", fallbacks: [
+            "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-halt/ithalt",
+        ])
     }
 
     /// Raise or drop the App Store-style "downloading" placeholder on the
@@ -363,7 +396,8 @@ struct DeviceTools: Sendable {
     }
 
     /// Run one command on the guest over USB. Best-effort and bounded.
-    private func guestRun(_ command: String) async throws {
+    private func guestRun(_ command: String, stdinPath: String? = nil,
+                         toleratingFailure: Bool = false) async throws {
         guard let iproxy = Bundled.tool("iproxy")
                 ?? Self.searchPaths.map({ "\($0)/iproxy" }).first(where: {
                     FileManager.default.isExecutableFile(atPath: $0)
@@ -386,7 +420,7 @@ struct DeviceTools: Sendable {
         SSH_ASKPASS="$ASK" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
-            -p \(port) root@127.0.0.1 '\(command)'
+            -p \(port) root@127.0.0.1 '\(command)' \(stdinPath.map { "< \"\($0)\"" } ?? "")
         rm -f "$ASK"
         """
         let result = try await run(
@@ -395,7 +429,9 @@ struct DeviceTools: Sendable {
             environment: toolEnvironment,
             output: .discarded, error: .string(limit: 1 << 16)
         )
-        guard result.terminationStatus.isSuccess else {
+        // A command that takes the guest DOWN kills its own ssh session, so a
+        // non-zero exit is the expected outcome there rather than a failure.
+        guard toleratingFailure || result.terminationStatus.isSuccess else {
             throw DeviceToolsError.failed(
                 "Could not reach the device over SSH. \(result.standardError)")
         }

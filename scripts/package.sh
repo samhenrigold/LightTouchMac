@@ -119,6 +119,9 @@ copy_tool "$QEMU/contrib/it-ssh-terminal.sh"
 # stands in for the python3 a clean Mac does not have.
 copy_tool "$QEMU/contrib/it-gles/MBXGLEngine"
 copy_tool "$QEMU/contrib/it-instprogress/sbdlicon"
+# The quit-time shutdown helper: reboot(RB_HALT) in 20 lines, because the guest
+# has no /sbin/halt and the gesture needs a UI that may not be there.
+copy_tool "$QEMU/contrib/it-halt/ithalt"
 # ipod-helper is built, not committed (contrib/macos-app/ipod-helper.c), and the
 # qemu-ios app pipeline is what compiles it — take its copy.
 copy_tool "${IT_HELPER_BIN:-$QEMU/build/iPod touch.app/Contents/Resources/tools/ipod-helper}"
