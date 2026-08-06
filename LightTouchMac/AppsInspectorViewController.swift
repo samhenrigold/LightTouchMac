@@ -397,15 +397,26 @@ final class AppsInspectorViewController: NSViewController {
             } else if haveLoaded {
                 showStaleBanner()   // keep the list, mark it stale
             }
+            // Also on the failure path: when usbmuxd dies the session goes away
+            // and canManageApps flips false, but nothing told the inspector, so
+            // "+" stayed enabled, opened a file picker, and the install failed
+            // with an error blaming the guest for a host daemon that had died.
+            updateButtons()
         }
     }
+
+    /// True when the HOST side is gone rather than the guest — worth saying,
+    /// because "device not responding" points the user at the wrong thing.
+    private var usbUnavailable: Bool { !emulator.canManageApps }
 
     private func showStaleBanner() {
         let when = lastLoaded.map {
             let f = RelativeDateTimeFormatter()
             return f.localizedString(for: $0, relativeTo: Date())
         } ?? "a while ago"
-        banner.stringValue = "Device not responding — list from \(when)"
+        banner.stringValue = usbUnavailable
+            ? "USB unavailable — list from \(when)"
+            : "Device not responding — list from \(when)"
         banner.isHidden = false
         bannerHeight?.constant = 20
     }
@@ -623,6 +634,13 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         // past the last row means the end. The bundle ID travels rather than the
         // index, so the answer survives the list reloading mid-drag.
         let target = app(at: row)?.id
+        // Dropping an app on its OWN top edge is the no-op AppKit normally
+        // treats as "nothing happened". Here `target` was the dragged app
+        // itself, which the remove() below takes out of `apps` — so the
+        // firstIndex lookup found nothing, the ?? fired, and the app was sent
+        // to the END of the home screen. That got written to SpringBoard, so a
+        // few pixels of accidental drag really moved the icon to the last page.
+        guard target != id else { return false }
 
         // Move it locally first: the device round trip is slow enough that a row
         // snapping back and then jumping looks like a failed drag. Moved with

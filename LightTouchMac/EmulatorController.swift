@@ -253,7 +253,12 @@ final class EmulatorController {
 
     func pause()  { qemu_ios_ui_pause();  if state == .running { state = .paused } }
     func resume() { qemu_ios_ui_resume(); if state == .paused  { state = .running } }
-    func reset()  { qemu_ios_ui_reset();  state = .booting }
+    /// The guest cold-boots portrait, so our tracked orientation has to follow
+    /// it back. Leaving it at 90/270 left DisplayView posing the shell sideways
+    /// and sizing the cutout landscape while the guest published a portrait
+    /// buffer — a permanently rotated, stretched screen that no amount of
+    /// rotating could fix, since every later quarter turn stayed 90° out.
+    func reset()  { qemu_ios_ui_reset();  rotationDegrees = 0; state = .booting }
     /// Kept for completeness; deliberately NOT in a menu — system_powerdown
     /// provably never completes on 3.1.3 (PMU reg 0x04–0x06 modelling gap), so
     /// exposing it is a trap that hangs the guest at 100% CPU.
@@ -280,13 +285,18 @@ final class EmulatorController {
     private var resetMarkerURL: URL { stateDir.appendingPathComponent(".reset-\(options.nand)") }
     private var restoringFromSnapshot = false
 
-    /// UserDefaults key for the Settings toggle. Default OFF: restoring a
-    /// snapshot re-attaches a guest whose host-side USB session is gone, which
-    /// wedges it a few seconds in — a worse failure than a cold boot. Resume is
-    /// opt-in until that host/guest USB-coherence gap is closed.
+    /// UserDefaults key for the Settings toggle.
+    ///
+    /// Back to ON now that the resume path works end to end: the guest no
+    /// longer comes back frozen (store_global_state), and usbmuxd detects a
+    /// resumed guest from the migrated USB address and adopts the live session
+    /// instead of driving a reset+re-enumeration into it. The self-heal is also
+    /// real now (it requires deviceReady, not the restore's own repaint), so a
+    /// bad snapshot quarantines and cold-boots on the next launch rather than
+    /// looping. Off remains one click away in Settings.
     static let resumeDefaultsKey = "resumeOnLaunch"
     static var resumeOnLaunch: Bool {
-        UserDefaults.standard.object(forKey: resumeDefaultsKey) as? Bool ?? false
+        UserDefaults.standard.object(forKey: resumeDefaultsKey) as? Bool ?? true
     }
     /// Set when the user explicitly discards saved state, so the very next quit
     /// doesn't silently re-save the current guest and drop them right back into

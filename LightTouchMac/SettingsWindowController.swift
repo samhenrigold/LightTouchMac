@@ -53,7 +53,9 @@ final class SettingsWindowController: NSWindowController {
     }
 
     func show() {
-        window?.center()
+        // Only on first use — setFrameAutosaveName already restored a saved
+        // position, and centering every time discarded wherever the user put it.
+        if window?.setFrameUsingName("Settings") != true { window?.center() }
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

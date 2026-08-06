@@ -35,7 +35,22 @@ final class DeviceViewController: NSViewController {
     
     func setZoom(_ zoom: ZoomMode) { displayView.zoom = zoom }
     
+    /// The same preconditions the menu and toolbar enforce for Install App…
+    /// A drop used to bypass all of them, so an .ipa dropped during the ~40s
+    /// boot (or with app sync off) was accepted, put a spinner in a sidebar
+    /// that wasn't even polling, and failed a moment later with a modal —
+    /// while the button for the identical operation sat greyed out.
     private func installDropped(_ url: URL) {
+        guard emulator.canManageApps, emulator.isRunning, !emulator.isInstalling else {
+            let alert = NSAlert()
+            alert.messageText = "The device isn’t ready yet"
+            alert.informativeText = emulator.isInstalling
+                ? "Another app is being installed. Wait for it to finish, then try again."
+                : "Apps can be installed once the device has finished starting up and USB is connected."
+            if let window = view.window { alert.beginSheetModal(for: window) { _ in } }
+            else { alert.runModal() }
+            return
+        }
         AppInstaller.start(url, with: emulator, presenting: view.window)
     }
 }

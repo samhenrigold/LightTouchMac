@@ -168,7 +168,18 @@ final class DisplayView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil, displayLink == nil else { return }
+        // Leaving the window: stop the link. It retains self, and nothing ever
+        // invalidated it — so the view (and the emulator through it) could never
+        // deallocate and step() kept polling, deep-copying frames forever. Only
+        // masked because closing the window usually quits the app.
+        if window == nil {
+            displayLink?.invalidate()
+            displayLink = nil
+            NotificationCenter.default.removeObserver(
+                self, name: NSWindow.didChangeScreenNotification, object: nil)
+            return
+        }
+        guard displayLink == nil else { return }
         let link = displayLink(target: self, selector: #selector(step))
         link.add(to: .main, forMode: .common)
         displayLink = link
