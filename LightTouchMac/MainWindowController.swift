@@ -343,11 +343,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func installApp(_ sender: Any?) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "ipa")].compactMap { $0 }
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose a decrypted .ipa to install."
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose one or more decrypted .ipa files to install."
         panel.beginSheetModal(for: window!) { [weak self] response in
-            guard let self, response == .OK, let url = panel.url else { return }
-            AppInstaller.start(url, with: self.emulator, presenting: self.window)
+            guard let self, response == .OK else { return }
+            for url in panel.urls {
+                AppInstaller.start(url, with: self.emulator, presenting: self.window)
+            }
         }
     }
     

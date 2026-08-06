@@ -85,8 +85,14 @@ struct DeviceTools: Sendable {
     func install(_ ipa: URL, progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
         // A GL app on a non-baked image needs the ssh engine copy that only the
         // script performs — installing it in-process would wedge the device.
-        let sdk = await AppMetadataCache.shared.sdkName(from: ipa)
-        let sdkMarker = Self.sdkTooNew(sdk) ? "\nnewer than the device's SDK" : ""
+        // MinimumOSVersion, NOT DTSDKName. The SDK an app was BUILT with says
+        // nothing about whether it runs: Temple Run 1.0 is DTSDKName
+        // iphoneos4.2 with MinimumOSVersion 3.0 and runs fine on 3.1.3. Gating
+        // on the build SDK cried wolf on most of the library, which trains
+        // people to click through the one warning that is real. iPhone OS
+        // enforces MinimumOSVersion, so that is what we check.
+        let minOS = await AppMetadataCache.shared.minimumOS(from: ipa)
+        let sdkMarker = Self.sdkTooNew(minOS) ? "\nnewer than the device's SDK" : ""
 
         if bakedGuestTools {
             // An .ipa whose binary is archived 0644 installs fine and then never
@@ -149,8 +155,9 @@ struct DeviceTools: Sendable {
         return out
     }
 
-    /// Whether a DTSDKName like "iphoneos6.1" is newer than 3.1.3. iOS refuses
-    /// to launch such apps regardless of MinimumOSVersion, so the caller warns.
+    /// Whether a declared MinimumOSVersion ("4.0", "6.1") is newer than the
+    /// device's OS — the version iPhone OS itself refuses to launch past.
+    /// Tolerates a leading "iphoneos" so an accidental DTSDKName still parses.
     static func sdkTooNew(_ sdkName: String?, deviceOS: String = "3.1.3") -> Bool {
         guard let sdkName else { return false }
         let digits = sdkName.drop { !$0.isNumber }

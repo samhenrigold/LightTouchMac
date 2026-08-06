@@ -264,6 +264,11 @@ final class AppsInspectorViewController: NSViewController {
         addRemove.target = self
         addRemove.action = #selector(addOrRemove(_:))
         addRemove.translatesAutoresizingMaskIntoConstraints = false
+        // Start disabled and let updateButtons() turn them on. Enabled-by-
+        // default meant they were live all through the boot wait.
+        addRemove.setEnabled(false, forSegment: 0)
+        addRemove.setEnabled(false, forSegment: 1)
+        updateButtons()
     }
 
     override func viewDidLoad() {
@@ -466,8 +471,13 @@ final class AppsInspectorViewController: NSViewController {
         // only means the usbmux session exists, not that the guest is up —
         // without haveLoaded these stayed clickable through the entire boot
         // wait shown by the "Waiting for the device…" placeholder.
-        addRemove.setEnabled(emulator.canManageApps && haveLoaded, forSegment: 0)
-        addRemove.setEnabled(haveLoaded && selectedApp != nil && !installing, forSegment: 1)
+        // isRunning as well as haveLoaded: during the ~40s boot the daemon is
+        // alive (so canManageApps is true) and the list has never loaded, but
+        // the buttons started out enabled because nothing had called this yet —
+        // clicking + opened a picker for a device that could not install.
+        let ready = emulator.canManageApps && emulator.isRunning && haveLoaded
+        addRemove.setEnabled(ready && !installing, forSegment: 0)
+        addRemove.setEnabled(ready && selectedApp != nil && !installing, forSegment: 1)
     }
 
     /// The selected row's app, or nil if nothing (or a pending row) is selected.
@@ -487,11 +497,15 @@ final class AppsInspectorViewController: NSViewController {
     private func add() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "ipa")].compactMap { $0 }
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose a decrypted .ipa to install."
+        // Several at once: AppInstaller already queues them (each job awaits the
+        // previous), because the guest serves ~one lockdown session.
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose one or more decrypted .ipa files to install."
         panel.beginSheetModal(for: view.window!) { [weak self] response in
-            guard let self, response == .OK, let url = panel.url else { return }
-            AppInstaller.start(url, with: self.emulator, presenting: self.view.window)
+            guard let self, response == .OK else { return }
+            for url in panel.urls {
+                AppInstaller.start(url, with: self.emulator, presenting: self.view.window)
+            }
         }
     }
 

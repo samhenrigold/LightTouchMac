@@ -581,15 +581,18 @@ final class DisplayView: NSView {
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard let url = droppedIPA(sender) else { return false }
-        onDropIPA?(url)
+        let ipas = droppedIPAs(sender)
+        guard !ipas.isEmpty else { return false }
+        ipas.forEach { onDropIPA?($0) }   // AppInstaller queues them
         return true
     }
 
-    private func droppedIPA(_ sender: NSDraggingInfo) -> URL? {
+    private func droppedIPA(_ sender: NSDraggingInfo) -> URL? { droppedIPAs(sender).first }
+
+    private func droppedIPAs(_ sender: NSDraggingInfo) -> [URL] {
         guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self])
-                as? [URL] else { return nil }
-        return urls.first { $0.pathExtension.lowercased() == "ipa" }
+                as? [URL] else { return [] }
+        return urls.filter { $0.pathExtension.lowercased() == "ipa" }
     }
 }
 

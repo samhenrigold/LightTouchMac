@@ -146,6 +146,18 @@ final class AppMetadataCache {
         return info["DTSDKName"] as? String
     }
 
+    /// The lowest OS the app declares it will run on (Info.plist
+    /// MinimumOSVersion). This — not the SDK it was built against — is what
+    /// iPhone OS actually enforces at launch.
+    func minimumOS(from ipa: URL) async -> String? {
+        let members = await Self.members(ipa)
+        guard let root = Self.appRoot(members),
+              let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        return info["MinimumOSVersion"] as? String
+    }
+
     private func save() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: indexURL, options: .atomic)

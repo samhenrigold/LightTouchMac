@@ -81,9 +81,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard emulator.isRunning else { return .terminateNow }
-        emulator.beginQuitSnapshot { _ in
+
+        // Quit must ALWAYS complete. .terminateLater hands AppKit an IOU, and
+        // if the completion never runs the app just sits there — ⌘Q appears to
+        // do nothing and the only way out is force-quit. The snapshot is a
+        // convenience; never let it hold the app hostage. Whichever of the two
+        // fires first wins, and replying twice is not allowed, hence the latch.
+        var replied = false
+        let reply = {
+            guard !replied else { return }
+            replied = true
             NSApp.reply(toApplicationShouldTerminate: true)
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+            if !replied { NSLog("quit: snapshot did not finish in time — quitting anyway") }
+            reply()
+        }
+        emulator.beginQuitSnapshot { _ in reply() }
         return .terminateLater
     }
 

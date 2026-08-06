@@ -165,10 +165,16 @@ struct DeviceServices: Sendable {
 
     /// A stable device-side filename from the .ipa: staging paths must survive
     /// odd characters (`Super Monkey Ball [SEGA]`), so reduce to a safe set.
+    /// Unique per upload. Collapsing punctuation to "_" made "Temple Run",
+    /// "Temple-Run" and "Temple.Run" all stage to one path, so re-dropping a
+    /// newer build landed on a file the device still held open from the last
+    /// attempt — AFC refused it (the bare "File-transfer error: code 1") — and
+    /// one install's fire-and-forget cleanup could delete the next install's
+    /// upload out from under it. A unique suffix removes both.
     private static func stagingName(_ ipa: URL) -> String {
         let base = ipa.deletingPathExtension().lastPathComponent
-        let safe = base.map { $0.isLetter || $0.isNumber ? $0 : "_" }
-        return String(safe) + ".ipa"
+        let safe = String(base.map { $0.isLetter || $0.isNumber ? $0 : "_" }.prefix(48))
+        return "\(safe)-\(UUID().uuidString.prefix(8)).ipa"
     }
 
     /// Best-effort cleanup of a staged upload.
