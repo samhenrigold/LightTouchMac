@@ -428,10 +428,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     // MARK: - Edit menu (guest clipboard / screen)
     
     @objc func copyScreen(_ sender: Any?) {
-        guard let image = deviceVC.screen.screenImage else { return }
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.writeObjects([image])
+        // Async because the copy is taken by the next frame, where the pixels
+        // are provably current — see DisplayView.screenImage.
+        Task {
+            guard let image = await deviceVC.screen.screenImage else { return }
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.writeObjects([image])
+        }
     }
     
     @objc func pasteToGuest(_ sender: Any?) {

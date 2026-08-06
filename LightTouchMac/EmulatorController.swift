@@ -617,6 +617,9 @@ final class EmulatorController {
     /// Health-gate + save + atomic promote. `completion(true)` iff a good
     /// snapshot now exists on disk. Never overwrites a good snapshot with a bad
     /// one: an unhealthy guest is skipped entirely.
+    /// Worst case for a quit-time save: the liveness probe plus the save poll.
+    static let quitSnapshotBudget: TimeInterval = Timeouts.serviceProbe * 2 + 3 + 15
+
     private func performSnapshot(completion: @escaping (Bool) -> Void) {
         guard state == .running else { completion(false); return }
         Task { [weak self] in
@@ -757,8 +760,21 @@ final class EmulatorController {
     ///      (measured 1/1). Reached when the helper is missing.
     ///   3. the powerdown gesture — needs a healthy SpringBoard, so it is the
     ///      last resort, not the plan. Only when there is no ssh channel at all.
+    /// Seconds this can take at worst. The quit backstop is derived from this
+    /// rather than restated, because a backstop shorter than the path it guards
+    /// kills the app MID-shutdown — which is the one thing it exists to prevent.
+    static let cleanShutdownBudget: TimeInterval = 30 + 20 + 40 + 5
+
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
         guard !isDead, state != .notStarted else { completion(false); return }
+        // Never underneath a save. `Save State Now` stops the vCPU and is still
+        // writing; resuming it here produced a snapshot captured across a
+        // running CPU and then promoted it as good, for the NEXT launch to
+        // restore. reset() is guarded for exactly this reason.
+        guard state != .snapshotting else {
+            NSLog("quit: a state save is in flight — leaving the guest alone")
+            completion(false); return
+        }
         // A stopped vCPU cannot run any of this. Pause, or a save that stopped
         // it, used to make this give up silently — and giving up here is the one
         // failure that costs the user data.

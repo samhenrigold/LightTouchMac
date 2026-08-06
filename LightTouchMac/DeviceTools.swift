@@ -364,8 +364,12 @@ struct DeviceTools: Sendable {
         guard let helper = Self.haltHelperPath else {
             throw DeviceToolsError.toolMissing("ithalt")
         }
-        try await guestRun("cat > /tmp/ithalt && chmod 755 /tmp/ithalt && exec /tmp/ithalt",
-                           stdinPath: helper, toleratingFailure: true)
+        // rm first: /tmp/ithalt from a previous run may still be a RUNNING image,
+        // and Darwin answers ETXTBSY to opening one for write — which would make
+        // the whole command fail with no clue why.
+        try await guestRun("rm -f /tmp/ithalt && cat > /tmp/ithalt && chmod 755 /tmp/ithalt"
+                           + " && exec /tmp/ithalt",
+                           stdinPath: helper, expecting: "syncing and halting")
     }
 
     /// The bundled guest-side halt helper, or the checkout's copy in a dev build.
@@ -396,8 +400,17 @@ struct DeviceTools: Sendable {
     }
 
     /// Run one command on the guest over USB. Best-effort and bounded.
+    /// Run one command on the guest over USB.
+    ///
+    /// `expecting` is how a command that KILLS ITS OWN SESSION proves it ran:
+    /// the halt takes the system down, so ssh always exits non-zero and the
+    /// exit status cannot tell "the guest halted" from "ssh never got there".
+    /// Tolerating the failure without demanding evidence made haltFilesystem
+    /// report success when sshd was not up yet — and the caller then skipped
+    /// the sync and the powerdown, which is the entire ladder, and lost the
+    /// session's installs. The marker is the guest's own stdout.
     private func guestRun(_ command: String, stdinPath: String? = nil,
-                         toleratingFailure: Bool = false) async throws {
+                         expecting marker: String? = nil) async throws {
         guard let iproxy = Bundled.tool("iproxy")
                 ?? Self.searchPaths.map({ "\($0)/iproxy" }).first(where: {
                     FileManager.default.isExecutableFile(atPath: $0)
@@ -412,28 +425,39 @@ struct DeviceTools: Sendable {
         set -e
         "\(iproxy)" \(port) 22 >/dev/null 2>&1 &
         IP=$!
-        trap 'kill $IP 2>/dev/null' EXIT
         sleep 1
+        # A leaked iproxy from an earlier run holding this port is a documented
+        # failure here, and the symptom is every guest command silently timing
+        # out. Fail loudly instead.
+        kill -0 "$IP" 2>/dev/null || { echo "iproxy could not bind port \(port)" >&2; exit 1; }
         ASK="$(mktemp -t ltmask)"
+        # Both, and on a signal too: `set -e` skips everything after a failed
+        # ssh, and a successful halt ALWAYS fails ssh — so a cleanup that lives
+        # at the end of the script leaked one password file per shutdown.
+        trap 'kill $IP 2>/dev/null; rm -f "$ASK"' EXIT INT TERM HUP
         printf '#!/bin/sh\\necho %s\\n' "\(password)" > "$ASK"
         chmod 700 "$ASK"
         SSH_ASKPASS="$ASK" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
             -p \(port) root@127.0.0.1 '\(command)' \(stdinPath.map { "< \"\($0)\"" } ?? "")
-        rm -f "$ASK"
         """
         let result = try await run(
             .path(FilePath("/bin/bash")),
             arguments: ["-c", script],
             environment: toolEnvironment,
-            output: .discarded, error: .string(limit: 1 << 16)
+            output: .string(limit: 1 << 16), error: .string(limit: 1 << 16)
         )
-        // A command that takes the guest DOWN kills its own ssh session, so a
-        // non-zero exit is the expected outcome there rather than a failure.
-        guard toleratingFailure || result.terminationStatus.isSuccess else {
+        if let marker {
+            guard (result.standardOutput ?? "").contains(marker) else {
+                throw DeviceToolsError.failed(
+                    "The device did not run the command. \(result.standardError ?? "")")
+            }
+            return   // it ran; its own exit status is meaningless by then
+        }
+        guard result.terminationStatus.isSuccess else {
             throw DeviceToolsError.failed(
-                "Could not reach the device over SSH. \(result.standardError)")
+                "Could not reach the device over SSH. \(result.standardError ?? "")")
         }
     }
 

@@ -121,17 +121,27 @@ final class GuestNotifications {
         // guest that serves about one — retried every 10s, including for the
         // whole of an install, which is precisely the collision every other path
         // in the app suppresses itself to avoid.
+        // The deadline's loser is DISCARDED by withDeadline, so a connect that
+        // lands late would leak its np client, its retained Sink, and one of
+        // the ~one lockdown service slots this guest has — every 10 seconds,
+        // forever, which is exactly what stops it recovering. The box is how
+        // the late result is still reachable to be freed.
+        let landed = LateSession()
         let handles: Session?
         do {
             handles = try await DeviceGate.shared.serialized {
                 try await withDeadline(Timeouts.serviceProbe * 2, "notification watcher") {
-                    connect(socket: socket, onChange: onChange)
+                    let session = connect(socket: socket, onChange: onChange)
+                    if let session { landed.store(session) }
+                    return session
                 }
             }
         } catch {
+            landed.freeIfLate()
             return false
         }
-        guard let handles else { return false }
+        guard let handles else { landed.freeIfLate(); return false }
+        landed.claim()
 
         // The callback runs on a thread libimobiledevice owns. Wait out here
         // while it does — asynchronously, so no pool thread is parked — and let
@@ -176,6 +186,34 @@ final class GuestNotifications {
             return nil
         }
         return Session(client: client, ctx: ctx)
+    }
+
+    /// Holds whatever `connect` produced so the deadline's losing side can still
+    /// close it. `claim()` says the caller took ownership; otherwise the session
+    /// is freed the moment we know nobody is waiting for it any more.
+    nonisolated private final class LateSession: @unchecked Sendable {
+        private let lock = NSLock()
+        private var session: Session?
+        private var claimed = false
+
+        func store(_ s: Session) {
+            lock.lock()
+            if claimed { lock.unlock(); Self.free(s); return }   // already gave up
+            session = s
+            lock.unlock()
+        }
+        func claim() { lock.lock(); claimed = true; session = nil; lock.unlock() }
+        func freeIfLate() {
+            lock.lock()
+            claimed = true
+            let s = session; session = nil
+            lock.unlock()
+            if let s { Self.free(s) }
+        }
+        private static func free(_ s: Session) {
+            _ = IMobileDevice.np_client_free?(s.client)
+            Unmanaged<Sink>.fromOpaque(s.ctx).release()
+        }
     }
 
     /// The open session's handles. A box, because OpaquePointer is not Sendable

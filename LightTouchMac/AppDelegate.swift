@@ -92,12 +92,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: "Quit Anyway")
             alert.addButton(withTitle: "Cancel")
             alert.buttons.first?.hasDestructiveAction = true
-            // Mid-install is not a clean state to snapshot; quit straight out.
             guard alert.runModal() == .alertFirstButtonReturn else {
                 emulator.cancelFactoryReset()   // this quit was the erase; call it off
                 return .terminateCancel
             }
-            return .terminateNow
+            // Falls through to the SAME shutdown as any other quit. It used to
+            // return .terminateNow, on the reasoning that a half-finished
+            // install is not a clean state to snapshot — true, and irrelevant
+            // to the flush. Skipping the flush threw away every app installed
+            // earlier in the session as well as the one in flight.
         }
 
         guard !emulator.isDead else { return .terminateNow }
@@ -113,12 +116,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             replied = true
             NSApp.reply(toApplicationShouldTerminate: true)
         }
-        // Past the worst case of whichever path runs below, and no further: a
-        // quit the user cannot predict the end of is a quit that feels broken.
-        // With resume on, a failed save falls through to the shutdown, so the
-        // budget is both (20s save + 20s sync + 40s powerdown); otherwise it is
-        // the shutdown's own 60s. The powerdown itself takes about 14s.
-        let backstop: TimeInterval = EmulatorController.resumeOnLaunch ? 85 : 65
+        // DERIVED, not restated. This used to carry hand-written numbers that
+        // had drifted below the real ones, so ⌘Q could fire the backstop 25s
+        // into a 40s powerdown wait and kill QEMU mid-shutdown — the backstop
+        // causing the data loss it exists to bound. Typical quit is a few
+        // seconds; this is only the ceiling.
+        let backstop = EmulatorController.cleanShutdownBudget
+            + (EmulatorController.resumeOnLaunch ? EmulatorController.quitSnapshotBudget : 0)
         DispatchQueue.main.asyncAfter(deadline: .now() + backstop) {
             if !replied { NSLog("quit: shutdown did not finish in time — quitting anyway") }
             reply()
@@ -134,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // exactly the stale-RAM-over-newer-flash corruption the snapshot code
         // spends its comments warning about. So: save if resume is on, and fall
         // back to unmounting only if the save did not happen.
-        if EmulatorController.resumeOnLaunch {
+        if EmulatorController.resumeOnLaunch, !emulator.isInstalling, !AppInstaller.hasPendingWork {
             emulator.beginQuitSnapshot { saved in
                 if saved { reply() } else { emulator.beginCleanShutdown { _ in reply() } }
             }

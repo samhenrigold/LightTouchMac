@@ -422,14 +422,22 @@ final class DisplayView: NSView {
         CATransaction.setDisableActions(true)
         contentLayer.contents = image
         CATransaction.commit()
-        // Keep the ring-backed image; copy it only when someone asks (see
-        // screenImage). Copying here was ~37 MB/s of allocate-and-memcpy on the
-        // main thread, every frame, for a command almost nobody runs — and the
-        // main thread is the one that also has to service every touch.
-        lastImage = image
-        lastImageGeometry = (width, height, bitmapInfo, colorSpace)
+        // Copy only when someone has asked. Doing it every frame was ~37 MB/s of
+        // allocate-and-memcpy on the main thread — the thread that also has to
+        // service every touch — for a command almost nobody runs. But the copy
+        // has to happen HERE, next to the pixels being handed to the layer:
+        // copying at Copy-Screen time instead read a ring slot the emulator had
+        // recycled many frames ago (the display link stops while the window is
+        // minimised, so "many" can be thousands).
+        if wantsScreenCopy {
+            wantsScreenCopy = false
+            lastImage = Self.deepCopy(image, width: width, height: height,
+                                      bitmapInfo: bitmapInfo, colorSpace: colorSpace)
+        }
     }
-    private var lastImageGeometry: (Int, Int, CGBitmapInfo, CGColorSpace)?
+
+    /// Set by screenImage; honoured by the next frame.
+    private var wantsScreenCopy = false
 
     /// A CGImage over its own copy of `image`'s pixels — outlives the frame ring.
     private static func deepCopy(_ image: CGImage, width: Int, height: Int,
@@ -445,15 +453,19 @@ final class DisplayView: NSView {
 
     /// Current screen as an image, for Edit ▸ Copy Screen.
     ///
-    /// The copy happens HERE, not per frame. `lastImage` is backed by the
-    /// emulator's frame ring, which the ABI only guarantees for "a few more
-    /// frames", so handing it out directly would eventually read recycled
-    /// memory — the copy is what makes the returned image own its pixels.
+    /// Asks `step()` for a copy and waits briefly for it, because only `step()`
+    /// runs at a moment when the ring's pixels are provably the ones on screen.
+    /// Falls back to the previous copy if no frame arrives — a paused or dead
+    /// guest paints nothing, and a slightly old screenshot beats none.
     var screenImage: NSImage? {
-        guard let cg = lastImage, let g = lastImageGeometry,
-              let owned = Self.deepCopy(cg, width: g.0, height: g.1,
-                                        bitmapInfo: g.2, colorSpace: g.3) else { return nil }
-        return NSImage(cgImage: owned, size: NSSize(width: owned.width, height: owned.height))
+        get async {
+            wantsScreenCopy = true
+            for _ in 0..<20 where wantsScreenCopy {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            guard let cg = lastImage else { return nil }
+            return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        }
     }
 
     // MARK: - Touch input

@@ -333,7 +333,18 @@ struct DeviceServices: Sendable {
             // which is still live. Tell the accountant, though — this is the
             // one leak that never did, so the cap meant to stop leaked sessions
             // piling up could not see the very case it exists for.
+            // Counted, and GIVEN BACK on a timer. The leaked handles here are
+            // not a blocked thread — blockingInstall returns — so nothing else
+            // will ever call returned() for them, and three install timeouts
+            // in a session would otherwise close the gate permanently: every
+            // later device operation failing with "still waiting for earlier
+            // requests" until the app is relaunched. The cap exists to stop a
+            // pile-up, not to become one.
             AbandonedWork.abandoned("install")
+            Task.detached {
+                try? await Task.sleep(for: .seconds(Timeouts.installIdle))
+                AbandonedWork.returned()
+            }
             throw DeviceError.timedOut(operation: "install")
         }
     }
@@ -684,7 +695,13 @@ nonisolated enum InstproxyError: Equatable, CustomStringConvertible {
         case .opFailed: return "operation failed"
         case .receiveTimeout: return "receive timeout"
         case .alreadyInstalled: return "already installed"
-        case .packageExtractionFailed: return "package extraction failed (device may be full)"
+        // NOT "(device may be full)" any more: DeviceTools.install checks free
+        // space against the archive before it uploads, so by the time installd
+        // says this, space has been PROVEN. Blaming it sent people off
+        // uninstalling their apps to fix something else entirely.
+        case .packageExtractionFailed:
+            return "the device refused the package — it may still be encrypted, "
+                + "or built for a different architecture"
         case .other(let c): return "code \(c)"
         }
     }
