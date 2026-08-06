@@ -228,7 +228,12 @@ final class DisplayView: NSView {
             scale = shellScale(guestPixelsPerDisplayPixel: multiple, cutout: cutoutSize)
         }
         appliedScale = scale
-        let viewCenter = CGPoint(x: bounds.midX, y: bounds.midY)
+        // Centre on the SAFE area, not the raw bounds: with .fullSizeContentView
+        // the pane runs behind the toolbar, so centring on bounds would push the
+        // device up under it. The gradient still fills the whole pane, which is
+        // the point — only the device is inset.
+        let usable = safeAreaRect
+        let viewCenter = CGPoint(x: usable.midX, y: usable.midY)
         let shellCenter = CGPoint(x: Self.shellPixels.width / 2, y: Self.shellPixels.height / 2)
         let rest = Self.layerAngle(rotation)
         let angle = rest + tiltAngle
@@ -309,8 +314,12 @@ final class DisplayView: NSView {
                                      ?? shellScale(guestPixelsPerDisplayPixel: nearestPixelStep, cutout: cutout)
         case .fit:           scale = shellScale(guestPixelsPerDisplayPixel: nearestPixelStep, cutout: cutout)
         }
-        return CGSize(width: (shell.width * scale + 2 * Self.zoomInset).rounded(),
-                      height: (shell.height * scale + 2 * Self.zoomInset).rounded())
+        // Plus whatever the toolbar covers: the pane is full-height now, so the
+        // content it has to hold is the device box AND the inset above it.
+        let chrome = CGSize(width: bounds.width - safeAreaRect.width,
+                            height: bounds.height - safeAreaRect.height)
+        return CGSize(width: (shell.width * scale + 2 * Self.zoomInset + chrome.width).rounded(),
+                      height: (shell.height * scale + 2 * Self.zoomInset + chrome.height).rounded())
     }
 
     /// The step on the ladder closest to the size on screen right now, so
@@ -362,8 +371,9 @@ final class DisplayView: NSView {
     /// orientation, so portrait and landscape both land with the same margin
     /// without either needing its own number.
     private func fitScale(_ nativeSize: CGSize) -> CGFloat {
-        let maxWidth = max(bounds.width - 2 * Self.zoomInset, 1)
-        let maxHeight = max(bounds.height - 2 * Self.zoomInset, 1)
+        let usable = safeAreaRect
+        let maxWidth = max(usable.width - 2 * Self.zoomInset, 1)
+        let maxHeight = max(usable.height - 2 * Self.zoomInset, 1)
         return min(maxWidth / nativeSize.width, maxHeight / nativeSize.height)
     }
 

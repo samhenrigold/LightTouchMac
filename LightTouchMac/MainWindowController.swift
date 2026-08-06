@@ -53,7 +53,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         
         let window = NSWindow(contentViewController: split)
         window.title = "iPod touch"
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        // .fullSizeContentView is what makes the inspector run the FULL HEIGHT
+        // of the window rather than starting below the toolbar (WWDC23 "inspectors
+        // use the full height of the window when the full size content view mask
+        // is set"). Without it the tracking separator splits the toolbar but the
+        // inspector's material still stops at it, which is the giveaway that the
+        // pane is sitting under the titlebar instead of behind it.
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.setContentSize(NSSize(width: 320 + 260, height: 560))
         window.setFrameAutosaveName("Main")
         super.init(window: window)
