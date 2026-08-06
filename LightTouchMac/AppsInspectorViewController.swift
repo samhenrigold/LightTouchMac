@@ -190,8 +190,10 @@ final class AppsInspectorViewController: NSViewController {
         banner.textColor = .secondaryLabelColor
         banner.alignment = .center
         banner.lineBreakMode = .byTruncatingTail
-        banner.wantsLayer = true
-        banner.layer?.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.18).cgColor
+        // drawsBackground with an NSColor (not a captured layer cgColor) so the
+        // tint re-resolves when the user switches Light/Dark.
+        banner.drawsBackground = true
+        banner.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.18)
         banner.translatesAutoresizingMaskIntoConstraints = false
         banner.isHidden = true
         let bannerHeight = banner.heightAnchor.constraint(equalToConstant: 0)

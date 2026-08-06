@@ -42,8 +42,9 @@ enum MainMenuBuilder {
         let menu = NSMenu(title: appName)
         menu.addItem(item("About \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
         menu.addItem(.separator())
-        menu.addItem(item("Settings…", nil, ","))
-        menu.addItem(.separator())
+        // No "Settings…": there is no preferences window (the app is configured
+        // by launch options / env), and a permanently-disabled item bound to
+        // ⌘, reads as broken.
         let services = NSMenu(title: "Services")
         menu.addItem(submenu(services, title: "Services"))
         NSApp.servicesMenu = services
@@ -57,21 +58,16 @@ enum MainMenuBuilder {
     }
     
     private static func fileMenu() -> NSMenu {
+        // Not a document app — the New/Open/Save/Print boilerplate was all dead
+        // (permanently disabled, targeting NSDocument/NSDocumentController that
+        // don't exist here). File carries the app-level actions that fit it:
+        // install, and the diagnostics export, plus Close.
         let menu = NSMenu(title: "File")
-        menu.addItem(item("New", #selector(NSDocumentController.newDocument(_:)), "n"))
-        menu.addItem(item("Open…", #selector(NSDocumentController.openDocument(_:)), "o"))
-        let recent = NSMenu(title: "Open Recent")
-        recent.addItem(item("Clear Menu", #selector(NSDocumentController.clearRecentDocuments(_:))))
-        // NSDocumentController wires this submenu up by its private role; harmless without documents.
-        menu.addItem(submenu(recent, title: "Open Recent"))
+        menu.addItem(item("Install App…", #selector(MainWindowController.installApp(_:)), "i", [.shift, .command]))
+        menu.addItem(.separator())
+        menu.addItem(item("Export Diagnostics…", #selector(MainWindowController.exportDiagnostics(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Close", #selector(NSWindow.performClose(_:)), "w"))
-        menu.addItem(item("Save…", #selector(NSDocument.save(_:)), "s"))
-        menu.addItem(item("Save As…", #selector(NSDocument.saveAs(_:)), "S"))
-        menu.addItem(item("Revert to Saved", #selector(NSDocument.revertToSaved(_:)), "r"))
-        menu.addItem(.separator())
-        menu.addItem(item("Page Setup…", #selector(FirstResponderActions.runPageLayout(_:)), "P"))
-        menu.addItem(item("Print…", #selector(FirstResponderActions.printDocument(_:)), "p"))
         return menu
     }
     
@@ -169,8 +165,11 @@ enum MainMenuBuilder {
         menu.addItem(item("Home", #selector(MainWindowController.deviceHome(_:)), "H", [.shift, .command]))
         menu.addItem(item("Lock", #selector(MainWindowController.deviceLock(_:)), "l"))
         menu.addItem(.separator())
-        menu.addItem(item("Volume Up", #selector(MainWindowController.deviceVolumeUp(_:)), "="))
-        menu.addItem(item("Volume Down", #selector(MainWindowController.deviceVolumeDown(_:)), "-"))
+        // No key equivalents: ⌘=/⌘- collide with View ▸ Zoom In/Out, and since
+        // View is installed before Device those always win, leaving these
+        // showing shortcuts that never fire. Click-only is honest.
+        menu.addItem(item("Volume Up", #selector(MainWindowController.deviceVolumeUp(_:))))
+        menu.addItem(item("Volume Down", #selector(MainWindowController.deviceVolumeDown(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Rotate", #selector(MainWindowController.deviceRotate(_:)), "r", [.control, .command]))
         // The arrows are the shortcut anyone reaches for, and they read the way
@@ -181,7 +180,7 @@ enum MainMenuBuilder {
                           String(UnicodeScalar(NSRightArrowFunctionKey)!)))
         menu.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
         menu.addItem(.separator())
-        menu.addItem(item("Install App…", #selector(MainWindowController.installApp(_:)), "i", [.shift, .command]))
+        // Install App… lives in the File menu (with its ⇧⌘I); Terminal is here.
         menu.addItem(item("Open Terminal", #selector(MainWindowController.openDeviceTerminal(_:)), "t", [.shift, .command]))
         menu.addItem(.separator())
         menu.addItem(item("Pause", #selector(MainWindowController.devicePause(_:))))

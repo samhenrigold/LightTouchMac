@@ -35,6 +35,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         self.inspectorVC = AppsInspectorViewController(emulator: emulator)
         
         let split = NSSplitViewController()
+        // Remember the divider position and inspector-collapsed state across
+        // launches (state restoration is on; this is the missing piece).
+        split.splitView.autosaveName = "MainSplit"
         let deviceItem = NSSplitViewItem(viewController: deviceVC)
         deviceItem.minimumThickness = 200
         split.addSplitViewItem(deviceItem)
@@ -91,7 +94,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     override func windowDidLoad() {
         super.windowDidLoad()
-        window?.center()
+        // Only center on first run. setFrameAutosaveName already restored a
+        // saved frame; centering unconditionally threw that away every launch.
+        if window?.setFrameUsingName("Main") != true { window?.center() }
+        apply(Self.savedZoom())   // restore the zoom the user left it at
     }
 
     // MARK: - Health / status surfacing
@@ -240,6 +246,26 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         zoom = mode
         deviceVC.setZoom(mode)
         syncZoomControls()
+        Self.saveZoom(mode)
+    }
+
+    private static let zoomKey = "zoomMode"
+    private static func saveZoom(_ mode: ZoomMode) {
+        let encoded: String
+        switch mode {
+        case .fit: encoded = "fit"
+        case .physical: encoded = "physical"
+        case .pixels(let n): encoded = "pixels:\(n)"
+        }
+        UserDefaults.standard.set(encoded, forKey: zoomKey)
+    }
+    static func savedZoom() -> ZoomMode {
+        switch UserDefaults.standard.string(forKey: zoomKey) {
+        case "physical": return .physical
+        case let s? where s.hasPrefix("pixels:"):
+            return Int(s.dropFirst("pixels:".count)).map(ZoomMode.pixels) ?? .fit
+        default: return .fit
+        }
     }
 
     /// Grey out a direction there is no room left in.
