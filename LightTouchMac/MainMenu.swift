@@ -16,9 +16,36 @@ import Cocoa
     @objc(print:) func printDocument(_ sender: Any?)
 }
 
+/// Hides the saved-state section when resume is switched off in Settings —
+/// evaluated as the menu opens, so toggling the setting is reflected at once.
+@MainActor
+final class DeviceMenuDelegate: NSObject, NSMenuDelegate {
+    static let shared = DeviceMenuDelegate()
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let show = EmulatorController.resumeOnLaunch
+        for item in menu.items {
+            switch item.action {
+            case #selector(MainWindowController.saveStateNow(_:)),
+                 #selector(MainWindowController.discardSavedState(_:)):
+                item.isHidden = !show
+            default:
+                break
+            }
+        }
+        // The separator that closes the section goes with it. It is the one
+        // directly after Discard Saved State.
+        if let i = menu.items.firstIndex(where: {
+            $0.action == #selector(MainWindowController.discardSavedState(_:))
+        }), menu.items.indices.contains(i + 1), menu.items[i + 1].isSeparatorItem {
+            menu.items[i + 1].isHidden = !show
+        }
+    }
+}
+
 @MainActor
 enum MainMenuBuilder {
-    
+
     static func install() {
         let appName = ProcessInfo.processInfo.processName
         let main = NSMenu(title: "Main Menu")
@@ -71,64 +98,21 @@ enum MainMenuBuilder {
     }
     
     private static func editMenu() -> NSMenu {
+        // Not a text app. Every field is a label and the only control anywhere
+        // is a checkbox, so Cut/Paste/Delete/Select All and the whole Find,
+        // Spelling, Substitutions, Transformations and Speech tree validated to
+        // permanently disabled — five greyed submenus sitting above the two
+        // items that actually do something. Same reasoning that emptied File.
+        //
+        // AutoFill, Start Dictation and Emoji & Symbols are injected by AppKit
+        // rather than built here; they are suppressed in AppDelegate via the
+        // NSDisabled*MenuItem defaults, which is the only supported off switch.
         let menu = NSMenu(title: "Edit")
-        menu.addItem(item("Undo", #selector(FirstResponderActions.undo(_:)), "z"))
-        menu.addItem(item("Redo", #selector(FirstResponderActions.redo(_:)), "Z"))
-        menu.addItem(.separator())
-        menu.addItem(item("Cut", #selector(NSText.cut(_:)), "x"))
-        menu.addItem(item("Copy", #selector(NSText.copy(_:)), "c"))
-        menu.addItem(item("Paste", #selector(NSText.paste(_:)), "v"))
-        menu.addItem(item("Paste and Match Style", #selector(FirstResponderActions.pasteAsPlainText(_:)), "V", [.option, .command]))
-        menu.addItem(item("Delete", #selector(NSText.delete(_:))))
-        menu.addItem(item("Select All", #selector(NSText.selectAll(_:)), "a"))
-        menu.addItem(.separator())
         menu.addItem(item("Copy Screen", #selector(MainWindowController.copyScreen(_:)), "c", [.control, .command]))
         menu.addItem(item("Paste Text to Guest", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
-        menu.addItem(.separator())
-        
-        let find = NSMenu(title: "Find")
-        find.addItem(item("Find…", #selector(NSTextView.performFindPanelAction(_:)), "f", tag: NSTextFinder.Action.showFindInterface.rawValue))
-        find.addItem(item("Find and Replace…", #selector(NSTextView.performFindPanelAction(_:)), "f", [.option, .command], tag: NSTextFinder.Action.showReplaceInterface.rawValue))
-        find.addItem(item("Find Next", #selector(NSTextView.performFindPanelAction(_:)), "g", tag: NSTextFinder.Action.nextMatch.rawValue))
-        find.addItem(item("Find Previous", #selector(NSTextView.performFindPanelAction(_:)), "G", tag: NSTextFinder.Action.previousMatch.rawValue))
-        find.addItem(item("Use Selection for Find", #selector(NSTextView.performFindPanelAction(_:)), "e", tag: NSTextFinder.Action.setSearchString.rawValue))
-        find.addItem(item("Jump to Selection", #selector(NSResponder.centerSelectionInVisibleArea(_:)), "j"))
-        menu.addItem(submenu(find, title: "Find"))
-        
-        let spelling = NSMenu(title: "Spelling")
-        spelling.addItem(item("Show Spelling and Grammar", #selector(NSText.showGuessPanel(_:)), ":"))
-        spelling.addItem(item("Check Document Now", #selector(NSText.checkSpelling(_:)), ";"))
-        spelling.addItem(.separator())
-        spelling.addItem(item("Check Spelling While Typing", #selector(NSTextView.toggleContinuousSpellChecking(_:))))
-        spelling.addItem(item("Check Grammar With Spelling", #selector(NSTextView.toggleGrammarChecking(_:))))
-        spelling.addItem(item("Correct Spelling Automatically", #selector(NSTextView.toggleAutomaticSpellingCorrection(_:))))
-        menu.addItem(submenu(spelling, title: "Spelling and Grammar"))
-        
-        let subs = NSMenu(title: "Substitutions")
-        subs.addItem(item("Show Substitutions", #selector(NSTextView.orderFrontSubstitutionsPanel(_:))))
-        subs.addItem(.separator())
-        subs.addItem(item("Smart Copy/Paste", #selector(NSTextView.toggleSmartInsertDelete(_:))))
-        subs.addItem(item("Smart Quotes", #selector(NSTextView.toggleAutomaticQuoteSubstitution(_:))))
-        subs.addItem(item("Smart Dashes", #selector(NSTextView.toggleAutomaticDashSubstitution(_:))))
-        subs.addItem(item("Smart Links", #selector(NSTextView.toggleAutomaticLinkDetection(_:))))
-        subs.addItem(item("Data Detectors", #selector(NSTextView.toggleAutomaticDataDetection(_:))))
-        subs.addItem(item("Text Replacement", #selector(NSTextView.toggleAutomaticTextReplacement(_:))))
-        menu.addItem(submenu(subs, title: "Substitutions"))
-        
-        let transforms = NSMenu(title: "Transformations")
-        transforms.addItem(item("Make Upper Case", #selector(NSResponder.uppercaseWord(_:))))
-        transforms.addItem(item("Make Lower Case", #selector(NSResponder.lowercaseWord(_:))))
-        transforms.addItem(item("Capitalize", #selector(NSResponder.capitalizeWord(_:))))
-        menu.addItem(submenu(transforms, title: "Transformations"))
-        
-        let speech = NSMenu(title: "Speech")
-        speech.addItem(item("Start Speaking", #selector(NSTextView.startSpeaking(_:))))
-        speech.addItem(item("Stop Speaking", #selector(NSTextView.stopSpeaking(_:))))
-        menu.addItem(submenu(speech, title: "Speech"))
-        
         return menu
     }
-    
+
     private static func viewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
         // The standard zoom commands, same ones the toolbar buttons drive.
@@ -164,34 +148,35 @@ enum MainMenuBuilder {
         menu.addItem(item("Home", #selector(MainWindowController.deviceHome(_:)), "H", [.shift, .command]))
         menu.addItem(item("Lock", #selector(MainWindowController.deviceLock(_:)), "l"))
         menu.addItem(.separator())
-        // No key equivalents: ⌘=/⌘- collide with View ▸ Zoom In/Out, and since
-        // View is installed before Device those always win, leaving these
-        // showing shortcuts that never fire. Click-only is honest.
-        menu.addItem(item("Volume Up", #selector(MainWindowController.deviceVolumeUp(_:))))
-        menu.addItem(item("Volume Down", #selector(MainWindowController.deviceVolumeDown(_:))))
-        menu.addItem(.separator())
-        menu.addItem(item("Rotate", #selector(MainWindowController.deviceRotate(_:)), "r", [.control, .command]))
         // The arrows are the shortcut anyone reaches for, and they read the way
-        // the device turns. The menu titles carry the ⌘←/⌘→ display for free.
+        // the device turns. No plain "Rotate" item — left and right cover it,
+        // and the toolbar keeps the one-button portrait/landscape toggle.
         menu.addItem(item("Rotate Left", #selector(MainWindowController.deviceRotateLeft(_:)),
                           String(UnicodeScalar(NSLeftArrowFunctionKey)!)))
         menu.addItem(item("Rotate Right", #selector(MainWindowController.deviceRotateRight(_:)),
                           String(UnicodeScalar(NSRightArrowFunctionKey)!)))
         menu.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
         menu.addItem(.separator())
-        // Install App… lives in the File menu (with its ⇧⌘I); Terminal is here.
-        menu.addItem(item("Open Terminal", #selector(MainWindowController.openDeviceTerminal(_:)), "t", [.shift, .command]))
-        menu.addItem(.separator())
-        menu.addItem(item("Pause", #selector(MainWindowController.devicePause(_:))))
-        menu.addItem(item("Resume", #selector(MainWindowController.deviceResume(_:))))
-        menu.addItem(item("Restart", #selector(MainWindowController.deviceReset(_:))))
-        // No "Shut Down": system_powerdown never completes on 3.1.3 (PMU gap),
-        // so it would wedge the guest rather than power it off.
-        menu.addItem(.separator())
+
+        // Saved state only means anything when resume is on, so the whole
+        // section hides with the setting (menuNeedsUpdate re-evaluates it).
         menu.addItem(item("Save State Now", #selector(MainWindowController.saveStateNow(_:)), "s", [.control, .command]))
         menu.addItem(item("Discard Saved State", #selector(MainWindowController.discardSavedState(_:))))
+        let stateSeparator = NSMenuItem.separator()
+        menu.addItem(stateSeparator)
+
+        let advanced = NSMenu(title: "Advanced")
+        advanced.addItem(item("Open SSH", #selector(MainWindowController.openDeviceTerminal(_:)), "t", [.shift, .command]))
+        advanced.addItem(item("Restart SpringBoard", #selector(MainWindowController.restartSpringBoard(_:))))
+        menu.addItem(submenu(advanced, title: "Advanced"))
         menu.addItem(.separator())
+
+        // The destructive pair, together at the bottom and away from everything
+        // routine. No "Shut Down": system_powerdown never completes on 3.1.3
+        // (PMU gap), so it would wedge the guest rather than power it off.
+        menu.addItem(item("Restart", #selector(MainWindowController.deviceReset(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
+        menu.delegate = DeviceMenuDelegate.shared
         return menu
     }
     

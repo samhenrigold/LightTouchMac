@@ -270,6 +270,60 @@ struct DeviceTools: Sendable {
 
     func freeSpaceBytes() async throws -> Int64 { try await services.freeSpaceBytes() }
 
+    /// Respring: kill SpringBoard and let launchd bring it straight back.
+    ///
+    /// This is the cheap fix for the "a freshly sideloaded app crashes until I
+    /// restart the iPod" problem — SpringBoard caches what it knows about
+    /// installed apps, and a respring rebuilds that in a few seconds where a
+    /// full boot costs ~40. ssh is the only route (there is no service for it),
+    /// which is why this is a deliberate, user-invoked action rather than
+    /// something the install path does behind your back.
+    ///
+    /// Non-interactive password auth via SSH_ASKPASS_REQUIRE=force, the
+    /// supported way since OpenSSH 8.4; macOS ships 9.x.
+    func restartSpringBoard() async throws {
+        try await guestRun("killall SpringBoard")
+    }
+
+    /// Run one command on the guest over USB. Best-effort and bounded.
+    private func guestRun(_ command: String) async throws {
+        guard let iproxy = Bundled.tool("iproxy")
+                ?? Self.searchPaths.map({ "\($0)/iproxy" }).first(where: {
+                    FileManager.default.isExecutableFile(atPath: $0)
+                }) else {
+            throw DeviceToolsError.toolMissing("iproxy")
+        }
+        let port = Int.random(in: 29200...29399)
+        let password = ProcessInfo.processInfo.environment["DEVICE_PASSWORD"] ?? "alpine"
+        // ControlPath is deliberately absent: it is the 104-byte socket-path
+        // limit that silently disabled every guest command once before.
+        let script = """
+        set -e
+        "\(iproxy)" \(port) 22 >/dev/null 2>&1 &
+        IP=$!
+        trap 'kill $IP 2>/dev/null' EXIT
+        sleep 1
+        ASK="$(mktemp -t ltmask)"
+        printf '#!/bin/sh\\necho %s\\n' "\(password)" > "$ASK"
+        chmod 700 "$ASK"
+        SSH_ASKPASS="$ASK" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
+            -p \(port) root@127.0.0.1 '\(command)'
+        rm -f "$ASK"
+        """
+        let result = try await run(
+            .path(FilePath("/bin/bash")),
+            arguments: ["-c", script],
+            environment: toolEnvironment,
+            output: .discarded, error: .string(limit: 1 << 16)
+        )
+        guard result.terminationStatus.isSuccess else {
+            throw DeviceToolsError.failed(
+                "Could not reach the device over SSH. \(result.standardError ?? "")")
+        }
+    }
+
     // MARK: - SSH terminal (opens Terminal.app itself)
     
     func openTerminal() async throws {

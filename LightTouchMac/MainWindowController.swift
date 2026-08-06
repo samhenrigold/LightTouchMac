@@ -353,6 +353,18 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         }
     }
     
+    /// Respring — the quick fix for a freshly sideloaded app that crashes on
+    /// launch until the device is restarted.
+    @objc func restartSpringBoard(_ sender: Any?) {
+        Task {
+            do {
+                try await emulator.restartSpringBoard()
+            } catch {
+                AppInstaller.presentError(error, in: window)
+            }
+        }
+    }
+
     @objc func openDeviceTerminal(_ sender: Any?) {
         Task {
             do { try await emulator.openTerminal() }
@@ -458,16 +470,14 @@ extension MainWindowController: NSMenuItemValidation {
         switch menuItem.action {
         // App management: needs USB, a live guest, and no install already running
         // (the guest serves ~one lockdown session).
-        case #selector(installApp(_:)), #selector(openDeviceTerminal(_:)):
+        case #selector(installApp(_:)), #selector(openDeviceTerminal(_:)),
+             #selector(restartSpringBoard(_:)):
             return emulator.canManageApps && emulator.isRunning && !emulator.isInstalling
         // Device input only reaches a running guest.
         case #selector(deviceHome(_:)), #selector(deviceLock(_:)),
-             #selector(deviceVolumeUp(_:)), #selector(deviceVolumeDown(_:)),
              #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)),
              #selector(deviceRotateRight(_:)), #selector(deviceShake(_:)):
             return emulator.acceptsInput
-        case #selector(devicePause(_:)):  return emulator.isRunning
-        case #selector(deviceResume(_:)): return emulator.isPaused
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState

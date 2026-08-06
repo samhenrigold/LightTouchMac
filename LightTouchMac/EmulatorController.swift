@@ -537,6 +537,7 @@ final class EmulatorController {
     func installedApps() async throws -> [InstalledApp] { try await tools().installedApps() }
     func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
     func openTerminal() async throws                     { try await tools().openTerminal() }
+    func restartSpringBoard() async throws               { try await tools().restartSpringBoard() }
 
     /// True while any install is running — the quit guard reads this so ⌘Q
     /// mid-install prompts instead of leaving a half-installed app.

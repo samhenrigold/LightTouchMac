@@ -87,14 +87,15 @@ enum AppInstaller {
                         NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                     }
                 }
-                // The script installs SDK-too-new apps without error and iOS
-                // then refuses to launch them (the DTSDKName filter) — an icon
-                // that does nothing. The one moment this is knowable is now.
+                // Only when the app's own MinimumOSVersion is above 3.1.3 —
+                // the version iPhone OS actually enforces. (Gating on the SDK
+                // it was BUILT with fired on most of a 2009-era library and
+                // taught people to click straight through this.)
                 if output.contains("newer than the device's") {
                     let alert = NSAlert()
                     alert.alertStyle = .warning
                     alert.messageText = "“\(job.name)” installed, but may not launch"
-                    alert.informativeText = "It was built with a newer iOS SDK than 3.1.3, "
+                    alert.informativeText = "It requires a newer version of iOS than 3.1.3, "
                         + "and iPhone OS refuses to launch such apps. "
                         + "Look for a version of this app built for iOS 3 or earlier."
                     if let window { alert.beginSheetModal(for: window) { _ in } }
@@ -186,14 +187,18 @@ final class AppsInspectorViewController: NSViewController {
         placeholder.translatesAutoresizingMaskIntoConstraints = false
         placeholder.isHidden = true
 
-        banner.font = .systemFont(ofSize: 10)
+        banner.font = .systemFont(ofSize: 11, weight: .medium)
         banner.textColor = .secondaryLabelColor
         banner.alignment = .center
         banner.lineBreakMode = .byTruncatingTail
         // drawsBackground with an NSColor (not a captured layer cgColor) so the
         // tint re-resolves when the user switches Light/Dark.
+        // A quiet inline notice, not a warning stripe. The flat yellow band
+        // read as an error and clashed with the sidebar; a subtle fill plus a
+        // hairline separator matches how AppKit sidebars carry status.
         banner.drawsBackground = true
-        banner.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.18)
+        banner.backgroundColor = NSColor.quaternarySystemFill
+        banner.lineBreakMode = .byTruncatingMiddle
         banner.translatesAutoresizingMaskIntoConstraints = false
         banner.isHidden = true
         let bannerHeight = banner.heightAnchor.constraint(equalToConstant: 0)
@@ -423,7 +428,7 @@ final class AppsInspectorViewController: NSViewController {
             ? "USB unavailable — list from \(when)"
             : "Device not responding — list from \(when)"
         banner.isHidden = false
-        bannerHeight?.constant = 20
+        bannerHeight?.constant = 24
     }
 
     private func hideStaleBanner() {

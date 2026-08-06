@@ -16,6 +16,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // AppKit injects AutoFill, Start Dictation and Emoji & Symbols into the
+        // Edit menu, and a Tab Bar section into View. All of them are dead here:
+        // there is no editable text and the app is single-window. These defaults
+        // are the only supported way to decline them, and must be set before the
+        // menu is built.
+        UserDefaults.standard.register(defaults: [
+            "NSDisabledDictationMenuItem": true,
+            "NSDisabledCharacterPaletteMenuItem": true,
+        ])
+        NSWindow.allowsAutomaticWindowTabbing = false
+
         MainMenuBuilder.install()
         #if DEBUG
         SpringBoardIcons.selfCheck()

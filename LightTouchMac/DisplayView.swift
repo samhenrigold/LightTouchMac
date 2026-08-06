@@ -428,19 +428,209 @@ final class DisplayView: NSView {
         return (Double(cp.x / b.width), Double(cp.y / b.height))   // isFlipped → y-down
     }
 
-    /// Trackpad pinch zooms the window's view of the device. It does NOT reach
-    /// the guest — a guest pinch is Option-drag, which is a mouse gesture, so
-    /// the two never collide.
-    ///
-    /// The steps are discrete, so this accumulates magnification until it has
-    /// earned a whole one rather than tracking the fingers continuously; a
-    /// continuous zoom would spend most of its time between pixel multiples,
-    /// which is the thing the steps exist to avoid.
+    // MARK: - Trackpad gestures
+    //
+    // Where the cursor is decides who the gesture belongs to. Over the panel it
+    // is the guest's — a pinch is a real two-finger pinch, a scroll is a finger
+    // dragging the content, a two-finger double tap is a double tap. Off the
+    // panel there is no touch to send, so the same gestures drive the host: the
+    // window's zoom, and tilting the device for the accelerometer.
+    //
+    // All of it tracks continuously. A gesture is a stream of small deltas from
+    // .began to .ended, and each one is forwarded as it arrives, so the guest
+    // follows the fingers instead of receiving a canned event at the end.
+
+    /// Where the guest touch(es) are right now, in 0…1 panel space.
+    private var gestureAnchor = CGPoint.zero
+    /// Half the current pinch separation, panel-relative.
+    private var pinchSpread = 0.0
+    private var pinchingGuest = false
+    /// Live scroll-drag: the finger's current position, carried between events.
+    private var scrollPoint: CGPoint?
+    /// Tilt driven by a two-finger scroll off the panel.
+    private var scrollTilt = 0.0
+
+    /// The panel-space point under the cursor, clamped into the panel. Unlike
+    /// `normalized` this does not fail when the cursor is just outside — a pinch
+    /// that drifts off the edge mid-gesture should keep tracking, not stop dead.
+    private func clampedPanelPoint(_ event: NSEvent) -> CGPoint? {
+        guard let rootLayer = layer else { return nil }
+        let cp = contentLayer.convert(convert(event.locationInWindow, from: nil), from: rootLayer)
+        let b = contentLayer.bounds
+        guard b.width > 0, b.height > 0 else { return nil }
+        return CGPoint(x: min(max(cp.x / b.width, 0), 1), y: min(max(cp.y / b.height, 0), 1))
+    }
+
+    /// Is the cursor over the device's screen right now?
+    private func cursorOverPanel(_ event: NSEvent) -> Bool { normalized(event) != nil }
+
+    // MARK: Pinch
+
+    /// Over the panel: a genuine two-finger pinch, both contacts tracking the
+    /// magnification continuously around the point the fingers started on.
+    /// Off the panel: the window's own zoom ladder, as before.
     override func magnify(with event: NSEvent) {
+        if pinchingGuest || (event.phase == .began && cursorOverPanel(event)) {
+            guestPinch(event)
+            return
+        }
+        guard !pinchingGuest else { return }
         pendingMagnification += event.magnification
         guard abs(pendingMagnification) > 0.25 else { return }
         onZoomStep?(pendingMagnification > 0 ? 1 : -1)
         pendingMagnification = 0
+    }
+
+    private func guestPinch(_ event: NSEvent) {
+        switch event.phase {
+        case .began:
+            guard let p = clampedPanelPoint(event) else { return }
+            gestureAnchor = p
+            pinchSpread = 0.12          // a comfortable starting separation
+            pinchingGuest = true
+            sendPinch(Int32(QEMU_IOS_TOUCH_BEGIN))
+        case .changed:
+            guard pinchingGuest else { return }
+            // Track the fingers: the separation scales exactly as they do.
+            pinchSpread = min(max(pinchSpread * (1 + event.magnification), 0.01), 0.6)
+            sendPinch(Int32(QEMU_IOS_TOUCH_UPDATE))
+        case .ended, .cancelled:
+            guard pinchingGuest else { return }
+            sendPinch(Int32(QEMU_IOS_TOUCH_END))
+            pinchingGuest = false
+        default:
+            break
+        }
+    }
+
+    /// Two contacts mirrored through the anchor, along the panel's x axis.
+    private func sendPinch(_ phase: Int32) {
+        let a = gestureAnchor
+        let x1 = min(max(a.x - pinchSpread, 0), 1), x2 = min(max(a.x + pinchSpread, 0), 1)
+        qemu_ios_ui_touch(0, phase, Double(x1), Double(a.y))
+        qemu_ios_ui_touch2(phase, Double(x2), Double(a.y))
+    }
+
+    // MARK: Two-finger double tap
+
+    /// macOS calls this for a two-finger double tap — the "smart zoom" gesture.
+    /// Over the panel it becomes what it means on the device: a double tap,
+    /// which is exactly how iOS zooms to fit.
+    override func smartMagnify(with event: NSEvent) {
+        guard let (nx, ny) = normalized(event) else {
+            super.smartMagnify(with: event)
+            return
+        }
+        Task { @MainActor in
+            for _ in 0..<2 {
+                qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_BEGIN), nx, ny)
+                try? await Task.sleep(for: .milliseconds(40))
+                qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_END), nx, ny)
+                try? await Task.sleep(for: .milliseconds(70))
+            }
+        }
+    }
+
+    // MARK: Scroll / swipe
+
+    /// Over the panel, a two-finger scroll IS a finger dragging the content:
+    /// begin a touch where the cursor is and move it with the fingers, through
+    /// momentum too, so a flick keeps travelling and iOS's own inertia takes
+    /// over naturally. A two-finger swipe is the same stream at speed, so it
+    /// needs no separate case.
+    ///
+    /// Off the panel the gesture tilts the device instead: side-to-side runs
+    /// the accelerometer, and letting go springs it back upright.
+    override func scrollWheel(with event: NSEvent) {
+        if scrollPoint == nil && scrollTilt == 0 && event.phase == .began && !cursorOverPanel(event) {
+            beginScrollTilt()
+        }
+        if scrollTilt != 0 || (event.phase == .began && !cursorOverPanel(event)) {
+            scrollTiltChanged(event)
+            return
+        }
+        guestScrollDrag(event)
+    }
+
+    private func guestScrollDrag(_ event: NSEvent) {
+        // Finger movement, not wheel movement: a natural-scrolling trackpad
+        // already reports the direction the fingers went, and a classic wheel
+        // (or "natural" turned off) reports the opposite, which is what
+        // isDirectionInvertedFromDevice distinguishes.
+        let sign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
+        let dx = event.scrollingDeltaX * sign
+        let dy = event.scrollingDeltaY * sign
+        let b = contentLayer.bounds
+        guard b.width > 0, b.height > 0 else { return }
+
+        switch event.phase {
+        case .began:
+            guard let p = clampedPanelPoint(event) else { return }
+            scrollPoint = p
+            qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_BEGIN), Double(p.x), Double(p.y))
+        case .changed:
+            guard var p = scrollPoint else { return }
+            let d = rotatedPanelDelta(dx, dy)
+            p.x = min(max(p.x + d.dx / b.width, 0), 1)
+            p.y = min(max(p.y + d.dy / b.height, 0), 1)
+            scrollPoint = p
+            qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
+        case .ended, .cancelled:
+            // Lift only if no momentum follows; otherwise ride it out below.
+            if event.momentumPhase == [] { endScrollDrag() }
+        default:
+            // Momentum: keep the contact down and moving so the flick reads as
+            // one continuous drag rather than a drag that stops and restarts.
+            guard var p = scrollPoint else { return }
+            if event.momentumPhase == .ended || event.momentumPhase == .cancelled {
+                endScrollDrag()
+                return
+            }
+            let d = rotatedPanelDelta(dx, dy)
+            p.x = min(max(p.x + d.dx / b.width, 0), 1)
+            p.y = min(max(p.y + d.dy / b.height, 0), 1)
+            scrollPoint = p
+            qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
+        }
+    }
+
+    private func endScrollDrag() {
+        guard let p = scrollPoint else { return }
+        qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_END), Double(p.x), Double(p.y))
+        scrollPoint = nil
+    }
+
+    /// A movement in view points expressed in content-layer points, un-rotated
+    /// so directions match what the user sees in any orientation.
+    private func rotatedPanelDelta(_ dx: CGFloat, _ dy: CGFloat) -> CGVector {
+        let a = -(Self.layerAngle(emulator?.rotationDegrees ?? 0) + tiltAngle)
+        let s = max(appliedScale * (contentLayer.bounds.width / max(framePixels.width, 1)), 0.01)
+        let ux = dx / s, uy = dy / s
+        return CGVector(dx: ux * cos(a) - uy * sin(a), dy: ux * sin(a) + uy * cos(a))
+    }
+
+    // MARK: Tilt by scroll (cursor off the panel)
+
+    private func beginScrollTilt() {
+        shellLayer.removeAnimation(forKey: "tiltSnap")
+    }
+
+    private func scrollTiltChanged(_ event: NSEvent) {
+        switch event.phase {
+        case .began, .changed:
+            // Sideways fingers roll the device. A full trackpad sweep is about
+            // a quarter turn, which is as far as any tilt game needs.
+            let sign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
+            scrollTilt = min(max(scrollTilt + event.scrollingDeltaX * sign * 0.006, -.pi / 3), .pi / 3)
+            tiltAngle = scrollTilt
+            setShellAngle(restAngle + tiltAngle)
+            emulator?.setTilt(angle: restAngle + tiltAngle)
+        case .ended, .cancelled:
+            scrollTilt = 0
+            endTilt()          // springs the shell back and restores gravity
+        default:
+            break
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
