@@ -345,6 +345,10 @@ final class DisplayView: NSView {
         var w: Int32 = 0
         var h: Int32 = 0
         guard qemu_ios_ui_frame(&pixels, &w, &h, &serial), let pixels else { return }
+        // A true return means the serial advanced — the guest painted. This is
+        // the liveness signal behind booting→running and the snapshot health
+        // gate; a wedged guest stops here.
+        emulator?.noteFrameAdvanced()
 
         let width = Int(w), height = Int(h)
         let newFramePixels = CGSize(width: width, height: height)
@@ -372,9 +376,25 @@ final class DisplayView: NSView {
         CATransaction.setDisableActions(true)
         contentLayer.contents = image
         CATransaction.commit()
-        lastImage = image
+        // The display image is backed by the emulator's frame ring (valid only
+        // "a few more frames" per the ABI). Copy Screen can fire long after the
+        // last frame, so lastImage must own its pixels — otherwise it reads
+        // recycled ring memory. Deep-copy the bytes here, once per new frame.
+        lastImage = Self.deepCopy(image, width: width, height: height,
+                                  bitmapInfo: bitmapInfo, colorSpace: colorSpace)
     }
 
+    /// A CGImage over its own copy of `image`'s pixels — outlives the frame ring.
+    private static func deepCopy(_ image: CGImage, width: Int, height: Int,
+                                 bitmapInfo: CGBitmapInfo, colorSpace: CGColorSpace) -> CGImage? {
+        guard let src = image.dataProvider?.data,
+              let owned = CFDataCreateMutableCopy(nil, 0, src),
+              let provider = CGDataProvider(data: owned) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+                       bytesPerRow: width * 4, space: colorSpace, bitmapInfo: bitmapInfo,
+                       provider: provider, decode: nil, shouldInterpolate: false,
+                       intent: .defaultIntent)
+    }
 
     /// Current screen as an image, for Edit ▸ Copy Screen.
     var screenImage: NSImage? {

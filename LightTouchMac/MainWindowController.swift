@@ -26,6 +26,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private let zoomControl = NSSegmentedControl()
     private var rotateItem: NSToolbarItem?
     private(set) var zoom: ZoomMode = .fit
+    private let statusLabel = NSTextField(labelWithString: "")
+    private var deadOverlay: NSView?
     
     init(emulator: EmulatorController) {
         self.emulator = emulator
@@ -79,13 +81,92 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         zoomControl.action = #selector(zoomSegmentClicked(_:))
         zoomControl.sizeToFit()
         syncZoomControls()
+
+        installStatusAccessory(on: window)
+        emulator.onStatusChange = { [weak self] in self?.refreshForState() }
+        refreshForState()
     }
-    
+
     required init?(coder: NSCoder) { fatalError("not used") }
-    
+
     override func windowDidLoad() {
         super.windowDidLoad()
         window?.center()
+    }
+
+    // MARK: - Health / status surfacing
+
+    /// A quiet status line on the trailing side of the titlebar: "Running",
+    /// "Booting…", "Running — USB unavailable", "Emulator stopped".
+    private func installStatusAccessory(on window: NSWindow) {
+        statusLabel.font = .systemFont(ofSize: 11)
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.alignment = .right
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        let host = NSView()
+        host.addSubview(statusLabel)
+        NSLayoutConstraint.activate([
+            statusLabel.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 8),
+            statusLabel.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -8),
+            statusLabel.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+            host.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+        ])
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.view = host
+        accessory.layoutAttribute = .right
+        window.addTitlebarAccessoryViewController(accessory)
+    }
+
+    private func refreshForState() {
+        statusLabel.stringValue = emulator.statusLine
+        window?.toolbar?.validateVisibleItems()
+        updateDeadOverlay()
+    }
+
+    /// When the emulator dies (QEMU can't re-init), cover the device with an
+    /// unmistakable overlay — the frozen last frame otherwise looks live.
+    private func updateDeadOverlay() {
+        guard emulator.isDead else {
+            deadOverlay?.removeFromSuperview()
+            deadOverlay = nil
+            return
+        }
+        guard deadOverlay == nil, let content = window?.contentView else { return }
+        let overlay = NSView()
+        overlay.wantsLayer = true
+        overlay.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(labelWithString: "The emulator stopped.")
+        label.font = .systemFont(ofSize: 15, weight: .medium)
+        label.textColor = .white
+        let button = NSButton(title: "Relaunch", target: self, action: #selector(relaunchApp(_:)))
+        button.bezelStyle = .rounded
+        let stack = NSStackView(views: [label, button])
+        stack.orientation = .vertical
+        stack.spacing = 14
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        overlay.addSubview(stack)
+        content.addSubview(overlay, positioned: .above, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            overlay.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            overlay.topAnchor.constraint(equalTo: content.topAnchor),
+            overlay.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+        ])
+        deadOverlay = overlay
+    }
+
+    /// QEMU is once-per-process, so recovering means a fresh process. Launch a
+    /// new instance, then quit this dead one.
+    @objc private func relaunchApp(_ sender: Any?) {
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
     }
     
     // MARK: - Toolbar
@@ -220,7 +301,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func devicePause(_ sender: Any?)       { emulator.pause() }
     @objc func deviceResume(_ sender: Any?)      { emulator.resume() }
     @objc func deviceReset(_ sender: Any?)       { emulator.reset() }
-    @objc func devicePowerDown(_ sender: Any?)   { emulator.powerDown() }
+    // No devicePowerDown: system_powerdown never completes on 3.1.3 (PMU gap),
+    // so a menu item for it is a trap that wedges the guest at 100% CPU.
     
     @objc func installApp(_ sender: Any?) {
         let panel = NSOpenPanel()
@@ -260,6 +342,60 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         guard let text = NSPasteboard.general.string(forType: .string) else { return }
         emulator.pasteToGuest(text)
     }
+
+    // MARK: - Diagnostics
+
+    /// Bundle the logs + provenance into a zip for a bug report. The logs are
+    /// where the last two nights' failures were finally diagnosed; making them
+    /// one click to collect means the next report arrives with its evidence.
+    @objc func exportDiagnostics(_ sender: Any?) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "LightTouchMac-diagnostics.zip"
+        if let zip = UTType(filenameExtension: "zip") { panel.allowedContentTypes = [zip] }
+        panel.beginSheetModal(for: window!) { [weak self] response in
+            guard let self, response == .OK, let dest = panel.url else { return }
+            self.writeDiagnostics(to: dest)
+        }
+    }
+
+    private func writeDiagnostics(to dest: URL) {
+        let fm = FileManager.default
+        let staging = Bundled.stateDirectory.appendingPathComponent("diagnostics-staging", isDirectory: true)
+        try? fm.removeItem(at: staging)
+        try? fm.createDirectory(at: staging, withIntermediateDirectories: true)
+
+        // Logs from both writers.
+        let logs = [
+            Bundled.stateDirectory.appendingPathComponent("serial.log"),
+            Bundled.stateDirectory.appendingPathComponent("serial.log.1"),
+            Bundled.workDirectory.appendingPathComponent("usbmuxd.log"),
+            Bundled.workDirectory.appendingPathComponent("usbmuxd.log.1"),
+            Bundled.workDirectory.appendingPathComponent("session.env"),
+        ]
+        for src in logs where fm.fileExists(atPath: src.path) {
+            try? fm.copyItem(at: src, to: staging.appendingPathComponent(src.lastPathComponent))
+        }
+
+        let info = """
+        LightTouchMac diagnostics
+        \(emulator.dylibProvenance)
+        state: \(emulator.statusLine)
+        files-root: \(emulator.options.filesRoot)
+        nand: \(emulator.options.nand)
+        appsync: \(emulator.options.appsync)   network: \(emulator.options.network)
+        canManageApps: \(emulator.canManageApps)
+        """
+        try? info.write(to: staging.appendingPathComponent("info.txt"), atomically: true, encoding: .utf8)
+
+        // ditto zips the staging dir; a host one-shot, so plain Process is fine.
+        let ditto = Process()
+        ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        ditto.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", staging.path, dest.path]
+        try? ditto.run()
+        ditto.waitUntilExit()
+        try? fm.removeItem(at: staging)
+        NSWorkspace.shared.activateFileViewerSelecting([dest])
+    }
 }
 
 // MARK: - Toolbar item validation (same command model as the menus)
@@ -267,8 +403,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 extension MainWindowController: NSToolbarItemValidation {
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
-        case .installApp, .openTerminal: return emulator.canManageApps
-        default: return true
+        case .installApp, .openTerminal:
+            return emulator.canManageApps && emulator.isRunning && !emulator.isInstalling
+        case .home, .lock, .rotate:
+            return emulator.acceptsInput
+        default:
+            return !emulator.isDead
         }
     }
 }
@@ -278,10 +418,22 @@ extension MainWindowController: NSToolbarItemValidation {
 extension MainWindowController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
+        // App management: needs USB, a live guest, and no install already running
+        // (the guest serves ~one lockdown session).
         case #selector(installApp(_:)), #selector(openDeviceTerminal(_:)):
-            return emulator.canManageApps
+            return emulator.canManageApps && emulator.isRunning && !emulator.isInstalling
+        // Device input only reaches a running guest.
+        case #selector(deviceHome(_:)), #selector(deviceLock(_:)),
+             #selector(deviceVolumeUp(_:)), #selector(deviceVolumeDown(_:)),
+             #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)),
+             #selector(deviceRotateRight(_:)), #selector(deviceShake(_:)):
+            return emulator.acceptsInput
+        case #selector(devicePause(_:)):  return emulator.isRunning
+        case #selector(deviceResume(_:)): return emulator.isPaused
+        case #selector(deviceReset(_:)):  return !emulator.isDead
+        case #selector(copyScreen(_:)):   return !emulator.isDead
         case #selector(pasteToGuest(_:)):
-            return NSPasteboard.general.string(forType: .string) != nil
+            return emulator.acceptsInput && NSPasteboard.general.string(forType: .string) != nil
         case #selector(zoomIn(_:)):
             return zoom.percent.map { $0 / 100 } ?? 0 < ZoomMode.steps.last!
         case #selector(zoomOut(_:)):

@@ -24,6 +24,10 @@ final class AppMetadataCache {
     
     private let dir: URL
     private var entries: [String: Entry] = [:]
+    /// Decoded icons, so the sidebar's `viewFor:` doesn't hit the disk on every
+    /// visible row on every reload. NSCache evicts under memory pressure on its
+    /// own; a few dozen 57px PNGs never will.
+    private let iconMemo = NSCache<NSString, NSImage>()
     
     private init() {
         dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -71,12 +75,16 @@ final class AppMetadataCache {
 
     func icon(for bundleID: String) -> NSImage? {
         guard entries[bundleID]?.hasIcon == true else { return nil }
-        return NSImage(contentsOf: iconURL(bundleID))
+        if let memo = iconMemo.object(forKey: bundleID as NSString) { return memo }
+        guard let image = NSImage(contentsOf: iconURL(bundleID)) else { return nil }
+        iconMemo.setObject(image, forKey: bundleID as NSString)
+        return image
     }
-    
+
     /// Drop the cached name/icon for one bundle ID (uninstalled via our button).
     func forget(_ bundleID: String) {
         guard entries.removeValue(forKey: bundleID) != nil else { return }
+        iconMemo.removeObject(forKey: bundleID as NSString)
         try? FileManager.default.removeItem(at: iconURL(bundleID))
         save()
     }
@@ -107,6 +115,8 @@ final class AppMetadataCache {
         if let member = Self.iconMember(members, root: root, info: info),
            let data = try? await Self.unzip(ipa, member: member) {
             hasIcon = (try? data.write(to: iconURL(bundleID))) != nil
+            // A reinstall may ship a new icon; drop any decoded copy of the old.
+            iconMemo.removeObject(forKey: bundleID as NSString)
         }
         entries[bundleID] = Entry(name: name, hasIcon: hasIcon)
         save()

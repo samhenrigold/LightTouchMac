@@ -25,14 +25,24 @@ final class USBMux {
     private(set) var session: Session?
     private var daemonTask: Task<Void, Never>?
     private var daemonPID: pid_t?
-    
+
+    /// Called on the main actor if the daemon exits without us stopping it —
+    /// the health signal that flips `canManageApps` off and tells the UI USB
+    /// is gone. Empty catch used to swallow this entirely.
+    var onUnexpectedExit: (() -> Void)?
+
     /// The fork ships in the bundle; a dev build falls back to the checkout
     /// (see qemu-ios' usbmuxd-qemu).
     private static let root = "\(NSHomeDirectory())/Developer/usbmuxd-qemu"
     private static var binary: String {
         Bundled.tool("usbmuxd") ?? "\(root)/usbmuxd/src/usbmuxd"
     }
-    private static var conf: String { "\(root)/run/conf" }
+    /// The daemon's config dir: bundled first (package.sh stages it), else the
+    /// dev checkout. Was hardcoded to the checkout with no bundle fallback, so
+    /// a packaged app always passed `-C` a path that does not exist.
+    private static var conf: String {
+        Bundled.resource("usbmuxd-conf") ?? "\(root)/run/conf"
+    }
     
     /// Start usbmuxd and record a session. Returns nil (and does nothing) if the
     /// binary is missing — the app still runs, just without app management.
@@ -45,7 +55,10 @@ final class USBMux {
             return nil
         }
         
-        pidFile = "\(filesRoot)/apps/work/usbmuxd.pid"
+        // All writable scratch lives under Application Support, never files-root
+        // (which is read-only inside a packaged app's signed bundle).
+        let work = Bundled.workDirectory
+        pidFile = work.appendingPathComponent("usbmuxd.pid").path
         // A daemon from a previous run survives anything that skips stop() —
         // Xcode's stop button is a SIGKILL — and orphans accumulate one per
         // dev cycle. The pid file names the only process this may kill, and
@@ -57,18 +70,19 @@ final class USBMux {
         let guestAddress = "127.0.0.1:\(Self.freePort())"
         let session = Session(clientSocket: clientSocket, guestAddress: guestAddress)
         self.session = session
-        
+
         writeSessionFile(filesRoot: filesRoot, nand: nand, overlay: overlay,
                          session: session)
-        
+
+        Bundled.rotateLog(at: work.appendingPathComponent("usbmuxd.log"))
         let binary = Self.binary, conf = Self.conf
         // The daemon's log lands where install-ipa.sh's error message has
         // always claimed it is. It was .discarded before, which made every
         // "check usbmuxd.log" a dead end.
-        let logPath = FilePath("\(filesRoot)/apps/work/usbmuxd.log")
+        let logPath = FilePath(work.appendingPathComponent("usbmuxd.log").path)
         daemonTask = Task.detached {
             do {
-                // The work directory exists — writeSessionFile above made it —
+                // The work directory exists — Bundled.workDirectory made it —
                 // so this only fails in circumstances /dev/null also covers.
                 let log = (try? FileDescriptor.open(
                     logPath, .writeOnly,
@@ -105,19 +119,37 @@ final class USBMux {
                                                   encoding: .utf8)
                         }
                     }
-                    // Hold the process open until the task is cancelled; the
-                    // throw on cancellation triggers Subprocess teardown.
+                    // Hold the process open until cancelled, but poll the pid so
+                    // the daemon dying on its own is NOTICED — the closure body
+                    // gates run()'s return, so a plain long sleep would let a
+                    // dead daemon look alive forever (the empty-catch bug).
                     while !Task.isCancelled {
-                        try await Task.sleep(for: .seconds(3600))
+                        try await Task.sleep(for: .seconds(1))
+                        if kill(pid, 0) != 0 { break }   // ESRCH: daemon gone
                     }
                 }
             } catch {
-                // Cancelled (normal shutdown) or the daemon exited.
+                // Cancelled (normal shutdown) or a spawn failure.
+            }
+            // Distinguish an orderly stop() from an unexpected death: on the
+            // latter the task was never cancelled.
+            if !Task.isCancelled {
+                await MainActor.run { [weak self] in self?.daemonDidDie() }
             }
         }
         return session
     }
-    
+
+    /// The daemon exited without stop() — app management is now dead. Clear the
+    /// session so canManageApps flips false and tell whoever is listening.
+    private func daemonDidDie() {
+        guard session != nil else { return }   // already torn down by stop()
+        NSLog("usbmux: daemon exited unexpectedly; app management disabled")
+        session = nil
+        daemonPID = nil
+        onUnexpectedExit?()
+    }
+
     private var pidFile: String?
 
     private func reapStaleDaemon() {
@@ -143,24 +175,32 @@ final class USBMux {
         session = nil
     }
     
-    // MARK: - session.env (consumed by apps/install-app.sh and it-ssh-terminal.sh)
-    
+    // MARK: - session.env (consumed by it-ssh-terminal.sh; installs are in-process)
+
+    /// Where the SSH-terminal script reads the mux socket from. DeviceTools
+    /// points the script at this via the SESSION env var.
+    static var sessionFile: String {
+        Bundled.workDirectory.appendingPathComponent("session.env").path
+    }
+
     private func writeSessionFile(filesRoot: String, nand: String,
                                   overlay: String, session: Session) {
-        let workDir = "\(filesRoot)/apps/work"
-        try? FileManager.default.createDirectory(atPath: workDir,
-                                                 withIntermediateDirectories: true)
         // Values are quoted: the overlay lives under "Application Support", whose
         // space would otherwise break `. session.env` in the shell scripts.
         let contents = """
-        # written by LightTouchMac; read by apps/install-app.sh and it-ssh-terminal.sh
+        # written by LightTouchMac; read by it-ssh-terminal.sh
         SOCK="\(session.clientSocket)"
         QEMU_ADDR="\(session.guestAddress)"
         NAND="\(filesRoot)/\(nand)"
         OVL="\(overlay)"
         """
-        try? contents.write(toFile: "\(workDir)/session.env",
-                            atomically: true, encoding: .utf8)
+        do {
+            try contents.write(toFile: Self.sessionFile, atomically: true, encoding: .utf8)
+        } catch {
+            // Not fatal — only the Terminal feature reads this — but no longer
+            // silent: a write failure here used to be invisible.
+            NSLog("usbmux: could not write session.env: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Free-port pick

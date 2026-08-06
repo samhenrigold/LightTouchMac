@@ -129,6 +129,20 @@ if [ -n "$MISSING" ]; then
     echo "  checkout the features these back will be unavailable." >&2
 fi
 
+# The usbmuxd config dir. USBMux.swift passes this as `-C`; without a bundle
+# copy a packaged app pointed at a nonexistent path (Bundled.resource returns
+# nil and it fell back to the dev checkout, which a clean Mac does not have).
+CONF_SRC="${USBMUXD_QEMU:-$HOME/Developer/usbmuxd-qemu}/run/conf"
+CONF_DST="$APP/Contents/Resources/usbmuxd-conf"
+if [ -d "$CONF_SRC" ]; then
+    echo "embedding usbmuxd-conf…"
+    rm -rf "$CONF_DST"; mkdir -p "$CONF_DST"
+    # Only the plists (pairing record + SystemConfiguration); skip logs/.DS_Store.
+    find "$CONF_SRC" -maxdepth 1 -name '*.plist' -exec cp {} "$CONF_DST/" \;
+else
+    echo "  NOT bundled: usbmuxd-conf (no $CONF_SRC) — app management may fail on a clean Mac" >&2
+fi
+
 # Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
 install_name_tool -delete_rpath "$BUILD" "$APP_BIN" 2>/dev/null || true
 

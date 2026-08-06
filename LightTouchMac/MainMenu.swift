@@ -187,7 +187,8 @@ enum MainMenuBuilder {
         menu.addItem(item("Pause", #selector(MainWindowController.devicePause(_:))))
         menu.addItem(item("Resume", #selector(MainWindowController.deviceResume(_:))))
         menu.addItem(item("Restart", #selector(MainWindowController.deviceReset(_:))))
-        menu.addItem(item("Shut Down", #selector(MainWindowController.devicePowerDown(_:))))
+        // No "Shut Down": system_powerdown never completes on 3.1.3 (PMU gap),
+        // so it would wedge the guest rather than power it off.
         return menu
     }
     
@@ -203,6 +204,8 @@ enum MainMenuBuilder {
     private static func helpMenu(_ appName: String) -> NSMenu {
         let menu = NSMenu(title: "Help")
         menu.addItem(item("\(appName) Help", #selector(NSApplication.showHelp(_:)), "?"))
+        menu.addItem(.separator())
+        menu.addItem(item("Export Diagnostics…", #selector(MainWindowController.exportDiagnostics(_:))))
         return menu
     }
     

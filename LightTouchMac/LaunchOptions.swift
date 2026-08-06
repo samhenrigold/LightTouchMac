@@ -54,4 +54,13 @@ struct LaunchOptions: ParsableArguments {
     var iBoot: String   { "\(filesRoot)/ios3/iBoot.bin" }
     var nor: String     { "\(filesRoot)/ios3/nor_7E18.bin" }
     var nandImage: String { "\(filesRoot)/\(nand)" }
+
+    /// Required assets that don't exist, so the app can report them up front
+    /// instead of failing inside the dylib on the QEMU thread with no UI — a
+    /// missing NAND used to be an invisible hang.
+    func missingAssets() -> [String] {
+        [filesRoot, bootrom, iBoot, nor, nandImage].filter {
+            !FileManager.default.fileExists(atPath: $0)
+        }
+    }
 }

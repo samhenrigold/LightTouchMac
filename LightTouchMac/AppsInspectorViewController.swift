@@ -125,6 +125,12 @@ final class AppsInspectorViewController: NSViewController {
     private let tableView = NSTableView()
     private let addRemove = NSSegmentedControl()
     private let placeholder = NSTextField(labelWithString: "")
+    /// Shown over a populated list when the device stops answering: the list is
+    /// kept (it was correct a moment ago) but no longer silently pretends to be
+    /// current.
+    private let banner = NSTextField(labelWithString: "")
+    private var bannerHeight: NSLayoutConstraint?
+    private var lastLoaded: Date?
     private var apps: [InstalledApp] = []
     private var pending: [InstallJob] = []
     /// Bundle IDs in home-screen order, empty until SpringBoard tells us. The
@@ -180,9 +186,25 @@ final class AppsInspectorViewController: NSViewController {
         placeholder.translatesAutoresizingMaskIntoConstraints = false
         placeholder.isHidden = true
 
-        [scroll, placeholder].forEach(container.addSubview)
+        banner.font = .systemFont(ofSize: 10)
+        banner.textColor = .secondaryLabelColor
+        banner.alignment = .center
+        banner.lineBreakMode = .byTruncatingTail
+        banner.wantsLayer = true
+        banner.layer?.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.18).cgColor
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        banner.isHidden = true
+        let bannerHeight = banner.heightAnchor.constraint(equalToConstant: 0)
+        self.bannerHeight = bannerHeight
+
+        [banner, scroll, placeholder].forEach(container.addSubview)
         var constraints = [
-            scroll.topAnchor.constraint(equalTo: container.topAnchor),
+            banner.topAnchor.constraint(equalTo: container.topAnchor),
+            banner.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            banner.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bannerHeight,
+
+            scroll.topAnchor.constraint(equalTo: banner.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
 
@@ -280,8 +302,13 @@ final class AppsInspectorViewController: NSViewController {
                     // wait for the finish notification
                 } else if await self.emulator.deviceReady() {
                     await self.loadOnce()
-                } else if !self.haveLoaded, self.pending.isEmpty {
-                    self.showPlaceholder("Waiting for the device…")
+                } else {
+                    self.emulator.deviceReachable = false
+                    if !self.haveLoaded, self.pending.isEmpty {
+                        self.showPlaceholder("Waiting for the device…")
+                    } else if self.haveLoaded {
+                        self.showStaleBanner()   // keep the list, mark it stale
+                    }
                 }
                 // Press harder until the device has answered once. A cold boot
                 // takes ~40 s and the list is the first thing anyone looks at,
@@ -341,6 +368,9 @@ final class AppsInspectorViewController: NSViewController {
             let live = try await emulator.installedApps()
             apps = live
             haveLoaded = true
+            lastLoaded = Date()
+            emulator.deviceReachable = true
+            hideStaleBanner()
             // SpringBoard publishes no notification when icons are rearranged
             // on the device — notification_proxy carries application_installed
             // and application_uninstalled, but nothing for the icon layout — so
@@ -357,12 +387,31 @@ final class AppsInspectorViewController: NSViewController {
             showPlaceholder(apps.isEmpty && pending.isEmpty ? "No third-party apps installed." : nil)
             updateButtons()
         } catch {
+            emulator.deviceReachable = false
             // The reason rides along so a manual Refresh that fails says why,
             // instead of sitting on the same three words the boot wait shows.
             if !haveLoaded, pending.isEmpty {
                 showPlaceholder("Waiting for the device — \(error.localizedDescription)")
+            } else if haveLoaded {
+                showStaleBanner()   // keep the list, mark it stale
             }
         }
+    }
+
+    private func showStaleBanner() {
+        let when = lastLoaded.map {
+            let f = RelativeDateTimeFormatter()
+            return f.localizedString(for: $0, relativeTo: Date())
+        } ?? "a while ago"
+        banner.stringValue = "Device not responding — list from \(when)"
+        banner.isHidden = false
+        bannerHeight?.constant = 20
+    }
+
+    private func hideStaleBanner() {
+        guard !banner.isHidden else { return }
+        banner.isHidden = true
+        bannerHeight?.constant = 0
     }
 
     private func loadHomeOrder() async {
