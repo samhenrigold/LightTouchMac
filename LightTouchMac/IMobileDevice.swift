@@ -67,6 +67,10 @@ nonisolated enum IMobileDevice {
     typealias SetIconState = @convention(c) (OpaquePointer?, OpaquePointer?) -> Int32
     typealias PlistToXML = @convention(c) (OpaquePointer?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>, UnsafeMutablePointer<UInt32>) -> Void
     typealias PlistFromXML = @convention(c) (UnsafePointer<CChar>?, UInt32, UnsafeMutablePointer<OpaquePointer?>) -> Int32
+    /// lockdownd_get_value(client, domain, key, &value)
+    typealias LockdownGetValue = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
+                                                UnsafePointer<CChar>?,
+                                                UnsafeMutablePointer<OpaquePointer?>) -> Int32
     typealias PlistFree = @convention(c) (OpaquePointer?) -> Void
     typealias MemFree = @convention(c) (UnsafeMutableRawPointer?) -> Void
 
@@ -75,6 +79,7 @@ nonisolated enum IMobileDevice {
     static let lockdownd_client_new_with_handshake = symbol("lockdownd_client_new_with_handshake", NewClient.self)
     static let lockdownd_client_free = symbol("lockdownd_client_free", FreeHandle.self)
     static let lockdownd_start_service = symbol("lockdownd_start_service", StartService.self)
+    static let lockdownd_get_value = symbol("lockdownd_get_value", LockdownGetValue.self)
     static let lockdownd_service_descriptor_free = symbol("lockdownd_service_descriptor_free", FreeHandle.self)
     static let sbservices_client_new = symbol("sbservices_client_new", NewServiceClient.self)
     static let sbservices_client_free = symbol("sbservices_client_free", FreeHandle.self)

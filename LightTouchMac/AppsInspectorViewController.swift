@@ -434,7 +434,21 @@ final class AppsInspectorViewController: NSViewController {
             // The reason rides along so a manual Refresh that fails says why,
             // instead of sitting on the same three words the boot wait shows.
             if !haveLoaded, pending.isEmpty {
-                showPlaceholder("Waiting for the device — \(error.localizedDescription)")
+                // A guest sitting on the Connect-to-iTunes screen still answers
+                // lockdownd but refuses every service, so this path is all the
+                // user ever saw of it: "Install service error (connect): code
+                // -256", with nothing to act on. Ask why before blaming the
+                // wait, and name the fix.
+                if let activation = await emulator.activationState(),
+                   !activation.hasSuffix("Activated") || activation == "Unactivated" {
+                    showPlaceholder("""
+                        The device needs to be erased.
+
+                        Its filesystem was damaged — usually by the emulator                         being force-quit before the guest could unmount — and it                         booted to the Connect to iTunes screen. Choose                         Device ▸ Erase All Content and Settings to start clean.                         Installed apps will be lost; the base image is untouched.
+                        """)
+                } else {
+                    showPlaceholder("Waiting for the device — \(error.localizedDescription)")
+                }
             } else if haveLoaded {
                 showStaleBanner()   // keep the list, mark it stale
             }

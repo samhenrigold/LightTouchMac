@@ -765,6 +765,13 @@ final class EmulatorController {
     }
 
     func installedApps() async throws -> [InstalledApp] { try await tools().installedApps() }
+
+    /// nil when we could not ask. Anything other than "Activated"/"FactoryActivated"
+    /// means the guest is sitting on the Connect-to-iTunes screen.
+    func activationState() async -> String? {
+        guard let socket = usbmux.session?.clientSocket else { return nil }
+        return await DeviceServices(clientSocket: socket).activationState()
+    }
     func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
     func openTerminal() async throws                     { try await tools().openTerminal() }
     func restartSpringBoard() async throws               { try await tools().restartSpringBoard() }
