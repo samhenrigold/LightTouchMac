@@ -752,16 +752,25 @@ final class EmulatorController {
     /// for the animation to end was reported in the log as "filesystem flushed",
     /// which was a claim this code was in no position to make.
     ///
-    /// What is left is `sync`, over the ssh channel the app already uses. It is
-    /// small, it demonstrably executes, and it is the standard way to push dirty
-    /// buffers out. A marker file written over AFC was verified to survive a
-    /// SIGKILL on nand-ultimate both with and without it, so `sync` is insurance
-    /// rather than a proven fix — the honest statement is that the app now does
-    /// the one flush available to it and no longer pretends to do more.
+    /// What is left is `sync`, over the ssh channel the app already uses — and
+    /// it is not a consolation prize. Measured on nand-ultimate, 2026-08-06,
+    /// install Temple Run over installd then SIGKILL QEMU:
     ///
-    /// The real fix is the PMU sequencing in qemu-ios. Until then, resume-on-
-    /// launch (Settings) is the only way to end a session with no data at risk,
-    /// because a snapshot captures the dirty state instead of discarding it.
+    ///     no flush   0/1 apps still installed after the reboot  (GONE)
+    ///     sync       1/1 apps still installed after the reboot
+    ///
+    /// The overlay held 9,408 pages / 74 MB in the losing run, so the app's DATA
+    /// was on flash the whole time; what never landed was the directory entry
+    /// for /var/mobile/Applications/<uuid>/. That is precisely the "I installed
+    /// it, quit, and it was gone" failure, and one `sync` is the difference.
+    /// (An earlier probe here wrote its marker over AFC, which survives a kill
+    /// either way — it measured the one path that was never fragile and would
+    /// have talked me out of this fix. The workload has to be installd's.)
+    ///
+    /// A real unmount would still be better, and the PMU sequencing in qemu-ios
+    /// is what unlocks it. Until then this is the flush, and resume-on-launch
+    /// (Settings) is the belt to its braces: a snapshot keeps the dirty state
+    /// rather than relying on it having reached flash at all.
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
         guard !isDead, state != .notStarted else { completion(false); return }
         // A stopped vCPU cannot run anything. Pause, or a save that stopped it,
@@ -784,7 +793,10 @@ final class EmulatorController {
                     return false
                 }
             } ?? false
-            NSLog(flushed ? "quit: guest sync complete" : "quit: guest sync did not complete")
+            // Worth logging loudly: this line is the difference between the
+            // session's installs existing next launch and not.
+            NSLog(flushed ? "quit: guest sync complete — installs are on flash"
+                          : "quit: guest sync did NOT complete — this session's installs may be lost")
             completion(flushed)
         }
     }
