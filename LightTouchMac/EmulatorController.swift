@@ -728,76 +728,68 @@ final class EmulatorController {
         performSnapshot(completion: completion)
     }
 
-    /// Make the guest's filesystem as safe as it can be made, then let the app
-    /// quit. `completion(true)` means the flush was actually delivered.
+    /// Shut the guest down properly on quit. `completion(true)` means the guest
+    /// really did unmount, not that we asked it to.
     ///
-    /// READ THIS BEFORE CHANGING IT. This used to drive `system_powerdown` and
-    /// wait for the guest to halt, on the understanding that the machine model
-    /// turns that into the slide-to-power-off gesture, the guest unmounts, and
-    /// QEMU exits. **The guest does not halt.** qemu-ios' own regression suite
-    /// fails `persist` and `fsck` on exactly this path, and qemu-ios commit
-    /// 313269d1 ("unplug at system_powerdown (partial fix; 3.1.3 still hangs)")
-    /// documents where it stops: with the USB cable bit cleared the kernel gets
-    /// past its power-source poll and starts sequencing rails down — 0x05,
-    /// 0x06, 0x0a — and then waits for something at PMU register 0x0a that the
-    /// model does not answer. Measured again on 2026-08-06: powerdown requested,
-    /// still running 180s later, killed, volume fsck-dirty. The gesture itself
-    /// is fine; the PMU is where the gap is. (An earlier version of this comment
-    /// — mine — claimed the PMU work had fixed it. It had not. The regression
-    /// suite said so the whole time.)
+    /// This works now, which it did not for the whole life of this project. The
+    /// guest always ran its full shutdown -- gesture, rails down, interrupts
+    /// masked, root volume UNMOUNTED -- and then waited for the power to go;
+    /// nothing in the emulated PMU answered the standby write it ends on, so it
+    /// waited forever and was killed on a live filesystem. qemu-ios commit
+    /// feb556f4 answers it, and the guest now halts by itself in about 14
+    /// seconds. qemu-ios' regression suite went green on the same change:
+    /// `persist` -- a file surviving a clean shutdown and a reboot -- passes for
+    /// the first time.
     ///
-    /// So driving it here bought nothing and cost something real: it starts a
-    /// shutdown SpringBoard cannot finish, and we then SIGKILL the guest in the
-    /// middle of that work rather than while it is quiescent. Worse, the wait
-    /// for the animation to end was reported in the log as "filesystem flushed",
-    /// which was a claim this code was in no position to make.
+    /// So the order here is: `sync` first, then the powerdown.
     ///
-    /// What is left is `sync`, over the ssh channel the app already uses — and
-    /// it is not a consolation prize. Measured on nand-ultimate, 2026-08-06,
-    /// install Temple Run over installd then SIGKILL QEMU:
+    /// The sync is not redundant. Measured on nand-ultimate, install an app
+    /// through installd and then SIGKILL: without a sync the app is GONE on the
+    /// next boot (0/1), with one it survives (1/1) -- 74 MB of its data was on
+    /// flash the whole time and only the directory entry was missing. That is
+    /// the failure mode if anything goes wrong with the shutdown below, so it
+    /// costs a few seconds to make the unmount unnecessary rather than critical.
     ///
-    ///     no flush   0/1 apps still installed after the reboot  (GONE)
-    ///     sync       1/1 apps still installed after the reboot
-    ///
-    /// The overlay held 9,408 pages / 74 MB in the losing run, so the app's DATA
-    /// was on flash the whole time; what never landed was the directory entry
-    /// for /var/mobile/Applications/<uuid>/. That is precisely the "I installed
-    /// it, quit, and it was gone" failure, and one `sync` is the difference.
-    /// (An earlier probe here wrote its marker over AFC, which survives a kill
-    /// either way — it measured the one path that was never fragile and would
-    /// have talked me out of this fix. The workload has to be installd's.)
-    ///
-    /// A real unmount would still be better, and the PMU sequencing in qemu-ios
-    /// is what unlocks it. Until then this is the flush, and resume-on-launch
-    /// (Settings) is the belt to its braces: a snapshot keeps the dirty state
-    /// rather than relying on it having reached flash at all.
+    /// Waiting for `.dead` is the honest signal: QEMU exits on its own once the
+    /// PMU cuts the rails, and that transition is already observed. An earlier
+    /// version watched for the framebuffer to go quiet instead and called that
+    /// "flushed", which was a guess dressed up as a measurement.
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
         guard !isDead, state != .notStarted else { completion(false); return }
-        // A stopped vCPU cannot run anything. Pause, or a save that stopped it,
-        // used to make this give up silently — and giving up here is the one
+        // A stopped vCPU cannot run the shutdown. Pause, or a save that stopped
+        // it, used to make this give up silently — and giving up here is the one
         // failure that costs the user data.
         qemu_ios_snapshot_resume()   // no-op if already running
         state = .running
         Task { [weak self] in
             guard let self else { completion(false); return }
-            guard self.canManageApps else {
-                NSLog("quit: no USB session — nothing can be flushed; quitting")
-                completion(false); return
+
+            if self.canManageApps {
+                let synced = await withSoftDeadline(20) { () -> Bool in
+                    do { try await self.syncFilesystem(); return true }
+                    catch {
+                        NSLog("quit: sync failed (\(error.localizedDescription))")
+                        return false
+                    }
+                } ?? false
+                NSLog(synced ? "quit: guest sync complete" : "quit: guest sync did not complete")
             }
-            // Bounded, and bounded by us: the ssh helper has its own timeout but
-            // the quit must not be hostage to it either way.
-            let flushed = await withSoftDeadline(20) { () -> Bool in
-                do { try await self.syncFilesystem(); return true }
-                catch {
-                    NSLog("quit: sync failed (\(error.localizedDescription))")
-                    return false
+
+            NSLog("quit: powering the guest down so it unmounts")
+            qemu_ios_ui_powerdown()
+            // ~14s in practice; 40 leaves room for a loaded host without being a
+            // wait the user cannot predict the end of.
+            let deadline = Date().addingTimeInterval(40)
+            while Date() < deadline {
+                try? await Task.sleep(for: .milliseconds(200))
+                if self.isDead {
+                    NSLog("quit: guest powered off cleanly — volume unmounted")
+                    completion(true); return
                 }
-            } ?? false
-            // Worth logging loudly: this line is the difference between the
-            // session's installs existing next launch and not.
-            NSLog(flushed ? "quit: guest sync complete — installs are on flash"
-                          : "quit: guest sync did NOT complete — this session's installs may be lost")
-            completion(flushed)
+            }
+            // The sync above is why this is a disappointment rather than a loss.
+            NSLog("quit: guest did not power off in time — quitting anyway")
+            completion(false)
         }
     }
 
