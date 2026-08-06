@@ -95,20 +95,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Quit must ALWAYS complete. .terminateLater hands AppKit an IOU, and
         // if the completion never runs the app just sits there — ⌘Q appears to
-        // do nothing and the only way out is force-quit. The snapshot is a
-        // convenience; never let it hold the app hostage. Whichever of the two
-        // fires first wins, and replying twice is not allowed, hence the latch.
+        // do nothing and the only way out is force-quit. Nothing below may hold
+        // the app hostage. Whichever finishes first wins, and replying twice is
+        // not allowed, hence the latch.
         var replied = false
         let reply = {
             guard !replied else { return }
             replied = true
             NSApp.reply(toApplicationShouldTerminate: true)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
-            if !replied { NSLog("quit: snapshot did not finish in time — quitting anyway") }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 50) {
+            if !replied { NSLog("quit: shutdown did not finish in time — quitting anyway") }
             reply()
         }
-        emulator.beginQuitSnapshot { _ in reply() }
+
+        // Power the guest down first. HFS+ holds catalog updates in memory and
+        // only an unmount flushes them, so quitting without this loses the
+        // directory entries for anything installed this session even though
+        // every data block already reached the overlay. If resume is on, the
+        // snapshot is taken first — it captures RAM, which the powerdown then
+        // discards by design.
+        if EmulatorController.resumeOnLaunch {
+            emulator.beginQuitSnapshot { _ in
+                emulator.beginCleanShutdown { _ in reply() }
+            }
+        } else {
+            emulator.beginCleanShutdown { _ in reply() }
+        }
         return .terminateLater
     }
 

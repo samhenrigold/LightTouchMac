@@ -496,7 +496,7 @@ final class EmulatorController {
     /// looping. Off remains one click away in Settings.
     static let resumeDefaultsKey = "resumeOnLaunch"
     static var resumeOnLaunch: Bool {
-        UserDefaults.standard.object(forKey: resumeDefaultsKey) as? Bool ?? true
+        UserDefaults.standard.object(forKey: resumeDefaultsKey) as? Bool ?? false
     }
     /// Set when the user explicitly discards saved state, so the very next quit
     /// doesn't silently re-save the current guest and drop them right back into
@@ -545,7 +545,7 @@ final class EmulatorController {
             guard let self, !self.isDead else { return }
             NSLog("snapshot: restored state never came alive — quarantining, cold-booting")
             self.quarantineSnapshot()
-            self.coldRelaunch()
+            self.quitForRelaunch(reason: "restored state never came alive")
         }
     }
 
@@ -626,6 +626,39 @@ final class EmulatorController {
         performSnapshot(completion: completion)
     }
 
+    /// Shut the guest down properly on quit, so the filesystem is intact.
+    ///
+    /// This matters more than it sounds. The guest writes file DATA to flash
+    /// promptly, but HFS+ keeps catalog updates in memory and nothing forces
+    /// them out on an idle device — measured in qemu-ios as no page reaching
+    /// flash in the three minutes after a write. Killing QEMU therefore loses
+    /// the directory entry while every data block is safely on disk, and the
+    /// file simply does not exist next boot. Unmounting the root volume is what
+    /// flushes the catalog, and only a real shutdown unmounts it.
+    ///
+    /// `system_powerdown` is turned into the slide-to-power-off gesture by the
+    /// machine model; the guest unmounts, clears the PMU power latch, and QEMU
+    /// exits on its own — which is exactly the `.dead` transition we already
+    /// observe. (An earlier note in this project said powerdown never completes
+    /// on 3.1.3; that predates the PMU work and is no longer true.)
+    func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
+        guard state == .running || state == .paused else { completion(false); return }
+        NSLog("quit: powering the guest down so HFS+ flushes its catalog")
+        qemu_ios_ui_powerdown()
+        Task { [weak self] in
+            // ~10s is typical; give it room, and let the caller's own backstop
+            // handle a guest that never gets there.
+            let deadline = Date().addingTimeInterval(40)
+            while Date() < deadline {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard let self else { completion(false); return }
+                if self.isDead { completion(true); return }
+            }
+            NSLog("quit: guest did not power off in time — quitting anyway")
+            completion(false)
+        }
+    }
+
     /// Menu ▸ Save State Now: save, then resume the vCPU (the save stops it).
     func saveSnapshotNow() {
         skipNextQuitSnapshot = false   // an explicit save clears a prior discard
@@ -675,7 +708,7 @@ final class EmulatorController {
     func requestFactoryReset() {
         discardSavedState()
         try? "reset".write(to: resetMarkerURL, atomically: true, encoding: .utf8)
-        coldRelaunch()
+        quitForRelaunch(reason: "factory reset requested")
     }
 
     private func quarantineSnapshot() {
@@ -683,25 +716,19 @@ final class EmulatorController {
         try? FileManager.default.moveItem(at: snapshotURL, to: snapshotBadURL)
     }
 
-    /// Relaunch, with THIS process fully gone before the next one starts.
+    /// Quit, and leave reopening to the user.
     ///
-    /// Launching first and terminating in the completion handler overlapped the
-    /// two: the callback fires only after the new instance is up, by which point
-    /// its start() has already wiped and reopened the overlay — while this
-    /// process's QEMU was still writing pages into that same directory. A
-    /// factory reset could therefore keep orphan pages from the pre-erase
-    /// filesystem, and the new instance's usbmuxd reaper would SIGTERM the old,
-    /// still-live daemon. `open -n` detached with a short delay lets us exit
-    /// first; the successor owns the overlay alone.
-    private func coldRelaunch() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c",
-                          "sleep 1; open -n \"$1\"", "sh", Bundle.main.bundleURL.path]
-        try? task.run()
+    /// This used to `open -n` a successor. Two instances then existed at once
+    /// whenever our own exit was slow — which a wedged guest guarantees — and
+    /// they fought over one NAND overlay and one usbmuxd pid file. An app that
+    /// spawns copies of itself behind the user's back is the wrong shape for
+    /// this regardless: QEMU cannot re-init in-process, so "relaunch" is only
+    /// ever "quit, then the user reopens".
+    private func quitForRelaunch(reason: String) {
+        NSLog("relaunch: \(reason) — quitting; reopen the app to continue")
         NSApp.terminate(nil)
     }
-    
+
     // MARK: - App management
     
     var canManageApps: Bool { usbmux.session != nil }

@@ -587,14 +587,14 @@ final class DisplayView: NSView {
     }
 
     private func guestScrollDrag(_ event: NSEvent) {
-        // Finger movement, not wheel movement. With natural scrolling on
-        // (isDirectionInvertedFromDevice true) the deltas already describe where
-        // the fingers went, so they pass through; a classic wheel reports the
-        // opposite and has to be negated. Getting this backwards is what made
-        // every gesture run the wrong way.
-        let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
-        let dx = event.scrollingDeltaX * sign
-        let dy = event.scrollingDeltaY * sign
+        // Use the deltas as AppKit reports them. It has ALREADY applied the
+        // user's natural-scrolling preference, so consulting
+        // isDirectionInvertedFromDevice and flipping the sign ourselves just
+        // corrects a correction — which is what kept sending these gestures the
+        // wrong way. That flag is for telling the user which way the hardware
+        // went, not for undoing the system setting.
+        let dx = event.scrollingDeltaX
+        let dy = event.scrollingDeltaY
         let b = contentLayer.bounds
         guard b.width > 0, b.height > 0 else { return }
 
@@ -655,8 +655,8 @@ final class DisplayView: NSView {
         case .began, .changed:
             // Sideways fingers roll the device. A full trackpad sweep is about
             // a quarter turn, which is as far as any tilt game needs.
-            let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
-            scrollTilt = min(max(scrollTilt + event.scrollingDeltaX * sign * 0.006, -.pi / 3), .pi / 3)
+            scrollTilt = min(max(scrollTilt + event.scrollingDeltaX * Self.scrollTiltGain,
+                                 -.pi / 3), .pi / 3)
             tiltAngle = scrollTilt
             setShellAngle(restAngle + tiltAngle)
             emulator?.setTilt(angle: restAngle + tiltAngle)
@@ -682,18 +682,20 @@ final class DisplayView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         if tilting {
-            // NEGATED: a layer transform's positive direction is the opposite
-            // of the polar angle measured in this flipped view, so the shell
-            // used to swing AGAINST the drag — which read as "wrong way" and
-            // "too fast" at once, since the device and your hand moved apart.
+            // NOT negated. The polar angle in this flipped view and the layer
+            // transform share a handedness, so the raw delta already turns the
+            // shell with the hand. It was negated for a while on the theory
+            // that explained an earlier "wrong direction, too fast" report —
+            // but that report was the ungeared 1:1 rate reading as reversed,
+            // and the gain below is what actually fixed it.
             //
-            // Geared down by rotationGain on top of that. 1:1 is the textbook
+            // Geared down by rotationGain. 1:1 is the textbook
             // answer for direct manipulation, but the useful arc here is a
             // wrist movement around a point on screen, and at 1:1 a quarter
             // turn costs almost none of it — fine for flipping to landscape,
             // useless for holding a few degrees of tilt in a game, which is
             // what this gesture is actually for.
-            let delta = -(mouseAngle(event) - grabAngle)
+            let delta = mouseAngle(event) - grabAngle
             tiltAngle = atan2(sin(delta), cos(delta)) * Self.rotationGain   // wrap, then gear down
             setShellAngle(restAngle + tiltAngle)
             emulator?.setTilt(angle: restAngle + tiltAngle)
@@ -719,6 +721,12 @@ final class DisplayView: NSView {
     /// The calibration knob for how fine the tilt is: 1.0 tracks the cursor
     /// exactly, lower trades that for precision. Tune here, not at the call site.
     private static let rotationGain: CGFloat = 0.4
+
+    /// Radians of device tilt per point of two-finger swipe, when the cursor is
+    /// off the panel. Much gentler than a drag: a swipe has no anchor to hold
+    /// on to, so the same rate that feels direct under a finger feels wild here.
+    /// A full trackpad sweep is a few degrees, which is the range tilt games use.
+    private static let scrollTiltGain: CGFloat = 0.0015
 
     private var tilting = false
     private var grabAngle: CGFloat = 0   // mouse polar angle at grab
