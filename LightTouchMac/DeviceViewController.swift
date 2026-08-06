@@ -17,6 +17,9 @@ final class DeviceViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
         displayView.emulator = emulator
         displayView.onDropIPA = { [weak self] url in self?.installDropped(url) }
+        displayView.onZoomStep = { [weak self] direction in
+            (self?.view.window?.windowController as? MainWindowController)?.stepZoom(direction)
+        }
     }
     
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -30,9 +33,9 @@ final class DeviceViewController: NSViewController {
     
     var screen: DisplayView { displayView }
     
-    func setScaleMode(_ mode: ScaleMode) { displayView.scaleMode = mode }
+    func setZoom(_ zoom: ZoomMode) { displayView.zoom = zoom }
     
     private func installDropped(_ url: URL) {
-        Task { await AppInstaller.install(url, with: emulator, presenting: view.window) }
+        AppInstaller.start(url, with: emulator, presenting: view.window)
     }
 }

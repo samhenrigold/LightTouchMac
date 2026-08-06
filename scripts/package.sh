@@ -69,27 +69,89 @@ copy_with_deps() {
 echo "embedding dylib + dependency closure…"
 copy_with_deps "$DYLIB"
 
-# Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
 APP_BIN="$APP/Contents/MacOS/LightTouchMac"
+
+# ---------------------------------------------------------- tools the app runs
+#
+# The app is meant to work on a Mac with no Homebrew and no source checkout, so
+# everything it shells out to ships inside it: Contents/Resources/tools for the
+# executables and scripts, Contents/Frameworks for the dylibs they need.
+# Bundled.swift looks there first and falls back to the checkout, so a dev build
+# and a packaged one take the same code path.
+#
+# libimobiledevice is here rather than in the app's link line on purpose: the
+# app dlopens it (see IMobileDevice.swift), because Homebrew builds its dylibs
+# for whatever macOS the build machine runs and hard-linking one would stop the
+# app launching on anything older.
+TOOLS="$APP/Contents/Resources/tools"
+mkdir -p "$TOOLS"
+MISSING=""
+
+copy_tool() {
+    local src="$1" base; base="$(basename "$src")"
+    if [ ! -f "$src" ]; then MISSING="$MISSING $base"; return; fi
+    cp -f "$src" "$TOOLS/$base"
+    chmod u+wx "$TOOLS/$base"
+    # Scripts have no load commands; otool just says so and the loop is empty.
+    local deps
+    deps="$(otool -L "$TOOLS/$base" 2>/dev/null | tail -n +2 | awk '{print $1}' \
+            | grep -E '^(/opt/homebrew|/usr/local)/' || true)"
+    for dep in $deps; do
+        install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$TOOLS/$base"
+        copy_with_deps "$dep"
+    done
+    # tools/ is two levels under Contents, so its way back to Frameworks is not
+    # the app binary's.
+    if [ -n "$deps" ]; then
+        install_name_tool -add_rpath "@executable_path/../../Frameworks" "$TOOLS/$base" 2>/dev/null || true
+    fi
+}
+
+echo "embedding tools…"
+BREW="$(brew --prefix 2>/dev/null || echo /opt/homebrew)"
+for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair; do
+    copy_tool "$BREW/bin/$tool"
+done
+copy_tool "${USBMUXD_QEMU:-$HOME/Developer/usbmuxd-qemu}/usbmuxd/src/usbmuxd"
+copy_tool "$QEMU/imgtools/install-ipa.sh"
+copy_tool "$QEMU/contrib/it-ssh-terminal.sh"
+# Guest-side binaries install-ipa.sh copies onto the device, and the helper that
+# stands in for the python3 a clean Mac does not have.
+copy_tool "$QEMU/contrib/it-gles/MBXGLEngine"
+copy_tool "$QEMU/contrib/it-instprogress/sbdlicon"
+# ipod-helper is built, not committed (contrib/macos-app/ipod-helper.c), and the
+# qemu-ios app pipeline is what compiles it — take its copy.
+copy_tool "${IT_HELPER_BIN:-$QEMU/build/iPod touch.app/Contents/Resources/tools/ipod-helper}"
+
+if [ -n "$MISSING" ]; then
+    echo "  NOT bundled:$MISSING" >&2
+    echo "  The app still runs, but on a Mac without Homebrew or a qemu-ios" >&2
+    echo "  checkout the features these back will be unavailable." >&2
+fi
+
+# Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
 install_name_tool -delete_rpath "$BUILD" "$APP_BIN" 2>/dev/null || true
 
 # Seal: refuse to ship if any embedded Mach-O still resolves outside the bundle.
 echo "sealing…"
 bad=0
-for f in "$FRAMEWORKS"/*.dylib; do
+for f in "$FRAMEWORKS"/*.dylib "$TOOLS"/*; do
+    [ -f "$f" ] || continue
     while read -r dep; do
         case "$dep" in
             /opt/homebrew/*|/usr/local/*)
                 echo "  LEAK: $(basename "$f") still needs $dep" >&2; bad=1 ;;
         esac
-    done < <(otool -L "$f" | tail -n +2 | awk '{print $1}')
+    done < <(otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}')
 done
 [ "$bad" = 0 ] || { echo "sealing failed — unresolved external dylibs" >&2; exit 1; }
 
 # Sign inside-out: frameworks first, then the app with entitlements.
 echo "signing (id: $SIGN_ID)…"
-for f in "$FRAMEWORKS"/*.dylib; do
-    codesign -f -o runtime -s "$SIGN_ID" "$f"
+for f in "$FRAMEWORKS"/*.dylib "$TOOLS"/*; do
+    # Scripts are not signable and do not need to be; the app's signature covers
+    # them as resources.
+    [ -f "$f" ] && file "$f" | grep -q Mach-O && codesign -f -o runtime -s "$SIGN_ID" "$f"
 done
 codesign -f -o runtime --entitlements "$ENTITLEMENTS" -s "$SIGN_ID" "$APP"
 codesign -dv "$APP" 2>&1 | grep -E "Identifier|Signature" || true

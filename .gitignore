@@ -1,7 +1,2 @@
 .DS_Store
-build/
-DerivedData/
-
-# Per-user Xcode state (window positions, breakpoints, scheme ordering).
 xcuserdata/
-*.xcuserstate

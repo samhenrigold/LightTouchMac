@@ -6,8 +6,8 @@
 // on install we read the real CFBundleDisplayName/icon straight out of the
 // .ipa via /usr/bin/unzip (shipped with macOS, no new dependency) and cache
 // it to disk keyed by bundle ID. The live device list still drives *which*
-// bundle IDs are installed; this only supplies the name/icon for them, and
-// self-heals for guest-side installs/deletes it never learned about.
+// bundle IDs are installed; this only supplies the name/icon for them, so an
+// app installed inside the guest simply falls back to the reported name.
 
 import Cocoa
 import Subprocess
@@ -19,8 +19,6 @@ final class AppMetadataCache {
     
     private struct Entry: Codable {
         let name: String
-        let version: String   // compared against the live list; a mismatch means the
-        // app was updated some other way and this entry is stale
         let hasIcon: Bool
     }
     
@@ -34,20 +32,45 @@ final class AppMetadataCache {
         if let data = try? Data(contentsOf: indexURL) {
             entries = (try? JSONDecoder().decode([String: Entry].self, from: data)) ?? [:]
         }
+        #if DEBUG
+        Self.selfCheck()
+        #endif
     }
+
+    #if DEBUG
+    /// The member-picking rules are the whole reason names and icons went
+    /// missing, so they assert against the shapes that broke them.
+    static func selfCheck() {
+        let members = [
+            "Payload/Super Monkey Ball [SEGA].app/Info.plist",
+            "Payload/Super Monkey Ball [SEGA].app/Icon.png",
+            "Payload/Super Monkey Ball [SEGA].app/Icon@2x.png",
+            "Payload/Super Monkey Ball [SEGA].app/Settings.bundle/Nested.app/Info.plist",
+            "Payload/Super Monkey Ball [SEGA].app/Frameworks/Foo.framework/Icon.png",
+        ]
+        let root = appRoot(members)
+        assert(root == "Payload/Super Monkey Ball [SEGA].app/", "nested .app won: \(root ?? "nil")")
+        assert(iconMember(members, root: root!, info: [:]) == "\(root!)Icon@2x.png")
+        assert(iconMember(members, root: root!, info: ["CFBundleIconFile": "Icon.png"]) == "\(root!)Icon@2x.png")
+        assert(escapedForUnzip("a [b]*?.png") == "a \\[b\\]\\*\\?.png")
+    }
+    #endif
     
     private var indexURL: URL { dir.appendingPathComponent("index.json") }
     private func iconURL(_ bundleID: String) -> URL { dir.appendingPathComponent("\(bundleID).png") }
     
-    /// nil if never learned, or if the live version no longer matches what
-    /// was cached (the app was updated some way we didn't see).
-    func name(for bundleID: String, version: String) -> String? {
-        guard let entry = entries[bundleID], entry.version == version else { return nil }
-        return entry.name
-    }
-    
-    func icon(for bundleID: String, version: String) -> NSImage? {
-        guard let entry = entries[bundleID], entry.version == version, entry.hasIcon else { return nil }
+    /// nil if we never learned this bundle ID.
+    ///
+    /// Entries used to also carry the version and be discarded when it didn't
+    /// match the live list — but ideviceinstaller reports CFBundleVersion while
+    /// we read CFBundleShortVersionString, so for any app where those differ
+    /// (most of them) every entry was rejected on read AND deleted by prune,
+    /// which is what made the sidebar fall back to bundle IDs at random. A name
+    /// and icon barely change between versions; a stale one is not worth that.
+    func name(for bundleID: String) -> String? { entries[bundleID]?.name }
+
+    func icon(for bundleID: String) -> NSImage? {
+        guard entries[bundleID]?.hasIcon == true else { return nil }
         return NSImage(contentsOf: iconURL(bundleID))
     }
     
@@ -58,34 +81,36 @@ final class AppMetadataCache {
         save()
     }
     
-    /// Drop cache entries for anything not in the live list (deleted from the
-    /// guest's springboard rather than our Remove button) or whose version no
-    /// longer matches (updated some way we didn't learn from).
-    func prune(keeping liveVersions: [String: String]) {
-        for (id, entry) in entries where liveVersions[id] != entry.version { forget(id) }
-    }
-    
+    // There is deliberately no prune-against-the-live-list. It existed, and it
+    // was what threw the name and icon away moments after learning them: the
+    // sidebar polls every 3 s, an install takes far longer than that, and the
+    // app being installed is not in the live list for any of those ticks — so
+    // the entry written at the start of the install was deleted before installd
+    // ever registered the app. An entry for an app that is gone costs a few KB
+    // and is never read (lookups only happen for bundle IDs the device
+    // reports); an entry deleted by mistake costs the icon and the name.
+
     /// Best-effort: read the display name and icon out of a decrypted .ipa and
-    /// cache them. Silently does nothing on any failure — the sidebar just
-    /// falls back to whatever ideviceinstaller reports.
-    func learn(from ipa: URL) async {
-        guard let info = await Self.readInfoPlist(ipa),
-              let bundleID = info["CFBundleIdentifier"] as? String else { return }
+    /// cache them, returning the name. Silently does nothing on any failure —
+    /// the sidebar just falls back to whatever ideviceinstaller reports.
+    @discardableResult
+    func learn(from ipa: URL) async -> String? {
+        let members = await Self.members(ipa)
+        guard let root = Self.appRoot(members),
+              let plist = try? await Self.unzip(ipa, member: root + "Info.plist"),
+              let info = try? PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any],
+              let bundleID = info["CFBundleIdentifier"] as? String else { return nil }
         let name = (info["CFBundleDisplayName"] as? String)
         ?? (info["CFBundleName"] as? String)
         ?? ipa.deletingPathExtension().lastPathComponent
-        // Same field ideviceinstaller reports in `list`, so it lines up with
-        // the live version DeviceTools.parseList hands back.
-        let version = (info["CFBundleShortVersionString"] as? String)
-        ?? (info["CFBundleVersion"] as? String) ?? ""
-        let hasIcon: Bool
-        if let iconData = await Self.readIcon(ipa, info: info) {
-            hasIcon = (try? iconData.write(to: iconURL(bundleID))) != nil
-        } else {
-            hasIcon = false
+        var hasIcon = false
+        if let member = Self.iconMember(members, root: root, info: info),
+           let data = try? await Self.unzip(ipa, member: member) {
+            hasIcon = (try? data.write(to: iconURL(bundleID))) != nil
         }
-        entries[bundleID] = Entry(name: name, version: version, hasIcon: hasIcon)
+        entries[bundleID] = Entry(name: name, hasIcon: hasIcon)
         save()
+        return name
     }
     
     private func save() {
@@ -93,37 +118,77 @@ final class AppMetadataCache {
         try? data.write(to: indexURL, options: .atomic)
     }
     
-    // MARK: - .ipa reading (Payload/*.app is the app bundle inside the zip)
-    
-    private static func readInfoPlist(_ ipa: URL) async -> [String: Any]? {
-        guard let data = try? await unzip(ipa, "Payload/*.app/Info.plist") else { return nil }
-        return try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+    // MARK: - .ipa reading (Payload/<something>.app is the app bundle)
+    //
+    // Every member is looked up in the archive's own listing and then extracted
+    // by its exact name, rather than handing unzip a `Payload/*.app/Info.plist`
+    // pattern. Two reasons that pattern misfired: unzip's `*` matches `/` too,
+    // so a nested .app inside a bundle could win and the two matches would be
+    // concatenated into unparseable plist data; and `[`, `]`, `?` in a real
+    // bundle name (Super Monkey Ball [SEGA].app) are wildcard syntax to unzip,
+    // so those apps matched nothing at all and learned no name or icon.
+
+    /// Every path in the archive.
+    private static func members(_ ipa: URL) async -> [String] {
+        let result = try? await run(
+            .path(FilePath("/usr/bin/unzip")),
+            arguments: ["-Z1", ipa.path],
+            output: .string(limit: 1 << 22), error: .discarded
+        )
+        guard let text = result?.standardOutput else { return [] }
+        return text.split(separator: "\n").map(String.init)
     }
-    
-    private static func readIcon(_ ipa: URL, info: [String: Any]) async -> Data? {
-        var candidates: [String] = []
-        if let files = info["CFBundleIconFiles"] as? [String], let first = files.first {
-            candidates.append(first)
+
+    /// "Payload/Foo.app/" — the shallowest bundle holding an Info.plist, so a
+    /// nested .app can never be mistaken for the app itself.
+    static func appRoot(_ members: [String]) -> String? {
+        members
+            .filter { $0.hasSuffix(".app/Info.plist") }
+            .min { $0.count < $1.count }
+            .map { String($0.dropLast("Info.plist".count)) }
+    }
+
+    /// The icon PNG to cache: whatever the Info.plist declares, else Icon.png.
+    /// Only PNGs sitting directly in the .app count, so a framework's artwork
+    /// can't win, and @2x is preferred — same picture, twice the resolution.
+    static func iconMember(_ members: [String], root: String, info: [String: Any]) -> String? {
+        var names: [String] = []
+        if let icons = info["CFBundleIcons"] as? [String: Any],
+           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+           let files = primary["CFBundleIconFiles"] as? [String] { names += files }
+        if let files = info["CFBundleIconFiles"] as? [String] { names += files }
+        if let file = info["CFBundleIconFile"] as? String { names.append(file) }
+        names.append("Icon")
+
+        let pngs = members.filter {
+            $0.hasPrefix(root) && $0.hasSuffix(".png") && !$0.dropFirst(root.count).contains("/")
         }
-        if let file = info["CFBundleIconFile"] as? String {
-            candidates.append(file)
-        }
-        candidates.append("Icon.png")
-        for name in candidates {
-            let file = name.hasSuffix(".png") ? name : "\(name).png"
-            if let data = try? await unzip(ipa, "Payload/*.app/\(file)") { return data }
+        for name in names {
+            let base = root + (name.hasSuffix(".png") ? String(name.dropLast(4)) : name)
+            if let hit = pngs.first(where: { $0 == "\(base)@2x.png" })
+                ?? pngs.first(where: { $0 == "\(base).png" })
+                ?? pngs.first(where: { $0.hasPrefix(base) }) { return hit }
         }
         return nil
     }
-    
-    private static func unzip(_ ipa: URL, _ pattern: String) async throws -> Data {
+
+    /// unzip reads `*`, `?` and `[]` in a member name as wildcards, so the name
+    /// has to be escaped even though it came from unzip's own listing.
+    static func escapedForUnzip(_ member: String) -> String {
+        member.reduce(into: "") { out, c in
+            if "*?[]\\".contains(c) { out.append("\\") }
+            out.append(c)
+        }
+    }
+
+    private static func unzip(_ ipa: URL, member: String) async throws -> Data {
         let result = try await run(
             .path(FilePath("/usr/bin/unzip")),
-            arguments: ["-p", ipa.path, pattern],
+            arguments: ["-p", ipa.path, escapedForUnzip(member)],
             output: .data(limit: 1 << 22), error: .discarded
         )
         guard result.terminationStatus.isSuccess, !result.standardOutput.isEmpty else {
-            throw DeviceToolsError.failed("no match")
+            throw DeviceToolsError.failed("no such member: \(member)")
         }
         return result.standardOutput
     }

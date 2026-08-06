@@ -65,6 +65,7 @@ final class EmulatorController {
             argv += ["-netdev", "user,id=wifi0"]   // host networking via slirp
         }
         
+        logEmulatorBuild()
         qemu_ios_ui_attach(nil, nil)
         
         let thread = Thread {
@@ -80,6 +81,19 @@ final class EmulatorController {
     
     func stop() {
         usbmux.stop()
+    }
+
+    /// Which libqemu-arm.dylib this process actually loaded, and when it was
+    /// built. The dylib lives in a build tree other sessions rebuild under our
+    /// feet; when "did this run have that fix?" comes up, this line answers it.
+    private func logEmulatorBuild() {
+        guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2) /* RTLD_DEFAULT */,
+                              "qemu_ios_main") else { return }
+        var info = Dl_info()
+        guard dladdr(sym, &info) != 0, let name = info.dli_fname else { return }
+        let path = String(cString: name)
+        let built = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate]
+        NSLog("emulator dylib: \(path) (built \(built.map(String.init(describing:)) ?? "unknown"))")
     }
     
     // MARK: - Hardware buttons
@@ -100,14 +114,37 @@ final class EmulatorController {
     func rotateLeft()      { qemu_ios_ui_rotate(false) }
     func rotateRight()     { qemu_ios_ui_rotate(true) }
     func shake()           { qemu_ios_ui_shake() }
+
+    /// Point the accelerometer's gravity at a device tilted `angle` radians
+    /// from upright — positive is clockwise as seen on screen, matching the
+    /// shell layer's transform. ±0x40 counts is ±1 g in the LIS302DL model;
+    /// the axis signs are the ones lis302dl_apply_orientation uses for
+    /// orientations 1/3/4, so an angle of exactly ∓π/2 lands on the same
+    /// vector a real rotation would.
+    func setTilt(angle: Double) {
+        qemu_ios_ui_accel(Int32((64 * sin(angle)).rounded()),
+                          Int32((-64 * cos(angle)).rounded()), 0)
+    }
     
-    /// Toggle between portrait and landscape. The guest rotate is a 90° edge
-    /// event, so we alternate direction to swing back and forth. Exposed so
-    /// the toolbar can show which way the *next* press will rotate.
-    private(set) var isLandscape = false
+    /// The device's orientation as degrees turned clockwise from portrait —
+    /// the same value the LCD model calls its rotation, stepped in lockstep
+    /// with the guest's own quarter-turn cycle (ipod_touch_kbd_rotate:
+    /// portrait → landscape-right(90) → upside-down(180) → landscape-left(270)).
+    /// DisplayView poses the shell from this, so all rotation must go through
+    /// rotate(clockwise:) or the shell drifts out of step with the guest.
+    private(set) var rotationDegrees = 0
+    var isLandscape: Bool { rotationDegrees == 90 || rotationDegrees == 270 }
+
+    /// Toggle between portrait and landscape: enter counter-clockwise (home
+    /// button ends up on the right), leave by heading back the short way.
     func toggleRotation() {
-        isLandscape ? rotateLeft() : rotateRight()
-        isLandscape.toggle()
+        rotate(clockwise: rotationDegrees == 270)
+    }
+
+    /// Rotate a quarter turn in a named direction.
+    func rotate(clockwise: Bool) {
+        clockwise ? rotateRight() : rotateLeft()
+        rotationDegrees = (rotationDegrees + (clockwise ? 90 : 270)) % 360
     }
     
     // MARK: - Keyboard passthrough
@@ -138,10 +175,33 @@ final class EmulatorController {
         return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot)
     }
     
+    /// Cheap in-process check that the guest is attached and lockdownd is
+    /// answering, without spawning a tool to find out the hard way.
+    func deviceReady() async -> Bool {
+        guard let socket = usbmux.session?.clientSocket else { return false }
+        return await Task.detached { IMobileDevice.deviceReady(socket: socket) }.value
+    }
+
     func installedApps() async throws -> [InstalledApp] { try await tools().installedApps() }
-    func install(_ ipa: URL) async throws -> String     { try await tools().install(ipa) }
     func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
     func openTerminal() async throws                     { try await tools().openTerminal() }
+
+    func install(_ ipa: URL, progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
+        try await tools().install(ipa, progress: progress)
+    }
+
+    /// The home screen's own icon order, for the sidebar to mirror and reorder.
+    private func springBoard() throws -> SpringBoardIcons {
+        guard let session = usbmux.session else {
+            throw DeviceToolsError.failed("The device is not reachable over USB yet.")
+        }
+        return SpringBoardIcons(clientSocket: session.clientSocket)
+    }
+
+    func homeScreenOrder() async throws -> [String] { try await springBoard().order() }
+    func moveOnHomeScreen(_ bundleID: String, before other: String?) async throws {
+        try await springBoard().move(bundleID, before: other)
+    }
     
     // MARK: - Boot environment
     

@@ -26,9 +26,12 @@ final class USBMux {
     private var daemonTask: Task<Void, Never>?
     private var daemonPID: pid_t?
     
-    /// The fork lives here (see the qemu-ios usbmuxd-qemu checkout).
+    /// The fork ships in the bundle; a dev build falls back to the checkout
+    /// (see qemu-ios' usbmuxd-qemu).
     private static let root = "\(NSHomeDirectory())/Developer/usbmuxd-qemu"
-    private static var binary: String { "\(root)/usbmuxd/src/usbmuxd" }
+    private static var binary: String {
+        Bundled.tool("usbmuxd") ?? "\(root)/usbmuxd/src/usbmuxd"
+    }
     private static var conf: String { "\(root)/run/conf" }
     
     /// Start usbmuxd and record a session. Returns nil (and does nothing) if the
@@ -42,6 +45,14 @@ final class USBMux {
             return nil
         }
         
+        pidFile = "\(filesRoot)/apps/work/usbmuxd.pid"
+        // A daemon from a previous run survives anything that skips stop() —
+        // Xcode's stop button is a SIGKILL — and orphans accumulate one per
+        // dev cycle. The pid file names the only process this may kill, and
+        // the executable path is checked so a recycled pid is never someone
+        // else's process.
+        reapStaleDaemon()
+
         let clientSocket = "127.0.0.1:\(Self.freePort())"
         let guestAddress = "127.0.0.1:\(Self.freePort())"
         let session = Session(clientSocket: clientSocket, guestAddress: guestAddress)
@@ -51,22 +62,49 @@ final class USBMux {
                          session: session)
         
         let binary = Self.binary, conf = Self.conf
+        // The daemon's log lands where install-ipa.sh's error message has
+        // always claimed it is. It was .discarded before, which made every
+        // "check usbmuxd.log" a dead end.
+        let logPath = FilePath("\(filesRoot)/apps/work/usbmuxd.log")
         daemonTask = Task.detached {
             do {
+                // The work directory exists — writeSessionFile above made it —
+                // so this only fails in circumstances /dev/null also covers.
+                let log = (try? FileDescriptor.open(
+                    logPath, .writeOnly,
+                    options: [.create, .truncate], permissions: .ownerReadWrite))
+                    ?? (try! FileDescriptor.open("/dev/null", .writeOnly))
+                defer { try? log.close() }
                 _ = try await run(
                     .path(FilePath(binary)),
-                    arguments: ["-f", "-v", "-v", "-S", clientSocket, "-P", "NONE",
+                    arguments: ["-f", "-v", "-S", clientSocket, "-P", "NONE",
                                 "-C", conf],
                     environment: .inherit.updating([
                         "USBMUXD_QEMU_ADDR": guestAddress,
-                        "USBMUXD_QEMU_DELAY": "100",
+                        // SECONDS, not ms — "100" here was a hundred-second
+                        // stall between QEMU connecting and the first USB
+                        // enumeration attempt, which is why the device took
+                        // forever to "attach" on every boot. Ten skips the
+                        // iBoot phase's noise; the daemon's own retries (now
+                        // uncapped) carry it from there.
+                        "USBMUXD_QEMU_DELAY": "10",
                     ]),
-                    input: .none, output: .discarded, error: .discarded
+                    input: .none,
+                    output: .fileDescriptor(log, closeAfterSpawningProcess: false),
+                    error: .fileDescriptor(log, closeAfterSpawningProcess: false)
                 ) { execution in
                     // Record the pid so stop() can kill it synchronously — an
                     // app quit runs cleanup faster than the async teardown can.
+                    // The pid file is what lets the NEXT launch reap this
+                    // daemon when this one dies without running stop().
                     let pid = execution.processIdentifier.value
-                    await MainActor.run { [weak self] in self?.daemonPID = pid }
+                    await MainActor.run { [weak self] in
+                        self?.daemonPID = pid
+                        if let pidFile = self?.pidFile {
+                            try? "\(pid)\n".write(toFile: pidFile, atomically: true,
+                                                  encoding: .utf8)
+                        }
+                    }
                     // Hold the process open until the task is cancelled; the
                     // throw on cancellation triggers Subprocess teardown.
                     while !Task.isCancelled {
@@ -80,10 +118,25 @@ final class USBMux {
         return session
     }
     
+    private var pidFile: String?
+
+    private func reapStaleDaemon() {
+        guard let pidFile,
+              let text = try? String(contentsOfFile: pidFile, encoding: .utf8),
+              let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+              pid > 0, kill(pid, 0) == 0 else { return }
+        var buffer = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0,
+              String(cString: buffer).hasSuffix("/usbmuxd") else { return }
+        NSLog("usbmux: killing stale usbmuxd \(pid) from a previous run")
+        kill(pid, SIGTERM)
+    }
+
     func stop() {
         // Kill synchronously: app termination won't wait for the async teardown
         // the task cancellation would otherwise run. Only ever our own child.
         if let pid = daemonPID { kill(pid, SIGTERM) }
+        if let pidFile { try? FileManager.default.removeItem(atPath: pidFile) }
         daemonPID = nil
         daemonTask?.cancel()
         daemonTask = nil

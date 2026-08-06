@@ -23,9 +23,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private let deviceVC: DeviceViewController
     private let inspectorVC: AppsInspectorViewController
     private let inspectorItem: NSSplitViewItem
-    private let zoomButton = NSButton()
+    private let zoomControl = NSSegmentedControl()
     private var rotateItem: NSToolbarItem?
-    private(set) var scaleMode: ScaleMode = .zoomed
+    private(set) var zoom: ZoomMode = .fit
     
     init(emulator: EmulatorController) {
         self.emulator = emulator
@@ -38,8 +38,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         split.addSplitViewItem(deviceItem)
         
         inspectorItem = NSSplitViewItem(inspectorWithViewController: inspectorVC)
-        inspectorItem.minimumThickness = 220
-        inspectorItem.maximumThickness = 360
+        // The widths the sidebar guidelines ask for: enough for an app name at a
+        // readable size, not so much that it competes with the device.
+        inspectorItem.minimumThickness = 240
+        inspectorItem.maximumThickness = 400
+        if #available(macOS 26.0, *) {
+            inspectorItem.addBottomAlignedAccessoryViewController(inspectorVC.makeBottomBar())
+        }
         split.addSplitViewItem(inspectorItem)
         
         let window = NSWindow(contentViewController: split)
@@ -57,16 +62,23 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         toolbar.autosavesConfiguration = true
         window.toolbar = toolbar
         
-        // Zoom is a single on/off toggle: on = zoomed to fill, off = physical size.
-        zoomButton.title = ""
-        zoomButton.imagePosition = .imageOnly
-        zoomButton.setButtonType(.pushOnPushOff)
-        zoomButton.bezelStyle = .toolbar
-        zoomButton.image = NSImage(systemSymbolName: "plus.magnifyingglass",
-                                   accessibilityDescription: "Zoom to Fill")
-        zoomButton.state = (scaleMode == .zoomed) ? .on : .off
-        zoomButton.target = self
-        zoomButton.action = #selector(toggleZoom(_:))
+        // Out and in. Momentary, because both are commands rather than states
+        // to sit in — which state you are in is the menu's job, where the
+        // checkmarks live.
+        zoomControl.segmentCount = 2
+        zoomControl.trackingMode = .momentary
+        zoomControl.segmentStyle = .separated
+        let symbols = [("minus.magnifyingglass", "Zoom Out"),
+                       ("plus.magnifyingglass", "Zoom In")]
+        for (index, (symbol, label)) in symbols.enumerated() {
+            zoomControl.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: label),
+                                 forSegment: index)
+            zoomControl.setToolTip(label, forSegment: index)
+        }
+        zoomControl.target = self
+        zoomControl.action = #selector(zoomSegmentClicked(_:))
+        zoomControl.sizeToFit()
+        syncZoomControls()
     }
     
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -101,8 +113,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             let item = NSToolbarItem(itemIdentifier: .zoom)
             item.label = "Zoom"
             item.paletteLabel = "Zoom"
-            item.toolTip = "Zoom the device to fill, or show it at its real physical size"
-            item.view = zoomButton
+            item.toolTip = "How large the device is drawn"
+            item.view = zoomControl
             return item
         default:
             return nil          // space / flexibleSpace / toggleInspector are system-made
@@ -122,25 +134,60 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         return item
     }
     
+    /// The inspector toggle ships in the default set: an inspector nobody can
+    /// find is an inspector nobody uses, and the toolbar is the only place the
+    /// control is meant to live. The tracking separator sits on the split
+    /// view's divider, so the toggle rides above the inspector rather than
+    /// floating in the middle of the titlebar.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .flexibleSpace, .lock, .flexibleSpace, .rotate, .zoom]
+        [.home, .lock, .rotate, .zoom,
+         .flexibleSpace, .inspectorTrackingSeparator, .flexibleSpace, .toggleInspector]
     }
-    
+
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .zoom, .installApp, .openTerminal, .space, .flexibleSpace, .toggleInspector]
+        [.home, .lock, .rotate, .zoom, .installApp, .openTerminal,
+         .space, .flexibleSpace, .inspectorTrackingSeparator, .toggleInspector]
     }
     
     // MARK: - Zoom (single source of truth for the toggle, menu, and view)
     
-    @objc private func toggleZoom(_ sender: Any?) {
-        applyScaleMode(scaleMode == .zoomed ? .actual : .zoomed)
+    @objc private func zoomSegmentClicked(_ sender: NSSegmentedControl) {
+        sender.selectedSegment == 0 ? zoomOut(sender) : zoomIn(sender)
     }
-    
-    private func applyScaleMode(_ mode: ScaleMode) {
-        scaleMode = mode
-        deviceVC.setScaleMode(mode)
-        zoomButton.state = (mode == .zoomed) ? .on : .off
+
+    private func apply(_ mode: ZoomMode) {
+        zoom = mode
+        deviceVC.setZoom(mode)
+        syncZoomControls()
     }
+
+    /// Grey out a direction there is no room left in.
+    private func syncZoomControls() {
+        let step = zoom.percent.map { $0 / 100 }
+        zoomControl.setEnabled(step != ZoomMode.steps.first, forSegment: 0)
+        zoomControl.setEnabled(step != ZoomMode.steps.last, forSegment: 1)
+    }
+
+    /// One notch along the ladder, from the pinch gesture and from ⌘+ / ⌘−.
+    /// Stepping out of Fit starts from whatever size Fit happens to be showing,
+    /// so the first press nudges the device rather than jumping it.
+    func stepZoom(_ direction: Int) {
+        let steps = ZoomMode.steps
+        let current = zoom.percent.map { $0 / 100 } ?? deviceVC.screen.nearestPixelStep
+        let index = steps.firstIndex(of: current)
+            ?? steps.firstIndex { $0 >= current }
+            ?? steps.count - 1
+        apply(.pixels(steps[min(max(index + direction, 0), steps.count - 1)]))
+    }
+
+    @objc func zoomIn(_ sender: Any?)  { stepZoom(1) }
+    @objc func zoomOut(_ sender: Any?) { stepZoom(-1) }
+    /// Life size — the device as it measures in the hand, not 1:1 pixels. 100%
+    /// is a pixel count and lands wherever the display's density puts it, which
+    /// on a Retina Mac is noticeably smaller than the real thing (163 ppi of
+    /// original screen against roughly 220 of display).
+    @objc func zoomActualSize(_ sender: Any?) { apply(.physical) }
+    @objc func zoomToFit(_ sender: Any?) { apply(.fit) }
     
     // MARK: - Device menu actions (routed via the responder chain)
     
@@ -150,11 +197,25 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func deviceVolumeDown(_ sender: Any?)  { emulator.pressVolumeDown() }
     @objc func deviceRotate(_ sender: Any?) {
         emulator.toggleRotation()
-        // Symbol always shows which way the *next* press will rotate.
+        syncRotateSymbol()
+    }
+
+    @objc func deviceRotateLeft(_ sender: Any?) {
+        emulator.rotate(clockwise: false)
+        syncRotateSymbol()
+    }
+
+    @objc func deviceRotateRight(_ sender: Any?) {
+        emulator.rotate(clockwise: true)
+        syncRotateSymbol()
+    }
+
+    /// The symbol always shows which way the *next* toolbar press will rotate.
+    private func syncRotateSymbol() {
         rotateItem?.image = NSImage(systemSymbolName: rotateSymbolName, accessibilityDescription: "Rotate")
     }
 
-    private var rotateSymbolName: String { emulator.isLandscape ? "rotate.left" : "rotate.right" }
+    private var rotateSymbolName: String { emulator.isLandscape ? "rotate.right" : "rotate.left" }
     @objc func deviceShake(_ sender: Any?)       { emulator.shake() }
     @objc func devicePause(_ sender: Any?)       { emulator.pause() }
     @objc func deviceResume(_ sender: Any?)      { emulator.resume() }
@@ -168,7 +229,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         panel.message = "Choose a decrypted .ipa to install."
         panel.beginSheetModal(for: window!) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
-            Task { await AppInstaller.install(url, with: self.emulator, presenting: self.window) }
+            AppInstaller.start(url, with: self.emulator, presenting: self.window)
         }
     }
     
@@ -179,15 +240,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         }
     }
     
-    // MARK: - View menu (zoom + inspector), synced with the toolbar
-    
-    @objc func toggleZoomMenu(_ sender: Any?) {
-        applyScaleMode(scaleMode == .zoomed ? .actual : .zoomed)
-    }
-    
+    // MARK: - View menu (inspector), synced with the toolbar
+
     @objc func toggleAppInspector(_ sender: Any?) {
         inspectorItem.animator().isCollapsed.toggle()
     }
+
     
     // MARK: - Edit menu (guest clipboard / screen)
     
@@ -224,8 +282,15 @@ extension MainWindowController: NSMenuItemValidation {
             return emulator.canManageApps
         case #selector(pasteToGuest(_:)):
             return NSPasteboard.general.string(forType: .string) != nil
-        case #selector(toggleZoomMenu(_:)):
-            menuItem.state = (scaleMode == .zoomed) ? .on : .off
+        case #selector(zoomIn(_:)):
+            return zoom.percent.map { $0 / 100 } ?? 0 < ZoomMode.steps.last!
+        case #selector(zoomOut(_:)):
+            return zoom != .pixels(ZoomMode.steps[0])
+        case #selector(zoomActualSize(_:)):
+            menuItem.state = (zoom == .physical) ? .on : .off
+            return true
+        case #selector(zoomToFit(_:)):
+            menuItem.state = (zoom == .fit) ? .on : .off
             return true
         case #selector(toggleAppInspector(_:)):
             menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"

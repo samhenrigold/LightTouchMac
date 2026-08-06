@@ -136,8 +136,22 @@ enum MainMenuBuilder {
     
     private static func viewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
-        // Mirrors the toolbar's Zoom toggle (same on/off state).
-        menu.addItem(item("Zoom to Fill", #selector(MainWindowController.toggleZoomMenu(_:)), "0"))
+        // The standard zoom commands, same ones the toolbar buttons drive.
+        //
+        // Zoom In is listed as ⌘+ because that is what every Mac app shows and
+        // what people look for — but + is a shifted key, so an item that really
+        // wanted "+" would only fire on ⇧⌘=. The fix is the one Preview uses: a
+        // second, hidden item on the unshifted "=" carrying the same action.
+        // Hidden items normally give up their key equivalent, hence
+        // allowsKeyEquivalentWhenHidden.
+        menu.addItem(item("Actual Size", #selector(MainWindowController.zoomActualSize(_:)), "0"))
+        menu.addItem(item("Zoom to Fit", #selector(MainWindowController.zoomToFit(_:)), "9"))
+        menu.addItem(item("Zoom In", #selector(MainWindowController.zoomIn(_:)), "+"))
+        let unshiftedZoomIn = item("Zoom In", #selector(MainWindowController.zoomIn(_:)), "=")
+        unshiftedZoomIn.isHidden = true
+        unshiftedZoomIn.allowsKeyEquivalentWhenHidden = true
+        menu.addItem(unshiftedZoomIn)
+        menu.addItem(item("Zoom Out", #selector(MainWindowController.zoomOut(_:)), "-"))
         menu.addItem(.separator())
         menu.addItem(item("Show Inspector", #selector(MainWindowController.toggleAppInspector(_:)), "i", [.option, .command]))
         menu.addItem(.separator())
@@ -159,6 +173,12 @@ enum MainMenuBuilder {
         menu.addItem(item("Volume Down", #selector(MainWindowController.deviceVolumeDown(_:)), "-"))
         menu.addItem(.separator())
         menu.addItem(item("Rotate", #selector(MainWindowController.deviceRotate(_:)), "r", [.control, .command]))
+        // The arrows are the shortcut anyone reaches for, and they read the way
+        // the device turns. The menu titles carry the ⌘←/⌘→ display for free.
+        menu.addItem(item("Rotate Left", #selector(MainWindowController.deviceRotateLeft(_:)),
+                          String(UnicodeScalar(NSLeftArrowFunctionKey)!)))
+        menu.addItem(item("Rotate Right", #selector(MainWindowController.deviceRotateRight(_:)),
+                          String(UnicodeScalar(NSRightArrowFunctionKey)!)))
         menu.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Install App…", #selector(MainWindowController.installApp(_:)), "i", [.shift, .command]))

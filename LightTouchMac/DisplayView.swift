@@ -8,16 +8,39 @@
 // content alone (consistent margins in both orientations), and the shell
 // chrome is locked to the same scale and may spill past the pane edges. The
 // shell image is opaque (no cutout transparency — a 1px seam would flicker
-// through), so the content layer draws on top of it and rotates in lockstep,
-// animated, whenever the guest's frame buffer orientation flips. Mouse events
+// through); the content layer is a sublayer of the shell, parked at the screen
+// cutout, so it rides the shell's scale+rotation transform and the two stay in
+// lockstep by construction when the guest's orientation flips. Mouse events
 // become single-finger touches, Option-drag a two-finger pinch, and when this
 // view is first responder key events are forwarded to the guest.
 
 import Cocoa
 
-enum ScaleMode {
-    case actual   // the original device's real-world physical dimensions
-    case zoomed   // enlarged to a comfortable fraction of the pane height
+/// How big the device is drawn.
+///
+/// The steps are whole multiples of a display pixel per guest pixel, so the
+/// 320×480 frame buffer always lands on pixel boundaries: at 100% one guest
+/// pixel is one pixel of your display, at 200% it is a 2×2 block. Anything in
+/// between resamples 320 pixels across a fractional number of them, which with
+/// nearest-neighbour magnification means some guest pixels come out one wide
+/// and their neighbours two — the shimmer that makes an emulator look cheap.
+/// `.fit` and `.physical` are exempt — each is explicitly a size asked for in
+/// something other than pixels, and neither pretends otherwise.
+enum ZoomMode: Equatable {
+    case fit
+    /// The device drawn the size a real iPod touch measures in the hand. Not a
+    /// step on the ladder and not usually near one: the original screen is 163
+    /// pixels per inch and a Mac display is nothing like that, so life size
+    /// lands wherever it lands.
+    case physical
+    case pixels(Int)
+
+    static let steps = [1, 2, 3, 4, 6, 8]
+
+    var percent: Int? {
+        guard case .pixels(let n) = self else { return nil }
+        return n * 100
+    }
 }
 
 final class DisplayView: NSView {
@@ -39,22 +62,37 @@ final class DisplayView: NSView {
     /// Whatever the guest is actually sending right now — swaps on rotation.
     private var framePixels = nativeScreenPixels
     /// nil until the first layout, so the initial appearance never "rotates in".
-    private var lastIsLandscape: Bool?
+    private var lastRotation: Int?
 
     /// Set by the owner so key/drop events can reach the guest.
     weak var emulator: EmulatorController?
     /// Called when an .ipa is dropped on the screen.
     var onDropIPA: ((URL) -> Void)?
+    /// Called with +1/-1 when the trackpad is pinched, so the window controller
+    /// can move one step along the zoom ladder it owns.
+    var onZoomStep: ((Int) -> Void)?
+    private var pendingMagnification = 0.0
 
-    /// Fraction of the pane (whichever axis binds) the shell fills when zoomed
-    /// — ~15% margin all round.
-    private static let zoomMarginFraction = 0.85
+    /// Points of breathing room between the shell and the pane edge when
+    /// zoomed. A flat inset, not a fraction of the pane: 0.85 of the pane threw
+    /// away 15% of a 1400-point window — over 200 points of black — to leave the
+    /// same visual margin an 8-point gap gives.
+    ///
+    /// Wide enough that the shell's shadow has somewhere to fall.
+    static let zoomInset: CGFloat = 16
     /// How long the shell + screen take to swing between portrait and landscape.
     private static let rotationDuration = 0.35
 
-    var scaleMode: ScaleMode = .zoomed {
-        didSet { needsLayout = true }
+    var zoom: ZoomMode = .fit {
+        didSet {
+            guard oldValue != zoom else { return }
+            pendingAnimatedLayout = true
+            needsLayout = true
+        }
     }
+    /// Set by the scaleMode toggle so the next layout animates even though
+    /// orientation didn't change — mirrors how orientationChanged drives it.
+    private var pendingAnimatedLayout = false
 
     private let contentLayer = CALayer()
     private let shellLayer = CALayer()
@@ -82,16 +120,37 @@ final class DisplayView: NSView {
         shellLayer.contents = NSImage(named: "shell")?
             .cgImage(forProposedRect: nil, context: nil, hints: nil)
         shellLayer.contentsGravity = .resize
+        // The shell stays at its native pixel size forever; layout() scales and
+        // rotates it with a single transform. The content layer lives INSIDE it
+        // at the cutout, so scale and rotation can never drift apart — they are
+        // one matrix.
+        shellLayer.bounds = CGRect(origin: .zero, size: Self.shellPixels)
+        // Enough of a shadow to lift the device off the gradient, not enough to
+        // notice as an effect. The radius is in the shell's own native pixels,
+        // so the transform scales it with the device and the shadow stays
+        // proportionate at every window size.
+        //
+        // Ambient — no offset — on purpose: the shadow belongs to the shell
+        // layer, so it rides the same transform, and any offset that fell
+        // downwards in portrait would fall sideways once the shell rotates.
+        //
+        // ponytail: no shadowPath, so Core Animation derives the shape from the
+        // artwork's alpha — correct for a rounded, bevelled device by
+        // construction. The layer's contents never change, so it renders once;
+        // give it a rounded-rect path if it ever shows up in a profile.
+        shellLayer.shadowColor = NSColor.black.cgColor
+        shellLayer.shadowOpacity = 0.4
+        shellLayer.shadowRadius = 40
+        shellLayer.shadowOffset = .zero
         layer?.addSublayer(shellLayer)
 
         contentLayer.magnificationFilter = .nearest
-        // The shell is opaque now, so the LCD draws on top of it, sized in
-        // layout() to exactly the visible screen rect. Black backing shows a
-        // powered-on device screen during boot, before the first guest frame.
+        // The shell is opaque, so the LCD draws on top of it. Black backing
+        // shows a powered-on device screen during boot, before the first frame.
         contentLayer.contentsGravity = .resize
         contentLayer.backgroundColor = NSColor.black.cgColor
-        contentLayer.anchorPoint = .zero
-        layer?.addSublayer(contentLayer)
+        contentLayer.position = CGPoint(x: Self.screenCutout.midX, y: Self.screenCutout.midY)
+        shellLayer.addSublayer(contentLayer)
 
         homeButton.target = self
         homeButton.action = #selector(homeTapped)
@@ -126,15 +185,22 @@ final class DisplayView: NSView {
 
     // MARK: - Layout
 
-    /// Everything below is worked out relative to the shell's own centre, in
-    /// its native (portrait, unrotated) pixel space, then rotated as a unit
-    /// into view space — that's what keeps the screen cutout and home button
-    /// locked to the shell as it swings between orientations.
+    /// The shell layer stays at its native pixel size and carries scale and
+    /// rotation in a single transform; the content layer is its child, parked
+    /// at the screen cutout in shell-native pixels. Locked-together geometry
+    /// falls out of the layer tree — layout only picks the scale, the angle,
+    /// and the home button's (view-space) frame.
     override func layout() {
         super.layout()
-        let isLandscape = framePixels.width > framePixels.height
-        let orientationChanged = lastIsLandscape.map { $0 != isLandscape } ?? false
-        lastIsLandscape = isLandscape
+        // The pose comes from the emulator's tracked orientation, not the frame
+        // buffer's aspect — 480×320 alone can't tell landscape-left from
+        // landscape-right, and 180° doesn't change the dimensions at all.
+        // (Layout is still *triggered* by the dims flipping in step(), which
+        // every quarter turn does.)
+        let rotation = emulator?.rotationDegrees ?? 0
+        let orientationChanged = lastRotation.map { $0 != rotation } ?? false
+        lastRotation = rotation
+        let isLandscape = rotation == 90 || rotation == 270
 
         let cutoutSize = isLandscape
             ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
@@ -146,63 +212,98 @@ final class DisplayView: NSView {
             : Self.shellPixels
 
         let scale: CGFloat
-        switch scaleMode {
-        case .actual:
-            scale = physicalContentSize().map { $0.width / cutoutSize.width } ?? fitScale(shellOnScreenPixels)
-        case .zoomed:
+        switch zoom {
+        case .fit:
             scale = fitScale(shellOnScreenPixels)
+        case .physical:
+            scale = physicalContentSize().map { $0.width / cutoutSize.width }
+                ?? fitScale(shellOnScreenPixels)
+        case .pixels(let multiple):
+            scale = shellScale(guestPixelsPerDisplayPixel: multiple, cutout: cutoutSize)
         }
-        let content = CGSize(width: (cutoutSize.width * scale).rounded(), height: (cutoutSize.height * scale).rounded())
-
+        appliedScale = scale
         let viewCenter = CGPoint(x: bounds.midX, y: bounds.midY)
         let shellCenter = CGPoint(x: Self.shellPixels.width / 2, y: Self.shellPixels.height / 2)
+        let rest = Self.layerAngle(rotation)
+        let angle = rest + tiltAngle
 
-        // A vector from the shell's centre, in its native space, rotated (if
-        // landscape) the same -90° (counter-clockwise) the shell itself is
-        // about to be transformed by — this is what keeps the cutout/button
-        // locked to the artwork as it swings.
-        func rotatedOffset(from point: CGPoint) -> CGVector {
-            let native = CGVector(dx: point.x - shellCenter.x, dy: point.y - shellCenter.y)
-            return isLandscape ? CGVector(dx: -native.dy, dy: native.dx) : native
-        }
-
-        let cutoutCenter = CGPoint(x: Self.screenCutout.midX, y: Self.screenCutout.midY)
-        let contentOffset = rotatedOffset(from: cutoutCenter)
-        let contentRect = CGRect(
-            x: viewCenter.x + contentOffset.dx * scale - content.width / 2,
-            y: viewCenter.y + contentOffset.dy * scale - content.height / 2,
-            width: content.width, height: content.height)
-
+        // The home button is an NSView, so it can't ride the shell's transform;
+        // project its shell-native centre through the same rotation by hand.
+        // NOTE: in this flipped (y-down) view the standard rotation matrix
+        // turns a point visually clockwise for a positive angle — the SAME
+        // visual direction a positive angle gives the layer transform here
+        // (AppKit's geometry flip inverts a layer transform's handedness too),
+        // so `rest` feeds both unconverted. At rest+tilt the button is mid-drag
+        // and invisible anyway, so only `rest` is projected.
         let buttonCenterNative = CGPoint(x: Self.shellPixels.width / 2,
                                          y: Self.shellPixels.height - Self.homeButtonBottomInset
                                             - Self.homeButtonDiameter / 2)
-        let buttonOffset = rotatedOffset(from: buttonCenterNative)
+        let native = CGVector(dx: buttonCenterNative.x - shellCenter.x,
+                              dy: buttonCenterNative.y - shellCenter.y)
+        let buttonOffset = CGVector(dx: native.dx * cos(rest) - native.dy * sin(rest),
+                                    dy: native.dx * sin(rest) + native.dy * cos(rest))
         let buttonDiameter = (Self.homeButtonDiameter * scale).rounded()
         let buttonRect = CGRect(
             x: (viewCenter.x + buttonOffset.dx * scale - buttonDiameter / 2).rounded(),
             y: (viewCenter.y + buttonOffset.dy * scale - buttonDiameter / 2).rounded(),
             width: buttonDiameter, height: buttonDiameter)
 
-        let shellSize = CGSize(width: Self.shellPixels.width * scale, height: Self.shellPixels.height * scale)
+        let animate = orientationChanged || pendingAnimatedLayout
+        pendingAnimatedLayout = false
 
+        // The guest surface arrives pre-rotated (ipod_touch_lcd.c turns the
+        // picture the same way the user turned the device), so at rest the
+        // content sits at -angle inside the shell: net rotation zero, surface
+        // shown as published. These are applied WITHOUT animation — the new
+        // buffer drawn at the new pose is pixel-identical to the old frame at
+        // the old pose, so there's no jump, and during the shell's animated
+        // swing the content keeps its fixed offset and rides rigidly, rotating
+        // with the chrome instead of squishing in place. Bounds, never frame:
+        // setting .frame on a transformed layer is undefined (it was the
+        // squished-screen bug).
         CATransaction.begin()
-        if orientationChanged {
+        CATransaction.setDisableActions(true)
+        contentLayer.bounds = CGRect(origin: .zero, size: cutoutSize)
+        contentLayer.transform = CATransform3DMakeRotation(-angle, 0, 0, 1)
+        CATransaction.commit()
+
+        // Scale and rotation live in ONE transform, and the content is a child
+        // of the shell — the whole device swings as a unit.
+        CATransaction.begin()
+        if animate {
             CATransaction.setAnimationDuration(Self.rotationDuration)
             CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeInEaseOut))
         } else {
             CATransaction.setDisableActions(true)   // no implicit fade on plain resize
         }
-        shellLayer.bounds = CGRect(origin: .zero, size: shellSize)
         shellLayer.position = viewCenter
-        shellLayer.transform = CATransform3DMakeRotation(isLandscape ? -.pi / 2 : 0, 0, 0, 1)
-        contentLayer.frame = contentRect
+        shellLayer.transform = CATransform3DScale(
+            CATransform3DMakeRotation(angle, 0, 0, 1), scale, scale, 1)
         CATransaction.commit()
 
         homeButton.frame = buttonRect
     }
 
+    /// The step on the ladder closest to the size on screen right now, so
+    /// zooming in or out of Fit or Actual Size carries on from what is already
+    /// there instead of jumping to the bottom of the ladder.
+    var nearestPixelStep: Int {
+        let isLandscape = framePixels.width > framePixels.height
+        let cutout = isLandscape
+            ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
+            : Self.screenCutout.size
+        let backing = window?.backingScaleFactor ?? 2
+        let multiple = appliedScale * cutout.width / framePixels.width * backing
+        return ZoomMode.steps.min {
+            abs(CGFloat($0) - multiple) < abs(CGFloat($1) - multiple)
+        } ?? 1
+    }
+
+    /// The scale the last layout actually used, whichever mode picked it.
+    private var appliedScale: CGFloat = 1
+
     /// The screen at its true physical size, in this view's points, using the
-    /// current screen's real pixel geometry. nil if the screen is unknown.
+    /// current display's real pixel geometry. nil if the display is unknown.
     private func physicalContentSize() -> CGSize? {
         guard let screen = window?.screen,
               let number = screen.deviceDescription[.init("NSScreenNumber")] as? NSNumber
@@ -216,12 +317,24 @@ final class DisplayView: NSView {
                       height: Double(framePixels.height) / Self.devicePPI * pointsPerInch)
     }
 
-    /// The largest uniform scale that fits `nativeSize` within ~85% of the
-    /// pane on whichever axis is binding — a consistent ~15% margin all round,
-    /// whichever way the shell is currently oriented.
+    /// The shell transform that puts `multiple` display pixels on every guest
+    /// pixel. The screen content is a child of the shell, resized to fill the
+    /// cutout, so the shell's scale is what decides the pixel size: the cutout
+    /// is 594 shell pixels across for a 320-pixel frame buffer, and everything
+    /// else follows from making those 320 land on the pixel count asked for.
+    private func shellScale(guestPixelsPerDisplayPixel multiple: Int, cutout: CGSize) -> CGFloat {
+        let backing = window?.backingScaleFactor ?? 2
+        let pointsPerGuestPixel = CGFloat(multiple) / backing
+        return pointsPerGuestPixel * framePixels.width / cutout.width
+    }
+
+    /// The largest uniform scale that fits `nativeSize` in the pane inset on
+    /// every side. `nativeSize` is the shell's bounding box in its current
+    /// orientation, so portrait and landscape both land with the same margin
+    /// without either needing its own number.
     private func fitScale(_ nativeSize: CGSize) -> CGFloat {
-        let maxWidth = bounds.width * Self.zoomMarginFraction
-        let maxHeight = bounds.height * Self.zoomMarginFraction
+        let maxWidth = max(bounds.width - 2 * Self.zoomInset, 1)
+        let maxHeight = max(bounds.height - 2 * Self.zoomInset, 1)
         return min(maxWidth / nativeSize.width, maxHeight / nativeSize.height)
     }
 
@@ -271,28 +384,135 @@ final class DisplayView: NSView {
 
     // MARK: - Touch input
 
-    /// Normalise a point to 0…1 over the panel content, whichever sub-rect the
-    /// content currently occupies. Returns nil for clicks outside it.
+    /// Normalise a point to 0…1 over the panel content. The content layer sits
+    /// inside the shell's scale+rotation transform, so convert through the
+    /// layer tree rather than reading a frame. Returns nil for clicks outside
+    /// it. (The emulator un-rotates touches itself — ipod_touch_lcd_map_touch —
+    /// so coordinates over the surface as published are exactly what it wants.)
     private func normalized(_ event: NSEvent) -> (Double, Double)? {
+        guard let rootLayer = layer else { return nil }
         let p = convert(event.locationInWindow, from: nil)
-        let f = contentLayer.frame
-        guard f.width > 0, f.height > 0, f.contains(p) else { return nil }
-        let nx = (p.x - f.minX) / f.width
-        let ny = (p.y - f.minY) / f.height     // isFlipped → y-down
-        return (Double(nx), Double(ny))
+        let cp = contentLayer.convert(p, from: rootLayer)
+        let b = contentLayer.bounds
+        guard b.width > 0, b.height > 0, b.contains(cp) else { return nil }
+        return (Double(cp.x / b.width), Double(cp.y / b.height))   // isFlipped → y-down
+    }
+
+    /// Trackpad pinch zooms the window's view of the device. It does NOT reach
+    /// the guest — a guest pinch is Option-drag, which is a mouse gesture, so
+    /// the two never collide.
+    ///
+    /// The steps are discrete, so this accumulates magnification until it has
+    /// earned a whole one rather than tracking the fingers continuously; a
+    /// continuous zoom would spend most of its time between pixel multiples,
+    /// which is the thing the steps exist to avoid.
+    override func magnify(with event: NSEvent) {
+        pendingMagnification += event.magnification
+        guard abs(pendingMagnification) > 0.25 else { return }
+        onZoomStep?(pendingMagnification > 0 ? 1 : -1)
+        pendingMagnification = 0
     }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        if let grab = chassisGrabAngle(event) {
+            shellLayer.removeAnimation(forKey: "tiltSnap")
+            tilting = true
+            grabAngle = grab
+            return
+        }
         pinching = event.modifierFlags.contains(.option)
         emit(event, Int32(QEMU_IOS_TOUCH_BEGIN))
     }
 
-    override func mouseDragged(with event: NSEvent) { emit(event, Int32(QEMU_IOS_TOUCH_UPDATE)) }
+    override func mouseDragged(with event: NSEvent) {
+        if tilting {
+            let delta = mouseAngle(event) - grabAngle
+            tiltAngle = atan2(sin(delta), cos(delta))   // wrap to (-π, π]
+            setShellAngle(restAngle + tiltAngle)
+            emulator?.setTilt(angle: restAngle + tiltAngle)
+            return
+        }
+        emit(event, Int32(QEMU_IOS_TOUCH_UPDATE))
+    }
 
     override func mouseUp(with event: NSEvent) {
+        if tilting { endTilt(); return }
         emit(event, Int32(QEMU_IOS_TOUCH_END))
         pinching = false
+    }
+
+    // MARK: - Tilt (drag the chassis to rotate; the accelerometer follows)
+    //
+    // Grabbing the shell anywhere outside the screen — bezel or corners — and
+    // dragging rotates the whole device around its centre, Photoshop-style,
+    // and feeds the guest the matching gravity vector, so tilt games play.
+    // Release springs the shell back to rest and restores resting gravity.
+
+    private var tilting = false
+    private var grabAngle: CGFloat = 0   // mouse polar angle at grab
+    private var tiltAngle: CGFloat = 0   // current drag delta from rest
+
+    /// The shell layer's rest rotation for a guest orientation, signed so 270°
+    /// comes in as a single quarter turn (-π/2), not three of them — the
+    /// implicit animation interpolates the transform, and the sign is what
+    /// makes the swing take the short way round.
+    private static func layerAngle(_ degrees: Int) -> CGFloat {
+        degrees == 270 ? -.pi / 2 : CGFloat(degrees) * .pi / 180
+    }
+
+    /// The shell's resting rotation for the guest's current orientation —
+    /// the same angle layout() starts from.
+    private var restAngle: CGFloat { Self.layerAngle(emulator?.rotationDegrees ?? 0) }
+
+    /// If the press is on the chassis (inside the shell artwork, outside the
+    /// screen cutout), the mouse's polar angle around the shell centre; nil
+    /// otherwise, in which case the press is a guest touch. Converting through
+    /// the layer accounts for the current scale and rotation.
+    private func chassisGrabAngle(_ event: NSEvent) -> CGFloat? {
+        guard let rootLayer = layer else { return nil }
+        let p = convert(event.locationInWindow, from: nil)
+        let sp = shellLayer.convert(p, from: rootLayer)
+        guard shellLayer.bounds.contains(sp), !Self.screenCutout.contains(sp)
+        else { return nil }
+        return mouseAngle(event)
+    }
+
+    /// Polar angle of the mouse around the shell centre in view space. The
+    /// view is flipped (y-down), so a positive angle is visually clockwise —
+    /// the same handedness as a positive layer-transform rotation here, which
+    /// is what lets the drag delta feed the transform unconverted.
+    private func mouseAngle(_ event: NSEvent) -> CGFloat {
+        let p = convert(event.locationInWindow, from: nil)
+        return atan2(p.y - shellLayer.position.y, p.x - shellLayer.position.x)
+    }
+
+    /// The same transform layout() computes, at an arbitrary angle, applied
+    /// without animation — this is the per-mouse-move path.
+    private func setShellAngle(_ angle: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shellLayer.transform = CATransform3DScale(
+            CATransform3DMakeRotation(angle, 0, 0, 1), appliedScale, appliedScale, 1)
+        CATransaction.commit()
+    }
+
+    private func endTilt() {
+        tilting = false
+        let from = shellLayer.transform
+        tiltAngle = 0
+        setShellAngle(restAngle)
+        let spring = CASpringAnimation(keyPath: "transform")
+        spring.fromValue = NSValue(caTransform3D: from)
+        spring.toValue = NSValue(caTransform3D: shellLayer.transform)
+        spring.stiffness = 200
+        spring.damping = 14
+        spring.duration = spring.settlingDuration
+        shellLayer.add(spring, forKey: "tiltSnap")
+        // Gravity snaps straight to rest; the spring is only visual.
+        // ponytail: sample the presentation layer from the display link if a
+        // game ever needs to see the settle.
+        emulator?.setTilt(angle: restAngle)
     }
 
     private func emit(_ event: NSEvent, _ phase: Int32) {

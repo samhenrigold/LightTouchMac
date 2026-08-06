@@ -9,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationWillFinishLaunching(_ notification: Notification) {
         MainMenuBuilder.install()
+        #if DEBUG
+        SpringBoardIcons.selfCheck()
+        #endif
     }
     
     func applicationDidFinishLaunching(_ notification: Notification) {

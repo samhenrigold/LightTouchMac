@@ -32,8 +32,8 @@ struct DeviceTools: Sendable {
     let clientSocket: String
     let filesRoot: String
     
-    // Resolve Homebrew tools without assuming the app's PATH.
-    private static let searchPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+    // The app's own tools first, then Homebrew's — without assuming any PATH.
+    private static let searchPaths = Bundled.binarySearchPaths
     
     private static func toolPath(_ name: String) -> String? {
         for dir in searchPaths {
@@ -44,7 +44,7 @@ struct DeviceTools: Sendable {
     }
     
     private var toolEnvironment: Environment {
-        .inherit.updating([
+        var environment: [Environment.Key: String?] = [
             // SOCK is what apps/install-app.sh keys on; USBMUXD_SOCKET_ADDRESS is
             // what it-ssh-terminal.sh and the raw libimobiledevice tools use.
             // Passing both means neither needs the session.env file to exist.
@@ -52,7 +52,19 @@ struct DeviceTools: Sendable {
             "USBMUXD_SOCKET_ADDRESS": clientSocket,
             "IPOD_FILES": filesRoot,
             "PATH": (Self.searchPaths + ["/bin", "/usr/sbin", "/sbin"]).joined(separator: ":"),
-        ])
+        ]
+        // The scripts look these up themselves and fall back to a source
+        // checkout when they are unset. Pointing them at the bundle is what
+        // makes an install work on a Mac that has neither the checkout nor
+        // Homebrew: install-ipa.sh carries the exec-bit repair and the GL
+        // engine, ipod-helper stands in for the python3 a clean Mac lacks, and
+        // the guest tools are the binaries it copies onto the device.
+        for (key, name) in [(Environment.Key("INSTALL_IPA"), "install-ipa.sh"),
+                            (Environment.Key("IT_HELPER"), "ipod-helper")] {
+            if let path = Bundled.tool(name) { environment[key] = path }
+        }
+        if let tools = Bundled.toolsDirectory { environment["IT_GUEST_TOOLS"] = tools }
+        return .inherit.updating(environment)
     }
     
     // MARK: - List
@@ -67,6 +79,15 @@ struct DeviceTools: Sendable {
             environment: toolEnvironment,
             output: .string(limit: 1 << 20), error: .string(limit: 1 << 16)
         )
+        // A failed list used to be indistinguishable from an empty one: the
+        // exit status was never looked at, so "Could not start
+        // com.apple.installation_proxy" parsed to zero apps and the sidebar
+        // said "No third-party apps installed" about a home screen full of
+        // them, with no way to tell it was wrong.
+        guard result.terminationStatus.isSuccess else {
+            let msg = result.standardError.isEmpty ? "the device did not answer" : result.standardError
+            throw DeviceToolsError.failed(msg)
+        }
         return Self.parseList(result.standardOutput)
     }
     
@@ -90,34 +111,68 @@ struct DeviceTools: Sendable {
     
     // MARK: - Install (through apps/install-app.sh)
     
+    /// `progress` is called on every line the script prints, already trimmed to
+    /// something worth showing in a table row — an install is minutes of
+    /// silence otherwise, on hardware slow enough that silence reads as a hang.
     @discardableResult
-    func install(_ ipa: URL) async throws -> String {
+    func install(_ ipa: URL, progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
         let script = "\(filesRoot)/apps/install-app.sh"
         guard FileManager.default.isExecutableFile(atPath: script) else {
             throw DeviceToolsError.toolMissing(script)
         }
-        
+
         // The guest's lockdown/AFC service is briefly unavailable right after an
         // uninstall ("Could not start com.apple.afc: Invalid service"), so a
-        // reinstall can fail transiently. Retry a few times before giving up;
-        // failures that aren't service-transient (a bad .ipa) fail immediately.
+        // reinstall can fail transiently. install-ipa.sh retries the one failing
+        // command itself; this outer loop is the net for the paths that don't
+        // reach it, and re-runs the whole script.
         var lastOutput = "install failed"
         for attempt in 0..<3 {
             let result = try await run(
                 .path(FilePath("/bin/bash")),
                 arguments: [script, ipa.path],
                 environment: toolEnvironment,
-                output: .string(limit: 1 << 20), error: .string(limit: 1 << 20)
-            )
-            let out = result.standardOutput + result.standardError
+                input: .none,
+                output: .sequence, error: .string(limit: 1 << 20)
+            ) { execution in
+                var collected = ""
+                var partial = ""
+                for try await buffer in execution.standardOutput {
+                    let chunk = buffer.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
+                    collected += chunk
+                    partial += chunk
+                    while let newline = partial.firstIndex(of: "\n") {
+                        let line = String(partial[..<newline])
+                        partial = String(partial[partial.index(after: newline)...])
+                        if let status = Self.status(of: line) { progress(status) }
+                    }
+                }
+                return collected
+            }
+            let out = result.closureResult + result.standardError
             if result.terminationStatus.isSuccess {
                 return out
             }
             lastOutput = out.isEmpty ? "install failed" : out
             guard attempt < 2, Self.isTransientServiceError(out) else { break }
-            try? await Task.sleep(for: .seconds(2))
+            try await Task.sleep(for: .seconds(2))   // throws if cancelled, which ends the retry
         }
         throw DeviceToolsError.failed(lastOutput)
+    }
+
+    /// One line of script output as a row subtitle, or nil for lines that say
+    /// nothing to someone watching a progress row. ideviceinstaller's own
+    /// status lines look like `Install: CreatingStagingDirectory (5%)`.
+    static func status(of line: String) -> String? {
+        let text = line.trimmingCharacters(in: .whitespaces)
+        if let range = text.range(of: #"^\w+: "#, options: .regularExpression) {
+            let rest = String(text[range.upperBound...])
+            // "Complete" arrives before the script's own trailing output; the
+            // row is about to be replaced by the real one either way.
+            return rest.isEmpty ? nil : rest
+        }
+        if text.hasPrefix("--- ") { return String(text.dropFirst(4)) }
+        return nil
     }
     
     private static func isTransientServiceError(_ output: String) -> Bool {
@@ -147,9 +202,12 @@ struct DeviceTools: Sendable {
     // MARK: - SSH terminal (opens Terminal.app itself)
     
     func openTerminal() async throws {
-        let script = "\(filesRoot)/../qemu-ios/contrib/it-ssh-terminal.sh"
-        let resolved = FileManager.default.isExecutableFile(atPath: script)
-        ? script : "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-ssh-terminal.sh"
+        guard let resolved = Bundled.resolve("it-ssh-terminal.sh", fallbacks: [
+            "\(filesRoot)/../qemu-ios/contrib/it-ssh-terminal.sh",
+            "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-ssh-terminal.sh",
+        ]) else {
+            throw DeviceToolsError.toolMissing("it-ssh-terminal.sh")
+        }
         _ = try await run(
             .path(FilePath("/bin/bash")),
             arguments: [resolved],
