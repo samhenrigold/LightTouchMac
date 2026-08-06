@@ -335,6 +335,13 @@ struct DeviceTools: Sendable {
         try await guestRun("killall SpringBoard")
     }
 
+    /// Push the guest's dirty buffers to flash. The one durability step on the
+    /// quit path that is actually known to execute — see
+    /// EmulatorController.beginCleanShutdown for why the powerdown is not.
+    func syncFilesystem() async throws {
+        try await guestRun("sync")
+    }
+
     /// Raise or drop the App Store-style "downloading" placeholder on the
     /// guest's home screen. `sbdlicon` is baked into nand-ultimate at this path;
     /// see qemu-ios/contrib/it-instprogress for what SpringBoard does with it.

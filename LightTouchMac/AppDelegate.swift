@@ -73,10 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         emulator?.stop()
     }
 
-    /// On quit: guard an in-flight install, then power the guest down so its
-    /// filesystem is intact next launch. (The comment here used to say 3.1.3
-    /// has no clean shutdown — that stopped being true once the PMU power latch
-    /// was modelled; see EmulatorController.beginCleanShutdown.)
+    /// On quit: guard an in-flight install, then make the guest's filesystem as
+    /// safe as it can be made. Note "as it can be" — 3.1.3 still has no working
+    /// shutdown here; see EmulatorController.beginCleanShutdown, which now says
+    /// what actually happens rather than what we wished did.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let emulator else { return .terminateNow }
 
@@ -115,9 +115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Past the worst case of whichever path runs below, and no further: a
         // quit the user cannot predict the end of is a quit that feels broken.
-        // With resume on, a failed save falls through to the shutdown, so the
-        // budget is both (20s + 26s); otherwise it is the shutdown's 25s alone.
-        let backstop: TimeInterval = EmulatorController.resumeOnLaunch ? 50 : 30
+        // With resume on, a failed save falls through to the flush, so the
+        // budget is both (20s + 20s); otherwise it is the flush's 20s alone.
+        let backstop: TimeInterval = EmulatorController.resumeOnLaunch ? 45 : 25
         DispatchQueue.main.asyncAfter(deadline: .now() + backstop) {
             if !replied { NSLog("quit: shutdown did not finish in time — quitting anyway") }
             reply()

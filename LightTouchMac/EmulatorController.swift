@@ -728,77 +728,64 @@ final class EmulatorController {
         performSnapshot(completion: completion)
     }
 
-    /// Shut the guest down properly on quit, so the filesystem is intact.
+    /// Make the guest's filesystem as safe as it can be made, then let the app
+    /// quit. `completion(true)` means the flush was actually delivered.
     ///
-    /// This matters more than it sounds. The guest writes file DATA to flash
-    /// promptly, but HFS+ keeps catalog updates in memory and nothing forces
-    /// them out on an idle device — measured in qemu-ios as no page reaching
-    /// flash in the three minutes after a write. Killing QEMU therefore loses
-    /// the directory entry while every data block is safely on disk, and the
-    /// file simply does not exist next boot. Unmounting the root volume is what
-    /// flushes the catalog, and only a real shutdown unmounts it.
+    /// READ THIS BEFORE CHANGING IT. This used to drive `system_powerdown` and
+    /// wait for the guest to halt, on the understanding that the machine model
+    /// turns that into the slide-to-power-off gesture, the guest unmounts, and
+    /// QEMU exits. **The guest does not halt.** qemu-ios' own regression suite
+    /// fails `persist` and `fsck` on exactly this path, and qemu-ios commit
+    /// 313269d1 ("unplug at system_powerdown (partial fix; 3.1.3 still hangs)")
+    /// documents where it stops: with the USB cable bit cleared the kernel gets
+    /// past its power-source poll and starts sequencing rails down — 0x05,
+    /// 0x06, 0x0a — and then waits for something at PMU register 0x0a that the
+    /// model does not answer. Measured again on 2026-08-06: powerdown requested,
+    /// still running 180s later, killed, volume fsck-dirty. The gesture itself
+    /// is fine; the PMU is where the gap is. (An earlier version of this comment
+    /// — mine — claimed the PMU work had fixed it. It had not. The regression
+    /// suite said so the whole time.)
     ///
-    /// `system_powerdown` is turned into the slide-to-power-off gesture by the
-    /// machine model; the guest unmounts, clears the PMU power latch, and QEMU
-    /// exits on its own — which is exactly the `.dead` transition we already
-    /// observe. (An earlier note in this project said powerdown never completes
-    /// on 3.1.3; that predates the PMU work and is no longer true.)
+    /// So driving it here bought nothing and cost something real: it starts a
+    /// shutdown SpringBoard cannot finish, and we then SIGKILL the guest in the
+    /// middle of that work rather than while it is quiescent. Worse, the wait
+    /// for the animation to end was reported in the log as "filesystem flushed",
+    /// which was a claim this code was in no position to make.
+    ///
+    /// What is left is `sync`, over the ssh channel the app already uses. It is
+    /// small, it demonstrably executes, and it is the standard way to push dirty
+    /// buffers out. A marker file written over AFC was verified to survive a
+    /// SIGKILL on nand-ultimate both with and without it, so `sync` is insurance
+    /// rather than a proven fix — the honest statement is that the app now does
+    /// the one flush available to it and no longer pretends to do more.
+    ///
+    /// The real fix is the PMU sequencing in qemu-ios. Until then, resume-on-
+    /// launch (Settings) is the only way to end a session with no data at risk,
+    /// because a snapshot captures the dirty state instead of discarding it.
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
         guard !isDead, state != .notStarted else { completion(false); return }
-        // A stopped vCPU cannot run the shutdown. Pause, or a save that stopped
-        // it, used to make this give up silently — and giving up here is the
-        // one failure that costs the user data.
+        // A stopped vCPU cannot run anything. Pause, or a save that stopped it,
+        // used to make this give up silently — and giving up here is the one
+        // failure that costs the user data.
         qemu_ios_snapshot_resume()   // no-op if already running
         state = .running
-        NSLog("quit: powering the guest down so HFS+ flushes its catalog")
         Task { [weak self] in
             guard let self else { completion(false); return }
-            // Wake the screen FIRST. The powerdown is a synthetic press-and-hold
-            // plus a slide on SpringBoard's sheet, and the "guest went quiet"
-            // signal below is meaningless if the guest was never painting: a
-            // locked or auto-slept device satisfied the quiet test on the very
-            // first tick, so quit returned in under three seconds having flushed
-            // nothing at all. Home wakes it; the animation then gives us real
-            // activity to watch end.
-            self.pressHome()
-            try? await Task.sleep(for: .milliseconds(600))
-            qemu_ios_ui_powerdown()
-            // What we need is the UNMOUNT, not QEMU's own exit. Waiting for the
-            // process to finish tearing itself down made quit hostage to
-            // qemu_cleanup, which is not on the critical path for our data and
-            // does not always get there promptly — the app then sat until the
-            // caller's backstop, which reads as "it never quits".
-            //
-            // The guest stopping painting is the signal: SpringBoard puts the
-            // slide-to-power-off animation up, the screen goes dark, and the
-            // frame serial stops advancing. That happens AFTER the volume is
-            // unmounted, which is the part we actually came for.
-            let deadline = Date().addingTimeInterval(25)
-            var quietSince: Date?
-            var sawActivity = false
-            while Date() < deadline {
-                try? await Task.sleep(for: .milliseconds(200))
-                if self.isDead {
-                    NSLog("quit: guest powered off cleanly")
-                    completion(true); return
-                }
-                if self.framesRecentlyAdvanced {
-                    sawActivity = true
-                    quietSince = nil
-                } else if let since = quietSince {
-                    // Still, and stayed still — but only after we watched it
-                    // move. Quiet on its own proves nothing; quiet AFTER the
-                    // shutdown animation is what says the unmount is done.
-                    if sawActivity, Date().timeIntervalSince(since) > 2.5 {
-                        NSLog("quit: guest went quiet — filesystem flushed, quitting")
-                        completion(true); return
-                    }
-                } else {
-                    quietSince = Date()
-                }
+            guard self.canManageApps else {
+                NSLog("quit: no USB session — nothing can be flushed; quitting")
+                completion(false); return
             }
-            NSLog("quit: guest did not power off in time — quitting anyway")
-            completion(false)
+            // Bounded, and bounded by us: the ssh helper has its own timeout but
+            // the quit must not be hostage to it either way.
+            let flushed = await withSoftDeadline(20) { () -> Bool in
+                do { try await self.syncFilesystem(); return true }
+                catch {
+                    NSLog("quit: sync failed (\(error.localizedDescription))")
+                    return false
+                }
+            } ?? false
+            NSLog(flushed ? "quit: guest sync complete" : "quit: guest sync did not complete")
+            completion(flushed)
         }
     }
 
@@ -949,6 +936,7 @@ final class EmulatorController {
     }
     func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
     func openTerminal() async throws                     { try await tools().openTerminal() }
+    func syncFilesystem() async throws                   { try await tools().syncFilesystem() }
     func restartSpringBoard() async throws               { try await tools().restartSpringBoard() }
 
     /// True while any install is running — the quit guard reads this so ⌘Q
