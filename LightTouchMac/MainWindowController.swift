@@ -483,14 +483,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         """
         try? info.write(to: staging.appendingPathComponent("info.txt"), atomically: true, encoding: .utf8)
 
-        // ditto zips the staging dir; a host one-shot, so plain Process is fine.
-        let ditto = Process()
-        ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        ditto.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", staging.path, dest.path]
-        try? ditto.run()
-        ditto.waitUntilExit()
-        try? fm.removeItem(at: staging)
-        NSWorkspace.shared.activateFileViewerSelecting([dest])
+        // ditto zips the staging dir. Off the main thread: waitUntilExit blocks
+        // its caller by contract, and this runs from the save panel's completion
+        // handler — i.e. on the main thread, freezing the device screen and the
+        // whole window for as long as zipping two rotated serial logs takes.
+        Task.detached {
+            let ditto = Process()
+            ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            ditto.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent",
+                               staging.path, dest.path]
+            try? ditto.run()
+            ditto.waitUntilExit()
+            try? FileManager.default.removeItem(at: staging)
+            await MainActor.run { NSWorkspace.shared.activateFileViewerSelecting([dest]) }
+        }
     }
 }
 

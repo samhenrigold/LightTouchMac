@@ -328,7 +328,13 @@ struct DeviceServices: Sendable {
             Unmanaged<InstallContext>.fromOpaque(ctxPtr).release()
             throw DeviceError.instproxy(e, phase: desc)
         case nil:
-            throw DeviceError.timedOut(operation: "install")   // leak; gate bounds it
+            // Deliberately leaks the client and the device handle: freeing them
+            // here would free them under libimobiledevice's own updater thread,
+            // which is still live. Tell the accountant, though — this is the
+            // one leak that never did, so the cap meant to stop leaked sessions
+            // piling up could not see the very case it exists for.
+            AbandonedWork.abandoned("install")
+            throw DeviceError.timedOut(operation: "install")
         }
     }
 
@@ -487,6 +493,23 @@ func abandonedWorkSelfCheck() async {
 }
 #endif
 
+/// Wait for `work`, but not forever — and let it finish on its own if we stop
+/// waiting. The gate's own `acquire()` has no deadline: `withDeadline` bounds
+/// the WORK, not the queueing in front of it, so a device operation that is
+/// allowed 120 seconds (an uninstall) could hold up everything behind it,
+/// including the quit path's health probe — which then blew the quit budget and
+/// terminated the app before the guest was ever asked to power down.
+func withSoftDeadline<T: Sendable>(_ seconds: Double,
+                                   _ work: @escaping @Sendable () async -> T) async -> T? {
+    let once = ResumeOnce<T?>()
+    Task { once.resume(.success(await work())) }
+    Task {
+        try? await Task.sleep(for: .seconds(seconds))
+        once.resume(.success(nil))
+    }
+    return try? await withCheckedThrowingContinuation { once.attach($0) }
+}
+
 /// First result wins; the rest are dropped. Handles the result landing before
 /// the continuation attaches (a fast op) and vice versa (the normal case).
 nonisolated private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
@@ -595,7 +618,13 @@ nonisolated enum DeviceError: Error, LocalizedError {
     /// full disk fails the same way every time and must not loop.
     var isTransient: Bool {
         switch self {
-        case .timedOut, .recovering: return true
+        // NOT .timedOut. A timed-out operation has left a blocked C thread and
+        // an open service connection behind it (see AbandonedWork), so retrying
+        // one stacks a second and a third against a guest that serves about one
+        // — turning a single wedged install into a session with no working app
+        // management at all. Only failures that left nothing behind retry.
+        case .timedOut: return false
+        case .recovering: return true
         case .lockdown: return true
         case .instproxy(let e, _): return e.isTransient
         case .afc(let e): return e.isTransient

@@ -62,6 +62,17 @@ final class AppMetadataCache {
     
     private var indexURL: URL { dir.appendingPathComponent("index.json") }
     private func iconURL(_ bundleID: String) -> URL { dir.appendingPathComponent("\(bundleID).png") }
+
+    /// A bundle id read out of an untrusted archive is about to become a path
+    /// component. `appendingPathComponent` happily accepts "/" and "..", and
+    /// `Data.write(to:)` resolves them — so an .ipa declaring a
+    /// CFBundleIdentifier of "../../../../Library/LaunchAgents/x" wrote its icon
+    /// wherever it liked, on DROP, before any install was attempted. Every zip
+    /// member name here is already escaped for exactly this reason; the plist
+    /// value was the one input that wasn't.
+    private static func isSafeBundleID(_ id: String) -> Bool {
+        !id.isEmpty && !id.hasPrefix(".") && !id.contains("/") && !id.contains(":")
+    }
     
     /// nil if we never learned this bundle ID.
     ///
@@ -107,7 +118,8 @@ final class AppMetadataCache {
         guard let root = Self.appRoot(members),
               let plist = try? await Self.unzip(ipa, member: root + "Info.plist"),
               let info = try? PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any],
-              let bundleID = info["CFBundleIdentifier"] as? String else { return nil }
+              let bundleID = info["CFBundleIdentifier"] as? String,
+              Self.isSafeBundleID(bundleID) else { return nil }
         let name = (info["CFBundleDisplayName"] as? String)
         ?? (info["CFBundleName"] as? String)
         ?? ipa.deletingPathExtension().lastPathComponent
@@ -133,7 +145,8 @@ final class AppMetadataCache {
               let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
               let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
         else { return nil }
-        return info["CFBundleIdentifier"] as? String
+        guard let id = info["CFBundleIdentifier"] as? String, isSafeBundleID(id) else { return nil }
+        return id
     }
 
     /// The archive path of the app's main binary, e.g.

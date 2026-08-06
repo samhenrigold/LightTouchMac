@@ -37,6 +37,11 @@ final class InstallJob {
     /// leaves a gap where neither the placeholder nor the real row is present.
     fileprivate(set) var bundleID: String?
     fileprivate(set) var finishedAt: Date?
+    /// Set when the install ENDED BADLY. A finished job renders as an ordinary
+    /// app row, which for a failed one was a lie: the sidebar showed the app,
+    /// with its real icon and name, for ~30 s (forever, if the failure was the
+    /// device going away) while nothing had been installed at all.
+    fileprivate(set) var failed = false
     fileprivate var task: Task<Void, Never>?
 
     fileprivate init(name: String) { self.name = name }
@@ -50,6 +55,11 @@ final class InstallJob {
 /// along, and owns the task so the row can cancel it.
 @MainActor
 enum AppInstaller {
+
+    /// Is any install still outstanding — running OR waiting its turn?
+    /// `EmulatorController.isInstalling` covers only the one executing, so the
+    /// quit guard used to wave through a queue of .ipas and drop them silently.
+    static var hasPendingWork: Bool { lastJob.map { !$0.isFinished } ?? false }
 
     /// The most recently started job, so the next one can queue behind it.
     /// Installs run strictly one at a time: the script pins iproxy to a single
@@ -113,6 +123,7 @@ enum AppInstaller {
                 // is already down: the script path has a TERM trap and the
                 // in-process path a defer that survives cancellation.
             } catch {
+                job.failed = true
                 guard !Task.isCancelled else { return }
                 presentError(error, in: window)
             }
@@ -150,6 +161,8 @@ final class AppsInspectorViewController: NSViewController {
     /// "we don't know yet", not "nothing is installed".
     private var haveLoaded = false
     private var loadTask: Task<Void, Never>?
+    /// One list read at a time; see loadOnce.
+    private var isLoading = false
     private var notifications: GuestNotifications?
 
     init(emulator: EmulatorController) {
@@ -361,6 +374,7 @@ final class AppsInspectorViewController: NSViewController {
     private func prunePending() {
         pending.removeAll { job in
             guard job.isFinished else { return false }
+            if job.failed || job.isCancelled { return true }   // nothing will ever appear
             guard let id = job.bundleID, !apps.contains(where: { $0.id == id }) else { return true }
             return Date().timeIntervalSince(job.finishedAt ?? Date()) > 20
         }
@@ -389,7 +403,13 @@ final class AppsInspectorViewController: NSViewController {
     @objc private func installProgressed(_ note: Notification) {
         guard let job = note.object as? InstallJob,
               let row = pending.firstIndex(where: { $0 === job }) else { return }
-        tableView.reloadData(forRowIndexes: [row], columnIndexes: [0])
+        // A per-row reload does not re-ask for the row COUNT, and the count can
+        // change here: as soon as a job learns its bundle id, `visibleApps`
+        // hides the app it is replacing. On a reinstall that left a blank row
+        // stranded at the bottom of the sidebar for the whole install, because
+        // the poll that would have fixed it is suppressed while installing.
+        if job.bundleID != nil, !apps.isEmpty { tableView.reloadData() }
+        else { tableView.reloadData(forRowIndexes: [row], columnIndexes: [0]) }
     }
 
     /// One attempt to read the installed list.
@@ -403,9 +423,25 @@ final class AppsInspectorViewController: NSViewController {
         // Nothing talks to the device while an install runs (see `installing`);
         // the finish notification reloads the list anyway.
         guard !installing else { return }
+        // One at a time. Every .ltmAppsChanged used to spawn another of these,
+        // and an upgrade publishes two notifications back to back — so two
+        // reads queued on the gate for up to 20s each and the SLOWER, older one
+        // assigned `apps` last, putting a stale list on screen.
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
         do {
             let live = try await emulator.installedApps()
+            // Read the home-screen order BEFORE publishing anything. Assigning
+            // `apps` and then awaiting left the data source reporting a row
+            // count the table had never been told about, and anything that
+            // re-queried it during that window (a layout pass, the
+            // active/inactive icon dimming) asked for a row that did not exist
+            // — an out-of-range raise, not a glitch.
+            let order = (try? await emulator.homeScreenOrder()) ?? homeOrder
+            // No suspension points from here to reloadData().
             apps = live
+            homeOrder = order
             haveLoaded = true
             lastLoaded = Date()
             emulator.deviceReachable = true
@@ -417,13 +453,6 @@ final class AppsInspectorViewController: NSViewController {
             // every time round, or the sidebar disagrees with the home screen
             // until something else happens to refresh it.
             //
-            // Not while an install is running: that is a second lockdown
-            // session competing with one whose services are already fragile
-            // enough to need retries.
-            // `installing`, not `pending.isEmpty`: finished rows now linger
-            // until the device lists the app, and a lingering row must not
-            // block the home-screen read for the next 20 seconds.
-            if !installing { await loadHomeOrder() }
             sortApps()
             prunePending()   // the list just changed; a row may have earned its exit
             tableView.reloadData()
@@ -431,6 +460,11 @@ final class AppsInspectorViewController: NSViewController {
             updateButtons()
         } catch {
             emulator.deviceReachable = false
+            // Prune here too. This path never touched `pending`, so a row whose
+            // install failed because the device went away stayed on screen —
+            // and the failing list read is exactly when that happens.
+            prunePending()
+            tableView.reloadData()
             // The reason rides along so a manual Refresh that fails says why,
             // instead of sitting on the same three words the boot wait shows.
             if !haveLoaded, pending.isEmpty {
@@ -469,13 +503,18 @@ final class AppsInspectorViewController: NSViewController {
         guard notifications == nil, let session = emulator.usbmuxSession else { return }
         let watcher = GuestNotifications(clientSocket: session)
         notifications = watcher
-        watcher.start {
+        let emulator = self.emulator
+        watcher.start(probe: { await emulator.deviceReady() }) {
             // Off the library's callback thread and onto ours.
             Task { @MainActor in
                 NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
             }
         }
     }
+
+    // GuestNotifications cancels its own loops in its deinit, which is what
+    // this releasing it triggers; nothing else here may touch main-actor state.
+    deinit { loadTask?.cancel() }
 
     private func showStaleBanner() {
         let when = lastLoaded.map {
@@ -493,10 +532,6 @@ final class AppsInspectorViewController: NSViewController {
         guard !banner.isHidden else { return }
         banner.isHidden = true
         bannerHeight?.constant = 0
-    }
-
-    private func loadHomeOrder() async {
-        homeOrder = (try? await emulator.homeScreenOrder()) ?? homeOrder
     }
 
     /// Home-screen order when SpringBoard has told us one, and the *displayed*
@@ -630,7 +665,11 @@ extension AppsInspectorViewController: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let row = tableView.clickedRow
-        if row >= 0, row < pending.count {
+        // `!isFinished`, not just the index: a finished job is DRAWN as an
+        // ordinary app row, so classifying by index alone offered "Cancel
+        // Install" (which by then does nothing) on a row showing an installed
+        // app's own icon and name, and never offered Uninstall.
+        if row >= 0, row < pending.count, !pending[row].isFinished {
             let job = pending[row]
             let item = menu.addItem(withTitle: "Cancel Install",
                                     action: #selector(cancelInstallClicked(_:)), keyEquivalent: "")
@@ -762,7 +801,6 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         Task {
             do {
                 try await emulator.moveOnHomeScreen(id, before: target)
-                await loadHomeOrder()
             } catch {
                 AppInstaller.presentError(error, in: view.window)
             }

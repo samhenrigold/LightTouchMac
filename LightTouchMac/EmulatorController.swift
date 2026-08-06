@@ -69,8 +69,19 @@ final class EmulatorController {
         // (and any snapshot) now, in this fresh process, before it is reopened.
         if FileManager.default.fileExists(atPath: resetMarkerURL.path) {
             NSLog("reset: wiping device overlay back to the base image")
-            try? FileManager.default.removeItem(at: overlay)
-            try? FileManager.default.removeItem(at: resetMarkerURL)
+            do {
+                try FileManager.default.removeItem(at: overlay)
+                // Consume the marker only once the wipe has actually happened.
+                // It used to be removed regardless, so a removal that failed
+                // (a leaked process holding a page open, a permissions problem)
+                // silently downgraded "Erase All Content and Settings" to
+                // nothing at all — the device came back with everything the
+                // user had just asked to destroy, and no error anywhere.
+                try? FileManager.default.removeItem(at: resetMarkerURL)
+            } catch {
+                NSLog("reset: could not wipe the overlay (\(error.localizedDescription)) — "
+                      + "leaving the request armed for the next launch")
+            }
             discardSavedState()
         }
         try? FileManager.default.createDirectory(at: overlay, withIntermediateDirectories: true)
@@ -470,7 +481,20 @@ final class EmulatorController {
     /// and sizing the cutout landscape while the guest published a portrait
     /// buffer — a permanently rotated, stretched screen that no amount of
     /// rotating could fix, since every later quarter turn stayed 90° out.
-    func reset()  { qemu_ios_ui_reset();  rotationDegrees = 0; state = .booting }
+    /// Restart the guest. Refused mid-save: the save has already stopped the
+    /// vCPU, so `system_reset` would not restart it, and overwriting the state
+    /// with `.booting` meant the save's own completion declined to resume it —
+    /// leaving a stopped machine labelled "Booting…" with all input dead, and no
+    /// way back except stumbling onto Device ▸ Resume.
+    func reset() {
+        guard state != .snapshotting else {
+            NSLog("reset: ignored while a state save is in flight")
+            return
+        }
+        qemu_ios_ui_reset()
+        rotationDegrees = 0
+        state = .booting
+    }
     /// Kept for completeness; deliberately NOT in a menu — system_powerdown
     /// provably never completes on 3.1.3 (PMU reg 0x04–0x06 modelling gap), so
     /// exposing it is a trap that hangs the guest at 100% CPU.
@@ -529,8 +553,40 @@ final class EmulatorController {
             return []
         }
         guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return [] }
+        // The snapshot holds RAM; the overlay holds flash. They are only a
+        // matching pair if nothing wrote to flash after the save. An observed
+        // exit already discards for this reason (qemuDidExit), but a crash or a
+        // SIGKILL — Xcode's stop button, a force quit — never gets there, so a
+        // "Save State Now" followed by an hour of play and a kill would restore
+        // hour-old RAM onto an hour-newer filesystem. Stale HFS+ journal and
+        // buffer-cache state over live flash is corruption, not a slow boot.
+        if overlayIsNewerThanSnapshot(overlay: overlay) {
+            NSLog("snapshot: overlay has advanced past the saved state — cold boot, discarding")
+            discardSavedState()
+            return []
+        }
         restoringFromSnapshot = true
         return ["-incoming", "file:\(snapshotURL.path)"]
+    }
+
+    /// Has the NAND overlay been written since the snapshot was taken?
+    ///
+    /// Generous margin: the quit-time save and the last few page writes race
+    /// each other by design, and a false positive here silently costs the user
+    /// the resume they asked for. Only a clearly-later overlay counts.
+    private func overlayIsNewerThanSnapshot(overlay: URL) -> Bool {
+        let fm = FileManager.default
+        func modified(_ url: URL) -> Date {
+            (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date ?? .distantPast
+        }
+        let saved = modified(snapshotURL)
+        // Pages land in per-chip-select subdirectories (cs0…cs3); renaming into
+        // one touches that directory, not the parent, so ask the children too.
+        var newest = modified(overlay)
+        for child in (try? fm.contentsOfDirectory(at: overlay, includingPropertiesForKeys: nil)) ?? [] {
+            newest = max(newest, modified(child))
+        }
+        return newest.timeIntervalSince(saved) > 10
     }
 
     /// A restored snapshot is provisional. If the guest doesn't paint or answer
@@ -543,16 +599,13 @@ final class EmulatorController {
             while Date() < deadline {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
-                // deviceReady ONLY — deliberately not framesRecentlyAdvanced.
-                // Consuming the incoming stream repaints the framebuffer, which
-                // advances the frame serial at t≈0 of the restore, so the frame
-                // signal reported "alive" on the first poll before the vCPU had
+                // Deliberately not framesRecentlyAdvanced on its own: consuming
+                // the incoming stream repaints the framebuffer, so the frame
+                // signal says "alive" at t≈0 of the restore, before the vCPU has
                 // proven it can execute at all. That made the self-heal a no-op
-                // for the exact failure it was written for (restore paints the
-                // home screen, then wedges), so a bad snapshot looped forever
-                // instead of healing. Answering the device probe requires the
-                // guest to actually be running code.
-                if await self.deviceReady() { return }
+                // for the exact failure it was written for. proveAlive asks the
+                // guest to do something instead of watching for it.
+                if await self.proveAlive() { return }
             }
             guard let self, !self.isDead else { return }
             NSLog("snapshot: restored state never came alive — quarantining, cold-booting")
@@ -568,13 +621,7 @@ final class EmulatorController {
         guard state == .running else { completion(false); return }
         Task { [weak self] in
             guard let self else { completion(false); return }
-            // Alive = painting recently OR answering the device probe (a locked
-            // idle device stops painting but still answers). A 100%-CPU wedge
-            // fails both — and must not be saved.
-            let healthy: Bool
-            if self.framesRecentlyAdvanced { healthy = true }
-            else { healthy = await self.deviceReady() }
-            guard healthy else {
+            guard await self.proveAlive() else {
                 // Do NOT keep the older snapshot. The NAND overlay is not part
                 // of the snapshot and every guest write since it was taken is
                 // already durable (fmss_store_page renames per page), so an old
@@ -605,7 +652,7 @@ final class EmulatorController {
                         .attributesOfItem(atPath: self.snapshotTmpURL.path))?[.size] as? Int ?? 0
                     guard size > 0 else {
                         NSLog("snapshot: reported DONE with no output — keeping existing snapshot")
-                        completion(false); return
+                        self.resumeAfterFailedSave(); completion(false); return
                     }
                     // Atomic promote: a torn snapshot must never shadow a good one.
                     try? FileManager.default.removeItem(at: self.snapshotURL)
@@ -615,14 +662,57 @@ final class EmulatorController {
                 if status == QEMU_IOS_SNAPSHOT_FAILED {
                     NSLog("snapshot: save failed: \(String(cString: buf))")
                     try? FileManager.default.removeItem(at: self.snapshotTmpURL)
-                    completion(false); return
+                    self.resumeAfterFailedSave(); completion(false); return
                 }
                 try? await Task.sleep(for: .milliseconds(100))
             }
             NSLog("snapshot: save timed out")
             try? FileManager.default.removeItem(at: self.snapshotTmpURL)
+            self.resumeAfterFailedSave()
             completion(false)
         }
+    }
+
+    /// Put the machine back the way a save found it.
+    ///
+    /// The save stops the vCPU (`qmp_stop` inside the migration bottom half) and
+    /// parks the controller in `.snapshotting`. Every failure exit used to leave
+    /// both that way, which is worse than the failed save: `.snapshotting` is
+    /// not `.running`, so input is refused, and — the expensive one — the quit
+    /// path's clean shutdown checks for a running guest and declined, so a
+    /// failed quit-save silently cost the user the filesystem flush as well as
+    /// the snapshot. Success deliberately does NOT resume: the caller decides
+    /// (Save State Now resumes; the quit path is about to exit).
+    private func resumeAfterFailedSave() {
+        guard state == .snapshotting else { return }
+        qemu_ios_snapshot_resume()
+        state = .running
+    }
+
+    /// Make the guest prove it is executing, rather than watching for a sign.
+    ///
+    /// "Is the guest alive" has three answers here and only two used to be
+    /// handled. Painting means alive. Answering lockdownd means alive. But
+    /// *silence* is ambiguous — a locked, idle device paints nothing and a
+    /// wedged one paints nothing, and neither answers when there is no usbmuxd
+    /// session at all (`--no-appsync`), when usbmuxd has died, or when the gate
+    /// is refusing work after earlier timeouts. Every one of those read as
+    /// "unhealthy", which quarantined a perfectly good snapshot and, on the
+    /// restore path, force-quit a perfectly good guest.
+    ///
+    /// So when the passive signals say nothing, ask a question: a Home press
+    /// wakes the screen and repaints. A guest that is executing answers within
+    /// a frame or two; a wedged one never does.
+    func proveAlive() async -> Bool {
+        if framesRecentlyAdvanced { return true }
+        if canManageApps, await deviceReady() { return true }
+        pressHome()
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(200))
+            if framesRecentlyAdvanced { return true }
+        }
+        return false
     }
 
     /// Quit path: save, then let the app terminate. `completion` runs whether
@@ -654,10 +744,25 @@ final class EmulatorController {
     /// observe. (An earlier note in this project said powerdown never completes
     /// on 3.1.3; that predates the PMU work and is no longer true.)
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
-        guard state == .running || state == .paused else { completion(false); return }
+        guard !isDead, state != .notStarted else { completion(false); return }
+        // A stopped vCPU cannot run the shutdown. Pause, or a save that stopped
+        // it, used to make this give up silently — and giving up here is the
+        // one failure that costs the user data.
+        qemu_ios_snapshot_resume()   // no-op if already running
+        state = .running
         NSLog("quit: powering the guest down so HFS+ flushes its catalog")
-        qemu_ios_ui_powerdown()
         Task { [weak self] in
+            guard let self else { completion(false); return }
+            // Wake the screen FIRST. The powerdown is a synthetic press-and-hold
+            // plus a slide on SpringBoard's sheet, and the "guest went quiet"
+            // signal below is meaningless if the guest was never painting: a
+            // locked or auto-slept device satisfied the quiet test on the very
+            // first tick, so quit returned in under three seconds having flushed
+            // nothing at all. Home wakes it; the animation then gives us real
+            // activity to watch end.
+            self.pressHome()
+            try? await Task.sleep(for: .milliseconds(600))
+            qemu_ios_ui_powerdown()
             // What we need is the UNMOUNT, not QEMU's own exit. Waiting for the
             // process to finish tearing itself down made quit hostage to
             // qemu_cleanup, which is not on the critical path for our data and
@@ -670,18 +775,21 @@ final class EmulatorController {
             // unmounted, which is the part we actually came for.
             let deadline = Date().addingTimeInterval(25)
             var quietSince: Date?
+            var sawActivity = false
             while Date() < deadline {
                 try? await Task.sleep(for: .milliseconds(200))
-                guard let self else { completion(false); return }
                 if self.isDead {
                     NSLog("quit: guest powered off cleanly")
                     completion(true); return
                 }
                 if self.framesRecentlyAdvanced {
+                    sawActivity = true
                     quietSince = nil
                 } else if let since = quietSince {
-                    // Still, and stayed still. The unmount is done.
-                    if Date().timeIntervalSince(since) > 2.5 {
+                    // Still, and stayed still — but only after we watched it
+                    // move. Quiet on its own proves nothing; quiet AFTER the
+                    // shutdown animation is what says the unmount is done.
+                    if sawActivity, Date().timeIntervalSince(since) > 2.5 {
                         NSLog("quit: guest went quiet — filesystem flushed, quitting")
                         completion(true); return
                     }
@@ -746,6 +854,17 @@ final class EmulatorController {
         quitForRelaunch(reason: "factory reset requested")
     }
 
+    /// The quit that was going to perform the erase was called off, so disarm
+    /// it. Without this the marker survived on disk with the app still running
+    /// normally and nothing on screen to say so — and the wipe then fired,
+    /// unannounced and unconfirmed, at whatever launch happened next. (Cancel is
+    /// reachable: the in-progress-install prompt on the quit path offers it.)
+    func cancelFactoryReset() {
+        guard FileManager.default.fileExists(atPath: resetMarkerURL.path) else { return }
+        NSLog("reset: quit cancelled — disarming the pending erase")
+        try? FileManager.default.removeItem(at: resetMarkerURL)
+    }
+
     private func quarantineSnapshot() {
         try? FileManager.default.removeItem(at: snapshotBadURL)
         try? FileManager.default.moveItem(at: snapshotURL, to: snapshotBadURL)
@@ -804,12 +923,20 @@ final class EmulatorController {
     /// blocked thread; the gate keeps it from racing other device work.
     func deviceReady() async -> Bool {
         guard let socket = usbmux.session?.clientSocket else { return false }
-        let ok = try? await DeviceGate.shared.serialized {
-            try await withDeadline(Timeouts.serviceProbe, "device probe") {
-                IMobileDevice.deviceReady(socket: socket)
+        // Bounded INCLUDING the wait for the gate. withDeadline bounds the probe
+        // itself, but not the queue in front of it, and this is called from the
+        // quit path — where waiting out a 120s uninstall means the app's own
+        // backstop fires and the guest is killed without ever being asked to
+        // power down. Giving up on the answer is safe; every caller treats a
+        // silent device as "could not prove it is alive", not "it is dead".
+        let ok = await withSoftDeadline(Timeouts.serviceProbe * 2) {
+            try? await DeviceGate.shared.serialized {
+                try await withDeadline(Timeouts.serviceProbe, "device probe") {
+                    IMobileDevice.deviceReady(socket: socket)
+                }
             }
         }
-        return ok ?? false
+        return ok.flatMap { $0 } ?? false
     }
 
     func installedApps() async throws -> [InstalledApp] { try await tools().installedApps() }

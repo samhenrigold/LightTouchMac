@@ -80,18 +80,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let emulator else { return .terminateNow }
 
-        if emulator.isInstalling {
+        // Queued installs count too. isInstalling is set only around the install
+        // that is executing; jobs waiting their turn are parked on the previous
+        // job's task, so quitting with three .ipas queued used to take no notice
+        // and drop them without a word.
+        if emulator.isInstalling || AppInstaller.hasPendingWork {
             let alert = NSAlert()
             alert.messageText = "An app install is in progress"
-            alert.informativeText = "Quitting now will leave the app half-installed on the device. Quit anyway?"
+            alert.informativeText = "Quitting now will leave an app half-installed on the device, "
+                + "and cancel any others still queued. Quit anyway?"
             alert.addButton(withTitle: "Quit Anyway")
             alert.addButton(withTitle: "Cancel")
             alert.buttons.first?.hasDestructiveAction = true
             // Mid-install is not a clean state to snapshot; quit straight out.
-            return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+            guard alert.runModal() == .alertFirstButtonReturn else {
+                emulator.cancelFactoryReset()   // this quit was the erase; call it off
+                return .terminateCancel
+            }
+            return .terminateNow
         }
 
-        guard emulator.isRunning else { return .terminateNow }
+        guard !emulator.isDead else { return .terminateNow }
 
         // Quit must ALWAYS complete. .terminateLater hands AppKit an IOU, and
         // if the completion never runs the app just sits there — ⌘Q appears to
@@ -104,22 +113,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             replied = true
             NSApp.reply(toApplicationShouldTerminate: true)
         }
-        // Comfortably past beginCleanShutdown's own 25s cap, and no further: a
+        // Past the worst case of whichever path runs below, and no further: a
         // quit the user cannot predict the end of is a quit that feels broken.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+        // With resume on, a failed save falls through to the shutdown, so the
+        // budget is both (20s + 26s); otherwise it is the shutdown's 25s alone.
+        let backstop: TimeInterval = EmulatorController.resumeOnLaunch ? 50 : 30
+        DispatchQueue.main.asyncAfter(deadline: .now() + backstop) {
             if !replied { NSLog("quit: shutdown did not finish in time — quitting anyway") }
             reply()
         }
 
-        // Power the guest down first. HFS+ holds catalog updates in memory and
-        // only an unmount flushes them, so quitting without this loses the
-        // directory entries for anything installed this session even though
-        // every data block already reached the overlay. If resume is on, the
-        // snapshot is taken first — it captures RAM, which the powerdown then
-        // discards by design.
+        // Exactly ONE of these two runs, and that is the whole point.
+        //
+        // Both make the session durable, by opposite means. The snapshot freezes
+        // RAM while flash stays where it is; the powerdown makes the guest
+        // unmount, which pushes RAM's HFS+ catalog INTO flash. Doing the save
+        // and then the powerdown — which is what this used to ask for — leaves
+        // the snapshot describing a filesystem that has since moved on, i.e.
+        // exactly the stale-RAM-over-newer-flash corruption the snapshot code
+        // spends its comments warning about. So: save if resume is on, and fall
+        // back to unmounting only if the save did not happen.
         if EmulatorController.resumeOnLaunch {
-            emulator.beginQuitSnapshot { _ in
-                emulator.beginCleanShutdown { _ in reply() }
+            emulator.beginQuitSnapshot { saved in
+                if saved { reply() } else { emulator.beginCleanShutdown { _ in reply() } }
             }
         } else {
             emulator.beginCleanShutdown { _ in reply() }

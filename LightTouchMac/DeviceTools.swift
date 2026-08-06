@@ -21,7 +21,8 @@ enum DeviceToolsError: LocalizedError {
     case failed(String)
     var errorDescription: String? {
         switch self {
-        case .toolMissing(let t): return "\(t) not found. Install libimobiledevice (brew install libimobiledevice)."
+        case .toolMissing(let t):
+            return "\(t) is missing from this build of LightTouchMac."
         case .failed(let msg): return msg
         }
     }
@@ -94,6 +95,19 @@ struct DeviceTools: Sendable {
         let minOS = await AppMetadataCache.shared.minimumOS(from: ipa)
         let sdkMarker = Self.sdkTooNew(minOS) ? "\nnewer than the device's SDK" : ""
 
+        // Cheapest possible pre-flight, and the app had none: without a
+        // Payload/<name>.app/Info.plist this is not an iPhone app archive at
+        // all — a renamed zip, a truncated download, a .ipa of something else.
+        // installd's answer to that is PackageExtractionFailed, which the app
+        // renders as "package extraction failed (device may be full)": the user
+        // is told to uninstall things to make room, after waiting out a
+        // multi-minute upload, for a file that was never installable.
+        guard await AppMetadataCache.bundleID(of: ipa) != nil else {
+            throw DeviceError.preflight(
+                "“\(ipa.lastPathComponent)” doesn't look like an iPhone app archive — "
+                + "it has no Payload/…app/Info.plist inside.")
+        }
+
         if bakedGuestTools {
             // Placeholder first, before anything slow: the exec-bit repair
             // repacks the whole archive and the free-space check is a round
@@ -110,8 +124,14 @@ struct DeviceTools: Sendable {
                 ?? ipa.deletingPathExtension().lastPathComponent
             let placeholder = "qemu-install-" + key
                 .filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
-            placeholderIcon("add", placeholder)
-            defer { placeholderIcon("cancel", placeholder) }
+            // The add and the cancel are two independent fire-and-forget ssh
+            // sessions, each with a ~1s floor, so a fast failure below (disk
+            // full answers in about that long) could run the cancel FIRST and
+            // strand a "downloading" placeholder on the home screen with nothing
+            // ever coming to replace it. Chaining the cancel behind the add's
+            // own task is what orders them.
+            let raised = placeholderIcon("add", placeholder)
+            defer { placeholderIcon("cancel", placeholder, after: raised) }
 
             // An .ipa whose binary is archived 0644 installs fine and then never
             // launches: posix_spawn fails EACCES, SpringBoard logs only "exited
@@ -131,6 +151,18 @@ struct DeviceTools: Sendable {
             }
             defer { Task { await services.removeStaged(staged) } }
 
+            // Cancelling during the upload is honoured here, at the last point
+            // where it can be: instproxy_install runs on a detached thread that
+            // ignores cancellation, so once it starts, the install finishes.
+            try Task.checkCancellation()
+
+            // attempts: 1. An install that hit its watchdog leaves a live
+            // libimobiledevice thread and an open lockdown service behind
+            // (deliberately — freeing them under the library is worse), so
+            // retrying a TIMEOUT meant three of those against a guest that
+            // serves about one, which is how a wedged install took the rest of
+            // the session's app management down with it. Transient CONNECT
+            // failures still retry; see DeviceError.isTransient.
             try await withTransientRetry(attempts: 3) {
                 try await services.install(stagedPath: staged) { pct, _ in
                     progress(pct >= 0 ? "Installing… \(pct)%" : "Installing…")
@@ -314,8 +346,13 @@ struct DeviceTools: Sendable {
     /// run when the install itself was cancelled; and if even that is lost, the
     /// icon is placed with saveIconState:NO and dies with the running
     /// SpringBoard rather than being written to disk.
-    private func placeholderIcon(_ action: String, _ id: String) {
-        Task { try? await guestRun("/usr/local/bin/sbdlicon \(action) '\(id)'") }
+    @discardableResult
+    private func placeholderIcon(_ action: String, _ id: String,
+                                 after previous: Task<Void, Never>? = nil) -> Task<Void, Never> {
+        Task {
+            await previous?.value
+            try? await guestRun("/usr/local/bin/sbdlicon \(action) '\(id)'")
+        }
     }
 
     /// Run one command on the guest over USB. Best-effort and bounded.

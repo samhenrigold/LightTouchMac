@@ -422,13 +422,14 @@ final class DisplayView: NSView {
         CATransaction.setDisableActions(true)
         contentLayer.contents = image
         CATransaction.commit()
-        // The display image is backed by the emulator's frame ring (valid only
-        // "a few more frames" per the ABI). Copy Screen can fire long after the
-        // last frame, so lastImage must own its pixels — otherwise it reads
-        // recycled ring memory. Deep-copy the bytes here, once per new frame.
-        lastImage = Self.deepCopy(image, width: width, height: height,
-                                  bitmapInfo: bitmapInfo, colorSpace: colorSpace)
+        // Keep the ring-backed image; copy it only when someone asks (see
+        // screenImage). Copying here was ~37 MB/s of allocate-and-memcpy on the
+        // main thread, every frame, for a command almost nobody runs — and the
+        // main thread is the one that also has to service every touch.
+        lastImage = image
+        lastImageGeometry = (width, height, bitmapInfo, colorSpace)
     }
+    private var lastImageGeometry: (Int, Int, CGBitmapInfo, CGColorSpace)?
 
     /// A CGImage over its own copy of `image`'s pixels — outlives the frame ring.
     private static func deepCopy(_ image: CGImage, width: Int, height: Int,
@@ -443,9 +444,16 @@ final class DisplayView: NSView {
     }
 
     /// Current screen as an image, for Edit ▸ Copy Screen.
+    ///
+    /// The copy happens HERE, not per frame. `lastImage` is backed by the
+    /// emulator's frame ring, which the ABI only guarantees for "a few more
+    /// frames", so handing it out directly would eventually read recycled
+    /// memory — the copy is what makes the returned image own its pixels.
     var screenImage: NSImage? {
-        guard let cg = lastImage else { return nil }
-        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        guard let cg = lastImage, let g = lastImageGeometry,
+              let owned = Self.deepCopy(cg, width: g.0, height: g.1,
+                                        bitmapInfo: g.2, colorSpace: g.3) else { return nil }
+        return NSImage(cgImage: owned, size: NSSize(width: owned.width, height: owned.height))
     }
 
     // MARK: - Touch input
@@ -587,6 +595,17 @@ final class DisplayView: NSView {
     }
 
     private func guestScrollDrag(_ event: NSEvent) {
+        // A conventional wheel mouse reports NO phase at all: phase and
+        // momentumPhase are both empty. Every branch below tests for a specific
+        // phase, so those events fell through to `default`, found no
+        // scrollPoint, and returned — scrolling the guest with anything other
+        // than an Apple trackpad or Magic Mouse did nothing whatsoever, and
+        // super.scrollWheel was never called either, so the event just vanished.
+        // Treat one as a whole flick: press, move, lift, in this single call.
+        if event.phase.isEmpty, event.momentumPhase.isEmpty {
+            wheelFlick(event)
+            return
+        }
         // Use the deltas as AppKit reports them. It has ALREADY applied the
         // user's natural-scrolling preference, so consulting
         // isDirectionInvertedFromDevice and flipping the sign ourselves just
@@ -627,6 +646,21 @@ final class DisplayView: NSView {
             scrollPoint = p
             qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
         }
+    }
+
+    /// One phase-less wheel event as a complete short drag.
+    private func wheelFlick(_ event: NSEvent) {
+        let b = contentLayer.bounds
+        guard b.width > 0, b.height > 0, var p = clampedPanelPoint(event) else { return }
+        // scrollingDelta* is 0 for a legacy wheel; deltaY carries the clicks.
+        let dx = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.deltaX * 10
+        let dy = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY * 10
+        let d = rotatedPanelDelta(dx, dy)
+        qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_BEGIN), Double(p.x), Double(p.y))
+        p.x = min(max(p.x + d.dx / b.width, 0), 1)
+        p.y = min(max(p.y + d.dy / b.height, 0), 1)
+        qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
+        qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_END), Double(p.x), Double(p.y))
     }
 
     private func endScrollDrag() {
@@ -856,7 +890,13 @@ final class DisplayView: NSView {
     // MARK: - Drag & drop
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        droppedIPA(sender) != nil ? .copy : []
+        // Refuse at the drag system, not with an alert per file. During the boot
+        // the menu and toolbar items for this same operation are correctly
+        // greyed out, but the drop still showed the green copy badge, accepted,
+        // and then queued one "The device isn't ready yet" sheet per .ipa to be
+        // dismissed one at a time.
+        guard emulator?.canReachDevice == true else { return [] }
+        return droppedIPA(sender) != nil ? .copy : []
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
