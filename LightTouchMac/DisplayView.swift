@@ -677,11 +677,17 @@ final class DisplayView: NSView {
         if tilting {
             // NEGATED: a layer transform's positive direction is the opposite
             // of the polar angle measured in this flipped view, so the shell
-            // used to swing AGAINST the drag. That reads as both "wrong way"
-            // and "too fast" at once — the device and your hand move apart, so
-            // the apparent rate is double what you are actually doing.
+            // used to swing AGAINST the drag — which read as "wrong way" and
+            // "too fast" at once, since the device and your hand moved apart.
+            //
+            // Geared down by rotationGain on top of that. 1:1 is the textbook
+            // answer for direct manipulation, but the useful arc here is a
+            // wrist movement around a point on screen, and at 1:1 a quarter
+            // turn costs almost none of it — fine for flipping to landscape,
+            // useless for holding a few degrees of tilt in a game, which is
+            // what this gesture is actually for.
             let delta = -(mouseAngle(event) - grabAngle)
-            tiltAngle = atan2(sin(delta), cos(delta))   // wrap to (-π, π]
+            tiltAngle = atan2(sin(delta), cos(delta)) * Self.rotationGain   // wrap, then gear down
             setShellAngle(restAngle + tiltAngle)
             emulator?.setTilt(angle: restAngle + tiltAngle)
             return
@@ -701,6 +707,11 @@ final class DisplayView: NSView {
     // dragging rotates the whole device around its centre, Photoshop-style,
     // and feeds the guest the matching gravity vector, so tilt games play.
     // Release springs the shell back to rest and restores resting gravity.
+
+    /// Degrees of device rotation per degree of drag around the shell's centre.
+    /// The calibration knob for how fine the tilt is: 1.0 tracks the cursor
+    /// exactly, lower trades that for precision. Tune here, not at the call site.
+    private static let rotationGain: CGFloat = 0.4
 
     private var tilting = false
     private var grabAngle: CGFloat = 0   // mouse polar angle at grab
