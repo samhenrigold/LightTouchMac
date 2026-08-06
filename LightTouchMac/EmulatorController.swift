@@ -117,10 +117,15 @@ final class EmulatorController {
         thread.start()
 
         verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
+        startOrientationWatch()   // idle until the guest is up and reachable
     }
 
     func stop() {
         usbmux.stop()
+        // Ends the ssh session, which is what tells the guest-side reporter to
+        // exit; leaving it running would strand an iproxy and an ssh behind us.
+        orientationWatch?.terminate()
+        orientationWatch = nil
     }
 
     /// The QEMU thread returned — the VM is gone for this process (QEMU can't
@@ -240,7 +245,192 @@ final class EmulatorController {
         clockwise ? rotateRight() : rotateLeft()
         rotationDegrees = (rotationDegrees + (clockwise ? 90 : 270)) % 360
     }
-    
+
+    /// Quarter-turn our way to `target`, the short way round. Every step goes
+    /// through rotate(clockwise:) so the guest and `rotationDegrees` stay in
+    /// lockstep — this is a caller of the one source of truth, not a second one.
+    private func rotate(toward target: Int) {
+        while true {
+            let delta = (target - rotationDegrees + 360) % 360
+            guard delta != 0 else { return }
+            rotate(clockwise: delta != 270)   // 90 and 180 go clockwise, 270 back
+        }
+    }
+
+    // MARK: - Auto-rotation
+    //
+    // Open a landscape-only app and the emulated iPod swings to landscape by
+    // itself; press home and it swings back. The signal comes from the guest,
+    // because on 3.1.3 there is nowhere else it can come from: SpringBoard's
+    // -[SpringBoard noteUIOrientationChanged:display:] updates an ivar and calls
+    // GSEventRotateSimulator() in-process, and posts nothing. The three
+    // com.apple.springboard.*Orientation Darwin notifications that notification_proxy
+    // WOULD have relayed are posted from the accelerometer path — they describe
+    // how the device is being held, which is the thing we are faking anyway —
+    // and springboardservicesrelay on 3.1.3 answers only getIconState /
+    // setIconState / getIconPNGData, so libimobiledevice's
+    // sbservices_get_interface_orientation has nothing to talk to.
+    //
+    // So a 50 KB armv6 helper (qemu-ios/contrib/it-orientation) is streamed onto
+    // the guest over the ssh path the app already uses and left running; it
+    // polls SpringBoardServices' SBGetUIOrientation MIG stub — no injection, no
+    // respring, nothing baked into the NAND image — and prints a line every time
+    // the answer changes. Its header documents the whole chain.
+    //
+    // EDGES, NOT LEVELS, is the rule that keeps this from fighting the user.
+    // We rotate when the guest's orientation *changes*; we never correct the
+    // shell towards the guest's steady state. The home screen is portrait-only
+    // on 3.1.3, so a levels rule would undo a manual rotation the instant it was
+    // made — the user turns the device, the guest stays at 0, and we would turn
+    // it straight back. With edges, a manual rotation the guest declines to
+    // follow simply stands, and a manual rotation the guest DOES follow reports
+    // the orientation we already moved to, so it lands on a no-op. The user only
+    // loses their manual angle when the front app actually changes what it wants,
+    // which is the moment they asked us to follow.
+
+    /// Off switch, for anyone who would rather the device never move on its own:
+    /// `defaults write <bundle-id> autoRotateWithGuest -bool NO`. On by default —
+    /// it is only ever driven by an explicit change on the guest's side.
+    static let autoRotateDefaultsKey = "autoRotateWithGuest"
+    static var autoRotateEnabled: Bool {
+        UserDefaults.standard.object(forKey: autoRotateDefaultsKey) as? Bool ?? true
+    }
+
+    /// The last value SpringBoard reported, in SpringBoard's degrees (0, 90,
+    /// 180, -90). nil until the first line arrives — that first one only seeds
+    /// this, so a watcher that attaches to an already-running guest never yanks
+    /// the shell around on connect.
+    private var lastGuestOrientation: Int?
+    private var orientationWatch: Process?
+
+    /// SpringBoard's degrees are the angle the *content* is rotated by; ours are
+    /// the angle the *device* is turned clockwise. They are mirror images.
+    ///
+    /// From -[SBApplication defaultStatusBarOrientation]: UIInterfaceOrientation
+    /// Portrait → 0, PortraitUpsideDown → 180, LandscapeLeft → 90, LandscapeRight
+    /// → -90. UIInterfaceOrientationLandscapeLeft is the one with the home button
+    /// on the RIGHT, which is the device turned 270° clockwise — hence the flip.
+    private func hostDegrees(forGuest degrees: Int) -> Int? {
+        switch degrees {
+        case 0:          return 0
+        case 180:        return 180
+        case 90:         return 270   // LandscapeLeft:  home button right
+        case -90, 270:   return 90    // LandscapeRight: home button left
+        default:         return nil   // a torn line, or a value we don't know
+        }
+    }
+
+    private func guestOrientationChanged(to degrees: Int) {
+        guard let target = hostDegrees(forGuest: degrees) else { return }
+        defer { lastGuestOrientation = degrees }
+        // First reading seeds only: see lastGuestOrientation.
+        guard let previous = lastGuestOrientation, previous != degrees else { return }
+        guard Self.autoRotateEnabled, state == .running else { return }
+        rotate(toward: target)
+    }
+
+    /// Where the guest-side reporter comes from: the app bundle in a packaged
+    /// build, the qemu-ios checkout in a dev one. Same shape as the ssh terminal
+    /// script — no helper, no auto-rotation, and nothing else changes.
+    private var orientationHelperPath: String? {
+        Bundled.resolve("itorient", fallbacks: [
+            "\(options.filesRoot)/../qemu-ios/contrib/it-orientation/itorient",
+            "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-orientation/itorient",
+        ])
+    }
+
+    /// Keeps one reporter alive for as long as the app runs, re-attaching after
+    /// a boot, a respring, or a dropped USB session — the same "the guest drops
+    /// its services and comes back" reality GuestNotifications backs off around.
+    private func startOrientationWatch() {
+        guard Self.autoRotateEnabled,
+              let helper = orientationHelperPath,
+              let binary = try? Data(contentsOf: URL(fileURLWithPath: helper)),
+              let iproxy = Bundled.tool("iproxy")
+                ?? Bundled.binarySearchPaths.map({ "\($0)/iproxy" })
+                    .first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+        else { return }
+
+        Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                if self.state == .running, self.canManageApps {
+                    await self.runOrientationWatch(iproxy: iproxy, binary: binary)
+                    // The session ended: SpringBoard restarted, the link dropped,
+                    // or sshd is not there at all (an image without it). Either
+                    // way the retry is cheap and silent.
+                    self.lastGuestOrientation = nil
+                }
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
+
+    /// One session. Streams the helper into the guest over ssh's stdin, runs it
+    /// in place, and reads its lines until the connection dies.
+    ///
+    /// `cat > … && exec …` rather than scp: it needs one connection instead of
+    /// two, and it is the only way to be sure the binary that just landed is the
+    /// one that runs. The write end is closed straight after the bytes go in,
+    /// which is what gives `cat` its EOF.
+    private func runOrientationWatch(iproxy: String, binary: Data) async {
+        let port = Int.random(in: 29400...29599)
+        let password = ProcessInfo.processInfo.environment["DEVICE_PASSWORD"] ?? "alpine"
+        // ControlPath is deliberately absent here too — the 104-byte socket-path
+        // limit is what silently disabled every guest command once before.
+        let script = """
+        export PATH=/usr/bin:/bin:$PATH
+        "\(iproxy)" \(port) 22 >/dev/null 2>&1 &
+        IP=$!
+        ASK="$(mktemp -t ltorient)"
+        trap 'kill $IP 2>/dev/null; rm -f "$ASK"' EXIT
+        printf '#!/bin/sh\\necho %s\\n' "\(password)" > "$ASK"
+        chmod 700 "$ASK"
+        sleep 1
+        SSH_ASKPASS="$ASK" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
+            -p \(port) root@127.0.0.1 \
+            'cat > /tmp/itorient && chmod 755 /tmp/itorient && exec /tmp/itorient'
+        """
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.arguments = ["-c", script]
+        let input = Pipe(), output = Pipe()
+        task.standardInput = input
+        task.standardOutput = output
+        task.standardError = FileHandle.nullDevice
+
+        // The handler runs on Foundation's own queue and a read can split a line
+        // anywhere, so the tail lives in a box that outlives each call. Every
+        // complete line hops to the main actor; nothing is parsed off it.
+        let pending = LineBuffer()
+        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            for line in pending.take(handle.availableData) {
+                guard let value = Int(line) else { continue }
+                Task { @MainActor in self?.guestOrientationChanged(to: value) }
+            }
+        }
+
+        orientationWatch = task
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            // Set before run(): a process that exits immediately would otherwise
+            // finish before there was a handler to notice, and park us forever.
+            task.terminationHandler = { _ in continuation.resume() }
+            do {
+                try task.run()
+                input.fileHandleForWriting.write(binary)
+                try? input.fileHandleForWriting.close()
+            } catch {
+                task.terminationHandler = nil
+                continuation.resume()
+            }
+        }
+        output.fileHandleForReading.readabilityHandler = nil
+        if orientationWatch === task { orientationWatch = nil }
+    }
+
     // MARK: - Keyboard passthrough
     
     /// Forward a host key by its macOS virtual keycode; the shim maps it to a
@@ -583,5 +773,27 @@ final class EmulatorController {
             "IT_BOOT_ARGS_INTERVAL_MS": "250",
         ]
         for (k, v) in env { setenv(k, v, 1) }
+    }
+}
+
+/// Splits a byte stream into whole lines across reads.
+///
+/// `@unchecked Sendable` with no lock is deliberate: Foundation serialises a
+/// pipe's readability callbacks, so `take` is only ever on one thread at a time.
+/// A line-per-read assumption would have been shorter and is very nearly always
+/// true here — but "very nearly" on a parser that decides which way a device
+/// turns is how you get a 9 out of a torn "90".
+private final class LineBuffer: @unchecked Sendable {
+    private var tail = Data()
+
+    func take(_ chunk: Data) -> [String] {
+        tail.append(chunk)
+        var lines: [String] = []
+        while let newline = tail.firstIndex(of: 0x0a) {
+            lines.append(String(decoding: tail[tail.startIndex..<newline], as: UTF8.self)
+                .trimmingCharacters(in: .whitespaces))
+            tail.removeSubrange(tail.startIndex...newline)
+        }
+        return lines
     }
 }

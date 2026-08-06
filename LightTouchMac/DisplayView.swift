@@ -395,6 +395,13 @@ final class DisplayView: NSView {
             framePixels = newFramePixels
             needsLayout = true
         }
+        // The dims flipping catches every quarter turn but not a half one:
+        // 180° leaves 320×480 at 320×480, so an upside-down app (or two
+        // auto-rotations run back to back) would leave the shell posed at the
+        // old angle until something else happened to lay out. Ask the emulator
+        // directly — it is the source of truth for the pose, and layout()
+        // already compares against the same value to decide whether to animate.
+        if emulator?.rotationDegrees != lastRotation { needsLayout = true }
         let bytes = width * height * 4
         guard let provider = CGDataProvider(dataInfo: nil, data: pixels, size: bytes,
                                             releaseData: { _, _, _ in }) else { return }
