@@ -81,7 +81,7 @@ final class DisplayView: NSView {
     /// Wide enough that the shell's shadow has somewhere to fall.
     static let zoomInset: CGFloat = 16
     /// How long the shell + screen take to swing between portrait and landscape.
-    private static let rotationDuration = 0.35
+    private static let rotationDuration = 0.4
 
     var zoom: ZoomMode = .fit {
         didSet {

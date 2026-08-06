@@ -81,11 +81,24 @@ enum AppInstaller {
             job.status = "Installing…"
             NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
             do {
-                _ = try await emulator.install(ipa) { line in
+                let output = try await emulator.install(ipa) { line in
                     Task { @MainActor in
                         job.status = line
                         NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                     }
+                }
+                // The script installs SDK-too-new apps without error and iOS
+                // then refuses to launch them (the DTSDKName filter) — an icon
+                // that does nothing. The one moment this is knowable is now.
+                if output.contains("newer than the device's") {
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "“\(job.name)” installed, but may not launch"
+                    alert.informativeText = "It was built with a newer iOS SDK than 3.1.3, "
+                        + "and iPhone OS refuses to launch such apps. "
+                        + "Look for a version of this app built for iOS 3 or earlier."
+                    if let window { alert.beginSheetModal(for: window) { _ in } }
+                    else { alert.runModal() }
                 }
             } catch is CancellationError {
                 // Cancelling is a decision, not a failure. The script's TERM
@@ -235,6 +248,8 @@ final class AppsInspectorViewController: NSViewController {
         nc.addObserver(self, selector: #selector(appsChanged), name: .ltmAppsChanged, object: nil)
         nc.addObserver(self, selector: #selector(installStarted(_:)), name: .ltmInstallStarted, object: nil)
         nc.addObserver(self, selector: #selector(installProgressed(_:)), name: .ltmInstallProgress, object: nil)
+        nc.addObserver(self, selector: #selector(refreshIconDimming), name: NSApplication.didBecomeActiveNotification, object: nil)
+        nc.addObserver(self, selector: #selector(refreshIconDimming), name: NSApplication.didResignActiveNotification, object: nil)
         startInitialLoad()
     }
 
@@ -275,6 +290,13 @@ final class AppsInspectorViewController: NSViewController {
                 // three seconds is plenty.
                 try? await Task.sleep(for: .seconds(self.haveLoaded ? 3 : 1))
             }
+        }
+    }
+
+    @objc private func refreshIconDimming() {
+        for row in pending.count..<numberOfRows(in: tableView) {
+            (tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView)?
+                .imageView?.alphaValue = NSApp.isActive ? 1 : 0.5
         }
     }
 
@@ -378,8 +400,12 @@ final class AppsInspectorViewController: NSViewController {
     private var installing: Bool { pending.contains { !$0.isFinished } }
 
     private func updateButtons() {
-        addRemove.setEnabled(emulator.canManageApps, forSegment: 0)
-        addRemove.setEnabled(selectedApp != nil && !installing, forSegment: 1)
+        // Disabled until the device has answered at least once: canManageApps
+        // only means the usbmux session exists, not that the guest is up —
+        // without haveLoaded these stayed clickable through the entire boot
+        // wait shown by the "Waiting for the device…" placeholder.
+        addRemove.setEnabled(emulator.canManageApps && haveLoaded, forSegment: 0)
+        addRemove.setEnabled(haveLoaded && selectedApp != nil && !installing, forSegment: 1)
     }
 
     /// The selected row's app, or nil if nothing (or a pending row) is selected.
@@ -502,16 +528,21 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         let cell = appCell(tableView)
         cell.textField?.stringValue = displayName(app)
         cell.imageView?.image = AppMetadataCache.shared.icon(for: app.id) ?? Self.genericAppIcon
+        // AppKit only dims a *selected* row when the window resigns key,
+        // leaving every other icon at full strength — inconsistent with the
+        // rest of the sidebar, which dims as a whole. Set explicitly instead
+        // of relying on that per-row behavior; refreshed by the app-active
+        // observers below whenever it changes with no reload otherwise due.
+        cell.imageView?.alphaValue = NSApp.isActive ? 1 : 0.5
         cell.toolTip = "\(app.id)\(app.version.isEmpty ? "" : " — \(app.version)")"
         return cell
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) { updateButtons() }
 
-    // A pending row can't be selected for removal.
-    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
-        row >= pending.count
-    }
+    // Every row selects, pending installs included — an unselectable row in a
+    // source list reads as broken. What a pending row can't do (uninstall) is
+    // decided where the buttons are enabled, not by refusing the selection.
 
     // MARK: Drag to reorder the home screen
 
@@ -582,6 +613,10 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         let image = NSImageView()
         image.imageScaling = .scaleProportionallyUpOrDown
         image.translatesAutoresizingMaskIntoConstraints = false
+        image.wantsLayer = true
+        image.layer?.cornerRadius = 6
+        image.layer?.cornerCurve = .continuous
+        image.layer?.masksToBounds = true
         let text = NSTextField(labelWithString: "")
         text.lineBreakMode = .byTruncatingTail
         // A narrow inspector truncates app names; hovering shows the whole one.

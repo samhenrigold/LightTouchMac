@@ -25,7 +25,7 @@ struct LaunchOptions: ParsableArguments {
     }
     
     @Option(name: .long, help: "NAND image directory name under files-root.")
-    var nand: String = "nand-appsync3"
+    var nand: String = "nand-ultimate"
     
     @Flag(name: .long, inversion: .prefixedNo,
           help: "Start usbmuxd so apps can be installed and managed over USB.")

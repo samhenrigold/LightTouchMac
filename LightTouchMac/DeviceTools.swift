@@ -160,18 +160,28 @@ struct DeviceTools: Sendable {
         throw DeviceToolsError.failed(lastOutput)
     }
 
-    /// One line of script output as a row subtitle, or nil for lines that say
-    /// nothing to someone watching a progress row. ideviceinstaller's own
-    /// status lines look like `Install: CreatingStagingDirectory (5%)`.
+    /// One line of installer output as a row subtitle, translated for a human.
+    /// The script narrates for its log ("device is up: iOS 3.1.3",
+    /// "TakingInstallLock (0%)") and none of that reads as status under an
+    /// app's name in a sidebar. Only lines that map to a phase someone would
+    /// recognise become a subtitle; everything else returns nil so the last
+    /// real status stays put instead of being replaced by noise.
     static func status(of line: String) -> String? {
         let text = line.trimmingCharacters(in: .whitespaces)
-        if let range = text.range(of: #"^\w+: "#, options: .regularExpression) {
-            let rest = String(text[range.upperBound...])
-            // "Complete" arrives before the script's own trailing output; the
-            // row is about to be replaced by the real one either way.
-            return rest.isEmpty ? nil : rest
+        // ideviceinstaller's per-phase progress: `Install: StagingPackage (10%)`.
+        // The phase names are installd internals; the percentage is the story.
+        if let match = text.range(of: #"^Install: \w+ \((\d+)%\)"#, options: .regularExpression) {
+            let percent = text[match].drop { !$0.isNumber }.prefix { $0.isNumber }
+            return "Installing… \(percent)%"
         }
-        if text.hasPrefix("--- ") { return String(text.dropFirst(4)) }
+        let lower = text.lowercased()
+        if lower.contains("waiting for the device") ||
+           lower.contains("services are still starting") { return "Waiting for the device…" }
+        if lower.contains("retrying in") { return "Device is busy — retrying…" }
+        if lower.contains("gl engine") { return "Setting up graphics support…" }
+        if lower.hasPrefix("--- installing") || lower.hasPrefix("copying ") {
+            return "Sending to device…"
+        }
         return nil
     }
     
