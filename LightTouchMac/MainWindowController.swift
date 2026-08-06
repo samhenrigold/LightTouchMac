@@ -140,6 +140,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // and it competed with the toolbar for space.
         window?.subtitle = emulator.statusLine
         window?.toolbar?.validateVisibleItems()
+        syncRotateSymbol()      // follows automatic rotations, not just manual ones
         updateDeadOverlay()
     }
 

@@ -98,11 +98,17 @@ struct DeviceTools: Sendable {
             // Placeholder first, before anything slow: the exec-bit repair
             // repacks the whole archive and the free-space check is a round
             // trip, and until now this path put nothing on the home screen for
-            // any of it. Keyed on the .ipa's name rather than its bundle id
-            // only because the bundle id costs another unzip of Info.plist —
-            // the cost of that is two icons if the same app is dropped from two
-            // different files, and both come down.
-            let placeholder = "qemu-install-" + ipa.deletingPathExtension().lastPathComponent
+            // any of it.
+            //
+            // Keyed on the bundle id, falling back to the filename. Info.plist
+            // is already unzipped just above for minimumOS, so this is free —
+            // and keying on the filename alone meant the same app dropped from
+            // two differently named files raised two placeholders. The filter
+            // is also what makes the value safe inside the single quotes it is
+            // interpolated into below.
+            let key = await AppMetadataCache.bundleID(of: ipa)
+                ?? ipa.deletingPathExtension().lastPathComponent
+            let placeholder = "qemu-install-" + key
                 .filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
             placeholderIcon("add", placeholder)
             defer { placeholderIcon("cancel", placeholder) }

@@ -231,7 +231,13 @@ final class EmulatorController {
     /// portrait → landscape-right(90) → upside-down(180) → landscape-left(270)).
     /// DisplayView poses the shell from this, so all rotation must go through
     /// rotate(clockwise:) or the shell drifts out of step with the guest.
-    private(set) var rotationDegrees = 0
+    private(set) var rotationDegrees = 0 {
+        // Orientation is health-relevant UI state like any other: the toolbar's
+        // rotate glyph shows which way the NEXT turn goes, so it has to follow
+        // an automatic rotation too, not just the three manual actions that used
+        // to poke it by hand.
+        didSet { if oldValue != rotationDegrees { onStatusChange?() } }
+    }
     var isLandscape: Bool { rotationDegrees == 90 || rotationDegrees == 270 }
 
     /// Toggle between portrait and landscape: enter counter-clockwise (home

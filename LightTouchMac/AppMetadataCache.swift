@@ -123,6 +123,19 @@ final class AppMetadataCache {
         return name
     }
     
+    /// The app's CFBundleIdentifier, for keying the install placeholder. Same
+    /// Info.plist read the rest of the pre-flight already does — keying on the
+    /// .ipa's filename instead meant the same app dropped from two differently
+    /// named files raised two placeholder icons.
+    static func bundleID(of ipa: URL) async -> String? {
+        let members = await Self.members(ipa)
+        guard let root = Self.appRoot(members),
+              let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        return info["CFBundleIdentifier"] as? String
+    }
+
     /// The archive path of the app's main binary, e.g.
     /// "Payload/CubeRunner.app/CubeRunner" — what the exec-bit repair needs to
     /// know before staging. Same Info.plist read as learn().
