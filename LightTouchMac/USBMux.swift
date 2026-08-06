@@ -40,8 +40,24 @@ final class USBMux {
     /// The daemon's config dir: bundled first (package.sh stages it), else the
     /// dev checkout. Was hardcoded to the checkout with no bundle fallback, so
     /// a packaged app always passed `-C` a path that does not exist.
+    /// usbmuxd's `-C` directory is WRITABLE STATE, not a resource: the daemon
+    /// creates it if absent and writes SystemConfiguration.plist plus a pairing
+    /// record per device into it. Pointed at the bundle it cannot write at all
+    /// (read-only, and writing would break the signature), so pairing could
+    /// never persist. Seed a copy in Application Support once and use that.
     private static var conf: String {
-        Bundled.resource("usbmuxd-conf") ?? "\(root)/run/conf"
+        let work = Bundled.workDirectory.appendingPathComponent("usbmuxd-conf", isDirectory: true)
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: work.path) {
+            try? fm.createDirectory(at: work, withIntermediateDirectories: true)
+            if let seed = Bundled.resource("usbmuxd-conf") {
+                for name in (try? fm.contentsOfDirectory(atPath: seed)) ?? [] {
+                    try? fm.copyItem(at: URL(fileURLWithPath: seed).appendingPathComponent(name),
+                                     to: work.appendingPathComponent(name))
+                }
+            }
+        }
+        return work.path
     }
     
     /// Start usbmuxd and record a session. Returns nil (and does nothing) if the

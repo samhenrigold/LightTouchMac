@@ -113,6 +113,10 @@ for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair; do
     copy_tool "$BREW/bin/$tool"
 done
 copy_tool "${USBMUXD_QEMU:-$HOME/Developer/usbmuxd-qemu}/usbmuxd/src/usbmuxd"
+# NOTE: usbmuxd's -C directory is writable state (it stores SystemConfiguration
+# and a pairing record per device). The app copies the bundled seed out to
+# Application Support before use — see USBMux.confDirectory — because the bundle
+# is read-only and signed. Ship only the seed, never a pairing record.
 copy_tool "$QEMU/imgtools/install-ipa.sh"
 copy_tool "$QEMU/contrib/it-ssh-terminal.sh"
 # Guest-side binaries install-ipa.sh copies onto the device, and the helper that
@@ -122,6 +126,10 @@ copy_tool "$QEMU/contrib/it-instprogress/sbdlicon"
 # The quit-time shutdown helper: reboot(RB_HALT) in 20 lines, because the guest
 # has no /sbin/halt and the gesture needs a UI that may not be there.
 copy_tool "$QEMU/contrib/it-halt/ithalt"
+# Auto-rotation's guest-side reporter. Without it the feature is silently absent
+# from every packaged build — the app resolves it bundle-first and then falls
+# back to a checkout path a user's Mac does not have.
+copy_tool "$QEMU/contrib/it-orientation/itorient"
 # ipod-helper is built, not committed (contrib/macos-app/ipod-helper.c), and the
 # qemu-ios app pipeline is what compiles it — take its copy.
 copy_tool "${IT_HELPER_BIN:-$QEMU/build/iPod touch.app/Contents/Resources/tools/ipod-helper}"
@@ -140,8 +148,13 @@ CONF_DST="$APP/Contents/Resources/usbmuxd-conf"
 if [ -d "$CONF_SRC" ]; then
     echo "embedding usbmuxd-conf…"
     rm -rf "$CONF_DST"; mkdir -p "$CONF_DST"
-    # Only the plists (pairing record + SystemConfiguration); skip logs/.DS_Store.
-    find "$CONF_SRC" -maxdepth 1 -name '*.plist' -exec cp {} "$CONF_DST/" \;
+    [ -f "$CONF_SRC/SystemConfiguration.plist" ] &&
+        cp "$CONF_SRC/SystemConfiguration.plist" "$CONF_DST/"
+    # SystemConfiguration.plist ONLY. The per-device files are PAIRING RECORDS
+    # — copying "*.plist" shipped this developer's own pairing record and host
+    # SystemBUID to every user, and a pairing record is a device credential.
+    # usbmuxd writes its own on first use, into the copy the app makes in
+    # Application Support (the bundle is read-only and signed).
 else
     echo "  NOT bundled: usbmuxd-conf (no $CONF_SRC) — app management may fail on a clean Mac" >&2
 fi

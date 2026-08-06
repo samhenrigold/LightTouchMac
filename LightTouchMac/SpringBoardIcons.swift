@@ -41,7 +41,16 @@ struct SpringBoardIcons: Sendable {
     func move(_ bundleID: String, before other: String?) async throws -> [String] {
         try await withState { state, client in
             var ids = Self.flatten(state)
-            guard let from = ids.firstIndex(of: bundleID) else { return ids }
+            // Not "return ids". Returning the unchanged order looked like a
+            // successful move to the caller, which kept its optimistic row
+            // position while the device never got the write — most likely for
+            // an app SpringBoard has not added to its layout yet, i.e. a fresh
+            // install before a respring.
+            guard let from = ids.firstIndex(of: bundleID) else {
+                throw DeviceToolsError.failed(
+                    "SpringBoard doesn't know about this app yet. "
+                    + "Try Device ▸ Advanced ▸ Restart SpringBoard, then reorder it.")
+            }
             ids.remove(at: from)
             let to = other.flatMap { ids.firstIndex(of: $0) } ?? ids.count
             ids.insert(bundleID, at: to)

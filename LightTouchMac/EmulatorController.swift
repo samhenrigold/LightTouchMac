@@ -47,6 +47,11 @@ final class EmulatorController {
     }
     private var didSweepStaging = false
 
+    /// Set when a requested erase could not be performed at launch; the window
+    /// reports it once it exists.
+    private(set) var eraseFailure: String?
+    func clearEraseFailure() { eraseFailure = nil }
+
     init(options: LaunchOptions) {
         self.options = options
         usbmux.onUnexpectedExit = { [weak self] in self?.onStatusChange?() }
@@ -61,6 +66,8 @@ final class EmulatorController {
         guard !started else { return }
         started = true
         state = .booting
+
+        migrateStateNames()
 
         // One overlay per base image, so an overlay is never replayed onto a
         // different NAND (which would shadow unrelated blocks).
@@ -81,6 +88,11 @@ final class EmulatorController {
             } catch {
                 NSLog("reset: could not wipe the overlay (\(error.localizedDescription)) — "
                       + "leaving the request armed for the next launch")
+                // And SAY so. The user confirmed a destructive, irreversible
+                // action, the app quit, and it came back with everything still
+                // there — with the erase still armed to fire, unannounced, at
+                // some arbitrary later launch.
+                eraseFailure = error.localizedDescription
             }
             discardSavedState()
         }
@@ -352,6 +364,17 @@ final class EmulatorController {
     private func guestOrientationChanged(to degrees: Int) {
         guard let target = hostDegrees(forGuest: degrees) else { return }
         defer { lastGuestOrientation = degrees }
+        // A restored guest can already be in landscape, and the app starts every
+        // process at 0 — so on the restore path the FIRST reading is the truth,
+        // not a seed. Left seeded, the shell posed portrait over a landscape
+        // buffer and every later quarter turn stayed 90° out, which no amount of
+        // rotating could fix (the same failure reset() re-derives for).
+        if restoringFromSnapshot, lastGuestOrientation == nil,
+           let target = hostDegrees(forGuest: degrees), target != rotationDegrees {
+            lastGuestOrientation = degrees
+            rotate(toward: target)
+            return
+        }
         // First reading seeds only: see lastGuestOrientation.
         guard let previous = lastGuestOrientation, previous != degrees else { return }
         guard Self.autoRotateEnabled, state == .running else { return }
@@ -412,7 +435,10 @@ final class EmulatorController {
         "\(iproxy)" \(port) 22 >/dev/null 2>&1 &
         IP=$!
         ASK="$(mktemp -t ltorient)"
-        trap 'kill $IP 2>/dev/null; rm -f "$ASK"' EXIT
+        # EXIT alone is not enough: stop() sends SIGTERM, and a shell killed by an
+        # uncaught signal never runs its EXIT trap — so every quit stranded an
+        # iproxy holding a port and an ssh holding a guest process.
+        trap 'kill $IP 2>/dev/null; rm -f "$ASK"; exit 0' EXIT INT TERM HUP
         printf '#!/bin/sh\\necho %s\\n' "\(password)" > "$ASK"
         chmod 700 "$ASK"
         sleep 1
@@ -420,7 +446,8 @@ final class EmulatorController {
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
             -p \(port) root@127.0.0.1 \
-            'cat > /tmp/itorient && chmod 755 /tmp/itorient && exec /tmp/itorient'
+            'pkill -f /tmp/itorient 2>/dev/null; rm -f /tmp/itorient; \
+             cat > /tmp/itorient && chmod 755 /tmp/itorient && exec /tmp/itorient'
         """
 
         let task = Process()
@@ -491,9 +518,21 @@ final class EmulatorController {
             NSLog("reset: ignored while a state save is in flight")
             return
         }
-        qemu_ios_ui_reset()
-        rotationDegrees = 0
-        state = .booting
+        // Flush first. A bare system_reset is the same hard cut as a SIGKILL as
+        // far as the guest's filesystem is concerned — it loses the HFS+ catalog
+        // updates still in memory, which is how a device ends up on the
+        // Connect-to-iTunes screen. The quit path has done this for a while;
+        // Restart, which is one menu row away from Erase, was still doing it
+        // the dangerous way.
+        Task { [weak self] in
+            guard let self else { return }
+            if self.canManageApps {
+                _ = await withSoftDeadline(20) { try? await self.syncFilesystem() }
+            }
+            qemu_ios_ui_reset()
+            self.rotationDegrees = 0
+            self.state = .booting
+        }
     }
     /// Kept for completeness; deliberately NOT in a menu — system_powerdown
     /// provably never completes on 3.1.3 (PMU reg 0x04–0x06 modelling gap), so
@@ -512,13 +551,53 @@ final class EmulatorController {
     // is quarantined and the next launch cold-boots). The overlay is never
     // auto-deleted — nuking the device is always the user's deliberate choice.
 
-    private var snapshotURL: URL { stateDir.appendingPathComponent("snapshot-\(options.nand)") }
+    /// Adopt state written before the key included the files-root.
+    ///
+    /// Without this, adding the root to the key silently hands every existing
+    /// user a factory-fresh device: their overlay is still on disk under the old
+    /// name, just no longer looked at. Renaming is the whole migration, and it
+    /// only fires when the new name is absent — so it can never overwrite state
+    /// that already belongs to this image.
+    private func migrateStateNames() {
+        let fm = FileManager.default
+        for (old, new) in [("nandrw-\(options.nand)", "nandrw-\(imageKey)"),
+                           ("snapshot-\(options.nand)", "snapshot-\(imageKey)"),
+                           (".reset-\(options.nand)", ".reset-\(imageKey)")]
+        where old != new {
+            let from = stateDir.appendingPathComponent(old)
+            let to = stateDir.appendingPathComponent(new)
+            guard fm.fileExists(atPath: from.path), !fm.fileExists(atPath: to.path) else { continue }
+            do {
+                try fm.moveItem(at: from, to: to)
+                NSLog("state: adopted \(old) as \(new)")
+            } catch {
+                NSLog("state: could not adopt \(old) (\(error.localizedDescription))")
+            }
+        }
+    }
+
+    /// Distinguishes two base images that happen to share a directory name.
+    /// Keying on the name alone meant `LTM_FILES=/a` and `LTM_FILES=/b`, both
+    /// holding a "nand-ultimate", shared one copy-on-write overlay and one
+    /// snapshot — image B read through image A's overlay, and a snapshot taken
+    /// on A restored onto B. That is the stale-RAM-over-different-flash
+    /// corruption this file's own comments spend paragraphs avoiding.
+    private var imageKey: String {
+        let root = options.filesRoot
+        guard !root.isEmpty else { return options.nand }
+        // Short, stable, and readable enough to identify in Finder.
+        var hash: UInt64 = 5381
+        for byte in root.utf8 { hash = hash &* 33 &+ UInt64(byte) }
+        return "\(options.nand)-\(String(hash, radix: 36))"
+    }
+
+    private var snapshotURL: URL { stateDir.appendingPathComponent("snapshot-\(imageKey)") }
     private var snapshotTmpURL: URL { snapshotURL.appendingPathExtension("tmp") }
     private var snapshotBadURL: URL { snapshotURL.appendingPathExtension("bad") }
-    private var overlayURL: URL { stateDir.appendingPathComponent("nandrw-\(options.nand)", isDirectory: true) }
+    private var overlayURL: URL { stateDir.appendingPathComponent("nandrw-\(imageKey)", isDirectory: true) }
     /// Set by a factory reset; the NEXT launch wipes the overlay before opening
     /// it (the current process holds it open, so it can't wipe it itself).
-    private var resetMarkerURL: URL { stateDir.appendingPathComponent(".reset-\(options.nand)") }
+    private var resetMarkerURL: URL { stateDir.appendingPathComponent(".reset-\(imageKey)") }
     private var restoringFromSnapshot = false
 
     /// UserDefaults key for the Settings toggle.
@@ -548,8 +627,12 @@ final class EmulatorController {
             return []
         }
         if NSEvent.modifierFlags.contains(.option) {
-            NSLog("snapshot: Option held at launch — cold boot, ignoring saved state")
-            discardSavedState()
+            // IGNORE, not delete — the log said "ignoring" while the code
+            // removed the file. Option is held for all sorts of reasons at
+            // launch, and this is meant to be the escape hatch from a bad
+            // snapshot, not a way to lose a good one by accident. Discarding is
+            // what Discard Saved State is for.
+            NSLog("snapshot: Option held at launch — cold boot, keeping saved state")
             return []
         }
         guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return [] }
@@ -826,10 +909,17 @@ final class EmulatorController {
     }
 
     /// Menu ▸ Save State Now: save, then resume the vCPU (the save stops it).
+    /// Set by the menu action so a failed save can be reported. The save is
+    /// otherwise indistinguishable from a successful one — including the case
+    /// where it DISCARDS the user's existing saved state because the guest is
+    /// not answering.
+    var onSnapshotResult: ((Bool) -> Void)?
+
     func saveSnapshotNow() {
         skipNextQuitSnapshot = false   // an explicit save clears a prior discard
-        performSnapshot { [weak self] _ in
+        performSnapshot { [weak self] ok in
             guard let self else { return }
+            self.onSnapshotResult?(ok)
             // Only un-stop what THIS save stopped. Flipping to .running
             // unconditionally resurrected a VM that died during the save: the
             // dead-overlay vanished and input went to a process with no VM —
@@ -995,7 +1085,10 @@ final class EmulatorController {
     }
 
     func homeScreenOrder() async throws -> [String] { try await springBoard().order() }
-    func moveOnHomeScreen(_ bundleID: String, before other: String?) async throws {
+    /// Returns the order SpringBoard ACCEPTED, which is not always the one asked
+    /// for — the caller should adopt it rather than assume its own.
+    @discardableResult
+    func moveOnHomeScreen(_ bundleID: String, before other: String?) async throws -> [String] {
         try await springBoard().move(bundleID, before: other)
     }
     

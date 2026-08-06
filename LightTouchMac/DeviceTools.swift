@@ -470,11 +470,20 @@ struct DeviceTools: Sendable {
         ]) else {
             throw DeviceToolsError.toolMissing("it-ssh-terminal.sh")
         }
-        _ = try await run(
+        let result = try await run(
             .path(FilePath("/bin/bash")),
             arguments: [resolved],
             environment: toolEnvironment,
-            output: .discarded, error: .discarded
+            output: .discarded, error: .string(limit: 1 << 16)
         )
+        // Was `.discarded` with the status ignored, so every failure — no sshd
+        // on this image, a refused connection, a wrong password — produced
+        // no Terminal window, no error, nothing. This is the command people
+        // reach for when things are already broken.
+        guard result.terminationStatus.isSuccess else {
+            throw DeviceToolsError.failed(
+                "Could not open a shell on the device. This NAND image may not have sshd "
+                + "installed. \(result.standardError ?? "")")
+        }
     }
 }

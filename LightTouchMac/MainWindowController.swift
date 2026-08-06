@@ -125,10 +125,26 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     override func windowDidLoad() {
         super.windowDidLoad()
+        reportEraseFailureIfNeeded()
         // Only center on first run. setFrameAutosaveName already restored a
         // saved frame; centering unconditionally threw that away every launch.
         if window?.setFrameUsingName("Main") != true { window?.center() }
         apply(Self.savedZoom())   // restore the zoom the user left it at
+    }
+
+    /// An erase the user confirmed that could not be carried out. Silence here
+    /// meant a destructive action appeared to do nothing, with the request still
+    /// armed to fire at some later launch.
+    private func reportEraseFailureIfNeeded() {
+        guard let reason = emulator.eraseFailure, let window else { return }
+        emulator.clearEraseFailure()
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "The device could not be erased"
+        alert.informativeText = "\(reason)\n\nThe device is unchanged, and the erase is still "
+            + "pending — it will be tried again the next time you open LightTouchMac. "
+            + "Choose Device ▸ Erase All Content and Settings again to cancel it."
+        alert.beginSheetModal(for: window) { _ in }
     }
 
     // MARK: - Health / status surfacing
@@ -357,10 +373,45 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func deviceShake(_ sender: Any?)       { emulator.shake() }
     @objc func devicePause(_ sender: Any?)       { emulator.pause() }
     @objc func deviceResume(_ sender: Any?)      { emulator.resume() }
-    @objc func deviceReset(_ sender: Any?)       { emulator.reset() }
-    // No devicePowerDown: system_powerdown never completes on 3.1.3 (PMU gap),
-    // so a menu item for it is a trap that wedges the guest at 100% CPU.
-    @objc func saveStateNow(_ sender: Any?) { emulator.saveSnapshotNow() }
+    @objc func deviceReset(_ sender: Any?) {
+        // Confirmed, because a restart cuts the guest off mid-write much the way
+        // a force quit does, and it sits one row above Erase in the same menu.
+        let alert = NSAlert()
+        alert.messageText = "Restart the device?"
+        alert.informativeText = "LightTouchMac will flush the device's filesystem first, "
+            + "but anything it hasn't finished writing may still be lost."
+        alert.addButton(withTitle: "Restart")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard let window else {
+            if alert.runModal() == .alertFirstButtonReturn { emulator.reset() }
+            return
+        }
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.emulator.reset()
+        }
+    }
+    // No devicePowerDown menu item: the quit path drives the shutdown itself
+    // (EmulatorController.beginCleanShutdown), and a bare powerdown needs a
+    // healthy SpringBoard to draw the sheet its gesture slides.
+    @objc func saveStateNow(_ sender: Any?) {
+        emulator.onSnapshotResult = { [weak self] ok in
+            guard !ok, let window = self?.window else { return }
+            // Not just "it failed": the unhealthy-guest path also throws away
+            // the snapshot that was already there, because it no longer matches
+            // the device's storage. Saying nothing meant the user found out at
+            // the next launch, as an unexplained cold boot.
+            let alert = NSAlert()
+            alert.messageText = "Couldn't save the device's state"
+            alert.informativeText = "The device isn't responding, so its state could not be "
+                + "captured. Any previously saved state has been set aside as well, because it "
+                + "no longer matches what is on the device's storage — the next launch will "
+                + "start the device fresh."
+            alert.beginSheetModal(for: window) { _ in }
+        }
+        emulator.saveSnapshotNow()
+    }
     @objc func discardSavedState(_ sender: Any?) {
         emulator.discardSavedStateByUser()
         let alert = NSAlert()
@@ -376,7 +427,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = "Erase all content and settings?"
-        alert.informativeText = "This wipes everything on the device — installed apps, settings, saved state — back to a clean iOS 3.1.3, and relaunches the app. This cannot be undone."
+        alert.informativeText = "This wipes everything on the device — installed apps, settings, saved state — back to a clean iOS 3.1.3. LightTouchMac quits now and erases the device the next time you open it. This cannot be undone."
         alert.addButton(withTitle: "Erase")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true

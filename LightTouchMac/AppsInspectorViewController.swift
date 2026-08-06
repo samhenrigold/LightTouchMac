@@ -92,8 +92,14 @@ enum AppInstaller {
                 NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
             }
             job.bundleID = await AppMetadataCache.bundleID(of: ipa)
-            if let learned = await AppMetadataCache.shared.learn(from: ipa) {
-                job.name = learned
+            // Read the archive's name/icon for the ROW, but do not commit them
+            // to the cache yet. Committing here overwrote the entry for an app
+            // that is still installed, so a cancelled or failed install left the
+            // sidebar showing the name and icon of a build that never landed —
+            // and the cache has no invalidation path, so it stayed that way.
+            let preview = await AppMetadataCache.shared.preview(of: ipa)
+            if let name = preview?.name {
+                job.name = name
                 NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
             }
             // Queue behind the previous install, finished or not — awaiting a
@@ -117,6 +123,8 @@ enum AppInstaller {
                 // the version iPhone OS actually enforces. (Gating on the SDK
                 // it was BUILT with fired on most of a 2009-era library and
                 // taught people to click straight through this.)
+                // It is really installed now, so the cache may adopt it.
+                await AppMetadataCache.shared.learn(from: ipa)
                 if output.contains("newer than the device's") {
                     let alert = NSAlert()
                     alert.alertStyle = .warning
@@ -172,6 +180,8 @@ final class AppsInspectorViewController: NSViewController {
     private var loadTask: Task<Void, Never>?
     /// One list read at a time; see loadOnce.
     private var isLoading = false
+    /// A refresh arrived while one was running; run once more when it finishes.
+    private var needsReload = false
     private var notifications: GuestNotifications?
 
     init(emulator: EmulatorController) {
@@ -348,8 +358,13 @@ final class AppsInspectorViewController: NSViewController {
                 // second, and a transient lockdown wobble skips a poll
                 // instead of failing it. Not while installing — the probe is
                 // itself a lockdown session, the very thing being avoided.
-                if self.installing {
-                    // wait for the finish notification
+                if self.busyWithDevice {
+                    // Reads are suppressed while our own device work runs, but
+                    // "unknown" is not "reachable": leaving the last value
+                    // frozen meant Install App…, the toolbar and drag-to-install
+                    // all kept claiming a device that might have gone away ten
+                    // minutes ago. The type already models this as nil.
+                    self.emulator.deviceReachable = nil
                 } else if await self.emulator.deviceReady() {
                     await self.loadOnce()
                 } else {
@@ -389,7 +404,15 @@ final class AppsInspectorViewController: NSViewController {
             guard job.isFinished else { return false }
             if job.failed || job.isCancelled { return true }   // nothing will ever appear
             guard let id = job.bundleID, !apps.contains(where: { $0.id == id }) else { return true }
-            return Date().timeIntervalSince(job.finishedAt ?? Date()) > 20
+            // Two bounds, not one. At 20s ask the device again rather than
+            // dropping the row blind — deleting it reopened the "app vanished
+            // from the sidebar" gap this row exists to close, just 20 seconds
+            // later. At 60s give up anyway, because a row that can never leave
+            // is its own bug.
+            let age = Date().timeIntervalSince(job.finishedAt ?? Date())
+            if age > 60 { return true }
+            if age > 20 { Task { await self.loadOnce() } }
+            return false
         }
     }
 
@@ -435,14 +458,23 @@ final class AppsInspectorViewController: NSViewController {
         guard emulator.canManageApps else { return }
         // Nothing talks to the device while an install runs (see `installing`);
         // the finish notification reloads the list anyway.
-        guard !installing else { return }
+        guard !busyWithDevice else { return }
         // One at a time. Every .ltmAppsChanged used to spawn another of these,
         // and an upgrade publishes two notifications back to back — so two
         // reads queued on the gate for up to 20s each and the SLOWER, older one
         // assigned `apps` last, putting a stale list on screen.
-        guard !isLoading else { return }
+        // Coalesce, don't drop. A refresh that arrives while one is in flight
+        // used to be discarded outright — and the read already running was
+        // started BEFORE the change that prompted it, so the list it publishes
+        // is already stale. Notification-driven refreshes, the post-reorder
+        // re-read and the user's own Refresh all went through this path, which
+        // is a large part of "the list and the home screen fall out of sync".
+        guard !isLoading else { needsReload = true; return }
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            if needsReload { needsReload = false; Task { await loadOnce() } }
+        }
         do {
             let live = try await emulator.installedApps()
             // Read the home-screen order BEFORE publishing anything. Assigning
@@ -489,10 +521,14 @@ final class AppsInspectorViewController: NSViewController {
                 if let activation = await emulator.activationState(),
                    !activation.hasSuffix("Activated") || activation == "Unactivated" {
                     showPlaceholder("""
-                        The device needs to be erased.
-
-                        Its filesystem was damaged — usually by the emulator                         being force-quit before the guest could unmount — and it                         booted to the Connect to iTunes screen. Choose                         Device ▸ Erase All Content and Settings to start clean.                         Installed apps will be lost; the base image is untouched.
+                        The device needs to be erased.\n\nIts filesystem was damaged — usually by the emulator being force-quit before the guest could unmount — and it booted to the Connect to iTunes screen.\n\nChoose Device ▸ Erase All Content and Settings to start clean. Installed apps will be lost; the base image is untouched.
                         """)
+                } else if case DeviceError.unavailable = error {
+                    // Permanent and host-side: "Waiting" is the wrong frame and
+                    // names no remedy.
+                    showPlaceholder("LightTouchMac can't find libimobiledevice, so it can't "
+                        + "manage apps on the device.\n\nReinstall LightTouchMac, or install "
+                        + "it with: brew install libimobiledevice")
                 } else {
                     showPlaceholder("Waiting for the device — \(error.localizedDescription)")
                 }
@@ -577,6 +613,14 @@ final class AppsInspectorViewController: NSViewController {
     /// failing ("Invalid service").
     private var installing: Bool { pending.contains { !$0.isFinished } }
 
+    /// Apps with an uninstall in flight. Without this the row stayed, the
+    /// buttons stayed live, and nothing said anything for up to two minutes —
+    /// so the obvious thing to do was press Uninstall again.
+    private var uninstalling: Set<String> = []
+
+    /// Any device operation of ours in flight.
+    private var busyWithDevice: Bool { installing || !uninstalling.isEmpty }
+
     private func updateButtons() {
         // Disabled until the device has answered at least once: canManageApps
         // only means the usbmux session exists, not that the guest is up —
@@ -640,14 +684,26 @@ final class AppsInspectorViewController: NSViewController {
         alert.buttons.first?.hasDestructiveAction = true
         alert.beginSheetModal(for: view.window!) { [weak self] response in
             guard let self, response == .alertFirstButtonReturn else { return }
+            self.uninstalling.insert(app.id)
+            self.tableView.reloadData()
+            self.updateButtons()
             Task {
+                defer {
+                    self.uninstalling.remove(app.id)
+                    self.tableView.reloadData()
+                    self.updateButtons()
+                    NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+                }
                 do {
                     try await self.emulator.uninstall(app.id)
                     AppMetadataCache.shared.forget(app.id)
+                    // Drop it locally rather than waiting for the device to stop
+                    // listing it: the poll is up to 15s away and the row it
+                    // leaves behind is one the user just removed.
+                    self.apps.removeAll { $0.id == app.id }
                 } catch {
                     AppInstaller.presentError(error, in: self.view.window)
                 }
-                NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
             }
         }
     }
@@ -694,7 +750,7 @@ extension AppsInspectorViewController: NSMenuDelegate {
                                          action: #selector(uninstallClicked(_:)), keyEquivalent: "")
             uninstall.target = self
             uninstall.representedObject = app
-            uninstall.isEnabled = !installing
+            uninstall.isEnabled = !busyWithDevice
 
             let copy = menu.addItem(withTitle: "Copy Bundle Identifier",
                                     action: #selector(copyBundleIDClicked(_:)), keyEquivalent: "")
@@ -743,6 +799,12 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
             return cell
         }
         guard let app = app(at: row) else { return nil }
+        if uninstalling.contains(app.id) {
+            let cell = pendingCell(tableView)
+            cell.textField?.stringValue = displayName(app)
+            (cell.viewWithTag(Self.subtitleTag) as? NSTextField)?.stringValue = "Removing…"
+            return cell
+        }
         let cell = appCell(tableView)
         cell.textField?.stringValue = displayName(app)
         cell.imageView?.image = AppMetadataCache.shared.icon(for: app.id) ?? Self.genericAppIcon
@@ -829,7 +891,11 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
 
         Task {
             do {
-                try await emulator.moveOnHomeScreen(id, before: target)
+                // Adopt the order SpringBoard ACCEPTED. Dropping it meant the
+                // next list read fell back to the pre-drag `homeOrder` and
+                // re-sorted the sidebar back to where it started, while the
+                // device kept the new arrangement.
+                homeOrder = try await emulator.moveOnHomeScreen(id, before: target)
             } catch {
                 AppInstaller.presentError(error, in: view.window)
             }

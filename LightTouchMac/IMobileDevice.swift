@@ -193,7 +193,11 @@ nonisolated enum IMobileDevice {
     /// actor. Without the library there is nothing to probe with, so answer
     /// yes and fall through to the tools.
     static func deviceReady(socket: String) -> Bool {
-        guard let idevice_new else { return true }
+        // FALSE, not true. Answering "yes" with no library made the poll believe
+        // the device was up and call through every tick, so a permanent,
+        // host-side, user-fixable condition rendered as "Waiting for the
+        // device…" forever.
+        guard let idevice_new else { return false }
         setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
         var device: OpaquePointer?
         guard idevice_new(&device, nil) == success, let device else { return false }

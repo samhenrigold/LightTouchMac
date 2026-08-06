@@ -112,6 +112,21 @@ final class AppMetadataCache {
     /// Best-effort: read the display name and icon out of a decrypted .ipa and
     /// cache them, returning the name. Silently does nothing on any failure —
     /// the sidebar just falls back to whatever ideviceinstaller reports.
+    /// The archive's display name without touching the cache — for a row that
+    /// is only a proposal until the install succeeds. See learn(from:).
+    func preview(of ipa: URL) async -> (name: String, bundleID: String)? {
+        let members = await Self.members(ipa)
+        guard let root = Self.appRoot(members),
+              let plist = try? await Self.unzip(ipa, member: root + "Info.plist"),
+              let info = try? PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any],
+              let bundleID = info["CFBundleIdentifier"] as? String,
+              Self.isSafeBundleID(bundleID) else { return nil }
+        let name = (info["CFBundleDisplayName"] as? String)
+            ?? (info["CFBundleName"] as? String)
+            ?? ipa.deletingPathExtension().lastPathComponent
+        return (name, bundleID)
+    }
+
     @discardableResult
     func learn(from ipa: URL) async -> String? {
         let members = await Self.members(ipa)

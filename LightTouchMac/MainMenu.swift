@@ -174,7 +174,7 @@ enum MainMenuBuilder {
         // The destructive pair, together at the bottom and away from everything
         // routine. No "Shut Down": system_powerdown never completes on 3.1.3
         // (PMU gap), so it would wedge the guest rather than power it off.
-        menu.addItem(item("Restart", #selector(MainWindowController.deviceReset(_:))))
+        menu.addItem(item("Restart…", #selector(MainWindowController.deviceReset(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
         menu.delegate = DeviceMenuDelegate.shared
         return menu
