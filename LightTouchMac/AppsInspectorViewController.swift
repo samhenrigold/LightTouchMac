@@ -32,6 +32,11 @@ final class InstallJob {
     /// in flight at once and each one's finish notification reaches the list —
     /// without this, the first to land clears the other's row too.
     fileprivate(set) var isFinished = false
+    /// Learned from the .ipa while the install runs. The list keeps this row up
+    /// until an app with this id actually shows up, so a finished install never
+    /// leaves a gap where neither the placeholder nor the real row is present.
+    fileprivate(set) var bundleID: String?
+    fileprivate(set) var finishedAt: Date?
     fileprivate var task: Task<Void, Never>?
 
     fileprivate init(name: String) { self.name = name }
@@ -67,8 +72,10 @@ enum AppInstaller {
         job.task = Task {
             defer {
                 job.isFinished = true
+                job.finishedAt = Date()
                 NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
             }
+            job.bundleID = await AppMetadataCache.bundleID(of: ipa)
             if let learned = await AppMetadataCache.shared.learn(from: ipa) {
                 job.name = learned
                 NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
@@ -345,8 +352,22 @@ final class AppsInspectorViewController: NSViewController {
         }
     }
 
+    /// Drop finished install rows, but not before the device admits the app
+    /// exists. instproxy does not list a newly installed app the instant the
+    /// install call returns, so removing the row on completion left a window
+    /// with neither the pending row nor a real one — the app appeared to vanish
+    /// and only came back on a manual refresh. Bounded, so a failed install (or
+    /// one whose bundle id we never learned) cannot strand a row forever.
+    private func prunePending() {
+        pending.removeAll { job in
+            guard job.isFinished else { return false }
+            guard let id = job.bundleID, !apps.contains(where: { $0.id == id }) else { return true }
+            return Date().timeIntervalSince(job.finishedAt ?? Date()) > 20
+        }
+    }
+
     @objc private func appsChanged() {
-        pending.removeAll { $0.isFinished }
+        prunePending()
         // Reload NOW, not from loadOnce: its failure path doesn't touch the
         // table, and an install that failed because the device died is exactly
         // the case where the next read fails too — leaving a phantom pending
@@ -399,8 +420,12 @@ final class AppsInspectorViewController: NSViewController {
             // Not while an install is running: that is a second lockdown
             // session competing with one whose services are already fragile
             // enough to need retries.
-            if pending.isEmpty { await loadHomeOrder() }
+            // `installing`, not `pending.isEmpty`: finished rows now linger
+            // until the device lists the app, and a lingering row must not
+            // block the home-screen read for the next 20 seconds.
+            if !installing { await loadHomeOrder() }
             sortApps()
+            prunePending()   // the list just changed; a row may have earned its exit
             tableView.reloadData()
             showPlaceholder(apps.isEmpty && pending.isEmpty ? "No third-party apps installed." : nil)
             updateButtons()
@@ -507,9 +532,19 @@ final class AppsInspectorViewController: NSViewController {
     /// The selected row's app, or nil if nothing (or a pending row) is selected.
     private var selectedApp: InstalledApp? { app(at: tableView.selectedRow) }
 
+    /// The installed apps actually shown. An app being replaced by a newer
+    /// build is hidden while its pending row is up — otherwise a reinstall
+    /// lists the same app twice, once installing and once as the old version,
+    /// and the old row's Uninstall would remove what is being installed.
+    private var visibleApps: [InstalledApp] {
+        let replacing = Set(pending.compactMap { $0.isFinished ? nil : $0.bundleID })
+        return replacing.isEmpty ? apps : apps.filter { !replacing.contains($0.id) }
+    }
+
     private func app(at row: Int) -> InstalledApp? {
         let index = row - pending.count
-        return apps.indices.contains(index) ? apps[index] : nil
+        let shown = visibleApps
+        return shown.indices.contains(index) ? shown[index] : nil
     }
 
     // MARK: - Actions
@@ -612,7 +647,7 @@ extension AppsInspectorViewController: NSMenuDelegate {
 
 extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegate {
 
-    func numberOfRows(in tableView: NSTableView) -> Int { pending.count + apps.count }
+    func numberOfRows(in tableView: NSTableView) -> Int { pending.count + visibleApps.count }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?,
                    row: Int) -> NSView? {

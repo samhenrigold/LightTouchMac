@@ -38,12 +38,15 @@ final class DeviceViewController: NSViewController {
     /// that wasn't even polling, and failed a moment later with a modal —
     /// while the button for the identical operation sat greyed out.
     private func installDropped(_ url: URL) {
-        guard emulator.canManageApps, emulator.isRunning, !emulator.isInstalling else {
+        // Deliberately NOT gated on isInstalling: AppInstaller queues each job
+        // behind the last, so dropping a second .ipa mid-install is supported.
+        // Refusing it was a regression — dropping three at once is the whole
+        // point of accepting multiple files.
+        guard emulator.canManageApps, emulator.isRunning else {
             let alert = NSAlert()
             alert.messageText = "The device isn’t ready yet"
-            alert.informativeText = emulator.isInstalling
-                ? "Another app is being installed. Wait for it to finish, then try again."
-                : "Apps can be installed once the device has finished starting up and USB is connected."
+            alert.informativeText =
+                "Apps can be installed once the device has finished starting up and USB is connected."
             if let window = view.window { alert.beginSheetModal(for: window) { _ in } }
             else { alert.runModal() }
             return

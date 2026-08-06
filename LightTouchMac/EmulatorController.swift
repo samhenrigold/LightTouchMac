@@ -413,9 +413,13 @@ final class EmulatorController {
         // complete line hops to the main actor; nothing is parsed off it.
         let pending = LineBuffer()
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            for line in pending.take(handle.availableData) {
-                guard let value = Int(line) else { continue }
-                Task { @MainActor in self?.guestOrientationChanged(to: value) }
+            let data = handle.availableData
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                for line in pending.take(data) {
+                    guard let value = Int(line) else { continue }
+                    self.guestOrientationChanged(to: value)
+                }
             }
         }
 

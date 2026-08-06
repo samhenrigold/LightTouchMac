@@ -499,7 +499,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 extension MainWindowController: NSToolbarItemValidation {
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
-        case .installApp, .openTerminal:
+        // Install is NOT gated on isInstalling: AppInstaller queues jobs behind
+        // one another, so choosing a second .ipa mid-install is supported and
+        // blocking it was a regression. The terminal is gated, because it opens
+        // a competing lockdown session.
+        case .installApp:
+            return emulator.canManageApps && emulator.isRunning
+        case .openTerminal:
             return emulator.canManageApps && emulator.isRunning && !emulator.isInstalling
         case .home, .lock, .rotate:
             return emulator.acceptsInput
@@ -516,8 +522,9 @@ extension MainWindowController: NSMenuItemValidation {
         switch menuItem.action {
         // App management: needs USB, a live guest, and no install already running
         // (the guest serves ~one lockdown session).
-        case #selector(installApp(_:)), #selector(openDeviceTerminal(_:)),
-             #selector(restartSpringBoard(_:)):
+        case #selector(installApp(_:)):
+            return emulator.canManageApps && emulator.isRunning      // queues; see above
+        case #selector(openDeviceTerminal(_:)), #selector(restartSpringBoard(_:)):
             return emulator.canManageApps && emulator.isRunning && !emulator.isInstalling
         // Device input only reaches a running guest.
         case #selector(deviceHome(_:)), #selector(deviceLock(_:)),
