@@ -646,13 +646,36 @@ final class EmulatorController {
         NSLog("quit: powering the guest down so HFS+ flushes its catalog")
         qemu_ios_ui_powerdown()
         Task { [weak self] in
-            // ~10s is typical; give it room, and let the caller's own backstop
-            // handle a guest that never gets there.
-            let deadline = Date().addingTimeInterval(40)
+            // What we need is the UNMOUNT, not QEMU's own exit. Waiting for the
+            // process to finish tearing itself down made quit hostage to
+            // qemu_cleanup, which is not on the critical path for our data and
+            // does not always get there promptly — the app then sat until the
+            // caller's backstop, which reads as "it never quits".
+            //
+            // The guest stopping painting is the signal: SpringBoard puts the
+            // slide-to-power-off animation up, the screen goes dark, and the
+            // frame serial stops advancing. That happens AFTER the volume is
+            // unmounted, which is the part we actually came for.
+            let deadline = Date().addingTimeInterval(25)
+            var quietSince: Date?
             while Date() < deadline {
-                try? await Task.sleep(for: .milliseconds(250))
+                try? await Task.sleep(for: .milliseconds(200))
                 guard let self else { completion(false); return }
-                if self.isDead { completion(true); return }
+                if self.isDead {
+                    NSLog("quit: guest powered off cleanly")
+                    completion(true); return
+                }
+                if self.framesRecentlyAdvanced {
+                    quietSince = nil
+                } else if let since = quietSince {
+                    // Still, and stayed still. The unmount is done.
+                    if Date().timeIntervalSince(since) > 2.5 {
+                        NSLog("quit: guest went quiet — filesystem flushed, quitting")
+                        completion(true); return
+                    }
+                } else {
+                    quietSince = Date()
+                }
             }
             NSLog("quit: guest did not power off in time — quitting anyway")
             completion(false)

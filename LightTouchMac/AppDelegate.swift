@@ -72,11 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         emulator?.stop()
     }
 
-    /// On quit: guard an in-flight install, then snapshot the running guest so
-    /// the next launch resumes instantly instead of cold-booting (and doesn't
-    /// lose guest-filesystem writes to a torn overlay — 3.1.3 has no clean
-    /// shutdown). The snapshot is health-gated in EmulatorController: a wedged
-    /// guest is never saved.
+    /// On quit: guard an in-flight install, then power the guest down so its
+    /// filesystem is intact next launch. (The comment here used to say 3.1.3
+    /// has no clean shutdown — that stopped being true once the PMU power latch
+    /// was modelled; see EmulatorController.beginCleanShutdown.)
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let emulator else { return .terminateNow }
 
@@ -104,7 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             replied = true
             NSApp.reply(toApplicationShouldTerminate: true)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 50) {
+        // Comfortably past beginCleanShutdown's own 25s cap, and no further: a
+        // quit the user cannot predict the end of is a quit that feels broken.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
             if !replied { NSLog("quit: shutdown did not finish in time — quitting anyway") }
             reply()
         }
