@@ -6,11 +6,14 @@
 // every few seconds. The np symbols were loaded for exactly this and had gone
 // unused; this is the consumer.
 //
-// It does NOT replace the poll outright, for two reasons the guest gives us:
-// SpringBoard publishes nothing when icons are rearranged (there is no
-// notification for the icon layout — only install/uninstall), and a dropped USB
-// session would otherwise leave the list silently frozen. So the poll stays as
-// a slow backstop and this makes the common case instant.
+// Icon rearranges are the gap: SpringBoard publishes no notification for the
+// layout, only install/uninstall. Those come from the emulator instead — the
+// layout cannot reach flash without crossing the emulated NAND, which counts
+// the writes and lets us watch a counter. See qemu_ios_ui_icon_state_generation.
+//
+// None of it replaces the poll outright: a dropped USB session would leave the
+// list silently frozen either way. So the poll stays as a slow backstop and
+// these two make the common cases instant.
 
 import Foundation
 
@@ -51,6 +54,28 @@ final class GuestNotifications {
         guard !running, IMobileDevice.isAvailable else { return }
         running = true
         let socket = self.socket
+
+        // The home screen is the one change the guest will never announce, so
+        // take it from underneath instead: the icon layout can only reach flash
+        // through the emulated NAND, which now counts those writes for us (see
+        // qemu_ios_ui_icon_state_generation). Reading it is an atomic load, so
+        // a one-second tick costs less than the notification_proxy session
+        // below does sitting idle, and still reads as instant next to the
+        // 15-second poll it replaces.
+        Task {
+            var seen = qemu_ios_ui_icon_state_generation()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                // One rearrange is several NAND pages, and the plist goes
+                // through the journal as well. Comparing once per tick collapses
+                // the whole burst into a single refresh.
+                let now = qemu_ios_ui_icon_state_generation()
+                if now != seen {
+                    seen = now
+                    onChange()
+                }
+            }
+        }
 
         Task.detached {
             // Re-establish on loss: the guest drops its services on reboot and
