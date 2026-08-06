@@ -303,6 +303,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @objc func deviceReset(_ sender: Any?)       { emulator.reset() }
     // No devicePowerDown: system_powerdown never completes on 3.1.3 (PMU gap),
     // so a menu item for it is a trap that wedges the guest at 100% CPU.
+    @objc func saveStateNow(_ sender: Any?) { emulator.saveSnapshotNow() }
+    @objc func discardSavedState(_ sender: Any?) {
+        emulator.discardSavedState()
+        let alert = NSAlert()
+        alert.messageText = "Saved state discarded"
+        alert.informativeText = "The next launch will cold-boot the device. The device's own data is untouched."
+        alert.beginSheetModal(for: window!) { _ in }
+    }
     
     @objc func installApp(_ sender: Any?) {
         let panel = NSOpenPanel()
@@ -431,6 +439,8 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(devicePause(_:)):  return emulator.isRunning
         case #selector(deviceResume(_:)): return emulator.isPaused
         case #selector(deviceReset(_:)):  return !emulator.isDead
+        case #selector(saveStateNow(_:)): return emulator.isRunning
+        case #selector(discardSavedState(_:)): return emulator.hasSavedState
         case #selector(copyScreen(_:)):   return !emulator.isDead
         case #selector(pasteToGuest(_:)):
             return emulator.acceptsInput && NSPasteboard.general.string(forType: .string) != nil

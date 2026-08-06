@@ -104,6 +104,8 @@ final class EmulatorController {
         thread.qualityOfService = .userInteractive
         thread.stackSize = 16 << 20
         thread.start()
+
+        verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
     }
 
     func stop() {
@@ -113,11 +115,13 @@ final class EmulatorController {
     /// The QEMU thread returned — the VM is gone for this process (QEMU can't
     /// re-init). Flip to `.dead`; the window shows a relaunch overlay.
     private func qemuDidExit(code: Int32) {
-        guard case .dead = state else {
-            usbmux.stop()
-            state = .dead(exitCode: code)
-            return
-        }
+        guard !isDead else { return }
+        // A VM that exited on its own ran the overlay PAST any saved snapshot;
+        // restoring stale RAM onto an advanced NAND is worse than a cold boot,
+        // so drop the snapshot (unless a clean save is in progress).
+        if state != .snapshotting { discardSavedState() }
+        usbmux.stop()
+        state = .dead(exitCode: code)
     }
 
     // MARK: - Liveness
@@ -246,13 +250,134 @@ final class EmulatorController {
 
     func pasteToGuest(_ text: String) { qemu_ios_ui_paste(text) }
 
-    // MARK: - Snapshot restore (Phase 5 fills this in with the dylib ABI)
+    // MARK: - Snapshot persistence
+    //
+    // The snapshot is the durable state (3.1.3 has no clean shutdown, so the
+    // overlay is torn on every hard exit). The overriding invariant, B2a: it
+    // must be impossible to get STUCK on a bad snapshot. Two gates enforce it —
+    // never SAVE a wedged guest (health gate below), and never stay on a bad
+    // RESTORE (a restored snapshot is provisional; if it doesn't come alive it
+    // is quarantined and the next launch cold-boots). The overlay is never
+    // auto-deleted — nuking the device is always the user's deliberate choice.
 
-    /// Returns `-incoming file:…` when a trusted snapshot exists for this
-    /// overlay, else nothing (cold boot). Stubbed until Phase 5 wires the
-    /// snapshot status ABI — restoring blind, with no way to detect a bad
-    /// snapshot, is exactly the "stuck forever" trap we refuse to ship.
-    private func restoreArgs(overlay: URL) -> [String] { [] }
+    private var snapshotURL: URL { stateDir.appendingPathComponent("snapshot-\(options.nand)") }
+    private var snapshotTmpURL: URL { snapshotURL.appendingPathExtension("tmp") }
+    private var snapshotBadURL: URL { snapshotURL.appendingPathExtension("bad") }
+    private var restoringFromSnapshot = false
+
+    /// `-incoming file:…` when a trusted snapshot exists — unless ⌥Option is
+    /// held at launch, the muscle-memory escape from a bad saved state.
+    private func restoreArgs(overlay: URL) -> [String] {
+        if NSEvent.modifierFlags.contains(.option) {
+            NSLog("snapshot: Option held at launch — cold boot, ignoring saved state")
+            discardSavedState()
+            return []
+        }
+        guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return [] }
+        restoringFromSnapshot = true
+        return ["-incoming", "file:\(snapshotURL.path)"]
+    }
+
+    /// A restored snapshot is provisional. If the guest doesn't paint or answer
+    /// within the window, the restore is bad — quarantine it and cold-relaunch,
+    /// so a bad snapshot heals on the VERY NEXT launch instead of looping.
+    private func verifyRestoreIfNeeded() {
+        guard restoringFromSnapshot else { return }
+        Task { [weak self] in
+            let deadline = Date().addingTimeInterval(20)
+            while Date() < deadline {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self else { return }
+                if self.framesRecentlyAdvanced { return }        // alive
+                if await self.deviceReady() { return }           // alive
+            }
+            guard let self, !self.isDead else { return }
+            NSLog("snapshot: restored state never came alive — quarantining, cold-booting")
+            self.quarantineSnapshot()
+            self.coldRelaunch()
+        }
+    }
+
+    /// Health-gate + save + atomic promote. `completion(true)` iff a good
+    /// snapshot now exists on disk. Never overwrites a good snapshot with a bad
+    /// one: an unhealthy guest is skipped entirely.
+    private func performSnapshot(completion: @escaping (Bool) -> Void) {
+        guard state == .running else { completion(false); return }
+        Task { [weak self] in
+            guard let self else { completion(false); return }
+            // Alive = painting recently OR answering the device probe (a locked
+            // idle device stops painting but still answers). A 100%-CPU wedge
+            // fails both — and must not be saved.
+            let healthy: Bool
+            if self.framesRecentlyAdvanced { healthy = true }
+            else { healthy = await self.deviceReady() }
+            guard healthy else {
+                NSLog("snapshot: guest not healthy — skipping save, keeping last good snapshot")
+                completion(false); return
+            }
+            self.state = .snapshotting
+            try? FileManager.default.removeItem(at: self.snapshotTmpURL)
+            qemu_ios_snapshot_save2(self.snapshotTmpURL.path)
+
+            let deadline = Date().addingTimeInterval(15)
+            while Date() < deadline {
+                var buf = [CChar](repeating: 0, count: 256)
+                let status = qemu_ios_snapshot_status(&buf, 256)
+                if status == QEMU_IOS_SNAPSHOT_DONE {
+                    // Atomic promote: a torn snapshot must never shadow a good one.
+                    try? FileManager.default.removeItem(at: self.snapshotURL)
+                    try? FileManager.default.moveItem(at: self.snapshotTmpURL, to: self.snapshotURL)
+                    completion(true); return
+                }
+                if status == QEMU_IOS_SNAPSHOT_FAILED {
+                    NSLog("snapshot: save failed: \(String(cString: buf))")
+                    try? FileManager.default.removeItem(at: self.snapshotTmpURL)
+                    completion(false); return
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            NSLog("snapshot: save timed out")
+            try? FileManager.default.removeItem(at: self.snapshotTmpURL)
+            completion(false)
+        }
+    }
+
+    /// Quit path: save, then let the app terminate. `completion` runs whether
+    /// or not a snapshot was written (worst case is today's behaviour: a cold
+    /// boot next launch).
+    func beginQuitSnapshot(completion: @escaping (Bool) -> Void) {
+        performSnapshot(completion: completion)
+    }
+
+    /// Menu ▸ Save State Now: save, then resume the vCPU (the save stops it).
+    func saveSnapshotNow() {
+        performSnapshot { [weak self] _ in
+            qemu_ios_snapshot_resume()
+            self?.state = .running
+        }
+    }
+
+    /// Menu ▸ Discard Saved State, and the ⌥/coherence paths. Removes the
+    /// snapshot and its quarantine — never the overlay.
+    func discardSavedState() {
+        try? FileManager.default.removeItem(at: snapshotURL)
+        try? FileManager.default.removeItem(at: snapshotTmpURL)
+    }
+
+    var hasSavedState: Bool { FileManager.default.fileExists(atPath: snapshotURL.path) }
+
+    private func quarantineSnapshot() {
+        try? FileManager.default.removeItem(at: snapshotBadURL)
+        try? FileManager.default.moveItem(at: snapshotURL, to: snapshotBadURL)
+    }
+
+    private func coldRelaunch() {
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+    }
     
     // MARK: - App management
     

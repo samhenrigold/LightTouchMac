@@ -189,6 +189,9 @@ enum MainMenuBuilder {
         menu.addItem(item("Restart", #selector(MainWindowController.deviceReset(_:))))
         // No "Shut Down": system_powerdown never completes on 3.1.3 (PMU gap),
         // so it would wedge the guest rather than power it off.
+        menu.addItem(.separator())
+        menu.addItem(item("Save State Now", #selector(MainWindowController.saveStateNow(_:)), "s", [.control, .command]))
+        menu.addItem(item("Discard Saved State", #selector(MainWindowController.discardSavedState(_:))))
         return menu
     }
     

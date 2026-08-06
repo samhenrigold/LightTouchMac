@@ -53,18 +53,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         emulator?.stop()
     }
 
-    /// Guard a quit that would abandon an install (half-installed app + a
-    /// stranded SpringBoard placeholder). Snapshot-on-quit is wired here in
-    /// Phase 5; for now this is the install guard only.
+    /// On quit: guard an in-flight install, then snapshot the running guest so
+    /// the next launch resumes instantly instead of cold-booting (and doesn't
+    /// lose guest-filesystem writes to a torn overlay — 3.1.3 has no clean
+    /// shutdown). The snapshot is health-gated in EmulatorController: a wedged
+    /// guest is never saved.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let emulator, emulator.isInstalling else { return .terminateNow }
-        let alert = NSAlert()
-        alert.messageText = "An app install is in progress"
-        alert.informativeText = "Quitting now will leave the app half-installed on the device. Quit anyway?"
-        alert.addButton(withTitle: "Quit Anyway")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons.first?.hasDestructiveAction = true
-        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+        guard let emulator else { return .terminateNow }
+
+        if emulator.isInstalling {
+            let alert = NSAlert()
+            alert.messageText = "An app install is in progress"
+            alert.informativeText = "Quitting now will leave the app half-installed on the device. Quit anyway?"
+            alert.addButton(withTitle: "Quit Anyway")
+            alert.addButton(withTitle: "Cancel")
+            alert.buttons.first?.hasDestructiveAction = true
+            // Mid-install is not a clean state to snapshot; quit straight out.
+            return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+        }
+
+        guard emulator.isRunning else { return .terminateNow }
+        emulator.beginQuitSnapshot { _ in
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
