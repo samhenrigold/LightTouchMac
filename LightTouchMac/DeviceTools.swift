@@ -27,22 +27,23 @@ enum DeviceToolsError: LocalizedError {
     }
 }
 
-/// Talks to one running device, identified by its usbmuxd client socket.
+/// Talks to one running device, identified by its usbmuxd client socket. The
+/// facade the UI calls; list/install/uninstall run in-process through
+/// DeviceServices, and only the SSH terminal (and the fallback install for a
+/// non-baked NAND) still shell out.
 struct DeviceTools: Sendable {
     let clientSocket: String
     let filesRoot: String
-    
+    /// True when the guest image already carries the GL engine shim and
+    /// sblaunch (nand-ultimate). When false, a GL app needs the ssh engine
+    /// copy, which only the install script does — so we fall back to it.
+    var bakedGuestTools: Bool = true
+
+    private var services: DeviceServices { DeviceServices(clientSocket: clientSocket) }
+
     // The app's own tools first, then Homebrew's — without assuming any PATH.
     private static let searchPaths = Bundled.binarySearchPaths
-    
-    private static func toolPath(_ name: String) -> String? {
-        for dir in searchPaths {
-            let p = "\(dir)/\(name)"
-            if FileManager.default.isExecutableFile(atPath: p) { return p }
-        }
-        return nil
-    }
-    
+
     private var toolEnvironment: Environment {
         var environment: [Environment.Key: String?] = [
             // SOCK is what apps/install-app.sh keys on; USBMUXD_SOCKET_ADDRESS is
@@ -67,55 +68,77 @@ struct DeviceTools: Sendable {
         return .inherit.updating(environment)
     }
     
-    // MARK: - List
-    
+    // MARK: - List (in-process)
+
     func installedApps() async throws -> [InstalledApp] {
-        guard let tool = Self.toolPath("ideviceinstaller") else {
-            throw DeviceToolsError.toolMissing("ideviceinstaller")
-        }
-        let result = try await run(
-            .path(FilePath(tool)),
-            arguments: ["list", "--user"],
-            environment: toolEnvironment,
-            output: .string(limit: 1 << 20), error: .string(limit: 1 << 16)
-        )
-        // A failed list used to be indistinguishable from an empty one: the
-        // exit status was never looked at, so "Could not start
-        // com.apple.installation_proxy" parsed to zero apps and the sidebar
-        // said "No third-party apps installed" about a home screen full of
-        // them, with no way to tell it was wrong.
-        guard result.terminationStatus.isSuccess else {
-            let msg = result.standardError.isEmpty ? "the device did not answer" : result.standardError
-            throw DeviceToolsError.failed(msg)
-        }
-        return Self.parseList(result.standardOutput)
+        try await services.installedApps()
     }
-    
-    /// ideviceinstaller prints `bundleID, "version", "Display Name"`, one per
-    /// line, after a header row. Parse defensively — fields can hold commas.
-    static func parseList(_ text: String) -> [InstalledApp] {
-        var apps: [InstalledApp] = []
-        for line in text.split(separator: "\n") {
-            let s = String(line)
-            guard let firstComma = s.firstIndex(of: ",") else { continue }
-            let bundleID = s[..<firstComma].trimmingCharacters(in: .whitespaces)
-            if bundleID.isEmpty || bundleID == "CFBundleIdentifier" { continue }
-            let quoted = s.split(separator: "\"").enumerated()
-                .filter { $0.offset % 2 == 1 }.map { String($0.element) }
-            let version = quoted.first ?? ""
-            let name = quoted.count >= 2 ? quoted[1] : bundleID
-            apps.append(InstalledApp(id: bundleID, name: name, version: version))
-        }
-        return apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-    
-    // MARK: - Install (through apps/install-app.sh)
-    
-    /// `progress` is called on every line the script prints, already trimmed to
-    /// something worth showing in a table row — an install is minutes of
-    /// silence otherwise, on hardware slow enough that silence reads as a hang.
+
+    // MARK: - Install
+
+    /// Install a decrypted .ipa. Baked images go the fast in-process route
+    /// (AFC stage + instproxy, no shell); a non-baked image falls back to the
+    /// install script, which copies the GL engine over ssh. `progress` gets
+    /// short, human phase strings for the sidebar row. The return string is
+    /// non-empty only to carry the "SDK too new" marker the caller warns on.
     @discardableResult
     func install(_ ipa: URL, progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
+        // A GL app on a non-baked image needs the ssh engine copy that only the
+        // script performs — installing it in-process would wedge the device.
+        let sdk = await AppMetadataCache.shared.sdkName(from: ipa)
+        let sdkMarker = Self.sdkTooNew(sdk) ? "\nnewer than the device's SDK" : ""
+
+        if bakedGuestTools {
+            let bytes = (try? FileManager.default.attributesOfItem(atPath: ipa.path)[.size] as? Int) ?? 0
+            let free = try await services.freeSpaceBytes()
+            let needed = Int64(bytes) * 2 + (16 << 20)
+            guard free >= needed else { throw DeviceError.diskFull(free: free, needed: needed) }
+
+            progress("Sending to device…")
+            let staged = try await services.stage(ipa) { frac in
+                progress("Sending to device… \(Int(frac * 100))%")
+            }
+            defer { Task { await services.removeStaged(staged) } }
+
+            try await withTransientRetry(attempts: 3) {
+                try await services.install(stagedPath: staged) { pct, _ in
+                    progress(pct >= 0 ? "Installing… \(pct)%" : "Installing…")
+                }
+            }
+            return "installed" + sdkMarker
+        }
+        return try await installViaScript(ipa, progress: progress) + sdkMarker
+    }
+
+    /// Whether a DTSDKName like "iphoneos6.1" is newer than 3.1.3. iOS refuses
+    /// to launch such apps regardless of MinimumOSVersion, so the caller warns.
+    static func sdkTooNew(_ sdkName: String?, deviceOS: String = "3.1.3") -> Bool {
+        guard let sdkName else { return false }
+        let digits = sdkName.drop { !$0.isNumber }
+        let parts = digits.split(separator: ".").compactMap { Int($0) }
+        let device = deviceOS.split(separator: ".").compactMap { Int($0) }
+        for (a, b) in zip(parts, device) where a != b { return a > b }
+        return parts.count > device.count && parts[device.count] > 0
+    }
+
+    /// Retry only genuinely transient device errors (a service refusing
+    /// connections right after boot or an uninstall); a rejected package or a
+    /// full disk fails immediately.
+    private func withTransientRetry(attempts: Int, _ body: () async throws -> Void) async throws {
+        var lastError: Error = DeviceError.failed("no attempt made")
+        for i in 0..<attempts {
+            do { return try await body() }
+            catch let error as DeviceError where error.isTransient {
+                lastError = error
+                try await Task.sleep(for: .seconds(Double(min(i + 1, 5)) * 2))
+            }
+        }
+        throw lastError
+    }
+
+    // MARK: - Install fallback (non-baked image, through apps/install-app.sh)
+
+    private func installViaScript(_ ipa: URL, progress: @escaping @Sendable (String) -> Void) async throws -> String {
         let script = "\(filesRoot)/apps/install-app.sh"
         guard FileManager.default.isExecutableFile(atPath: script) else {
             throw DeviceToolsError.toolMissing(script)
@@ -191,24 +214,16 @@ struct DeviceTools: Sendable {
         return markers.contains { output.localizedCaseInsensitiveContains($0) }
     }
     
-    // MARK: - Uninstall
-    
+    // MARK: - Uninstall (in-process)
+
     func uninstall(_ bundleID: String) async throws {
-        guard let tool = Self.toolPath("ideviceinstaller") else {
-            throw DeviceToolsError.toolMissing("ideviceinstaller")
-        }
-        let result = try await run(
-            .path(FilePath(tool)),
-            arguments: ["uninstall", bundleID],
-            environment: toolEnvironment,
-            output: .string(limit: 1 << 16), error: .string(limit: 1 << 16)
-        )
-        guard result.terminationStatus.isSuccess else {
-            let msg = result.standardError.isEmpty ? "uninstall failed" : result.standardError
-            throw DeviceToolsError.failed(msg)
-        }
+        try await services.uninstall(bundleID)
     }
-    
+
+    // MARK: - Free space (in-process)
+
+    func freeSpaceBytes() async throws -> Int64 { try await services.freeSpaceBytes() }
+
     // MARK: - SSH terminal (opens Terminal.app itself)
     
     func openTerminal() async throws {

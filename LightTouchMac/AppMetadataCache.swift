@@ -123,6 +123,17 @@ final class AppMetadataCache {
         return name
     }
     
+    /// The SDK the .ipa was built against (e.g. "iphoneos6.1"), for the
+    /// too-new-to-launch check. Reuses the same Info.plist read as learn().
+    func sdkName(from ipa: URL) async -> String? {
+        let members = await Self.members(ipa)
+        guard let root = Self.appRoot(members),
+              let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        return info["DTSDKName"] as? String
+    }
+
     private func save() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: indexURL, options: .atomic)

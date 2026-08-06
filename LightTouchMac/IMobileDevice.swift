@@ -85,6 +85,88 @@ nonisolated enum IMobileDevice {
     static let plist_free = symbol("plist_free", PlistFree.self)
     static let plist_mem_free = symbol("plist_mem_free", MemFree.self)
 
+    // MARK: - installation_proxy / afc / notification_proxy
+    //
+    // The device operations that used to shell out to ideviceinstaller and a
+    // 579-line install script. Client handles are opaque pointers; option
+    // dictionaries and browse results are plist_t, built and read through the
+    // XML bridge already used above (plist_from_xml / plist_to_xml) — which
+    // also sidesteps libimobiledevice's variadic option builders, uncallable
+    // through a function pointer.
+
+    /// idevice + label -> client. instproxy/afc/np all share this shape; each
+    /// does its own lockdown handshake + start_service internally.
+    typealias StartService2 = @convention(c) (OpaquePointer?, UnsafeMutablePointer<OpaquePointer?>, UnsafePointer<CChar>?) -> Int32
+    typealias Browse = @convention(c) (OpaquePointer?, OpaquePointer?, UnsafeMutablePointer<OpaquePointer?>) -> Int32
+    /// (command, status, user_data) — fired on a library thread during install.
+    typealias InstproxyStatusCB = @convention(c) (OpaquePointer?, OpaquePointer?, UnsafeMutableRawPointer?) -> Void
+    /// install(pkg_path,…) and uninstall(appid,…) share this signature.
+    typealias InstproxyOp = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?, OpaquePointer?, InstproxyStatusCB?, UnsafeMutableRawPointer?) -> Int32
+    typealias StatusGetName = @convention(c) (OpaquePointer?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Void
+    typealias StatusGetPercent = @convention(c) (OpaquePointer?, UnsafeMutablePointer<Int32>) -> Void
+    typealias StatusGetError = @convention(c) (OpaquePointer?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?, UnsafeMutablePointer<UInt64>?) -> Int32
+
+    typealias AfcOpen = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?, UInt32, UnsafeMutablePointer<UInt64>) -> Int32
+    typealias AfcWrite = @convention(c) (OpaquePointer?, UInt64, UnsafePointer<CChar>?, UInt32, UnsafeMutablePointer<UInt32>) -> Int32
+    typealias AfcClose = @convention(c) (OpaquePointer?, UInt64) -> Int32
+    typealias AfcPath = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
+    typealias AfcInfoKey = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+
+    typealias NpNotifyCB = @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void
+    typealias NpObserve = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
+    typealias NpSetCB = @convention(c) (OpaquePointer?, NpNotifyCB?, UnsafeMutableRawPointer?) -> Int32
+
+    static let instproxy_client_start_service = symbol("instproxy_client_start_service", StartService2.self)
+    static let instproxy_client_free = symbol("instproxy_client_free", FreeHandle.self)
+    static let instproxy_browse = symbol("instproxy_browse", Browse.self)
+    static let instproxy_install = symbol("instproxy_install", InstproxyOp.self)
+    static let instproxy_uninstall = symbol("instproxy_uninstall", InstproxyOp.self)
+    static let instproxy_status_get_name = symbol("instproxy_status_get_name", StatusGetName.self)
+    static let instproxy_status_get_percent_complete = symbol("instproxy_status_get_percent_complete", StatusGetPercent.self)
+    static let instproxy_status_get_error = symbol("instproxy_status_get_error", StatusGetError.self)
+
+    static let afc_client_start_service = symbol("afc_client_start_service", StartService2.self)
+    static let afc_client_free = symbol("afc_client_free", FreeHandle.self)
+    static let afc_file_open = symbol("afc_file_open", AfcOpen.self)
+    static let afc_file_write = symbol("afc_file_write", AfcWrite.self)
+    static let afc_file_close = symbol("afc_file_close", AfcClose.self)
+    static let afc_make_directory = symbol("afc_make_directory", AfcPath.self)
+    static let afc_remove_path = symbol("afc_remove_path", AfcPath.self)
+    static let afc_get_device_info_key = symbol("afc_get_device_info_key", AfcInfoKey.self)
+
+    static let np_client_start_service = symbol("np_client_start_service", StartService2.self)
+    static let np_client_free = symbol("np_client_free", FreeHandle.self)
+    static let np_observe_notification = symbol("np_observe_notification", NpObserve.self)
+    static let np_set_notify_callback = symbol("np_set_notify_callback", NpSetCB.self)
+
+    /// AFC_FOPEN_WRONLY: w — O_WRONLY | O_CREAT | O_TRUNC.
+    static let afcWriteMode: UInt32 = 3
+
+    // MARK: - plist ↔ Foundation (via the XML both sides speak)
+
+    /// plist_t → Foundation. nil on any failure.
+    static func decode(_ node: OpaquePointer) -> Any? {
+        var xml: UnsafeMutablePointer<CChar>?
+        var length: UInt32 = 0
+        plist_to_xml?(node, &xml, &length)
+        guard let xml else { return nil }
+        defer { plist_mem_free?(xml) }
+        let data = Data(bytes: xml, count: Int(length))
+        return try? PropertyListSerialization.propertyList(from: data, format: nil)
+    }
+
+    /// Foundation → plist_t. The caller owns the result and must plist_free it.
+    static func encode(_ value: Any) -> OpaquePointer? {
+        guard let data = try? PropertyListSerialization.data(fromPropertyList: value,
+                                                             format: .xml, options: 0) else { return nil }
+        var node: OpaquePointer?
+        _ = data.withUnsafeBytes { buffer in
+            plist_from_xml?(buffer.baseAddress?.assumingMemoryBound(to: CChar.self),
+                            UInt32(buffer.count), &node)
+        }
+        return node
+    }
+
     // MARK: - Readiness probe
 
     /// Has the guest attached to this usbmuxd? One in-process round trip to

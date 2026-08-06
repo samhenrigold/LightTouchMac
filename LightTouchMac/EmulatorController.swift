@@ -262,7 +262,11 @@ final class EmulatorController {
         guard let session = usbmux.session else {
             throw DeviceToolsError.failed("The device is not reachable over USB yet.")
         }
-        return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot)
+        // nand-ultimate ships the GL engine shim + sblaunch baked in, so the
+        // fast in-process install path is safe; other images need the script's
+        // ssh engine copy.
+        return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot,
+                           bakedGuestTools: options.nand.contains("ultimate"))
     }
     
     /// Cheap in-process check that the guest is attached and lockdownd is
