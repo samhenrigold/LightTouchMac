@@ -320,7 +320,7 @@ struct DeviceTools: Sendable {
         )
         guard result.terminationStatus.isSuccess else {
             throw DeviceToolsError.failed(
-                "Could not reach the device over SSH. \(result.standardError ?? "")")
+                "Could not reach the device over SSH. \(result.standardError)")
         }
     }
 

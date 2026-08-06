@@ -142,6 +142,7 @@ final class AppsInspectorViewController: NSViewController {
     /// "we don't know yet", not "nothing is installed".
     private var haveLoaded = false
     private var loadTask: Task<Void, Never>?
+    private var notifications: GuestNotifications?
 
     init(emulator: EmulatorController) {
         self.emulator = emulator
@@ -301,6 +302,9 @@ final class AppsInspectorViewController: NSViewController {
             updateButtons()
             return
         }
+        // Push, so an install or uninstall shows up at once instead of on the
+        // next tick. The poll below stays as the backstop.
+        startGuestNotifications()
         loadTask?.cancel()
         loadTask = Task { [weak self] in
             while let self, !Task.isCancelled {
@@ -322,12 +326,13 @@ final class AppsInspectorViewController: NSViewController {
                         self.showStaleBanner()   // keep the list, mark it stale
                     }
                 }
-                // Press harder until the device has answered once. A cold boot
-                // takes ~40 s and the list is the first thing anyone looks at,
-                // so waiting a full three seconds between early attempts spends
-                // most of that window asleep; once there is a list to show,
-                // three seconds is plenty.
-                try? await Task.sleep(for: .seconds(self.haveLoaded ? 3 : 1))
+                // Press hard until the device has answered once — a cold boot
+                // takes ~40 s and the list is the first thing anyone looks at.
+                // After that this is only a BACKSTOP: notification_proxy pushes
+                // install/uninstall the moment they happen, so the poll exists
+                // for what the guest never publishes (icon reordering) and for
+                // a dropped session, neither of which needs a 3 s cadence.
+                try? await Task.sleep(for: .seconds(self.haveLoaded ? 15 : 1))
             }
         }
     }
@@ -418,6 +423,19 @@ final class AppsInspectorViewController: NSViewController {
     /// True when the HOST side is gone rather than the guest — worth saying,
     /// because "device not responding" points the user at the wrong thing.
     private var usbUnavailable: Bool { !emulator.canManageApps }
+
+    /// Subscribe to the guest's own install/uninstall notifications.
+    private func startGuestNotifications() {
+        guard notifications == nil, let session = emulator.usbmuxSession else { return }
+        let watcher = GuestNotifications(clientSocket: session)
+        notifications = watcher
+        watcher.start {
+            // Off the library's callback thread and onto ours.
+            Task { @MainActor in
+                NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+            }
+        }
+    }
 
     private func showStaleBanner() {
         let when = lastLoaded.map {

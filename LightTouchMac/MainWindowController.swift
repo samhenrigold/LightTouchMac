@@ -17,7 +17,7 @@ private extension NSToolbarItem.Identifier {
     static let openTerminal = NSToolbarItem.Identifier("openTerminal")
 }
 
-final class MainWindowController: NSWindowController, NSToolbarDelegate {
+final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
     
     private let emulator: EmulatorController
     private let deviceVC: DeviceViewController
@@ -84,8 +84,35 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         zoomControl.sizeToFit()
         syncZoomControls()
 
+        window.delegate = self
         emulator.onStatusChange = { [weak self] in self?.refreshForState() }
         refreshForState()
+    }
+
+    /// Where the green button sends the window.
+    ///
+    /// Hold Option and it means "fit the device": the pane sized exactly to the
+    /// shell at the current zoom, plus the inspector if it is showing, so there
+    /// is no letterboxing on any side. Without Option it is the usual zoom, so
+    /// the standard behaviour is untouched.
+    func windowWillUseStandardFrame(_ window: NSWindow, defaultFrame: NSRect) -> NSRect {
+        guard NSEvent.modifierFlags.contains(.option) else { return defaultFrame }
+
+        var content = deviceVC.screen.idealPaneSize
+        if !inspectorItem.isCollapsed {
+            content.width += inspectorVC.view.frame.width
+        }
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: content))
+        // Grow down-and-right from the current top-left, the direction AppKit
+        // zooms in, and stay on screen.
+        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        if let visible = window.screen?.visibleFrame {
+            frame.size.width = min(frame.width, visible.width)
+            frame.size.height = min(frame.height, visible.height)
+            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+        }
+        return frame
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }

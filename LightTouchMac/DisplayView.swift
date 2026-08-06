@@ -294,6 +294,29 @@ final class DisplayView: NSView {
         homeButton.frame = buttonRect
     }
 
+    /// The pane size that fits the device exactly at the current zoom, with the
+    /// standard margin and nothing left over. `.fit` has no intrinsic size of
+    /// its own (it fits whatever it is given), so it is measured at the nearest
+    /// pixel step — the size Fit would settle on if the window matched it.
+    var idealPaneSize: CGSize {
+        let isLandscape = emulator?.isLandscape ?? false
+        let shell = isLandscape
+            ? CGSize(width: Self.shellPixels.height, height: Self.shellPixels.width)
+            : Self.shellPixels
+        let cutout = isLandscape
+            ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
+            : Self.screenCutout.size
+        let scale: CGFloat
+        switch zoom {
+        case .pixels(let n): scale = shellScale(guestPixelsPerDisplayPixel: n, cutout: cutout)
+        case .physical:      scale = physicalContentSize().map { $0.width / cutout.width }
+                                     ?? shellScale(guestPixelsPerDisplayPixel: nearestPixelStep, cutout: cutout)
+        case .fit:           scale = shellScale(guestPixelsPerDisplayPixel: nearestPixelStep, cutout: cutout)
+        }
+        return CGSize(width: (shell.width * scale + 2 * Self.zoomInset).rounded(),
+                      height: (shell.height * scale + 2 * Self.zoomInset).rounded())
+    }
+
     /// The step on the ladder closest to the size on screen right now, so
     /// zooming in or out of Fit or Actual Size carries on from what is already
     /// there instead of jumping to the bottom of the ladder.
@@ -553,11 +576,12 @@ final class DisplayView: NSView {
     }
 
     private func guestScrollDrag(_ event: NSEvent) {
-        // Finger movement, not wheel movement: a natural-scrolling trackpad
-        // already reports the direction the fingers went, and a classic wheel
-        // (or "natural" turned off) reports the opposite, which is what
-        // isDirectionInvertedFromDevice distinguishes.
-        let sign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
+        // Finger movement, not wheel movement. With natural scrolling on
+        // (isDirectionInvertedFromDevice true) the deltas already describe where
+        // the fingers went, so they pass through; a classic wheel reports the
+        // opposite and has to be negated. Getting this backwards is what made
+        // every gesture run the wrong way.
+        let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
         let dx = event.scrollingDeltaX * sign
         let dy = event.scrollingDeltaY * sign
         let b = contentLayer.bounds
@@ -620,7 +644,7 @@ final class DisplayView: NSView {
         case .began, .changed:
             // Sideways fingers roll the device. A full trackpad sweep is about
             // a quarter turn, which is as far as any tilt game needs.
-            let sign: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
+            let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
             scrollTilt = min(max(scrollTilt + event.scrollingDeltaX * sign * 0.006, -.pi / 3), .pi / 3)
             tiltAngle = scrollTilt
             setShellAngle(restAngle + tiltAngle)

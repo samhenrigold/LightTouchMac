@@ -505,6 +505,9 @@ final class EmulatorController {
     // MARK: - App management
     
     var canManageApps: Bool { usbmux.session != nil }
+    /// The usbmuxd socket to talk to this device on, for the long-lived
+    /// notification_proxy watcher (which owns its own session, not a gated one).
+    var usbmuxSession: String? { usbmux.session?.clientSocket }
     
     private func tools() throws -> DeviceTools {
         guard let session = usbmux.session else {
