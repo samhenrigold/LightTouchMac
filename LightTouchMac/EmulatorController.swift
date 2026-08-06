@@ -801,6 +801,18 @@ final class EmulatorController {
     
     // MARK: - Boot environment
     
+    /// UserDefaults key for Settings ▸ verbose boot.
+    static let verboseBootDefaultsKey = "verboseBoot"
+    static var verboseBoot: Bool {
+        UserDefaults.standard.bool(forKey: verboseBootDefaultsKey)
+    }
+
+    /// The code-signing gate 3.1.3 needs, plus `-v` when the user asked for it.
+    static var bootArgs: String {
+        let base = "amfi_allow_any_signature=1 cs_enforcement_disable=1"
+        return verboseBoot ? base + " -v" : base
+    }
+
     private func setBootEnv() {
         // The settings 3.1.3 will not boot without, plus the code-signing gate
         // (values from contrib/run-ipod-touch.sh).
@@ -811,7 +823,16 @@ final class EmulatorController {
             "IT_TVOUT_READY": "1",
             "IT_TVOUT_VBLANK": "1",
             "IT_IMG3_SIG_ASIS": "1",   // restores the Apple boot logo on 3.1.3
-            "IT_BOOT_ARGS": "amfi_allow_any_signature=1 cs_enforcement_disable=1",
+            // `-v` when asked: iPhone OS shows the kernel's console output over
+            // the boot logo instead of the Apple mark, which is the only view
+            // of what the guest is doing between iBoot and SpringBoard. Off by
+            // default because it replaces the logo for every boot.
+            //
+            // NOTE for scripts/regress_app.py: its env-parity check compares
+            // IT_BOOT_ARGS against the harness. Verbose is an app-side option
+            // the harness has no equivalent for, so parity is asserted on the
+            // base string, which is what is shared.
+            "IT_BOOT_ARGS": Self.bootArgs,
             "IT_BOOT_ARGS_DELAY_MS": "1500",
             "IT_BOOT_ARGS_REPEAT": "200",
             "IT_BOOT_ARGS_INTERVAL_MS": "250",

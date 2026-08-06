@@ -11,7 +11,7 @@ import Cocoa
 final class SettingsWindowController: NSWindowController {
 
     convenience init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 130),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 250),
                               styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered, defer: false)
         window.title = "Settings"
@@ -35,10 +35,22 @@ final class SettingsWindowController: NSWindowController {
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
 
-        let stack = NSStackView(views: [resume, note])
+        let verbose = NSButton(checkboxWithTitle: "Verbose boot",
+                               target: self, action: #selector(toggleVerbose(_:)))
+        verbose.state = EmulatorController.verboseBoot ? .on : .off
+
+        let verboseNote = NSTextField(wrappingLabelWithString:
+            "Boot with -v, so the guest prints kernel messages over the Apple logo. "
+            + "The only view of what the device is doing between iBoot and "
+            + "SpringBoard. Takes effect at the next launch.")
+        verboseNote.font = .systemFont(ofSize: 11)
+        verboseNote.textColor = .secondaryLabelColor
+
+        let stack = NSStackView(views: [resume, note, verbose, verboseNote])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
+        stack.setCustomSpacing(18, after: note)
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -46,6 +58,10 @@ final class SettingsWindowController: NSWindowController {
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
         ])
+    }
+
+    @objc private func toggleVerbose(_ sender: NSButton) {
+        UserDefaults.standard.set(sender.state == .on, forKey: EmulatorController.verboseBootDefaultsKey)
     }
 
     @objc private func toggleResume(_ sender: NSButton) {
