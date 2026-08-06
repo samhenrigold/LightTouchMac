@@ -95,6 +95,18 @@ struct DeviceTools: Sendable {
         let sdkMarker = Self.sdkTooNew(minOS) ? "\nnewer than the device's SDK" : ""
 
         if bakedGuestTools {
+            // Placeholder first, before anything slow: the exec-bit repair
+            // repacks the whole archive and the free-space check is a round
+            // trip, and until now this path put nothing on the home screen for
+            // any of it. Keyed on the .ipa's name rather than its bundle id
+            // only because the bundle id costs another unzip of Info.plist —
+            // the cost of that is two icons if the same app is dropped from two
+            // different files, and both come down.
+            let placeholder = "qemu-install-" + ipa.deletingPathExtension().lastPathComponent
+                .filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
+            placeholderIcon("add", placeholder)
+            defer { placeholderIcon("cancel", placeholder) }
+
             // An .ipa whose binary is archived 0644 installs fine and then never
             // launches: posix_spawn fails EACCES, SpringBoard logs only "exited
             // abnormally", the icon bounces once and NO crash report is written
@@ -283,6 +295,21 @@ struct DeviceTools: Sendable {
     /// supported way since OpenSSH 8.4; macOS ships 9.x.
     func restartSpringBoard() async throws {
         try await guestRun("killall SpringBoard")
+    }
+
+    /// Raise or drop the App Store-style "downloading" placeholder on the
+    /// guest's home screen. `sbdlicon` is baked into nand-ultimate at this path;
+    /// see qemu-ios/contrib/it-instprogress for what SpringBoard does with it.
+    ///
+    /// Deliberately fire-and-forget. This is the only ssh left on the in-process
+    /// install path and it is cosmetic, so a slow or unreachable guest must cost
+    /// the install nothing and can never fail it. An unstructured Task does not
+    /// inherit cancellation, which is what lets the `cancel` in a defer still
+    /// run when the install itself was cancelled; and if even that is lost, the
+    /// icon is placed with saveIconState:NO and dies with the running
+    /// SpringBoard rather than being written to disk.
+    private func placeholderIcon(_ action: String, _ id: String) {
+        Task { try? await guestRun("/usr/local/bin/sbdlicon \(action) '\(id)'") }
     }
 
     /// Run one command on the guest over USB. Best-effort and bounded.

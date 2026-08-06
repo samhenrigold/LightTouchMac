@@ -102,8 +102,9 @@ enum AppInstaller {
                     else { alert.runModal() }
                 }
             } catch is CancellationError {
-                // Cancelling is a decision, not a failure. The script's TERM
-                // trap has already taken the placeholder down.
+                // Cancelling is a decision, not a failure. The placeholder icon
+                // is already down: the script path has a TERM trap and the
+                // in-process path a defer that survives cancellation.
             } catch {
                 guard !Task.isCancelled else { return }
                 presentError(error, in: window)
