@@ -32,8 +32,20 @@ final class EmulatorController {
 
     /// Set by the inspector's poll: nil = never checked, true/false = last read.
     var deviceReachable: Bool? {
-        didSet { if oldValue != deviceReachable { onStatusChange?() } }
+        didSet {
+            if oldValue != deviceReachable { onStatusChange?() }
+            // First time the guest answers is the one safe moment to clear out
+            // staging uploads an earlier run abandoned: nothing of ours can be
+            // in flight yet, because installing needs this very flag.
+            if deviceReachable == true, !didSweepStaging {
+                didSweepStaging = true
+                if let socket = usbmux.session?.clientSocket {
+                    Task { await DeviceServices(clientSocket: socket).sweepStaging() }
+                }
+            }
+        }
     }
+    private var didSweepStaging = false
 
     init(options: LaunchOptions) {
         self.options = options
@@ -755,6 +767,19 @@ final class EmulatorController {
     // MARK: - App management
     
     var canManageApps: Bool { usbmux.session != nil }
+
+    /// The question every app-management command actually wants answered.
+    ///
+    /// `canManageApps` only says the host daemon is alive, and it is true from
+    /// the moment usbmuxd starts — through the whole boot and USB enumeration,
+    /// which is ~40s on a warm image and past three minutes on a first boot.
+    /// Gating on it alone left Install App… and Open SSH enabled that whole
+    /// time, so choosing them opened a file picker (or a Terminal window) for a
+    /// device that could only answer "not reachable over USB yet". The
+    /// inspector's own buttons already waited for a real round trip; the menu
+    /// and toolbar were the ones still guessing. `deviceReachable` is that round
+    /// trip, set by the list poll, and nil until the first one lands.
+    var canReachDevice: Bool { canManageApps && isRunning && deviceReachable == true }
     /// The usbmuxd socket to talk to this device on, for the long-lived
     /// notification_proxy watcher (which owns its own session, not a gated one).
     var usbmuxSession: String? { usbmux.session?.clientSocket }

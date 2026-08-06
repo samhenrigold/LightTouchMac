@@ -116,6 +116,10 @@ nonisolated enum IMobileDevice {
     typealias AfcClose = @convention(c) (OpaquePointer?, UInt64) -> Int32
     typealias AfcPath = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
     typealias AfcInfoKey = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+    /// afc_read_directory(client, path, &list) — a NULL-terminated char* array.
+    typealias AfcReadDir = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
+                                          UnsafeMutablePointer<UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?>) -> Int32
+    typealias AfcDictFree = @convention(c) (UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?) -> Int32
 
     typealias NpNotifyCB = @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void
     typealias NpObserve = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
@@ -138,6 +142,8 @@ nonisolated enum IMobileDevice {
     static let afc_make_directory = symbol("afc_make_directory", AfcPath.self)
     static let afc_remove_path = symbol("afc_remove_path", AfcPath.self)
     static let afc_get_device_info_key = symbol("afc_get_device_info_key", AfcInfoKey.self)
+    static let afc_read_directory = symbol("afc_read_directory", AfcReadDir.self)
+    static let afc_dictionary_free = symbol("afc_dictionary_free", AfcDictFree.self)
 
     static let np_client_start_service = symbol("np_client_start_service", StartService2.self)
     static let np_client_free = symbol("np_client_free", FreeHandle.self)

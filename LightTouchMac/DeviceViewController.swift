@@ -42,7 +42,7 @@ final class DeviceViewController: NSViewController {
         // behind the last, so dropping a second .ipa mid-install is supported.
         // Refusing it was a regression — dropping three at once is the whole
         // point of accepting multiple files.
-        guard emulator.canManageApps, emulator.isRunning else {
+        guard emulator.canReachDevice else {
             let alert = NSAlert()
             alert.messageText = "The device isn’t ready yet"
             alert.informativeText =

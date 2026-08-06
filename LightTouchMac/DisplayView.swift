@@ -794,8 +794,38 @@ final class DisplayView: NSView {
         emulator?.setTilt(angle: restAngle)
     }
 
+    /// Is a mouse-driven touch currently down in the guest? The host and the
+    /// guest each keep their own idea of that, and this is what keeps the two
+    /// from drifting apart.
+    private var touchDown = false
+
+    /// Send a mouse event to the guest as a touch.
+    ///
+    /// This used to bail whenever the cursor was outside the screen — which
+    /// silently dropped the TOUCH_END of any drag that ended off the panel, and
+    /// a drag that runs past the edge is the most ordinary gesture there is.
+    /// The guest then believed a finger was still down forever: scrolling
+    /// stopped working, and `mtt_bh`'s tracked flag (which only clears on an
+    /// END) desynced so no later pinch ever began. So:
+    ///
+    /// - a BEGIN outside the screen is not a touch, and is dropped — but then
+    ///   nothing is in flight, so the matching END is dropped too;
+    /// - once down, UPDATEs clamp to the panel edge rather than vanishing,
+    ///   which is also what a real finger sliding onto the bezel does;
+    /// - an END is delivered whenever a touch is down, wherever the cursor is.
     private func emit(_ event: NSEvent, _ phase: Int32) {
-        guard let (nx, ny) = normalized(event) else { return }
+        if phase == Int32(QEMU_IOS_TOUCH_BEGIN) {
+            guard let (nx, ny) = normalized(event) else { return }
+            touchDown = true
+            send(phase, nx, ny)
+            return
+        }
+        guard touchDown, let p = clampedPanelPoint(event) else { return }
+        if phase == Int32(QEMU_IOS_TOUCH_END) { touchDown = false }
+        send(phase, Double(p.x), Double(p.y))
+    }
+
+    private func send(_ phase: Int32, _ nx: Double, _ ny: Double) {
         qemu_ios_ui_touch(0, phase, nx, ny)
         if pinching {
             // Second finger mirrored through the panel centre — an Option-drag

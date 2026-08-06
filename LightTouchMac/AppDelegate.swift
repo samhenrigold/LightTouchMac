@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainMenuBuilder.install()
         #if DEBUG
         SpringBoardIcons.selfCheck()
+        Task { await abandonedWorkSelfCheck() }
         #endif
     }
     
@@ -128,6 +129,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// Bring the device window back on a Dock click.
+    ///
+    /// Closing it is normally the same as quitting — but not while Settings is
+    /// open, because then it isn't the last window and the app stays alive with
+    /// the emulator running and nothing on screen. There is no menu item that
+    /// recreates it and the Window menu only lists windows that exist, so the
+    /// app was unrecoverable short of ⌘Q. Checked on the window rather than
+    /// AppKit's hasVisibleWindows, which counts Settings.
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        if windowController?.window?.isVisible != true { windowController?.showWindow(nil) }
+        return true
     }
     
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

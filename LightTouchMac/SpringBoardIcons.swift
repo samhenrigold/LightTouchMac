@@ -123,68 +123,78 @@ struct SpringBoardIcons: Sendable {
     /// handle is released on the way out, including on a throw — a leaked
     /// lockdown client is a service slot the device does not get back, and
     /// this device only has a handful.
+    ///
+    /// Under the same gate and deadline as every other device operation. This
+    /// was a bare detached task: the only device path in the app that opened a
+    /// lockdown session without asking the gate first, against a guest that
+    /// serves about one — so a home-screen read landing next to a list poll or
+    /// an install cost both of them their services ("Invalid service"). And
+    /// `lockdownd_client_new_with_handshake` has no timeout of its own, so a
+    /// wedged guest hung the reorder with nothing to end the wait.
     private func withState<T: Sendable>(
         _ body: @Sendable @escaping ([Any], OpaquePointer) throws -> T
     ) async throws -> T {
         let socket = clientSocket
-        return try await Task.detached(priority: .userInitiated) {
-            let imd = IMobileDevice.self
-            guard let idevice_new = imd.idevice_new,
-                  let lockdownd_client_new_with_handshake = imd.lockdownd_client_new_with_handshake,
-                  let lockdownd_start_service = imd.lockdownd_start_service,
-                  let sbservices_client_new = imd.sbservices_client_new,
-                  let sbservices_get_icon_state = imd.sbservices_get_icon_state,
-                  let plist_free = imd.plist_free else {
-                throw DeviceToolsError.failed(
-                    "libimobiledevice is not installed (brew install libimobiledevice).")
-            }
+        return try await DeviceGate.shared.serialized {
+            try await withDeadline(Timeouts.browse, "home-screen layout") {
+                let imd = IMobileDevice.self
+                guard let idevice_new = imd.idevice_new,
+                      let lockdownd_client_new_with_handshake = imd.lockdownd_client_new_with_handshake,
+                      let lockdownd_start_service = imd.lockdownd_start_service,
+                      let sbservices_client_new = imd.sbservices_client_new,
+                      let sbservices_get_icon_state = imd.sbservices_get_icon_state,
+                      let plist_free = imd.plist_free else {
+                    throw DeviceToolsError.failed(
+                        "libimobiledevice is not installed (brew install libimobiledevice).")
+                }
 
-            // libimobiledevice reads this at connect time, and it is what
-            // points it at *our* emulator's usbmuxd rather than a real device
-            // or another instance (they all report the same UDID).
-            setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
+                // libimobiledevice reads this at connect time, and it is what
+                // points it at *our* emulator's usbmuxd rather than a real device
+                // or another instance (they all report the same UDID).
+                setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
 
-            var device: OpaquePointer?
-            guard idevice_new(&device, nil) == imd.success, let device else {
-                throw DeviceToolsError.failed("The device is not reachable over USB yet.")
-            }
-            defer { _ = imd.idevice_free?(device) }
+                var device: OpaquePointer?
+                guard idevice_new(&device, nil) == imd.success, let device else {
+                    throw DeviceToolsError.failed("The device is not reachable over USB yet.")
+                }
+                defer { _ = imd.idevice_free?(device) }
 
-            var lockdown: OpaquePointer?
-            guard lockdownd_client_new_with_handshake(device, &lockdown, "LightTouchMac")
-                    == imd.success, let lockdown else {
-                throw DeviceToolsError.failed("lockdownd would not accept a session.")
-            }
-            defer { _ = imd.lockdownd_client_free?(lockdown) }
+                var lockdown: OpaquePointer?
+                guard lockdownd_client_new_with_handshake(device, &lockdown, "LightTouchMac")
+                        == imd.success, let lockdown else {
+                    throw DeviceToolsError.failed("lockdownd would not accept a session.")
+                }
+                defer { _ = imd.lockdownd_client_free?(lockdown) }
 
-            var service: OpaquePointer?
-            guard lockdownd_start_service(lockdown, "com.apple.springboardservices", &service)
-                    == imd.success, let service else {
-                throw DeviceToolsError.failed("SpringBoard is not answering yet.")
-            }
-            defer { _ = imd.lockdownd_service_descriptor_free?(service) }
+                var service: OpaquePointer?
+                guard lockdownd_start_service(lockdown, "com.apple.springboardservices", &service)
+                        == imd.success, let service else {
+                    throw DeviceToolsError.failed("SpringBoard is not answering yet.")
+                }
+                defer { _ = imd.lockdownd_service_descriptor_free?(service) }
 
-            var client: OpaquePointer?
-            guard sbservices_client_new(device, service, &client) == imd.success,
-                  let client else {
-                throw DeviceToolsError.failed("Could not talk to SpringBoard.")
-            }
-            defer { _ = imd.sbservices_client_free?(client) }
+                var client: OpaquePointer?
+                guard sbservices_client_new(device, service, &client) == imd.success,
+                      let client else {
+                    throw DeviceToolsError.failed("Could not talk to SpringBoard.")
+                }
+                defer { _ = imd.sbservices_client_free?(client) }
 
-            var raw: OpaquePointer?
-            // "2" is the format version SpringBoard has spoken since iOS 3 —
-            // the one that reports the dock as its own list.
-            guard sbservices_get_icon_state(client, &raw, "2") == imd.success,
-                  let raw else {
-                throw DeviceToolsError.failed("SpringBoard would not report its icon layout.")
-            }
-            defer { plist_free(raw) }
+                var raw: OpaquePointer?
+                // "2" is the format version SpringBoard has spoken since iOS 3 —
+                // the one that reports the dock as its own list.
+                guard sbservices_get_icon_state(client, &raw, "2") == imd.success,
+                      let raw else {
+                    throw DeviceToolsError.failed("SpringBoard would not report its icon layout.")
+                }
+                defer { plist_free(raw) }
 
-            guard let state = try Self.decode(raw) as? [Any] else {
-                throw DeviceToolsError.failed("SpringBoard's icon layout was not a list of pages.")
+                guard let state = try Self.decode(raw) as? [Any] else {
+                    throw DeviceToolsError.failed("SpringBoard's icon layout was not a list of pages.")
+                }
+                return try body(state, client)
             }
-            return try body(state, client)
-        }.value
+        }
     }
 
     /// plist_t -> Foundation, via the XML both sides already speak. Converting

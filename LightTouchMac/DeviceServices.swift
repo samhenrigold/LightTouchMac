@@ -16,7 +16,9 @@
 //      from the watchdog side; that frees under a live library thread.
 //   2. One process-wide serial gate. setenv(USBMUXD_SOCKET_ADDRESS) is global
 //      and the guest serves ~one lockdown session, so all of this is one at a
-//      time — which also bounds the leaked-thread count to at most one.
+//      time. The gate does NOT bound the leaked threads on its own — what
+//      releases it is the deadline, not the thread — so they are counted
+//      (AbandonedWork) and the gate refuses new work past the cap.
 //   3. Errors are typed (the C libraries' own return codes), and the retry
 //      policy is expressed over those codes, not over the text of a message.
 
@@ -175,6 +177,43 @@ struct DeviceServices: Sendable {
         let base = ipa.deletingPathExtension().lastPathComponent
         let safe = String(base.map { $0.isLetter || $0.isNumber ? $0 : "_" }.prefix(48))
         return "\(safe)-\(UUID().uuidString.prefix(8)).ipa"
+    }
+
+    /// Clear out /PublicStaging, once, before this session stages anything.
+    ///
+    /// Every install uploads the whole .ipa here first and deletes it after.
+    /// That delete is fire-and-forget and runs over the same connection the
+    /// install just failed on — so it fails in exactly the cases that leave a
+    /// file behind, and nothing else has ever swept. The uploads are tens of
+    /// megabytes on a partition with a few hundred, and when they finally fill
+    /// it the install fails as PackageExtractionFailed, which the app reports
+    /// as "device may be full" and blames the user's apps for. Safe to call
+    /// only before the first install of a session: anything here is by
+    /// definition from a run that is over.
+    func sweepStaging() async {
+        _ = try? await run(Timeouts.query, "staging sweep") { imd, device in
+            guard let start = imd.afc_client_start_service,
+                  let readDir = imd.afc_read_directory,
+                  let remove = imd.afc_remove_path,
+                  let dictFree = imd.afc_dictionary_free else { return }
+            var client: OpaquePointer?
+            guard start(device, &client, "LightTouchMac") == imd.success, let client else { return }
+            defer { _ = imd.afc_client_free?(client) }
+
+            var list: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
+            guard "PublicStaging".withCString({ readDir(client, $0, &list) }) == imd.success,
+                  let list else { return }
+            defer { _ = dictFree(list) }
+
+            var i = 0
+            while let entry = list[i] {
+                let name = String(cString: entry)
+                i += 1
+                guard name != ".", name != ".." else { continue }
+                NSLog("device: removing orphaned staging upload \(name)")
+                _ = "PublicStaging/\(name)".withCString { remove(client, $0) }
+            }
+        }
     }
 
     /// Best-effort cleanup of a staged upload.
@@ -384,15 +423,69 @@ func withDeadline<T: Sendable>(_ seconds: Double, _ operation: String,
                                _ work: @escaping @Sendable () throws -> T) async throws -> T {
     let once = ResumeOnce<T>()
     Task.detached {
-        do { once.resume(.success(try work())) }
-        catch { once.resume(.failure(error)) }
+        let result: Result<T, Error>
+        do { result = .success(try work()) } catch { result = .failure(error) }
+        // Losing the race means the deadline already fired and this thread was
+        // written off. It is alive again now, so give the budget its slot back.
+        if !once.resume(result) { AbandonedWork.returned() }
     }
     Task.detached {
         try? await Task.sleep(for: .seconds(seconds))
-        once.resume(.failure(DeviceError.timedOut(operation: operation)))
+        if once.resume(.failure(DeviceError.timedOut(operation: operation))) {
+            AbandonedWork.abandoned(operation)
+        }
     }
     return try await withCheckedThrowingContinuation { once.attach($0) }
 }
+
+/// How many blocked C threads have been walked away from and not come back.
+///
+/// The gate does NOT bound this on its own, whatever the header used to claim:
+/// what releases the gate is the deadline firing, not the thread finishing, so
+/// a guest that never answers leaks one thread and one lockdown session per
+/// attempt — and the list poll alone attempts one every few seconds. Each of
+/// those sessions is a slot the guest doesn't have, so piling on more is also
+/// what stops it from ever recovering. Past the cap, new work fails fast until
+/// the stuck threads drain, which they do the moment the guest comes back.
+nonisolated enum AbandonedWork {
+    /// ponytail: a plain counter under a lock. Fine at this scale — it is
+    /// touched once per timed-out device op, not per call.
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var outstanding = 0
+
+    /// Above this, the guest is clearly not answering and more sessions will
+    /// not help. Two in flight is already one more than it serves.
+    static let cap = 3
+
+    static var count: Int { lock.withLock { outstanding } }
+
+    static func abandoned(_ operation: String) {
+        let n = lock.withLock { outstanding += 1; return outstanding }
+        NSLog("device: abandoned a blocked thread in \(operation) (\(n) outstanding)")
+    }
+
+    static func returned() {
+        lock.withLock { if outstanding > 0 { outstanding -= 1 } }
+    }
+}
+
+#if DEBUG
+/// The accounting has to balance both ways. Counting an abandoned thread and
+/// never giving the slot back closes the gate permanently — every device
+/// operation for the rest of the run fails with "still waiting for earlier
+/// requests" and nothing ever clears it — which is a worse failure than the
+/// leak it exists to bound.
+func abandonedWorkSelfCheck() async {
+    let before = AbandonedWork.count
+    do {
+        _ = try await withDeadline(0.05, "self-check") { Thread.sleep(forTimeInterval: 0.5) }
+        assertionFailure("withDeadline did not time out")
+    } catch {}
+    assert(AbandonedWork.count == before + 1, "a timeout did not count its abandoned thread")
+    try? await Task.sleep(for: .seconds(1))   // past the work's own 0.5s
+    assert(AbandonedWork.count == before, "an abandoned thread never gave its slot back")
+}
+#endif
 
 /// First result wins; the rest are dropped. Handles the result landing before
 /// the continuation attaches (a fast op) and vice versa (the normal case).
@@ -411,14 +504,17 @@ nonisolated private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
         lock.unlock()
     }
 
-    func resume(_ result: Result<T, Error>) {
+    /// True if this result is the one the caller gets — i.e. this side won.
+    @discardableResult
+    func resume(_ result: Result<T, Error>) -> Bool {
         lock.lock()
-        guard !done else { lock.unlock(); return }
+        guard !done else { lock.unlock(); return false }
         if let c = cont {
-            done = true; cont = nil; lock.unlock(); c.resume(with: result); return
+            done = true; cont = nil; lock.unlock(); c.resume(with: result); return true
         }
-        if pending == nil { pending = result }
+        if pending == nil { pending = result; lock.unlock(); return true }
         lock.unlock()
+        return false
     }
 }
 
@@ -469,7 +565,11 @@ actor DeviceGate {
         if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
     }
 
-    func serialized<T: Sendable>(_ body: @Sendable () async throws -> T) async rethrows -> T {
+    func serialized<T: Sendable>(_ body: @Sendable () async throws -> T) async throws -> T {
+        // Refuse rather than pile on: every one of those outstanding threads is
+        // still holding a lockdown session against a guest that serves about
+        // one, so starting another is what keeps it from recovering.
+        guard AbandonedWork.count < AbandonedWork.cap else { throw DeviceError.recovering }
         await acquire()
         do { let r = try await body(); release(); return r }
         catch { release(); throw error }
@@ -486,6 +586,7 @@ nonisolated enum DeviceError: Error, LocalizedError {
     case afc(AFCError)
     case diskFull(free: Int64, needed: Int64)
     case timedOut(operation: String)
+    case recovering                                    // earlier requests still stuck
     case preflight(String)                             // ipod-helper findings
     case failed(String)
 
@@ -494,7 +595,7 @@ nonisolated enum DeviceError: Error, LocalizedError {
     /// full disk fails the same way every time and must not loop.
     var isTransient: Bool {
         switch self {
-        case .timedOut: return true
+        case .timedOut, .recovering: return true
         case .lockdown: return true
         case .instproxy(let e, _): return e.isTransient
         case .afc(let e): return e.isTransient
@@ -514,6 +615,8 @@ nonisolated enum DeviceError: Error, LocalizedError {
             return "Not enough space on the device: \(free / 1_048_576) MB free, "
                 + "about \(needed / 1_048_576) MB needed. Uninstall something first."
         case .timedOut(let op): return "The device stopped responding during \(op)."
+        case .recovering:
+            return "The device stopped responding; still waiting for earlier requests to finish."
         case .preflight(let m): return m
         case .failed(let m): return m
         }
