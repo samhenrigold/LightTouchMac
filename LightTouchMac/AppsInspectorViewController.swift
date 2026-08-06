@@ -46,6 +46,12 @@ final class InstallJob {
 
     fileprivate init(name: String) { self.name = name }
 
+    /// False once the install has passed the last point cancellation can reach.
+    /// instproxy_install runs on a detached thread that ignores cancellation, so
+    /// after it starts the install WILL finish — the row used to say
+    /// "Cancelling…" for the rest of it and then the app appeared anyway.
+    fileprivate(set) var isCancellable = true
+
     var isCancelled: Bool { task?.isCancelled ?? false }
     func cancel() { task?.cancel() }
 }
@@ -101,6 +107,9 @@ enum AppInstaller {
                 let output = try await emulator.install(ipa) { line in
                     Task { @MainActor in
                         job.status = line
+                        // The upload is still interruptible; the install itself
+                        // is not (DeviceTools checks cancellation between them).
+                        if line.hasPrefix("Installing") { job.isCancellable = false }
                         NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                     }
                 }
@@ -186,7 +195,11 @@ final class AppsInspectorViewController: NSViewController {
         tableView.rowHeight = 40
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.registerForDraggedTypes([.string])
+        // .string is the internal reorder drag; .fileURL is an .ipa dropped
+        // from the Finder. The list of installed apps is the obvious place to
+        // drop an app, and it silently ignored one — two inches to the left, on
+        // the device screen, the same drop installed it.
+        tableView.registerForDraggedTypes([.string, .fileURL])
         let menu = NSMenu()
         menu.delegate = self
         // menuNeedsUpdate decides what is enabled; automatic enabling would
@@ -675,7 +688,7 @@ extension AppsInspectorViewController: NSMenuDelegate {
                                     action: #selector(cancelInstallClicked(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = job
-            item.isEnabled = !job.isCancelled
+            item.isEnabled = !job.isCancelled && job.isCancellable
         } else if let app = app(at: row) {
             let uninstall = menu.addItem(withTitle: "Uninstall “\(displayName(app))”…",
                                          action: #selector(uninstallClicked(_:)), keyEquivalent: "")
@@ -765,13 +778,29 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo,
                    proposedRow row: Int,
                    proposedDropOperation operation: NSTableView.DropOperation) -> NSDragOperation {
-        guard operation == .above, row >= pending.count,
-              info.draggingSource as? NSTableView === tableView else { return [] }
+        if info.draggingSource as? NSTableView !== tableView {
+            // From outside: an .ipa to install, if the device can take one.
+            guard emulator.canReachDevice, !Self.droppedIPAs(info).isEmpty else { return [] }
+            tableView.setDropRow(-1, dropOperation: .on)   // the list as a whole
+            return .copy
+        }
+        guard operation == .above, row >= pending.count else { return [] }
         return .move
+    }
+
+    private static func droppedIPAs(_ info: NSDraggingInfo) -> [URL] {
+        guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self])
+                as? [URL] else { return [] }
+        return urls.filter { $0.pathExtension.lowercased() == "ipa" }
     }
 
     func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo,
                    row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+        let ipas = Self.droppedIPAs(info)
+        if !ipas.isEmpty, info.draggingSource as? NSTableView !== tableView {
+            ipas.forEach { AppInstaller.start($0, with: emulator, presenting: view.window) }
+            return true
+        }
         guard let id = info.draggingPasteboard.string(forType: .string) else { return false }
         // Dropping above row N means "put it where the app now at N sits", and
         // past the last row means the end. The bundle ID travels rather than the
