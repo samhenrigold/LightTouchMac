@@ -364,7 +364,7 @@ func withDeadline<T: Sendable>(_ seconds: Double, _ operation: String,
 
 /// First result wins; the rest are dropped. Handles the result landing before
 /// the continuation attaches (a fast op) and vice versa (the normal case).
-private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
+nonisolated private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: Result<T, Error>?
     private var cont: CheckedContinuation<T, Error>?

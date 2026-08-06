@@ -26,7 +26,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     private let zoomControl = NSSegmentedControl()
     private var rotateItem: NSToolbarItem?
     private(set) var zoom: ZoomMode = .fit
-    private let statusLabel = NSTextField(labelWithString: "")
     private var deadOverlay: NSView?
     
     init(emulator: EmulatorController) {
@@ -85,7 +84,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         zoomControl.sizeToFit()
         syncZoomControls()
 
-        installStatusAccessory(on: window)
         emulator.onStatusChange = { [weak self] in self?.refreshForState() }
         refreshForState()
     }
@@ -102,31 +100,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     // MARK: - Health / status surfacing
 
-    /// A quiet status line on the trailing side of the titlebar: "Running",
-    /// "Booting…", "Running — USB unavailable", "Emulator stopped".
-    private func installStatusAccessory(on window: NSWindow) {
-        statusLabel.font = .systemFont(ofSize: 11)
-        statusLabel.textColor = .secondaryLabelColor
-        statusLabel.alignment = .right
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        // A real starting width, so the autoresizing mask contributes width==180
-        // (not width==0) and never fights the label's edge pins at first layout.
-        let host = NSView(frame: NSRect(x: 0, y: 0, width: 180, height: 24))
-        host.addSubview(statusLabel)
-        NSLayoutConstraint.activate([
-            statusLabel.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 8),
-            statusLabel.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -8),
-            statusLabel.centerYAnchor.constraint(equalTo: host.centerYAnchor),
-            host.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
-        ])
-        let accessory = NSTitlebarAccessoryViewController()
-        accessory.view = host
-        accessory.layoutAttribute = .right
-        window.addTitlebarAccessoryViewController(accessory)
-    }
-
     private func refreshForState() {
-        statusLabel.stringValue = emulator.statusLine
+        // The window subtitle is where AppKit puts secondary window state, and
+        // it styles and truncates itself to match the title. A custom titlebar
+        // accessory was carrying this before — more code, its own constraints,
+        // and it competed with the toolbar for space.
+        window?.subtitle = emulator.statusLine
         window?.toolbar?.validateVisibleItems()
         updateDeadOverlay()
     }
@@ -170,11 +149,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     /// QEMU is once-per-process, so recovering means a fresh process. Launch a
     /// new instance, then quit this dead one.
     @objc private func relaunchApp(_ sender: Any?) {
-        let config = NSWorkspace.OpenConfiguration()
-        config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
-            DispatchQueue.main.async { NSApp.terminate(nil) }
-        }
+        // Exit BEFORE the successor starts. Launching first and terminating in
+        // the completion handler overlapped two processes on one NAND overlay,
+        // and the new instance's usbmuxd reaper would SIGTERM the old, live
+        // daemon. Same reasoning as EmulatorController.coldRelaunch.
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", "sleep 1; open -n \"$1\"", "sh", Bundle.main.bundleURL.path]
+        try? task.run()
+        NSApp.terminate(nil)
     }
     
     // MARK: - Toolbar
