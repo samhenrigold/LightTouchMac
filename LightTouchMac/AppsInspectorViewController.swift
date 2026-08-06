@@ -667,6 +667,23 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
                    row: Int) -> NSView? {
         if row < pending.count {
             let job = pending[row]
+            // A finished job renders as an ORDINARY app row — icon, name, no
+            // spinner, no percentage — even though it is still a pending entry
+            // underneath. Two things fall out of that. It stops claiming
+            // "Installing… 90%" for an app already sitting on the home screen
+            // (instproxy's last progress callback is 90, then "Complete", so
+            // that number was simply the last one anyone heard). And when the
+            // real row finally replaces it, the two look the same, so the swap
+            // that used to make the whole list flicker is now invisible.
+            if job.isFinished, !job.isCancelled {
+                let cell = appCell(tableView)
+                cell.textField?.stringValue = job.name
+                cell.imageView?.image = job.bundleID.flatMap {
+                    AppMetadataCache.shared.icon(for: $0)
+                } ?? Self.genericAppIcon
+                cell.imageView?.alphaValue = NSApp.isActive ? 1 : 0.5
+                return cell
+            }
             let cell = pendingCell(tableView)
             cell.textField?.stringValue = job.name
             (cell.viewWithTag(Self.subtitleTag) as? NSTextField)?.stringValue =
