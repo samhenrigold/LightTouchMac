@@ -198,16 +198,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .lock:
             return button(id, "Lock", "lock", #selector(deviceLock(_:)), "Lock or wake the device")
         case .rotate:
-            let item = button(id, "Rotate", rotateSymbolName, #selector(deviceRotate(_:)),
-                              "Rotate between portrait and landscape")
+            let item = button(id, "Rotate", rotateSymbolName, #selector(deviceRotate(_:)), "Rotate between portrait and landscape")
             rotateItem = item
             return item
         case .installApp:
-            return button(id, "Install App", "square.and.arrow.down", #selector(installApp(_:)),
-                          "Install a decrypted .ipa")
+            return button(id, "Install App", "square.and.arrow.down", #selector(installApp(_:)), "Install a decrypted .ipa")
         case .openTerminal:
-            return button(id, "Terminal", "terminal", #selector(openDeviceTerminal(_:)),
-                          "Open a root shell on the device")
+            return button(id, "SSH", "terminal", #selector(openDeviceTerminal(_:)), "Open a root shell on the device")
         case .zoom:
             let item = NSToolbarItem(itemIdentifier: .zoom)
             item.label = "Zoom"
@@ -215,9 +212,24 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             item.toolTip = "How large the device is drawn"
             item.view = zoomControl
             return item
+        case .inspectorTrackingSeparator:
+            // Must be supplied explicitly with the split view and the divider
+            // it tracks. Listing the identifier alone got it silently dropped,
+            // so the toolbar never split at the divider — which is why the
+            // inspector's material stopped at the toolbar instead of running
+            // top to bottom, and the toggle floated over the device pane
+            // instead of sitting above the inspector (compare Xcode).
+            guard let split = contentSplitViewController else { return nil }
+            return NSTrackingSeparatorToolbarItem(identifier: id,
+                                                  splitView: split.splitView,
+                                                  dividerIndex: 0)
         default:
-            return nil          // space / flexibleSpace / toggleInspector are system-made
+            return nil
         }
+    }
+
+    private var contentSplitViewController: NSSplitViewController? {
+        window?.contentViewController as? NSSplitViewController
     }
     
     private func button(_ id: NSToolbarItem.Identifier, _ label: String, _ symbol: String,

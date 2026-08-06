@@ -17,9 +17,6 @@ final class DeviceViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
         displayView.emulator = emulator
         displayView.onDropIPA = { [weak self] url in self?.installDropped(url) }
-        displayView.onZoomStep = { [weak self] direction in
-            (self?.view.window?.windowController as? MainWindowController)?.stepZoom(direction)
-        }
     }
     
     required init?(coder: NSCoder) { fatalError("not used") }

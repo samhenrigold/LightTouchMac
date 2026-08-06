@@ -68,10 +68,6 @@ final class DisplayView: NSView {
     weak var emulator: EmulatorController?
     /// Called when an .ipa is dropped on the screen.
     var onDropIPA: ((URL) -> Void)?
-    /// Called with +1/-1 when the trackpad is pinched, so the window controller
-    /// can move one step along the zoom ladder it owns.
-    var onZoomStep: ((Int) -> Void)?
-    private var pendingMagnification = 0.0
 
     /// Points of breathing room between the shell and the pane edge when
     /// zoomed. A flat inset, not a fraction of the pane: 0.85 of the pane threw
@@ -489,19 +485,17 @@ final class DisplayView: NSView {
 
     // MARK: Pinch
 
-    /// Over the panel: a genuine two-finger pinch, both contacts tracking the
-    /// magnification continuously around the point the fingers started on.
-    /// Off the panel: the window's own zoom ladder, as before.
+    /// A pinch is the guest's, always — a genuine two-finger pinch with both
+    /// contacts tracking the magnification continuously around the point the
+    /// fingers started on.
+    ///
+    /// It deliberately does NOT resize the device itself: pinching is what you
+    /// do to the content on a phone, so having it also scale the phone made the
+    /// same gesture mean two things depending on a few pixels of cursor
+    /// position. The window's zoom lives on the toolbar, the View menu and ⌘+/−.
     override func magnify(with event: NSEvent) {
-        if pinchingGuest || (event.phase == .began && cursorOverPanel(event)) {
-            guestPinch(event)
-            return
-        }
-        guard !pinchingGuest else { return }
-        pendingMagnification += event.magnification
-        guard abs(pendingMagnification) > 0.25 else { return }
-        onZoomStep?(pendingMagnification > 0 ? 1 : -1)
-        pendingMagnification = 0
+        guard pinchingGuest || (event.phase == .began && cursorOverPanel(event)) else { return }
+        guestPinch(event)
     }
 
     private func guestPinch(_ event: NSEvent) {
@@ -671,7 +665,12 @@ final class DisplayView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         if tilting {
-            let delta = mouseAngle(event) - grabAngle
+            // NEGATED: a layer transform's positive direction is the opposite
+            // of the polar angle measured in this flipped view, so the shell
+            // used to swing AGAINST the drag. That reads as both "wrong way"
+            // and "too fast" at once — the device and your hand move apart, so
+            // the apparent rate is double what you are actually doing.
+            let delta = -(mouseAngle(event) - grabAngle)
             tiltAngle = atan2(sin(delta), cos(delta))   // wrap to (-π, π]
             setShellAngle(restAngle + tiltAngle)
             emulator?.setTilt(angle: restAngle + tiltAngle)
