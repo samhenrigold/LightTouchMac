@@ -228,18 +228,29 @@ final class EmulatorController {
         let fm = FileManager.default
         let tmp = dest + ".partial"
         try? fm.removeItem(atPath: tmp)
-        try? fm.createDirectory(atPath: (dest as NSString).deletingLastPathComponent,
-                                withIntermediateDirectories: true)
+        // The helper creates cs0…cs3 INSIDE the directory it is given; the
+        // directory itself must already exist. Its absence was an instant
+        // "The emulator stopped" on every first packaged boot.
+        do {
+            try fm.createDirectory(atPath: tmp, withIntermediateDirectories: true)
+        } catch {
+            NSLog("nand: could not create \(tmp): \(error.localizedDescription)")
+            return false
+        }
         let task = Process()
         task.executableURL = URL(fileURLWithPath: helper)
         task.arguments = ["nand-unpack", packed, tmp]
+        let errPipe = Pipe()
+        task.standardError = errPipe
         do { try task.run() } catch {
             NSLog("nand: could not run ipod-helper: \(error.localizedDescription)")
             return false
         }
         task.waitUntilExit()
         guard task.terminationStatus == 0 else {
-            NSLog("nand: unpack failed (exit \(task.terminationStatus))")
+            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(),
+                             encoding: .utf8) ?? ""
+            NSLog("nand: unpack failed (exit \(task.terminationStatus)): \(err)")
             return false
         }
         do { try fm.moveItem(atPath: tmp, toPath: dest) } catch {
