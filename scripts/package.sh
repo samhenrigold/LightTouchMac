@@ -27,11 +27,23 @@ ENTITLEMENTS="$QEMU/contrib/macos-app/entitlements.plist"
 SIGN_ID="${SIGN_ID:--}"          # '-' == ad-hoc
 
 if [ -z "$APP" ]; then
+    # Not Index.noindex — Xcode's index-build app there is not a signable bundle.
     APP="$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d \
-        -path "*LightTouchMac*/Build/Products/*/LightTouchMac.app" 2>/dev/null | head -1)"
+        -path "*LightTouchMac*/Build/Products/*/LightTouchMac.app" \
+        -not -path "*/Index.noindex/*" 2>/dev/null | head -1)"
 fi
 [ -d "$APP" ] || { echo "no LightTouchMac.app found; build it first or pass a path" >&2; exit 1; }
 [ -f "$DYLIB" ] || { echo "no $DYLIB; run contrib/macos-app/make-dylib-macos.sh" >&2; exit 1; }
+
+# A Debug build is not shippable: its binary is a stub loading
+# LightTouchMac.debug.dylib, and its SPM frameworks live in DerivedData's
+# PackageFrameworks OUTSIDE the bundle — it packages cleanly and then fails
+# on any other Mac. Build Release: xcodebuild -scheme LightTouchMac
+# -configuration Release.
+if otool -L "$APP/Contents/MacOS/LightTouchMac" | grep -q '\.debug\.dylib'; then
+    echo "$APP is a Debug build (loads a .debug.dylib); package a Release build" >&2
+    exit 1
+fi
 
 FRAMEWORKS="$APP/Contents/Frameworks"
 mkdir -p "$FRAMEWORKS"
@@ -157,6 +169,30 @@ if [ -d "$CONF_SRC" ]; then
     # Application Support (the bundle is read-only and signed).
 else
     echo "  NOT bundled: usbmuxd-conf (no $CONF_SRC) — app management may fail on a clean Mac" >&2
+fi
+
+# -------------------------------------------------------------- device assets
+#
+# The guest firmware and NAND, read from Resources/device (see
+# LaunchOptions.defaultFilesRoot). Copied raw and uncompressed: the app boots
+# the NAND directory read-only with a per-user overlay in Application Support,
+# so a signed read-only copy works as-is — no first-run unpack step to break.
+# Costs ~1.2 GB of bundle; LTM_ASSETS=none skips it for a dev-machine build
+# that keeps using the checkout's files-root.
+FILES="${LTM_ASSETS:-$HOME/Developer/qemu-ios-files}"
+NAND_NAME="${LTM_NAND:-nand-ultimate}"
+if [ "$FILES" != none ]; then
+    for f in "$FILES/bootrom_240_4" "$FILES/ios3/iBoot.bin" \
+             "$FILES/ios3/nor_7E18.bin" "$FILES/$NAND_NAME"; do
+        [ -e "$f" ] || { echo "missing device asset: $f (LTM_ASSETS=none to skip)" >&2; exit 1; }
+    done
+    DEVICE="$APP/Contents/Resources/device"
+    echo "embedding device assets ($NAND_NAME, ~1.2 GB)…"
+    rm -rf "$DEVICE"
+    mkdir -p "$DEVICE/ios3"
+    cp "$FILES/bootrom_240_4" "$DEVICE/"
+    cp "$FILES/ios3/iBoot.bin" "$FILES/ios3/nor_7E18.bin" "$DEVICE/ios3/"
+    cp -R "$FILES/$NAND_NAME" "$DEVICE/$NAND_NAME"
 fi
 
 # Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
