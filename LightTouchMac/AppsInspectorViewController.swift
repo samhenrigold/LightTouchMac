@@ -17,6 +17,8 @@ extension Notification.Name {
     static let ltmInstallStarted = Notification.Name("LTMInstallStarted")
     /// Posted as an install reports progress; object is the InstallJob.
     static let ltmInstallProgress = Notification.Name("LTMInstallProgress")
+    /// An app was launched on the guest from the sidebar (post-success).
+    static let ltmAppLaunched = Notification.Name("LTMAppLaunched")
 }
 
 /// One install in flight. The sidebar shows it as a row; cancelling it tears
@@ -1123,6 +1125,7 @@ final class AppsInspectorViewController: NSViewController {
         Task { [weak self] in
             do {
                 try await self?.emulator.launchApp(app.id)
+                NotificationCenter.default.post(name: .ltmAppLaunched, object: nil)
             } catch {
                 guard let self else { return }
                 AppInstaller.presentError(error, in: self.view.window)

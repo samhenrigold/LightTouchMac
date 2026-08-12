@@ -6,14 +6,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     private var windowController: MainWindowController?
     private var emulator: EmulatorController?
-    private var settingsController: SettingsWindowController?
-
-    /// Standard Settings/Preferences window (⌘,). Routed here via the responder
-    /// chain (nil-targeted menu item → app → delegate).
-    @objc func showSettings(_ sender: Any?) {
-        if settingsController == nil { settingsController = SettingsWindowController() }
-        settingsController?.show()
-    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // AppKit injects AutoFill, Start Dictation and Emoji & Symbols into the

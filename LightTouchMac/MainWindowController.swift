@@ -375,6 +375,18 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         syncRotateSymbol()
     }
 
+    // The two persisted switches that used to live in a Settings window; the
+    // menu checkmarks are set in validateMenuItem.
+    @objc func toggleResumeOnLaunch(_ sender: Any?) {
+        UserDefaults.standard.set(!EmulatorController.resumeOnLaunch,
+                                  forKey: EmulatorController.resumeDefaultsKey)
+    }
+
+    @objc func toggleVerboseBoot(_ sender: Any?) {
+        UserDefaults.standard.set(!EmulatorController.verboseBoot,
+                                  forKey: EmulatorController.verboseBootDefaultsKey)
+    }
+
     @objc func deviceRotateLeft(_ sender: Any?) {
         emulator.rotate(clockwise: false)
         syncRotateSymbol()
@@ -613,6 +625,12 @@ extension MainWindowController: NSMenuItemValidation {
              #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)),
              #selector(deviceRotateRight(_:)), #selector(deviceShake(_:)):
             return emulator.acceptsInput
+        case #selector(toggleResumeOnLaunch(_:)):
+            menuItem.state = EmulatorController.resumeOnLaunch ? .on : .off
+            return true
+        case #selector(toggleVerboseBoot(_:)):
+            menuItem.state = EmulatorController.verboseBoot ? .on : .off
+            return true
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState
