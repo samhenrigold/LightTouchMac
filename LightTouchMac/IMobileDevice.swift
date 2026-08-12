@@ -71,11 +71,10 @@ nonisolated enum IMobileDevice {
     typealias LockdownGetValue = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
                                                 UnsafePointer<CChar>?,
                                                 UnsafeMutablePointer<OpaquePointer?>) -> Int32
-    /// lockdownd_set_value(client, domain, key, value) — takes OWNERSHIP of
-    /// value and frees it; do not plist_free after a set.
-    typealias LockdownSetValue = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
-                                                UnsafePointer<CChar>?, OpaquePointer?) -> Int32
-    typealias PlistNewString = @convention(c) (UnsafePointer<CChar>?) -> OpaquePointer?
+    // NO lockdownd_set_value here, deliberately: called in-process against
+    // 3.1.3's lockdownd it corrupts the heap (the app died ~20 s later in
+    // unrelated Swift runtime code, reproducibly). Writes go through the
+    // bundled lockdown-tz tool — see DeviceTools.setTimeZone.
     typealias PlistFree = @convention(c) (OpaquePointer?) -> Void
     typealias MemFree = @convention(c) (UnsafeMutableRawPointer?) -> Void
 
@@ -85,8 +84,6 @@ nonisolated enum IMobileDevice {
     static let lockdownd_client_free = symbol("lockdownd_client_free", FreeHandle.self)
     static let lockdownd_start_service = symbol("lockdownd_start_service", StartService.self)
     static let lockdownd_get_value = symbol("lockdownd_get_value", LockdownGetValue.self)
-    static let lockdownd_set_value = symbol("lockdownd_set_value", LockdownSetValue.self)
-    static let plist_new_string = symbol("plist_new_string", PlistNewString.self)
     static let lockdownd_service_descriptor_free = symbol("lockdownd_service_descriptor_free", FreeHandle.self)
     static let sbservices_client_new = symbol("sbservices_client_new", NewServiceClient.self)
     static let sbservices_client_free = symbol("sbservices_client_free", FreeHandle.self)

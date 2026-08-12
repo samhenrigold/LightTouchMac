@@ -124,6 +124,14 @@ BREW="$(brew --prefix 2>/dev/null || echo /opt/homebrew)"
 for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair; do
     copy_tool "$BREW/bin/$tool"
 done
+# Compiled here rather than shipped prebuilt: ~80 lines of C against
+# Homebrew's libimobiledevice, embedded like the rest of the tools. It exists
+# because lockdownd_set_value must NOT run inside the app — see the comment
+# at the top of the source.
+TZ_BIN="$(mktemp -d)/lockdown-tz"
+cc -O2 -o "$TZ_BIN" "$SRC/scripts/lockdown-tz.c" \
+   -I"$BREW/include" -L"$BREW/lib" -limobiledevice-1.0 -lplist-2.0
+copy_tool "$TZ_BIN"
 copy_tool "${USBMUXD_QEMU:-$HOME/Developer/usbmuxd-qemu}/usbmuxd/src/usbmuxd"
 # NOTE: usbmuxd's -C directory is writable state (it stores SystemConfiguration
 # and a pairing record per device). The app copies the bundled seed out to
@@ -145,6 +153,15 @@ copy_tool "$QEMU/contrib/it-orientation/itorient"
 # ipod-helper is built, not committed (contrib/macos-app/ipod-helper.c), and the
 # qemu-ios app pipeline is what compiles it — take its copy.
 copy_tool "${IT_HELPER_BIN:-$QEMU/build/iPod touch.app/Contents/Resources/tools/ipod-helper}"
+
+# IMobileDevice.swift dlopens the UNVERSIONED names (libimobiledevice-1.0,
+# libplist-2.0); Homebrew install names are versioned, so the closure above
+# lands as libimobiledevice-1.0.6.dylib etc. Without these links, a Mac with
+# no Homebrew has no fallback and in-process app management silently dies.
+for stem in libimobiledevice-1.0 libplist-2.0; do
+    real="$(cd "$FRAMEWORKS" && ls "$stem".*.dylib 2>/dev/null | head -1)"
+    [ -n "$real" ] && ln -sfh "$real" "$FRAMEWORKS/$stem.dylib"
+done
 
 if [ -n "$MISSING" ]; then
     echo "  NOT bundled:$MISSING" >&2

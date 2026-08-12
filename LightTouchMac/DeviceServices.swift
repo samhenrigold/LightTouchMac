@@ -375,35 +375,6 @@ struct DeviceServices: Sendable {
         }
     }
 
-    /// Point the guest at a timezone via lockdown's TimeZone value — the path
-    /// iTunes used. lockdownd rewrites /var/db/timezone/localtime and posts
-    /// timezone_changed, which SpringBoard observes live: no respring, and the
-    /// status bar clock follows. Reads first so a matching zone costs no write.
-    func setTimeZone(_ identifier: String) async {
-        try? await run(Timeouts.query, "set timezone") { imd, device in
-            guard let newClient = imd.lockdownd_client_new_with_handshake,
-                  let getValue = imd.lockdownd_get_value,
-                  let setValue = imd.lockdownd_set_value,
-                  let newString = imd.plist_new_string,
-                  let plistFree = imd.plist_free else { throw DeviceError.unavailable }
-            var client: OpaquePointer?
-            let rc = newClient(device, &client, "LightTouchMac")
-            guard rc == imd.success, let client else { throw DeviceError.lockdown(rc) }
-            defer { _ = imd.lockdownd_client_free?(client) }
-
-            var current: OpaquePointer?
-            if "TimeZone".withCString({ getValue(client, nil, $0, &current) }) == imd.success,
-               let current {
-                defer { plistFree(current) }
-                if IMobileDevice.decode(current) as? String == identifier { return }
-            }
-            // setValue frees the plist it is handed — see LockdownSetValue.
-            let sr = "TimeZone".withCString { setValue(client, nil, $0, newString(identifier)) }
-            guard sr == imd.success else { throw DeviceError.lockdown(sr) }
-            NSLog("device: guest timezone set to \(identifier)")
-        }
-    }
-
     // MARK: - Service readiness
 
     /// Does installation_proxy answer right now? A fresh boot brings lockdownd

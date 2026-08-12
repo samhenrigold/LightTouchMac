@@ -499,6 +499,33 @@ struct DeviceTools: Sendable {
         }
     }
 
+    // MARK: - Timezone
+
+    /// Sync the guest's timezone through the bundled lockdown-tz helper — a
+    /// child process ON PURPOSE. lockdownd_set_value called in-process against
+    /// 3.1.3's lockdownd corrupts the heap: the app died ~20 s later in
+    /// unrelated Swift runtime code, reproducibly, while the identical call
+    /// from a child process is clean (scripts/lockdown-tz.c). The tool reads
+    /// first, sets only on mismatch, and prints the zone in effect. Dev builds
+    /// without the bundled tool skip quietly — the zone is cosmetic.
+    func setTimeZone(_ identifier: String) async throws {
+        guard let tool = Bundled.tool("lockdown-tz") else {
+            NSLog("timezone: no bundled lockdown-tz (dev build) — leaving the guest's zone alone")
+            return
+        }
+        let result = try await run(
+            .path(FilePath(tool)),
+            arguments: [identifier],
+            environment: toolEnvironment,
+            output: .string(limit: 1 << 10), error: .string(limit: 1 << 10)
+        )
+        guard result.terminationStatus.isSuccess else {
+            throw DeviceToolsError.failed(
+                "Could not set the device timezone. \(result.standardError)")
+        }
+        NSLog("timezone: guest zone now \(result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))")
+    }
+
     // MARK: - SSH terminal (opens Terminal.app itself)
     
     func openTerminal() async throws {

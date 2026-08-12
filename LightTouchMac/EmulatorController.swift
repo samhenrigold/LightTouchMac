@@ -195,13 +195,13 @@ final class EmulatorController {
     }
 
     /// Wait out the boot (services come up well after lockdown answers), then
-    /// set once. Idempotent and gated, so an overlapping run is harmless.
+    /// set until one attempt sticks — a transient "Invalid service" right
+    /// after boot just means the next 5 s tick tries again. Idempotent, so an
+    /// overlapping run is harmless.
     private func syncTimeZoneWhenReady() async {
         while !Task.isCancelled {
-            if state == .running, canManageApps, await deviceReady() {
-                guard let socket = usbmux.session?.clientSocket else { return }
-                await DeviceServices(clientSocket: socket)
-                    .setTimeZone(TimeZone.current.identifier)
+            if state == .running, canManageApps, await deviceReady(),
+               (try? await tools().setTimeZone(TimeZone.current.identifier)) != nil {
                 return
             }
             try? await Task.sleep(for: .seconds(5))
