@@ -276,7 +276,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Light Touch";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Light Touch carries the emulated iPod\U2019s Wi-Fi and USB traffic over your Mac\U2019s network stack. Nothing leaves this Mac unless you browse the network from inside the emulated device.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Light Touch carries the emulated iPod’s Wi-Fi and USB traffic over your Mac’s network stack. Nothing leaves this Mac unless you browse the network from inside the emulated device.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				INFOPLIST_KEY_NSViewGestureRecognizerIsExclusive = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -334,7 +334,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Light Touch";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Light Touch carries the emulated iPod\U2019s Wi-Fi and USB traffic over your Mac\U2019s network stack. Nothing leaves this Mac unless you browse the network from inside the emulated device.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Light Touch carries the emulated iPod’s Wi-Fi and USB traffic over your Mac’s network stack. Nothing leaves this Mac unless you browse the network from inside the emulated device.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				INFOPLIST_KEY_NSViewGestureRecognizerIsExclusive = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
