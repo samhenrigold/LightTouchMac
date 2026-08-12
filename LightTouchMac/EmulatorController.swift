@@ -153,6 +153,35 @@ final class EmulatorController {
 
         verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
         startOrientationWatch()   // idle until the guest is up and reachable
+        startTimeZoneSync()       // guest zone follows the Mac's, incl. travel
+    }
+
+    /// Keep the guest's timezone matched to the Mac's: once when the device
+    /// first answers after this boot, and again whenever the host's zone
+    /// changes (travel). Set through lockdown's TimeZone value — lockdownd
+    /// rewrites /var/db/timezone/localtime and SpringBoard follows live, so
+    /// no respring. The guest's clock itself is UTC from the RTC model; only
+    /// the zone needs the host's help.
+    private func startTimeZoneSync() {
+        NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange,
+                                               object: nil, queue: nil) { [weak self] _ in
+            Task { @MainActor in await self?.syncTimeZoneWhenReady() }
+        }
+        Task { [weak self] in await self?.syncTimeZoneWhenReady() }
+    }
+
+    /// Wait out the boot (services come up well after lockdown answers), then
+    /// set once. Idempotent and gated, so an overlapping run is harmless.
+    private func syncTimeZoneWhenReady() async {
+        while !Task.isCancelled {
+            if state == .running, canManageApps, await deviceReady() {
+                guard let socket = usbmux.session?.clientSocket else { return }
+                await DeviceServices(clientSocket: socket)
+                    .setTimeZone(TimeZone.current.identifier)
+                return
+            }
+            try? await Task.sleep(for: .seconds(5))
+        }
     }
 
     func stop() {
