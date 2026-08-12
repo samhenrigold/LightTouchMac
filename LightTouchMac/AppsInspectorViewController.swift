@@ -449,37 +449,40 @@ final class AppsInspectorViewController: NSViewController {
         configureAddRemove()
         let container = NSView()
         container.addSubview(addRemove)
-        NSLayoutConstraint.activate([
-            addRemove.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+        let expanded = [
             addRemove.topAnchor.constraint(equalTo: container.topAnchor, constant: 6),
             addRemove.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -6),
+        ]
+        NSLayoutConstraint.activate(expanded + [
+            addRemove.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
         ])
+        footerExpanded = expanded
+        footerCollapsed = container.heightAnchor.constraint(equalToConstant: 0)
         let controller = NSSplitViewItemAccessoryViewController()
         controller.view = container
-        bottomBar = controller
+        updateFooterVisibility()   // the pane opens in Store mode: born collapsed
         return controller
     }
 
-    /// The bottom bar the window controller hung off the split view item, and
-    /// the item itself — held so the Store can take the +/- footer down: those
-    /// controls only act on installed apps. Accessory controllers have no
-    /// hidden state, so visibility is remove/re-add (the documented pair).
-    /// Typed NSViewController because a stored property can't be gated on the
-    /// macOS 26 accessory class.
-    private var bottomBar: NSViewController?
-    weak var splitItem: NSSplitViewItem? { didSet { updateFooterVisibility() } }
+    /// The +/- footer only acts on installed apps, so the Store collapses it.
+    /// By CONSTRAINT, never by removing the accessory controller: the split
+    /// view item's accessory bar is SwiftUI-backed internally, and detaching /
+    /// re-attaching the controller mid-update crashed in its preference
+    /// machinery (PAC trap under DesignLibrary on the first segment click).
+    /// The hierarchy stays put; only the bar's height changes.
+    private var footerExpanded: [NSLayoutConstraint] = []
+    private var footerCollapsed: NSLayoutConstraint?
 
     private func updateFooterVisibility() {
         let storeMode = (mode == .store)
         addRemove.isHidden = storeMode   // pre-26, where the controls sit in the pane
-        guard #available(macOS 26.0, *),
-              let bottomBar = bottomBar as? NSSplitViewItemAccessoryViewController,
-              let splitItem else { return }
-        let attached = splitItem.bottomAlignedAccessoryViewControllers.contains(bottomBar)
-        if storeMode, attached {
-            bottomBar.removeFromParent()
-        } else if !storeMode, !attached {
-            splitItem.addBottomAlignedAccessoryViewController(bottomBar)
+        guard let footerCollapsed else { return }
+        if storeMode {
+            NSLayoutConstraint.deactivate(footerExpanded)
+            footerCollapsed.isActive = true
+        } else {
+            footerCollapsed.isActive = false
+            NSLayoutConstraint.activate(footerExpanded)
         }
     }
 
