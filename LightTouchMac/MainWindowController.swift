@@ -15,6 +15,7 @@ private extension NSToolbarItem.Identifier {
     static let zoom         = NSToolbarItem.Identifier("zoom")
     static let installApp   = NSToolbarItem.Identifier("installApp")
     static let openTerminal = NSToolbarItem.Identifier("openTerminal")
+    static let searchCatalog = NSToolbarItem.Identifier("searchCatalog")
 }
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
@@ -210,8 +211,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         NSApp.terminate(nil)
     }
     
+    /// ⌘F / Edit ▸ Find: focus the Legacy Store search field in the toolbar.
+    @objc func findCatalog(_ sender: Any?) {
+        inspectorVC.focusSearch()
+    }
+
     // MARK: - Toolbar
-    
+
     func toolbar(_ toolbar: NSToolbar,
                  itemForItemIdentifier id: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
@@ -226,6 +232,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             return item
         case .installApp:
             return button(id, "Install App", "square.and.arrow.down", #selector(installApp(_:)), "Install a decrypted .ipa")
+        case .searchCatalog:
+            // The inspector owns the field (its text drives the catalog/installed
+            // mode switch); the toolbar is just where it lives — the standard
+            // Mac home for search, riding above the inspector pane thanks to
+            // the tracking separator.
+            let item = NSSearchToolbarItem(itemIdentifier: id)
+            item.label = "Search"
+            item.paletteLabel = "Search Legacy Store"
+            item.toolTip = "Search Legacy Store for apps the device can run"
+            inspectorVC.attachSearchField(to: item)
+            return item
         case .openTerminal:
             return button(id, "SSH", "terminal", #selector(openDeviceTerminal(_:)), "Open a root shell on the device")
         case .zoom:
@@ -275,11 +292,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// floating in the middle of the titlebar.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.home, .lock, .rotate, .zoom,
-         .flexibleSpace, .inspectorTrackingSeparator, .flexibleSpace, .toggleInspector]
+         .flexibleSpace, .inspectorTrackingSeparator, .flexibleSpace, .searchCatalog, .toggleInspector]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .zoom, .installApp, .openTerminal,
+        [.home, .lock, .rotate, .zoom, .installApp, .openTerminal, .searchCatalog,
          .space, .flexibleSpace, .inspectorTrackingSeparator, .toggleInspector]
     }
     

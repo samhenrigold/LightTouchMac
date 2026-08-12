@@ -11,7 +11,8 @@ import Subprocess
 import System
 
 struct InstalledApp: Identifiable, Sendable {
-    let id: String        // CFBundleIdentifier
+    /// The `CFBundleIdentifier`
+    let id: String
     let name: String
     let version: String
 }
@@ -83,7 +84,8 @@ struct DeviceTools: Sendable {
     /// short, human phase strings for the sidebar row. The return string is
     /// non-empty only to carry the "SDK too new" marker the caller warns on.
     @discardableResult
-    func install(_ ipa: URL, progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
+    func install(_ ipa: URL, placeholderRaised: Bool = false,
+                 progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
         // A GL app on a non-baked image needs the ssh engine copy that only the
         // script performs — installing it in-process would wedge the device.
         // MinimumOSVersion, NOT DTSDKName. The SDK an app was BUILT with says
@@ -122,15 +124,19 @@ struct DeviceTools: Sendable {
             // interpolated into below.
             let key = await AppMetadataCache.bundleID(of: ipa)
                 ?? ipa.deletingPathExtension().lastPathComponent
-            let placeholder = "qemu-install-" + key
-                .filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
+            let placeholder = Self.placeholderID(for: key)
             // The add and the cancel are two independent fire-and-forget ssh
             // sessions, each with a ~1s floor, so a fast failure below (disk
             // full answers in about that long) could run the cancel FIRST and
             // strand a "downloading" placeholder on the home screen with nothing
             // ever coming to replace it. Chaining the cancel behind the add's
             // own task is what orders them.
-            let raised = placeholderIcon("add", placeholder)
+            //
+            // placeholderRaised: a catalog install already put this exact icon
+            // up at download start (installPlaceholder derives the same id from
+            // the same bundle id). Adding it again drew a SECOND placeholder —
+            // so adopt the existing one and only own the cancel.
+            let raised = placeholderRaised ? nil : placeholderIcon("add", placeholder)
             defer { placeholderIcon("cancel", placeholder, after: raised) }
 
             // An .ipa whose binary is archived 0644 installs fine and then never
@@ -340,6 +346,19 @@ struct DeviceTools: Sendable {
         try await guestRun("sync")
     }
 
+    /// Ask SpringBoard to launch an installed app — the same path a tap on
+    /// its icon takes (SBSLaunchApplicationWithIdentifier). sblaunch has no
+    /// argv (these guest binaries have no crt1), so the bundle id travels via
+    /// /tmp/sblaunch.id. SpringBoard refuses the request on a locked device.
+    func launchApp(_ bundleID: String) async throws {
+        guard bakedGuestTools else {
+            throw DeviceToolsError.failed("Launching apps from the sidebar needs the standard device image.")
+        }
+        // The filter is what makes the value safe inside the single quotes.
+        let id = bundleID.filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
+        try await guestRun("printf %s '\(id)' > /tmp/sblaunch.id && /usr/local/bin/sblaunch")
+    }
+
     /// Shut the guest's filesystem down through the kernel: sync, unmount
     /// everything, halt. No SpringBoard, no gesture, nothing drawn.
     ///
@@ -390,6 +409,25 @@ struct DeviceTools: Sendable {
     /// run when the install itself was cancelled; and if even that is lost, the
     /// icon is placed with saveIconState:NO and dies with the running
     /// SpringBoard rather than being written to disk.
+    /// The one id both phases share for a given app, so a placeholder raised
+    /// at download start is the SAME icon the install phase adopts and
+    /// cancels — never two. (Two ids was tried: the download's icon and the
+    /// install's coexisted on the home screen through the whole install.)
+    static func placeholderID(for key: String) -> String {
+        "qemu-install-" + key
+            .filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
+    }
+
+    /// Raise or drop the placeholder from outside the install path (the
+    /// catalog's download phase). Cancel of an id that is already gone is a
+    /// no-op on SpringBoard, so belt-and-suspenders cancels are safe.
+    @discardableResult
+    func installPlaceholder(_ action: String, bundleID: String,
+                            after previous: Task<Void, Never>? = nil) -> Task<Void, Never>? {
+        guard bakedGuestTools else { return nil }
+        return placeholderIcon(action, Self.placeholderID(for: bundleID), after: previous)
+    }
+
     @discardableResult
     private func placeholderIcon(_ action: String, _ id: String,
                                  after previous: Task<Void, Never>? = nil) -> Task<Void, Never> {
@@ -449,15 +487,15 @@ struct DeviceTools: Sendable {
             output: .string(limit: 1 << 16), error: .string(limit: 1 << 16)
         )
         if let marker {
-            guard (result.standardOutput ?? "").contains(marker) else {
+            guard result.standardOutput.contains(marker) else {
                 throw DeviceToolsError.failed(
-                    "The device did not run the command. \(result.standardError ?? "")")
+                    "The device did not run the command. \(result.standardError)")
             }
             return   // it ran; its own exit status is meaningless by then
         }
         guard result.terminationStatus.isSuccess else {
             throw DeviceToolsError.failed(
-                "Could not reach the device over SSH. \(result.standardError ?? "")")
+                "Could not reach the device over SSH. \(result.standardError)")
         }
     }
 
@@ -483,7 +521,7 @@ struct DeviceTools: Sendable {
         guard result.terminationStatus.isSuccess else {
             throw DeviceToolsError.failed(
                 "Could not open a shell on the device. This NAND image may not have sshd "
-                + "installed. \(result.standardError ?? "")")
+                + "installed. \(result.standardError)")
         }
     }
 }

@@ -98,16 +98,29 @@ enum MainMenuBuilder {
     }
     
     private static func editMenu() -> NSMenu {
-        // Not a text app. Every field is a label and the only control anywhere
-        // is a checkbox, so Cut/Paste/Delete/Select All and the whole Find,
-        // Spelling, Substitutions, Transformations and Speech tree validated to
-        // permanently disabled — five greyed submenus sitting above the two
-        // items that actually do something. Same reasoning that emptied File.
-        //
-        // AutoFill, Start Dictation and Emoji & Symbols are injected by AppKit
-        // rather than built here; they are suppressed in AppDelegate via the
-        // NSDisabled*MenuItem defaults, which is the only supported off switch.
+        // The standard text-editing block is REQUIRED now that the toolbar has
+        // a search field: menu key equivalents are the only thing that
+        // delivers ⌘A/⌘C/⌘V/⌘Z to a field editor, so removing them (this menu
+        // once held only the two guest items, on the "not a text app" theory)
+        // silently disabled selection and editing in the field. The items
+        // target the first responder and validate to disabled when no text is
+        // focused. The Find/Spelling/Substitutions tree stays out — still no
+        // text VIEW anywhere — and AutoFill, Start Dictation and Emoji &
+        // Symbols are suppressed in AppDelegate via NSDisabled*MenuItem.
         let menu = NSMenu(title: "Edit")
+        menu.addItem(item("Undo", #selector(FirstResponderActions.undo(_:)), "z"))
+        menu.addItem(item("Redo", #selector(FirstResponderActions.redo(_:)), "Z"))
+        menu.addItem(.separator())
+        menu.addItem(item("Cut", #selector(NSText.cut(_:)), "x"))
+        menu.addItem(item("Copy", #selector(NSText.copy(_:)), "c"))
+        menu.addItem(item("Paste", #selector(NSText.paste(_:)), "v"))
+        menu.addItem(item("Delete", #selector(NSText.delete(_:))))
+        menu.addItem(item("Select All", #selector(NSResponder.selectAll(_:)), "a"))
+        menu.addItem(.separator())
+        // One Find item, not the standard submenu: the only searchable thing
+        // is the Legacy Store field, and ⌘F should simply put the caret there.
+        menu.addItem(item("Find", #selector(MainWindowController.findCatalog(_:)), "f"))
+        menu.addItem(.separator())
         menu.addItem(item("Copy Screen", #selector(MainWindowController.copyScreen(_:)), "c", [.control, .command]))
         menu.addItem(item("Paste Text to Guest", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
         return menu

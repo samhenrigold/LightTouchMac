@@ -1061,6 +1061,7 @@ final class EmulatorController {
         return await DeviceServices(clientSocket: socket).activationState()
     }
     func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
+    func launchApp(_ bundleID: String) async throws      { try await tools().launchApp(bundleID) }
     func openTerminal() async throws                     { try await tools().openTerminal() }
     func syncFilesystem() async throws                   { try await tools().syncFilesystem() }
     func haltFilesystem() async throws                   { try await tools().haltFilesystem() }
@@ -1070,10 +1071,21 @@ final class EmulatorController {
     /// mid-install prompts instead of leaving a half-installed app.
     private(set) var isInstalling = false
 
-    func install(_ ipa: URL, progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
+    func install(_ ipa: URL, placeholderRaised: Bool = false,
+                 progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
         isInstalling = true
         defer { isInstalling = false }
-        return try await tools().install(ipa, progress: progress)
+        return try await tools().install(ipa, placeholderRaised: placeholderRaised, progress: progress)
+    }
+
+    /// Fire-and-forget App Store-style "downloading" placeholder on the guest
+    /// home screen, mirroring a catalog download the host is running — under
+    /// the SAME id the install path uses, so the install adopts it. Cosmetic
+    /// by design: a device that can't take it right now costs nothing.
+    @discardableResult
+    func installPlaceholder(_ action: String, bundleID: String,
+                            after previous: Task<Void, Never>? = nil) -> Task<Void, Never>? {
+        (try? tools())?.installPlaceholder(action, bundleID: bundleID, after: previous)
     }
 
     /// The home screen's own icon order, for the sidebar to mirror and reorder.

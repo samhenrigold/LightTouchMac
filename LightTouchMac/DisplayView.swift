@@ -68,6 +68,8 @@ final class DisplayView: NSView {
     weak var emulator: EmulatorController?
     /// Called when an .ipa is dropped on the screen.
     var onDropIPA: ((URL) -> Void)?
+    /// Called when a Legacy Store row is dropped on the screen.
+    var onDropCatalogApp: ((CatalogApp) -> Void)?
 
     /// Points of breathing room between the shell and the pane edge when
     /// zoomed. A flat inset, not a fraction of the pane: 0.85 of the pane threw
@@ -152,7 +154,7 @@ final class DisplayView: NSView {
         homeButton.action = #selector(homeTapped)
         addSubview(homeButton)
 
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([.fileURL, .ltmCatalogApp])
         setAccessibilityLabel("iPod touch screen")
         setAccessibilityRole(.image)
     }
@@ -908,10 +910,21 @@ final class DisplayView: NSView {
         // and then queued one "The device isn't ready yet" sheet per .ipa to be
         // dismissed one at a time.
         guard emulator?.canReachDevice == true else { return [] }
+        if !droppedCatalogApps(sender).isEmpty { return .copy }
+        // Local drags carry .fileURL too (an installed row is draggable to
+        // the Finder as its .ipa), but dropping one back on the device would
+        // just reinstall what's already there — only OUTSIDE files install.
+        guard sender.draggingSource == nil else { return [] }
         return droppedIPA(sender) != nil ? .copy : []
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let catalog = droppedCatalogApps(sender)
+        if !catalog.isEmpty {
+            catalog.forEach { onDropCatalogApp?($0) }
+            return true
+        }
+        guard sender.draggingSource == nil else { return false }
         let ipas = droppedIPAs(sender)
         guard !ipas.isEmpty else { return false }
         ipas.forEach { onDropIPA?($0) }   // AppInstaller queues them
@@ -924,6 +937,14 @@ final class DisplayView: NSView {
         guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self])
                 as? [URL] else { return [] }
         return urls.filter { $0.pathExtension.lowercased() == "ipa" }
+    }
+
+    /// Store rows dragged from the inspector: decode the private payload.
+    private func droppedCatalogApps(_ sender: NSDraggingInfo) -> [CatalogApp] {
+        (sender.draggingPasteboard.pasteboardItems ?? []).compactMap { item in
+            item.data(forType: .ltmCatalogApp)
+                .flatMap { try? JSONDecoder().decode(CatalogApp.self, from: $0) }
+        }
     }
 }
 

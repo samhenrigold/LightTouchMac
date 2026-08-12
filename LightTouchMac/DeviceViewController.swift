@@ -17,6 +17,10 @@ final class DeviceViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
         displayView.emulator = emulator
         displayView.onDropIPA = { [weak self] url in self?.installDropped(url) }
+        displayView.onDropCatalogApp = { [weak self] app in
+            guard let self, self.emulator.canReachDevice else { return }
+            AppInstaller.startCatalog(app, with: self.emulator, presenting: self.view.window)
+        }
     }
     
     required init?(coder: NSCoder) { fatalError("not used") }
