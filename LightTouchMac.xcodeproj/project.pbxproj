@@ -270,8 +270,8 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
-					"/Users/shg/Developer/qemu-ios/contrib/ios-app",
-					"/Users/shg/Developer/qemu-ios/contrib/macos-app",
+					"$(HOME)/Developer/qemu-ios/contrib/ios-app",
+					"$(HOME)/Developer/qemu-ios/contrib/macos-app",
 				);
 				INFOPLIST_KEY_CFBundleDisplayName = "Light Touch";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -285,8 +285,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
-					"/Users/shg/Developer/qemu-ios/build-min12b/libqemu-arm.dylib",
-					"-Wl,-rpath,/Users/shg/Developer/qemu-ios/build-min12b",
+					"$(HOME)/Developer/qemu-ios/build-min12b/libqemu-arm.dylib",
+					"-Wl,-rpath,$(HOME)/Developer/qemu-ios/build-min12b",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = gold.samhenri.LightTouchMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -327,8 +327,8 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
-					"/Users/shg/Developer/qemu-ios/contrib/ios-app",
-					"/Users/shg/Developer/qemu-ios/contrib/macos-app",
+					"$(HOME)/Developer/qemu-ios/contrib/ios-app",
+					"$(HOME)/Developer/qemu-ios/contrib/macos-app",
 				);
 				INFOPLIST_KEY_CFBundleDisplayName = "Light Touch";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -342,8 +342,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
-					"/Users/shg/Developer/qemu-ios/build-min12b/libqemu-arm.dylib",
-					"-Wl,-rpath,/Users/shg/Developer/qemu-ios/build-min12b",
+					"$(HOME)/Developer/qemu-ios/build-min12b/libqemu-arm.dylib",
+					"-Wl,-rpath,$(HOME)/Developer/qemu-ios/build-min12b",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = gold.samhenri.LightTouchMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
