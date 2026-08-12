@@ -49,9 +49,11 @@ def check_env_parity():
     harness = boot_env_keys(m.group(0)) if m else {}
 
     # The env 3.1.3 REQUIRES to boot — both must agree on these, or one side
-    # boots a device the other cannot. (IT_DIRECT_IBOOT is path-derived on both
-    # and IT_IMG3_SIG_ASIS is an app-only cosmetic, so neither is compared.)
-    required = ["IT_LCD_BRIGHT", "IT_WDT_NORESET", "IT_TVOUT_READY", "IT_TVOUT_VBLANK",
+    # boots a device the other cannot. (IT_DIRECT_IBOOT is path-derived on both,
+    # IT_IMG3_SIG_ASIS is an app-only cosmetic, and IT_LCD_BRIGHT is a
+    # harness-only knob — its lit-pixel checks need full exposure, while the app
+    # must show the real backlight or Lock looks dead — so none are compared.)
+    required = ["IT_WDT_NORESET", "IT_TVOUT_READY", "IT_TVOUT_VBLANK",
                 "IT_BOOT_ARGS", "IT_BOOT_ARGS_DELAY_MS", "IT_BOOT_ARGS_REPEAT",
                 "IT_BOOT_ARGS_INTERVAL_MS"]
     drift = [k for k in required if app.get(k) != harness.get(k)]

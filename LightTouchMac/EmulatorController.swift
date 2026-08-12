@@ -1150,8 +1150,11 @@ final class EmulatorController {
     private func setBootEnv() {
         // The settings 3.1.3 will not boot without, plus the code-signing gate
         // (values from contrib/run-ipod-touch.sh).
+        // No IT_LCD_BRIGHT override: it pinned the panel at full exposure, so
+        // the guest turning its backlight off (the Lock button's entire visible
+        // effect) never reached the window and Lock read as dead. The harness
+        // keeps the override — its checks count lit pixels.
         let env = [
-            "IT_LCD_BRIGHT": "255",
             "IT_DIRECT_IBOOT": options.iBoot,
             "IT_WDT_NORESET": "1",
             "IT_TVOUT_READY": "1",
