@@ -108,9 +108,26 @@ final class EmulatorController {
             setenv("IT_OSK", "1", 1)   // appsync runs imply the on-screen keyboard
         }
 
+        // A raw NAND directory (dev checkout) is used as-is; a packaged app
+        // carries only the opaque blob, unpacked into Application Support on
+        // first boot — the bundle is signed and read-only, and the notary
+        // would have rejected the raw pages inside it.
+        let nandBase: String
+        let nandUnpack: (packed: String, dest: String)?
+        if FileManager.default.fileExists(atPath: options.nandImage) {
+            nandBase = options.nandImage
+            nandUnpack = nil
+        } else {
+            let dest = stateDir.appendingPathComponent("device/\(options.nand)",
+                                                       isDirectory: true).path
+            nandBase = dest
+            nandUnpack = FileManager.default.fileExists(atPath: dest)
+                ? nil : (options.packedNAND, dest)
+        }
+
         var machine = "iPod-Touch"
         + ",bootrom=\(options.bootrom)"
-        + ",nand=\(options.nandImage)"
+        + ",nand=\(nandBase)"
         + ",nor=\(options.nor)"
         + ",nandrw=\(overlay.path)"
         if options.network {
@@ -136,6 +153,13 @@ final class EmulatorController {
         qemu_ios_ui_attach(nil, nil)
 
         let thread = Thread {
+            // First boot of a packaged app: inflate the device image before
+            // QEMU opens it. On this thread, not main — it takes a while and
+            // the window already says "Booting…".
+            if let nandUnpack, !Self.unpackNAND(nandUnpack.packed, into: nandUnpack.dest) {
+                DispatchQueue.main.async { self.qemuDidExit(code: 1) }
+                return
+            }
             var cargs = argv.map { strdup($0) }
             cargs.append(nil)
             let rc = qemu_ios_main(Int32(argv.count), &cargs)
@@ -190,6 +214,39 @@ final class EmulatorController {
         // exit; leaving it running would strand an iproxy and an ssh behind us.
         orientationWatch?.terminate()
         orientationWatch = nil
+    }
+
+    /// Inflate the packed device image with the bundled ipod-helper. Into a
+    /// .partial sibling first, renamed only on success, so a first launch
+    /// killed mid-unpack can't leave a torn base image that boots corrupt.
+    private static func unpackNAND(_ packed: String, into dest: String) -> Bool {
+        guard let helper = Bundled.tool("ipod-helper") else {
+            NSLog("nand: packed image present but no bundled ipod-helper to unpack it")
+            return false
+        }
+        NSLog("nand: first launch — unpacking the device image")
+        let fm = FileManager.default
+        let tmp = dest + ".partial"
+        try? fm.removeItem(atPath: tmp)
+        try? fm.createDirectory(atPath: (dest as NSString).deletingLastPathComponent,
+                                withIntermediateDirectories: true)
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: helper)
+        task.arguments = ["nand-unpack", packed, tmp]
+        do { try task.run() } catch {
+            NSLog("nand: could not run ipod-helper: \(error.localizedDescription)")
+            return false
+        }
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else {
+            NSLog("nand: unpack failed (exit \(task.terminationStatus))")
+            return false
+        }
+        do { try fm.moveItem(atPath: tmp, toPath: dest) } catch {
+            NSLog("nand: could not move the unpacked image into place: \(error.localizedDescription)")
+            return false
+        }
+        return true
     }
 
     /// The QEMU thread returned — the VM is gone for this process (QEMU can't

@@ -54,13 +54,21 @@ struct LaunchOptions: ParsableArguments {
     var iBoot: String   { "\(filesRoot)/ios3/iBoot.bin" }
     var nor: String     { "\(filesRoot)/ios3/nor_7E18.bin" }
     var nandImage: String { "\(filesRoot)/\(nand)" }
+    /// A packaged app ships the NAND as ONE opaque blob rather than raw page
+    /// files: Apple's notary walks every file in the bundle and rejects the
+    /// armv6 Mach-Os that a raw iOS filesystem inevitably contains (see
+    /// qemu-ios contrib/macos-app/nandpack.py). Unpacked on first boot.
+    var packedNAND: String { "\(filesRoot)/nand.itnand" }
 
     /// Required assets that don't exist, so the app can report them up front
     /// instead of failing inside the dylib on the QEMU thread with no UI — a
     /// missing NAND used to be an invisible hang.
     func missingAssets() -> [String] {
-        [filesRoot, bootrom, iBoot, nor, nandImage].filter {
-            !FileManager.default.fileExists(atPath: $0)
+        let fm = FileManager.default
+        var missing = [filesRoot, bootrom, iBoot, nor].filter { !fm.fileExists(atPath: $0) }
+        if !fm.fileExists(atPath: nandImage), !fm.fileExists(atPath: packedNAND) {
+            missing.append(nandImage)
         }
+        return missing
     }
 }

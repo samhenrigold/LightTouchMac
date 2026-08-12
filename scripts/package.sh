@@ -187,12 +187,17 @@ if [ "$FILES" != none ]; then
         [ -e "$f" ] || { echo "missing device asset: $f (LTM_ASSETS=none to skip)" >&2; exit 1; }
     done
     DEVICE="$APP/Contents/Resources/device"
-    echo "embedding device assets ($NAND_NAME, ~1.2 GB)…"
+    echo "embedding device assets ($NAND_NAME, packed)…"
     rm -rf "$DEVICE"
     mkdir -p "$DEVICE/ios3"
     cp "$FILES/bootrom_240_4" "$DEVICE/"
     cp "$FILES/ios3/iBoot.bin" "$FILES/ios3/nor_7E18.bin" "$DEVICE/ios3/"
-    cp -R "$FILES/$NAND_NAME" "$DEVICE/$NAND_NAME"
+    # The NAND goes in as ONE opaque blob, never raw pages: the notary walks
+    # every file in the bundle and rejects the armv6 Mach-Os a raw iOS
+    # filesystem contains — and it opens tarballs too, so only a format it
+    # cannot recognise works (see qemu-ios contrib/macos-app/nandpack.py).
+    # The app unpacks it into Application Support on first boot.
+    python3 "$QEMU/contrib/macos-app/nandpack.py" pack "$FILES/$NAND_NAME" "$DEVICE/nand.itnand"
 fi
 
 # Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
