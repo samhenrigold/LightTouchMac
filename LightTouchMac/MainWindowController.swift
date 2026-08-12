@@ -49,6 +49,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         inspectorItem.maximumThickness = 400
         if #available(macOS 26.0, *) {
             inspectorItem.addBottomAlignedAccessoryViewController(inspectorVC.makeBottomBar())
+            // Hands the inspector control of its own footer: setting this
+            // immediately takes the bar down again, because the pane opens in
+            // Store mode where +/- has nothing to act on.
+            inspectorVC.splitItem = inspectorItem
         }
         split.addSplitViewItem(inspectorItem)
         

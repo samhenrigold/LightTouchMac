@@ -350,17 +350,13 @@ final class AppsInspectorViewController: NSViewController {
         placeholder.translatesAutoresizingMaskIntoConstraints = false
         placeholder.isHidden = true
 
-        banner.font = .systemFont(ofSize: 11, weight: .medium)
+        // A quiet caption, the way Mail dates its last check — no fill at all.
+        // Both a yellow band and a gray quaternary strip were tried; any
+        // edge-to-edge fill under the segmented control reads as a broken
+        // control, not a status line.
+        banner.font = .systemFont(ofSize: 11)
         banner.textColor = .secondaryLabelColor
         banner.alignment = .center
-        banner.lineBreakMode = .byTruncatingTail
-        // drawsBackground with an NSColor (not a captured layer cgColor) so the
-        // tint re-resolves when the user switches Light/Dark.
-        // A quiet inline notice, not a warning stripe. The flat yellow band
-        // read as an error and clashed with the sidebar; a subtle fill plus a
-        // hairline separator matches how AppKit sidebars carry status.
-        banner.drawsBackground = true
-        banner.backgroundColor = NSColor.quaternarySystemFill
         banner.lineBreakMode = .byTruncatingMiddle
         banner.translatesAutoresizingMaskIntoConstraints = false
         banner.isHidden = true
@@ -390,8 +386,8 @@ final class AppsInspectorViewController: NSViewController {
             modeControl.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
 
             banner.topAnchor.constraint(equalTo: modeControl.bottomAnchor, constant: 6),
-            banner.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            banner.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            banner.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            banner.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
             bannerHeight,
 
             scroll.topAnchor.constraint(equalTo: banner.bottomAnchor),
@@ -458,7 +454,31 @@ final class AppsInspectorViewController: NSViewController {
         ])
         let controller = NSSplitViewItemAccessoryViewController()
         controller.view = container
+        bottomBar = controller
         return controller
+    }
+
+    /// The bottom bar the window controller hung off the split view item, and
+    /// the item itself — held so the Store can take the +/- footer down: those
+    /// controls only act on installed apps. Accessory controllers have no
+    /// hidden state, so visibility is remove/re-add (the documented pair).
+    /// Typed NSViewController because a stored property can't be gated on the
+    /// macOS 26 accessory class.
+    private var bottomBar: NSViewController?
+    weak var splitItem: NSSplitViewItem? { didSet { updateFooterVisibility() } }
+
+    private func updateFooterVisibility() {
+        let storeMode = (mode == .store)
+        addRemove.isHidden = storeMode   // pre-26, where the controls sit in the pane
+        guard #available(macOS 26.0, *),
+              let bottomBar = bottomBar as? NSSplitViewItemAccessoryViewController,
+              let splitItem else { return }
+        let attached = splitItem.bottomAlignedAccessoryViewControllers.contains(bottomBar)
+        if storeMode, attached {
+            bottomBar.removeFromParent()
+        } else if !storeMode, !attached {
+            splitItem.addBottomAlignedAccessoryViewController(bottomBar)
+        }
     }
 
     private func configureAddRemove() {
@@ -744,7 +764,7 @@ final class AppsInspectorViewController: NSViewController {
             ? "USB unavailable — list from \(when)"
             : "Device not responding — list from \(when)"
         banner.isHidden = false
-        bannerHeight?.constant = 24
+        bannerHeight?.constant = 18
     }
 
     private func hideStaleBanner() {
@@ -960,6 +980,7 @@ final class AppsInspectorViewController: NSViewController {
         tableView.deselectAll(nil)
         tableView.reloadData()
         updateButtons()
+        updateFooterVisibility()
         switch newMode {
         case .installed:
             showPlaceholder(installedPlaceholderText)
