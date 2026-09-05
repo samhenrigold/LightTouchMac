@@ -9,6 +9,11 @@ import Cocoa
 import UniformTypeIdentifiers
 
 private extension NSToolbarItem.Identifier {
+    static let screenshot = NSToolbarItem.Identifier("screenshot")
+    static let recording = NSToolbarItem.Identifier("recording")
+    static let liveText = NSToolbarItem.Identifier("liveText")
+    static let copyScreen = NSToolbarItem.Identifier("copyScreen")
+    static let fingerDots = NSToolbarItem.Identifier("fingerDots")
     static let home         = NSToolbarItem.Identifier("home")
     static let lock         = NSToolbarItem.Identifier("lock")
     static let rotate       = NSToolbarItem.Identifier("rotate")
@@ -72,6 +77,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         toolbar.allowsUserCustomization = true
         toolbar.autosavesConfiguration = true
         window.toolbar = toolbar
+        if !UserDefaults.standard.bool(forKey: "captureToolbarItemsAdded") {
+            for id: NSToolbarItem.Identifier in [.screenshot, .recording, .liveText] {
+                if !toolbar.items.contains(where: { $0.itemIdentifier == id }) {
+                    let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == .inspectorTrackingSeparator }) ?? toolbar.items.count
+                    toolbar.insertItem(withItemIdentifier: id, at: index)
+                }
+            }
+            UserDefaults.standard.set(true, forKey: "captureToolbarItemsAdded")
+        }
         
         // Out and in. Momentary, because both are commands rather than states
         // to sit in — which state you are in is the menu's job, where the
@@ -213,6 +227,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                  itemForItemIdentifier id: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         switch id {
+        case .screenshot:
+            return button(id, "Screenshot", "camera", #selector(saveScreenshot(_:)), "Save a screenshot (⇧⌘S)")
+        case .recording:
+            return button(id, "Record", "record.circle", #selector(toggleRecording(_:)), "Start or stop screen recording (⇧⌘R)")
+        case .liveText:
+            return button(id, "Live Text", "text.viewfinder", #selector(showLiveText(_:)), "Select text on the device screen (⇧⌘L)")
+        case .copyScreen:
+            return button(id, "Copy Screen", "doc.on.doc", #selector(copyScreen(_:)), "Copy the device screen (⇧⌘C)")
+        case .fingerDots:
+            return button(id, "Finger Dots", "hand.draw", #selector(toggleTouchOverlay(_:)), "Show or hide touches")
         case .home:
             return button(id, "Home", "house", #selector(deviceHome(_:)), "Press the Home button")
         case .lock:
@@ -300,12 +324,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// view's divider, so the toggle rides above the inspector rather than
     /// floating in the middle of the titlebar.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .zoom,
+        [.home, .lock, .rotate, .zoom, .screenshot, .recording, .liveText,
          .flexibleSpace, .inspectorTrackingSeparator, .flexibleSpace, .searchCatalog, .toggleInspector]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .zoom, .installApp, .openTerminal, .searchCatalog,
+        [.home, .lock, .rotate, .zoom, .screenshot, .recording, .liveText, .copyScreen, .fingerDots, .installApp, .openTerminal, .searchCatalog,
          .space, .flexibleSpace, .inspectorTrackingSeparator, .toggleInspector]
     }
     
@@ -749,6 +773,19 @@ extension MainWindowController: NSToolbarItemValidation {
         // one another, so choosing a second .ipa mid-install is supported and
         // blocking it was a regression. The terminal is gated, because it opens
         // a competing lockdown session.
+        case .screenshot, .copyScreen:
+            return !emulator.isPoweredOff && !emulator.isDead
+        case .recording:
+            let active = recordingOutput != nil
+            item.label = finishingRecording ? "Finishing…" : active ? "Stop Recording" : "Record"
+            item.image = NSImage(systemSymbolName: active ? "stop.circle.fill" : "record.circle", accessibilityDescription: item.label)
+            return !finishingRecording && (active || emulator.isRunning)
+        case .liveText:
+            item.label = deviceVC.screen.isShowingLiveText ? "Dismiss Live Text" : "Live Text"
+            return deviceVC.screen.isShowingLiveText || (!emulator.isPoweredOff && !emulator.isDead)
+        case .fingerDots:
+            item.label = deviceVC.screen.showsTouches ? "Hide Finger Dots" : "Show Finger Dots"
+            return true
         case .installApp:
             return emulator.canQueueInstall
         case .openTerminal:

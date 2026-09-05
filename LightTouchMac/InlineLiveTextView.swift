@@ -10,6 +10,7 @@ final class InlineLiveTextView: NSView, ImageAnalysisOverlayViewDelegate {
     private let analyzer = ImageAnalyzer()
     private let doneButton = NSButton(title: "Done", target: nil, action: nil)
     private let statusLabel = NSTextField(labelWithString: "Recognizing text…")
+    private var hasHighlightedItems = false
     private var analysisTask: Task<Void, Never>?
     var onClose: (() -> Void)?
     let capturedImage: CGImage
@@ -48,6 +49,7 @@ final class InlineLiveTextView: NSView, ImageAnalysisOverlayViewDelegate {
                                                         configuration: ImageAnalyzer.Configuration([.text]))
                 try Task.checkCancellation()
                 overlay.analysis = analysis
+                hasHighlightedItems = true
                 overlay.selectableItemsHighlighted = true
                 statusLabel.isHidden = true
                 window?.makeFirstResponder(overlay)
@@ -66,7 +68,7 @@ final class InlineLiveTextView: NSView, ImageAnalysisOverlayViewDelegate {
         statusLabel.sizeToFit()
         statusLabel.frame.origin = CGPoint(x: 6, y: bounds.height - statusLabel.frame.height - 6)
     }
-    func stop() { analysisTask?.cancel(); removeFromSuperview() }
+    func stop() { overlay.delegate = nil; analysisTask?.cancel(); removeFromSuperview() }
     @objc private func done(_ sender: Any?) { onClose?() }
     override func mouseDown(with event: NSEvent) {}
     override func mouseDragged(with event: NSEvent) {}
@@ -76,6 +78,11 @@ final class InlineLiveTextView: NSView, ImageAnalysisOverlayViewDelegate {
     override func rotate(with event: NSEvent) {}
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { onClose?() } else { super.keyDown(with: event) }
+    }
+    func overlayView(_ overlayView: ImageAnalysisOverlayView,
+                     highlightSelectedItemsDidChange highlighted: Bool) {
+        if highlighted { hasHighlightedItems = true }
+        else if hasHighlightedItems { onClose?() }
     }
     func contentsRect(for overlayView: ImageAnalysisOverlayView) -> CGRect {
         CGRect(x: 0, y: 0, width: 1, height: 1)

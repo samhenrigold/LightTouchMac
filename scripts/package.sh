@@ -43,7 +43,9 @@ fi
 # PackageFrameworks OUTSIDE the bundle — it packages cleanly and then fails
 # on any other Mac. Build Release: xcodebuild -scheme LightTouchMac
 # -configuration Release.
-if otool -L "$APP/Contents/MacOS/LightTouchMac" | grep -q '\.debug\.dylib'; then
+APP_EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
+APP_BIN="$APP/Contents/MacOS/$APP_EXECUTABLE"
+if otool -L "$APP_BIN" | grep -q '\.debug\.dylib'; then
     echo "$APP is a Debug build (loads a .debug.dylib); package a Release build" >&2
     exit 1
 fi
@@ -94,7 +96,7 @@ case "$COPIED" in
         ;;
 esac
 
-APP_BIN="$APP/Contents/MacOS/LightTouchMac"
+APP_BIN="$APP/Contents/MacOS/$APP_EXECUTABLE"
 
 # ---------------------------------------------------------- tools the app runs
 #

@@ -105,7 +105,7 @@ enum MainMenuBuilder {
         // is the Legacy Store field, and ⌘F should simply put the caret there.
         menu.addItem(item("Find", #selector(MainWindowController.findCatalog(_:)), "f"))
         menu.addItem(.separator())
-        menu.addItem(item("Copy Screen", #selector(MainWindowController.copyScreen(_:)), "c", [.control, .command]))
+        menu.addItem(item("Copy Screen", #selector(MainWindowController.copyScreen(_:)), "c", [.shift, .command]))
         menu.addItem(item("Paste Text to Guest", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
         return menu
     }
