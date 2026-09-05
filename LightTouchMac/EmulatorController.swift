@@ -17,6 +17,18 @@ final class EmulatorController {
     private(set) var shuttingDown = false { didSet { onStatusChange?() } }
     private(set) var isSleeping = false { didSet { if oldValue != isSleeping { onStatusChange?() } } }
     private(set) var foregroundAppName: String? { didSet { if oldValue != foregroundAppName { onStatusChange?() } } }
+    private(set) var webProxy = WebProxyConfiguration.load()
+    private(set) var webProxyStatus = "Waiting for device"
+    private var proxyRevision = 0
+    private(set) var webProxyAvailable = false
+    func configureWebProxy(_ value: WebProxyConfiguration) throws {
+        guard webProxyAvailable else { throw DeviceToolsError.failed("The web proxy helper is unavailable, or networking is disabled.") }
+        try value.save()
+        webProxy = value
+        proxyRevision += 1
+        webProxyStatus = "Waiting for device"
+        onStatusChange?()
+    }
     private var foregroundTask: Task<Void, Never>?
     private var bootGeneration = 0
     var isPoweredOff: Bool { state == .poweredOff }
@@ -183,7 +195,15 @@ final class EmulatorController {
             "-serial", "file:\(serialLog.path)",
         ]
         if options.network {
-            argv += ["-netdev", "user,id=wifi0"]   // host networking via slirp
+            var network = "user,id=wifi0"
+            if let helper = Bundled.resolve("itwebproxy", fallbacks: ["\(options.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"]) {
+                do {
+                    try webProxy.writeRouting()
+                    network += WebProxyConfiguration.guestForward(helper: helper)
+                    webProxyAvailable = true
+                } catch { webProxyStatus = error.localizedDescription }
+            }
+            argv += ["-netdev", network]
         }
         argv += restoreArgs(overlay: overlay)      // -incoming, if a snapshot is trusted
 
@@ -811,9 +831,26 @@ final class EmulatorController {
         let generation = bootGeneration
         foregroundTask = Task { [weak self] in
             var staged = false
+            var appliedProxyRevision: Int?
             while !Task.isCancelled {
                 guard let self else { return }
                 if self.canReachDevice, !self.isSleeping, !self.isInstalling, !AppInstaller.hasPendingWork {
+                    if self.webProxyAvailable && appliedProxyRevision != self.proxyRevision {
+                        let revision = self.proxyRevision
+                        do {
+                            try await self.tools().configureWebProxy(enabled: self.webProxy.mode != .off)
+                            try Task.checkCancellation()
+                            guard generation == self.bootGeneration else { return }
+                            if revision == self.proxyRevision {
+                                appliedProxyRevision = revision
+                                self.webProxyStatus = self.webProxy.mode == .off ? "Off — previous device settings restored" : "Active"
+                                self.onStatusChange?()
+                            }
+                        } catch {
+                            if Task.isCancelled { return }
+                            self.webProxyStatus = error.localizedDescription
+                        }
+                    }
                     do {
                         let name = try await self.tools().foregroundAppName(stageHelper: !staged)
                         try Task.checkCancellation()

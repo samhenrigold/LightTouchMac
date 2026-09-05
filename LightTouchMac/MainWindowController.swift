@@ -366,6 +366,44 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         syncRotateSymbol()
     }
 
+    @objc func configureWebProxy(_ sender: Any?) {
+        guard let window else { return }
+        let current = emulator.webProxy
+        let alert = NSAlert()
+        alert.messageText = "HTTP Proxy"
+        alert.informativeText = "Direct HTTP uses your Mac’s internet connection. For WaybackProxy, start its server and enter its address below (usually 127.0.0.1:8888). Configure the archive date in WaybackProxy. Changes apply when the device is awake and ready."
+        alert.addButton(withTitle: "Apply")
+        alert.addButton(withTitle: "Cancel")
+        let mode = NSPopUpButton(frame: .zero, pullsDown: false)
+        mode.addItems(withTitles: WebProxyConfiguration.Mode.allCases.map(\.title))
+        mode.selectItem(at: WebProxyConfiguration.Mode.allCases.firstIndex(of: current.mode) ?? 0)
+        let host = NSTextField(string: current.host)
+        let port = NSTextField(string: String(current.port))
+        let grid = NSGridView(views: [
+            [NSTextField(labelWithString: "Mode"), mode],
+            [NSTextField(labelWithString: "External host"), host],
+            [NSTextField(labelWithString: "Port"), port],
+            [NSTextField(labelWithString: "Status"), NSTextField(wrappingLabelWithString: emulator.webProxyStatus)]
+        ])
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 1).width = 280
+        grid.rowSpacing = 10
+        grid.frame.size = grid.fittingSize
+        alert.accessoryView = grid
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            var value = current
+            value.mode = WebProxyConfiguration.Mode.allCases[mode.indexOfSelectedItem]
+            value.host = host.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            value.port = Int(port.stringValue) ?? 0
+            do { try self.emulator.configureWebProxy(value) }
+            catch {
+                let failure = NSAlert(error: error)
+                failure.beginSheetModal(for: window)
+            }
+        }
+    }
+
     @objc func toggleVerboseBoot(_ sender: Any?) {
         UserDefaults.standard.set(!EmulatorController.verboseBoot,
                                   forKey: EmulatorController.verboseBootDefaultsKey)
@@ -628,6 +666,8 @@ extension MainWindowController: NSMenuItemValidation {
              #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)),
              #selector(deviceRotateRight(_:)), #selector(deviceShake(_:)):
             return emulator.acceptsInput
+        case #selector(configureWebProxy(_:)):
+            return emulator.webProxyAvailable
         case #selector(toggleVerboseBoot(_:)):
             menuItem.state = EmulatorController.verboseBoot ? .on : .off
             return true

@@ -452,6 +452,14 @@ struct DeviceTools: Sendable {
         return value.isEmpty ? nil : String(value.prefix(200))
     }
 
+    func configureWebProxy(enabled: Bool) async throws {
+        guard let helper = Bundled.resolve("itproxy", fallbacks: [
+            "\(filesRoot)/../qemu-ios/contrib/it-proxy/itproxy"
+        ]) else { throw DeviceToolsError.toolMissing("itproxy") }
+        let action = enabled ? "on" : "off"
+        try await guestRun("cat > /tmp/ltm-itproxy.new && chmod 755 /tmp/ltm-itproxy.new && mv /tmp/ltm-itproxy.new /tmp/ltm-itproxy && /tmp/ltm-itproxy \(action)", stdinPath: helper)
+    }
+
     /// Push the guest's dirty buffers to flash.
     func syncFilesystem() async throws {
         try await guestRun("sync")

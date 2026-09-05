@@ -141,6 +141,8 @@ TZ_BIN="$WORK/lockdown-tz"
 cc -O2 -mmacosx-version-min="$MINOS" -o "$TZ_BIN" "$SRC/scripts/lockdown-tz.c" \
    -I"$DEPS/include" -L"$DEPS/lib" -limobiledevice-1.0 -lplist-2.0
 copy_tool "$TZ_BIN"
+CFLAGS="-mmacosx-version-min=$MINOS" bash "$QEMU/contrib/it-webproxy/build.sh"
+copy_tool "$QEMU/contrib/it-webproxy/itwebproxy"
 copy_tool "${USBMUXD_BIN:-$QEMU/build-native14/build/usbmuxd/src/usbmuxd}"
 
 # NOTE: usbmuxd's -C directory is writable state (it stores SystemConfiguration
@@ -157,6 +159,7 @@ copy_tool "$QEMU/contrib/it-instprogress/sbdlicon" guest
 # the host still waits for an actual guest PMU power-off event.
 copy_tool "$QEMU/contrib/it-halt/ithalt" guest
 copy_tool "$QEMU/contrib/it-status/itstatus" guest
+copy_tool "$QEMU/contrib/it-proxy/itproxy" guest
 # Auto-rotation's guest-side reporter. Without it the feature is silently absent
 # from every packaged build — the app resolves it bundle-first and then falls
 # back to a checkout path a user's Mac does not have.
