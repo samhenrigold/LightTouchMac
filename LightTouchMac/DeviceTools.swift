@@ -348,8 +348,8 @@ struct DeviceTools: Sendable {
         try await guestRun("killall SpringBoard")
     }
 
-    /// Upgrade existing images as well as newly installed apps. Call before
-    /// accepting input, then reload SpringBoard if this returns true.
+    /// Upgrade existing images, including legacy lock-disabling preferences.
+    /// Reload SpringBoard after changes; the caller waits for it to answer.
     func updateMediaComponents() async throws -> Bool {
         guard let engine = Bundled.resolve("MBXGLEngine", fallbacks: [
             "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-gles/MBXGLEngine",
@@ -360,6 +360,9 @@ struct DeviceTools: Sendable {
         guard !engineData.isEmpty, engineData.count <= 1 << 20 else {
             throw DeviceToolsError.failed("The bundled graphics engine is invalid.")
         }
+        let preferencesPath = "/var/mobile/Library/Preferences/com.apple.springboard.plist"
+        let oldPreferences = try await guestRun("cat \(preferencesPath)")
+        let newPreferences = try Self.lockButtonPreferences(oldPreferences)
         let oldPlist = try await guestRun("cat \(plistPath)")
         let newPlist = try Self.mediaLaunchConfiguration(oldPlist)
         let oldEngine = try await guestRun("cat \(enginePath)")
@@ -380,13 +383,40 @@ struct DeviceTools: Sendable {
             try await guestRun("cat > \(plistPath).ltm-new && chmod 644 \(plistPath).ltm-new"
                                + " && mv -f \(plistPath).ltm-new \(plistPath)", stdinPath: file.path)
         }
-        return changedEngine || newPlist != nil
+        let changed = changedEngine || newPlist != nil || newPreferences != nil
+        if changed {
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: file) }
+            if let newPreferences { try newPreferences.write(to: file, options: .atomic) }
+            try await reloadMediaCompositor(preferencesFile: newPreferences == nil ? nil : file.path)
+        }
+        return changed
     }
 
-    func reloadMediaCompositor() async throws {
+    private func reloadMediaCompositor(preferencesFile: String?) async throws {
         try Task.checkCancellation()
         let plist = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
-        try await guestRun("sync && launchctl unload \(plist) && launchctl load \(plist)")
+        let preferences = "/var/mobile/Library/Preferences/com.apple.springboard.plist"
+        // Stop SpringBoard before replacing its preferences: it can flush its
+        // cached copy on exit. Reload the job even if the replacement fails.
+        var command = "set -e; sync; launchctl unload \(plist); trap 'result=$?; launchctl load \(plist) || exit $?; exit $result' EXIT; trap 'exit 1' HUP INT TERM; "
+        if preferencesFile != nil {
+            command += "cat > \(preferences).ltm-new; chown 501:501 \(preferences).ltm-new"
+                + "; chmod 600 \(preferences).ltm-new; mv -f \(preferences).ltm-new \(preferences); "
+        }
+        command += "sync"
+        try await guestRun(command, stdinPath: preferencesFile)
+    }
+
+    static func lockButtonPreferences(_ data: Data) throws -> Data? {
+        var format = PropertyListSerialization.PropertyListFormat.xml
+        guard var preferences = try PropertyListSerialization.propertyList(from: data, format: &format) as? [String: Any] else {
+            throw DeviceToolsError.failed("The device's SpringBoard preferences are invalid.")
+        }
+        let keys = ["SBDontLockEver", "SBDisableCABlanking"]
+        guard keys.contains(where: { preferences[$0] != nil }) else { return nil }
+        for key in keys { preferences.removeValue(forKey: key) }
+        return try PropertyListSerialization.data(fromPropertyList: preferences, format: format, options: 0)
     }
 
     /// Preserve the launch job and unrelated environment, including binary

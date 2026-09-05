@@ -4,7 +4,7 @@ from pathlib import Path
 import json, os, signal, subprocess, tempfile, time
 root = Path(__file__).resolve().parents[1]
 source = (root / 'LightTouchMac/DeviceTools.swift').read_text()
-a = source.index('    static func mediaLaunchConfiguration(')
+a = source.index('    static func lockButtonPreferences(')
 b = source.index("    /// Push the guest's dirty buffers", a)
 method = source[a:b]
 a = source.index('        let script = """', source.index('    private func guestRun'))
@@ -30,6 +30,17 @@ for format in [PropertyListSerialization.PropertyListFormat.xml, .binary] {
  let repeated = try Check.mediaLaunchConfiguration(updated)
  precondition(repeated == nil)
 }
+for format in [PropertyListSerialization.PropertyListFormat.xml, .binary] {
+ let prefs: [String: Any] = ["SBDontLockEver": true, "SBDisableCABlanking": true, "SBAutoLockTime": -1, "iconState2": ["untouched"]]
+ let original = try PropertyListSerialization.data(fromPropertyList: prefs, format: format, options: 0)
+ let updated = try Check.lockButtonPreferences(original)!
+ var actualFormat = PropertyListSerialization.PropertyListFormat.xml
+ let decoded = try PropertyListSerialization.propertyList(from: updated, format: &actualFormat) as! [String: Any]
+ precondition(actualFormat == format && decoded["SBDontLockEver"] == nil && decoded["SBDisableCABlanking"] == nil)
+ precondition(decoded["SBAutoLockTime"] as? Int == -1 && decoded["iconState2"] as? [String] == ["untouched"])
+ let repeated = try Check.lockButtonPreferences(updated); precondition(repeated == nil)
+}
+do { _ = try Check.lockButtonPreferences(Data("broken".utf8)); fatalError("accepted corrupt preferences") } catch {}
 for invalid: Any in [["Label": "wrong"], ["Label": "com.apple.SpringBoard", "EnvironmentVariables": "bad"], ["array"]] {
  let data = try PropertyListSerialization.data(fromPropertyList: invalid, format: .binary, options: 0)
  do { _ = try Check.mediaLaunchConfiguration(data); fatalError("accepted invalid job") } catch {}

@@ -232,7 +232,6 @@ final class EmulatorController {
                 try Task.checkCancellation()
                 NSLog("media: checking guest graphics components")
                 if try await tools().updateMediaComponents() {
-                    try await tools().reloadMediaCompositor()
                     try await waitForSpringBoard()
                     NSLog("media: guest graphics components updated")
                 } else {
