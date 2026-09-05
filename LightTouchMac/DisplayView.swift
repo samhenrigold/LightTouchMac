@@ -71,7 +71,7 @@ final class DisplayView: NSView {
     func updatePowerPresentation() {
         guard let emulator else { return }
         let next: PowerPresentation = emulator.isPoweredOff ? .poweredOff
-            : emulator.shuttingDown ? .shuttingDown : emulator.isSleeping ? .sleeping : .awake
+            : emulator.shuttingDown ? .shuttingDown : (emulator.isSleeping && !isShowingLiveText) ? .sleeping : .awake
         guard next != powerPresentation else { return }
         powerPresentation = next
         powerBadge?.removeFromSuperview()
@@ -180,6 +180,9 @@ final class DisplayView: NSView {
         shellLayer.shadowRadius = 40
         shellLayer.shadowOffset = .zero
         layer?.addSublayer(shellLayer)
+        touchOverlayLayer.zPosition = 50
+        touchOverlayLayer.actions = ["bounds": NSNull(), "position": NSNull(), "sublayers": NSNull()]
+        layer?.addSublayer(touchOverlayLayer)
 
         contentLayer.magnificationFilter = .nearest
         // The shell is opaque, so the LCD draws on top of it. Black backing
@@ -228,7 +231,7 @@ final class DisplayView: NSView {
 
     @objc private func screenChanged() { needsLayout = true }
 
-    @objc private func homeTapped() { emulator?.pressHome() }
+    @objc private func homeTapped() { endLiveText(); emulator?.pressHome() }
 
     // MARK: - Layout
 
@@ -245,6 +248,7 @@ final class DisplayView: NSView {
         // (Layout is still *triggered* by the dims flipping in step(), which
         // every quarter turn does.)
         let rotation = emulator?.rotationDegrees ?? 0
+        if let lastRotation, lastRotation != rotation { endLiveText() }
         let orientationChanged = lastRotation.map { $0 != rotation } ?? false
         lastRotation = rotation
         let isLandscape = rotation == 90 || rotation == 270
@@ -333,6 +337,9 @@ final class DisplayView: NSView {
         CATransaction.commit()
 
         homeButton.frame = buttonRect
+        if let liveTextView, let root = layer {
+            liveTextView.frame = contentLayer.convert(contentLayer.bounds, to: root)
+        }
     }
 
     /// Scale is independent of a framebuffer arriving before or after rotation.
@@ -408,56 +415,125 @@ final class DisplayView: NSView {
         CATransaction.commit()
     }
 
+    private var liveTextView: InlineLiveTextView?
+    var isShowingLiveText: Bool { liveTextView != nil }
+    func toggleLiveText() {
+        if liveTextView != nil { endLiveText(); return }
+        guard let image = captureFrame(includeTouches: false) else { return }
+        let view = InlineLiveTextView(image: image)
+        view.onClose = { [weak self] in self?.endLiveText() }
+        liveTextView = view
+        updatePowerPresentation()
+        addSubview(view)
+        needsLayout = true
+    }
+    func endLiveText() {
+        guard let liveTextView else { return }
+        liveTextView.stop()
+        self.liveTextView = nil
+        updatePowerPresentation()
+        window?.makeFirstResponder(self)
+    }
+
     var showsTouches = UserDefaults.standard.bool(forKey: "showsTouches") {
         didSet {
             UserDefaults.standard.set(showsTouches, forKey: "showsTouches")
             updateTouchOverlay()
         }
     }
-    private let touchOverlay = CAShapeLayer()
+    // A sibling of the device shell, never a child of the framebuffer layer.
+    // Fading/shadow compositing must not involve the guest screen's contents.
+    private let touchOverlayLayer = CALayer()
+    private var touchLayers: [Int: CALayer] = [:]
+    private static let touchFadeDuration = 0.16
     private var visibleTouches: [Int: (point: CGPoint, expires: CFTimeInterval)] = [:]
 
     private func sendVisualTouch(_ slot: Int32, _ phase: Int32, _ x: Double, _ y: Double) {
+        guard touchInteractionEnabled else {
+            if phase == Int32(QEMU_IOS_TOUCH_END) { qemu_ios_ui_touch(slot, phase, x, y) }
+            clearTouchOverlay()
+            return
+        }
         noteTouch(slot: Int(slot), phase: phase, x: x, y: y)
         qemu_ios_ui_touch(slot, phase, x, y)
     }
     private func sendVisualTouch2(_ phase: Int32, _ x: Double, _ y: Double) {
+        guard touchInteractionEnabled else {
+            if phase == Int32(QEMU_IOS_TOUCH_END) { qemu_ios_ui_touch2(phase, x, y) }
+            clearTouchOverlay()
+            return
+        }
         noteTouch(slot: 1, phase: phase, x: x, y: y)
         qemu_ios_ui_touch2(phase, x, y)
     }
     private func noteTouch(slot: Int, phase: Int32, x: Double, y: Double) {
-        visibleTouches[slot] = (CGPoint(x: x, y: y), phase == Int32(QEMU_IOS_TOUCH_END) ? CACurrentMediaTime() + 0.2 : .infinity)
+        visibleTouches[slot] = (CGPoint(x: x, y: y), phase == Int32(QEMU_IOS_TOUCH_END) ? CACurrentMediaTime() + Self.touchFadeDuration : .infinity)
         updateTouchOverlay()
     }
-    private var touchPoints: [CGPoint] {
-        visibleTouches = visibleTouches.filter { $0.value.expires > CACurrentMediaTime() }
-        return showsTouches ? visibleTouches.values.map(\.point) : []
+    private var touchInteractionEnabled: Bool {
+        emulator?.acceptsInput == true && emulator?.isSleeping != true && !isShowingLiveText
+    }
+    private func clearTouchOverlay() {
+        visibleTouches.removeAll()
+        for layer in touchLayers.values { layer.removeFromSuperlayer() }
+        touchLayers.removeAll()
+    }
+    private var activeTouches: [(slot: Int, point: CGPoint, opacity: CGFloat)] {
+        guard touchInteractionEnabled else { clearTouchOverlay(); return [] }
+        let now = CACurrentMediaTime()
+        visibleTouches = visibleTouches.filter { $0.value.expires > now }
+        guard showsTouches else { return [] }
+        return visibleTouches.map { slot, value in
+            (slot, value.point, CGFloat(min(1, (value.expires - now) / Self.touchFadeDuration)))
+        }
     }
     private func updateTouchOverlay() {
-        if touchOverlay.superlayer == nil {
-            touchOverlay.fillColor = NSColor.white.withAlphaComponent(0.6).cgColor
-            touchOverlay.strokeColor = NSColor.black.withAlphaComponent(0.65).cgColor
-            touchOverlay.lineWidth = 1.5
-            contentLayer.addSublayer(touchOverlay)
+        let touches = activeTouches
+        let liveSlots = Set(touches.map(\.slot))
+        for slot in Array(touchLayers.keys) where !liveSlots.contains(slot) {
+            touchLayers.removeValue(forKey: slot)?.removeFromSuperlayer()
         }
-        let path = CGMutablePath()
-        let bounds = contentLayer.bounds
-        let radius = bounds.width / max(framePixels.width, 1) * 9
-        for point in touchPoints {
-            path.addEllipse(in: CGRect(x: point.x * bounds.width - radius,
-                                       y: point.y * bounds.height - radius,
-                                       width: radius * 2, height: radius * 2))
-        }
+        // This overlay uses view coordinates, independent of the scaled shell.
+        let diameter: CGFloat = 44
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        touchOverlay.frame = bounds
-        touchOverlay.path = path
+        touchOverlayLayer.frame = layer?.bounds ?? bounds
+        for touch in touches {
+            let dot: CALayer
+            if let existing = touchLayers[touch.slot] { dot = existing }
+            else {
+                dot = CALayer()
+                dot.actions = ["opacity": NSNull(), "position": NSNull(), "bounds": NSNull(), "shadowPath": NSNull()]
+                let gradient = CAGradientLayer()
+                gradient.colors = [NSColor.white.withAlphaComponent(0.95).cgColor,
+                                   NSColor(white: 0.94, alpha: 0.9).cgColor]
+                gradient.startPoint = CGPoint(x: 0.5, y: 0)
+                gradient.endPoint = CGPoint(x: 0.5, y: 1)
+                gradient.masksToBounds = true
+                dot.addSublayer(gradient)
+                dot.shadowColor = NSColor.black.cgColor
+                dot.shadowOpacity = 0.22
+                touchOverlayLayer.addSublayer(dot)
+                touchLayers[touch.slot] = dot
+            }
+            dot.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
+            dot.position = contentLayer.convert(
+                CGPoint(x: touch.point.x * contentLayer.bounds.width,
+                        y: touch.point.y * contentLayer.bounds.height), to: touchOverlayLayer)
+            dot.opacity = Float(touch.opacity)
+            dot.shadowRadius = 5
+            dot.shadowOffset = CGSize(width: 0, height: 2)
+            dot.shadowPath = CGPath(ellipseIn: dot.bounds, transform: nil)
+            dot.sublayers?.first?.frame = dot.bounds
+            dot.sublayers?.first?.cornerRadius = diameter / 2
+        }
         CATransaction.commit()
     }
 
     /// The bridge copies while holding its publication lock, so capture is
     /// current even when paused/minimized and never retains a recycled slot.
     func captureFrame(includeTouches: Bool = true) -> CGImage? {
+        if let liveTextView { return liveTextView.capturedImage }
         var data = Data(count: 480 * 480 * 4)
         var width: Int32 = 0, height: Int32 = 0
         let copied = data.withUnsafeMutableBytes {
@@ -471,19 +547,33 @@ final class DisplayView: NSView {
                                   bitsPerPixel: 32, bytesPerRow: Int(width) * 4, space: colorSpace,
                                   bitmapInfo: info, provider: provider, decode: nil,
                                   shouldInterpolate: false, intent: .defaultIntent) else { return nil }
-        let points = includeTouches ? touchPoints : []
-        guard !points.isEmpty,
+        let touches = includeTouches ? activeTouches : []
+        guard !touches.isEmpty,
               let context = CGContext(data: nil, width: Int(width), height: Int(height),
                                       bitsPerComponent: 8, bytesPerRow: Int(width) * 4,
                                       space: colorSpace, bitmapInfo: info.rawValue) else { return image }
         context.draw(image, in: CGRect(x: 0, y: 0, width: Int(width), height: Int(height)))
-        context.setFillColor(NSColor.white.withAlphaComponent(0.6).cgColor)
-        context.setStrokeColor(NSColor.black.withAlphaComponent(0.65).cgColor)
-        context.setLineWidth(1.5)
-        for point in points {
-            context.addEllipse(in: CGRect(x: point.x * CGFloat(width) - 9,
-                                          y: (1 - point.y) * CGFloat(height) - 9, width: 18, height: 18))
-            context.drawPath(using: .fillStroke)
+        let pixelScale = CGFloat(width) / max(contentLayer.bounds.width * appliedScale, 1)
+        let diameter = 44 * pixelScale
+        let colors = [NSColor.white.withAlphaComponent(0.95).cgColor,
+                      NSColor(white: 0.94, alpha: 0.9).cgColor] as CFArray
+        guard let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: [0, 1]) else { return image }
+        for touch in touches {
+            let rect = CGRect(x: touch.point.x * CGFloat(width) - diameter / 2,
+                              y: (1 - touch.point.y) * CGFloat(height) - diameter / 2,
+                              width: diameter, height: diameter)
+            context.saveGState()
+            context.setAlpha(touch.opacity)
+            context.setShadow(offset: CGSize(width: 0, height: -2 * pixelScale), blur: 5 * pixelScale,
+                              color: NSColor.black.withAlphaComponent(0.22).cgColor)
+            context.setFillColor(NSColor.white.cgColor)
+            context.fillEllipse(in: rect)
+            context.setShadow(offset: .zero, blur: 0, color: nil)
+            context.addEllipse(in: rect)
+            context.clip()
+            context.drawLinearGradient(gradient, start: CGPoint(x: rect.midX, y: rect.maxY),
+                                       end: CGPoint(x: rect.midX, y: rect.minY), options: [])
+            context.restoreGState()
         }
         return context.makeImage()
     }
@@ -915,6 +1005,11 @@ final class DisplayView: NSView {
     // MARK: - Keyboard passthrough
 
     override func keyDown(with event: NSEvent) {
+        if isShowingLiveText {
+            if event.keyCode == 53 { endLiveText() }
+            else { super.keyDown(with: event) }
+            return
+        }
         // Command combinations belong to the menu bar; let them pass.
         if event.modifierFlags.contains(.command) {
             super.keyDown(with: event)
@@ -924,6 +1019,7 @@ final class DisplayView: NSView {
     }
 
     override func keyUp(with event: NSEvent) {
+        if isShowingLiveText { return }
         if event.modifierFlags.contains(.command) {
             super.keyUp(with: event)
             return

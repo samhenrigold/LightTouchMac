@@ -138,16 +138,20 @@ The default remains the existing user state directory.
 
 ### Web and captures
 
-Device > HTTP Proxy offers Direct HTTP or an external HTTP proxy, including
-WaybackProxy at `127.0.0.1:8888`. Changes apply when the guest is awake and ready;
-Off restores its previous proxy keys. WaybackProxy runs separately and owns its
-archive date. CONNECT preserves guest TLS; this does not yet modernize old TLS.
+Device > Proxy offers No Proxy or HTTP Proxy, with an optional archive date.
+The proxy is bundled: no separate server or installation is required. Dated
+browsing fetches the closest available Internet Archive capture through verified
+host HTTPS. Changes apply when the guest is awake and ready; No Proxy restores
+its previous proxy keys. Normal CONNECT preserves guest TLS; this does not yet
+modernize old TLS. Archive availability and rate limits still apply.
 
 Capture provides Save Screenshot (Shift-Command-S), Live Text
 (Shift-Command-L), and Start/Stop Recording (Shift-Command-R). Screenshots use
-the native screen pixels, including while paused. Live Text opens a separate
-freeze frame for text selection and data detectors. Show Finger Dots overlays
-mouse/trackpad contacts in the preview, screenshots and recordings.
+the native screen pixels, including while paused. Live Text freezes the image inline inside the device screen for selection and
+data detectors; Done or Escape returns to the live guest. Show Finger Dots uses
+44-point soft gradient indicators with shadows and a 160 ms release fade in the
+preview, screenshots and recordings. Touches do nothing while sleeping or off.
+The sleeping presentation uses the bundled Sleeping.caar animation.
 
 Recordings use H.264 video on a fixed 480 × 480 canvas, preserving native pixels
 through rotation with black margins. The title bar and Dock indicate recording.

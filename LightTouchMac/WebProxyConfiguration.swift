@@ -2,19 +2,21 @@ import Foundation
 
 /// Host routing is read once per guest connection. Changes need no VM restart.
 struct WebProxyConfiguration: Codable, Equatable {
-    enum Mode: String, Codable, CaseIterable {
-        case off, direct, upstream
-        var title: String {
-            switch self {
-            case .off: "Off"
-            case .direct: "Direct HTTP"
-            case .upstream: "External Proxy / WaybackProxy"
-            }
-        }
+    enum Mode: String, Codable {
+        case off, direct, archive
     }
     var mode: Mode = .off
-    var host = "127.0.0.1"
-    var port = 8888
+    var archiveDate = "20090909"
+    static var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd"
+        formatter.isLenient = false
+        return formatter
+    }
+    var dateValue: Date { Self.dateFormatter.date(from: archiveDate) ?? Date() }
     static var file: URL { Bundled.stateDirectory.appendingPathComponent("web-proxy.conf") }
     static var preferencesFile: URL { Bundled.stateDirectory.appendingPathComponent("web-proxy.json") }
     static func load() -> Self {
@@ -23,17 +25,16 @@ struct WebProxyConfiguration: Codable, Equatable {
         return value
     }
     func validate() throws {
-        if mode == .upstream {
-            let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-:")
-            guard !host.isEmpty, host.utf8.count <= 253,
-                  host.unicodeScalars.allSatisfy({ allowed.contains($0) }), (1...65535).contains(port) else {
-                throw DeviceToolsError.failed("Enter a hostname or IP address and a port from 1 to 65535.")
+        if mode == .archive {
+            guard archiveDate.count == 8, let date = Self.dateFormatter.date(from: archiveDate),
+                  Self.dateFormatter.string(from: date) == archiveDate else {
+                throw DeviceToolsError.failed("Choose a valid archive date.")
             }
         }
     }
     func writeRouting() throws {
         try validate()
-        let text = mode == .upstream ? "upstream\n\(host)\n\(port)\n" : "\(mode.rawValue)\n"
+        let text = mode == .archive ? "archive\n\(archiveDate)\n" : "\(mode.rawValue)\n"
         try Data(text.utf8).write(to: Self.file, options: .atomic)
     }
     func save() throws {

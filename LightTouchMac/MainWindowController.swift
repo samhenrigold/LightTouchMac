@@ -104,7 +104,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var recordingFailure: Error?
     private var quitAfterRecording = false
     private var recordingIndicator: NSTitlebarAccessoryViewController?
-    private var liveTextWindow: LiveTextWindowController?
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
@@ -141,6 +140,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // and it competed with the toolbar for space.
         window?.subtitle = emulator.isRunning && !emulator.isSleeping
             ? (emulator.foregroundAppName ?? emulator.statusLine) : emulator.statusLine
+        if emulator.isPoweredOff || emulator.isDead { deviceVC.screen.endLiveText() }
         deviceVC.screen.updatePowerPresentation()
         if let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .lock }) {
             item.label = emulator.isPoweredOff ? "Power On" : "Lock"
@@ -378,39 +378,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc func configureWebProxy(_ sender: Any?) {
         guard let window else { return }
-        let current = emulator.webProxy
         let alert = NSAlert()
-        alert.messageText = "HTTP Proxy"
-        alert.informativeText = "Direct HTTP uses your Mac’s internet connection. For WaybackProxy, start its server and enter its address below (usually 127.0.0.1:8888). Configure the archive date in WaybackProxy. Changes apply when the device is awake and ready."
+        alert.messageText = "Proxy"
+        alert.informativeText = "HTTP Proxy connects through your Mac. Choose an optional date to browse pages preserved by the Internet Archive. Everything runs inside Light Touch; archived pages use the closest available capture."
         alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
-        let mode = NSPopUpButton(frame: .zero, pullsDown: false)
-        mode.addItems(withTitles: WebProxyConfiguration.Mode.allCases.map(\.title))
-        mode.selectItem(at: WebProxyConfiguration.Mode.allCases.firstIndex(of: current.mode) ?? 0)
-        let host = NSTextField(string: current.host)
-        let port = NSTextField(string: String(current.port))
-        let grid = NSGridView(views: [
-            [NSTextField(labelWithString: "Mode"), mode],
-            [NSTextField(labelWithString: "External host"), host],
-            [NSTextField(labelWithString: "Port"), port],
-            [NSTextField(labelWithString: "Status"), NSTextField(wrappingLabelWithString: emulator.webProxyStatus)]
-        ])
-        grid.column(at: 0).xPlacement = .trailing
-        grid.column(at: 1).width = 280
-        grid.rowSpacing = 10
-        grid.frame.size = grid.fittingSize
-        alert.accessoryView = grid
+        let editor = ProxySettingsView(configuration: emulator.webProxy, status: emulator.webProxyStatus)
+        alert.accessoryView = editor
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            var value = current
-            value.mode = WebProxyConfiguration.Mode.allCases[mode.indexOfSelectedItem]
-            value.host = host.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            value.port = Int(port.stringValue) ?? 0
-            do { try self.emulator.configureWebProxy(value) }
-            catch {
-                let failure = NSAlert(error: error)
-                failure.beginSheetModal(for: window)
-            }
+            do { try self.emulator.configureWebProxy(editor.configuration) }
+            catch { NSAlert(error: error).beginSheetModal(for: window) }
         }
     }
 
@@ -574,13 +552,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         return "Light Touch \(kind) \(date)"
     }
 
-    @objc func showLiveText(_ sender: Any?) {
-        guard let cg = deviceVC.screen.captureFrame(includeTouches: false) else { return }
-        liveTextWindow?.close()
-        let controller = LiveTextWindowController(image: NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)))
-        liveTextWindow = controller
-        controller.showWindow(nil)
-    }
+    @objc func showLiveText(_ sender: Any?) { deviceVC.screen.toggleLiveText() }
 
     @objc func toggleTouchOverlay(_ sender: Any?) { deviceVC.screen.showsTouches.toggle() }
 
@@ -832,7 +804,11 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleTouchOverlay(_:)):
             menuItem.state = deviceVC.screen.showsTouches ? .on : .off
             return true
-        case #selector(showLiveText(_:)), #selector(saveScreenshot(_:)), #selector(copyScreen(_:)):
+        case #selector(showLiveText(_:)):
+            menuItem.title = deviceVC.screen.isShowingLiveText ? "Done with Live Text" : "Live Text"
+            menuItem.state = deviceVC.screen.isShowingLiveText ? .on : .off
+            return deviceVC.screen.isShowingLiveText || (!emulator.isPoweredOff && !emulator.isDead)
+        case #selector(saveScreenshot(_:)), #selector(copyScreen(_:)):
             return !emulator.isPoweredOff && !emulator.isDead
         case #selector(pasteToGuest(_:)):
             return emulator.acceptsInput && NSPasteboard.general.string(forType: .string) != nil

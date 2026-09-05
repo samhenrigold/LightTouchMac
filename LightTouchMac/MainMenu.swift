@@ -155,7 +155,7 @@ enum MainMenuBuilder {
         menu.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
         menu.addItem(.separator())
 
-        menu.addItem(item("HTTP Proxy…", #selector(MainWindowController.configureWebProxy(_:))))
+        menu.addItem(item("Proxy…", #selector(MainWindowController.configureWebProxy(_:))))
         let advanced = NSMenu(title: "Advanced")
         advanced.addItem(item("Open SSH", #selector(MainWindowController.openDeviceTerminal(_:)), "t", [.shift, .command]))
         advanced.addItem(item("Restart SpringBoard", #selector(MainWindowController.restartSpringBoard(_:))))
