@@ -233,7 +233,7 @@ final class EmulatorController {
                 NSLog("media: checking guest graphics components")
                 if try await tools().updateMediaComponents() {
                     try await tools().reloadMediaCompositor()
-                    try await Task.sleep(for: .seconds(12))
+                    try await waitForSpringBoard()
                     NSLog("media: guest graphics components updated")
                 } else {
                     NSLog("media: guest graphics components already current")
@@ -371,7 +371,7 @@ final class EmulatorController {
         }
     }
 
-    var isRunning: Bool { state == .running && !storageFailed && !preparingMedia }
+    var isRunning: Bool { state == .running && !storageFailed && !preparingMedia && !restartingSpringBoard }
     var isPaused:  Bool { state == .paused }
     var isDead:    Bool { if case .dead = state { return true } else { return false } }
     /// The guest can take input only while actually executing.
@@ -384,6 +384,7 @@ final class EmulatorController {
         case .notStarted: return "Starting…"
         case .booting:    return "Booting…"
         case .running:
+            if restartingSpringBoard { return "Restarting SpringBoard…" }
             if preparingMedia { return "Preparing device media…" }
             if let mediaPreparationFailure { return "Media update failed — \(mediaPreparationFailure)" }
             if retainedPackedImage { return "Running — existing image retained; erase device to upgrade" }
@@ -411,7 +412,11 @@ final class EmulatorController {
     
     // MARK: - Hardware buttons
     
-    private static let holdInterval: TimeInterval = 0.25
+    private var restartingSpringBoard = false {
+        didSet { onStatusChange?() }
+    }
+
+    private static let holdInterval: TimeInterval = 0.10
     
     private func tapButton(_ button: Int32) {
         qemu_ios_ui_button(button, true)
@@ -799,9 +804,7 @@ final class EmulatorController {
     ///
     /// Opt-in until resume is validated across the supported guest workloads.
     static let resumeDefaultsKey = "resumeOnLaunch"
-    static var resumeOnLaunch: Bool {
-        UserDefaults.standard.object(forKey: resumeDefaultsKey) as? Bool ?? false
-    }
+    static var resumeOnLaunch: Bool { false }
     /// Set when the user explicitly discards saved state, so the very next quit
     /// doesn't silently re-save the current guest and drop them right back into
     /// the state they just cleared (the "discard doesn't stick" bug).
@@ -1212,7 +1215,23 @@ final class EmulatorController {
     func openTerminal() async throws                     { try await tools().openTerminal() }
     func syncFilesystem() async throws                   { try await tools().syncFilesystem() }
     func haltFilesystem() async throws                   { try await tools().haltFilesystem() }
-    func restartSpringBoard() async throws               { try await tools().restartSpringBoard() }
+    func restartSpringBoard() async throws {
+        guard isRunning, !isInstalling else { return }
+        restartingSpringBoard = true
+        defer { restartingSpringBoard = false }
+        try await tools().restartSpringBoard()
+        try await waitForSpringBoard()
+    }
+
+    private func waitForSpringBoard() async throws {
+        let deadline = ContinuousClock.now + .seconds(45)
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            if (try? await springBoard().order()) != nil { return }
+            try await Task.sleep(for: .seconds(1))
+        }
+        throw DeviceToolsError.failed("SpringBoard did not recover. Restart the device to recover; your installed apps are preserved.")
+    }
 
     /// True while any install is running — the quit guard reads this so ⌘Q
     /// mid-install prompts instead of leaving a half-installed app.

@@ -16,33 +16,6 @@ import Cocoa
     @objc(print:) func printDocument(_ sender: Any?)
 }
 
-/// Hides the saved-state section when resume is switched off in Settings —
-/// evaluated as the menu opens, so toggling the setting is reflected at once.
-@MainActor
-final class DeviceMenuDelegate: NSObject, NSMenuDelegate {
-    static let shared = DeviceMenuDelegate()
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        let show = EmulatorController.resumeOnLaunch
-        for item in menu.items {
-            switch item.action {
-            case #selector(MainWindowController.saveStateNow(_:)),
-                 #selector(MainWindowController.discardSavedState(_:)):
-                item.isHidden = !show
-            default:
-                break
-            }
-        }
-        // The separator that closes the section goes with it. It is the one
-        // directly after Discard Saved State.
-        if let i = menu.items.firstIndex(where: {
-            $0.action == #selector(MainWindowController.discardSavedState(_:))
-        }), menu.items.indices.contains(i + 1), menu.items[i + 1].isSeparatorItem {
-            menu.items[i + 1].isHidden = !show
-        }
-    }
-}
-
 @MainActor
 enum MainMenuBuilder {
 
@@ -169,23 +142,10 @@ enum MainMenuBuilder {
         menu.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
         menu.addItem(.separator())
 
-        // The two switches that used to be the whole Settings window (⌘,).
-        // Checkmark toggles, since a window for two checkboxes was ceremony.
-        // The resume toggle stays visible when off — it is how you turn it on.
-        menu.addItem(item("Automatically Resume on Launch",
-                          #selector(MainWindowController.toggleResumeOnLaunch(_:))))
-        // Saved state only means anything when resume is on, so the whole
-        // section hides with the setting (menuNeedsUpdate re-evaluates it).
-        menu.addItem(item("Save State Now", #selector(MainWindowController.saveStateNow(_:)), "s", [.control, .command]))
-        menu.addItem(item("Discard Saved State", #selector(MainWindowController.discardSavedState(_:))))
-        let stateSeparator = NSMenuItem.separator()
-        menu.addItem(stateSeparator)
-
         let advanced = NSMenu(title: "Advanced")
         advanced.addItem(item("Open SSH", #selector(MainWindowController.openDeviceTerminal(_:)), "t", [.shift, .command]))
         advanced.addItem(item("Restart SpringBoard", #selector(MainWindowController.restartSpringBoard(_:))))
-        // -v on the next COLD boot; a resumed snapshot never boots, so with
-        // resume on this shows nothing until a Restart or erase.
+        // Applies at the next boot.
         advanced.addItem(item("Verbose Boot", #selector(MainWindowController.toggleVerboseBoot(_:))))
         menu.addItem(submenu(advanced, title: "Advanced"))
         menu.addItem(.separator())
@@ -195,7 +155,6 @@ enum MainMenuBuilder {
         // (PMU gap), so it would wedge the guest rather than power it off.
         menu.addItem(item("Restart…", #selector(MainWindowController.deviceReset(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
-        menu.delegate = DeviceMenuDelegate.shared
         return menu
     }
     

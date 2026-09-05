@@ -96,32 +96,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         refreshForState()
     }
 
-    /// Where the green button sends the window.
-    ///
-    /// Hold Option and it means "fit the device": the pane sized exactly to the
-    /// shell at the current zoom, plus the inspector if it is showing, so there
-    /// is no letterboxing on any side. Without Option it is the usual zoom, so
-    /// the standard behaviour is untouched.
-    func windowWillUseStandardFrame(_ window: NSWindow, defaultFrame: NSRect) -> NSRect {
-        guard NSEvent.modifierFlags.contains(.option) else { return defaultFrame }
-
-        var content = deviceVC.screen.idealPaneSize
-        if !inspectorItem.isCollapsed {
-            content.width += inspectorVC.view.frame.width
-        }
-        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: content))
-        // Grow down-and-right from the current top-left, the direction AppKit
-        // zooms in, and stay on screen.
-        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
-        if let visible = window.screen?.visibleFrame {
-            frame.size.width = min(frame.width, visible.width)
-            frame.size.height = min(frame.height, visible.height)
-            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
-            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
-        }
-        return frame
-    }
-
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func windowDidLoad() {
@@ -318,16 +292,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let encoded: String
         switch mode {
         case .fit: encoded = "fit"
-        case .physical: encoded = "physical"
         case .pixels(let n): encoded = "pixels:\(n)"
         }
         UserDefaults.standard.set(encoded, forKey: zoomKey)
     }
     static func savedZoom() -> ZoomMode {
         switch UserDefaults.standard.string(forKey: zoomKey) {
-        case "physical": return .physical
         case let s? where s.hasPrefix("pixels:"):
-            return Int(s.dropFirst("pixels:".count)).map(ZoomMode.pixels) ?? .fit
+            return Int(s.dropFirst("pixels:".count)).flatMap { ZoomMode.steps.contains($0) ? .pixels($0) : nil } ?? .fit
         default: return .fit
         }
     }
@@ -344,20 +316,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// so the first press nudges the device rather than jumping it.
     func stepZoom(_ direction: Int) {
         let steps = ZoomMode.steps
-        let current = zoom.percent.map { $0 / 100 } ?? deviceVC.screen.nearestPixelStep
-        let index = steps.firstIndex(of: current)
-            ?? steps.firstIndex { $0 >= current }
-            ?? steps.count - 1
-        apply(.pixels(steps[min(max(index + direction, 0), steps.count - 1)]))
+        let current = deviceVC.screen.pixelMultiple
+        let next = direction > 0
+            ? steps.first { CGFloat($0) > current + 0.001 } ?? steps.last!
+            : steps.last { CGFloat($0) < current - 0.001 } ?? steps.first!
+        apply(.pixels(next))
     }
 
     @objc func zoomIn(_ sender: Any?)  { stepZoom(1) }
     @objc func zoomOut(_ sender: Any?) { stepZoom(-1) }
-    /// Life size — the device as it measures in the hand, not 1:1 pixels. 100%
-    /// is a pixel count and lands wherever the display's density puts it, which
-    /// on a Retina Mac is noticeably smaller than the real thing (163 ppi of
-    /// original screen against roughly 220 of display).
-    @objc func zoomActualSize(_ sender: Any?) { apply(.physical) }
+    @objc func zoomActualSize(_ sender: Any?) { apply(.pixels(1)) }
     @objc func zoomToFit(_ sender: Any?) { apply(.fit) }
     
     // MARK: - Device menu actions (routed via the responder chain)
@@ -369,13 +337,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func deviceRotate(_ sender: Any?) {
         emulator.toggleRotation()
         syncRotateSymbol()
-    }
-
-    // The two persisted switches that used to live in a Settings window; the
-    // menu checkmarks are set in validateMenuItem.
-    @objc func toggleResumeOnLaunch(_ sender: Any?) {
-        UserDefaults.standard.set(!EmulatorController.resumeOnLaunch,
-                                  forKey: EmulatorController.resumeDefaultsKey)
     }
 
     @objc func toggleVerboseBoot(_ sender: Any?) {
@@ -621,9 +582,6 @@ extension MainWindowController: NSMenuItemValidation {
              #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)),
              #selector(deviceRotateRight(_:)), #selector(deviceShake(_:)):
             return emulator.acceptsInput
-        case #selector(toggleResumeOnLaunch(_:)):
-            menuItem.state = EmulatorController.resumeOnLaunch ? .on : .off
-            return true
         case #selector(toggleVerboseBoot(_:)):
             menuItem.state = EmulatorController.verboseBoot ? .on : .off
             return true
@@ -639,7 +597,7 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(zoomOut(_:)):
             return zoom != .pixels(ZoomMode.steps[0])
         case #selector(zoomActualSize(_:)):
-            menuItem.state = (zoom == .physical) ? .on : .off
+            menuItem.state = (zoom == .pixels(1)) ? .on : .off
             return true
         case #selector(zoomToFit(_:)):
             menuItem.state = (zoom == .fit) ? .on : .off

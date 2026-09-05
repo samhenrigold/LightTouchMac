@@ -1,38 +1,11 @@
-// Created by Sam on 2026-08-05.
-//
-// The device screen: a dedicated content sublayer shows the emulator's
-// published frame buffer (no copy — the frame ring keeps each buffer alive for
-// several frames). A display link polls for new frames; the serial check makes
-// idle ticks free. The frame is laid out either scaled to fit the pane, or at
-// the original device's true physical size — sizing is driven by the screen
-// content alone (consistent margins in both orientations), and the shell
-// chrome is locked to the same scale and may spill past the pane edges. The
-// shell image is opaque (no cutout transparency — a 1px seam would flicker
-// through); the content layer is a sublayer of the shell, parked at the screen
-// cutout, so it rides the shell's scale+rotation transform and the two stay in
-// lockstep by construction when the guest's orientation flips. Mouse events
-// become single-finger touches, Option-drag a two-finger pinch, and when this
-// view is first responder key events are forwarded to the guest.
+// Device shell and LCD share a transform. Fit uses the pane bounds; manual
+// zoom uses display pixels per guest pixel, independent of orientation.
 
 import Cocoa
 
-/// How big the device is drawn.
-///
-/// The steps are whole multiples of a display pixel per guest pixel, so the
-/// 320×480 frame buffer always lands on pixel boundaries: at 100% one guest
-/// pixel is one pixel of your display, at 200% it is a 2×2 block. Anything in
-/// between resamples 320 pixels across a fractional number of them, which with
-/// nearest-neighbour magnification means some guest pixels come out one wide
-/// and their neighbours two — the shimmer that makes an emulator look cheap.
-/// `.fit` and `.physical` are exempt — each is explicitly a size asked for in
-/// something other than pixels, and neither pretends otherwise.
+/// Fit the whole device in the window, or use an integer display-pixel scale.
 enum ZoomMode: Equatable {
     case fit
-    /// The device drawn the size a real iPod touch measures in the hand. Not a
-    /// step on the ladder and not usually near one: the original screen is 163
-    /// pixels per inch and a Mac display is nothing like that, so life size
-    /// lands wherever it lands.
-    case physical
     case pixels(Int)
 
     static let steps = [1, 2, 3, 4, 6, 8]
@@ -48,7 +21,6 @@ final class DisplayView: NSView {
     /// The original hardware: iPod touch 2G, 320×480 at 163 ppi (3.5" panel).
     /// The live frame buffer swaps to 480×320 on rotation.
     private static let nativeScreenPixels = CGSize(width: 320, height: 480)
-    private static let devicePPI = 163.0
 
     /// The shell.png asset: its full pixel size, the screen cutout rect within
     /// it (top-left origin, matching this view's isFlipped space), and the
@@ -181,7 +153,7 @@ final class DisplayView: NSView {
         let link = displayLink(target: self, selector: #selector(step))
         link.add(to: .main, forMode: .common)
         displayLink = link
-        // A move to a screen with a different physical PPI changes the accurate size.
+        // Moving between displays can change the backing pixel scale.
         NotificationCenter.default.addObserver(self, selector: #selector(screenChanged),
                                                name: NSWindow.didChangeScreenNotification,
                                                object: window)
@@ -223,11 +195,8 @@ final class DisplayView: NSView {
         switch zoom {
         case .fit:
             scale = fitScale(shellOnScreenPixels)
-        case .physical:
-            scale = physicalContentSize().map { $0.width / cutoutSize.width }
-                ?? fitScale(shellOnScreenPixels)
         case .pixels(let multiple):
-            scale = shellScale(guestPixelsPerDisplayPixel: multiple, cutout: cutoutSize)
+            scale = shellScale(guestPixelsPerDisplayPixel: multiple)
         }
         appliedScale = scale
         // Centre on the SAFE area, not the raw bounds: with .fullSizeContentView
@@ -299,75 +268,17 @@ final class DisplayView: NSView {
         homeButton.frame = buttonRect
     }
 
-    /// The pane size that fits the device exactly at the current zoom, with the
-    /// standard margin and nothing left over. `.fit` has no intrinsic size of
-    /// its own (it fits whatever it is given), so it is measured at the nearest
-    /// pixel step — the size Fit would settle on if the window matched it.
-    var idealPaneSize: CGSize {
-        let isLandscape = emulator?.isLandscape ?? false
-        let shell = isLandscape
-            ? CGSize(width: Self.shellPixels.height, height: Self.shellPixels.width)
-            : Self.shellPixels
-        let cutout = isLandscape
-            ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
-            : Self.screenCutout.size
-        let scale: CGFloat
-        switch zoom {
-        case .pixels(let n): scale = shellScale(guestPixelsPerDisplayPixel: n, cutout: cutout)
-        case .physical:      scale = physicalContentSize().map { $0.width / cutout.width }
-                                     ?? shellScale(guestPixelsPerDisplayPixel: nearestPixelStep, cutout: cutout)
-        case .fit:           scale = shellScale(guestPixelsPerDisplayPixel: nearestPixelStep, cutout: cutout)
-        }
-        // Plus whatever the toolbar covers: the pane is full-height now, so the
-        // content it has to hold is the device box AND the inset above it.
-        let chrome = CGSize(width: bounds.width - safeAreaRect.width,
-                            height: bounds.height - safeAreaRect.height)
-        return CGSize(width: (shell.width * scale + 2 * Self.zoomInset + chrome.width).rounded(),
-                      height: (shell.height * scale + 2 * Self.zoomInset + chrome.height).rounded())
+    /// Scale is independent of a framebuffer arriving before or after rotation.
+    var pixelMultiple: CGFloat {
+        appliedScale * Self.screenCutout.width / Self.nativeScreenPixels.width
+            * (window?.backingScaleFactor ?? 2)
     }
 
-    /// The step on the ladder closest to the size on screen right now, so
-    /// zooming in or out of Fit or Actual Size carries on from what is already
-    /// there instead of jumping to the bottom of the ladder.
-    var nearestPixelStep: Int {
-        let isLandscape = framePixels.width > framePixels.height
-        let cutout = isLandscape
-            ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
-            : Self.screenCutout.size
-        let backing = window?.backingScaleFactor ?? 2
-        let multiple = appliedScale * cutout.width / framePixels.width * backing
-        return ZoomMode.steps.min {
-            abs(CGFloat($0) - multiple) < abs(CGFloat($1) - multiple)
-        } ?? 1
-    }
-
-    /// The scale the last layout actually used, whichever mode picked it.
     private var appliedScale: CGFloat = 1
 
-    /// The screen at its true physical size, in this view's points, using the
-    /// current display's real pixel geometry. nil if the display is unknown.
-    private func physicalContentSize() -> CGSize? {
-        guard let screen = window?.screen,
-              let number = screen.deviceDescription[.init("NSScreenNumber")] as? NSNumber
-        else { return nil }
-        let display = CGDirectDisplayID(number.uint32Value)
-        let mm = CGDisplayScreenSize(display)               // physical, millimetres
-        guard mm.width > 0 else { return nil }
-        // Points that span one physical inch on this display.
-        let pointsPerInch = Double(screen.frame.width) / (Double(mm.width) / 25.4)
-        return CGSize(width: Double(framePixels.width) / Self.devicePPI * pointsPerInch,
-                      height: Double(framePixels.height) / Self.devicePPI * pointsPerInch)
-    }
-
-    /// The shell transform that puts `multiple` display pixels on every guest
-    /// pixel. The screen content is a child of the shell, resized to fill the
-    /// cutout, so the shell's scale is what decides the pixel size: the cutout
-    /// is 594 shell pixels across for a 320-pixel frame buffer, and everything
-    /// else follows from making those 320 land on the pixel count asked for.
-    private func shellScale(guestPixelsPerDisplayPixel multiple: Int, cutout: CGSize) -> CGFloat {
-        let backing = window?.backingScaleFactor ?? 2
-        let pointsPerGuestPixel = CGFloat(multiple) / backing
-        return pointsPerGuestPixel * framePixels.width / cutout.width
+    private func shellScale(guestPixelsPerDisplayPixel multiple: Int) -> CGFloat {
+        CGFloat(multiple) / (window?.backingScaleFactor ?? 2)
+            * Self.nativeScreenPixels.width / Self.screenCutout.width
     }
 
     /// The largest uniform scale that fits `nativeSize` in the pane inset on
