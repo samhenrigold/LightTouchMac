@@ -277,7 +277,9 @@ final class DisplayView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         contentLayer.bounds = CGRect(origin: .zero, size: cutoutSize)
-        contentLayer.transform = CATransform3DMakeRotation(-angle, 0, 0, 1)
+        // Counter only the guest's quarter-turn, never the temporary tilt.
+        // A layout during a gesture must not leave the panel crooked after release.
+        contentLayer.transform = CATransform3DMakeRotation(-rest, 0, 0, 1)
         CATransaction.commit()
 
         // Scale and rotation live in ONE transform, and the content is a child
@@ -382,6 +384,7 @@ final class DisplayView: NSView {
     // MARK: - Frame polling
 
     @objc private func step() {
+        emulator?.pollStorageFailure()
         var pixels: UnsafeRawPointer?
         var w: Int32 = 0
         var h: Int32 = 0
@@ -507,6 +510,7 @@ final class DisplayView: NSView {
     private var scrollPoint: CGPoint?
     /// Tilt driven by a two-finger scroll off the panel.
     private var scrollTilt = 0.0
+    private var scrollTilting = false
 
     /// The panel-space point under the cursor, clamped into the panel. Unlike
     /// `normalized` this does not fail when the cursor is just outside — a pinch
@@ -598,10 +602,10 @@ final class DisplayView: NSView {
     /// Off the panel the gesture tilts the device instead: side-to-side runs
     /// the accelerometer, and letting go springs it back upright.
     override func scrollWheel(with event: NSEvent) {
-        if scrollPoint == nil && scrollTilt == 0 && event.phase == .began && !cursorOverPanel(event) {
+        if scrollPoint == nil && !scrollTilting && event.phase == .began && !cursorOverPanel(event) {
             beginScrollTilt()
         }
-        if scrollTilt != 0 || (event.phase == .began && !cursorOverPanel(event)) {
+        if scrollTilting {
             scrollTiltChanged(event)
             return
         }
@@ -695,6 +699,7 @@ final class DisplayView: NSView {
     // MARK: Tilt by scroll (cursor off the panel)
 
     private func beginScrollTilt() {
+        scrollTilting = true
         shellLayer.removeAnimation(forKey: "tiltSnap")
     }
 
@@ -817,6 +822,8 @@ final class DisplayView: NSView {
     /// The same transform layout() computes, at an arbitrary angle, applied
     /// without animation — this is the per-mouse-move path.
     private func setShellAngle(_ angle: CGFloat) {
+        shellLayer.removeAnimation(forKey: "tiltSnap")
+        shellLayer.removeAnimation(forKey: "transform")
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         shellLayer.transform = CATransform3DScale(
@@ -826,7 +833,9 @@ final class DisplayView: NSView {
 
     private func endTilt() {
         tilting = false
-        let from = shellLayer.transform
+        scrollTilting = false
+        scrollTilt = 0
+        let from = shellLayer.presentation()?.transform ?? shellLayer.transform
         tiltAngle = 0
         setShellAngle(restAngle)
         let spring = CASpringAnimation(keyPath: "transform")
@@ -909,7 +918,7 @@ final class DisplayView: NSView {
         // greyed out, but the drop still showed the green copy badge, accepted,
         // and then queued one "The device isn't ready yet" sheet per .ipa to be
         // dismissed one at a time.
-        guard emulator?.canReachDevice == true else { return [] }
+        guard emulator?.canQueueInstall == true else { return [] }
         if !droppedCatalogApps(sender).isEmpty { return .copy }
         // Local drags carry .fileURL too (an installed row is draggable to
         // the Finder as its .ipa), but dropping one back on the device would

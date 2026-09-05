@@ -1,0 +1,114 @@
+import Foundation
+import Darwin
+
+/// Disk operations shared by the controller and the device-free regression check.
+enum DeviceStateStorage {
+    /// An SSH disconnect or a stopped VM alone does not establish an unmount.
+    @MainActor
+    static func waitForShutdown(until deadline: Date, confirmed: () -> Bool,
+                                stopped: () -> Bool) async -> Bool {
+        while !Task.isCancelled {
+            if confirmed() { return true }
+            if stopped() || Date() >= deadline { return false }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        return false
+    }
+
+    static func promoteSnapshot(from temporary: URL, to saved: URL) throws {
+        let size = try FileManager.default.attributesOfItem(atPath: temporary.path)[.size] as? Int ?? 0
+        guard size > 0 else { throw CocoaError(.fileReadCorruptFile) }
+        // Both files are siblings: rename replaces the old file atomically.
+        guard rename(temporary.path, saved.path) == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+    }
+
+    static func overlayIsNewer(_ overlay: URL, than snapshot: URL) -> Bool {
+        let fm = FileManager.default
+        do {
+            func modified(_ url: URL) throws -> Date {
+                guard let date = try fm.attributesOfItem(atPath: url.path)[.modificationDate] as? Date else {
+                    throw CocoaError(.fileReadCorruptFile)
+                }
+                return date
+            }
+            let saved = try modified(snapshot)
+            if try modified(overlay) > saved { return true }
+            // FMSS atomically renames each page into its cs directory, updating
+            // that directory's mtime even when replacing an existing page.
+            for child in try fm.contentsOfDirectory(at: overlay, includingPropertiesForKeys: nil) {
+                if try modified(child) > saved { return true }
+            }
+            return false
+        } catch {
+            // Missing/unreadable metadata cannot establish a coherent pair.
+            return true
+        }
+    }
+
+    struct PackedImage: Codable, Equatable {
+        let key: String
+        let directory: String
+    }
+
+    /// Keep an existing device on its original base until an explicit reset.
+    /// The active pointer is independent of the app's installation path.
+    static func packedImage(state: URL, nand: String, legacyKey: String,
+                            manifest: URL) throws -> (image: PackedImage, retained: Bool) {
+        let fm = FileManager.default
+        let digest = try String(contentsOf: manifest, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard digest.count == 64, digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let latest = PackedImage(key: "\(nand)-\(digest)", directory: "device/\(nand)-\(digest)")
+        let pointer = state.appendingPathComponent("device/active-\(nand).json")
+        var active: PackedImage
+        if fm.fileExists(atPath: pointer.path) {
+            active = try JSONDecoder().decode(PackedImage.self, from: Data(contentsOf: pointer))
+        } else if fm.fileExists(atPath: state.appendingPathComponent("device/\(nand)").path) {
+            let names = try fm.contentsOfDirectory(atPath: state.path)
+            let candidates = names.filter { $0 == "nandrw-\(nand)" || $0.hasPrefix("nandrw-\(nand)-") }
+            let key: String
+            if candidates.contains("nandrw-\(legacyKey)") {
+                key = legacyKey
+            } else if candidates.count == 1 {
+                key = String(candidates[0].dropFirst("nandrw-".count))
+            } else if candidates.isEmpty {
+                key = legacyKey
+            } else {
+                // Multiple historical roots cannot be attributed to this base.
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            active = PackedImage(key: key, directory: "device/\(nand)")
+        } else {
+            // Never silently abandon an overlay whose original base is missing.
+            for key in [legacyKey, nand] where fm.fileExists(atPath: state.appendingPathComponent("nandrw-\(key)").path) {
+                throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey:
+                    "The existing device overlay has no extracted base image. Restore its device/\(nand) directory before launching."])
+            }
+            active = latest
+        }
+        let oldReset = state.appendingPathComponent(".reset-\(active.key)")
+        let resetting = fm.fileExists(atPath: oldReset.path)
+            || fm.fileExists(atPath: state.appendingPathComponent(".reset-\(nand)").path)
+        if resetting {
+            // Preserve old base + overlay as a pair. Reset applies to the new
+            // image too if this build has previously been used on this Mac.
+            try Data().write(to: state.appendingPathComponent(".reset-\(latest.key)"), options: .atomic)
+            active = latest
+        } else if active != latest, !fm.fileExists(atPath: state.appendingPathComponent(active.directory).path) {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        try fm.createDirectory(at: pointer.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(active).write(to: pointer, options: .atomic)
+        if resetting, active == latest {
+            for marker in Set([oldReset, state.appendingPathComponent(".reset-\(nand)")])
+            where marker.lastPathComponent != ".reset-\(latest.key)" && fm.fileExists(atPath: marker.path) {
+                try fm.removeItem(at: marker)
+            }
+        }
+        return (active, active != latest)
+    }
+}

@@ -18,7 +18,7 @@ final class DeviceViewController: NSViewController {
         displayView.emulator = emulator
         displayView.onDropIPA = { [weak self] url in self?.installDropped(url) }
         displayView.onDropCatalogApp = { [weak self] app in
-            guard let self, self.emulator.canReachDevice else { return }
+            guard let self, self.emulator.canQueueInstall else { return }
             AppInstaller.startCatalog(app, with: self.emulator, presenting: self.view.window)
         }
     }
@@ -95,10 +95,10 @@ final class DeviceViewController: NSViewController {
     /// while the button for the identical operation sat greyed out.
     private func installDropped(_ url: URL) {
         // Deliberately NOT gated on isInstalling: AppInstaller queues each job
-        // behind the last, so dropping a second .ipa mid-install is supported.
+        // when their bytes are ready, so dropping another IPA is supported.
         // Refusing it was a regression — dropping three at once is the whole
         // point of accepting multiple files.
-        guard emulator.canReachDevice else {
+        guard emulator.canQueueInstall else {
             let alert = NSAlert()
             alert.messageText = "The device isn’t ready yet"
             alert.informativeText =

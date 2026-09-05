@@ -7,9 +7,9 @@
 // point of this program.
 
 import Foundation
+import Darwin
 
-@MainActor
-enum IPALibrary {
+nonisolated enum IPALibrary {
 
     private static let dir: URL = {
         let url = Bundled.stateDirectory.appendingPathComponent("IPAs", isDirectory: true)
@@ -21,7 +21,7 @@ enum IPALibrary {
     /// component, and an archive can claim anything as its identifier.
     private static func safe(_ bundleID: String) -> String? {
         guard !bundleID.isEmpty, !bundleID.hasPrefix("."),
-              !bundleID.contains("/"), !bundleID.contains(":") else { return nil }
+              !bundleID.contains("/"), !bundleID.contains(":"), !bundleID.contains("\0") else { return nil }
         return bundleID
     }
 
@@ -34,11 +34,19 @@ enum IPALibrary {
 
     /// Keep a copy of a just-installed .ipa. Best-effort: dragging is a
     /// convenience, never worth failing an install over.
-    static func adopt(_ ipa: URL, for bundleID: String) {
+    @concurrent static func adopt(_ ipa: URL, for bundleID: String) async {
         guard let id = safe(bundleID) else { return }
         let dst = dir.appendingPathComponent("\(id).ipa")
-        try? FileManager.default.removeItem(at: dst)
-        try? FileManager.default.copyItem(at: ipa, to: dst)
+        let temporary = dir.appendingPathComponent(".\(UUID().uuidString).ipa")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        do {
+            try FileManager.default.copyItem(at: ipa, to: temporary)
+            guard rename(temporary.path, dst.path) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+        } catch {
+            NSLog("library: could not preserve IPA for %@: %@", id, error.localizedDescription)
+        }
     }
 
     /// The uninstall path forgets the copy alongside the metadata cache.

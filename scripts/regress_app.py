@@ -38,7 +38,40 @@ def check(name, ok, detail):
 
 def boot_env_keys(text):
     """The IT_* pairs the app's setBootEnv sets."""
-    return dict(re.findall(r'"(IT_[A-Z_]+)":\s*"([^"]*)"', text))
+    values = dict(re.findall(r'"(IT_[A-Z_]+)":\s*"([^"]*)"', text))
+    if re.search(r'"IT_BOOT_ARGS":\s*Self\.bootArgs\b', text):
+        # Resolve the current Swift computed property, excluding optional -v.
+        # An unknown expression remains missing and fails parity explicitly.
+        base = re.search(
+            r'static var bootArgs: String\s*\{\s*let base = "([^"]*)"\s*'
+            r'return verboseBoot \? base \+ " -v" : base\s*\}', text)
+        if base:
+            values["IT_BOOT_ARGS"] = base.group(1)
+    return values
+
+
+def env_drift(app, harness, required):
+    return {key: (app.get(key), harness.get(key)) for key in required
+            if key not in app or key not in harness or app[key] != harness[key]}
+
+
+def self_test():
+    source = '''
+    static var bootArgs: String {
+        let base = "test=1"
+        return verboseBoot ? base + " -v" : base
+    }
+    "IT_BOOT_ARGS": Self.bootArgs,
+    "IT_WDT_NORESET": "1"
+    '''
+    app = boot_env_keys(source)
+    assert app == {"IT_BOOT_ARGS": "test=1", "IT_WDT_NORESET": "1"}
+    assert not env_drift(app, dict(app), app)
+    assert env_drift({}, {}, ["missing"]) == {"missing": (None, None)}
+    assert env_drift(app, {}, ["IT_BOOT_ARGS"]) == {"IT_BOOT_ARGS": ("test=1", None)}
+    assert env_drift({"key": "1"}, {"key": "2"}, ["key"]) == {"key": ("1", "2")}
+    assert "IT_BOOT_ARGS" not in boot_env_keys(source.replace("base +", "other +"))
+    print("env parity self-test passed")
 
 
 def check_env_parity():
@@ -53,13 +86,16 @@ def check_env_parity():
     # IT_IMG3_SIG_ASIS is an app-only cosmetic, and IT_LCD_BRIGHT is a
     # harness-only knob — its lit-pixel checks need full exposure, while the app
     # must show the real backlight or Lock looks dead — so none are compared.)
-    required = ["IT_WDT_NORESET", "IT_TVOUT_READY", "IT_TVOUT_VBLANK",
+    required = ["IT_TVOUT_READY", "IT_TVOUT_VBLANK",
                 "IT_BOOT_ARGS", "IT_BOOT_ARGS_DELAY_MS", "IT_BOOT_ARGS_REPEAT",
                 "IT_BOOT_ARGS_INTERVAL_MS"]
-    drift = [k for k in required if app.get(k) != harness.get(k)]
+    check("guest-reset-enabled", "IT_WDT_NORESET" not in app and
+          "IT_WDT_NORESET" not in harness,
+          "neither launcher suppresses guest watchdog reset commands")
+    drift = env_drift(app, harness, required)
     check("env-parity", not drift,
           "app and harness boot env agree" if not drift
-          else f"DRIFT on {drift}: app={{k: app.get(k) for k in drift}} harness={{k: harness.get(k) for k in drift}}")
+          else f"DRIFT (app, harness): {drift}")
 
 
 # --------------------------------------------------------------------------
@@ -74,7 +110,7 @@ def make_cfg(out):
     if not os.path.exists(c.base_nand):
         c.base_nand = os.path.join(c.files, "nand-appsync3")
     c.nor = os.path.join(c.files, "ios3", "nor_7E18.bin")
-    c.qemu = os.path.join(QEMU_IOS, "build-min12b", "qemu-system-arm")
+    c.qemu = os.environ.get("QEMU", os.path.join(QEMU_IOS, "build-min12b", "qemu-system-arm"))
     c.cpu = None; c.mem = "128M"; c.out = out
     c.overlay = os.path.join(out, "overlay"); os.makedirs(c.overlay, exist_ok=True)
     c.usbmuxd = os.path.expanduser("~/Developer/usbmuxd-qemu/usbmuxd/src/usbmuxd")
@@ -138,8 +174,11 @@ def check_snapshot_roundtrip():
             if info.get("status") == "completed":
                 break
             time.sleep(0.5)
-        migrated = os.path.exists(snapshot) and os.path.getsize(snapshot) > 0
-        check("snap-save", migrated, f"{os.path.getsize(snapshot) if migrated else 0} bytes")
+        migrated = (info.get("status") == "completed" and
+                    os.path.exists(snapshot) and os.path.getsize(snapshot) > 0)
+        if not check("snap-save", migrated,
+                     f"status={info.get('status')}, {os.path.getsize(snapshot) if migrated else 0} bytes"):
+            return
         procs.stop(dev.proc if hasattr(dev, "proc") else dev.qemu)
 
         # Restore: -incoming, and assert it comes alive FAST (restored, not cold).
@@ -181,7 +220,11 @@ def check_snapshot_roundtrip():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--checks", default="env,snapshot")
+    ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
+    if args.self_test:
+        self_test()
+        return
     selected = args.checks.split(",")
     print("LightTouchMac app regression")
     if "env" in selected:

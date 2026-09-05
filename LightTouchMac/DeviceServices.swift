@@ -120,13 +120,14 @@ struct DeviceServices: Sendable {
     /// Upload the .ipa into the AFC jail and return its device-relative path,
     /// which is what instproxy_install wants. Chunked so progress is live.
     func stage(_ ipa: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> String {
-        // Mapped, not read: this line runs on the main actor (the type is
-        // implicitly @MainActor), so a plain read beachballed the UI for the
-        // whole of a large .ipa and spiked resident memory by its full size.
-        // Mapping defers the I/O to page faults taken on the detached AFC thread.
-        let data = try Data(contentsOf: ipa, options: .mappedIfSafe)
         let remote = "PublicStaging/\(Self.stagingName(ipa))"
         return try await run(Timeouts.stage, "upload") { imd, device in
+            // File I/O stays on the detached worker, including opening the file.
+            let input = try FileHandle(forReadingFrom: ipa)
+            defer { try? input.close() }
+            let total = try input.seekToEnd()
+            try input.seek(toOffset: 0)
+            guard total > 0 else { throw DeviceError.preflight("The IPA is empty.") }
             guard let start = imd.afc_client_start_service,
                   let mkdir = imd.afc_make_directory,
                   let open = imd.afc_file_open,
@@ -136,31 +137,41 @@ struct DeviceServices: Sendable {
             let rc = start(device, &client, "LightTouchMac")
             guard rc == imd.success, let client else { throw DeviceError.afc(.init(code: rc)) }
             defer { _ = imd.afc_client_free?(client) }
-
-            _ = "PublicStaging".withCString { mkdir(client, $0) }   // ignore "exists"
+            _ = "PublicStaging".withCString { mkdir(client, $0) }
             var handle: UInt64 = 0
-            let or = remote.withCString { open(client, $0, IMobileDevice.afcWriteMode, &handle) }
-            guard or == imd.success else { throw DeviceError.afc(.init(code: or)) }
-
-            var written = 0
-            var writeError: Int32 = imd.success
-            data.withUnsafeBytes { raw in
-                guard let base = raw.bindMemory(to: CChar.self).baseAddress else { return }
-                let total = raw.count
-                while written < total {
-                    let chunk = UInt32(min(1 << 16, total - written))
-                    var w: UInt32 = 0
-                    let wr = write(client, handle, base + written, chunk, &w)
-                    if wr != imd.success { writeError = wr; break }
-                    if w == 0 { writeError = 1; break }
-                    written += Int(w)
-                    progress(Double(written) / Double(total))
+            let opened = remote.withCString { open(client, $0, IMobileDevice.afcWriteMode, &handle) }
+            guard opened == imd.success else { throw DeviceError.afc(.init(code: opened)) }
+            var closed = false
+            var complete = false
+            defer {
+                if !closed { _ = close(client, handle) }
+                if !complete { _ = remote.withCString { imd.afc_remove_path?(client, $0) } }
+            }
+            var written: UInt64 = 0
+            while written < total {
+                try Task.checkCancellation()
+                guard let chunk = try input.read(upToCount: Int(min(1 << 16, total - written))),
+                      !chunk.isEmpty else { throw DeviceError.preflight("The IPA changed during upload.") }
+                try chunk.withUnsafeBytes { raw in
+                    let base = raw.bindMemory(to: CChar.self).baseAddress!
+                    var offset = 0
+                    while offset < raw.count {
+                        try Task.checkCancellation()
+                        var count: UInt32 = 0
+                        let rc = write(client, handle, base + offset, UInt32(raw.count - offset), &count)
+                        guard rc == imd.success, count > 0, count <= raw.count - offset else {
+                            throw DeviceError.upload(.init(code: rc == 0 ? 1 : rc), written: written, total: total)
+                        }
+                        offset += Int(count)
+                        written += UInt64(count)
+                    }
                 }
+                progress(Double(written) / Double(total))
             }
-            _ = close(client, handle)
-            guard writeError == imd.success, written == data.count else {
-                throw DeviceError.afc(.init(code: writeError))
-            }
+            let result = close(client, handle)
+            closed = true
+            guard result == imd.success else { throw DeviceError.upload(.init(code: result), written: written, total: total) }
+            complete = true
             return remote
         }
     }
@@ -439,7 +450,7 @@ struct DeviceServices: Sendable {
 func withDeadline<T: Sendable>(_ seconds: Double, _ operation: String,
                                _ work: @escaping @Sendable () throws -> T) async throws -> T {
     let once = ResumeOnce<T>()
-    Task.detached {
+    let worker = Task.detached {
         let result: Result<T, Error>
         do { result = .success(try work()) } catch { result = .failure(error) }
         // Losing the race means the deadline already fired and this thread was
@@ -448,11 +459,18 @@ func withDeadline<T: Sendable>(_ seconds: Double, _ operation: String,
     }
     Task.detached {
         try? await Task.sleep(for: .seconds(seconds))
-        if once.resume(.failure(DeviceError.timedOut(operation: operation))) {
+        once.resume(.failure(DeviceError.timedOut(operation: operation)), onWin: {
             AbandonedWork.abandoned(operation)
-        }
+            worker.cancel()
+        })
     }
-    return try await withCheckedThrowingContinuation { once.attach($0) }
+    return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { once.attach($0) }
+    } onCancel: {
+        // Do not free C handles or release the gate until the worker returns
+        // (or its watchdog fires). Cooperative loops stop between C calls.
+        worker.cancel()
+    }
 }
 
 /// How many blocked C threads have been walked away from and not come back.
@@ -540,15 +558,18 @@ nonisolated private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
 
     /// True if this result is the one the caller gets — i.e. this side won.
     @discardableResult
-    func resume(_ result: Result<T, Error>) -> Bool {
+    func resume(_ result: Result<T, Error>, onWin: () -> Void = {}) -> Bool {
         lock.lock()
-        guard !done else { lock.unlock(); return false }
+        guard !done, pending == nil else { lock.unlock(); return false }
+        // Account for abandoned work before the worker can lose this race and
+        // decrement it, and before the caller is allowed to start another op.
+        onWin()
         if let c = cont {
             done = true; cont = nil; lock.unlock(); c.resume(with: result); return true
         }
-        if pending == nil { pending = result; lock.unlock(); return true }
+        pending = result
         lock.unlock()
-        return false
+        return true
     }
 }
 
@@ -605,8 +626,13 @@ actor DeviceGate {
         // one, so starting another is what keeps it from recovering.
         guard AbandonedWork.count < AbandonedWork.cap else { throw DeviceError.recovering }
         await acquire()
-        do { let r = try await body(); release(); return r }
-        catch { release(); throw error }
+        do {
+            try Task.checkCancellation()
+            guard AbandonedWork.count < AbandonedWork.cap else { throw DeviceError.recovering }
+            let r = try await body()
+            release()
+            return r
+        } catch { release(); throw error }
     }
 }
 
@@ -618,6 +644,7 @@ nonisolated enum DeviceError: Error, LocalizedError {
     case lockdown(Int32)
     case instproxy(InstproxyError, phase: String?)
     case afc(AFCError)
+    case upload(AFCError, written: UInt64, total: UInt64)
     case diskFull(free: Int64, needed: Int64)
     case timedOut(operation: String)
     case recovering                                    // earlier requests still stuck
@@ -627,6 +654,14 @@ nonisolated enum DeviceError: Error, LocalizedError {
     /// Transient service hiccups worth retrying — a fresh boot or a just-freed
     /// service slot refuses connections for a few seconds. A rejected .ipa or a
     /// full disk fails the same way every time and must not loop.
+    var shouldPauseInstallQueue: Bool {
+        switch self {
+        case .notAttached, .lockdown, .afc, .upload, .timedOut, .recovering: return true
+        case .instproxy(let error, _): return error.isTransient
+        default: return false
+        }
+    }
+
     var isTransient: Bool {
         switch self {
         // NOT .timedOut. A timed-out operation has left a blocked C thread and
@@ -651,6 +686,8 @@ nonisolated enum DeviceError: Error, LocalizedError {
         case .instproxy(let e, let phase):
             return "Install service error (\(phase ?? "op")): \(e)."
         case .afc(let e): return "File-transfer error: \(e)."
+        case .upload(let e, let written, let total):
+            return "Upload stopped after \(written / 1_048_576) of \(total / 1_048_576) MB: \(e). Pending installs are paused; resume them from the app list’s context menu after the device responds."
         case .diskFull(let free, let needed):
             return "Not enough space on the device: \(free / 1_048_576) MB free, "
                 + "about \(needed / 1_048_576) MB needed. Uninstall something first."
@@ -726,6 +763,9 @@ nonisolated enum AFCError: Equatable, CustomStringConvertible {
         case .opTimeout: return "timeout"
         case .noMem: return "out of memory"
         case .internalError: return "internal error"
+        case .other(1): return "unknown AFC error (code 1)"
+        case .other(18): return "device storage is full (code 18)"
+        case .other(11), .other(30): return "device connection lost"
         case .other(let c): return "code \(c)"
         }
     }

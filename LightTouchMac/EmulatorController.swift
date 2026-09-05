@@ -13,6 +13,15 @@ final class EmulatorController {
     let options: LaunchOptions
     private let usbmux = USBMux()
     private var started = false
+    private var packedImage: DeviceStateStorage.PackedImage?
+    private var retainedPackedImage = false
+    private var reportedStorageFailure = false
+    private var mediaPreparationTask: Task<Void, Never>?
+    private var preparingMedia = false {
+        didSet { onStatusChange?() }
+    }
+    private var mediaPreparationFailure: String?
+
 
     /// The VM's lifecycle. Everything the UI enables or disables keys off this;
     /// `.dead` is the one that used to be invisible — QEMU would exit and the
@@ -67,6 +76,23 @@ final class EmulatorController {
         started = true
         state = .booting
 
+        if !FileManager.default.fileExists(atPath: options.nandImage),
+           FileManager.default.fileExists(atPath: options.packedNAND + ".sha256") {
+            do {
+                let selected = try DeviceStateStorage.packedImage(
+                    state: stateDir, nand: options.nand, legacyKey: legacyImageKey,
+                    manifest: URL(fileURLWithPath: options.packedNAND + ".sha256"))
+                packedImage = selected.image
+                retainedPackedImage = selected.retained
+                if selected.retained {
+                    NSLog("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
+                }
+            } catch {
+                NSLog("nand: could not resolve device image: \(error.localizedDescription)")
+                state = .dead(exitCode: 1)
+                return
+            }
+        }
         migrateStateNames()
 
         // One overlay per base image, so an overlay is never replayed onto a
@@ -77,7 +103,9 @@ final class EmulatorController {
         if FileManager.default.fileExists(atPath: resetMarkerURL.path) {
             NSLog("reset: wiping device overlay back to the base image")
             do {
-                try FileManager.default.removeItem(at: overlay)
+                if FileManager.default.fileExists(atPath: overlay.path) {
+                    try FileManager.default.removeItem(at: overlay)
+                }
                 // Consume the marker only once the wipe has actually happened.
                 // It used to be removed regardless, so a removal that failed
                 // (a leaked process holding a page open, a permissions problem)
@@ -118,7 +146,7 @@ final class EmulatorController {
             nandBase = options.nandImage
             nandUnpack = nil
         } else {
-            let dest = stateDir.appendingPathComponent("device/\(options.nand)",
+            let dest = stateDir.appendingPathComponent(packedImage?.directory ?? "device/\(options.nand)",
                                                        isDirectory: true).path
             nandBase = dest
             nandUnpack = FileManager.default.fileExists(atPath: dest)
@@ -142,6 +170,7 @@ final class EmulatorController {
             "-M", machine,
             "-m", options.memory,
             "-display", "none",
+            "-audio", "driver=coreaudio,out.buffer-count=16",
             "-serial", "file:\(serialLog.path)",
         ]
         if options.network {
@@ -175,9 +204,47 @@ final class EmulatorController {
         thread.stackSize = 16 << 20
         thread.start()
 
+        startMediaPreparation()
         verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
         startOrientationWatch()   // idle until the guest is up and reachable
         startTimeZoneSync()       // guest zone follows the Mac's, incl. travel
+    }
+
+    /// Existing images need the same media engine/configuration as newly
+    /// packaged images before apps can use the native compositor.
+    private func startMediaPreparation() {
+        guard options.appsync else { return }
+        preparingMedia = true
+        mediaPreparationFailure = nil
+        mediaPreparationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.preparingMedia = false }
+            do {
+                let deadline = ContinuousClock.now + .seconds(180)
+                while true {
+                    try Task.checkCancellation()
+                    guard !isDead, !storageFailed, ContinuousClock.now < deadline else {
+                        throw DeviceToolsError.failed("The device did not become ready for its media update.")
+                    }
+                    if state == .running, await deviceReady() { break }
+                    try await Task.sleep(for: .seconds(2))
+                }
+                try Task.checkCancellation()
+                NSLog("media: checking guest graphics components")
+                if try await tools().updateMediaComponents() {
+                    try await tools().reloadMediaCompositor()
+                    try await Task.sleep(for: .seconds(12))
+                    NSLog("media: guest graphics components updated")
+                } else {
+                    NSLog("media: guest graphics components already current")
+                }
+            } catch {
+                if !Task.isCancelled {
+                    mediaPreparationFailure = error.localizedDescription
+                    NSLog("media: preparation failed: \(error.localizedDescription)")
+                }
+            }
+        }
     }
 
     /// Keep the guest's timezone matched to the Mac's: once when the device
@@ -200,7 +267,7 @@ final class EmulatorController {
     /// overlapping run is harmless.
     private func syncTimeZoneWhenReady() async {
         while !Task.isCancelled {
-            if state == .running, canManageApps, await deviceReady(),
+            if state == .running, !preparingMedia, canManageApps, await deviceReady(),
                (try? await tools().setTimeZone(TimeZone.current.identifier)) != nil {
                 return
             }
@@ -209,6 +276,7 @@ final class EmulatorController {
     }
 
     func stop() {
+        mediaPreparationTask?.cancel()
         usbmux.stop()
         // Ends the ssh session, which is what tells the guest-side reporter to
         // exit; leaving it running would strand an iproxy and an ssh behind us.
@@ -219,7 +287,7 @@ final class EmulatorController {
     /// Inflate the packed device image with the bundled ipod-helper. Into a
     /// .partial sibling first, renamed only on success, so a first launch
     /// killed mid-unpack can't leave a torn base image that boots corrupt.
-    private static func unpackNAND(_ packed: String, into dest: String) -> Bool {
+    nonisolated private static func unpackNAND(_ packed: String, into dest: String) -> Bool {
         guard let helper = Bundled.tool("ipod-helper") else {
             NSLog("nand: packed image present but no bundled ipod-helper to unpack it")
             return false
@@ -246,10 +314,11 @@ final class EmulatorController {
             NSLog("nand: could not run ipod-helper: \(error.localizedDescription)")
             return false
         }
+        // Drain before waiting: a full stderr pipe otherwise deadlocks unpack.
+        let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(),
+                         encoding: .utf8) ?? ""
         task.waitUntilExit()
         guard task.terminationStatus == 0 else {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(),
-                             encoding: .utf8) ?? ""
             NSLog("nand: unpack failed (exit \(task.terminationStatus)): \(err)")
             return false
         }
@@ -268,6 +337,7 @@ final class EmulatorController {
         // restoring stale RAM onto an advanced NAND is worse than a cold boot,
         // so drop the snapshot (unless a clean save is in progress).
         if state != .snapshotting { discardSavedState() }
+        mediaPreparationTask?.cancel()
         usbmux.stop()
         state = .dead(exitCode: code)
     }
@@ -291,18 +361,33 @@ final class EmulatorController {
         Date().timeIntervalSince(lastFrameAdvance) < 2.0
     }
 
-    var isRunning: Bool { state == .running }
+    var storageFailed: Bool { qemu_ios_ui_storage_failed() }
+
+    func pollStorageFailure() {
+        if storageFailed, !reportedStorageFailure {
+            reportedStorageFailure = true
+            discardSavedState()
+            onStatusChange?()
+        }
+    }
+
+    var isRunning: Bool { state == .running && !storageFailed && !preparingMedia }
     var isPaused:  Bool { state == .paused }
     var isDead:    Bool { if case .dead = state { return true } else { return false } }
     /// The guest can take input only while actually executing.
-    var acceptsInput: Bool { state == .running }
+    var acceptsInput: Bool { isRunning }
 
     /// One line for the window's status area.
     var statusLine: String {
+        if storageFailed { return "Storage write failed — device stopped; latest changes were not saved" }
         switch state {
         case .notStarted: return "Starting…"
         case .booting:    return "Booting…"
-        case .running:    return canManageApps ? "Running" : "Running — USB unavailable"
+        case .running:
+            if preparingMedia { return "Preparing device media…" }
+            if let mediaPreparationFailure { return "Media update failed — \(mediaPreparationFailure)" }
+            if retainedPackedImage { return "Running — existing image retained; erase device to upgrade" }
+            return canManageApps ? "Running" : "Running — USB unavailable"
         case .paused:     return "Paused"
         case .snapshotting: return "Saving state…"
         case .dead:       return "Emulator stopped"
@@ -599,7 +684,11 @@ final class EmulatorController {
     // MARK: - Machine control
 
     func pause()  { qemu_ios_ui_pause();  if state == .running { state = .paused } }
-    func resume() { qemu_ios_ui_resume(); if state == .paused  { state = .running } }
+    func resume() {
+        guard !storageFailed else { return }
+        qemu_ios_ui_resume()
+        if state == .paused { state = .running }
+    }
     /// The guest cold-boots portrait, so our tracked orientation has to follow
     /// it back. Leaving it at 90/270 left DisplayView posing the shell sideways
     /// and sizing the cutout landscape while the guest published a portrait
@@ -611,6 +700,7 @@ final class EmulatorController {
     /// leaving a stopped machine labelled "Booting…" with all input dead, and no
     /// way back except stumbling onto Device ▸ Resume.
     func reset() {
+        guard !storageFailed else { return }
         guard state != .snapshotting else {
             NSLog("reset: ignored while a state save is in flight")
             return
@@ -621,14 +711,19 @@ final class EmulatorController {
         // Connect-to-iTunes screen. The quit path has done this for a while;
         // Restart, which is one menu row away from Erase, was still doing it
         // the dangerous way.
+        let preparation = mediaPreparationTask
+        preparation?.cancel()
         Task { [weak self] in
             guard let self else { return }
+            await preparation?.value
             if self.canManageApps {
                 _ = await withSoftDeadline(20) { try? await self.syncFilesystem() }
             }
+            guard !self.storageFailed, self.state != .snapshotting else { return }
             qemu_ios_ui_reset()
             self.rotationDegrees = 0
             self.state = .booting
+            self.startMediaPreparation()
         }
     }
     /// Kept for completeness; deliberately NOT in a menu — system_powerdown
@@ -640,8 +735,7 @@ final class EmulatorController {
 
     // MARK: - Snapshot persistence
     //
-    // The snapshot is the durable state (3.1.3 has no clean shutdown, so the
-    // overlay is torn on every hard exit). The overriding invariant, B2a: it
+    // Snapshots persist RAM alongside the NAND overlay. The invariant: it
     // must be impossible to get STUCK on a bad snapshot. Two gates enforce it —
     // never SAVE a wedged guest (health gate below), and never stay on a bad
     // RESTORE (a restored snapshot is provisional; if it doesn't come alive it
@@ -656,6 +750,8 @@ final class EmulatorController {
     /// only fires when the new name is absent — so it can never overwrite state
     /// that already belongs to this image.
     private func migrateStateNames() {
+        // Content-keyed images must never adopt another image's overlay.
+        guard packedImage == nil || packedImage?.key == legacyImageKey else { return }
         let fm = FileManager.default
         for (old, new) in [("nandrw-\(options.nand)", "nandrw-\(imageKey)"),
                            ("snapshot-\(options.nand)", "snapshot-\(imageKey)"),
@@ -679,7 +775,9 @@ final class EmulatorController {
     /// snapshot — image B read through image A's overlay, and a snapshot taken
     /// on A restored onto B. That is the stale-RAM-over-different-flash
     /// corruption this file's own comments spend paragraphs avoiding.
-    private var imageKey: String {
+    private var imageKey: String { packedImage?.key ?? legacyImageKey }
+
+    private var legacyImageKey: String {
         let root = options.filesRoot
         guard !root.isEmpty else { return options.nand }
         // Short, stable, and readable enough to identify in Finder.
@@ -699,13 +797,7 @@ final class EmulatorController {
 
     /// UserDefaults key for the Settings toggle.
     ///
-    /// Back to ON now that the resume path works end to end: the guest no
-    /// longer comes back frozen (store_global_state), and usbmuxd detects a
-    /// resumed guest from the migrated USB address and adopts the live session
-    /// instead of driving a reset+re-enumeration into it. The self-heal is also
-    /// real now (it requires deviceReady, not the restore's own repaint), so a
-    /// bad snapshot quarantines and cold-boots on the next launch rather than
-    /// looping. Off remains one click away in Settings.
+    /// Opt-in until resume is validated across the supported guest workloads.
     static let resumeDefaultsKey = "resumeOnLaunch"
     static var resumeOnLaunch: Bool {
         UserDefaults.standard.object(forKey: resumeDefaultsKey) as? Bool ?? false
@@ -749,24 +841,8 @@ final class EmulatorController {
         return ["-incoming", "file:\(snapshotURL.path)"]
     }
 
-    /// Has the NAND overlay been written since the snapshot was taken?
-    ///
-    /// Generous margin: the quit-time save and the last few page writes race
-    /// each other by design, and a false positive here silently costs the user
-    /// the resume they asked for. Only a clearly-later overlay counts.
     private func overlayIsNewerThanSnapshot(overlay: URL) -> Bool {
-        let fm = FileManager.default
-        func modified(_ url: URL) -> Date {
-            (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date ?? .distantPast
-        }
-        let saved = modified(snapshotURL)
-        // Pages land in per-chip-select subdirectories (cs0…cs3); renaming into
-        // one touches that directory, not the parent, so ask the children too.
-        var newest = modified(overlay)
-        for child in (try? fm.contentsOfDirectory(at: overlay, includingPropertiesForKeys: nil)) ?? [] {
-            newest = max(newest, modified(child))
-        }
-        return newest.timeIntervalSince(saved) > 10
+        DeviceStateStorage.overlayIsNewer(overlay, than: snapshotURL)
     }
 
     /// A restored snapshot is provisional. If the guest doesn't paint or answer
@@ -801,7 +877,7 @@ final class EmulatorController {
     static let quitSnapshotBudget: TimeInterval = Timeouts.serviceProbe * 2 + 3 + 15
 
     private func performSnapshot(completion: @escaping (Bool) -> Void) {
-        guard state == .running else { completion(false); return }
+        guard isRunning else { completion(false); return }
         Task { [weak self] in
             guard let self else { completion(false); return }
             guard await self.proveAlive() else {
@@ -818,6 +894,7 @@ final class EmulatorController {
                 self.quarantineSnapshot()
                 completion(false); return
             }
+            guard self.isRunning else { completion(false); return }
             self.state = .snapshotting
             try? FileManager.default.removeItem(at: self.snapshotTmpURL)
             qemu_ios_snapshot_save2(self.snapshotTmpURL.path)
@@ -827,19 +904,15 @@ final class EmulatorController {
                 var buf = [CChar](repeating: 0, count: 256)
                 let status = qemu_ios_snapshot_status(&buf, 256)
                 if status == QEMU_IOS_SNAPSHOT_DONE {
-                    // Never destroy a good snapshot for a save that produced no
-                    // file: a premature DONE once deleted the saved state and
-                    // renamed a .tmp that did not exist, reporting success.
-                    // Promote only what actually exists and has bytes.
-                    let size = (try? FileManager.default
-                        .attributesOfItem(atPath: self.snapshotTmpURL.path))?[.size] as? Int ?? 0
-                    guard size > 0 else {
-                        NSLog("snapshot: reported DONE with no output — keeping existing snapshot")
+                    guard !self.storageFailed else {
                         self.resumeAfterFailedSave(); completion(false); return
                     }
-                    // Atomic promote: a torn snapshot must never shadow a good one.
-                    try? FileManager.default.removeItem(at: self.snapshotURL)
-                    try? FileManager.default.moveItem(at: self.snapshotTmpURL, to: self.snapshotURL)
+                    do {
+                        try DeviceStateStorage.promoteSnapshot(from: self.snapshotTmpURL, to: self.snapshotURL)
+                    } catch {
+                        NSLog("snapshot: could not promote saved state: \(error.localizedDescription)")
+                        self.resumeAfterFailedSave(); completion(false); return
+                    }
                     completion(true); return
                 }
                 if status == QEMU_IOS_SNAPSHOT_FAILED {
@@ -887,6 +960,7 @@ final class EmulatorController {
     /// wakes the screen and repaints. A guest that is executing answers within
     /// a frame or two; a wedged one never does.
     func proveAlive() async -> Bool {
+        guard !storageFailed else { return false }
         if framesRecentlyAdvanced { return true }
         if canManageApps, await deviceReady() { return true }
         pressHome()
@@ -911,42 +985,15 @@ final class EmulatorController {
         performSnapshot(completion: completion)
     }
 
-    /// Shut the guest's filesystem down on quit. `completion(true)` means it
-    /// actually happened, not that we asked.
-    ///
-    /// Through the KERNEL, not the UI. The machine model turns
-    /// `system_powerdown` into a synthetic press-and-hold plus a slide across
-    /// SpringBoard's power-off sheet, and that only works while the UI is
-    /// healthy — which is not when a shutdown gets asked for. Measured: a
-    /// powerdown requested while a full-screen GL app was foreground never
-    /// completed; the same build powers off in 14s from the home screen. A game
-    /// that has hung is not going to draw the slider, and that is exactly when
-    /// the user reaches for ⌘Q.
-    ///
-    /// `ithalt` (contrib/it-halt) calls reboot(RB_HALT): XNU syncs, runs
-    /// vfs_unmountall(), and halts. Nothing has to cooperate and nothing has to
-    /// be drawn. Verified on nand-ultimate — the helper reports "syncing and
-    /// halting", the guest takes the system down (ssh is closed from the remote
-    /// end), and an app installed that session is still installed after the VM
-    /// is killed and rebooted.
-    ///
-    /// The unmount is what commits the HFS+ catalog, which 3.1.3 otherwise
-    /// keeps in memory: without one, an app installed this session can be GONE
-    /// next boot (measured 0/1) even though all 74 MB of it reached flash.
-    ///
-    /// Order of preference, best first:
-    ///   1. ithalt — kernel unmount, no UI involvement at all.
-    ///   2. sync — no unmount, but enough to keep this session's installs
-    ///      (measured 1/1). Reached when the helper is missing.
-    ///   3. the powerdown gesture — needs a healthy SpringBoard, so it is the
-    ///      last resort, not the plan. Only when there is no ssh channel at all.
-    /// Seconds this can take at worst. The quit backstop is derived from this
-    /// rather than restated, because a backstop shorter than the path it guards
-    /// kills the app MID-shutdown — which is the one thing it exists to prevent.
-    static let cleanShutdownBudget: TimeInterval = 30 + 20 + 40 + 5
+    /// Request kernel unmount via ithalt, then require the guest's final PMU
+    /// power-off write. The helper banner, lost SSH connection, and `sync`
+    /// only prove progress; none establish a completed shutdown.
+    /// The halt command and its confirmation share a 30-second budget, followed
+    /// by a best-effort sync. No guest UI gestures are used on shutdown.
+    static let cleanShutdownBudget: TimeInterval = 30 + 20 + 5
 
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
-        guard !isDead, state != .notStarted else { completion(false); return }
+        guard !storageFailed, !isDead, state != .notStarted else { completion(false); return }
         // Never underneath a save. `Save State Now` stops the vCPU and is still
         // writing; resuming it here produced a snapshot captured across a
         // running CPU and then promoted it as good, for the NEXT launch to
@@ -961,45 +1008,42 @@ final class EmulatorController {
         qemu_ios_snapshot_resume()   // no-op if already running
         state = .running
 
+        let preparation = mediaPreparationTask
+        preparation?.cancel()
         Task { [weak self] in
             guard let self else { completion(false); return }
+            await preparation?.value
 
+            let confirmed = { !self.storageFailed && qemu_ios_ui_guest_shutdown_confirmed() }
+            let stopped = { self.storageFailed || self.isDead }
             if self.canManageApps {
-                let halted = await withSoftDeadline(30) { () -> Bool in
+                let haltDeadline = Date().addingTimeInterval(30)
+                _ = await withSoftDeadline(30) { () -> Bool in
                     do { try await self.haltFilesystem(); return true }
                     catch {
-                        NSLog("quit: halt helper unavailable (\(error.localizedDescription))")
+                        NSLog("quit: halt command ended without acknowledgement (\(error.localizedDescription)); waiting for guest power-off")
                         return false
                     }
                 } ?? false
-                if halted {
-                    // The helper does not return until the guest is going down;
-                    // give the unmount a moment to finish behind it.
-                    NSLog("quit: guest halted — volume unmounted")
-                    try? await Task.sleep(for: .seconds(2))
+                // sshd can close before its final stdout packet is delivered.
+                // The PMU event is authoritative even if the marker was lost.
+                if await DeviceStateStorage.waitForShutdown(until: haltDeadline,
+                                                            confirmed: confirmed, stopped: stopped) {
+                    NSLog("quit: guest confirmed power-off — volume unmounted")
                     completion(true); return
                 }
+                if confirmed() { completion(true); return }
+                if stopped() { completion(false); return }
                 let synced = await withSoftDeadline(20) { () -> Bool in
                     (try? await self.syncFilesystem()) != nil
                 } ?? false
                 if synced {
-                    NSLog("quit: no halt helper, but the guest synced — installs are safe")
-                    completion(true); return
+                    NSLog("quit: guest synced; unmount still unconfirmed")
                 }
             }
 
-            // No ssh channel at all. Fall back to the gesture, which is the only
-            // remaining option and needs SpringBoard to be alive and drawing.
-            NSLog("quit: falling back to the power-off gesture (needs a healthy UI)")
-            qemu_ios_ui_powerdown()
-            let deadline = Date().addingTimeInterval(40)
-            while Date() < deadline {
-                try? await Task.sleep(for: .milliseconds(200))
-                if self.isDead {
-                    NSLog("quit: guest powered off cleanly — volume unmounted")
-                    completion(true); return
-                }
-            }
+            if confirmed() { completion(true); return }
+            if stopped() { completion(false); return }
             NSLog("quit: guest did not shut down — this session's writes may be lost")
             completion(false)
         }
@@ -1095,7 +1139,7 @@ final class EmulatorController {
 
     // MARK: - App management
     
-    var canManageApps: Bool { usbmux.session != nil }
+    var canManageApps: Bool { usbmux.session != nil && !storageFailed }
 
     /// The question every app-management command actually wants answered.
     ///
@@ -1109,6 +1153,12 @@ final class EmulatorController {
     /// and toolbar were the ones still guessing. `deviceReachable` is that round
     /// trip, set by the list poll, and nil until the first one lands.
     var canReachDevice: Bool { canManageApps && isRunning && deviceReachable == true }
+
+    /// Adding to the ready queue opens no guest session. A probe suppressed by
+    /// our own install must not disable File → Install App or drag-and-drop.
+    var canQueueInstall: Bool {
+        canManageApps && isRunning && (deviceReachable == true || AppInstaller.isUsingDevice || isInstalling)
+    }
     /// The usbmuxd socket to talk to this device on, for the long-lived
     /// notification_proxy watcher (which owns its own session, not a gated one).
     var usbmuxSession: String? { usbmux.session?.clientSocket }
@@ -1224,9 +1274,13 @@ final class EmulatorController {
         // keeps the override — its checks count lit pixels.
         let env = [
             "IT_DIRECT_IBOOT": options.iBoot,
-            "IT_WDT_NORESET": "1",
             "IT_TVOUT_READY": "1",
             "IT_TVOUT_VBLANK": "1",
+            "IT_AMC_DECODE": "1",
+            "IT_MPVD_DECODE": "1",
+            "IT_H264_DECODE": "1",
+            "IT_SCALER_DECODE": "1",
+            "IT_LCD_PLANES": "1",
             "IT_IMG3_SIG_ASIS": "1",   // restores the Apple boot logo on 3.1.3
             // `-v` when asked: iPhone OS shows the kernel's console output over
             // the boot logo instead of the Apple mark, which is the only view

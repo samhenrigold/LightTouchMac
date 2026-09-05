@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Make the built LightTouchMac.app self-contained: embed libqemu-arm.dylib and
-# its Homebrew dylib dependency closure into Contents/Frameworks, repointed to
+# its compatible dylib dependency closure into Contents/Frameworks, repointed to
 # @rpath, then re-sign. After this the app runs on a Mac that has neither the
 # qemu-ios build tree nor Homebrew.
 #
@@ -12,18 +12,21 @@
 #   for a distributable build, and NOTARY_PROFILE to a notarytool keychain
 #   profile to also notarize + staple.
 #
-# Device assets (bootrom/NAND/NOR/iBoot) are NOT copied here — the 1 GB NAND is
-# compressed and staged by the existing contrib/macos-app/build-app.sh pipeline
-# (nandpack + first-run unpack). Point that at this app for a shippable, or run
-# the app with the dev files-root on this machine.
+# Build compatible dependencies with scripts/build-package-native.sh first; it
+# prints the QEMU_BUILD_DIR/LTM_DEPS_PREFIX/USBMUXD_BIN settings to use here.
+# Device assets are embedded below unless LTM_ASSETS=none (development only).
 set -euo pipefail
 
 APP="${1:-}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 QEMU="${QEMU_IOS_DIR:-$HOME/Developer/qemu-ios}"
-BUILD="$QEMU/build-min12b"
+BUILD="${QEMU_BUILD_DIR:-$QEMU/build-native14/qemu-build}"
 DYLIB="$BUILD/libqemu-arm.dylib"
 ENTITLEMENTS="$QEMU/contrib/macos-app/entitlements.plist"
+DEPS="${LTM_DEPS_PREFIX:-$QEMU/build-native14/prefix}"
+CHECK="$SRC/scripts/check-macho.py"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
 SIGN_ID="${SIGN_ID:--}"          # '-' == ad-hoc
 
 if [ -z "$APP" ]; then
@@ -45,6 +48,10 @@ if otool -L "$APP/Contents/MacOS/LightTouchMac" | grep -q '\.debug\.dylib'; then
     exit 1
 fi
 
+MINOS="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
+# Check the emulator closure before modifying the app. The app is checked after embedding.
+python3 "$CHECK" --minos "$MINOS" "$DYLIB"
+
 FRAMEWORKS="$APP/Contents/Frameworks"
 mkdir -p "$FRAMEWORKS"
 echo "app:        $APP"
@@ -59,27 +66,33 @@ copy_with_deps() {
     case "$COPIED" in *" $base "*) return ;; esac
     COPIED="$COPIED$base "
 
+    python3 "$CHECK" --minos "$MINOS" "$src"
     local dst="$FRAMEWORKS/$base"
     if [ "$src" != "$dst" ]; then cp -f "$src" "$dst"; chmod u+w "$dst"; fi
-    install_name_tool -id "@rpath/$base" "$dst" 2>/dev/null || true
+    install_name_tool -id "@rpath/$base" "$dst"
 
-    # Snapshot the Homebrew/local deps BEFORE repointing — otherwise the repoint
-    # rewrites them to @rpath and the recursion below never sees the originals.
-    local deps
-    deps="$(otool -L "$dst" | tail -n +2 | awk '{print $1}' \
-            | grep -E '^(/opt/homebrew|/usr/local)/' || true)"
+    local dep resolved
+    while IFS=$'\t' read -r dep resolved; do
+        install_name_tool -change "$dep" "@rpath/$(basename "$resolved")" "$dst"
+        copy_with_deps "$resolved"
+    done < <(python3 "$CHECK" --deps "$src")
+    install_name_tool -add_rpath "@loader_path" "$dst" 2>/dev/null || true
 
-    for dep in $deps; do
-        install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$dst"
-    done
-    # Recurse in this shell (a for-loop, not a pipe) so the COPIED set persists.
-    for dep in $deps; do
-        copy_with_deps "$dep"
-    done
 }
 
 echo "embedding dylib + dependency closure…"
 copy_with_deps "$DYLIB"
+# Ship the source provenance and license alongside the optional AAC decoder.
+case "$COPIED" in
+    *" libavcodec."*)
+        [ -f "$DEPS/share/licenses/ffmpeg/COPYING.LGPLv2.1" ] || {
+            echo "missing FFmpeg license/provenance in $DEPS/share/licenses/ffmpeg" >&2
+            exit 1
+        }
+        mkdir -p "$APP/Contents/Resources/licenses"
+        cp -R "$DEPS/share/licenses/ffmpeg" "$APP/Contents/Resources/licenses/"
+        ;;
+esac
 
 APP_BIN="$APP/Contents/MacOS/LightTouchMac"
 
@@ -91,48 +104,45 @@ APP_BIN="$APP/Contents/MacOS/LightTouchMac"
 # Bundled.swift looks there first and falls back to the checkout, so a dev build
 # and a packaged one take the same code path.
 #
-# libimobiledevice is here rather than in the app's link line on purpose: the
-# app dlopens it (see IMobileDevice.swift), because Homebrew builds its dylibs
-# for whatever macOS the build machine runs and hard-linking one would stop the
-# app launching on anything older.
+# IMobileDevice.swift dlopens compatible libimobiledevice and libplist; their
+# deployment targets must satisfy the same minimum as the linked emulator.
 TOOLS="$APP/Contents/Resources/tools"
 mkdir -p "$TOOLS"
-MISSING=""
-
+HOST_TOOLS=()
 copy_tool() {
     local src="$1" base; base="$(basename "$src")"
-    if [ ! -f "$src" ]; then MISSING="$MISSING $base"; return; fi
+    [ -f "$src" ] || { echo "missing required tool: $src" >&2; exit 1; }
+    if [ "${2:-host}" = host ] && file "$src" | grep -q Mach-O; then
+        python3 "$CHECK" --minos "$MINOS" "$src"
+        HOST_TOOLS+=("$TOOLS/$base")
+    fi
     cp -f "$src" "$TOOLS/$base"
     chmod u+wx "$TOOLS/$base"
-    # Scripts have no load commands; otool just says so and the loop is empty.
-    local deps
-    deps="$(otool -L "$TOOLS/$base" 2>/dev/null | tail -n +2 | awk '{print $1}' \
-            | grep -E '^(/opt/homebrew|/usr/local)/' || true)"
-    for dep in $deps; do
-        install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$TOOLS/$base"
-        copy_with_deps "$dep"
-    done
-    # tools/ is two levels under Contents, so its way back to Frameworks is not
-    # the app binary's.
-    if [ -n "$deps" ]; then
-        install_name_tool -add_rpath "@executable_path/../../Frameworks" "$TOOLS/$base" 2>/dev/null || true
-    fi
+    [ "${2:-host}" = guest ] && return
+    file "$src" | grep -q Mach-O || return 0
+    local dep resolved
+    while IFS=$'\t' read -r dep resolved; do
+        install_name_tool -change "$dep" "@rpath/$(basename "$resolved")" "$TOOLS/$base"
+        copy_with_deps "$resolved"
+    done < <(python3 "$CHECK" --deps "$src")
+    install_name_tool -add_rpath "@executable_path/../../Frameworks" "$TOOLS/$base" 2>/dev/null || true
 }
 
-echo "embedding tools…"
-BREW="$(brew --prefix 2>/dev/null || echo /opt/homebrew)"
+echo "embedding compatible tools…"
 for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair; do
-    copy_tool "$BREW/bin/$tool"
+    copy_tool "$DEPS/bin/$tool"
 done
-# Compiled here rather than shipped prebuilt: ~80 lines of C against
-# Homebrew's libimobiledevice, embedded like the rest of the tools. It exists
-# because lockdownd_set_value must NOT run inside the app — see the comment
-# at the top of the source.
-TZ_BIN="$(mktemp -d)/lockdown-tz"
-cc -O2 -o "$TZ_BIN" "$SRC/scripts/lockdown-tz.c" \
-   -I"$BREW/include" -L"$BREW/lib" -limobiledevice-1.0 -lplist-2.0
+# Explicitly ship dlopen libraries even when the command-line tools are static.
+for stem in libimobiledevice-1.0 libplist-2.0; do
+    python3 "$CHECK" --minos "$MINOS" "$DEPS/lib/$stem.dylib"
+    copy_with_deps "$DEPS/lib/$stem.dylib"
+done
+TZ_BIN="$WORK/lockdown-tz"
+cc -O2 -mmacosx-version-min="$MINOS" -o "$TZ_BIN" "$SRC/scripts/lockdown-tz.c" \
+   -I"$DEPS/include" -L"$DEPS/lib" -limobiledevice-1.0 -lplist-2.0
 copy_tool "$TZ_BIN"
-copy_tool "${USBMUXD_QEMU:-$HOME/Developer/usbmuxd-qemu}/usbmuxd/src/usbmuxd"
+copy_tool "${USBMUXD_BIN:-$QEMU/build-native14/build/usbmuxd/src/usbmuxd}"
+
 # NOTE: usbmuxd's -C directory is writable state (it stores SystemConfiguration
 # and a pairing record per device). The app copies the bundled seed out to
 # Application Support before use — see USBMux.confDirectory — because the bundle
@@ -141,33 +151,18 @@ copy_tool "$QEMU/imgtools/install-ipa.sh"
 copy_tool "$QEMU/contrib/it-ssh-terminal.sh"
 # Guest-side binaries install-ipa.sh copies onto the device, and the helper that
 # stands in for the python3 a clean Mac does not have.
-copy_tool "$QEMU/contrib/it-gles/MBXGLEngine"
-copy_tool "$QEMU/contrib/it-instprogress/sbdlicon"
-# The quit-time shutdown helper: reboot(RB_HALT) in 20 lines, because the guest
-# has no /sbin/halt and the gesture needs a UI that may not be there.
-copy_tool "$QEMU/contrib/it-halt/ithalt"
+copy_tool "$QEMU/contrib/it-gles/MBXGLEngine" guest
+copy_tool "$QEMU/contrib/it-instprogress/sbdlicon" guest
+# The quit-time helper asks launchd to shut down through reboot2(RB_HALT);
+# the host still waits for an actual guest PMU power-off event.
+copy_tool "$QEMU/contrib/it-halt/ithalt" guest
 # Auto-rotation's guest-side reporter. Without it the feature is silently absent
 # from every packaged build — the app resolves it bundle-first and then falls
 # back to a checkout path a user's Mac does not have.
-copy_tool "$QEMU/contrib/it-orientation/itorient"
+copy_tool "$QEMU/contrib/it-orientation/itorient" guest
 # ipod-helper is built, not committed (contrib/macos-app/ipod-helper.c), and the
 # qemu-ios app pipeline is what compiles it — take its copy.
 copy_tool "${IT_HELPER_BIN:-$QEMU/build/iPod touch.app/Contents/Resources/tools/ipod-helper}"
-
-# IMobileDevice.swift dlopens the UNVERSIONED names (libimobiledevice-1.0,
-# libplist-2.0); Homebrew install names are versioned, so the closure above
-# lands as libimobiledevice-1.0.6.dylib etc. Without these links, a Mac with
-# no Homebrew has no fallback and in-process app management silently dies.
-for stem in libimobiledevice-1.0 libplist-2.0; do
-    real="$(cd "$FRAMEWORKS" && ls "$stem".*.dylib 2>/dev/null | head -1)"
-    [ -n "$real" ] && ln -sfh "$real" "$FRAMEWORKS/$stem.dylib"
-done
-
-if [ -n "$MISSING" ]; then
-    echo "  NOT bundled:$MISSING" >&2
-    echo "  The app still runs, but on a Mac without Homebrew or a qemu-ios" >&2
-    echo "  checkout the features these back will be unavailable." >&2
-fi
 
 # The usbmuxd config dir. USBMux.swift passes this as `-C`; without a bundle
 # copy a packaged app pointed at a nonexistent path (Bundled.resource returns
@@ -185,7 +180,7 @@ if [ -d "$CONF_SRC" ]; then
     # usbmuxd writes its own on first use, into the copy the app makes in
     # Application Support (the bundle is read-only and signed).
 else
-    echo "  NOT bundled: usbmuxd-conf (no $CONF_SRC) — app management may fail on a clean Mac" >&2
+    echo "missing required usbmuxd configuration: $CONF_SRC" >&2; exit 1
 fi
 
 # -------------------------------------------------------------- device assets
@@ -215,28 +210,25 @@ if [ "$FILES" != none ]; then
     # cannot recognise works (see qemu-ios contrib/macos-app/nandpack.py).
     # The app unpacks it into Application Support on first boot.
     python3 "$QEMU/contrib/macos-app/nandpack.py" pack "$FILES/$NAND_NAME" "$DEVICE/nand.itnand"
+    shasum -a 256 "$DEVICE/nand.itnand" | awk '{print $1}' > "$DEVICE/nand.itnand.sha256"
 fi
 
 # Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
-install_name_tool -delete_rpath "$BUILD" "$APP_BIN" 2>/dev/null || true
-
-# Seal: refuse to ship if any embedded Mach-O still resolves outside the bundle.
-echo "sealing…"
-bad=0
-for f in "$FRAMEWORKS"/*.dylib "$TOOLS"/*; do
-    [ -f "$f" ] || continue
-    while read -r dep; do
-        case "$dep" in
-            /opt/homebrew/*|/usr/local/*)
-                echo "  LEAK: $(basename "$f") still needs $dep" >&2; bad=1 ;;
-        esac
-    done < <(otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}')
+for f in "$APP_BIN" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
+    while IFS= read -r path; do
+        case "$path" in /*) install_name_tool -delete_rpath "$path" "$f" ;; esac
+    done < <(python3 "$CHECK" --rpaths "$f")
 done
-[ "$bad" = 0 ] || { echo "sealing failed — unresolved external dylibs" >&2; exit 1; }
+
+# Check all host Mach-Os, including the app and its complete load closure.
+# Guest ARMv6 helpers are resources, not executable on macOS.
+echo "sealing…"
+python3 "$CHECK" --minos "$MINOS" --bundle "$APP" \
+    "$APP_BIN" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"
 
 # Sign inside-out: frameworks first, then the app with entitlements.
 echo "signing (id: $SIGN_ID)…"
-for f in "$FRAMEWORKS"/*.dylib "$TOOLS"/*; do
+for f in "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
     # Scripts are not signable and do not need to be; the app's signature covers
     # them as resources.
     [ -f "$f" ] && file "$f" | grep -q Mach-O && codesign -f -o runtime -s "$SIGN_ID" "$f"

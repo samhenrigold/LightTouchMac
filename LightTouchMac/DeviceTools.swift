@@ -145,7 +145,10 @@ struct DeviceTools: Sendable {
             // — it reads as an emulator bug. install-ipa.sh repacks it 0755;
             // the in-process path skipped that, so every 2009-era .ipa of this
             // shape (Cube Runner among them) regressed on the default image.
-            let ipa = await Self.execBitRepaired(ipa) ?? ipa
+            let repaired = try await Self.execBitRepaired(ipa)
+            defer { if let repaired { try? FileManager.default.removeItem(at: repaired) } }
+            let ipa = repaired ?? ipa
+            try Task.checkCancellation()
             let bytes = (try? FileManager.default.attributesOfItem(atPath: ipa.path)[.size] as? Int) ?? 0
             let free = try await services.freeSpaceBytes()
             let needed = Int64(bytes) * 2 + (16 << 20)
@@ -183,7 +186,7 @@ struct DeviceTools: Sendable {
     /// 0755 (via the bundled ipod-helper, the same tool install-ipa.sh uses);
     /// nil if no repair is needed or anything is unreadable — callers fall back
     /// to the original, which is exactly today's behaviour.
-    private static func execBitRepaired(_ ipa: URL) async -> URL? {
+    private static func execBitRepaired(_ ipa: URL) async throws -> URL? {
         guard let member = await AppMetadataCache.executableMember(of: ipa),
               let helper = Bundled.tool("ipod-helper") else { return nil }
         // `unzip -Z` long listing: the mode string is the first field and the
@@ -201,12 +204,16 @@ struct DeviceTools: Sendable {
         let out = FileManager.default.temporaryDirectory
             .appendingPathComponent("ltm-fixed-\(UUID().uuidString)")
             .appendingPathExtension("ipa")
-        guard let rc = try? await run(
+        var succeeded = false
+        defer { if !succeeded { try? FileManager.default.removeItem(at: out) } }
+        let rc = try await run(
             .path(FilePath(helper)),
             arguments: ["ipa-chmod", ipa.path, out.path, member],
-            output: .discarded, error: .discarded).terminationStatus,
-              rc.isSuccess,
-              FileManager.default.fileExists(atPath: out.path) else { return nil }
+            output: .discarded, error: .discarded).terminationStatus
+        guard rc.isSuccess, FileManager.default.fileExists(atPath: out.path) else {
+            throw DeviceError.preflight("Could not repair the IPA's executable permissions.")
+        }
+        succeeded = true
         NSLog("install: \(member) archived non-executable — repacked 0755")
         return out
     }
@@ -341,6 +348,64 @@ struct DeviceTools: Sendable {
         try await guestRun("killall SpringBoard")
     }
 
+    /// Upgrade existing images as well as newly installed apps. Call before
+    /// accepting input, then reload SpringBoard if this returns true.
+    func updateMediaComponents() async throws -> Bool {
+        guard let engine = Bundled.resolve("MBXGLEngine", fallbacks: [
+            "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-gles/MBXGLEngine",
+        ]) else { throw DeviceToolsError.toolMissing("MBXGLEngine") }
+        let enginePath = "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"
+        let plistPath = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
+        let engineData = try Data(contentsOf: URL(fileURLWithPath: engine))
+        guard !engineData.isEmpty, engineData.count <= 1 << 20 else {
+            throw DeviceToolsError.failed("The bundled graphics engine is invalid.")
+        }
+        let oldPlist = try await guestRun("cat \(plistPath)")
+        let newPlist = try Self.mediaLaunchConfiguration(oldPlist)
+        let oldEngine = try await guestRun("cat \(enginePath)")
+        let changedEngine = oldEngine != engineData
+        // Validate both inputs before changing either guest file. Stage beside
+        // the destination: /tmp is a different guest filesystem, so a move
+        // from there is a non-atomic copy and can leave an unbootable plist.
+        if changedEngine {
+            try Task.checkCancellation()
+            try await guestRun("cat > \(enginePath).ltm-new && chmod 755 \(enginePath).ltm-new"
+                               + " && mv -f \(enginePath).ltm-new \(enginePath)", stdinPath: engine)
+        }
+        if let newPlist {
+            try Task.checkCancellation()
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try newPlist.write(to: file, options: .atomic)
+            defer { try? FileManager.default.removeItem(at: file) }
+            try await guestRun("cat > \(plistPath).ltm-new && chmod 644 \(plistPath).ltm-new"
+                               + " && mv -f \(plistPath).ltm-new \(plistPath)", stdinPath: file.path)
+        }
+        return changedEngine || newPlist != nil
+    }
+
+    func reloadMediaCompositor() async throws {
+        try Task.checkCancellation()
+        let plist = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
+        try await guestRun("sync && launchctl unload \(plist) && launchctl load \(plist)")
+    }
+
+    /// Preserve the launch job and unrelated environment, including binary
+    /// plists. A malformed job must never be replaced with a guessed default.
+    static func mediaLaunchConfiguration(_ data: Data) throws -> Data? {
+        var format = PropertyListSerialization.PropertyListFormat.xml
+        guard var job = try PropertyListSerialization.propertyList(from: data, format: &format) as? [String: Any],
+              job["Label"] as? String == "com.apple.SpringBoard",
+              job["EnvironmentVariables"] == nil || job["EnvironmentVariables"] is [String: Any] else {
+            throw DeviceToolsError.failed("The device's SpringBoard configuration is invalid.")
+        }
+        var environment = job["EnvironmentVariables"] as? [String: Any] ?? [:]
+        let keys = ["CA_ENABLE_OGL", "LK_ENABLE_OGL"]
+        if keys.allSatisfy({ environment[$0] as? String == "1" }) { return nil }
+        for key in keys { environment[key] = "1" }
+        job["EnvironmentVariables"] = environment
+        return try PropertyListSerialization.data(fromPropertyList: job, format: format, options: 0)
+    }
+
     /// Push the guest's dirty buffers to flash.
     func syncFilesystem() async throws {
         try await guestRun("sync")
@@ -433,12 +498,11 @@ struct DeviceTools: Sendable {
                                  after previous: Task<Void, Never>? = nil) -> Task<Void, Never> {
         Task {
             await previous?.value
-            try? await guestRun("/usr/local/bin/sbdlicon \(action) '\(id)'")
+            _ = try? await guestRun("/usr/local/bin/sbdlicon \(action) '\(id)'")
         }
     }
 
-    /// Run one command on the guest over USB. Best-effort and bounded.
-    /// Run one command on the guest over USB.
+    /// Run one command on the guest over USB, bounded and cancellable.
     ///
     /// `expecting` is how a command that KILLS ITS OWN SESSION proves it ran:
     /// the halt takes the system down, so ssh always exits non-zero and the
@@ -447,8 +511,9 @@ struct DeviceTools: Sendable {
     /// report success when sshd was not up yet — and the caller then skipped
     /// the sync and the powerdown, which is the entire ladder, and lost the
     /// session's installs. The marker is the guest's own stdout.
+    @discardableResult
     private func guestRun(_ command: String, stdinPath: String? = nil,
-                         expecting marker: String? = nil) async throws {
+                         expecting marker: String? = nil) async throws -> Data {
         guard let iproxy = Bundled.tool("iproxy")
                 ?? Self.searchPaths.map({ "\($0)/iproxy" }).first(where: {
                     FileManager.default.isExecutableFile(atPath: $0)
@@ -461,41 +526,56 @@ struct DeviceTools: Sendable {
         // limit that silently disabled every guest command once before.
         let script = """
         set -e
-        "\(iproxy)" \(port) 22 >/dev/null 2>&1 &
+        "$1" "$2" 22 >/dev/null 2>&1 &
         IP=$!
+        ASK=""
+        trap 'kill "$IP" 2>/dev/null || :; rm -f "$ASK"' EXIT
+        trap 'exit 143' INT TERM HUP
         sleep 1
-        # A leaked iproxy from an earlier run holding this port is a documented
-        # failure here, and the symptom is every guest command silently timing
-        # out. Fail loudly instead.
-        kill -0 "$IP" 2>/dev/null || { echo "iproxy could not bind port \(port)" >&2; exit 1; }
+        kill -0 "$IP" 2>/dev/null || { echo "iproxy could not bind port $2" >&2; exit 1; }
         ASK="$(mktemp -t ltmask)"
-        # Both, and on a signal too: `set -e` skips everything after a failed
-        # ssh, and a successful halt ALWAYS fails ssh — so a cleanup that lives
-        # at the end of the script leaked one password file per shutdown.
-        trap 'kill $IP 2>/dev/null; rm -f "$ASK"' EXIT INT TERM HUP
-        printf '#!/bin/sh\\necho %s\\n' "\(password)" > "$ASK"
+        printf '%s\\n' '#!/bin/sh' 'printf "%s" "$LTM_SSH_PASSWORD"' > "$ASK"
         chmod 700 "$ASK"
+        export LTM_SSH_PASSWORD="$3"
         SSH_ASKPASS="$ASK" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
-            -p \(port) root@127.0.0.1 '\(command)' \(stdinPath.map { "< \"\($0)\"" } ?? "")
+            -o ServerAliveInterval=5 -o ServerAliveCountMax=3 \
+            -p "$2" root@127.0.0.1 "$4" < "$5"
         """
-        let result = try await run(
-            .path(FilePath("/bin/bash")),
-            arguments: ["-c", script],
-            environment: toolEnvironment,
-            output: .string(limit: 1 << 16), error: .string(limit: 1 << 16)
-        )
-        if let marker {
-            guard result.standardOutput.contains(marker) else {
-                throw DeviceToolsError.failed(
-                    "The device did not run the command. \(result.standardError)")
+        var platform = PlatformOptions()
+        platform.createSession = true
+        platform.teardownSequence = [.gracefulShutDown(toProcessGroup: true,
+                                                       allowedDurationToNextStep: .seconds(2))]
+        let environment = toolEnvironment
+        let options = platform
+        return try await withThrowingTaskGroup(of: Data.self) { group in
+            group.addTask {
+                let result = try await run(
+                    .path(FilePath("/bin/bash")),
+                    arguments: ["-c", script, "ltm-ssh", iproxy, String(port), password, command, stdinPath ?? "/dev/null"],
+                    environment: environment, platformOptions: options,
+                    output: .data(limit: 1 << 20), error: .string(limit: 1 << 16)
+                )
+                if let marker {
+                    guard String(decoding: result.standardOutput, as: UTF8.self).contains(marker) else {
+                        throw DeviceToolsError.failed(
+                            "The device did not run the command. \(result.standardError)")
+                    }
+                    return result.standardOutput // it ran; its own exit status is meaningless by then
+                }
+                guard result.terminationStatus.isSuccess else {
+                    throw DeviceToolsError.failed(
+                        "Could not reach the device over SSH. \(result.standardError)")
+                }
+                return result.standardOutput
             }
-            return   // it ran; its own exit status is meaningless by then
-        }
-        guard result.terminationStatus.isSuccess else {
-            throw DeviceToolsError.failed(
-                "Could not reach the device over SSH. \(result.standardError)")
+            group.addTask {
+                try await Task.sleep(for: .seconds(30))
+                throw DeviceToolsError.failed("The device's SSH command timed out.")
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
         }
     }
 

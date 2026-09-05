@@ -594,7 +594,7 @@ extension MainWindowController: NSToolbarItemValidation {
         // blocking it was a regression. The terminal is gated, because it opens
         // a competing lockdown session.
         case .installApp:
-            return emulator.canReachDevice
+            return emulator.canQueueInstall
         case .openTerminal:
             return emulator.canReachDevice && !emulator.isInstalling
         case .home, .lock, .rotate:
@@ -613,7 +613,7 @@ extension MainWindowController: NSMenuItemValidation {
         // App management: needs USB, a live guest, and no install already running
         // (the guest serves ~one lockdown session).
         case #selector(installApp(_:)):
-            return emulator.canReachDevice                           // queues; see above
+            return emulator.canQueueInstall
         case #selector(openDeviceTerminal(_:)), #selector(restartSpringBoard(_:)):
             return emulator.canReachDevice && !emulator.isInstalling
         // Device input only reaches a running guest.

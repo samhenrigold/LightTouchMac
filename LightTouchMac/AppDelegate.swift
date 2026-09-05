@@ -66,9 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// On quit: guard an in-flight install, then shut the guest down so it
-    /// unmounts. That genuinely works now — see beginCleanShutdown; it did not
-    /// for the whole life of this project, and everything downstream of it was
-    /// mitigation for the fact that it didn't.
+    /// unmounts. beginCleanShutdown requires explicit guest confirmation;
+    /// native halt without PMU power-off remains a known limitation.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let emulator else { return .terminateNow }
 
@@ -88,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 emulator.cancelFactoryReset()   // this quit was the erase; call it off
                 return .terminateCancel
             }
+            AppInstaller.cancelPendingWork()
             // Falls through to the SAME shutdown as any other quit. It used to
             // return .terminateNow, on the reasoning that a half-finished
             // install is not a clean state to snapshot — true, and irrelevant

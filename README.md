@@ -17,22 +17,50 @@ Checkouts are expected as siblings under `~/Developer`: `qemu-ios`,
 `usbmuxd-qemu`, and a `qemu-ios-files` directory holding the device assets
 (bootrom, iBoot, NOR, NAND — not distributed here; see below).
 
-1. Build the emulator dylib: `qemu-ios/contrib/macos-app/make-dylib-macos.sh`
-   (produces `build-min12b/libqemu-arm.dylib`).
+1. Build the native emulator and dependencies with
+   `scripts/build-package-native.sh "$HOME/Developer/qemu-ios/build-native14"`.
+   Debug and Release link `build-native14/qemu-build/libqemu-arm.dylib`.
+   After emulator-only changes, run `ninja -C ../qemu-ios/build-native14/qemu-build qemu-system-arm`
+   and `bash ../qemu-ios/contrib/macos-app/make-dylib-macos.sh "$HOME/Developer/qemu-ios/build-native14/qemu-build"`
+   before rebuilding in Xcode; Xcode does not compile the emulator itself.
 2. Build `usbmuxd-qemu/usbmuxd`.
 3. Open `LightTouchMac.xcodeproj` and build. A dev build finds everything in
    the checkouts; nothing is embedded.
 
 ## Packaging (a self-contained app)
 
+Requires Xcode, Python 3.12 (with QEMU’s `distlib` prerequisite), Meson, Ninja,
+pkg-config, autotools, and the existing macOS 12 static client prefix at `~/Developer/qemu-ios-deps12` (its
+`build-deps12.sh` records its build). Homebrew tools may run the build; Homebrew
+runtime libraries are not bundled.
+
 ```sh
-scripts/package.sh [path/to/LightTouchMac.app]
+scripts/build-package-native.sh "$HOME/Developer/qemu-ios/build-native14"
+xcodebuild -scheme LightTouchMac -configuration Release \
+  -derivedDataPath build-package \
+  OTHER_LDFLAGS="$HOME/Developer/qemu-ios/build-native14/qemu-build/libqemu-arm.dylib"
+scripts/package.sh build-package/Build/Products/Release/LightTouchMac.app
+python3 scripts/test-package.py
 ```
+
+The native build downloads pinned sources, checks their SHA-256 hashes, and
+builds a macOS 14-compatible emulator and USB dependency closure in the ignored
+`qemu-ios/build-native14` directory. It retains CGL rendering, CoreAudio output, and Wi-Fi/slirp.
+It refuses to reuse a build directory: for a clean rebuild, choose a new one
+and use the `QEMU_BUILD_DIR`, `LTM_DEPS_PREFIX`, and `USBMUXD_BIN` overrides it
+prints. The packaging defaults use `build-native14`; they do not silently
+fall back to Homebrew.
+
+Packaging rejects missing dependencies, newer macOS deployment targets, and
+load paths outside the bundle before signing. It explicitly embeds the two
+libraries the app loads with `dlopen`, even when the client tools are static.
+The packed NAND includes a `nand.itnand.sha256` content identity so installing
+a new app version does not replace an unchanged guest base.
 
 Takes the built app and makes it run on a Mac with no Homebrew and no source
 checkouts: embeds `libqemu-arm.dylib` and its dylib closure, the
 libimobiledevice tools, usbmuxd, the guest-side helpers, and the device assets
-(≈1.2 GB), then re-signs. `Bundled.swift` makes the app look inside its own
+(including a packed NAND), then re-signs. `Bundled.swift` makes the app look inside its own
 bundle first, so packaged and dev builds exercise the same code paths.
 
 - Ad-hoc signed by default (runs on your Mac; other Macs need Gatekeeper
@@ -50,3 +78,41 @@ of the three repos; a packaged app embeds your local copies from
 `~/Developer/qemu-ios-files`. The app never writes to the base image — per-user
 state (NAND overlay, snapshots, logs) lives in
 `~/Library/Application Support/LightTouchMac`.
+
+
+### Catalog and installation reliability (2026-09-04)
+
+The Store keeps `/api/emulator/apps` for its compatibility-filtered catalog.
+“Versions and Details…” uses the public versions/copy APIs; each selected copy
+is revalidated against the emulator endpoint, then checked for size and archive
+MD5 before installation. These checks do not establish runtime compatibility.
+
+Downloads run independently; only completed IPAs enter the serial device queue.
+A device/transfer failure pauses pending installs while retaining their downloaded
+files. Use “Resume Pending Installs” in the app-list context menu after the device
+responds, or cancel individual jobs. Open/Uninstall remain available during network
+downloads, but wait while a device operation is active. Store rows also expose
+Open/Uninstall for installed apps. Selection tracks stable row identities.
+
+Run the isolated checks (no QEMU or existing device state is used):
+
+```sh
+python3 tests/run-catalog-checks.py
+python3 tests/run-catalog-checks.py --ui  # also briefly presents an AppKit test sheet
+```
+
+Tilt counter-rotation now follows only the guest orientation, so a layout during
+a gesture cannot leave the screen crooked. Quit no longer attempts a UI power-off
+swipe. Native shutdown now follows SpringBoard’s launchd-coordinated `reboot2`
+path and passes actual PMU confirmation. Warm-reset storage mapping and watchdog
+command handling are corrected in QEMU; the app no longer suppresses resets.
+The `boot,restart,persist,fsck` regression passes with byte-identical markers
+and a full-volume filesystem check. A helper banner remains insufficient proof
+of shutdown.
+
+Outstanding reports: Spore’s black MPEG-4/AAC intro, silent PCM game music, missing
+video-player status bar still require further guest/emulator diagnosis. The
+status bar appeared in an isolated movie-player run, so that omission is not
+universal. Native reboot and post-media warm reset now pass. The current hardware model does not implement the video
+decoder or full AMC compressed-audio processing. These are not claimed fixed by
+the frontend changes.

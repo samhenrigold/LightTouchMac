@@ -75,13 +75,24 @@ enum AppInstaller {
     /// Is any install still outstanding — running OR waiting its turn?
     /// `EmulatorController.isInstalling` covers only the one executing, so the
     /// quit guard used to wave through a queue of .ipas and drop them silently.
-    static var hasPendingWork: Bool { lastJob.map { !$0.isFinished } ?? false }
+    static var hasPendingWork: Bool { !jobs.isEmpty }
+    private static var jobs: [InstallJob] = []
 
-    /// The most recently started job, so the next one can queue behind it.
-    /// Installs run strictly one at a time: the script pins iproxy to a single
-    /// port (a second iproxy on it fails silently and every guest command just
-    /// times out), and one lockdown session is all the guest reliably serves.
-    private static var lastJob: InstallJob?
+    static func cancelPendingWork() {
+        for job in jobs where job.isCancellable { job.cancel() }
+    }
+
+    private static let readyQueue = InstallationQueue()
+    static var isUsingDevice: Bool { readyQueue.isBusy }
+    static var isPaused: Bool { readyQueue.isPaused }
+
+    static func resume() {
+        readyQueue.resume()
+        for job in jobs where job.status.hasPrefix("Paused") {
+            job.status = "Waiting for device…"
+            NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
+        }
+    }
 
     @discardableResult
     static func start(_ ipa: URL, with emulator: EmulatorController,
@@ -91,9 +102,7 @@ enum AppInstaller {
         // the drop happens — then takes the app's real display name as soon as
         // the archive has been read.
         let job = InstallJob(name: ipa.deletingPathExtension().lastPathComponent)
-        let previous = lastJob
-        lastJob = job
-        if let previous, !previous.isFinished { job.status = "Waiting…" }
+        jobs.append(job)
         NotificationCenter.default.post(name: .ltmInstallStarted, object: job)
         job.task = Task {
             defer { finish(job) }
@@ -108,7 +117,7 @@ enum AppInstaller {
                 job.name = name
                 NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
             }
-            await install(job, ipa: ipa, after: previous, with: emulator, presenting: window)
+            await install(job, ipa: ipa, with: emulator, presenting: window)
         }
         return job
     }
@@ -116,8 +125,8 @@ enum AppInstaller {
     /// A Legacy Store copy: same pipeline, same queue, but the row exists —
     /// including in the installed list — from the first downloaded byte, so
     /// clearing the search can never lose sight of a transfer in flight.
-    /// The download runs immediately (network work doesn't contend with the
-    /// device); only the install itself queues behind the previous job.
+    /// Downloads run independently. Completed files join the device queue, so
+    /// a slow large download cannot block lightweight apps that are ready.
     @discardableResult
     static func startCatalog(_ app: CatalogApp, with emulator: EmulatorController,
                              presenting window: NSWindow?) -> InstallJob {
@@ -130,11 +139,14 @@ enum AppInstaller {
         job.catalogIconURL = app.iconURL
         job.status = "Downloading…"
         job.downloadProgress = app.size.map { _ in 0 } ?? -1
-        let previous = lastJob
-        lastJob = job
+        jobs.append(job)
         NotificationCenter.default.post(name: .ltmInstallStarted, object: job)
         job.task = Task {
             defer { finish(job) }
+            guard !Task.isCancelled else { return }
+            job.status = "Downloading…"
+            job.downloadProgress = -1
+            NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
             var scratch: URL?
             defer {
                 // learn(from:) has read the file by now; the temp copy is done.
@@ -157,6 +169,10 @@ enum AppInstaller {
             }
             do {
                 let ipa = try await CatalogClient.download(app) { fraction in
+                    guard !job.isFinished, !job.isCancelled, job.downloadProgress != nil else { return }
+                    let percent = fraction < 0 ? -1 : Int(fraction * 100)
+                    let previousPercent = job.downloadProgress.map { $0 < 0 ? -1 : Int($0 * 100) }
+                    guard percent != previousPercent else { return }
                     job.downloadProgress = fraction
                     job.status = fraction >= 0
                         ? "Downloading… \(Int(fraction * 100))%" : "Downloading…"
@@ -164,11 +180,11 @@ enum AppInstaller {
                 }
                 scratch = ipa.deletingLastPathComponent()
                 job.downloadProgress = nil
-                if let previous, !previous.isFinished {
-                    job.status = "Waiting…"
-                    NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
+                guard let actualID = await AppMetadataCache.bundleID(of: ipa),
+                      actualID == app.bundleID else {
+                    throw CatalogError.invalidCopy("The downloaded IPA does not contain the selected app.")
                 }
-                await install(job, ipa: ipa, after: previous, with: emulator, presenting: window,
+                await install(job, ipa: ipa, with: emulator, presenting: window,
                               placeholderRaised: raised != nil)
             } catch {
                 // Task.cancel() surfaces as URLError.cancelled out of
@@ -183,22 +199,25 @@ enum AppInstaller {
     }
 
     private static func finish(_ job: InstallJob) {
+        jobs.removeAll { $0 === job }
         job.isFinished = true
         job.finishedAt = Date()
         job.downloadProgress = nil
         NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
     }
 
-    /// The shared tail of every install: queue behind `previous`, run the
-    /// device install, adopt the metadata, present failures.
-    private static func install(_ job: InstallJob, ipa: URL, after previous: InstallJob?,
+    /// Queue when bytes are ready, not when the app was selected.
+    private static func install(_ job: InstallJob, ipa: URL,
                                 with emulator: EmulatorController,
                                 presenting window: NSWindow?,
                                 placeholderRaised: Bool = false) async {
-        // Queue behind the previous install, finished or not — awaiting a
-        // done task returns immediately. Cancelling a queued job takes
-        // effect the moment its turn comes.
-        await previous?.task?.value
+        if readyQueue.isBusy || readyQueue.isPaused {
+            job.status = readyQueue.isPaused ? "Paused — resume from the context menu" : "Waiting for device…"
+            NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
+        }
+        do { try await readyQueue.acquire() }
+        catch { return }
+        defer { readyQueue.release() }
         guard !Task.isCancelled else { return }
         job.status = "Installing…"
         NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
@@ -220,7 +239,7 @@ enum AppInstaller {
             // library keeps the bytes, which is what makes the installed row
             // draggable out of the app as a file.
             await AppMetadataCache.shared.learn(from: ipa)
-            if let id = job.bundleID { IPALibrary.adopt(ipa, for: id) }
+            if let id = job.bundleID { await IPALibrary.adopt(ipa, for: id) }
             if output.contains("newer than the device's") {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
@@ -238,6 +257,14 @@ enum AppInstaller {
         } catch {
             job.failed = true
             guard !Task.isCancelled else { return }
+            if let deviceError = error as? DeviceError, deviceError.shouldPauseInstallQueue {
+                readyQueue.pause()
+                emulator.deviceReachable = false
+                for waiting in jobs where waiting !== job && waiting.downloadProgress == nil {
+                    waiting.status = "Paused — resume from the context menu"
+                    NotificationCenter.default.post(name: .ltmInstallProgress, object: waiting)
+                }
+            }
             presentError(error, in: window)
         }
     }
@@ -601,6 +628,27 @@ final class AppsInspectorViewController: NSViewController {
         }
     }
 
+    private enum RowIdentity: Hashable {
+        case job(ObjectIdentifier), app(String), catalog(Int)
+    }
+    private var displayedRows: [RowIdentity] = []
+    private var rowIdentities: [RowIdentity] {
+        if searching { return catalogResults.map { .catalog($0.ipaID) } }
+        return pending.map { .job(ObjectIdentifier($0)) } + visibleApps.map { .app($0.id) }
+    }
+
+    /// Keep selection attached to objects across insertions, removals and polls.
+    /// Progress-only updates do not rebuild the table at all.
+    private func reloadTablePreservingSelection() {
+        let selected = Set(tableView.selectedRowIndexes.compactMap {
+            displayedRows.indices.contains($0) ? displayedRows[$0] : nil
+        })
+        displayedRows = rowIdentities
+        tableView.reloadData()
+        let indexes = IndexSet(displayedRows.indices.filter { selected.contains(displayedRows[$0]) })
+        tableView.selectRowIndexes(indexes, byExtendingSelection: false)
+    }
+
     @objc private func appsChanged() {
         prunePending()
         // Reload NOW, not from loadOnce: its failure path doesn't touch the
@@ -608,7 +656,7 @@ final class AppsInspectorViewController: NSViewController {
         // the case where the next read fails too — leaving a phantom pending
         // row on screen while every data-source index has shifted up one (the
         // right-click-hits-the-wrong-app bug).
-        tableView.reloadData()
+        reloadTablePreservingSelection()
         updateButtons()
         Task { await loadOnce() }
     }
@@ -617,7 +665,7 @@ final class AppsInspectorViewController: NSViewController {
         guard let job = note.object as? InstallJob else { return }
         pending.append(job)
         showInstalledPlaceholder(nil)
-        tableView.reloadData()
+        reloadTablePreservingSelection()
         updateButtons()
     }
 
@@ -634,13 +682,9 @@ final class AppsInspectorViewController: NSViewController {
             return
         }
         guard let row = pending.firstIndex(where: { $0 === job }) else { return }
-        // A per-row reload does not re-ask for the row COUNT, and the count can
-        // change here: as soon as a job learns its bundle id, `visibleApps`
-        // hides the app it is replacing. On a reinstall that left a blank row
-        // stranded at the bottom of the sidebar for the whole install, because
-        // the poll that would have fixed it is suppressed while installing.
-        if job.bundleID != nil, !apps.isEmpty { tableView.reloadData() }
+        if rowIdentities != displayedRows { reloadTablePreservingSelection() }
         else { tableView.reloadData(forRowIndexes: [row], columnIndexes: [0]) }
+        updateButtons()
     }
 
     /// One attempt to read the installed list.
@@ -695,7 +739,7 @@ final class AppsInspectorViewController: NSViewController {
             //
             sortApps()
             prunePending()   // the list just changed; a row may have earned its exit
-            tableView.reloadData()
+            reloadTablePreservingSelection()
             showInstalledPlaceholder(apps.isEmpty && pending.isEmpty ? "No third-party apps installed." : nil)
             updateButtons()
         } catch {
@@ -704,7 +748,7 @@ final class AppsInspectorViewController: NSViewController {
             // install failed because the device went away stayed on screen —
             // and the failing list read is exactly when that happens.
             prunePending()
-            tableView.reloadData()
+            reloadTablePreservingSelection()
             // The reason rides along so a manual Refresh that fails says why,
             // instead of sitting on the same three words the boot wait shows.
             if !haveLoaded, pending.isEmpty {
@@ -760,14 +804,18 @@ final class AppsInspectorViewController: NSViewController {
     // this releasing it triggers; nothing else here may touch main-actor state.
     deinit { loadTask?.cancel() }
 
+    static func freshnessText(since date: Date?, now: Date = Date()) -> String {
+        guard let date else { return "not yet refreshed" }
+        guard now.timeIntervalSince(date) >= 60 else { return "last updated just now" }
+        let relative = RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+        return "last updated \(relative)"
+    }
+
     private func showStaleBanner() {
-        let when = lastLoaded.map {
-            let f = RelativeDateTimeFormatter()
-            return f.localizedString(for: $0, relativeTo: Date())
-        } ?? "a while ago"
+        let when = Self.freshnessText(since: lastLoaded)
         banner.stringValue = usbUnavailable
-            ? "USB unavailable — list from \(when)"
-            : "Device not responding — list from \(when)"
+            ? "USB unavailable — \(when)"
+            : "Device not responding — \(when)"
         banner.isHidden = false
         bannerHeight?.constant = 18
     }
@@ -818,16 +866,8 @@ final class AppsInspectorViewController: NSViewController {
         return apps.isEmpty && pending.isEmpty ? "No third-party apps installed." : nil
     }
 
-    /// True while any install is running or queued. Every other device
-    /// operation waits it out — uninstall, reorder, the list poll — because a
-    /// second lockdown session is what makes the install's own services start
-    /// failing ("Invalid service").
-    /// A job still downloading holds no lockdown session — it neither pauses
-    /// the list poll nor blocks queueing more work; only jobs talking to the
-    /// device (uploading/installing, or queued past their download) count.
-    private var installing: Bool {
-        pending.contains { !$0.isFinished && $0.downloadProgress == nil }
-    }
+    /// Network downloads and waiting rows do not hold a device session.
+    private var installing: Bool { AppInstaller.isUsingDevice || emulator.isInstalling }
 
     /// Apps with an uninstall in flight. Without this the row stayed, the
     /// buttons stayed live, and nothing said anything for up to two minutes —
@@ -847,8 +887,8 @@ final class AppsInspectorViewController: NSViewController {
         // the buttons started out enabled because nothing had called this yet —
         // clicking + opened a picker for a device that could not install.
         let ready = emulator.canManageApps && emulator.isRunning && haveLoaded
-        addRemove.setEnabled(ready && !installing, forSegment: 0)
-        addRemove.setEnabled(ready && !selectedApps.isEmpty && !installing, forSegment: 1)
+        addRemove.setEnabled(emulator.canQueueInstall, forSegment: 0)
+        addRemove.setEnabled(ready && !selectedApps.isEmpty && !busyWithDevice, forSegment: 1)
     }
 
     /// Every selected installed app — pending rows and catalog rows resolve to
@@ -885,8 +925,7 @@ final class AppsInspectorViewController: NSViewController {
     private func add() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "ipa")].compactMap { $0 }
-        // Several at once: AppInstaller already queues them (each job awaits the
-        // previous), because the guest serves ~one lockdown session.
+        // Several at once: ready files install one at a time.
         panel.allowsMultipleSelection = true
         panel.message = "Choose one or more decrypted .ipa files to install."
         panel.beginSheetModal(for: view.window!) { [weak self] response in
@@ -898,7 +937,7 @@ final class AppsInspectorViewController: NSViewController {
     }
 
     private func remove(_ appsToRemove: [InstalledApp]) {
-        guard !appsToRemove.isEmpty else { return }
+        guard !appsToRemove.isEmpty, !busyWithDevice, emulator.canReachDevice else { return }
         let alert = NSAlert()
         alert.messageText = appsToRemove.count == 1
             ? "Uninstall “\(displayName(appsToRemove[0]))”?"
@@ -910,13 +949,14 @@ final class AppsInspectorViewController: NSViewController {
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
         alert.beginSheetModal(for: view.window!) { [weak self] response in
-            guard let self, response == .alertFirstButtonReturn else { return }
+            guard let self, response == .alertFirstButtonReturn, !self.busyWithDevice,
+                  self.emulator.canReachDevice else { return }
             for app in appsToRemove { self.uninstalling.insert(app.id) }
-            self.tableView.reloadData()
+            self.reloadTablePreservingSelection()
             self.updateButtons()
             Task {
                 defer {
-                    self.tableView.reloadData()
+                    self.reloadTablePreservingSelection()
                     self.updateButtons()
                     NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
                 }
@@ -924,7 +964,7 @@ final class AppsInspectorViewController: NSViewController {
                 // session, same reason installs queue. A failure stops the
                 // batch: the rest would almost certainly fail the same way.
                 for app in appsToRemove {
-                    defer { self.uninstalling.remove(app.id); self.tableView.reloadData() }
+                    defer { self.uninstalling.remove(app.id); self.reloadTablePreservingSelection() }
                     do {
                         try await self.emulator.uninstall(app.id)
                         AppMetadataCache.shared.forget(app.id)
@@ -969,7 +1009,19 @@ final class AppsInspectorViewController: NSViewController {
         NSWorkspace.shared.open(CatalogClient.baseURL.appendingPathComponent("app/\(app.id)"))
     }
 
+    @objc private func resumeInstallsClicked(_ sender: Any?) {
+        Task {
+            guard await emulator.deviceReady() else {
+                AppInstaller.presentError(DeviceError.notAttached, in: view.window)
+                return
+            }
+            emulator.deviceReachable = true
+            AppInstaller.resume()
+        }
+    }
+
     @objc private func refreshClicked(_ sender: Any?) {
+        if searching { scheduleSearch(); return }
         Task { await loadOnce() }
     }
 
@@ -983,7 +1035,7 @@ final class AppsInspectorViewController: NSViewController {
         mode = newMode
         modeControl.selectedSegment = newMode.rawValue
         tableView.deselectAll(nil)
-        tableView.reloadData()
+        reloadTablePreservingSelection()
         updateButtons()
         updateFooterVisibility()
         switch newMode {
@@ -1020,7 +1072,7 @@ final class AppsInspectorViewController: NSViewController {
         searchTask?.cancel()
         guard mode == .store else { return }
         let query = searchField.stringValue.trimmingCharacters(in: .whitespaces)
-        tableView.reloadData()
+        reloadTablePreservingSelection()
         searchTask = Task { [weak self] in
             if !query.isEmpty {
                 try? await Task.sleep(for: .milliseconds(300))   // debounce typing
@@ -1039,7 +1091,7 @@ final class AppsInspectorViewController: NSViewController {
                 let results = try await CatalogClient.search(query)
                 guard !Task.isCancelled, current() else { return }
                 self.catalogResults = results
-                self.tableView.reloadData()
+                self.reloadTablePreservingSelection()
                 self.showPlaceholder(results.isEmpty
                     ? (query.isEmpty ? "Legacy Store is empty right now."
                                      : "No compatible apps found for “\(query)”.")
@@ -1048,7 +1100,7 @@ final class AppsInspectorViewController: NSViewController {
             } catch {
                 guard !Task.isCancelled, current() else { return }
                 self.catalogResults = []
-                self.tableView.reloadData()
+                self.reloadTablePreservingSelection()
                 self.showPlaceholder("Couldn’t reach Legacy Store — \(error.localizedDescription)")
             }
             self.updateButtons()
@@ -1102,8 +1154,7 @@ final class AppsInspectorViewController: NSViewController {
         // more jobs may queue behind it. (The poll deliberately parks
         // deviceReachable at nil while device work runs, so canReachDevice
         // alone would disable every Install button for the whole install.)
-        if emulator.canReachDevice { return .installable }
-        if emulator.canManageApps, emulator.isRunning, busyWithDevice { return .installable }
+        if emulator.canQueueInstall { return .installable }
         return .unavailable
     }
 
@@ -1145,6 +1196,19 @@ final class AppsInspectorViewController: NSViewController {
         NSWorkspace.shared.open(url)
     }
 
+    @objc private func catalogDetailsClicked(_ sender: NSMenuItem) {
+        guard let app = sender.representedObject as? CatalogApp else { return }
+        let canInstall = { [weak self] in
+            guard let self else { return false }
+            return self.emulator.canQueueInstall && self.catalogJob(for: app)?.isFinished != false
+        }
+        let sheet = CatalogDetailsViewController(app: app, canInstall: canInstall) { [weak self] copy in
+            guard let self, canInstall() else { return }
+            AppInstaller.startCatalog(copy, with: self.emulator, presenting: self.view.window)
+        }
+        presentAsSheet(sheet)
+    }
+
     @objc fileprivate func installCatalogClicked(_ sender: NSMenuItem) {
         guard let app = sender.representedObject as? CatalogApp else { return }
         install(catalog: app)
@@ -1184,12 +1248,17 @@ extension AppsInspectorViewController: NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        if AppInstaller.isPaused {
+            menu.addItem(withTitle: "Resume Pending Installs", action: #selector(resumeInstallsClicked(_:)),
+                         keyEquivalent: "").target = self
+            menu.addItem(.separator())
+        }
         if searching {
             let row = tableView.clickedRow
             guard catalogResults.indices.contains(row) else { return }
             let app = catalogResults[row]
             // A right-click inside a multi-row selection offers the batch; the
-            // whole queue machinery (serial installs, parallel downloads,
+            // whole queue machinery (independent downloads and serial installs,
             // per-row progress) already handles N jobs.
             let selection = tableView.selectedRowIndexes
             if selection.count > 1, selection.contains(row) {
@@ -1218,6 +1287,25 @@ extension AppsInspectorViewController: NSMenuDelegate {
                 install.representedObject = app
                 install.isEnabled = catalogState(of: app) == .installable
             }
+            if let installed = apps.first(where: { $0.id == app.bundleID }) {
+                menu.addItem(.separator())
+                let open = menu.addItem(withTitle: "Open “\(displayName(installed))”",
+                                        action: #selector(openClicked(_:)), keyEquivalent: "")
+                open.target = self
+                open.representedObject = installed
+                open.isEnabled = !busyWithDevice && emulator.canReachDevice
+                let uninstall = menu.addItem(withTitle: "Uninstall “\(displayName(installed))”…",
+                                             action: #selector(uninstallClicked(_:)), keyEquivalent: "")
+                uninstall.target = self
+                uninstall.representedObject = installed
+                uninstall.isEnabled = !busyWithDevice && emulator.canReachDevice
+                    && catalogJob(for: app)?.isFinished != false
+                menu.addItem(.separator())
+            }
+            let details = menu.addItem(withTitle: "Versions and Details…",
+                                       action: #selector(catalogDetailsClicked(_:)), keyEquivalent: "")
+            details.target = self
+            details.representedObject = app
             if app.appURL != nil {
                 let view = menu.addItem(withTitle: "View on Legacy Store",
                                         action: #selector(viewOnLegacyStoreClicked(_:)), keyEquivalent: "")
@@ -1626,7 +1714,7 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         text.allowsExpansionToolTips = true
         text.translatesAutoresizingMaskIntoConstraints = false
         let subtitle = NSTextField(labelWithString: subtitleText)
-        subtitle.textColor = .tertiaryLabelColor
+        subtitle.textColor = .secondaryLabelColor
         subtitle.font = .systemFont(ofSize: 10)
         subtitle.lineBreakMode = .byTruncatingTail
         subtitle.translatesAutoresizingMaskIntoConstraints = false

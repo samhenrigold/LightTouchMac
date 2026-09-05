@@ -71,7 +71,7 @@ final class AppMetadataCache {
     /// member name here is already escaped for exactly this reason; the plist
     /// value was the one input that wasn't.
     private static func isSafeBundleID(_ id: String) -> Bool {
-        !id.isEmpty && !id.hasPrefix(".") && !id.contains("/") && !id.contains(":")
+        !id.isEmpty && !id.hasPrefix(".") && !id.contains("/") && !id.contains(":") && !id.contains("\0")
     }
     
     /// nil if we never learned this bundle ID.
@@ -225,13 +225,16 @@ final class AppMetadataCache {
         return text.split(separator: "\n").map(String.init)
     }
 
-    /// "Payload/Foo.app/" — the shallowest bundle holding an Info.plist, so a
-    /// nested .app can never be mistaken for the app itself.
+    /// Exactly one root Payload app. Nested bundles and ambiguous archives
+    /// cannot supply the identity used by the installer and library.
     static func appRoot(_ members: [String]) -> String? {
-        members
-            .filter { $0.hasSuffix(".app/Info.plist") }
-            .min { $0.count < $1.count }
-            .map { String($0.dropLast("Info.plist".count)) }
+        let roots = members.filter {
+            let parts = $0.split(separator: "/", omittingEmptySubsequences: false)
+            return parts.count == 3 && parts[0] == "Payload"
+                && parts[1].hasSuffix(".app") && parts[2] == "Info.plist"
+        }
+        guard roots.count == 1 else { return nil }
+        return String(roots[0].dropLast("Info.plist".count))
     }
 
     /// The icon PNG to cache: whatever the Info.plist declares, else Icon.png.
