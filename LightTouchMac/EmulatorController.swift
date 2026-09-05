@@ -1277,10 +1277,17 @@ final class EmulatorController {
         UserDefaults.standard.bool(forKey: verboseBootDefaultsKey)
     }
 
-    /// The code-signing gate 3.1.3 needs, plus `-v` when the user asked for it.
+    static let kernelConsoleDefaultsKey = "kernelConsole"
+    static var kernelConsole: Bool {
+        UserDefaults.standard.bool(forKey: kernelConsoleDefaultsKey)
+    }
+
+    /// Early iBoot handoff arguments; serial output is included in diagnostics.
     static var bootArgs: String {
-        let base = "amfi_allow_any_signature=1 cs_enforcement_disable=1"
-        return verboseBoot ? base + " -v" : base
+        var args = "amfi_allow_any_signature=1 cs_enforcement_disable=1"
+        if verboseBoot { args += " -v" }
+        if kernelConsole { args += " serial=3 debug=0x8" }
+        return args
     }
 
     private func setBootEnv() {
@@ -1293,7 +1300,6 @@ final class EmulatorController {
         let env = [
             "IT_DIRECT_IBOOT": options.iBoot,
             "IT_TVOUT_READY": "1",
-            "IT_TVOUT_VBLANK": "1",
             "IT_AMC_DECODE": "1",
             "IT_MPVD_DECODE": "1",
             "IT_H264_DECODE": "1",

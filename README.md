@@ -11,6 +11,14 @@ It is one of three repos that version together:
 | [qemu-ios](https://github.com/samhenrigold/qemu-ios) | The emulator, loaded as `libqemu-arm.dylib`; also the guest-side helpers the app ships. |
 | [usbmuxd-qemu](https://github.com/samhenrigold/usbmuxd-qemu) | Forked usbmuxd that carries USB between the guest and libimobiledevice. |
 
+## Kernel diagnostics
+
+Device > Advanced > Kernel Console enables XNU serial logging on the next boot.
+Verbose Boot separately controls text on the guest display. Kernel output is
+written to the device's `serial.log` and included in Export Diagnostics; it starts
+when XNU initializes its serial console, so the earliest kernel banner may not
+appear there.
+
 ## Building (development)
 
 Checkouts are expected as siblings under `~/Developer`: `qemu-ios`,

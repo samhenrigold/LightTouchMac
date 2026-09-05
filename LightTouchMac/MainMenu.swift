@@ -147,12 +147,11 @@ enum MainMenuBuilder {
         advanced.addItem(item("Restart SpringBoard", #selector(MainWindowController.restartSpringBoard(_:))))
         // Applies at the next boot.
         advanced.addItem(item("Verbose Boot", #selector(MainWindowController.toggleVerboseBoot(_:))))
+        advanced.addItem(item("Kernel Console", #selector(MainWindowController.toggleKernelConsole(_:))))
         menu.addItem(submenu(advanced, title: "Advanced"))
         menu.addItem(.separator())
 
-        // The destructive pair, together at the bottom and away from everything
-        // routine. No "Shut Down": system_powerdown never completes on 3.1.3
-        // (PMU gap), so it would wedge the guest rather than power it off.
+        // Keep restart and erase together at the bottom, away from routine input.
         menu.addItem(item("Restart…", #selector(MainWindowController.deviceReset(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
         return menu

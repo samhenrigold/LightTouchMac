@@ -344,6 +344,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                                   forKey: EmulatorController.verboseBootDefaultsKey)
     }
 
+    @objc func toggleKernelConsole(_ sender: Any?) {
+        UserDefaults.standard.set(!EmulatorController.kernelConsole,
+                                  forKey: EmulatorController.kernelConsoleDefaultsKey)
+    }
+
     @objc func deviceRotateLeft(_ sender: Any?) {
         emulator.rotate(clockwise: false)
         syncRotateSymbol()
@@ -584,6 +589,9 @@ extension MainWindowController: NSMenuItemValidation {
             return emulator.acceptsInput
         case #selector(toggleVerboseBoot(_:)):
             menuItem.state = EmulatorController.verboseBoot ? .on : .off
+            return true
+        case #selector(toggleKernelConsole(_:)):
+            menuItem.state = EmulatorController.kernelConsole ? .on : .off
             return true
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(saveStateNow(_:)): return emulator.isRunning
