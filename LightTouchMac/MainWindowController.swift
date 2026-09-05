@@ -129,7 +129,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // it styles and truncates itself to match the title. A custom titlebar
         // accessory was carrying this before — more code, its own constraints,
         // and it competed with the toolbar for space.
-        window?.subtitle = emulator.statusLine
+        window?.subtitle = emulator.isRunning && !emulator.isSleeping
+            ? (emulator.foregroundAppName ?? emulator.statusLine) : emulator.statusLine
+        deviceVC.screen.updatePowerPresentation()
+        if let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .lock }) {
+            item.label = emulator.isPoweredOff ? "Power On" : "Lock"
+            item.image = NSImage(systemSymbolName: emulator.isPoweredOff ? "power" : "lock", accessibilityDescription: item.label)
+            item.toolTip = emulator.isPoweredOff ? "Power on the device" : "Lock or wake the device; open the menu for power options"
+        }
         window?.toolbar?.validateVisibleItems()
         syncRotateSymbol()      // follows automatic rotations, not just manual ones
         updateDeadOverlay()
@@ -215,7 +222,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             let powerOff = menu.addItem(withTitle: "Power Off", action: #selector(devicePowerOff(_:)), keyEquivalent: "")
             powerOff.target = self
             powerOff.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
-            powerOff.toolTip = "Shut down the device and close Light Touch"
+            powerOff.toolTip = "Shut down the device while keeping this window open"
             item.menu = menu
             return item
         case .rotate:
@@ -349,7 +356,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     // MARK: - Device menu actions (routed via the responder chain)
     
     @objc func deviceHome(_ sender: Any?)        { emulator.pressHome() }
-    @objc func deviceLock(_ sender: Any?)        { emulator.pressLock() }
+    @objc func deviceLock(_ sender: Any?) {
+        if emulator.isPoweredOff { emulator.powerOn() } else { emulator.pressLock() }
+    }
     @objc func deviceVolumeUp(_ sender: Any?)    { emulator.pressVolumeUp() }
     @objc func deviceVolumeDown(_ sender: Any?)  { emulator.pressVolumeDown() }
     @objc func deviceRotate(_ sender: Any?) {
@@ -405,9 +414,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             self?.emulator.reset()
         }
     }
-    /// The application quit path owns guest shutdown and protects queued installs.
-    /// QEMU runs once per process, so powering off also closes Light Touch.
-    @objc func devicePowerOff(_ sender: Any?) { NSApp.terminate(sender) }
+    @objc func devicePowerOff(_ sender: Any?) {
+        emulator.powerOff { [weak self] confirmed in
+            guard !confirmed, let self, let window = self.window else { return }
+            let alert = NSAlert()
+            alert.messageText = "The device did not finish powering off"
+            alert.informativeText = "Guest shutdown could not be confirmed. The window remains open so you can retry or restart the device."
+            alert.beginSheetModal(for: window) { _ in }
+        }
+    }
 
     @objc func saveStateNow(_ sender: Any?) {
         emulator.onSnapshotResult = { [weak self] ok in
@@ -582,7 +597,11 @@ extension MainWindowController: NSToolbarItemValidation {
             return emulator.canQueueInstall
         case .openTerminal:
             return emulator.canReachDevice && !emulator.isInstalling
-        case .home, .lock, .rotate:
+        case .lock:
+            item.label = emulator.isPoweredOff ? "Power On" : "Lock"
+            item.image = NSImage(systemSymbolName: emulator.isPoweredOff ? "power" : "lock", accessibilityDescription: item.label)
+            return emulator.acceptsInput || (emulator.isPoweredOff && !emulator.shuttingDown)
+        case .home, .rotate:
             return emulator.acceptsInput
         default:
             return !emulator.isDead
@@ -602,7 +621,10 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(openDeviceTerminal(_:)), #selector(restartSpringBoard(_:)):
             return emulator.canReachDevice && !emulator.isInstalling
         // Device input only reaches a running guest.
-        case #selector(deviceHome(_:)), #selector(deviceLock(_:)),
+        case #selector(deviceLock(_:)):
+            menuItem.title = emulator.isPoweredOff ? "Power On" : "Lock"
+            return emulator.acceptsInput || (emulator.isPoweredOff && !emulator.shuttingDown)
+        case #selector(deviceHome(_:)),
              #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)),
              #selector(deviceRotateRight(_:)), #selector(deviceShake(_:)):
             return emulator.acceptsInput
@@ -612,7 +634,7 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleKernelConsole(_:)):
             menuItem.state = EmulatorController.kernelConsole ? .on : .off
             return true
-        case #selector(devicePowerOff(_:)): return emulator.acceptsInput
+        case #selector(devicePowerOff(_:)): return emulator.acceptsInput && !emulator.isInstalling && !AppInstaller.hasPendingWork
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState

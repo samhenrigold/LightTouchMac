@@ -64,6 +64,58 @@ final class DisplayView: NSView {
     /// orientation didn't change — mirrors how orientationChanged drives it.
     private var pendingAnimatedLayout = false
 
+    private enum PowerPresentation: Equatable { case awake, sleeping, poweredOff, shuttingDown }
+    private var powerPresentation: PowerPresentation = .awake
+    private var powerBadge: NSStackView?
+
+    func updatePowerPresentation() {
+        guard let emulator else { return }
+        let next: PowerPresentation = emulator.isPoweredOff ? .poweredOff
+            : emulator.shuttingDown ? .shuttingDown : emulator.isSleeping ? .sleeping : .awake
+        guard next != powerPresentation else { return }
+        powerPresentation = next
+        powerBadge?.removeFromSuperview()
+        powerBadge = nil
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.3)
+        shellLayer.opacity = next == .awake ? 1 : next == .sleeping ? 0.45 : 0.25
+        contentLayer.isHidden = next == .poweredOff
+        CATransaction.commit()
+        guard next != .awake else {
+            setAccessibilityValue("Device awake")
+            return
+        }
+        let symbol = NSTextField(labelWithString: next == .sleeping ? "z z z" : "⏻")
+        symbol.font = .systemFont(ofSize: 30, weight: .light)
+        symbol.textColor = .white
+        let title = next == .sleeping ? "Sleeping" : next == .poweredOff ? "Powered Off" : "Powering off…"
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 15, weight: .medium)
+        label.textColor = .white
+        let stack = NSStackView(views: [symbol, label])
+        stack.appearance = NSAppearance(named: .darkAqua)
+        stack.orientation = .vertical
+        stack.spacing = 10
+        if next != .shuttingDown {
+            let button = NSButton(title: next == .poweredOff ? "Power On" : "Wake Up", target: self, action: #selector(wakeDevice(_:)))
+            button.bezelStyle = .rounded
+            stack.addArrangedSubview(button)
+        }
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: safeAreaLayoutGuide.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: safeAreaLayoutGuide.centerYAnchor)
+        ])
+        powerBadge = stack
+        setAccessibilityValue(title)
+    }
+
+    @objc private func wakeDevice(_ sender: Any?) {
+        guard let emulator else { return }
+        if emulator.isPoweredOff { emulator.powerOn() } else { emulator.pressLock() }
+    }
+
     private let contentLayer = CALayer()
     private let shellLayer = CALayer()
     private let homeButton = HomeButton()

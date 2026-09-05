@@ -13,6 +13,14 @@ final class EmulatorController {
     let options: LaunchOptions
     private let usbmux = USBMux()
     private var started = false
+    private var poweringOn = false
+    private(set) var shuttingDown = false { didSet { onStatusChange?() } }
+    private(set) var isSleeping = false { didSet { if oldValue != isSleeping { onStatusChange?() } } }
+    private(set) var foregroundAppName: String? { didSet { if oldValue != foregroundAppName { onStatusChange?() } } }
+    private var foregroundTask: Task<Void, Never>?
+    private var bootGeneration = 0
+    var isPoweredOff: Bool { state == .poweredOff }
+
     private var packedImage: DeviceStateStorage.PackedImage?
     private var retainedPackedImage = false
     private var reportedStorageFailure = false
@@ -27,7 +35,7 @@ final class EmulatorController {
     /// `.dead` is the one that used to be invisible — QEMU would exit and the
     /// app kept a frozen frame with every control live.
     enum VMState: Equatable {
-        case notStarted, booting, running, paused, snapshotting
+        case notStarted, booting, running, paused, snapshotting, poweredOff
         case dead(exitCode: Int32?)
     }
     private(set) var state: VMState = .notStarted {
@@ -170,6 +178,7 @@ final class EmulatorController {
             "-M", machine,
             "-m", options.memory,
             "-display", "none",
+            "-no-shutdown",
             "-audio", "driver=coreaudio,out.buffer-count=16",
             "-serial", "file:\(serialLog.path)",
         ]
@@ -208,6 +217,7 @@ final class EmulatorController {
         verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
         startOrientationWatch()   // idle until the guest is up and reachable
         startTimeZoneSync()       // guest zone follows the Mac's, incl. travel
+        startForegroundWatch()
     }
 
     /// Existing images need the same media engine/configuration as newly
@@ -276,6 +286,7 @@ final class EmulatorController {
 
     func stop() {
         mediaPreparationTask?.cancel()
+        foregroundTask?.cancel()
         usbmux.stop()
         // Ends the ssh session, which is what tells the guest-side reporter to
         // exit; leaving it running would strand an iproxy and an ssh behind us.
@@ -337,6 +348,7 @@ final class EmulatorController {
         // so drop the snapshot (unless a clean save is in progress).
         if state != .snapshotting { discardSavedState() }
         mediaPreparationTask?.cancel()
+        foregroundTask?.cancel()
         usbmux.stop()
         state = .dead(exitCode: code)
     }
@@ -350,7 +362,7 @@ final class EmulatorController {
 
     func noteFrameAdvanced() {
         lastFrameAdvance = Date()
-        if state == .booting { state = .running }
+        if state == .booting, !poweringOn { state = .running }
     }
 
     /// Frames within the last ~2s. Not sufficient alone for "healthy" — a
@@ -363,6 +375,20 @@ final class EmulatorController {
     var storageFailed: Bool { qemu_ios_ui_storage_failed() }
 
     func pollStorageFailure() {
+        if !poweringOn, qemu_ios_ui_guest_shutdown_confirmed(), !isDead, !isPoweredOff {
+            foregroundTask?.cancel()
+            foregroundAppName = nil
+            isSleeping = false
+            deviceReachable = false
+            discardSavedState()
+            state = .poweredOff
+        }
+        if state == .running {
+            isSleeping = qemu_ios_ui_display_sleeping()
+        } else if isSleeping {
+            isSleeping = false
+        }
+
         if storageFailed, !reportedStorageFailure {
             reportedStorageFailure = true
             discardSavedState()
@@ -370,7 +396,7 @@ final class EmulatorController {
         }
     }
 
-    var isRunning: Bool { state == .running && !storageFailed && !preparingMedia && !restartingSpringBoard }
+    var isRunning: Bool { state == .running && !storageFailed && !preparingMedia && !restartingSpringBoard && !shuttingDown }
     var isPaused:  Bool { state == .paused }
     var isDead:    Bool { if case .dead = state { return true } else { return false } }
     /// The guest can take input only while actually executing.
@@ -379,10 +405,13 @@ final class EmulatorController {
     /// One line for the window's status area.
     var statusLine: String {
         if storageFailed { return "Storage write failed — device stopped; latest changes were not saved" }
+        if shuttingDown, !isPoweredOff { return "Powering off…" }
         switch state {
+        case .poweredOff: return "Powered Off"
         case .notStarted: return "Starting…"
         case .booting:    return "Booting…"
         case .running:
+            if isSleeping { return "Sleeping" }
             if restartingSpringBoard { return "Restarting SpringBoard…" }
             if preparingMedia { return "Preparing device media…" }
             if let mediaPreparationFailure { return "Media update failed — \(mediaPreparationFailure)" }
@@ -704,6 +733,8 @@ final class EmulatorController {
     /// leaving a stopped machine labelled "Booting…" with all input dead, and no
     /// way back except stumbling onto Device ▸ Resume.
     func reset() {
+        if isPoweredOff { powerOn(); return }
+        guard !shuttingDown else { return }
         guard !storageFailed else { return }
         guard state != .snapshotting else {
             NSLog("reset: ignored while a state save is in flight")
@@ -730,10 +761,75 @@ final class EmulatorController {
             self.startMediaPreparation()
         }
     }
-    /// Kept for completeness; deliberately NOT in a menu — system_powerdown
-    /// provably never completes on 3.1.3 (PMU reg 0x04–0x06 modelling gap), so
-    /// exposing it is a trap that hangs the guest at 100% CPU.
-    func powerDown() { qemu_ios_ui_powerdown() }
+    /// Retain the QEMU main loop at guest power-off; a reset can cold boot it
+    /// again without reinitializing QEMU or opening a second NAND writer.
+    func powerOff(completion: @escaping (Bool) -> Void) {
+        guard isRunning, !isInstalling, !AppInstaller.hasPendingWork else { completion(false); return }
+        shuttingDown = true
+        foregroundTask?.cancel()
+        beginCleanShutdown { [weak self] confirmed in
+            guard let self else { completion(false); return }
+            self.pollStorageFailure()
+            self.shuttingDown = false
+            if !confirmed, !self.isDead, !self.isPoweredOff { self.startForegroundWatch() }
+            completion(confirmed)
+        }
+    }
+
+    func powerOn() {
+        guard isPoweredOff, !storageFailed, !shuttingDown else { return }
+        poweringOn = true
+        bootGeneration += 1
+        foregroundAppName = nil
+        isSleeping = false
+        deviceReachable = nil
+        rotationDegrees = 0
+        state = .booting
+        qemu_ios_ui_reset()
+        Task { [weak self] in
+            guard let self else { return }
+            let deadline = ContinuousClock.now + .seconds(5)
+            // system_reset is queued. Wait until the PMU reset clears its
+            // shutdown latch before resuming the stopped VM.
+            while qemu_ios_ui_guest_shutdown_confirmed(), ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard !qemu_ios_ui_guest_shutdown_confirmed(), !self.isDead else {
+                self.poweringOn = false
+                self.state = .poweredOff
+                return
+            }
+            qemu_ios_ui_resume()
+            self.poweringOn = false
+            self.startMediaPreparation()
+            self.startForegroundWatch()
+        }
+    }
+
+    private func startForegroundWatch() {
+        foregroundTask?.cancel()
+        let generation = bootGeneration
+        foregroundTask = Task { [weak self] in
+            var staged = false
+            while !Task.isCancelled {
+                guard let self else { return }
+                if self.canReachDevice, !self.isSleeping, !self.isInstalling, !AppInstaller.hasPendingWork {
+                    do {
+                        let name = try await self.tools().foregroundAppName(stageHelper: !staged)
+                        try Task.checkCancellation()
+                        guard generation == self.bootGeneration else { return }
+                        staged = true
+                        self.foregroundAppName = name
+                    } catch {
+                        if Task.isCancelled { return }
+                        staged = false
+                        self.foregroundAppName = nil
+                    }
+                }
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            }
+        }
+    }
 
     func pasteToGuest(_ text: String) { qemu_ios_ui_paste(text) }
 
@@ -995,6 +1091,7 @@ final class EmulatorController {
     static let cleanShutdownBudget: TimeInterval = 30 + 20 + 5
 
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
+        if isPoweredOff { completion(true); return }
         guard !storageFailed, !isDead, state != .notStarted else { completion(false); return }
         // Never underneath a save. `Save State Now` stops the vCPU and is still
         // writing; resuming it here produced a snapshot captured across a
@@ -1184,6 +1281,7 @@ final class EmulatorController {
     /// so a wedged socket hung the quit itself. `withDeadline` abandons the
     /// blocked thread; the gate keeps it from racing other device work.
     func deviceReady() async -> Bool {
+        guard !isPoweredOff, !shuttingDown else { return false }
         guard let socket = usbmux.session?.clientSocket else { return false }
         // Bounded INCLUDING the wait for the gate. withDeadline bounds the probe
         // itself, but not the queue in front of it, and this is called from the

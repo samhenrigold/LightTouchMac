@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // earlier in the session as well as the one in flight.
         }
 
-        guard !emulator.isDead else { return .terminateNow }
+        guard !emulator.isDead, !emulator.isPoweredOff else { return .terminateNow }
 
         // Quit must ALWAYS complete. .terminateLater hands AppKit an IOU, and
         // if the completion never runs the app just sits there — ⌘Q appears to

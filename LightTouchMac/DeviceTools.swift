@@ -436,6 +436,22 @@ struct DeviceTools: Sendable {
         return try PropertyListSerialization.data(fromPropertyList: job, format: format, options: 0)
     }
 
+    /// Read-only helper uses SpringBoard's foreground identifier and localized
+    /// display name. It never writes sblaunch's shared command file.
+    func foregroundAppName(stageHelper: Bool) async throws -> String? {
+        let data: Data
+        if stageHelper {
+            guard let helper = Bundled.resolve("itstatus", fallbacks: [
+                "\(filesRoot)/../qemu-ios/contrib/it-status/itstatus"
+            ]) else { throw DeviceToolsError.toolMissing("itstatus") }
+            data = try await guestRun("cat > /tmp/ltm-itstatus.new && chmod 755 /tmp/ltm-itstatus.new && mv /tmp/ltm-itstatus.new /tmp/ltm-itstatus && /tmp/ltm-itstatus", stdinPath: helper)
+        } else {
+            data = try await guestRun("/tmp/ltm-itstatus")
+        }
+        let value = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : String(value.prefix(200))
+    }
+
     /// Push the guest's dirty buffers to flash.
     func syncFilesystem() async throws {
         try await guestRun("sync")

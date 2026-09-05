@@ -32,8 +32,12 @@ nonisolated enum Bundled {
     /// Always writable, in both dev and packaged builds — unlike a files-root
     /// that may point inside the read-only signed bundle.
     static let stateDirectory: URL = {
-        let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("LightTouchMac", isDirectory: true)
+        // Explicit isolation for development and UI verification; default
+        // launches keep the user's existing Application Support directory.
+        let override = ProcessInfo.processInfo.environment["LTM_STATE_DIR"]
+        let url = override.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("LightTouchMac", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }()

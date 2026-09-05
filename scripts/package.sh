@@ -156,6 +156,7 @@ copy_tool "$QEMU/contrib/it-instprogress/sbdlicon" guest
 # The quit-time helper asks launchd to shut down through reboot2(RB_HALT);
 # the host still waits for an actual guest PMU power-off event.
 copy_tool "$QEMU/contrib/it-halt/ithalt" guest
+copy_tool "$QEMU/contrib/it-status/itstatus" guest
 # Auto-rotation's guest-side reporter. Without it the feature is silently absent
 # from every packaged build — the app resolves it bundle-first and then falls
 # back to a checkout path a user's Mac does not have.

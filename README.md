@@ -124,3 +124,14 @@ status bar appeared in an isolated movie-player run, so that omission is not
 universal. Native reboot and post-media warm reset now pass. The current hardware model does not implement the video
 decoder or full AMC compressed-audio processing. These are not claimed fixed by
 the frontend changes.
+
+
+Power Off in the Lock toolbar menu shuts down the guest and leaves the window
+open. Power On cold-boots the same emulator instance. A dimmed device with a
+Sleeping or Powered Off badge distinguishes these states from an unresponsive
+frame; Wake Up uses the power button. The window subtitle follows SpringBoard's
+localized foreground app name (Home Screen when no app is foreground).
+
+For isolated development runs, `LTM_STATE_DIR=/absolute/test/path` redirects
+all writable device state, logs and usbmuxd scratch from Application Support.
+The default remains the existing user state directory.

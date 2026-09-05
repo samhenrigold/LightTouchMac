@@ -813,9 +813,13 @@ final class AppsInspectorViewController: NSViewController {
 
     private func showStaleBanner() {
         let when = Self.freshnessText(since: lastLoaded)
-        banner.stringValue = usbUnavailable
-            ? "USB unavailable — \(when)"
-            : "Device not responding — \(when)"
+        if emulator.isPoweredOff { banner.stringValue = "Device powered off" }
+        else if emulator.shuttingDown { banner.stringValue = "Device powering off…" }
+        else {
+            banner.stringValue = usbUnavailable
+                ? "USB unavailable — \(when)"
+                : "Device not responding — \(when)"
+        }
         banner.isHidden = false
         bannerHeight?.constant = 18
     }
