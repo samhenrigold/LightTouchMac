@@ -199,7 +199,25 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .home:
             return button(id, "Home", "house", #selector(deviceHome(_:)), "Press the Home button")
         case .lock:
-            return button(id, "Lock", "lock", #selector(deviceLock(_:)), "Lock or wake the device")
+            let item = NSMenuToolbarItem(itemIdentifier: id)
+            item.label = "Lock"
+            item.paletteLabel = "Lock and Power Off"
+            item.toolTip = "Lock or wake the device; open the menu for power options"
+            item.image = NSImage(systemSymbolName: "lock", accessibilityDescription: "Lock")
+            item.target = self
+            item.action = #selector(deviceLock(_:))
+            item.isBordered = true
+            item.showsIndicator = true
+            let menu = NSMenu(title: "Device Power")
+            let lock = menu.addItem(withTitle: "Lock", action: #selector(deviceLock(_:)), keyEquivalent: "")
+            lock.target = self
+            lock.image = NSImage(systemSymbolName: "lock", accessibilityDescription: nil)
+            let powerOff = menu.addItem(withTitle: "Power Off", action: #selector(devicePowerOff(_:)), keyEquivalent: "")
+            powerOff.target = self
+            powerOff.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+            powerOff.toolTip = "Shut down the device and close Light Touch"
+            item.menu = menu
+            return item
         case .rotate:
             let item = button(id, "Rotate", rotateSymbolName, #selector(deviceRotate(_:)), "Rotate between portrait and landscape")
             rotateItem = item
@@ -387,9 +405,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             self?.emulator.reset()
         }
     }
-    // No devicePowerDown menu item: the quit path drives the shutdown itself
-    // (EmulatorController.beginCleanShutdown), and a bare powerdown needs a
-    // healthy SpringBoard to draw the sheet its gesture slides.
+    /// The application quit path owns guest shutdown and protects queued installs.
+    /// QEMU runs once per process, so powering off also closes Light Touch.
+    @objc func devicePowerOff(_ sender: Any?) { NSApp.terminate(sender) }
+
     @objc func saveStateNow(_ sender: Any?) {
         emulator.onSnapshotResult = { [weak self] ok in
             guard !ok, let window = self?.window else { return }
@@ -593,6 +612,7 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleKernelConsole(_:)):
             menuItem.state = EmulatorController.kernelConsole ? .on : .off
             return true
+        case #selector(devicePowerOff(_:)): return emulator.acceptsInput
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState
