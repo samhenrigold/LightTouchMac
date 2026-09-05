@@ -593,6 +593,10 @@ struct DeviceTools: Sendable {
     @discardableResult
     private func guestRun(_ command: String, stdinPath: String? = nil,
                          expecting marker: String? = nil) async throws -> Data {
+        if marker == nil,
+           let result = try await GuestAgentTransport.shared.runIfAvailable(command, stdinPath: stdinPath) {
+            return result
+        }
         guard let iproxy = Bundled.tool("iproxy")
                 ?? Self.searchPaths.map({ "\($0)/iproxy" }).first(where: {
                     FileManager.default.isExecutableFile(atPath: $0)
@@ -709,5 +713,68 @@ struct DeviceTools: Sendable {
                 "Could not open a shell on the device. This NAND image may not have sshd "
                 + "installed. \(result.standardError)")
         }
+    }
+}
+
+
+/// One result dispatcher for the process's embedded emulator. A submitted
+/// command is never retried through SSH: a lost response may follow a mutation.
+private actor GuestAgentTransport {
+    static let shared = GuestAgentTransport()
+    private var waiting: Set<String> = []
+    private var results: [String: (Int, Data)] = [:]
+
+    func runIfAvailable(_ command: String, stdinPath: String?) async throws -> Data? {
+        guard qemu_ios_agent_status() == 1,
+              command.utf8.allSatisfy({ $0 >= 32 && $0 <= 126 }),
+              command.utf8.count < 4000 else { return nil }
+        var body = Data()
+        if let stdinPath {
+            let size = try FileManager.default.attributesOfItem(atPath: stdinPath)[.size] as? NSNumber
+            guard let size, size.intValue <= 250_000 else { return nil }
+            body = try Data(contentsOf: URL(fileURLWithPath: stdinPath))
+        }
+        guard body.count + command.utf8.count + 40 <= 256 * 1024 else { return nil }
+        try Task.checkCancellation()
+        let id = UUID().uuidString
+        let request = "\(id) exec \(command)\n\(body.base64EncodedString())"
+        guard request.withCString({ qemu_ios_agent_request($0) }) else {
+            throw DeviceToolsError.failed("The device command queue is full or unavailable.")
+        }
+        waiting.insert(id)
+        var completed = false
+        defer {
+            waiting.remove(id)
+            results[id] = nil
+            if !completed { id.withCString { qemu_ios_agent_cancel($0) } }
+        }
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(65))
+        while clock.now < deadline {
+            try Task.checkCancellation()
+            while let pointer = qemu_ios_agent_result() {
+                let wire = String(cString: pointer)
+                qemu_ios_agent_free_result(pointer)
+                let parts = wire.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+                guard parts.count == 2 else { continue }
+                let header = parts[0].split(separator: " ", maxSplits: 1)
+                guard header.count == 2, let status = Int(header[1]),
+                      let output = Data(base64Encoded: String(parts[1])) else { continue }
+                let resultID = String(header[0])
+                if waiting.contains(resultID) { results[resultID] = (status, output) }
+            }
+            if let (status, output) = results.removeValue(forKey: id) {
+                completed = true
+                guard status == 0 else {
+                    throw DeviceToolsError.failed("The device command failed (\(status)). \(String(decoding: output.prefix(4096), as: UTF8.self))")
+                }
+                return output
+            }
+            guard qemu_ios_ui_ready() else {
+                throw DeviceToolsError.failed("The device stopped before its command completed.")
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        throw DeviceToolsError.failed("The device command timed out; its outcome is unknown.")
     }
 }
