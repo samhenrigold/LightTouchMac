@@ -28,6 +28,7 @@ enum MainMenuBuilder {
         main.addItem(submenu(editMenu(), title: "Edit"))
         main.addItem(submenu(viewMenu(), title: "View"))
         main.addItem(submenu(deviceMenu(), title: "Device"))
+        main.addItem(submenu(captureMenu(), title: "Capture"))
         main.addItem(submenu(windowMenu(), title: "Window"))
         main.addItem(submenu(helpMenu(appName), title: "Help"))
         
@@ -54,6 +55,18 @@ enum MainMenuBuilder {
         return menu
     }
     
+    private static func captureMenu() -> NSMenu {
+        let menu = NSMenu(title: "Capture")
+        menu.addItem(item("Save Screenshot…", #selector(MainWindowController.saveScreenshot(_:)), "s", [.shift, .command]))
+        menu.addItem(item("Copy Screen", #selector(MainWindowController.copyScreen(_:))))
+        menu.addItem(item("Live Text", #selector(MainWindowController.showLiveText(_:)), "l", [.shift, .command]))
+        menu.addItem(.separator())
+        menu.addItem(item("Start Recording", #selector(MainWindowController.toggleRecording(_:)), "r", [.shift, .command]))
+        menu.addItem(.separator())
+        menu.addItem(item("Show Finger Dots", #selector(MainWindowController.toggleTouchOverlay(_:))))
+        return menu
+    }
+
     private static func fileMenu() -> NSMenu {
         // Not a document app — the New/Open/Save/Print boilerplate was all dead
         // (permanently disabled, targeting NSDocument/NSDocumentController that

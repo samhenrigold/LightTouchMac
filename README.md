@@ -135,3 +135,21 @@ localized foreground app name (Home Screen when no app is foreground).
 For isolated development runs, `LTM_STATE_DIR=/absolute/test/path` redirects
 all writable device state, logs and usbmuxd scratch from Application Support.
 The default remains the existing user state directory.
+
+### Web and captures
+
+Device > HTTP Proxy offers Direct HTTP or an external HTTP proxy, including
+WaybackProxy at `127.0.0.1:8888`. Changes apply when the guest is awake and ready;
+Off restores its previous proxy keys. WaybackProxy runs separately and owns its
+archive date. CONNECT preserves guest TLS; this does not yet modernize old TLS.
+
+Capture provides Save Screenshot (Shift-Command-S), Live Text
+(Shift-Command-L), and Start/Stop Recording (Shift-Command-R). Screenshots use
+the native screen pixels, including while paused. Live Text opens a separate
+freeze frame for text selection and data detectors. Show Finger Dots overlays
+mouse/trackpad contacts in the preview, screenshots and recordings.
+
+Recordings use H.264 video on a fixed 480 × 480 canvas, preserving native pixels
+through rotation with black margins. The title bar and Dock indicate recording.
+Stopping or quitting finishes the movie and asks where to save it. This initial
+recording path is video-only; guest audio capture remains follow-up work.

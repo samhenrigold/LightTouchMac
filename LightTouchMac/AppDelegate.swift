@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// unmounts. beginCleanShutdown requires explicit guest confirmation;
     /// native halt without PMU power-off remains a known limitation.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if windowController?.finishRecordingBeforeQuit() == true { return .terminateCancel }
         guard let emulator else { return .terminateNow }
 
         // Queued installs count too. isInstalling is set only around the install

@@ -122,7 +122,6 @@ final class DisplayView: NSView {
     private var displayLink: CADisplayLink?
     private var serial: UInt64 = 0
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
-    private var lastImage: CGImage?
     private var pinching = false
 
     override init(frame: NSRect) {
@@ -348,6 +347,7 @@ final class DisplayView: NSView {
 
     @objc private func step() {
         emulator?.pollStorageFailure()
+        updateTouchOverlay()
         var pixels: UnsafeRawPointer?
         var w: Int32 = 0
         var h: Int32 = 0
@@ -390,48 +390,90 @@ final class DisplayView: NSView {
         CATransaction.setDisableActions(true)
         contentLayer.contents = image
         CATransaction.commit()
-        // Copy only when someone has asked. Doing it every frame was ~37 MB/s of
-        // allocate-and-memcpy on the main thread — the thread that also has to
-        // service every touch — for a command almost nobody runs. But the copy
-        // has to happen HERE, next to the pixels being handed to the layer:
-        // copying at Copy-Screen time instead read a ring slot the emulator had
-        // recycled many frames ago (the display link stops while the window is
-        // minimised, so "many" can be thousands).
-        if wantsScreenCopy {
-            wantsScreenCopy = false
-            lastImage = Self.deepCopy(image, width: width, height: height,
-                                      bitmapInfo: bitmapInfo, colorSpace: colorSpace)
+    }
+
+    var showsTouches = UserDefaults.standard.bool(forKey: "showsTouches") {
+        didSet {
+            UserDefaults.standard.set(showsTouches, forKey: "showsTouches")
+            updateTouchOverlay()
         }
     }
+    private let touchOverlay = CAShapeLayer()
+    private var visibleTouches: [Int: (point: CGPoint, expires: CFTimeInterval)] = [:]
 
-    /// Set by screenImage; honoured by the next frame.
-    private var wantsScreenCopy = false
-
-    /// A CGImage over its own copy of `image`'s pixels — outlives the frame ring.
-    private static func deepCopy(_ image: CGImage, width: Int, height: Int,
-                                 bitmapInfo: CGBitmapInfo, colorSpace: CGColorSpace) -> CGImage? {
-        guard let src = image.dataProvider?.data,
-              let owned = CFDataCreateMutableCopy(nil, 0, src),
-              let provider = CGDataProvider(data: owned) else { return nil }
-        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                       bytesPerRow: width * 4, space: colorSpace, bitmapInfo: bitmapInfo,
-                       provider: provider, decode: nil, shouldInterpolate: false,
-                       intent: .defaultIntent)
+    private func sendVisualTouch(_ slot: Int32, _ phase: Int32, _ x: Double, _ y: Double) {
+        noteTouch(slot: Int(slot), phase: phase, x: x, y: y)
+        qemu_ios_ui_touch(slot, phase, x, y)
+    }
+    private func sendVisualTouch2(_ phase: Int32, _ x: Double, _ y: Double) {
+        noteTouch(slot: 1, phase: phase, x: x, y: y)
+        qemu_ios_ui_touch2(phase, x, y)
+    }
+    private func noteTouch(slot: Int, phase: Int32, x: Double, y: Double) {
+        visibleTouches[slot] = (CGPoint(x: x, y: y), phase == Int32(QEMU_IOS_TOUCH_END) ? CACurrentMediaTime() + 0.2 : .infinity)
+        updateTouchOverlay()
+    }
+    private var touchPoints: [CGPoint] {
+        visibleTouches = visibleTouches.filter { $0.value.expires > CACurrentMediaTime() }
+        return showsTouches ? visibleTouches.values.map(\.point) : []
+    }
+    private func updateTouchOverlay() {
+        if touchOverlay.superlayer == nil {
+            touchOverlay.fillColor = NSColor.white.withAlphaComponent(0.6).cgColor
+            touchOverlay.strokeColor = NSColor.black.withAlphaComponent(0.65).cgColor
+            touchOverlay.lineWidth = 1.5
+            contentLayer.addSublayer(touchOverlay)
+        }
+        let path = CGMutablePath()
+        let bounds = contentLayer.bounds
+        let radius = bounds.width / max(framePixels.width, 1) * 9
+        for point in touchPoints {
+            path.addEllipse(in: CGRect(x: point.x * bounds.width - radius,
+                                       y: point.y * bounds.height - radius,
+                                       width: radius * 2, height: radius * 2))
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        touchOverlay.frame = bounds
+        touchOverlay.path = path
+        CATransaction.commit()
     }
 
-    /// Current screen as an image, for Edit ▸ Copy Screen.
-    ///
-    /// Asks `step()` for a copy and waits briefly for it, because only `step()`
-    /// runs at a moment when the ring's pixels are provably the ones on screen.
-    /// Falls back to the previous copy if no frame arrives — a paused or dead
-    /// guest paints nothing, and a slightly old screenshot beats none.
+    /// The bridge copies while holding its publication lock, so capture is
+    /// current even when paused/minimized and never retains a recycled slot.
+    func captureFrame(includeTouches: Bool = true) -> CGImage? {
+        var data = Data(count: 480 * 480 * 4)
+        var width: Int32 = 0, height: Int32 = 0
+        let copied = data.withUnsafeMutableBytes {
+            qemu_ios_ui_copy_frame($0.baseAddress, $0.count, &width, &height)
+        }
+        guard copied, width > 0, height > 0 else { return nil }
+        data.count = Int(width * height * 4)
+        let info: CGBitmapInfo = [.byteOrder32Little, CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue)]
+        guard let provider = CGDataProvider(data: data as CFData),
+              let image = CGImage(width: Int(width), height: Int(height), bitsPerComponent: 8,
+                                  bitsPerPixel: 32, bytesPerRow: Int(width) * 4, space: colorSpace,
+                                  bitmapInfo: info, provider: provider, decode: nil,
+                                  shouldInterpolate: false, intent: .defaultIntent) else { return nil }
+        let points = includeTouches ? touchPoints : []
+        guard !points.isEmpty,
+              let context = CGContext(data: nil, width: Int(width), height: Int(height),
+                                      bitsPerComponent: 8, bytesPerRow: Int(width) * 4,
+                                      space: colorSpace, bitmapInfo: info.rawValue) else { return image }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: Int(width), height: Int(height)))
+        context.setFillColor(NSColor.white.withAlphaComponent(0.6).cgColor)
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.65).cgColor)
+        context.setLineWidth(1.5)
+        for point in points {
+            context.addEllipse(in: CGRect(x: point.x * CGFloat(width) - 9,
+                                          y: (1 - point.y) * CGFloat(height) - 9, width: 18, height: 18))
+            context.drawPath(using: .fillStroke)
+        }
+        return context.makeImage()
+    }
     var screenImage: NSImage? {
         get async {
-            wantsScreenCopy = true
-            for _ in 0..<20 where wantsScreenCopy {
-                try? await Task.sleep(for: .milliseconds(20))
-            }
-            guard let cg = lastImage else { return nil }
+            guard let cg = captureFrame() else { return nil }
             return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         }
     }
@@ -530,8 +572,8 @@ final class DisplayView: NSView {
     private func sendPinch(_ phase: Int32) {
         let a = gestureAnchor
         let x1 = min(max(a.x - pinchSpread, 0), 1), x2 = min(max(a.x + pinchSpread, 0), 1)
-        qemu_ios_ui_touch(0, phase, Double(x1), Double(a.y))
-        qemu_ios_ui_touch2(phase, Double(x2), Double(a.y))
+        sendVisualTouch(0, phase, Double(x1), Double(a.y))
+        sendVisualTouch2(phase, Double(x2), Double(a.y))
     }
 
     // MARK: Two-finger double tap
@@ -546,9 +588,9 @@ final class DisplayView: NSView {
         }
         Task { @MainActor in
             for _ in 0..<2 {
-                qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_BEGIN), nx, ny)
+                sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), nx, ny)
                 try? await Task.sleep(for: .milliseconds(40))
-                qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_END), nx, ny)
+                sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), nx, ny)
                 try? await Task.sleep(for: .milliseconds(70))
             }
         }
@@ -602,14 +644,14 @@ final class DisplayView: NSView {
         case .began:
             guard let p = clampedPanelPoint(event) else { return }
             scrollPoint = p
-            qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_BEGIN), Double(p.x), Double(p.y))
+            sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), Double(p.x), Double(p.y))
         case .changed:
             guard var p = scrollPoint else { return }
             let d = rotatedPanelDelta(dx, dy)
             p.x = min(max(p.x + d.dx / b.width, 0), 1)
             p.y = min(max(p.y + d.dy / b.height, 0), 1)
             scrollPoint = p
-            qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
+            sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
         case .ended, .cancelled:
             // Lift only if no momentum follows; otherwise ride it out below.
             if event.momentumPhase == [] { endScrollDrag() }
@@ -625,7 +667,7 @@ final class DisplayView: NSView {
             p.x = min(max(p.x + d.dx / b.width, 0), 1)
             p.y = min(max(p.y + d.dy / b.height, 0), 1)
             scrollPoint = p
-            qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
+            sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
         }
     }
 
@@ -637,16 +679,16 @@ final class DisplayView: NSView {
         let dx = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.deltaX * 10
         let dy = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY * 10
         let d = rotatedPanelDelta(dx, dy)
-        qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_BEGIN), Double(p.x), Double(p.y))
+        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), Double(p.x), Double(p.y))
         p.x = min(max(p.x + d.dx / b.width, 0), 1)
         p.y = min(max(p.y + d.dy / b.height, 0), 1)
-        qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
-        qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_END), Double(p.x), Double(p.y))
+        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
+        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), Double(p.x), Double(p.y))
     }
 
     private func endScrollDrag() {
         guard let p = scrollPoint else { return }
-        qemu_ios_ui_touch(0, Int32(QEMU_IOS_TOUCH_END), Double(p.x), Double(p.y))
+        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), Double(p.x), Double(p.y))
         scrollPoint = nil
     }
 
@@ -846,11 +888,11 @@ final class DisplayView: NSView {
     }
 
     private func send(_ phase: Int32, _ nx: Double, _ ny: Double) {
-        qemu_ios_ui_touch(0, phase, nx, ny)
+        sendVisualTouch(0, phase, nx, ny)
         if pinching {
             // Second finger mirrored through the panel centre — an Option-drag
             // reads as a symmetric pinch, the geometry cocoa.m uses.
-            qemu_ios_ui_touch2(phase, 1.0 - nx, 1.0 - ny)
+            sendVisualTouch2(phase, 1.0 - nx, 1.0 - ny)
         }
     }
 

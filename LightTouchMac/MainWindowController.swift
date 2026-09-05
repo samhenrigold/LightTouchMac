@@ -96,6 +96,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         refreshForState()
     }
 
+    private let movieWriter = ScreenMovieWriter()
+    private var recordingTask: Task<Void, Never>?
+    private var recordingOutput: URL?
+    private var recordingStartedAt: CFTimeInterval = 0
+    private var finishingRecording = false
+    private var recordingFailure: Error?
+    private var quitAfterRecording = false
+    private var recordingIndicator: NSTitlebarAccessoryViewController?
+    private var liveTextWindow: LiveTextWindowController?
+
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func windowDidLoad() {
@@ -545,9 +555,145 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     
     // MARK: - Edit menu (guest clipboard / screen)
     
+    @objc func saveScreenshot(_ sender: Any?) {
+        guard let window, let image = deviceVC.screen.captureFrame(),
+              let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        panel.nameFieldStringValue = captureName("Screenshot") + ".png"
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            do { try data.write(to: url, options: .atomic) }
+            catch { NSAlert(error: error).beginSheetModal(for: window) }
+        }
+    }
+
+    private func captureName(_ kind: String) -> String {
+        let date = Date().formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false))
+            .replacingOccurrences(of: ":", with: "-")
+        return "Light Touch \(kind) \(date)"
+    }
+
+    @objc func showLiveText(_ sender: Any?) {
+        guard let cg = deviceVC.screen.captureFrame(includeTouches: false) else { return }
+        liveTextWindow?.close()
+        let controller = LiveTextWindowController(image: NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)))
+        liveTextWindow = controller
+        controller.showWindow(nil)
+    }
+
+    @objc func toggleTouchOverlay(_ sender: Any?) { deviceVC.screen.showsTouches.toggle() }
+
+    @objc func toggleRecording(_ sender: Any?) {
+        if recordingOutput != nil { stopRecording(sender); return }
+        guard !finishingRecording, let window else { return }
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mov")
+        recordingOutput = output
+        recordingFailure = nil
+        NSApp.dockTile.badgeLabel = "REC"
+        let indicator = NSTitlebarAccessoryViewController()
+        let label = NSTextField(labelWithString: "● Recording")
+        label.textColor = .systemRed
+        label.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        label.frame = CGRect(x: 0, y: 0, width: 145, height: 22)
+        indicator.view = label
+        indicator.layoutAttribute = .right
+        window.addTitlebarAccessoryViewController(indicator)
+        recordingIndicator = indicator
+        recordingTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await movieWriter.start(url: output)
+                recordingStartedAt = CACurrentMediaTime()
+                while !Task.isCancelled {
+                    let elapsed = Int(CACurrentMediaTime() - recordingStartedAt)
+                    if let label = recordingIndicator?.view as? NSTextField {
+                        let seconds = String(elapsed % 60)
+                        label.stringValue = "● \(elapsed / 60):\(seconds.count == 1 ? "0" : "")\(seconds)"
+                    }
+                    if let image = deviceVC.screen.captureFrame() {
+                        try await movieWriter.append(image, seconds: CACurrentMediaTime() - recordingStartedAt)
+                    }
+                    try await Task.sleep(for: .milliseconds(33))
+                }
+            } catch is CancellationError {
+                // Stop waits for this task before finishing the writer.
+            } catch {
+                recordingFailure = error
+                stopRecording(nil)
+            }
+        }
+        window.makeFirstResponder(deviceVC.screen)
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        !finishRecordingBeforeQuit()
+    }
+
+    func finishRecordingBeforeQuit() -> Bool {
+        guard recordingOutput != nil else { return false }
+        quitAfterRecording = true
+        stopRecording(nil)
+        return true
+    }
+
+    @objc private func stopRecording(_ sender: Any?) {
+        guard let output = recordingOutput, !finishingRecording else { return }
+        finishingRecording = true
+        let producer = recordingTask
+        producer?.cancel()
+        NSApp.dockTile.badgeLabel = nil
+        if let window, let indicator = recordingIndicator,
+           let index = window.titlebarAccessoryViewControllers.firstIndex(of: indicator) {
+            window.removeTitlebarAccessoryViewController(at: index)
+        }
+        recordingIndicator = nil
+        Task { [weak self] in
+            guard let self else { return }
+            await producer?.value
+            defer {
+                recordingOutput = nil
+                recordingTask = nil
+                finishingRecording = false
+                if quitAfterRecording {
+                    quitAfterRecording = false
+                    NSApp.terminate(nil)
+                }
+            }
+            do {
+                try await movieWriter.finish(seconds: max(CACurrentMediaTime() - recordingStartedAt, 0.034))
+                if let recordingFailure { throw recordingFailure }
+                guard let window else { return }
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [.quickTimeMovie]
+                panel.nameFieldStringValue = captureName("Recording") + ".mov"
+                panel.message = "Device video at native resolution on a 480 × 480 canvas. Audio is not included."
+                let response = await panel.beginSheetModal(for: window)
+                if response != .OK { quitAfterRecording = false }
+                if response == .OK, let destination = panel.url {
+                    // Copy into the destination volume, then atomically replace
+                    // any existing file only after the complete copy succeeds.
+                    let staged = destination.deletingLastPathComponent().appendingPathComponent(".ltm-" + UUID().uuidString + ".mov")
+                    defer { try? FileManager.default.removeItem(at: staged) }
+                    try FileManager.default.copyItem(at: output, to: staged)
+                    if FileManager.default.fileExists(atPath: destination.path) {
+                        _ = try FileManager.default.replaceItemAt(destination, withItemAt: staged)
+                    } else { try FileManager.default.moveItem(at: staged, to: destination) }
+                }
+                try? FileManager.default.removeItem(at: output)
+            } catch {
+                quitAfterRecording = false
+                if let window {
+                    let alert = NSAlert(error: error)
+                    alert.informativeText += "\nRecording recovery file: \(output.path)"
+                    await alert.beginSheetModal(for: window)
+                }
+            }
+        }
+    }
+
     @objc func copyScreen(_ sender: Any?) {
-        // Async because the copy is taken by the next frame, where the pixels
-        // are provably current — see DisplayView.screenImage.
+        // Capture owns its pixels before handing the image to the pasteboard.
         Task {
             guard let image = await deviceVC.screen.screenImage else { return }
             let pb = NSPasteboard.general
@@ -679,7 +825,15 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState
         case #selector(eraseDevice(_:)): return !emulator.isDead
-        case #selector(copyScreen(_:)):   return !emulator.isDead
+        case #selector(toggleRecording(_:)):
+            menuItem.title = recordingOutput == nil ? "Start Recording" : "Stop Recording…"
+            menuItem.state = recordingOutput == nil ? .off : .on
+            return !finishingRecording && (recordingOutput != nil || emulator.isRunning)
+        case #selector(toggleTouchOverlay(_:)):
+            menuItem.state = deviceVC.screen.showsTouches ? .on : .off
+            return true
+        case #selector(showLiveText(_:)), #selector(saveScreenshot(_:)), #selector(copyScreen(_:)):
+            return !emulator.isPoweredOff && !emulator.isDead
         case #selector(pasteToGuest(_:)):
             return emulator.acceptsInput && NSPasteboard.general.string(forType: .string) != nil
         case #selector(zoomIn(_:)):
