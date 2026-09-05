@@ -142,8 +142,11 @@ Device > Proxy offers No Proxy or HTTP Proxy, with an optional archive date.
 The proxy is bundled: no separate server or installation is required. Dated
 browsing fetches the closest available Internet Archive capture through verified
 host HTTPS. Changes apply when the guest is awake and ready; No Proxy restores
-its previous proxy keys. Normal CONNECT preserves guest TLS; this does not yet
-modernize old TLS. Archive availability and rate limits still apply.
+its previous proxy keys and removes the device-local proxy certificate. HTTPS
+uses a built-in TLS bridge: the guest trusts a unique certificate for its own
+proxy, while the Mac verifies the real site's modern TLS connection. No Mac
+certificate installation is needed. Archive availability/rate limits and the
+old browser's JavaScript/CSS limitations still apply.
 
 Capture provides Save Screenshot (Shift-Command-S), Live Text
 (Shift-Command-L), and Start/Stop Recording (Shift-Command-R). Screenshots use

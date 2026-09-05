@@ -456,8 +456,33 @@ struct DeviceTools: Sendable {
         guard let helper = Bundled.resolve("itproxy", fallbacks: [
             "\(filesRoot)/../qemu-ios/contrib/it-proxy/itproxy"
         ]) else { throw DeviceToolsError.toolMissing("itproxy") }
+        let certificate = WebProxyConfiguration.file.path + ".ca.der"
+        if enabled {
+            guard let host = Bundled.resolve("itwebproxy", fallbacks: [
+                "\(filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
+            ]) else { throw DeviceToolsError.toolMissing("itwebproxy") }
+            let status = try await run(.path(FilePath(host)),
+                                       arguments: ["--init-ca", WebProxyConfiguration.file.path],
+                                       output: .discarded, error: .discarded).terminationStatus
+            guard status.isSuccess else {
+                throw DeviceToolsError.failed("Could not prepare this device’s HTTP proxy certificate.")
+            }
+            try await configureProxyTrust(certificate: certificate, enabled: true)
+        }
         let action = enabled ? "on" : "off"
         try await guestRun("cat > /tmp/ltm-itproxy.new && chmod 755 /tmp/ltm-itproxy.new && mv /tmp/ltm-itproxy.new /tmp/ltm-itproxy && /tmp/ltm-itproxy \(action)", stdinPath: helper)
+        if !enabled && FileManager.default.fileExists(atPath: certificate) {
+            try await configureProxyTrust(certificate: certificate, enabled: false)
+        }
+    }
+
+    private func configureProxyTrust(certificate: String, enabled: Bool) async throws {
+        guard let helper = Bundled.resolve("ittrust", fallbacks: [
+            "\(filesRoot)/../qemu-ios/contrib/it-proxy/ittrust"
+        ]) else { throw DeviceToolsError.toolMissing("ittrust") }
+        try await guestRun("cat > /tmp/ltm-ittrust.new && chmod 755 /tmp/ltm-ittrust.new && mv /tmp/ltm-ittrust.new /tmp/ltm-ittrust", stdinPath: helper)
+        let action = enabled ? "add" : "remove"
+        try await guestRun("cat > /tmp/ltm-proxy-ca.der && /tmp/ltm-ittrust \(action) /tmp/ltm-proxy-ca.der", stdinPath: certificate)
     }
 
     /// Push the guest's dirty buffers to flash.
