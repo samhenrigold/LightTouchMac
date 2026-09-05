@@ -85,9 +85,25 @@ final class DisplayView: NSView {
             setAccessibilityValue("Device awake")
             return
         }
-        let symbol = NSTextField(labelWithString: next == .sleeping ? "z z z" : "⏻")
-        symbol.font = .systemFont(ofSize: 30, weight: .light)
-        symbol.textColor = .white
+        let symbol: NSView
+        if next == .sleeping {
+            let container = NSView(frame: CGRect(x: 0, y: 0, width: 160, height: 128))
+            let sleeping = SleepingAnimationView()
+            sleeping.frame = container.bounds
+            sleeping.autoresizingMask = [.width, .height]
+            container.addSubview(sleeping)
+            container.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                container.widthAnchor.constraint(equalToConstant: 160),
+                container.heightAnchor.constraint(equalToConstant: 128)
+            ])
+            symbol = container
+        } else {
+            let power = NSTextField(labelWithString: "⏻")
+            power.font = .systemFont(ofSize: 30, weight: .light)
+            power.textColor = .white
+            symbol = power
+        }
         let title = next == .sleeping ? "Sleeping" : next == .poweredOff ? "Powered Off" : "Powering off…"
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 15, weight: .medium)
