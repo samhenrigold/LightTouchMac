@@ -62,7 +62,10 @@ Device > Battery sets the target level and automatic/forced charging state.
 iOS filters battery measurements, so the displayed estimate changes gradually.
 The settings also apply at the next boot. Drain accepts 0–100 percent per
 emulated minute; 0 disables it. Pausing freezes drain. USB power also freezes
-drain unless charging is set to Not Charging.
+drain unless charging is set to Not Charging. Disconnect USB in the same panel
+for normal discharge; iOS can defer voltage measurements while USB is connected
+and charging is forced off. Installation and media sync need USB connected.
+USB reconnects when the device restarts.
 
 ## Building (development)
 

@@ -493,7 +493,19 @@ final class EmulatorController {
         guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_battery_config") else { return nil }
         return unsafeBitCast(symbol, to: BatterySetter.self)
     }
-    var batteryControlsAvailable: Bool { batterySetter != nil && acceptsInput && !shuttingDown }
+    private typealias USBConnectionSetter = @convention(c) (Bool) -> Bool
+    private var usbConnectionSetter: USBConnectionSetter? {
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_usb_connection") else { return nil }
+        return unsafeBitCast(symbol, to: USBConnectionSetter.self)
+    }
+    private(set) var usbConnected = true
+    var batteryControlsAvailable: Bool { batterySetter != nil && usbConnectionSetter != nil && acceptsInput && !shuttingDown && !isInstalling && !AppInstaller.hasPendingWork }
+    private func reconnectUSB() {
+        if !usbConnected, usbConnectionSetter?(true) == true {
+            usbConnected = true
+            deviceReachable = nil
+        }
+    }
     var batteryLevel: Int {
         guard let saved = UserDefaults.standard.object(forKey: "batteryLevel") as? Int,
               (0...100).contains(saved) else { return 96 } // Existing default ADC 850.
@@ -507,12 +519,15 @@ final class EmulatorController {
         let saved = UserDefaults.standard.double(forKey: "batteryDrain")
         return saved.isFinite && (0...100).contains(saved) ? saved : 0
     }
-    func configureBattery(level: Int, charging: Int, drain: Double) throws {
+    func configureBattery(level: Int, charging: Int, drain: Double, usbConnected: Bool) throws {
         guard batteryControlsAvailable, (0...100).contains(level), (0...2).contains(charging),
               drain.isFinite, (0...100).contains(drain),
-              batterySetter?(Int32(level), Int32(charging), drain) == true else {
+              batterySetter?(Int32(level), Int32(charging), drain) == true,
+              usbConnectionSetter?(usbConnected) == true else {
             throw DeviceToolsError.failed("Battery controls are unavailable while the device is stopped.")
         }
+        self.usbConnected = usbConnected
+        deviceReachable = nil
         UserDefaults.standard.set(level, forKey: "batteryLevel")
         UserDefaults.standard.set(charging, forKey: "batteryCharging")
         UserDefaults.standard.set(drain, forKey: "batteryDrain")
@@ -810,6 +825,7 @@ final class EmulatorController {
             NSLog("reset: ignored while a state save is in flight")
             return
         }
+        reconnectUSB()
         // Flush first. A bare system_reset is the same hard cut as a SIGKILL as
         // far as the guest's filesystem is concerned — it loses the HFS+ catalog
         // updates still in memory, which is how a device ends up on the
@@ -848,6 +864,7 @@ final class EmulatorController {
 
     func powerOn() {
         guard isPoweredOff, !storageFailed, !shuttingDown else { return }
+        reconnectUSB()
         poweringOn = true
         bootGeneration += 1
         foregroundAppName = nil
@@ -1375,12 +1392,12 @@ final class EmulatorController {
     /// inspector's own buttons already waited for a real round trip; the menu
     /// and toolbar were the ones still guessing. `deviceReachable` is that round
     /// trip, set by the list poll, and nil until the first one lands.
-    var canReachDevice: Bool { canManageApps && isRunning && deviceReachable == true }
+    var canReachDevice: Bool { usbConnected && canManageApps && isRunning && deviceReachable == true }
 
     /// Adding to the ready queue opens no guest session. A probe suppressed by
     /// our own install must not disable File → Install App or drag-and-drop.
     var canQueueInstall: Bool {
-        canManageApps && isRunning && (deviceReachable == true || AppInstaller.isUsingDevice || isInstalling)
+        usbConnected && canManageApps && isRunning && (deviceReachable == true || AppInstaller.isUsingDevice || isInstalling)
     }
     /// The usbmuxd socket to talk to this device on, for the long-lived
     /// notification_proxy watcher (which owns its own session, not a gated one).
@@ -1405,7 +1422,7 @@ final class EmulatorController {
     /// so a wedged socket hung the quit itself. `withDeadline` abandons the
     /// blocked thread; the gate keeps it from racing other device work.
     func deviceReady() async -> Bool {
-        guard !isPoweredOff, !shuttingDown else { return false }
+        guard usbConnected, !isPoweredOff, !shuttingDown else { return false }
         guard let socket = usbmux.session?.clientSocket else { return false }
         // Bounded INCLUDING the wait for the gate. withDeadline bounds the probe
         // itself, but not the queue in front of it, and this is called from the

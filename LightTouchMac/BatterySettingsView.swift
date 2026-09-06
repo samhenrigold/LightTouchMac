@@ -8,7 +8,9 @@ final class BatterySettingsView: NSView {
 
     private let drainField = NSTextField(string: "0")
 
-    init(level: Int, charging: Int, drain: Double) {
+    private let usbButton = NSButton(checkboxWithTitle: "USB connected", target: nil, action: nil)
+
+    init(level: Int, charging: Int, drain: Double, usbConnected: Bool) {
         super.init(frame: .zero)
         slider.integerValue = level
         slider.target = self
@@ -25,6 +27,8 @@ final class BatterySettingsView: NSView {
         capacity.isEditable = false
         chargingMenu.addItems(withTitles: ["Automatic (USB)", "Charging", "Not Charging"])
         chargingMenu.selectItem(at: charging)
+        usbButton.state = usbConnected ? .on : .off
+        usbButton.toolTip = "Disconnect for normal battery discharge. App installation and media sync require USB. It reconnects when the device restarts."
         let formatter = NumberFormatter()
         formatter.minimum = 0
         formatter.maximum = 100
@@ -42,6 +46,7 @@ final class BatterySettingsView: NSView {
             [NSView(), ends, NSView()],
             [NSTextField(labelWithString: "Charging"), chargingMenu, NSView()],
             [NSTextField(labelWithString: "Drain"), drainField, NSTextField(labelWithString: "%/min")],
+            [NSView(), usbButton, NSView()],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.column(at: 0).width = 70
@@ -59,6 +64,7 @@ final class BatterySettingsView: NSView {
     var level: Int { slider.integerValue }
     var charging: Int { chargingMenu.indexOfSelectedItem }
     var drain: Double { drainField.doubleValue }
+    var usbConnected: Bool { usbButton.state == .on }
     @objc private func updateCapacity(_ sender: Any?) {
         capacity.integerValue = level
         valueLabel.stringValue = "\(level)%"
