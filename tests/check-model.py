@@ -14,6 +14,7 @@ import RealityKit
   window.contentView = model; window.orderFront(nil)
   let colors: [NSColor] = [.red, .green, .blue, .yellow]
   let points = [CGPoint(x: 0.25,y: 0.25), CGPoint(x: 0.75,y: 0.25), CGPoint(x: 0.25,y: 0.75), CGPoint(x: 0.75,y: 0.75)]
+  var homeLevels: [CGFloat] = []
   for rotation in [0,90,180,270] {
    let w = rotation % 180 == 0 ? 320 : 480, h = rotation % 180 == 0 ? 480 : 320
    let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w*4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
@@ -35,10 +36,39 @@ import RealityKit
      let reference = NSBitmapImageRep(cgImage: context.makeImage()!).colorAt(x: Int(p.x*CGFloat(w)), y: Int(p.y*CGFloat(h)))!.usingColorSpace(.sRGB)!
      precondition(abs(pixel.redComponent-reference.redComponent)<0.22 && abs(pixel.greenComponent-reference.greenComponent)<0.22 && abs(pixel.blueComponent-reference.blueComponent)<0.22, "Frame orientation mismatch rotation=\(rotation) tilt=\(tilt) point=\(p) pixel=\(pixel) reference=\(reference)")
     }
+    if tilt == 0, let rect = model.homeButtonRect {
+      let p = CGPoint(x: rect.midX + rect.width * 0.3, y: rect.midY)
+      let color = snapshot.colorAt(x: Int(p.x/800*CGFloat(snapshot.pixelsWide)), y: Int((1-p.y/800)*CGFloat(snapshot.pixelsHigh)))!.usingColorSpace(.sRGB)!
+      homeLevels.append(color.redComponent)
+      precondition(color.redComponent < 0.35, "Home button washed out: \(rotation) \(color)")
+      try snapshot.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/n72-orientation-\(rotation).png"))
+    }
     if rotation == 0 && tilt != 0 {
       try snapshot.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "/tmp/n72-tilted.png"))
     }
    }
+  }
+  precondition(homeLevels.max()! - homeLevels.min()! < 0.12, "Home lighting changes with orientation: \(homeLevels)")
+  if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+    model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
+    let rest = model.projectedPoint(CGPoint(x: 0.5, y: 0))
+    model.pose(scale: 0.5, rotation: 0, roll: 0.4, pitch: 0, animated: false)
+    let tilted = model.projectedPoint(CGPoint(x: 0.5, y: 0))
+    model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: true, spring: true)
+    // A second layout with the same target must not cancel the spring.
+    model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
+    precondition(abs(model.projectedPoint(CGPoint(x: 0.5, y: 0)).x-tilted.x)<1)
+    try await Task.sleep(for: .seconds(0.3)); model.advanceAnimations()
+    let overshoot = model.projectedPoint(CGPoint(x: 0.5, y: 0))
+    precondition((overshoot.x-rest.x)*(tilted.x-rest.x)<0, "Spring must cross the resting pose")
+    try await Task.sleep(for: .seconds(0.9)); model.advanceAnimations()
+    precondition(abs(model.projectedPoint(CGPoint(x: 0.5, y: 0)).x-rest.x)<0.01)
+    model.pose(scale: 0.8, rotation: 90, roll: 0, pitch: 0, animated: true)
+    try await Task.sleep(for: .seconds(0.16)); model.advanceAnimations()
+    let midway = model.projectedPoint(CGPoint(x: 0.2, y: 0.3))
+    try await Task.sleep(for: .seconds(0.3)); model.advanceAnimations()
+    let end = model.projectedPoint(CGPoint(x: 0.2, y: 0.3))
+    precondition(hypot(midway.x-end.x,midway.y-end.y)>10, "Rotation/scale must interpolate")
   }
   model.pose(scale: 0.4, rotation: 0, roll: 0, pitch: 0, animated: false)
   try await Task.sleep(for: .seconds(0.1))
@@ -48,11 +78,14 @@ import RealityKit
   let large = model.projectedPoint(CGPoint(x:1,y:0.5)).x-model.projectedPoint(CGPoint(x:0,y:0.5)).x
   precondition(abs(large/small-2)<0.001)
   let centre = model.projectedPoint(CGPoint(x:0.5,y:0.5))
+  let beforeShakeWidth = model.projectedPoint(CGPoint(x: 1, y: 0.5)).x-model.projectedPoint(CGPoint(x: 0, y: 0.5)).x
   model.shake()
   try await Task.sleep(for: .seconds(0.07))
   model.advanceAnimations()
   if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
     precondition(abs(model.projectedPoint(CGPoint(x:0.5,y:0.5)).x-centre.x)>1)
+    let shakenWidth = model.projectedPoint(CGPoint(x: 1, y: 0.5)).x-model.projectedPoint(CGPoint(x: 0, y: 0.5)).x
+    precondition(abs(shakenWidth-beforeShakeWidth)>0.01, "Shake must change 3D perspective, not only position")
   }
   try await Task.sleep(for: .seconds(0.5))
   model.advanceAnimations()
@@ -120,6 +153,24 @@ enum PreparedMedia { static let extensions: Set<String> = [] }
    }
   }
   e.rotationDegrees=0;frameWidth=320;frameHeight=480;try await settle()
+  let grab = model.projectedPoint(CGPoint(x: 0.5, y: -0.15))
+  precondition(model.isChassis(grab))
+  let rest = model.projectedPoint(CGPoint(x: 0.5, y: 0))
+  func dragEvent(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent {
+    NSEvent.mouseEvent(with: type, location: model.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+      windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+  }
+  display.mouseDown(with: dragEvent(.leftMouseDown, grab))
+  display.mouseDragged(with: dragEvent(.leftMouseDragged, CGPoint(x: grab.x+100, y: grab.y)))
+  let tilted = model.projectedPoint(CGPoint(x: 0.5, y: 0))
+  let top = model.projectedPoint(CGPoint(x: 0.5, y: 0.1))
+  let bottom = model.projectedPoint(CGPoint(x: 0.5, y: 0.9))
+  precondition(abs(top.x-bottom.x)<0.1, "Horizontal drag must yaw, not spin around gravity")
+  precondition(abs(tilted.x-rest.x)>1)
+  display.mouseUp(with: dragEvent(.leftMouseUp, grab))
+  try await Task.sleep(for: .seconds(1.2))
+  precondition(abs(model.projectedPoint(CGPoint(x: 0.5, y: 0)).x-rest.x)<0.1)
+  precondition(model.layer!.sublayers!.contains { $0.shadowPath != nil && $0.shadowOpacity > 0 })
   e.isSleeping=true;display.updatePowerPresentation();touches.removeAll()
   let event=NSEvent.mouseEvent(with:.leftMouseDown,location:model.convert(model.projectedPoint(CGPoint(x:0.5,y:0.5)),to:nil),modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:1)!
   display.mouseDown(with:event);precondition(touches.isEmpty)

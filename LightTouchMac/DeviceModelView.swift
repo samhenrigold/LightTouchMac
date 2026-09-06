@@ -1,5 +1,6 @@
 import AppKit
 import RealityKit
+import Metal
 
 /// The live LCD is a material on the asset, with input projected onto that same surface.
 @MainActor
@@ -7,6 +8,12 @@ final class DeviceModelView: NSView {
   private let renderer = ARView(frame: .zero)
   private let chassis = Entity()
   private let camera = PerspectiveCamera()
+  private let homeLighting = Entity()
+  private let chassisShadow = CALayer()
+  private var shellBounds = BoundingBox()
+  private var targetPose: Transform?
+  private var transition: (start: CFTimeInterval, from: Transform, to: Transform, spring: Bool)?
+  private var basePose = Transform()
   private let display: Entity
   private let home: Entity
   private let displayBounds: BoundingBox
@@ -42,8 +49,10 @@ final class DeviceModelView: NSView {
     renderer.environment.background = .color(.clear)
     let anchor = AnchorEntity(world: .zero)
     chassis.addChild(loaded)
+    shellBounds = loaded.visualBounds(relativeTo: chassis)
     anchor.addChild(chassis)
     anchor.addChild(camera)
+    anchor.addChild(homeLighting)
     renderer.scene.addAnchor(anchor)
     camera.camera.near = 0.001
     camera.camera.far = 10
@@ -89,6 +98,17 @@ final class DeviceModelView: NSView {
     let lighting = try await EnvironmentResource(named: "N72Studio", in: .main)
     renderer.environment.lighting.resource = lighting
     renderer.environment.lighting.intensityExponent = 2
+    var homeLight = ImageBasedLightComponent(source: .single(lighting), intensityExponent: 2)
+    homeLight.inheritsRotation = true
+    homeLighting.components.set(homeLight)
+    home.components.set(ImageBasedLightReceiverComponent(imageBasedLight: homeLighting))
+    wantsLayer = true
+    layer?.insertSublayer(chassisShadow, at: 0)
+    chassisShadow.shadowColor = NSColor.black.cgColor
+    chassisShadow.shadowOpacity = 0.4
+    chassisShadow.shadowRadius = 24
+    chassisShadow.shadowOffset = CGSize(width: 0, height: -6)
+    chassisShadow.actions = ["shadowPath": NSNull(), "bounds": NSNull(), "position": NSNull()]
     screenMaterial.color = .init(tint: .black)
     updateScreenMaterial()
     setAccessibilityElement(false)
@@ -98,23 +118,29 @@ final class DeviceModelView: NSView {
   override func layout() {
     super.layout()
     renderer.frame = bounds
+    chassisShadow.frame = bounds
   }
 
-  func pose(scale: CGFloat, rotation: Int, roll: CGFloat, pitch: CGFloat, animated: Bool) {
+  func pose(scale: CGFloat, rotation: Int, roll: CGFloat, pitch: CGFloat, animated: Bool, spring: Bool = false) {
     self.rotation = rotation
     let rest = Float(rotation == 270 ? -90 : rotation) * .pi / 180
     let units = Float(scale * 594 / 0.0499 / 10000)
     let pose = Transform(
       scale: SIMD3(repeating: units),
-      rotation: simd_quatf(angle: -rest, axis: [0, 0, 1])
-        * simd_quatf(angle: Float(pitch), axis: [1, 0, 0])
-        * simd_quatf(angle: Float(roll), axis: [0, 1, 0]), translation: .zero)
-    if animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-      chassis.move(to: pose, relativeTo: chassis.parent, duration: 0.4, timingFunction: .easeInOut)
-    } else {
-      chassis.stopAllAnimations()
-      chassis.transform = pose
+      rotation: simd_quatf(angle: Float(pitch), axis: [1, 0, 0])
+        * simd_quatf(angle: Float(roll), axis: [0, 1, 0])
+        * simd_quatf(angle: -rest, axis: [0, 0, 1]), translation: .zero)
+    // Layout may repeat while a transition is running; only a new target replaces it.
+    if targetPose != pose {
+      if animated && targetPose != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        transition = (CACurrentMediaTime(), basePose, pose, spring)
+      } else {
+        transition = nil
+        basePose = pose
+      }
+      targetPose = pose
     }
+    homeLighting.orientation = simd_quatf(angle: -rest, axis: [0, 0, 1])
     camera.position = [0, 0, 0.3 + units * displayBounds.max.z]
     camera.camera.fieldOfViewInDegrees = Float(
       2 * atan(Double(max(bounds.height, 1)) / 6000) * 180 / .pi)
@@ -129,6 +155,7 @@ final class DeviceModelView: NSView {
       screenMaterial.textureCoordinateTransform = .init(offset: offset, rotation: rest)
     }
     updateScreenMaterial()
+    advanceAnimations()
   }
   func updateFrame(_ image: CGImage) {
     do {
@@ -144,7 +171,12 @@ final class DeviceModelView: NSView {
   }
   private func updateScreenMaterial() {
     if let screenTexture, !screenOff {
-      screenMaterial.color = .init(tint: .white, texture: .init(screenTexture))
+      var sampler = MaterialParameters.Texture.Sampler()
+      sampler.modify { descriptor in
+        descriptor.sAddressMode = .clampToEdge
+        descriptor.tAddressMode = .clampToEdge
+      }
+      screenMaterial.color = .init(tint: .white, texture: .init(screenTexture, sampler: sampler))
     } else {
       screenMaterial.color = .init(tint: .black)
     }
@@ -228,13 +260,53 @@ final class DeviceModelView: NSView {
     shakeStarted = CACurrentMediaTime()
   }
   func advanceAnimations() {
-    guard let start = shakeStarted else { return }
-    let t = CACurrentMediaTime() - start
-    if t >= 0.45 {
-      chassis.position.x = 0
-      shakeStarted = nil
-    } else {
-      chassis.position.x = Float(sin(t * .pi * 16 / 0.45) * 0.0018 * (1 - t / 0.45))
+    let now = CACurrentMediaTime()
+    if let animation = transition {
+      let t = now - animation.start
+      let duration = animation.spring ? 1.1 : 0.4
+      let fraction: Float
+      if animation.spring {
+        // Same unit-mass spring as the original CASpringAnimation: k=200, c=14.
+        let frequency = sqrt(200.0 - 49.0)
+        fraction = Float(1 - exp(-7 * t) * (cos(frequency * t) + 7 / frequency * sin(frequency * t)))
+      } else {
+        let x = min(t / duration, 1)
+        fraction = Float(x * x * (3 - 2 * x))
+      }
+      basePose = Transform(scale: simd_mix(animation.from.scale, animation.to.scale, SIMD3(repeating: fraction)),
+        rotation: simd_slerp(animation.from.rotation, animation.to.rotation, fraction), translation: .zero)
+      if t >= duration { basePose = animation.to; transition = nil }
     }
+    chassis.transform = basePose
+    if let start = shakeStarted {
+      let t = now - start
+      if t >= 0.45 {
+        shakeStarted = nil
+      } else {
+        let decay = Float(1 - t / 0.45)
+        let wave = Float(sin(t * .pi * 16 / 0.45)) * decay
+        let cross = Float(sin(t * .pi * 11 / 0.45)) * decay
+        chassis.position = [wave * 0.0018, cross * 0.0005, cross * 0.0008]
+        chassis.orientation = simd_quatf(angle: cross * 0.035, axis: [1, 0, 0])
+          * simd_quatf(angle: wave * 0.06, axis: [0, 1, 0]) * basePose.rotation
+      }
+    }
+    // Project the rounded chassis outline; never shadow the rectangular ARView.
+    let path = CGMutablePath()
+    let radius = min(shellBounds.extents.x, shellBounds.extents.y) * 0.12
+    for corner in 0..<4 {
+      let right = corner == 0 || corner == 3
+      let top = corner < 2
+      let center = SIMD2<Float>(right ? shellBounds.max.x-radius : shellBounds.min.x+radius,
+                                top ? shellBounds.max.y-radius : shellBounds.min.y+radius)
+      for step in 0...8 {
+        let angle = Float(corner) * .pi / 2 + Float(step) * .pi / 16
+        let local = SIMD3<Float>(center.x + cos(angle)*radius, center.y + sin(angle)*radius, 0.004)
+        guard let point = renderer.project(chassis.convert(position: local, to: nil)) else { continue }
+        if path.isEmpty { path.move(to: point) } else { path.addLine(to: point) }
+      }
+    }
+    path.closeSubpath()
+    chassisShadow.shadowPath = path
   }
 }

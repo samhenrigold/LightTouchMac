@@ -930,6 +930,7 @@ final class DisplayView: NSView {
             shellLayer.removeAnimation(forKey: "tiltSnap")
             tilting = true
             grabAngle = grab
+            grabPoint = convert(event.locationInWindow, from: nil)
             return
         }
         pinching = event.modifierFlags.contains(.option)
@@ -938,21 +939,14 @@ final class DisplayView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         if tilting {
-            // NOT negated. The polar angle in this flipped view and the layer
-            // transform share a handedness, so the raw delta already turns the
-            // shell with the hand. It was negated for a while on the theory
-            // that explained an earlier "wrong direction, too fast" report —
-            // but that report was the ungeared 1:1 rate reading as reversed,
-            // and the gain below is what actually fixed it.
-            //
-            // Geared down by rotationGain. 1:1 is the textbook
-            // answer for direct manipulation, but the useful arc here is a
-            // wrist movement around a point on screen, and at 1:1 a quarter
-            // turn costs almost none of it — fine for flipping to landscape,
-            // useless for holding a few degrees of tilt in a game, which is
-            // what this gesture is actually for.
-            let delta = mouseAngle(event) - grabAngle
-            tiltAngle = atan2(sin(delta), cos(delta)) * Self.rotationGain   // wrap, then gear down
+            if modelView != nil {
+                let point = convert(event.locationInWindow, from: nil)
+                tiltAngle = min(max((point.x - grabPoint.x) * 0.004, -.pi / 4), .pi / 4)
+                pitchAngle = min(max((point.y - grabPoint.y) * 0.004, -.pi / 4), .pi / 4)
+            } else {
+                let delta = mouseAngle(event) - grabAngle
+                tiltAngle = atan2(sin(delta), cos(delta)) * Self.rotationGain
+            }
             setShellAngle(restAngle + tiltAngle)
             sendAttitude()
             return
@@ -969,8 +963,8 @@ final class DisplayView: NSView {
     // MARK: - Tilt (drag the chassis to rotate; the accelerometer follows)
     //
     // Grabbing the shell anywhere outside the screen — bezel or corners — and
-    // dragging rotates the whole device around its centre, Photoshop-style,
-    // and feeds the guest the matching gravity vector, so tilt games play.
+    // dragging tilts the 3D device along the screen axes. The photo fallback
+    // retains its polar rotation gesture. Both feed gravity to tilt games.
     // Release springs the shell back to rest and restores resting gravity.
 
     /// Degrees of device rotation per degree of drag around the shell's centre.
@@ -985,6 +979,7 @@ final class DisplayView: NSView {
     private static let scrollTiltGain: CGFloat = 0.0015
 
     private var tilting = false
+    private var grabPoint = CGPoint.zero
     private var grabAngle: CGFloat = 0   // mouse polar angle at grab
     private var tiltAngle: CGFloat = 0   // current drag delta from rest
 
@@ -1035,9 +1030,9 @@ final class DisplayView: NSView {
         return CATransform3DScale(transform, scale, scale, 1)
     }
 
-    private func updateModelPose(animated: Bool = false) {
+    private func updateModelPose(animated: Bool = false, spring: Bool = false) {
         modelView?.pose(scale: appliedScale, rotation: emulator?.rotationDegrees ?? 0,
-                        roll: tiltAngle, pitch: pitchAngle, animated: animated)
+                        roll: tiltAngle, pitch: pitchAngle, animated: animated, spring: spring)
     }
 
     private func projectedPanelPoint(_ point: CGPoint) -> CGPoint {
@@ -1115,7 +1110,7 @@ final class DisplayView: NSView {
     }
 
     private func setShellAngle(_ angle: CGFloat, animated: Bool = false) {
-        updateModelPose(animated: animated)
+        updateModelPose(animated: animated, spring: animated)
         shellLayer.removeAnimation(forKey: "tiltSnap")
         shellLayer.removeAnimation(forKey: "transform")
         CATransaction.begin()
