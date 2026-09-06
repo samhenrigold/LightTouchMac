@@ -22,7 +22,8 @@ source=r'''import Cocoa
  func resume(){isPaused=false;isRunning=true}
 }
 @MainActor enum AppInstaller { static var hasPendingWork=false }
-@MainActor final class AppDelegate:NSObject { @objc func showSettings(_ sender:Any?) {} }
+@MainActor final class AppDelegate:NSObject { @objc func showSettings(_ sender:Any?) {}
+ @objc func showHelp(_ sender:Any?) {} }
 @MainActor final class MainWindowController:NSWindowController {
  let emulator=Emulator()
 '''+stubs+'\n'+toggle+r'''

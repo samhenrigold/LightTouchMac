@@ -1,0 +1,34 @@
+Light Touch Help
+
+Using the device
+Click and drag on the screen as you would with a finger. Pinch on a trackpad, or Option-drag on the screen, to use two fingers. Home is ⇧⌘H; Lock is ⌘L. The Lock toolbar menu also has Power Off. Powering off leaves Light Touch open; choose Power On to start the device again.
+
+Rotate with ⌘← or ⌘→. These shortcuts leave text fields alone while you edit. View contains Actual Size, Zoom to Fit, and zoom controls. Settings (⌘,) controls automatic rotation.
+
+Motion and controllers
+Drag beside the device to roll it. Two-finger scrolling beside it controls roll and pitch. Hold Option and use the arrow keys to tilt; Option–Space shakes. The Motion toolbar menu selects Upright or Flat and keyboard tilt speed. The small horizon appears while tilted; click it to level the device.
+
+A connected game controller uses the left stick for tilt, A to hold a screen point, Menu for Home, and Options to shake. Settings selects the stick response and A-button point, expressed as percentages from the screen’s top-left corner. Input works while the device screen has keyboard focus and the device is awake. Controller release, disconnection, and switching to mouse input release its touch.
+
+Apps and media
+Use File → Install App to choose a decrypted, compatible IPA, or search the Legacy Store. You can also drag apps onto the device. Imports and installations share the inspector’s queue.
+
+File → Sync Media accepts MP3, M4A, AAC, WAV, JPEG, PNG, and HEIC files. Songs appear in Music; images appear in Saved Photos. Raw AAC is converted by macOS before upload. Keep virtual USB connected while transferring. If an import reports an uncertain result, check the device library before importing it again.
+
+Capturing the screen
+The Capture menu and customizable toolbar offer Save Screenshot, Copy Screen (⇧⌘C), Live Text (⇧⌘L), and recording (⇧⌘R). Live Text selects text directly over the device screen; click its button again or press Escape to dismiss it.
+
+Recordings include device audio and use a 480 × 480 canvas that preserves native pixels through rotation. Stop Recording opens the save sheet. Pausing the emulator leaves a silent interval in the recording. Finger dots are optional; they do not respond while the device is asleep or off.
+
+Browsing the web
+Device → Proxy selects no proxy, the built-in HTTP proxy, or a dated Internet Archive replay. Nothing separate needs installing. Archived pages depend on available captures and archive rate limits. A modern site’s scripts or layout may still exceed this old version of Safari.
+
+Battery and device state
+Device → Battery controls target capacity, charging, drain per emulated minute, and virtual USB. The guest filters battery readings, so its displayed percentage can lag a changed target. Pausing stops drain. Automatic charging while USB is connected also stops drain.
+
+Device → Pause freezes the emulator; Resume continues it. Save State Now is available for supported machine states. Live accelerated graphics contexts cannot yet be saved, and Light Touch reports that limitation. Discard Saved State removes saved memory state without erasing the device’s stored apps and data.
+
+Recovery and diagnostics
+Device → Advanced contains Restart SpringBoard, Open SSH, Verbose Boot, and Kernel Console. Boot options apply on the next boot. File → Export Diagnostics collects information useful for reporting a problem. Prefer normal Power Off or Quit so the guest can finish writing its filesystem.
+
+Restart and Erase All Content and Settings require confirmation. Erase removes the device’s installed apps, media, and settings. It is not a routine repair step.

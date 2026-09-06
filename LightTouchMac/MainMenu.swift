@@ -107,6 +107,7 @@ enum MainMenuBuilder {
         menu.addItem(.separator())
         // One Find item, not the standard submenu: the only searchable thing
         // is the Legacy Store field, and ⌘F should simply put the caret there.
+        menu.addItem(item("Find…", #selector(NSTextView.performFindPanelAction(_:)), "f", tag: NSTextFinder.Action.showFindInterface.rawValue))
         menu.addItem(item("Search Store", #selector(MainWindowController.findCatalog(_:)), "f", [.option, .command]))
         menu.addItem(.separator())
         menu.addItem(item("Copy Screen", #selector(MainWindowController.copyScreen(_:)), "c", [.shift, .command]))
@@ -195,7 +196,7 @@ enum MainMenuBuilder {
     
     private static func helpMenu(_ appName: String) -> NSMenu {
         let menu = NSMenu(title: "Help")
-        menu.addItem(item("\(appName) Help", #selector(NSApplication.showHelp(_:)), "?"))
+        menu.addItem(item("\(appName) Help", #selector(AppDelegate.showHelp(_:)), "?"))
         return menu
     }
     
