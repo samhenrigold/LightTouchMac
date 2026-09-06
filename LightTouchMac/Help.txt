@@ -13,7 +13,7 @@ A connected game controller uses the left stick for tilt, A to hold a screen poi
 Apps and media
 Use File → Install App to choose a decrypted, compatible IPA, or search the Legacy Store. You can also drag apps onto the device. Imports and installations share the inspector’s queue.
 
-File → Sync Media accepts MP3, M4A, AAC, WAV, JPEG, PNG, and HEIC files. Songs appear in Music; images appear in Saved Photos. Raw AAC is converted by macOS before upload. Keep virtual USB connected while transferring. If an import reports an uncertain result, check the device library before importing it again.
+File → Sync Media accepts MP3, M4A, AAC, WAV, JPEG, PNG, and HEIC files. Songs appear in Music; images appear in Saved Photos. Raw AAC is converted by macOS before upload. New song imports recognize identical content on repeat imports. Songs imported by older builds are not automatically indexed for duplicate detection. Keep virtual USB connected while transferring. If an import reports an uncertain result, check the device library before importing it again.
 
 Capturing the screen
 The Capture menu and customizable toolbar offer Save Screenshot, Copy Screen (⇧⌘C), Live Text (⇧⌘L), and recording (⇧⌘R). Live Text selects text directly over the device screen; click its button again or press Escape to dismiss it.

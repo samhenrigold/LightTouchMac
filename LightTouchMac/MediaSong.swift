@@ -59,6 +59,7 @@ struct MediaSong: Sendable {
                 guard size > 0, size <= 1 << 30 else {
                     throw DeviceToolsError.failed("The prepared audio must be nonempty and no larger than 1 GB.")
                 }
+                try MediaIdentity.normalizeGeneratedM4A(converted)
                 try FileManager.default.removeItem(at: audio)
                 audio = converted
             }
@@ -107,7 +108,7 @@ struct MediaSong: Sendable {
             try PropertyListSerialization.data(fromPropertyList: properties, format: .xml, options: 0)
                 .write(to: metadata, options: .atomic)
             try Task.checkCancellation()
-            let result = MediaSong(id: id, directory: directory, audio: audio,
+            let result = MediaSong(id: try MediaIdentity.identifier(for: audio), directory: directory, audio: audio,
                                    metadata: metadata, title: properties["title"] as! String)
             complete = true
             return result

@@ -130,19 +130,19 @@ struct DeviceServices: Sendable {
             throw DeviceError.preflight("Invalid media staging path.")
         }
         _ = try await stageFile(song.audio, remote: "LightTouch/\(song.id)/\(song.audio.lastPathComponent)",
-                                progress: progress)
+                                reuseIdentical: true, progress: progress)
     }
 
     func stagePhoto(_ photo: MediaPhoto, progress: @escaping @Sendable (Double) -> Void) async throws {
         guard UUID(uuidString: photo.id) != nil, photo.image.lastPathComponent == "image.jpg" else {
             throw DeviceError.preflight("Invalid photo staging path.")
         }
-        _ = try await stageFile(photo.image, remote: "LightTouch/\(photo.id)/image.jpg", progress: progress)
+        _ = try await stageFile(photo.image, remote: "LightTouch/\(photo.id)/image.jpg", reuseIdentical: true, progress: progress)
     }
 
     /// Callers supply a validated relative destination. The same chunked AFC
     /// upload, cancellation and incomplete-file cleanup serve apps and songs.
-    private func stageFile(_ ipa: URL, remote: String,
+    private func stageFile(_ ipa: URL, remote: String, reuseIdentical: Bool = false,
                            progress: @escaping @Sendable (Double) -> Void) async throws -> String {
         return try await run(Timeouts.stage, "upload") { imd, device in
             // File I/O stays on the detached worker, including opening the file.
@@ -160,19 +160,51 @@ struct DeviceServices: Sendable {
             let rc = start(device, &client, "LightTouchMac")
             guard rc == imd.success, let client else { throw DeviceError.afc(.init(code: rc)) }
             defer { _ = imd.afc_client_free?(client) }
+            if reuseIdentical {
+                guard let read = imd.afc_file_read, imd.afc_rename_path != nil else { throw DeviceError.unavailable }
+                var existing: UInt64 = 0
+                let result = remote.withCString { open(client, $0, 1, &existing) } // AFC_FOPEN_RDONLY.
+                if result == imd.success {
+                    defer { _ = close(client, existing) }
+                    var buffer = [CChar](repeating: 0, count: 65536)
+                    while let chunk = try input.read(upToCount: 65536), !chunk.isEmpty {
+                        var offset = 0
+                        while offset < chunk.count {
+                            try Task.checkCancellation()
+                            var count: UInt32 = 0
+                            let rc = read(client, existing, &buffer, UInt32(chunk.count - offset), &count)
+                            guard rc == imd.success, count > 0, count <= chunk.count - offset,
+                                  Data(bytes: buffer, count: Int(count)) == chunk.subdata(in: offset..<(offset + Int(count))) else {
+                                throw DeviceError.preflight("An existing media file differs from this import. It was kept unchanged.")
+                            }
+                            offset += Int(count)
+                        }
+                    }
+                    var count: UInt32 = 0
+                    guard read(client, existing, &buffer, 1, &count) == imd.success, count == 0 else {
+                        throw DeviceError.preflight("An existing media file differs from this import. It was kept unchanged.")
+                    }
+                    progress(1)
+                    return remote
+                }
+                guard result == 8 else { throw DeviceError.afc(.init(code: result)) } // Object not found.
+            }
+            // Publish complete media only. Interrupted uploads never truncate a
+            // library file or leave a partial file at its content-derived path.
+            let destination = reuseIdentical ? remote + ".upload-" + UUID().uuidString : remote
             var parent = ""
             for component in remote.split(separator: "/").dropLast() {
                 parent = parent.isEmpty ? String(component) : parent + "/" + component
                 _ = parent.withCString { mkdir(client, $0) }
             }
             var handle: UInt64 = 0
-            let opened = remote.withCString { open(client, $0, IMobileDevice.afcWriteMode, &handle) }
+            let opened = destination.withCString { open(client, $0, IMobileDevice.afcWriteMode, &handle) }
             guard opened == imd.success else { throw DeviceError.afc(.init(code: opened)) }
             var closed = false
             var complete = false
             defer {
                 if !closed { _ = close(client, handle) }
-                if !complete { _ = remote.withCString { imd.afc_remove_path?(client, $0) } }
+                if !complete { _ = destination.withCString { imd.afc_remove_path?(client, $0) } }
             }
             var written: UInt64 = 0
             while written < total {
@@ -198,6 +230,12 @@ struct DeviceServices: Sendable {
             let result = close(client, handle)
             closed = true
             guard result == imd.success else { throw DeviceError.upload(.init(code: result), written: written, total: total) }
+            if reuseIdentical {
+                let renamed = destination.withCString { from in
+                    remote.withCString { to in imd.afc_rename_path!(client, from, to) }
+                }
+                guard renamed == imd.success else { throw DeviceError.afc(.init(code: renamed)) }
+            }
             complete = true
             return remote
         }

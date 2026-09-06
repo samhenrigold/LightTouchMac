@@ -14,6 +14,9 @@ enum DeviceToolsError: Error { case failed(String) }
             precondition(abs((p["duration_ms"] as! Double) - 6000) < 100)
             precondition(p["filename"] as? String == song.audio.lastPathComponent)
             precondition(UUID(uuidString: song.id) != nil)
+            let repeated = try await MediaSong.prepare(source)
+            defer { try? FileManager.default.removeItem(at: repeated.directory) }
+            precondition(repeated.id == song.id && repeated.directory != song.directory)
         }
         let raw = URL(fileURLWithPath: CommandLine.arguments[2])
         let converted = try await MediaSong.prepare(raw)
@@ -22,6 +25,10 @@ enum DeviceToolsError: Error { case failed(String) }
         let decoded = try AVAudioFile(forReading: converted.audio)
         precondition(abs(Double(decoded.length) / decoded.processingFormat.sampleRate - 6) < 0.15)
         precondition(!FileManager.default.fileExists(atPath: converted.directory.appendingPathComponent("audio.aac").path))
+        try await Task.sleep(for: .seconds(1.1))
+        let repeatedAAC = try await MediaSong.prepare(raw)
+        defer { try? FileManager.default.removeItem(at: repeatedAAC.directory) }
+        precondition(repeatedAAC.id == converted.id, "AAC conversion changed content identity")
         let invalid = FileManager.default.temporaryDirectory.appendingPathComponent("it-media-invalid-" + UUID().uuidString + ".m4a")
         try Data("not audio".utf8).write(to: invalid)
         defer { try? FileManager.default.removeItem(at: invalid) }

@@ -103,7 +103,33 @@ final class Progress: @unchecked Sendable {
         try await device.stageMedia(media) { progress.update($0) }
         precondition(progress.complete())
         try await device.commitMedia(media)
-        try await device.commitMedia(media) // Exact path reconciliation, no upload replay.
+        try await device.commitMedia(media) // Reconcile an uncertain reply.
+        let repeated = if case .song = media { try await PreparedMedia.prepare(source) } else { media }
+        defer { try? FileManager.default.removeItem(at: repeated.directory) }
+        let secondID: String
+        switch repeated {
+        case .song(let song): secondID = song.id
+        case .photo(let photo): secondID = photo.id
+        }
+        precondition(secondID == id)
+        try await device.stageMedia(repeated) { _ in }
+        try await device.commitMedia(repeated)
+        if case .song = media {
+        // A mismatched candidate must never truncate the already imported file.
+        let badDirectory = media.directory.appendingPathComponent("mismatch")
+        try FileManager.default.createDirectory(at: badDirectory, withIntermediateDirectories: false)
+        let badFile = badDirectory.appendingPathComponent(file.lastPathComponent)
+        var badBytes = try Data(contentsOf: file); badBytes[badBytes.count - 1] ^= 1
+        try badBytes.write(to: badFile)
+        let bad: PreparedMedia
+        switch media {
+        case .song(let song): bad = .song(MediaSong(id: song.id, directory: badDirectory, audio: badFile, metadata: song.metadata, title: song.title))
+        case .photo(let photo): bad = .photo(MediaPhoto(id: photo.id, directory: badDirectory, image: badFile, title: photo.title))
+        }
+        do { try await device.stageMedia(bad) { _ in }; fatalError("overwrote an existing media file") }
+        catch {}
+        try await device.stageMedia(media) { _ in } // Original bytes still match.
+        }
         let manifest = try JSONSerialization.data(withJSONObject:[
             "id":id,"filename":file.lastPathComponent,"title":media.title,
         ])
@@ -117,7 +143,7 @@ driver.write_text(swift)
 executable = out/'driver'
 subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
     '-module-cache-path',str(out/'modules'),
-    str(APP/'LightTouchMac/MediaSong.swift'),str(APP/'LightTouchMac/DeviceServices.swift'),
+    str(APP/'LightTouchMac/MediaIdentity.swift'),str(APP/'LightTouchMac/MediaSong.swift'),str(APP/'LightTouchMac/DeviceServices.swift'),
     str(APP/'LightTouchMac/IMobileDevice.swift'),str(APP/'LightTouchMac/MediaPhoto.swift'),
     str(APP/'LightTouchMac/PreparedMedia.swift'),str(driver),'-o',str(executable)],check=True)
 if args.photo:

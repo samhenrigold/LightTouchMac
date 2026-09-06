@@ -117,6 +117,8 @@ nonisolated enum IMobileDevice {
 
     typealias AfcOpen = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?, UInt32, UnsafeMutablePointer<UInt64>) -> Int32
     typealias AfcWrite = @convention(c) (OpaquePointer?, UInt64, UnsafePointer<CChar>?, UInt32, UnsafeMutablePointer<UInt32>) -> Int32
+    typealias AfcRead = @convention(c) (OpaquePointer?, UInt64, UnsafeMutablePointer<CChar>?, UInt32, UnsafeMutablePointer<UInt32>) -> Int32
+    typealias AfcRename = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> Int32
     typealias AfcClose = @convention(c) (OpaquePointer?, UInt64) -> Int32
     typealias AfcPath = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
     typealias AfcInfoKey = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
@@ -141,6 +143,8 @@ nonisolated enum IMobileDevice {
     static let afc_client_start_service = symbol("afc_client_start_service", StartService2.self)
     static let afc_client_free = symbol("afc_client_free", FreeHandle.self)
     static let afc_file_open = symbol("afc_file_open", AfcOpen.self)
+    static let afc_file_read = symbol("afc_file_read", AfcRead.self)
+    static let afc_rename_path = symbol("afc_rename_path", AfcRename.self)
     static let afc_file_write = symbol("afc_file_write", AfcWrite.self)
     static let afc_file_close = symbol("afc_file_close", AfcClose.self)
     static let afc_make_directory = symbol("afc_make_directory", AfcPath.self)

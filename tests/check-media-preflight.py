@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-check-') as work:
     executable = Path(work)/'check'
     subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
         '-module-cache-path',str(Path(work)/'modules'),
-        str(root/'LightTouchMac/MediaSong.swift'),str(root/'tests/media-preflight.swift'),
+        str(root/'LightTouchMac/MediaIdentity.swift'),str(root/'LightTouchMac/MediaSong.swift'),str(root/'tests/media-preflight.swift'),
         '-o',str(executable)],check=True)
     raw = Path(work)/'raw.aac'
     ffmpeg = shutil.which('ffmpeg')
