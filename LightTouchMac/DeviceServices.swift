@@ -191,7 +191,7 @@ struct DeviceServices: Sendable {
             }
             // Publish complete media only. Interrupted uploads never truncate a
             // library file or leave a partial file at its content-derived path.
-            let destination = reuseIdentical ? remote + ".upload-" + UUID().uuidString : remote
+            let destination = reuseIdentical ? remote + ".upload-" + Self.stagingSession + "-" + UUID().uuidString : remote
             var parent = ""
             for component in remote.split(separator: "/").dropLast() {
                 parent = parent.isEmpty ? String(component) : parent + "/" + component
@@ -264,6 +264,18 @@ struct DeviceServices: Sendable {
             && !name.contains("-\(stagingSession)-")
     }
 
+    private static func isOrphanedMediaUpload(_ name: String) -> Bool {
+        let parts = name.components(separatedBy: ".upload-")
+        guard parts.count == 2,
+              ["audio.mp3", "audio.m4a", "audio.aac", "audio.wav", "image.jpg"].contains(parts[0]),
+              !parts[1].hasPrefix(stagingSession + "-") else { return false }
+        let suffix = parts[1]
+        if UUID(uuidString: suffix) != nil { return true } // Earlier atomic uploads.
+        return suffix.count == 73 && suffix[suffix.index(suffix.startIndex, offsetBy: 36)] == "-"
+            && UUID(uuidString: String(suffix.prefix(36))) != nil
+            && UUID(uuidString: String(suffix.suffix(36))) != nil
+    }
+
     func sweepStaging() async {
         _ = try? await run(Timeouts.query, "staging sweep") { imd, device in
             guard let start = imd.afc_client_start_service,
@@ -274,19 +286,28 @@ struct DeviceServices: Sendable {
             guard start(device, &client, "LightTouchMac") == imd.success, let client else { return }
             defer { _ = imd.afc_client_free?(client) }
 
-            var list: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
-            guard "PublicStaging".withCString({ readDir(client, $0, &list) }) == imd.success,
-                  let list else { return }
-            defer { _ = dictFree(list) }
-
-            var i = 0
-            while let entry = list[i] {
-                let name = String(cString: entry)
-                i += 1
+            func entries(_ path: String) -> [String] {
+                var list: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
+                guard path.withCString({ readDir(client, $0, &list) }) == imd.success,
+                      let list else { return [] }
+                defer { _ = dictFree(list) }
+                var names: [String] = [], i = 0
+                while let entry = list[i] { names.append(String(cString: entry)); i += 1 }
+                return names
+            }
+            for name in entries("PublicStaging") {
                 try Task.checkCancellation()
                 guard Self.isOrphanedStagingName(name) else { continue }
                 NSLog("device: removing orphaned staging upload \(name)")
                 _ = "PublicStaging/\(name)".withCString { remove(client, $0) }
+            }
+            for directory in entries("LightTouch") where UUID(uuidString: directory) != nil {
+                try Task.checkCancellation()
+                for name in entries("LightTouch/\(directory)") {
+                    try Task.checkCancellation()
+                    guard Self.isOrphanedMediaUpload(name) else { continue }
+                    _ = "LightTouch/\(directory)/\(name)".withCString { remove(client, $0) }
+                }
             }
         }
     }

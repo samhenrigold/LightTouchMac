@@ -59,7 +59,7 @@ struct DeviceTools: Sendable {
     let filesRoot: String
     private var services: DeviceServices { DeviceServices(clientSocket: clientSocket) }
 """ + methods + r"""
-    @discardableResult private func guestRun(_ command: String, stdinPath: String? = nil) async throws -> Data {
+    @discardableResult func guestRun(_ command: String, stdinPath: String? = nil) async throws -> Data {
         let input = try stdinPath.map { try Data(contentsOf: URL(fileURLWithPath: $0)) } ?? Data()
         var request = URLRequest(url: URL(string: CommandLine.arguments[4])!)
         request.httpMethod = "POST"
@@ -130,6 +130,18 @@ final class Progress: @unchecked Sendable {
         catch {}
         try await device.stageMedia(media) { _ in } // Original bytes still match.
         }
+        // A late startup sweep sees both abandoned and current-session uploads.
+        let services = DeviceServices(clientSocket: CommandLine.arguments[3])
+        let dummy = media.directory.appendingPathComponent("cleanup-check.ipa")
+        try Data("owned upload".utf8).write(to: dummy)
+        let owned = try await services.stage(dummy) { _ in }
+        let directory = "/var/mobile/Media/LightTouch/" + id
+        let orphan = directory + "/image.jpg.upload-" + UUID().uuidString
+        let keep = directory + "/image.jpg.upload-not-a-valid-id"
+        try await device.guestRun("printf old > /var/mobile/Media/PublicStaging/old-test.ipa; printf old > " + orphan + "; printf keep > " + keep)
+        await services.sweepStaging()
+        try await device.guestRun("test -f /var/mobile/Media/" + owned + " && test ! -f /var/mobile/Media/PublicStaging/old-test.ipa && test ! -f " + orphan + " && test -f " + keep)
+        await services.removeStaged(owned)
         let manifest = try JSONSerialization.data(withJSONObject:[
             "id":id,"filename":file.lastPathComponent,"title":media.title,
         ])

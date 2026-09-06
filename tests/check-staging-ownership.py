@@ -18,7 +18,14 @@ with tempfile.TemporaryDirectory(prefix='ltm-staging-') as tmp:
   let removed=[old,first,second,".","..","../escape",""].filter(isOrphanedStagingName)
   precondition(removed == [old])
   precondition(!first.contains("/"))
-  print("PASS: delayed sweep preserves current-session uploads and rejects traversal")
+  let uuid=UUID().uuidString
+  precondition(isOrphanedMediaUpload("audio.m4a.upload-"+uuid))
+  precondition(isOrphanedMediaUpload("image.jpg.upload-"+uuid+"-"+UUID().uuidString))
+  precondition(!isOrphanedMediaUpload("audio.m4a.upload-"+stagingSession+"-"+uuid))
+  for name in ["audio.m4a","image.jpg",".photo-receipt","song.json","audio.m4a.upload-invalid","../image.jpg.upload-"+uuid] {
+   precondition(!isOrphanedMediaUpload(name),name)
+  }
+  print("PASS: late sweeps preserve active uploads, canonical media and receipts; only abandoned temporary files match")
  }
 }
 Check.run()
