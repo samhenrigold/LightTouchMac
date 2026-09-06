@@ -168,7 +168,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
         updateDeviceNotice()
         inspectorVC.refreshDeviceStatus()
-        if !emulator.batteryControlsAvailable { batteryPopover?.close() }
         // The window subtitle is where AppKit puts secondary window state, and
         // it styles and truncates itself to match the title. A custom titlebar
         // accessory was carrying this before — more code, its own constraints,
@@ -471,62 +470,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func deviceRotate(_ sender: Any?) {
         emulator.toggleRotation()
         syncRotateSymbol()
-    }
-
-    private var batteryPopover: NSPopover?
-    private var batteryEditor: BatterySettingsView?
-    private let batteryError = NSTextField(wrappingLabelWithString: "")
-
-    @objc func configureBattery(_ sender: Any?) {
-        guard emulator.batteryControlsAvailable, let window else { return }
-        if batteryPopover?.isShown == true { batteryPopover?.close(); return }
-        let editor = BatterySettingsView(level: emulator.batteryLevel, charging: emulator.batteryCharging,
-            drain: emulator.batteryDrain, usbConnected: emulator.usbConnected)
-        batteryEditor = editor
-        let heading = NSTextField(labelWithString: "Battery")
-        heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        let hint = NSTextField(wrappingLabelWithString: "Set a target level; iOS updates its estimate gradually. Drain is percent per emulated minute. USB is required for installation and media sync.")
-        hint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        hint.textColor = .secondaryLabelColor
-        batteryError.stringValue = ""
-        batteryError.textColor = .systemRed
-        batteryError.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        let apply = NSButton(title: "Apply", target: self, action: #selector(applyBatterySettings(_:)))
-        apply.bezelStyle = .rounded
-        let stack = NSStackView(views: [heading, hint, editor, batteryError, apply])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
-        NSLayoutConstraint.activate([
-            editor.widthAnchor.constraint(equalToConstant: editor.frame.width),
-            editor.heightAnchor.constraint(equalToConstant: editor.frame.height),
-            hint.widthAnchor.constraint(equalTo: editor.widthAnchor),
-            batteryError.widthAnchor.constraint(equalTo: editor.widthAnchor),
-        ])
-        let content = NSViewController()
-        content.view = stack
-        stack.setFrameSize(stack.fittingSize)
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentViewController = content
-        batteryPopover = popover
-        let anchor = (sender as? NSView).flatMap { $0.window === window ? $0 : nil } ?? deviceVC.view
-        let rect = sender is NSView ? anchor.bounds
-            : NSRect(x: anchor.bounds.midX, y: anchor.bounds.maxY - 8, width: 1, height: 1)
-        popover.show(relativeTo: rect, of: anchor, preferredEdge: .minX)
-    }
-
-    @objc private func applyBatterySettings(_ sender: Any?) {
-        guard let editor = batteryEditor else { return }
-        do {
-            try emulator.configureBattery(level: editor.level, charging: editor.charging,
-                drain: editor.drain, usbConnected: editor.usbConnected)
-            batteryPopover?.close()
-        } catch {
-            batteryError.stringValue = error.localizedDescription
-            logEvent("battery: \(error.localizedDescription)")
-        }
     }
 
     @objc func configureWebProxy(_ sender: Any?) {
@@ -1025,8 +968,6 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleDevicePause(_:)):
             menuItem.title = emulator.isPaused ? "Resume" : "Pause"
             return (emulator.isRunning || emulator.isPaused) && !emulator.isInstalling && !AppInstaller.hasPendingWork
-        case #selector(configureBattery(_:)):
-            return emulator.batteryControlsAvailable
         case #selector(configureWebProxy(_:)):
             return emulator.webProxyAvailable
         case #selector(toggleKeyboardInput(_:)):

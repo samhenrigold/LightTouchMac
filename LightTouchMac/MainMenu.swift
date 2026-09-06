@@ -169,7 +169,6 @@ enum MainMenuBuilder {
         menu.addItem(.separator())
 
         menu.addItem(item("Send Keyboard Input to Device", #selector(MainWindowController.toggleKeyboardInput(_:))))
-        menu.addItem(item("Battery…", #selector(MainWindowController.configureBattery(_:))))
         menu.addItem(item("Proxy…", #selector(MainWindowController.configureWebProxy(_:))))
         let advanced = NSMenu(title: "Advanced")
         advanced.addItem(item("Open SSH", #selector(MainWindowController.openDeviceTerminal(_:)), "t", [.shift, .command]))

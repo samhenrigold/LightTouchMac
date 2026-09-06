@@ -397,12 +397,8 @@ final class AppsInspectorViewController: NSViewController {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func refreshDeviceStatus() {
-        let charging = emulator.batteryCharging == 0 ? (emulator.usbConnected ? "USB power" : "On battery")
-            : emulator.batteryCharging == 1 ? "Charging" : "Not charging"
-        deviceStatus.update(status: emulator.statusLine, batteryLevel: emulator.batteryLevel,
-            charging: charging, proxyStatus: emulator.webProxyStatus,
+        deviceStatus.update(status: emulator.statusLine, proxyStatus: emulator.webProxyStatus,
             agentStatus: emulator.agentStatusText, keyboardInput: emulator.keyboardInputEnabled,
-            canConfigureBattery: emulator.batteryControlsAvailable,
             canConfigureProxy: emulator.webProxyAvailable)
     }
 

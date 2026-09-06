@@ -66,14 +66,14 @@ final class DisplayView: NSView {
     /// orientation didn't change — mirrors how orientationChanged drives it.
     private var pendingAnimatedLayout = false
 
-    private enum PowerPresentation: Equatable { case awake, sleeping, poweredOff, shuttingDown }
+    private enum PowerPresentation: Equatable { case awake, preparing, sleeping, poweredOff, shuttingDown }
     private var powerPresentation: PowerPresentation = .awake
     private var powerBadge: NSStackView?
 
     func updatePowerPresentation() {
         guard let emulator else { return }
         let next: PowerPresentation = emulator.isPoweredOff ? .poweredOff
-            : emulator.shuttingDown ? .shuttingDown : (emulator.isSleeping && !isShowingLiveText) ? .sleeping : .awake
+            : emulator.shuttingDown ? .shuttingDown : emulator.preparingMedia ? .preparing : (emulator.isSleeping && !isShowingLiveText) ? .sleeping : .awake
         guard next != powerPresentation else { return }
         powerPresentation = next
         powerBadge?.removeFromSuperview()
@@ -81,7 +81,7 @@ final class DisplayView: NSView {
         CATransaction.begin()
         CATransaction.setAnimationDuration(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.3)
         shellLayer.opacity = next == .awake ? 1 : next == .sleeping ? 0.45 : 0.25
-        contentLayer.isHidden = next == .poweredOff
+        contentLayer.isHidden = next == .poweredOff || next == .preparing
         modelView?.alphaValue = CGFloat(shellLayer.opacity)
         modelView?.setScreenOff(next != .awake)
         CATransaction.commit()
@@ -90,7 +90,13 @@ final class DisplayView: NSView {
             return
         }
         let symbol: NSView
-        if next == .sleeping {
+        if next == .preparing {
+            let spinner = NSProgressIndicator()
+            spinner.style = .spinning
+            spinner.controlSize = .regular
+            spinner.startAnimation(nil)
+            symbol = spinner
+        } else if next == .sleeping {
             let container = NSView(frame: CGRect(x: 0, y: 0, width: 160, height: 128))
             let sleeping = SleepingAnimationView()
             sleeping.frame = container.bounds
@@ -108,7 +114,7 @@ final class DisplayView: NSView {
             power.textColor = .white
             symbol = power
         }
-        let title = next == .sleeping ? "Sleeping" : next == .poweredOff ? "Powered Off" : "Powering off…"
+        let title = next == .preparing ? "Finishing device setup…" : next == .sleeping ? "Sleeping" : next == .poweredOff ? "Powered Off" : "Powering off…"
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 15, weight: .medium)
         label.textColor = .white
@@ -116,7 +122,7 @@ final class DisplayView: NSView {
         stack.appearance = NSAppearance(named: .darkAqua)
         stack.orientation = .vertical
         stack.spacing = 10
-        if next != .shuttingDown {
+        if next != .shuttingDown && next != .preparing {
             let button = NSButton(title: next == .poweredOff ? "Power On" : "Wake Up", target: self, action: #selector(wakeDevice(_:)))
             button.bezelStyle = .rounded
             stack.addArrangedSubview(button)
@@ -1241,7 +1247,14 @@ final class DisplayView: NSView {
 
     // MARK: - Keyboard passthrough
 
+    private var consumedWakeSpace = false
     override func keyDown(with event: NSEvent) {
+        if event.keyCode == 49, event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
+           consumedWakeSpace || (emulator?.isSleeping == true && emulator?.acceptsInput == true) {
+            if !consumedWakeSpace && !event.isARepeat { emulator?.pressLock() }
+            consumedWakeSpace = true
+            return
+        }
         if event.modifierFlags.contains(.option), event.modifierFlags.intersection([.command, .control]).isEmpty,
            [123, 124, 125, 126, 49].contains(event.keyCode), !isShowingLiveText {
             consumedTiltKeys.insert(event.keyCode)
@@ -1269,6 +1282,7 @@ final class DisplayView: NSView {
     }
 
     override func keyUp(with event: NSEvent) {
+        if event.keyCode == 49 && consumedWakeSpace { consumedWakeSpace = false; return }
         if !keyboardTouchKeys.isEmpty, keyboardPointerKey(event, down: false) { return }
         if consumedTiltKeys.remove(event.keyCode) != nil {
             tiltKeys.remove(event.keyCode)

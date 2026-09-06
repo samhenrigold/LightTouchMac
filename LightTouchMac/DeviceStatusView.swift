@@ -4,7 +4,6 @@ import Cocoa
 @MainActor
 final class DeviceStatusView: NSStackView {
     private let state = NSTextField(wrappingLabelWithString: "Starting…")
-    private let battery = NSButton()
     private let proxy = NSButton()
     private let agent = NSTextField(labelWithString: "Guest agent: Waiting")
     private let typing = NSButton(checkboxWithTitle: "Keyboard input", target: nil,
@@ -20,7 +19,6 @@ final class DeviceStatusView: NSStackView {
         state.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
         state.maximumNumberOfLines = 2
         for (button, symbol, action) in [
-            (battery, "battery.100", #selector(MainWindowController.configureBattery(_:))),
             (proxy, "network", #selector(MainWindowController.configureWebProxy(_:)))
         ] {
             button.isBordered = false
@@ -34,25 +32,21 @@ final class DeviceStatusView: NSStackView {
         agent.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         agent.lineBreakMode = .byTruncatingTail
         typing.controlSize = .small
-        for row in [state, battery, proxy, agent, typing] {
+        for row in [state, proxy, agent, typing] {
             addArrangedSubview(row)
             row.translatesAutoresizingMaskIntoConstraints = false
             row.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             row.widthAnchor.constraint(equalTo: widthAnchor, constant: -24).isActive = true
         }
-        battery.toolTip = "Configure the target battery level. iOS filters its displayed estimate over time."
         typing.toolTip = "When enabled, type into the device while its screen has focus. Mac shortcuts remain available."
     }
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func update(status: String, batteryLevel: Int, charging: String, proxyStatus: String,
-                agentStatus: String, keyboardInput: Bool, canConfigureBattery: Bool,
+    func update(status: String, proxyStatus: String,
+                agentStatus: String, keyboardInput: Bool,
                 canConfigureProxy: Bool) {
         state.stringValue = status
         state.toolTip = status
-        battery.title = "Battery target: \(batteryLevel)% · \(charging)"
-        battery.setAccessibilityLabel(battery.title)
-        battery.isEnabled = canConfigureBattery
         proxy.title = "Proxy: \(proxyStatus)"
         proxy.toolTip = proxy.title
         proxy.setAccessibilityLabel(proxy.title)

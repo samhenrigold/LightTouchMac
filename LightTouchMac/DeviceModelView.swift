@@ -128,7 +128,7 @@ final class DeviceModelView: NSView {
     let pose = Transform(
       scale: SIMD3(repeating: units),
       rotation: simd_quatf(angle: Float(pitch), axis: [1, 0, 0])
-        * simd_quatf(angle: Float(roll), axis: [0, 1, 0])
+        * simd_quatf(angle: -Float(roll), axis: [0, 0, 1])
         * simd_quatf(angle: -rest, axis: [0, 0, 1]), translation: .zero)
     // Layout may repeat while a transition is running; only a new target replaces it.
     if targetPose != pose {
@@ -286,9 +286,9 @@ final class DeviceModelView: NSView {
         let decay = Float(1 - t / 0.45)
         let wave = Float(sin(t * .pi * 16 / 0.45)) * decay
         let cross = Float(sin(t * .pi * 11 / 0.45)) * decay
-        chassis.position = [wave * 0.0018, cross * 0.0005, cross * 0.0008]
-        chassis.orientation = simd_quatf(angle: cross * 0.035, axis: [1, 0, 0])
-          * simd_quatf(angle: wave * 0.06, axis: [0, 1, 0]) * basePose.rotation
+        chassis.position = [wave * 0.00035, cross * 0.0001, cross * 0.00015]
+        chassis.orientation = simd_quatf(angle: cross * 0.008, axis: [1, 0, 0])
+          * simd_quatf(angle: wave * 0.012, axis: [0, 1, 0]) * basePose.rotation
       }
     }
     // Project the rounded chassis outline; never shadow the rectangular ARView.

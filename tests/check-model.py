@@ -83,7 +83,7 @@ import RealityKit
   try await Task.sleep(for: .seconds(0.07))
   model.advanceAnimations()
   if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-    precondition(abs(model.projectedPoint(CGPoint(x:0.5,y:0.5)).x-centre.x)>1)
+    precondition(abs(model.projectedPoint(CGPoint(x:0.5,y:0.5)).x-centre.x)>0.1)
     let shakenWidth = model.projectedPoint(CGPoint(x: 1, y: 0.5)).x-model.projectedPoint(CGPoint(x: 0, y: 0.5)).x
     precondition(abs(shakenWidth-beforeShakeWidth)>0.01, "Shake must change 3D perspective, not only position")
   }
@@ -126,8 +126,9 @@ enum PreparedMedia { static let extensions: Set<String> = [] }
  enum Pose { case flat, upright }
  var motionPose=Pose.upright, rotationDegrees=0, acceptsInput=true, canQueueInstall=true
  var keyboardInputEnabled=true, keyboardTiltRate=90.0, isSleeping=false, isPoweredOff=false, shuttingDown=false
- var shakeGeneration: UInt64=0, homeCount=0
- func pollStorageFailure() {} ;func noteFrameAdvanced() {};func pressLock() {};func powerOn() {}
+ var preparingMedia=false
+ var shakeGeneration: UInt64=0, homeCount=0, lockCount=0
+ func pollStorageFailure() {} ;func noteFrameAdvanced() {};func pressLock() { lockCount += 1 };func powerOn() {}
  func shake() { shakeGeneration &+= 1 };func setTilt(angle:CGFloat,pitch:CGFloat) {}
  func pressHome() {homeCount += 1};func sendKey(macKeyCode:UInt16,down:Bool) {}
 }
@@ -165,7 +166,7 @@ enum PreparedMedia { static let extensions: Set<String> = [] }
   let tilted = model.projectedPoint(CGPoint(x: 0.5, y: 0))
   let top = model.projectedPoint(CGPoint(x: 0.5, y: 0.1))
   let bottom = model.projectedPoint(CGPoint(x: 0.5, y: 0.9))
-  precondition(abs(top.x-bottom.x)<0.1, "Horizontal drag must yaw, not spin around gravity")
+  precondition(abs(top.x-bottom.x)>5, "Horizontal drag must roll like a steering wheel")
   precondition(abs(tilted.x-rest.x)>1)
   display.mouseUp(with: dragEvent(.leftMouseUp, grab))
   try await Task.sleep(for: .seconds(1.2))
@@ -174,6 +175,17 @@ enum PreparedMedia { static let extensions: Set<String> = [] }
   e.isSleeping=true;display.updatePowerPresentation();touches.removeAll()
   let event=NSEvent.mouseEvent(with:.leftMouseDown,location:model.convert(model.projectedPoint(CGPoint(x:0.5,y:0.5)),to:nil),modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:1)!
   display.mouseDown(with:event);precondition(touches.isEmpty)
+  let space=NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+    windowNumber: window.windowNumber, context: nil, characters: " ", charactersIgnoringModifiers: " ", isARepeat: false, keyCode: 49)!
+  display.keyDown(with: space); display.keyDown(with: space)
+  precondition(e.lockCount==1, "Space wakes once without toggling back to sleep")
+  e.preparingMedia=true; display.updatePowerPresentation()
+  func labels(_ view: NSView) -> [String] {
+    (view as? NSTextField).map { [$0.stringValue] } ?? view.subviews.flatMap { labels($0) }
+  }
+  precondition(labels(display).contains("Finishing device setup…"))
+  e.preparingMedia=false;e.isSleeping=false;display.updatePowerPresentation()
+  precondition(!labels(display).contains("Finishing device setup…"))
   window.orderOut(nil);window.contentView=nil
   print("PASS: integrated 3D screen input in all orientations; sleeping touch suppression")
  }

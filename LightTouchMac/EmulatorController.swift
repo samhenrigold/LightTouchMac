@@ -63,7 +63,7 @@ final class EmulatorController {
     private var retainedPackedImage = false
     private var reportedStorageFailure = false
     private var mediaPreparationTask: Task<Void, Never>?
-    private var preparingMedia = false {
+    private(set) var preparingMedia = false {
         didSet { onStatusChange?() }
     }
     private var mediaPreparationFailure: String?
@@ -216,10 +216,7 @@ final class EmulatorController {
         if let usbSession {
             machine += ",usb-tcp-addr=\(usbSession.guestAddress),osk=on"
         }
-        if batterySetter != nil, UserDefaults.standard.object(forKey: "batteryLevel") != nil {
-            let mode = ["auto", "on", "off"][batteryCharging]
-            machine += ",battery-level=\(batteryLevel),battery-charging=\(mode),battery-drain=\(batteryDrain)"
-        }
+
         if options.network {
             machine += ",wifi=on"          // brings up the emulated BCM4325
         }
@@ -492,9 +489,9 @@ final class EmulatorController {
         case .notStarted: return "Starting…"
         case .booting:    return "Booting…"
         case .running:
+            if preparingMedia { return "Finishing device setup…" }
             if isSleeping { return "Sleeping" }
             if restartingSpringBoard { return "Restarting SpringBoard…" }
-            if preparingMedia { return "Preparing device media…" }
             if let mediaPreparationFailure { return "Media update failed — \(mediaPreparationFailure)" }
             if retainedPackedImage { return "Running — existing image retained; erase device to upgrade" }
             return canManageApps ? "Running" : "Running — USB unavailable"
@@ -549,52 +546,18 @@ final class EmulatorController {
         shakeGeneration &+= 1
     }
 
-    private typealias BatterySetter = @convention(c) (Int32, Int32, Double) -> Bool
-    private var batterySetter: BatterySetter? {
-        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_battery_config") else { return nil }
-        return unsafeBitCast(symbol, to: BatterySetter.self)
-    }
     private typealias USBConnectionSetter = @convention(c) (Bool) -> Bool
     private var usbConnectionSetter: USBConnectionSetter? {
         guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_usb_connection") else { return nil }
         return unsafeBitCast(symbol, to: USBConnectionSetter.self)
     }
     private(set) var usbConnected = true
-    var batteryControlsAvailable: Bool { batterySetter != nil && usbConnectionSetter != nil && acceptsInput && !shuttingDown && !isInstalling && !AppInstaller.hasPendingWork }
     private func reconnectUSB() {
         if !usbConnected, usbConnectionSetter?(true) == true {
             usbConnected = true
             deviceReachable = nil
         }
     }
-    var batteryLevel: Int {
-        guard let saved = UserDefaults.standard.object(forKey: "batteryLevel") as? Int,
-              (0...100).contains(saved) else { return 96 } // Existing default ADC 850.
-        return saved
-    }
-    var batteryCharging: Int {
-        let saved = UserDefaults.standard.integer(forKey: "batteryCharging")
-        return (0...2).contains(saved) ? saved : 0
-    }
-    var batteryDrain: Double {
-        let saved = UserDefaults.standard.double(forKey: "batteryDrain")
-        return saved.isFinite && (0...100).contains(saved) ? saved : 0
-    }
-    func configureBattery(level: Int, charging: Int, drain: Double, usbConnected: Bool) throws {
-        guard batteryControlsAvailable, (0...100).contains(level), (0...2).contains(charging),
-              drain.isFinite, (0...100).contains(drain),
-              batterySetter?(Int32(level), Int32(charging), drain) == true,
-              usbConnectionSetter?(usbConnected) == true else {
-            throw DeviceToolsError.failed("Battery controls are unavailable while the device is stopped.")
-        }
-        self.usbConnected = usbConnected
-        deviceReachable = nil
-        UserDefaults.standard.set(level, forKey: "batteryLevel")
-        UserDefaults.standard.set(charging, forKey: "batteryCharging")
-        UserDefaults.standard.set(drain, forKey: "batteryDrain")
-        onStatusChange?()
-    }
-
     enum MotionPose: Int { case upright, flat }
     private(set) var motionPose = MotionPose(rawValue: UserDefaults.standard.integer(forKey: "motionPose")) ?? .upright
     var keyboardTiltRate: Double {
