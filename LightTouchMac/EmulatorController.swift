@@ -204,7 +204,7 @@ final class EmulatorController {
                 ? nil : (options.packedNAND, dest)
         }
 
-        var machine = "iPod-Touch"
+        var machine = "iPod-Touch,h264-decode=on"
         + ",bootrom=\(options.bootrom)"
         + ",nand=\(nandBase)"
         + ",nor=\(options.nor)"
@@ -1612,7 +1612,6 @@ final class EmulatorController {
             "IT_TVOUT_READY": "1",
             "IT_AMC_DECODE": "1",
             "IT_MPVD_DECODE": "1",
-            "IT_H264_DECODE": "1",
             "IT_SCALER_DECODE": "1",
             "IT_LCD_PLANES": "1",
             // `-v` when asked: iPhone OS shows the kernel's console output over
