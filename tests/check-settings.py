@@ -9,6 +9,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-settings-') as tmp:
 @MainActor final class EmulatorController {
  static let autoRotateDefaultsKey="autoRotateWithGuest"
  static var autoRotateEnabled: Bool { UserDefaults.standard.object(forKey:autoRotateDefaultsKey) as? Bool ?? true }
+ var keyboardInputEnabled = true
+ func toggleKeyboardInput() { keyboardInputEnabled.toggle() }
  var keyboardTiltRate: Double=90
  func setKeyboardTiltRate(_ value: Double) { keyboardTiltRate=value }
 }
@@ -33,10 +35,18 @@ with tempfile.TemporaryDirectory(prefix='ltm-settings-') as tmp:
   let views=descendants(window.contentView!)
   let button=views.compactMap{$0 as? NSButton}.first{$0.title=="Rotate with the device"}!
   button.performClick(nil);precondition(!EmulatorController.autoRotateEnabled)
+  let keyboard=views.compactMap{$0 as? NSButton}.first{$0.title=="Send keyboard input to the device"}!
+  keyboard.performClick(nil);precondition(!emulator.keyboardInputEnabled)
+  emulator.toggleKeyboardInput()
+  controller.windowDidBecomeKey(Notification(name:NSWindow.didBecomeKeyNotification,object:window))
+  precondition(keyboard.state == .on)
+  for title in ["Device","Game Controller","App Catalog"] {
+   precondition(views.compactMap{$0 as? NSTextField}.contains{$0.stringValue==title})
+  }
   let tilt=views.compactMap{$0 as? NSPopUpButton}.first!
   tilt.selectItem(at:2);tilt.sendAction(tilt.action,to:tilt.target)
   precondition(emulator.keyboardTiltRate==180)
-  let field=views.compactMap{$0 as? NSTextField}.first{$0.isEditable}!
+  let field=views.compactMap{$0 as? NSTextField}.first{$0.accessibilityLabel()=="Catalog URL"}!
   for bad in ["file:///etc/passwd","https://user:secret@example.com","https://example.com?x=1","https://example.com:70000","relative"] {
    precondition(SettingsWindowController.catalogURL(bad)==nil,bad)
    field.stringValue=bad;controller.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field))

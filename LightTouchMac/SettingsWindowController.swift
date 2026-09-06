@@ -1,8 +1,9 @@
 import Cocoa
 
-final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
+final class SettingsWindowController: NSWindowController, NSTextFieldDelegate, NSWindowDelegate {
     private let emulator: EmulatorController
     private let rotate = NSButton(checkboxWithTitle: "Rotate with the device", target: nil, action: nil)
+    private let keyboard = NSButton(checkboxWithTitle: "Send keyboard input to the device", target: nil, action: nil)
     private let tilt = NSPopUpButton(frame: .zero, pullsDown: false)
     private let catalog = NSTextField(string: "")
     private let controllerEnabled = NSButton(checkboxWithTitle: "Use game controller", target: nil, action: nil)
@@ -13,12 +14,14 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
 
     init(emulator: EmulatorController) {
         self.emulator = emulator
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 490, height: 370),
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 510, height: 570),
             styleMask: [.titled, .closable], backing: .buffered, defer: false)
         super.init(window: window)
         window.title = "Light Touch Settings"
+        window.delegate = self
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("Settings")
+        keyboard.target = self; keyboard.action = #selector(changeKeyboard(_:))
         rotate.target = self; rotate.action = #selector(changeRotation(_:))
         tilt.addItems(withTitles: ["Slow (45°/s)", "Normal (90°/s)", "Fast (180°/s)"])
         tilt.target = self; tilt.action = #selector(changeTilt(_:))
@@ -45,21 +48,40 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         let controllerHint = NSTextField(wrappingLabelWithString: "Left stick tilts up to 45°. A holds the chosen screen point (from top left). Menu is Home; Options shakes.")
         controllerHint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         controllerHint.textColor = .secondaryLabelColor
+        func heading(_ title: String) -> NSTextField {
+            let label = NSTextField(labelWithString: title)
+            label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+            return label
+        }
+        let keyboardHint = NSTextField(wrappingLabelWithString: "Turn off to move the touch pointer with arrow keys and hold Space to touch.")
+        keyboardHint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        keyboardHint.textColor = .secondaryLabelColor
         let grid = NSGridView(views: [
+            [heading("Device"), NSView()],
             [NSView(), rotate],
+            [NSView(), keyboard],
+            [NSView(), keyboardHint],
             [NSTextField(labelWithString: "Keyboard tilt:"), tilt],
             [NSView(), hint],
-            [NSTextField(labelWithString: "Catalog URL:"), catalog],
-            [NSView(), error],
+            [heading("Game Controller"), NSView()],
             [NSView(), controllerEnabled],
             [NSTextField(labelWithString: "Stick response:"), curve],
             [NSTextField(labelWithString: "A button tap:"), point],
             [NSView(), controllerHint],
+            [heading("App Catalog"), NSView()],
+            [NSTextField(labelWithString: "Catalog URL:"), catalog],
+            [NSView(), error],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.column(at: 1).xPlacement = .fill
         grid.column(at: 1).width = 330
         grid.rowSpacing = 12
+        for row in [0, 6, 11] {
+            grid.mergeCells(inHorizontalRange: NSRange(location: 0, length: 2),
+                            verticalRange: NSRange(location: row, length: 1))
+            grid.cell(atColumnIndex: 0, rowIndex: row).xPlacement = .leading
+            if row > 0 { grid.row(at: row).topPadding = 8 }
+        }
         grid.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(grid)
         NSLayoutConstraint.activate([
@@ -72,6 +94,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func showWindow(_ sender: Any?) {
+        keyboard.state = emulator.keyboardInputEnabled ? .on : .off
         rotate.state = EmulatorController.autoRotateEnabled ? .on : .off
         tilt.selectItem(at: [45.0, 90, 180].firstIndex(of: emulator.keyboardTiltRate) ?? 1)
         catalog.stringValue = CatalogClient.baseURL.absoluteString
@@ -82,6 +105,14 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         tapY.doubleValue = GameControllerInput.coordinate("controllerTapY") * 100
         super.showWindow(sender)
         window?.makeKeyAndOrderFront(sender)
+    }
+    func windowDidBecomeKey(_ notification: Notification) {
+        keyboard.state = emulator.keyboardInputEnabled ? .on : .off
+    }
+    @objc private func changeKeyboard(_ sender: Any?) {
+        if (keyboard.state == .on) != emulator.keyboardInputEnabled {
+            emulator.toggleKeyboardInput()
+        }
     }
     @objc private func changeRotation(_ sender: Any?) {
         UserDefaults.standard.set(rotate.state == .on, forKey: EmulatorController.autoRotateDefaultsKey)
