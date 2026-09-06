@@ -6,6 +6,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     private var windowController: MainWindowController?
     private var emulator: EmulatorController?
+    private var settingsController: SettingsWindowController?
+
+    @objc func showSettings(_ sender: Any?) {
+        guard let emulator else { return }
+        if settingsController == nil { settingsController = SettingsWindowController(emulator: emulator) }
+        settingsController?.showWindow(sender)
+    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // AppKit injects AutoFill, Start Dictation and Emoji & Symbols into the

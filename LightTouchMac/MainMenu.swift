@@ -20,7 +20,8 @@ import Cocoa
 enum MainMenuBuilder {
 
     static func install() {
-        let appName = ProcessInfo.processInfo.processName
+        let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Light Touch"
         let main = NSMenu(title: "Main Menu")
         
         main.addItem(submenu(appMenu(appName), title: appName))
@@ -42,6 +43,8 @@ enum MainMenuBuilder {
     private static func appMenu(_ appName: String) -> NSMenu {
         let menu = NSMenu(title: appName)
         menu.addItem(item("About \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
+        menu.addItem(.separator())
+        menu.addItem(item("Settings…", #selector(AppDelegate.showSettings(_:)), ","))
         menu.addItem(.separator())
         let services = NSMenu(title: "Services")
         menu.addItem(submenu(services, title: "Services"))
