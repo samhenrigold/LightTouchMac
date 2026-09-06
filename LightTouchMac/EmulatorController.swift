@@ -175,12 +175,9 @@ final class EmulatorController {
         setBootEnv()
 
         // usbmuxd must be listening before the guest USB core comes up.
-        if options.appsync,
-           let session = usbmux.start(filesRoot: options.filesRoot,
-                                      nand: options.nand, overlay: overlay.path) {
-            setenv("IT_USB_TCP", session.guestAddress, 1)
-            setenv("IT_OSK", "1", 1)   // appsync runs imply the on-screen keyboard
-        }
+        let usbSession = options.appsync
+            ? usbmux.start(filesRoot: options.filesRoot, nand: options.nand, overlay: overlay.path)
+            : nil
 
         // A raw NAND directory (dev checkout) is used as-is; a packaged app
         // carries only the opaque blob, unpacked into Application Support on
@@ -204,6 +201,9 @@ final class EmulatorController {
         + ",nand=\(nandBase)"
         + ",nor=\(options.nor)"
         + ",nandrw=\(overlay.path)"
+        if let usbSession {
+            machine += ",usb-tcp-addr=\(usbSession.guestAddress),osk=on"
+        }
         if batterySetter != nil, UserDefaults.standard.object(forKey: "batteryLevel") != nil {
             let mode = ["auto", "on", "off"][batteryCharging]
             machine += ",battery-level=\(batteryLevel),battery-charging=\(mode),battery-drain=\(batteryDrain)"
