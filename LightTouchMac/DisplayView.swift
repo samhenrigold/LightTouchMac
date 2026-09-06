@@ -186,6 +186,18 @@ final class DisplayView: NSView {
         touchOverlayLayer.zPosition = 50
         touchOverlayLayer.actions = ["bounds": NSNull(), "position": NSNull(), "sublayers": NSNull()]
         layer?.addSublayer(touchOverlayLayer)
+        keyboardPointerLayer.zPosition = 51
+        keyboardPointerLayer.bounds = CGRect(x: 0, y: 0, width: 18, height: 18)
+        keyboardPointerLayer.path = CGPath(ellipseIn: CGRect(x: 2, y: 2, width: 14, height: 14), transform: nil)
+        keyboardPointerLayer.fillColor = NSColor.black.withAlphaComponent(0.25).cgColor
+        keyboardPointerLayer.strokeColor = NSColor.white.cgColor
+        keyboardPointerLayer.lineWidth = 2
+        keyboardPointerLayer.shadowColor = NSColor.black.cgColor
+        keyboardPointerLayer.shadowOpacity = 1
+        keyboardPointerLayer.shadowRadius = 1
+        keyboardPointerLayer.shadowOffset = .zero
+        keyboardPointerLayer.isHidden = true
+        layer?.addSublayer(keyboardPointerLayer)
 
         contentLayer.magnificationFilter = .nearest
         // The shell is opaque, so the LCD draws on top of it. Black backing
@@ -213,6 +225,7 @@ final class DisplayView: NSView {
         registerForDraggedTypes([.fileURL, .ltmCatalogApp])
         setAccessibilityLabel("iPod touch screen")
         setAccessibilityRole(.image)
+        setAccessibilityHelp("Disable Keyboard Input in the Device menu to move a pointer with arrow keys. Hold Space to touch, or Shift-arrow to drag. Home is also available in the Device menu.")
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -386,6 +399,7 @@ final class DisplayView: NSView {
         emulator?.pollStorageFailure()
         updateTouchOverlay()
         updateKeyboardTilt()
+        updateKeyboardPointer()
         updateController()
         var pixels: UnsafeRawPointer?
         var w: Int32 = 0
@@ -464,8 +478,9 @@ final class DisplayView: NSView {
     private static let touchFadeDuration = 0.16
     private var visibleTouches: [Int: (point: CGPoint, expires: CFTimeInterval)] = [:]
 
-    private func sendVisualTouch(_ slot: Int32, _ phase: Int32, _ x: Double, _ y: Double, controller: Bool = false) {
+    private func sendVisualTouch(_ slot: Int32, _ phase: Int32, _ x: Double, _ y: Double, controller: Bool = false, keyboard: Bool = false) {
         if !controller { endControllerTouch() }
+        if !keyboard { endKeyboardTouch() }
         guard touchInteractionEnabled else {
             if phase == Int32(QEMU_IOS_TOUCH_END) { qemu_ios_ui_touch(slot, phase, x, y) }
             clearTouchOverlay()
@@ -990,7 +1005,7 @@ final class DisplayView: NSView {
     private func endControllerTouch() {
         guard let point = controllerTouch else { return }
         controllerTouch = nil
-        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), point.x, point.y, controller: true)
+        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), point.x, point.y, controller: true, keyboard: true)
     }
     private func updateController() {
         let active = touchInteractionEnabled && window?.isKeyWindow == true
@@ -1111,6 +1126,65 @@ final class DisplayView: NSView {
         }
     }
 
+    // MARK: - Keyboard pointer (typing disabled)
+
+    private let keyboardPointerLayer = CAShapeLayer()
+    private var keyboardPoint = CGPoint(x: 0.5, y: 0.5)
+    private var keyboardTouchKeys = Set<UInt16>()
+    private var hasKeyboardPointer = false
+
+    private func endKeyboardTouch() {
+        guard !keyboardTouchKeys.isEmpty else { return }
+        keyboardTouchKeys.removeAll()
+        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), keyboardPoint.x, keyboardPoint.y, controller: true, keyboard: true)
+    }
+
+    private func keyboardPointerKey(_ event: NSEvent, down: Bool) -> Bool {
+        let code = event.keyCode
+        guard [49, 123, 124, 125, 126].contains(code) else { return false }
+        if !down, keyboardTouchKeys.contains(code) {
+            if keyboardTouchKeys.count == 1 { endKeyboardTouch() }
+            else { keyboardTouchKeys.remove(code) }
+            return true
+        }
+        guard emulator?.keyboardInputEnabled == false,
+              event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
+        guard down, touchInteractionEnabled, !touchDown, !pinchingGuest, scrollPoint == nil else { return true }
+        hasKeyboardPointer = true
+        let touching = code == 49 || event.modifierFlags.contains(.shift)
+        if touching, !keyboardTouchKeys.contains(code) {
+            let began = keyboardTouchKeys.isEmpty
+            keyboardTouchKeys.insert(code)
+            if began { sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), keyboardPoint.x, keyboardPoint.y, keyboard: true) }
+        }
+        if code != 49 {
+            let delta: CGFloat = 0.02
+            switch code {
+            case 123: keyboardPoint.x = max(0, keyboardPoint.x - delta)
+            case 124: keyboardPoint.x = min(1, keyboardPoint.x + delta)
+            case 125: keyboardPoint.y = min(1, keyboardPoint.y + delta)
+            default: keyboardPoint.y = max(0, keyboardPoint.y - delta)
+            }
+            if !keyboardTouchKeys.isEmpty {
+                sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_UPDATE), keyboardPoint.x, keyboardPoint.y, keyboard: true)
+            }
+        }
+        return true
+    }
+
+    private func updateKeyboardPointer() {
+        let active = touchInteractionEnabled && emulator?.keyboardInputEnabled == false && window?.isKeyWindow == true && window?.firstResponder === self
+        if !active { endKeyboardTouch() }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        keyboardPointerLayer.isHidden = !active || !hasKeyboardPointer
+        if active, let layer {
+            let point = CGPoint(x: keyboardPoint.x * contentLayer.bounds.width, y: keyboardPoint.y * contentLayer.bounds.height)
+            keyboardPointerLayer.position = contentLayer.convert(point, to: layer)
+        }
+        CATransaction.commit()
+    }
+
     // MARK: - Keyboard passthrough
 
     override func keyDown(with event: NSEvent) {
@@ -1136,10 +1210,12 @@ final class DisplayView: NSView {
             super.keyDown(with: event)
             return
         }
+        if keyboardPointerKey(event, down: true) { return }
         emulator?.sendKey(macKeyCode: event.keyCode, down: true)
     }
 
     override func keyUp(with event: NSEvent) {
+        if !keyboardTouchKeys.isEmpty, keyboardPointerKey(event, down: false) { return }
         if consumedTiltKeys.remove(event.keyCode) != nil {
             tiltKeys.remove(event.keyCode)
             if tiltKeys.isEmpty { endTilt() }
@@ -1150,15 +1226,20 @@ final class DisplayView: NSView {
             super.keyUp(with: event)
             return
         }
+        if keyboardPointerKey(event, down: false) { return }
         emulator?.sendKey(macKeyCode: event.keyCode, down: false)
     }
 
     override func flagsChanged(with event: NSEvent) {
         if !event.modifierFlags.contains(.option), !tiltKeys.isEmpty { resetMotion() }
+        if !event.modifierFlags.contains(.shift), !keyboardTouchKeys.isDisjoint(with: [123, 124, 125, 126]) {
+            endKeyboardTouch()
+        }
         super.flagsChanged(with: event)
     }
 
     override func resignFirstResponder() -> Bool {
+        endKeyboardTouch()
         endControllerTouch()
         resetMotion()
         return super.resignFirstResponder()

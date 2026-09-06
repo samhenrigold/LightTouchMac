@@ -5,6 +5,9 @@ Click and drag on the screen as you would with a finger. Pinch on a trackpad, or
 
 Rotate with ⌘← or ⌘→. These shortcuts leave text fields alone while you edit. View contains Actual Size, Zoom to Fit, and zoom controls. Settings (⌘,) controls automatic rotation.
 
+Keyboard access
+Turn off Device → Send Keyboard Input to Device, then choose View → Focus Device Screen. Arrow keys move a visible pointer. Hold Space to touch and use arrows to drag; release Space to lift the finger. Shift-arrow also drags until you release the arrow keys or Shift. The pointer stops interacting when the device sleeps or loses focus. Turn keyboard input back on to type into guest apps. Mac Command and Control shortcuts, including VoiceOver, stay with macOS.
+
 Motion and controllers
 Drag beside the device to roll it. Two-finger scrolling beside it controls roll and pitch. Hold Option and use the arrow keys to tilt; Option–Space shakes. The Motion toolbar menu selects Upright or Flat and keyboard tilt speed. The small horizon appears while tilted; click it to level the device.
 
@@ -26,7 +29,7 @@ Device → Proxy selects no proxy, the built-in HTTP proxy, or a dated Internet 
 With the HTTP proxy enabled, Weather uses Open-Meteo forecasts and city search (https://open-meteo.com/, CC BY 4.0). The free service is for noncommercial use. If an old saved city no longer updates, remove it and add it again. The moon icon shows an approximate phase.
 
 Battery and device state
-Device → Battery controls target capacity, charging, drain per emulated minute, and virtual USB. The guest filters battery readings, so its displayed percentage can lag a changed target. Pausing stops drain. Automatic charging while USB is connected also stops drain.
+The inspector shows device, proxy, and guest-agent status above the app list. Click its battery row, or choose Device → Battery, to open the battery popover. It controls target capacity, charging, drain per emulated minute, and virtual USB. The guest filters battery readings, so its displayed percentage can lag a changed target. Pausing stops drain. Automatic charging while USB is connected also stops drain.
 
 Device → Pause freezes the emulator; Resume continues it. Save State Now is available for supported machine states. Live accelerated graphics contexts cannot yet be saved, and Light Touch reports that limitation. Discard Saved State removes saved memory state without erasing the device’s stored apps and data.
 

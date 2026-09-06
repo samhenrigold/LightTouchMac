@@ -10,6 +10,9 @@ touch=display[a:b].replace('private func','func')
 a=display.index('    private func endControllerTouch()')
 b=display.index('    private func updateController()',a)
 touch+=display[a:b].replace('private func','func')
+a=display.index('    private func endKeyboardTouch()')
+b=display.index('    private func keyboardPointerKey(',a)
+touch+=display[a:b].replace('private func','func')
 with tempfile.TemporaryDirectory(prefix='ltm-controller-') as tmp:
     tmp=Path(tmp)
     (tmp/'check.swift').write_text(r'''import GameController
@@ -19,6 +22,7 @@ let QEMU_IOS_TOUCH_END=2
 @MainActor func qemu_ios_ui_touch(_ slot:Int32,_ phase:Int32,_ x:Double,_ y:Double) { events.append((slot,phase)) }
 @MainActor final class Touch {
  var controllerTouch:CGPoint?
+ var keyboardPoint=CGPoint(x:0.5,y:0.5),keyboardTouchKeys=Set<UInt16>()
  var touchInteractionEnabled=true
  func clearTouchOverlay() {}
  func noteTouch(slot:Int,phase:Int32,x:Double,y:Double) {}
@@ -33,6 +37,12 @@ let QEMU_IOS_TOUCH_END=2
   events=[];touch.controllerTouch=CGPoint(x:0.5,y:0.5);touch.touchInteractionEnabled=false
   touch.endControllerTouch()
   precondition(events.map{$0.1}==[2] && touch.controllerTouch==nil)
+  events=[];touch.touchInteractionEnabled=true;touch.controllerTouch = .zero;touch.keyboardTouchKeys=[49]
+  touch.sendVisualTouch(0,0,0.5,0.5,keyboard:true)
+  precondition(events.map{$0.1}==[2,0] && touch.controllerTouch==nil && touch.keyboardTouchKeys==[49])
+  events=[];touch.controllerTouch = .zero
+  touch.sendVisualTouch(0,0,0,0,controller:true)
+  precondition(events.map{$0.1}==[2,0] && touch.controllerTouch != nil && touch.keyboardTouchKeys.isEmpty)
   var input=GameControllerInput()
   let controller=GCController.withExtendedGamepad(), pad=controller.extendedGamepad!
   _=input.read(controller,enabled:true,curve:1)

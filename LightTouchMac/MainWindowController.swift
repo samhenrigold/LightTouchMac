@@ -536,6 +536,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc func toggleKeyboardInput(_ sender: Any?) { emulator.toggleKeyboardInput() }
 
+    @objc func focusDeviceScreen(_ sender: Any?) {
+        deviceVC.screen.endLiveText()
+        window?.makeFirstResponder(deviceVC.screen)
+    }
+
     @objc func toggleVerboseBoot(_ sender: Any?) {
         UserDefaults.standard.set(!EmulatorController.verboseBoot,
                                   forKey: EmulatorController.verboseBootDefaultsKey)

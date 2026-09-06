@@ -133,6 +133,7 @@ enum MainMenuBuilder {
         menu.addItem(unshiftedZoomIn)
         menu.addItem(item("Zoom Out", #selector(MainWindowController.zoomOut(_:)), "-"))
         menu.addItem(.separator())
+        menu.addItem(item("Focus Device Screen", #selector(MainWindowController.focusDeviceScreen(_:))))
         menu.addItem(item("Show Inspector", #selector(MainWindowController.toggleAppInspector(_:)), "i", [.option, .command]))
         menu.addItem(.separator())
         menu.addItem(item("Show Toolbar", #selector(NSWindow.toggleToolbarShown(_:)), "t", [.option, .command]))

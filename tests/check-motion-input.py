@@ -35,6 +35,9 @@ source = r'''import Cocoa
  let emulator: Emulator? = Emulator()
  var window: Window? = Window()
  var touchInteractionEnabled = true, isShowingLiveText = false
+ var keyboardTouchKeys=Set<UInt16>()
+ func endKeyboardTouch() {}
+ func keyboardPointerKey(_ event:NSEvent,down:Bool)->Bool {false}
  var tiltKeys: Set<UInt16> = [], consumedTiltKeys: Set<UInt16> = []
  var tiltAngle = 0.0, pitchAngle = 0.0, lastTiltTick = 0.0, now = 0.0
  var restAngle = Double.pi / 2, motionRestAngle: CGFloat?
