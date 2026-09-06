@@ -51,9 +51,9 @@ struct MediaPhoto: Sendable {
             guard let image = context.makeImage() else {
                 throw DeviceToolsError.failed("The photo could not be prepared.")
             }
-            let id = UUID().uuidString.lowercased()
+            let temporaryID = UUID().uuidString.lowercased()
             let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("ltm-photo-" + id, isDirectory: true)
+                .appendingPathComponent("ltm-photo-" + temporaryID, isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
             var complete = false
             defer { if !complete { try? FileManager.default.removeItem(at: directory) } }
@@ -71,6 +71,7 @@ struct MediaPhoto: Sendable {
                 throw DeviceToolsError.failed("Could not finish the prepared photo.")
             }
             try Task.checkCancellation()
+            let id = try MediaIdentity.identifier(for: output)
             let result = MediaPhoto(id: id, directory: directory, image: output,
                                     title: source.deletingPathExtension().lastPathComponent)
             complete = true

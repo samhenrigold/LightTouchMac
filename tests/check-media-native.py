@@ -105,7 +105,7 @@ final class Progress: @unchecked Sendable {
         precondition(progress.complete())
         try await device.commitMedia(media)
         try await device.commitMedia(media) // Reconcile an uncertain reply.
-        let repeated = if case .song = media { try await PreparedMedia.prepare(source) } else { media }
+        let repeated = try await PreparedMedia.prepare(source)
         defer { try? FileManager.default.removeItem(at: repeated.directory) }
         let secondID: String
         switch repeated {

@@ -26,6 +26,12 @@ enum DeviceToolsError: Error { case failed(String) }
             let photo = try await MediaPhoto.prepare(work.appendingPathComponent(name))
             defer { try? FileManager.default.removeItem(at: photo.directory) }
             precondition(UUID(uuidString:photo.id) != nil)
+            let repeated = try await MediaPhoto.prepare(work.appendingPathComponent(name))
+            defer { try? FileManager.default.removeItem(at: repeated.directory) }
+            precondition(photo.id == repeated.id && photo.directory != repeated.directory)
+            let bytes = try Data(contentsOf: photo.image)
+            let repeatedBytes = try Data(contentsOf: repeated.image)
+            precondition(bytes == repeatedBytes)
             try FileManager.default.copyItem(at:photo.image,to:work.appendingPathComponent(name + ".prepared.jpg"))
         }
         do { _ = try await MediaPhoto.prepare(work.appendingPathComponent("broken.png")); fatalError("accepted malformed image") }
@@ -41,7 +47,7 @@ enum DeviceToolsError: Error { case failed(String) }
 """
     (work/'check.swift').write_text(swift)
     subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
-        '-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/MediaPhoto.swift'),
+        '-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/MediaPhoto.swift'),str(root/'LightTouchMac/MediaIdentity.swift'),
         str(work/'check.swift'),'-o',str(work/'check')],check=True)
     subprocess.run([str(work/'check'),str(work)],check=True)
     with Image.open(work/'rotated.jpg.prepared.jpg') as image:
