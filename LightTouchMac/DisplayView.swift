@@ -137,6 +137,7 @@ final class DisplayView: NSView {
     private let contentLayer = CALayer()
     private let shellLayer = CALayer()
     private let homeButton = HomeButton()
+    private let attitudeIndicator = AttitudeIndicatorButton(frame: .zero)
     private var displayLink: CADisplayLink?
     private var serial: UInt64 = 0
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
@@ -197,6 +198,17 @@ final class DisplayView: NSView {
         homeButton.target = self
         homeButton.action = #selector(homeTapped)
         addSubview(homeButton)
+        attitudeIndicator.target = self
+        attitudeIndicator.action = #selector(levelAttitude(_:))
+        attitudeIndicator.isHidden = true
+        attitudeIndicator.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(attitudeIndicator)
+        NSLayoutConstraint.activate([
+            attitudeIndicator.widthAnchor.constraint(equalToConstant: 40),
+            attitudeIndicator.heightAnchor.constraint(equalToConstant: 40),
+            attitudeIndicator.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            attitudeIndicator.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+        ])
 
         registerForDraggedTypes([.fileURL, .ltmCatalogApp])
         setAccessibilityLabel("iPod touch screen")
@@ -958,7 +970,10 @@ final class DisplayView: NSView {
         return CATransform3DScale(transform, scale, scale, 1)
     }
 
+    @objc private func levelAttitude(_ sender: Any?) { resetMotion() }
     private func sendAttitude() {
+        attitudeIndicator.update(pitch: pitchAngle, roll: tiltAngle)
+        attitudeIndicator.isHidden = !touchInteractionEnabled || (abs(pitchAngle) < 0.001 && abs(tiltAngle) < 0.001)
         let roll = emulator?.motionPose == .flat ? tiltAngle : restAngle + tiltAngle
         emulator?.setTilt(angle: roll, pitch: pitchAngle)
     }

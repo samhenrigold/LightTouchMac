@@ -38,6 +38,8 @@ source = r'''import Cocoa
  var tiltKeys: Set<UInt16> = [], consumedTiltKeys: Set<UInt16> = []
  var tiltAngle = 0.0, pitchAngle = 0.0, lastTiltTick = 0.0, now = 0.0
  var restAngle = Double.pi / 2, motionRestAngle: CGFloat?
+ class Indicator { var isHidden=false; func update(pitch:Double,roll:Double) {} }
+ let attitudeIndicator=Indicator()
  var motionWasEnabled = false
  static func layerAngle(_ degrees: Int) -> CGFloat { CGFloat(degrees) * .pi / 180 }
  func setShellAngle(_ angle: CGFloat) {}
