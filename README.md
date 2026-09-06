@@ -21,7 +21,7 @@ appear there.
 
 ## Music and photo import
 
-Use File > Sync Media… or drop MP3, M4A, AAC or WAV audio, or JPEG, PNG or HEIC
+Use Apps > Sync Media… or drop MP3, M4A, AAC or WAV audio, or JPEG, PNG or HEIC
 photos onto the device. Light Touch
 prepares a private copy, checks the codec and duration, and queues the upload
 with app installations. Progress appears in the Apps inspector. The guest's

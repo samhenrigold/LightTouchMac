@@ -70,6 +70,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.setContentSize(NSSize(width: 320 + 260, height: 560))
         window.setFrameAutosaveName("Main")
         super.init(window: window)
+        if let appsMenu = NSApp.mainMenu?.item(withTitle: "Apps")?.submenu {
+            appsMenu.delegate = inspectorVC
+            appsMenu.autoenablesItems = false
+        }
         
         window.toolbarStyle = .unified
         let toolbar = NSToolbar(identifier: "main")

@@ -1315,13 +1315,30 @@ extension AppsInspectorViewController: NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        let isMainMenu = menu !== tableView.menu
+        if isMainMenu {
+            let install = menu.addItem(withTitle: "Install App…", action: #selector(MainWindowController.installApp(_:)),
+                                       keyEquivalent: "i")
+            install.keyEquivalentModifierMask = [.shift, .command]
+            install.isEnabled = emulator.canQueueInstall
+            let media = menu.addItem(withTitle: "Sync Media…", action: #selector(MainWindowController.syncMedia(_:)), keyEquivalent: "")
+            media.isEnabled = emulator.canQueueInstall
+            menu.addItem(.separator())
+        }
+        appendAppActions(to: menu, row: isMainMenu ? tableView.selectedRow : tableView.clickedRow)
+        if menu.items.last?.isSeparatorItem == false { menu.addItem(.separator()) }
+        let refresh = menu.addItem(withTitle: "Refresh", action: #selector(refreshClicked(_:)),
+                                   keyEquivalent: isMainMenu ? "r" : "")
+        refresh.target = self
+    }
+
+    private func appendAppActions(to menu: NSMenu, row: Int) {
         if AppInstaller.isPaused {
             menu.addItem(withTitle: "Resume Pending Installs", action: #selector(resumeInstallsClicked(_:)),
                          keyEquivalent: "").target = self
             menu.addItem(.separator())
         }
         if searching {
-            let row = tableView.clickedRow
             guard catalogResults.indices.contains(row) else { return }
             let app = catalogResults[row]
             // A right-click inside a multi-row selection offers the batch; the
@@ -1381,7 +1398,6 @@ extension AppsInspectorViewController: NSMenuDelegate {
             }
             return
         }
-        let row = tableView.clickedRow
         // `!isFinished`, not just the index: a finished job is DRAWN as an
         // ordinary app row, so classifying by index alone offered "Cancel
         // Install" (which by then does nothing) on a row showing an installed
@@ -1435,10 +1451,6 @@ extension AppsInspectorViewController: NSMenuDelegate {
                 menu.addItem(.separator())
             }
         }
-        // Always offered: a list that has gone stale or empty because the
-        // device stopped answering has to be recoverable without relaunching.
-        menu.addItem(withTitle: "Refresh", action: #selector(refreshClicked(_:)),
-                     keyEquivalent: "").target = self
     }
 }
 

@@ -29,6 +29,7 @@ enum MainMenuBuilder {
         main.addItem(submenu(editMenu(), title: "Edit"))
         main.addItem(submenu(viewMenu(), title: "View"))
         main.addItem(submenu(deviceMenu(), title: "Device"))
+        main.addItem(submenu(NSMenu(title: "Apps"), title: "Apps"))
         main.addItem(submenu(captureMenu(), title: "Capture"))
         main.addItem(submenu(windowMenu(), title: "Window"))
         main.addItem(submenu(helpMenu(appName), title: "Help"))
@@ -74,11 +75,8 @@ enum MainMenuBuilder {
         // Not a document app — the New/Open/Save/Print boilerplate was all dead
         // (permanently disabled, targeting NSDocument/NSDocumentController that
         // don't exist here). File carries the app-level actions that fit it:
-        // install, and the diagnostics export, plus Close.
+        // diagnostics export and Close; app operations live in Apps.
         let menu = NSMenu(title: "File")
-        menu.addItem(item("Install App…", #selector(MainWindowController.installApp(_:)), "i", [.shift, .command]))
-        menu.addItem(item("Sync Media…", #selector(MainWindowController.syncMedia(_:)), ""))
-        menu.addItem(.separator())
         menu.addItem(item("Export Diagnostics…", #selector(MainWindowController.exportDiagnostics(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Close", #selector(NSWindow.performClose(_:)), "w"))
