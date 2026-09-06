@@ -12,7 +12,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		EA17D83230239D9B00BDF83E /* LightTouchMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LightTouchMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EA17D83230239D9B00BDF83E /* Light Touch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Light Touch.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -45,7 +45,7 @@
 		EA17D83330239D9B00BDF83E /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				EA17D83230239D9B00BDF83E /* LightTouchMac.app */,
+				EA17D83230239D9B00BDF83E /* Light Touch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -53,9 +53,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		EA17D83130239D9B00BDF83E /* LightTouchMac */ = {
+		EA17D83130239D9B00BDF83E /* Light Touch */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = EA17D83E30239D9B00BDF83E /* Build configuration list for PBXNativeTarget "LightTouchMac" */;
+			buildConfigurationList = EA17D83E30239D9B00BDF83E /* Build configuration list for PBXNativeTarget "Light Touch" */;
 			buildPhases = (
 				EA17D82E30239D9B00BDF83E /* Sources */,
 				EA17D82F30239D9B00BDF83E /* Frameworks */,
@@ -66,13 +66,13 @@
 			fileSystemSynchronizedGroups = (
 				EA17D83430239D9B00BDF83E /* LightTouchMac */,
 			);
-			name = LightTouchMac;
+			name = "Light Touch";
 			packageProductDependencies = (
 				EA17D84C3023A55900BDF83E /* Subprocess */,
 				EA17D84F3023A56800BDF83E /* ArgumentParser */,
 			);
 			productName = LightTouchMac;
-			productReference = EA17D83230239D9B00BDF83E /* LightTouchMac.app */;
+			productReference = EA17D83230239D9B00BDF83E /* Light Touch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -108,7 +108,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				EA17D83130239D9B00BDF83E /* LightTouchMac */,
+				EA17D83130239D9B00BDF83E /* Light Touch */,
 			);
 		};
 /* End PBXProject section */
@@ -250,7 +250,7 @@
 			};
 			name = Release;
 		};
-		EA17D83F30239D9B00BDF83E /* Debug configuration for PBXNativeTarget "LightTouchMac" */ = {
+		EA17D83F30239D9B00BDF83E /* Debug configuration for PBXNativeTarget "Light Touch" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = LightTouch;
@@ -308,7 +308,7 @@
 			};
 			name = Debug;
 		};
-		EA17D84030239D9B00BDF83E /* Release configuration for PBXNativeTarget "LightTouchMac" */ = {
+		EA17D84030239D9B00BDF83E /* Release configuration for PBXNativeTarget "Light Touch" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = LightTouch;
@@ -377,11 +377,11 @@
 			);
 			defaultConfigurationName = Release;
 		};
-		EA17D83E30239D9B00BDF83E /* Build configuration list for PBXNativeTarget "LightTouchMac" */ = {
+		EA17D83E30239D9B00BDF83E /* Build configuration list for PBXNativeTarget "Light Touch" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				EA17D83F30239D9B00BDF83E /* Debug configuration for PBXNativeTarget "LightTouchMac" */,
-				EA17D84030239D9B00BDF83E /* Release configuration for PBXNativeTarget "LightTouchMac" */,
+				EA17D83F30239D9B00BDF83E /* Debug configuration for PBXNativeTarget "Light Touch" */,
+				EA17D84030239D9B00BDF83E /* Release configuration for PBXNativeTarget "Light Touch" */,
 			);
 			defaultConfigurationName = Release;
 		};

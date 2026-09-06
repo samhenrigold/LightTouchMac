@@ -16,7 +16,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "EA17D83130239D9B00BDF83E"
-               BuildableName = "LightTouchMac.app"
+               BuildableName = "Light Touch.app"
+               BlueprintName = "Light Touch"
                ReferencedContainer = "container:LightTouchMac.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -45,7 +46,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "EA17D83130239D9B00BDF83E"
-            BuildableName = "LightTouchMac.app"
+            BuildableName = "Light Touch.app"
+            BlueprintName = "Light Touch"
             ReferencedContainer = "container:LightTouchMac.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -61,7 +63,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "EA17D83130239D9B00BDF83E"
-            BuildableName = "LightTouchMac.app"
+            BuildableName = "Light Touch.app"
+            BlueprintName = "Light Touch"
             ReferencedContainer = "container:LightTouchMac.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
