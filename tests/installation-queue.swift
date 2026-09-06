@@ -3,11 +3,21 @@ import Foundation
 @main struct Check {
     @MainActor static func main() async throws {
         let queue = InstallationQueue()
-        var order: [String] = []
+        var order: [String] = [], ready: [String] = []
         var concurrent = 0
-        func job(_ name: String, download: Int) -> Task<Void, Error> {
-            Task { @MainActor in
-                try await Task.sleep(for: .milliseconds(download))
+        func until(_ condition: () -> Bool) async throws {
+            let deadline = ContinuousClock.now + .seconds(5)
+            while !condition() {
+                precondition(ContinuousClock.now < deadline, "queue did not reach expected state")
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        func job(_ name: String) -> (task: Task<Void, Error>, download: AsyncStream<Void>.Continuation, finish: AsyncStream<Void>.Continuation) {
+            let download = AsyncStream<Void>.makeStream(), finish = AsyncStream<Void>.makeStream()
+            let task = Task { @MainActor in
+                for await _ in download.stream { break }
+                try Task.checkCancellation()
+                ready.append(name)
                 try await queue.acquire()
                 defer { queue.release() }
                 try Task.checkCancellation()
@@ -15,39 +25,45 @@ import Foundation
                 precondition(concurrent == 1)
                 defer { concurrent -= 1 }
                 order.append(name)
-                try await Task.sleep(for: .milliseconds(20))
+                for await _ in finish.stream { break }
             }
+            return (task, download.continuation, finish.continuation)
         }
-        let large = job("large", download: 150)
-        let small = job("small", download: 10)
-        let second = job("second", download: 15)
-        try await large.value; try await small.value; try await second.value
-        precondition(order == ["small", "second", "large"])
-        precondition(!queue.isBusy)
+        // Explicit download/completion gates: timer coalescing must not choose
+        // readiness order for this test when the host is busy building QEMU.
+        let large = job("large"), small = job("small"), second = job("second")
+        small.download.yield()
+        try await until { order == ["small"] }
+        second.download.yield()
+        try await until { ready.contains("second") }
+        small.finish.yield()
+        try await until { order == ["small", "second"] }
+        large.download.yield(); large.finish.yield(); second.finish.yield()
+        try await large.task.value; try await small.task.value; try await second.task.value
+        precondition(order == ["small", "second", "large"] && !queue.isBusy)
         try await queue.acquire()
-        let cancelled = job("cancelled", download: 0)
-        try await Task.sleep(for: .milliseconds(20))
-        cancelled.cancel()
-        do { try await cancelled.value; fatalError("cancelled waiter ran") }
+        let cancelled = job("cancelled"); cancelled.download.yield()
+        try await until { ready.contains("cancelled") }
+        cancelled.task.cancel()
+        do { try await cancelled.task.value; fatalError("cancelled waiter ran") }
         catch is CancellationError {}
         queue.release()
-        let next = job("next", download: 0)
-        try await next.value
+        let next = job("next"); next.download.yield(); next.finish.yield()
+        try await next.task.value
         precondition(order.last == "next" && !order.contains("cancelled") && !queue.isBusy)
         try await queue.acquire()
         queue.pause()
-        let paused = job("paused", download: 0)
-        try await Task.sleep(for: .milliseconds(20))
+        let paused = job("paused"); paused.download.yield()
+        try await until { ready.contains("paused") }
         queue.release()
-        try await Task.sleep(for: .milliseconds(20))
         precondition(!queue.isBusy && queue.isPaused && !order.contains("paused"))
-        let cancelledWhilePaused = job("cancelled paused", download: 0)
-        try await Task.sleep(for: .milliseconds(20))
-        cancelledWhilePaused.cancel()
-        do { try await cancelledWhilePaused.value; fatalError("cancelled paused waiter ran") }
+        let cancelledWhilePaused = job("cancelled paused"); cancelledWhilePaused.download.yield()
+        try await until { ready.contains("cancelled paused") }
+        cancelledWhilePaused.task.cancel()
+        do { try await cancelledWhilePaused.task.value; fatalError("cancelled paused waiter ran") }
         catch is CancellationError {}
-        queue.resume()
-        try await paused.value
+        queue.resume(); paused.finish.yield()
+        try await paused.task.value
         precondition(order.last == "paused" && !queue.isBusy && !queue.isPaused)
         print("PASS: small ready downloads bypass large transfers, one install at a time, queued cancellation drains")
     }

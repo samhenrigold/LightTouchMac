@@ -7,8 +7,8 @@ s=(root/'LightTouchMac/DisplayView.swift').read_text()
 transform=next(line.strip() for line in s.splitlines() if 'contentLayer.transform = CATransform3DMakeRotation' in line)
 a=s.index('    private func setShellAngle('); b=s.index('    /// Is a mouse-driven touch',a)
 methods=s[a:b].replace('private func','func')
-c=s.index('    private func motionTransform(');d=s.index('    private func sendAttitude()',c)
-methods=s[c:d].replace('private func','func')+methods
+c=s.index('    private func motionTransform(');d=s.index('\n    }',c)+len('\n    }')
+methods=s[c:d].replace('private func','func')+'\n'+methods
 source='''import Cocoa
 import QuartzCore
 @MainActor final class Check {
