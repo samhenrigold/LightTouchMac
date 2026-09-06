@@ -202,7 +202,12 @@ fi
 # Costs ~1.2 GB of bundle; LTM_ASSETS=none skips it for a dev-machine build
 # that keeps using the checkout's files-root.
 FILES="${LTM_ASSETS:-$HOME/Developer/qemu-ios-files}"
+# Prefer the validated current guest-tool image for new devices. Keep the
+# legacy asset layout usable, and always honor an explicit image selection.
 NAND_NAME="${LTM_NAND:-nand-ultimate}"
+if [ -z "${LTM_NAND:-}" ] && [ -d "$FILES/nand-agent-v3" ]; then
+    NAND_NAME=nand-agent-v3
+fi
 if [ "$FILES" != none ]; then
     for f in "$FILES/bootrom_240_4" "$FILES/ios3/iBoot.bin" \
              "$FILES/ios3/nor_7E18.bin" "$FILES/$NAND_NAME"; do
