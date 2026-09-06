@@ -2,6 +2,7 @@
 // zoom uses display pixels per guest pixel, independent of orientation.
 
 import Cocoa
+import GameController
 
 /// Fit the whole device in the window, or use an integer display-pixel scale.
 enum ZoomMode: Equatable {
@@ -373,6 +374,7 @@ final class DisplayView: NSView {
         emulator?.pollStorageFailure()
         updateTouchOverlay()
         updateKeyboardTilt()
+        updateController()
         var pixels: UnsafeRawPointer?
         var w: Int32 = 0
         var h: Int32 = 0
@@ -450,7 +452,8 @@ final class DisplayView: NSView {
     private static let touchFadeDuration = 0.16
     private var visibleTouches: [Int: (point: CGPoint, expires: CFTimeInterval)] = [:]
 
-    private func sendVisualTouch(_ slot: Int32, _ phase: Int32, _ x: Double, _ y: Double) {
+    private func sendVisualTouch(_ slot: Int32, _ phase: Int32, _ x: Double, _ y: Double, controller: Bool = false) {
+        if !controller { endControllerTouch() }
         guard touchInteractionEnabled else {
             if phase == Int32(QEMU_IOS_TOUCH_END) { qemu_ios_ui_touch(slot, phase, x, y) }
             clearTouchOverlay()
@@ -965,6 +968,39 @@ final class DisplayView: NSView {
         endTilt()
     }
 
+    private var controllerInput = GameControllerInput()
+    private var controllerTilting = false
+    private var controllerTouch: CGPoint?
+
+    private func endControllerTouch() {
+        guard let point = controllerTouch else { return }
+        controllerTouch = nil
+        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), point.x, point.y, controller: true)
+    }
+    private func updateController() {
+        let active = touchInteractionEnabled && window?.isKeyWindow == true
+            && window?.firstResponder === self && GameControllerInput.enabled
+        let controller = GCController.current ?? GCController.controllers().first { $0.extendedGamepad != nil }
+        let state = controllerInput.read(controller, enabled: active, curve: GameControllerInput.curve)
+        if state.tapEnded || !active { endControllerTouch() }
+        if state.home { emulator?.pressHome() }
+        if state.shake { emulator?.shake() }
+        if state.tapBegan && !touchDown && !pinchingGuest && scrollPoint == nil {
+            let point = CGPoint(x: GameControllerInput.coordinate("controllerTapX"),
+                                y: GameControllerInput.coordinate("controllerTapY"))
+            controllerTouch = point
+            sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), point.x, point.y, controller: true)
+        }
+        let tilting = state.roll != 0 || state.pitch != 0
+        if tilting {
+            if !controllerTilting { motionRestAngle = Self.layerAngle(emulator?.rotationDegrees ?? 0) }
+            tiltAngle = state.roll; pitchAngle = state.pitch
+            setShellAngle(restAngle + tiltAngle)
+            sendAttitude()
+        } else if controllerTilting { endTilt() }
+        controllerTilting = tilting
+    }
+
     private func updateKeyboardTilt() {
         let now = CACurrentMediaTime()
         let dt = min(max(now - lastTiltTick, 0), 0.05)
@@ -1108,6 +1144,7 @@ final class DisplayView: NSView {
     }
 
     override func resignFirstResponder() -> Bool {
+        endControllerTouch()
         resetMotion()
         return super.resignFirstResponder()
     }

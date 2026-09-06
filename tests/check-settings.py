@@ -60,5 +60,5 @@ with tempfile.TemporaryDirectory(prefix='ltm-settings-') as tmp:
  }
 }
 ''')
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'LightTouchMac/SettingsWindowController.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'LightTouchMac/SettingsWindowController.swift'),str(root/'LightTouchMac/GameControllerInput.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
     subprocess.run([str(tmp/'check')],check=True)

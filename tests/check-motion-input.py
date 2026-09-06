@@ -6,7 +6,10 @@ root = Path(__file__).resolve().parents[1]
 s = (root / 'LightTouchMac/DisplayView.swift').read_text()
 a = s.index('    private func sendAttitude()')
 b = s.index('    private func setShellAngle(', a)
-motion = s[a:b].replace('private func', 'func').replace('CACurrentMediaTime()', 'now')
+motion = s[a:b]
+start = motion.index('    private var controllerInput')
+end = motion.index('    private func updateKeyboardTilt()', start)
+motion = (motion[:start] + motion[end:]).replace('private func', 'func').replace('CACurrentMediaTime()', 'now')
 a = s.index('    override func keyDown(')
 b = s.index('    // MARK: - Drag & drop', a)
 keys = s[a:b]
@@ -39,6 +42,7 @@ source = r'''import Cocoa
  static func layerAngle(_ degrees: Int) -> CGFloat { CGFloat(degrees) * .pi / 180 }
  func setShellAngle(_ angle: CGFloat) {}
  func endTilt() { tiltAngle = 0; pitchAngle = 0; motionRestAngle = nil; sendAttitude() }
+ func endControllerTouch() {}
  func endLiveText() { isShowingLiveText = false }
 ''' + motion + keys + r'''
  func event(_ code: UInt16, _ flags: NSEvent.ModifierFlags = .option, repeatKey: Bool = false) -> NSEvent {
