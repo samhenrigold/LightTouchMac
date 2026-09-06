@@ -43,8 +43,10 @@ def boot_env_keys(text):
         # Resolve the current Swift computed property, excluding optional -v.
         # An unknown expression remains missing and fails parity explicitly.
         base = re.search(
-            r'static var bootArgs: String\s*\{\s*let base = "([^"]*)"\s*'
-            r'return verboseBoot \? base \+ " -v" : base\s*\}', text)
+            r'static var bootArgs: String\s*\{\s*var args = "([^"]*)"\s*'
+            r'if verboseBoot \{ args \+= " -v" \}\s*'
+            r'if kernelConsole \{ args \+= " serial=3 debug=0x8" \}\s*'
+            r'return args\s*\}', text)
         if base:
             values["IT_BOOT_ARGS"] = base.group(1)
     return values
@@ -58,8 +60,10 @@ def env_drift(app, harness, required):
 def self_test():
     source = '''
     static var bootArgs: String {
-        let base = "test=1"
-        return verboseBoot ? base + " -v" : base
+        var args = "test=1"
+        if verboseBoot { args += " -v" }
+        if kernelConsole { args += " serial=3 debug=0x8" }
+        return args
     }
     "IT_BOOT_ARGS": Self.bootArgs,
     "IT_WDT_NORESET": "1"
@@ -70,7 +74,7 @@ def self_test():
     assert env_drift({}, {}, ["missing"]) == {"missing": (None, None)}
     assert env_drift(app, {}, ["IT_BOOT_ARGS"]) == {"IT_BOOT_ARGS": ("test=1", None)}
     assert env_drift({"key": "1"}, {"key": "2"}, ["key"]) == {"key": ("1", "2")}
-    assert "IT_BOOT_ARGS" not in boot_env_keys(source.replace("base +", "other +"))
+    assert "IT_BOOT_ARGS" not in boot_env_keys(source.replace("return args", "return other"))
     print("env parity self-test passed")
 
 
@@ -83,12 +87,14 @@ def check_env_parity():
 
     # The env 3.1.3 REQUIRES to boot — both must agree on these, or one side
     # boots a device the other cannot. (IT_DIRECT_IBOOT is path-derived on both,
-    # and IT_LCD_BRIGHT is a
-    # harness-only knob — its lit-pixel checks need full exposure, while the app
+    # and IT_LCD_BRIGHT is a harness-only knob — its lit-pixel checks need full exposure, while the app
     # must show the real backlight or Lock looks dead — so none are compared.)
-    required = ["IT_TVOUT_READY", "IT_TVOUT_VBLANK",
+    required = ["IT_TVOUT_READY",
                 "IT_BOOT_ARGS", "IT_BOOT_ARGS_DELAY_MS", "IT_BOOT_ARGS_REPEAT",
                 "IT_BOOT_ARGS_INTERVAL_MS"]
+    check("obsolete-env-absent", all(key not in app and key not in harness
+          for key in ("IT_TVOUT_VBLANK", "IT_IMG3_SIG_ASIS")),
+          "removed behavior switches stay absent")
     check("guest-reset-enabled", "IT_WDT_NORESET" not in app and
           "IT_WDT_NORESET" not in harness,
           "neither launcher suppresses guest watchdog reset commands")
