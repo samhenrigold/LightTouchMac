@@ -76,6 +76,35 @@ struct DeviceTools: Sendable {
         try await services.installedApps()
     }
 
+    // MARK: - Music import
+
+    func stageSong(_ song: MediaSong, progress: @escaping @Sendable (Double) -> Void) async throws {
+        try await services.stageSong(song, progress: progress)
+    }
+
+    /// Once this starts, keep the staged audio even on an uncertain outcome.
+    /// The guest service owns database mutations and reconciles the same path.
+    func commitSong(_ song: MediaSong) async throws {
+        guard UUID(uuidString: song.id) != nil else {
+            throw DeviceToolsError.failed("Invalid media staging identifier.")
+        }
+        guard let helper = Bundled.resolve("itmedia", fallbacks: [
+            "\(filesRoot)/../qemu-ios/contrib/it-media/itmedia",
+        ]) else { throw DeviceToolsError.toolMissing("itmedia") }
+        let executable = "/tmp/ltm-itmedia-\(song.id)"
+        let metadata = "/tmp/ltm-song-\(song.id).plist"
+        try await guestRun("cat > \(executable) && chmod 755 \(executable) && "
+                           + "chown 501:501 /var/mobile/Media/LightTouch /var/mobile/Media/LightTouch/\(song.id)",
+                           stdinPath: helper)
+        let result = try await guestRun(
+            "cat > \(metadata) && chmod 644 \(metadata) && \(executable) \(metadata) \(song.id); "
+                + "result=$?; rm -f \(executable) \(metadata); exit $result",
+            stdinPath: song.metadata.path)
+        guard String(decoding: result, as: UTF8.self).hasSuffix("imported\n") else {
+            throw DeviceToolsError.failed("The device did not confirm the music import. Its staged audio has been retained.")
+        }
+    }
+
     // MARK: - Install
 
     /// Install a decrypted .ipa. Baked images go the fast in-process route

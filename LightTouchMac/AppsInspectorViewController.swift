@@ -122,6 +122,69 @@ enum AppInstaller {
         return job
     }
 
+    /// Media shares the ready queue and progress rows with app installation,
+    /// so AFC uploads cannot race installs or device lifecycle operations.
+    @discardableResult
+    static func startMedia(_ source: URL, with emulator: EmulatorController,
+                           presenting window: NSWindow?) -> InstallJob {
+        let job = InstallJob(name: source.deletingPathExtension().lastPathComponent)
+        job.status = "Preparing audio…"
+        jobs.append(job)
+        NotificationCenter.default.post(name: .ltmInstallStarted, object: job)
+        job.task = Task {
+            var acquired = false
+            defer {
+                if acquired { readyQueue.release() }
+                finish(job)
+            }
+            let scoped = source.startAccessingSecurityScopedResource()
+            defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+            do {
+                let song = try await MediaSong.prepare(source)
+                defer { try? FileManager.default.removeItem(at: song.directory) }
+                job.name = song.title
+                job.status = readyQueue.isPaused ? "Paused — resume from the context menu" : "Waiting for device…"
+                NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
+                try await readyQueue.acquire()
+                acquired = true
+                try Task.checkCancellation()
+                job.status = "Copying audio…"
+                job.downloadProgress = 0
+                NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
+                try await emulator.importSong(song) { fraction in
+                    Task { @MainActor in
+                        guard !job.isFinished, job.isCancellable else { return }
+                        job.downloadProgress = fraction
+                        job.status = "Copying audio… \(Int(fraction * 100))%"
+                        NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
+                    }
+                } willCommit: {
+                    job.isCancellable = false
+                    job.downloadProgress = nil
+                    job.status = "Adding to Music…"
+                    NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
+                }
+                job.status = "Added to Music"
+            } catch is CancellationError {
+                // The uploader removes incomplete files. A completed staged
+                // file is retained if the library outcome could be uncertain.
+            } catch {
+                job.failed = true
+                guard !Task.isCancelled else { return }
+                if let deviceError = error as? DeviceError, deviceError.shouldPauseInstallQueue {
+                    readyQueue.pause()
+                    emulator.deviceReachable = false
+                    for waiting in jobs where waiting !== job && waiting.downloadProgress == nil {
+                        waiting.status = "Paused — resume from the context menu"
+                        NotificationCenter.default.post(name: .ltmInstallProgress, object: waiting)
+                    }
+                }
+                presentError(error, in: window)
+            }
+        }
+        return job
+    }
+
     /// A Legacy Store copy: same pipeline, same queue, but the row exists —
     /// including in the installed list — from the first downloaded byte, so
     /// clearing the search can never lose sight of a transfer in flight.

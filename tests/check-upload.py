@@ -8,17 +8,23 @@ loop = s[s.index('    func stage('):s.index('    /// A stable device-side filena
 errors = s[s.index('nonisolated enum DeviceError'):s.index('// MARK: - Timeouts')]
 source = r'''import Foundation
 nonisolated enum Timeouts { static let stage = 300.0 }
+struct MediaSong: Sendable {
+ let id: String
+ let audio: URL
+ static let extensions: Set<String> = ["mp3", "m4a", "wav"]
+}
 final class State: @unchecked Sendable {
  let lock = NSLock()
  var bytes = Data(), removed = false, closeCalls = 0
+ var destination = "", directories: [String] = []
  var failure = false, badCount = false, closeFailure = false
- func reset() { lock.withLock { bytes = Data(); removed = false; closeCalls = 0; failure = false; badCount = false; closeFailure = false } }
+ func reset() { lock.withLock { bytes = Data(); destination = ""; directories = []; removed = false; closeCalls = 0; failure = false; badCount = false; closeFailure = false } }
 }
 nonisolated enum IMobileDevice {
  static let state = State(), success: Int32 = 0, afcWriteMode: UInt64 = 3
  static let afc_client_start_service: ((OpaquePointer, inout OpaquePointer?, String)->Int32)? = { _, c, _ in c = OpaquePointer(bitPattern: 1); return 0 }
- static let afc_make_directory: ((OpaquePointer, UnsafePointer<CChar>)->Int32)? = { _,_ in 0 }
- static let afc_file_open: ((OpaquePointer, UnsafePointer<CChar>, UInt64, inout UInt64)->Int32)? = { _,_,_,h in h=1;return 0 }
+ static let afc_make_directory: ((OpaquePointer, UnsafePointer<CChar>)->Int32)? = { _,p in state.directories.append(String(cString:p)); return 0 }
+ static let afc_file_open: ((OpaquePointer, UnsafePointer<CChar>, UInt64, inout UInt64)->Int32)? = { _,p,_,h in state.destination = String(cString:p); h=1;return 0 }
  static let afc_file_write: ((OpaquePointer, UInt64, UnsafePointer<CChar>, UInt32, inout UInt32)->Int32)? = { _,_,p,n,w in
   state.lock.withLock {
    if state.failure && !state.bytes.isEmpty { return 1 }
@@ -44,6 +50,17 @@ struct Services {
   let state = IMobileDevice.state
   _ = try await Services().stage(path) { _ in }
   precondition(state.bytes == expected && !state.removed && state.closeCalls == 1)
+  state.reset()
+  let audio = path.deletingLastPathComponent().appendingPathComponent("audio.m4a")
+  try expected.write(to: audio)
+  let id = UUID().uuidString
+  try await Services().stageSong(MediaSong(id:id,audio:audio)) { _ in }
+  precondition(state.bytes == expected && state.destination == "LightTouch/\(id)/audio.m4a")
+  precondition(state.directories == ["LightTouch","LightTouch/\(id)"])
+  state.reset()
+  do { try await Services().stageSong(MediaSong(id:"../escape",audio:audio)) { _ in }; fatalError("invalid destination accepted") }
+  catch {}
+  precondition(state.destination.isEmpty)
   for kind in 0..<3 {
    state.reset()
    state.failure = kind == 0; state.badCount = kind == 1; state.closeFailure = kind == 2
@@ -51,7 +68,7 @@ struct Services {
    catch let e as DeviceError { precondition(e.shouldPauseInstallQueue) }
    precondition(state.removed && state.closeCalls == 1)
   }
-  print("PASS: streamed AFC bytes survive short writes; write/count/close errors reject and clean partial files")
+  print("PASS: app/media AFC uploads, safe destination validation, short writes and failure cleanup")
  }
 }
 '''

@@ -40,6 +40,7 @@ final class DisplayView: NSView {
     weak var emulator: EmulatorController?
     /// Called when an .ipa is dropped on the screen.
     var onDropIPA: ((URL) -> Void)?
+    var onDropMedia: ((URL) -> Void)?
     /// Called when a Legacy Store row is dropped on the screen.
     var onDropCatalogApp: ((CatalogApp) -> Void)?
 
@@ -1125,7 +1126,7 @@ final class DisplayView: NSView {
         // the Finder as its .ipa), but dropping one back on the device would
         // just reinstall what's already there — only OUTSIDE files install.
         guard sender.draggingSource == nil else { return [] }
-        return droppedIPA(sender) != nil ? .copy : []
+        return droppedIPA(sender) != nil || !droppedMedia(sender).isEmpty ? .copy : []
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
@@ -1136,8 +1137,10 @@ final class DisplayView: NSView {
         }
         guard sender.draggingSource == nil else { return false }
         let ipas = droppedIPAs(sender)
-        guard !ipas.isEmpty else { return false }
+        let media = droppedMedia(sender)
+        guard !ipas.isEmpty || !media.isEmpty else { return false }
         ipas.forEach { onDropIPA?($0) }   // AppInstaller queues them
+        media.forEach { onDropMedia?($0) }
         return true
     }
 
@@ -1147,6 +1150,11 @@ final class DisplayView: NSView {
         guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self])
                 as? [URL] else { return [] }
         return urls.filter { $0.pathExtension.lowercased() == "ipa" }
+    }
+
+    private func droppedMedia(_ sender: NSDraggingInfo) -> [URL] {
+        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return [] }
+        return urls.filter { MediaSong.extensions.contains($0.pathExtension.lowercased()) }
     }
 
     /// Store rows dragged from the inspector: decode the private payload.

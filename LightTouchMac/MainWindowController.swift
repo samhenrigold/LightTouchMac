@@ -571,6 +571,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
     
+    @objc func syncMedia(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = MediaSong.extensions.sorted().compactMap { UTType(filenameExtension: $0) }
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose MP3, M4A or WAV files to add to Music."
+        panel.beginSheetModal(for: window!) { [weak self] response in
+            guard let self, response == .OK else { return }
+            for url in panel.urls {
+                AppInstaller.startMedia(url, with: self.emulator, presenting: self.window)
+            }
+        }
+    }
+
     /// Respring — the quick fix for a freshly sideloaded app that crashes on
     /// launch until the device is restarted.
     @objc func restartSpringBoard(_ sender: Any?) {
@@ -860,7 +873,7 @@ extension MainWindowController: NSMenuItemValidation {
 
         // App management: needs USB, a live guest, and no install already running
         // (the guest serves ~one lockdown session).
-        case #selector(installApp(_:)):
+        case #selector(installApp(_:)), #selector(syncMedia(_:)):
             return emulator.canQueueInstall
         case #selector(openDeviceTerminal(_:)), #selector(restartSpringBoard(_:)):
             return emulator.canReachDevice && !emulator.isInstalling

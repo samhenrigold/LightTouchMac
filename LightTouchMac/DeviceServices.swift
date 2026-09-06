@@ -120,14 +120,30 @@ struct DeviceServices: Sendable {
     /// Upload the .ipa into the AFC jail and return its device-relative path,
     /// which is what instproxy_install wants. Chunked so progress is live.
     func stage(_ ipa: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> String {
-        let remote = "PublicStaging/\(Self.stagingName(ipa))"
+        try await stageFile(ipa, remote: "PublicStaging/\(Self.stagingName(ipa))", progress: progress)
+    }
+
+    func stageSong(_ song: MediaSong, progress: @escaping @Sendable (Double) -> Void) async throws {
+        guard UUID(uuidString: song.id) != nil,
+              MediaSong.extensions.contains(song.audio.pathExtension),
+              song.audio.lastPathComponent == "audio." + song.audio.pathExtension else {
+            throw DeviceError.preflight("Invalid media staging path.")
+        }
+        _ = try await stageFile(song.audio, remote: "LightTouch/\(song.id)/\(song.audio.lastPathComponent)",
+                                progress: progress)
+    }
+
+    /// Callers supply a validated relative destination. The same chunked AFC
+    /// upload, cancellation and incomplete-file cleanup serve apps and songs.
+    private func stageFile(_ ipa: URL, remote: String,
+                           progress: @escaping @Sendable (Double) -> Void) async throws -> String {
         return try await run(Timeouts.stage, "upload") { imd, device in
             // File I/O stays on the detached worker, including opening the file.
             let input = try FileHandle(forReadingFrom: ipa)
             defer { try? input.close() }
             let total = try input.seekToEnd()
             try input.seek(toOffset: 0)
-            guard total > 0 else { throw DeviceError.preflight("The IPA is empty.") }
+            guard total > 0 else { throw DeviceError.preflight("The file is empty.") }
             guard let start = imd.afc_client_start_service,
                   let mkdir = imd.afc_make_directory,
                   let open = imd.afc_file_open,
@@ -137,7 +153,11 @@ struct DeviceServices: Sendable {
             let rc = start(device, &client, "LightTouchMac")
             guard rc == imd.success, let client else { throw DeviceError.afc(.init(code: rc)) }
             defer { _ = imd.afc_client_free?(client) }
-            _ = "PublicStaging".withCString { mkdir(client, $0) }
+            var parent = ""
+            for component in remote.split(separator: "/").dropLast() {
+                parent = parent.isEmpty ? String(component) : parent + "/" + component
+                _ = parent.withCString { mkdir(client, $0) }
+            }
             var handle: UInt64 = 0
             let opened = remote.withCString { open(client, $0, IMobileDevice.afcWriteMode, &handle) }
             guard opened == imd.success else { throw DeviceError.afc(.init(code: opened)) }
@@ -151,7 +171,7 @@ struct DeviceServices: Sendable {
             while written < total {
                 try Task.checkCancellation()
                 guard let chunk = try input.read(upToCount: Int(min(1 << 16, total - written))),
-                      !chunk.isEmpty else { throw DeviceError.preflight("The IPA changed during upload.") }
+                      !chunk.isEmpty else { throw DeviceError.preflight("The file changed during upload.") }
                 try chunk.withUnsafeBytes { raw in
                     let base = raw.bindMemory(to: CChar.self).baseAddress!
                     var offset = 0

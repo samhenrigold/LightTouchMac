@@ -74,6 +74,7 @@ enum MainMenuBuilder {
         // install, and the diagnostics export, plus Close.
         let menu = NSMenu(title: "File")
         menu.addItem(item("Install App…", #selector(MainWindowController.installApp(_:)), "i", [.shift, .command]))
+        menu.addItem(item("Sync Media…", #selector(MainWindowController.syncMedia(_:)), ""))
         menu.addItem(.separator())
         menu.addItem(item("Export Diagnostics…", #selector(MainWindowController.exportDiagnostics(_:))))
         menu.addItem(.separator())

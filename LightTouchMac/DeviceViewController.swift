@@ -17,6 +17,10 @@ final class DeviceViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
         displayView.emulator = emulator
         displayView.onDropIPA = { [weak self] url in self?.installDropped(url) }
+        displayView.onDropMedia = { [weak self] url in
+            guard let self, self.emulator.canQueueInstall else { return }
+            AppInstaller.startMedia(url, with: self.emulator, presenting: self.view.window)
+        }
         displayView.onDropCatalogApp = { [weak self] app in
             guard let self, self.emulator.canQueueInstall else { return }
             AppInstaller.startCatalog(app, with: self.emulator, presenting: self.view.window)
