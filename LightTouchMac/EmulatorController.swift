@@ -205,6 +205,8 @@ final class EmulatorController {
         }
 
         var machine = "iPod-Touch,h264-decode=on,scaler-decode=on,mpvd-decode=on,amc-mode=decode,lcd-planes=on"
+        + ",boot-args=\(Self.bootArgs.replacingOccurrences(of: ",", with: ",,"))"
+        + ",boot-args-delay-ms=1500,boot-args-repeat=200,boot-args-interval-ms=250"
         + ",direct-iboot=\(options.iBoot.replacingOccurrences(of: ",", with: ",,")),direct-llb="
         + ",bootrom=\(options.bootrom)"
         + ",nand=\(nandBase)"
@@ -1620,6 +1622,8 @@ final class EmulatorController {
     }
 
     /// Early iBoot handoff arguments; serial output is included in diagnostics.
+    /// The regression checker compares the base command line with the harness;
+    /// verbose boot and kernel-console output remain optional app settings.
     static var bootArgs: String {
         var args = "amfi_allow_any_signature=1 cs_enforcement_disable=1"
         if verboseBoot { args += " -v" }
@@ -1636,19 +1640,6 @@ final class EmulatorController {
         // keeps the override — its checks count lit pixels.
         let env = [
             "IT_TVOUT_READY": "1",
-            // `-v` when asked: iPhone OS shows the kernel's console output over
-            // the boot logo instead of the Apple mark, which is the only view
-            // of what the guest is doing between iBoot and SpringBoard. Off by
-            // default because it replaces the logo for every boot.
-            //
-            // NOTE for scripts/regress_app.py: its env-parity check compares
-            // IT_BOOT_ARGS against the harness. Verbose is an app-side option
-            // the harness has no equivalent for, so parity is asserted on the
-            // base string, which is what is shared.
-            "IT_BOOT_ARGS": Self.bootArgs,
-            "IT_BOOT_ARGS_DELAY_MS": "1500",
-            "IT_BOOT_ARGS_REPEAT": "200",
-            "IT_BOOT_ARGS_INTERVAL_MS": "250",
         ]
         for (k, v) in env { setenv(k, v, 1) }
     }
