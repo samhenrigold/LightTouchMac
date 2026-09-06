@@ -64,7 +64,9 @@ echo "dylib:      $DYLIB"
 # (Plain string set, so this runs under the stock macOS bash 3.2.)
 COPIED=" "
 copy_with_deps() {
-    local src="$1" base; base="$(basename "$src")"
+    local src base
+    src="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1")"
+    base="$(basename "$src")"
     case "$COPIED" in *" $base "*) return ;; esac
     COPIED="$COPIED$base "
 
@@ -101,10 +103,9 @@ APP_BIN="$APP/Contents/MacOS/$APP_EXECUTABLE"
 # ---------------------------------------------------------- tools the app runs
 #
 # The app is meant to work on a Mac with no Homebrew and no source checkout, so
-# everything it shells out to ships inside it: Contents/Resources/tools for the
-# executables and scripts, Contents/Frameworks for the dylibs they need.
-# Bundled.swift looks there first and falls back to the checkout, so a dev build
-# and a packaged one take the same code path.
+# Native helper executables live in Contents/MacOS, a standard nested-code
+# location. Scripts and guest upload payloads remain in Resources/tools.
+# Bundled.swift searches both, with native helpers first.
 #
 # IMobileDevice.swift dlopens compatible libimobiledevice and libplist; their
 # deployment targets must satisfy the same minimum as the linked emulator.
@@ -112,22 +113,27 @@ TOOLS="$APP/Contents/Resources/tools"
 mkdir -p "$TOOLS"
 HOST_TOOLS=()
 copy_tool() {
-    local src="$1" base; base="$(basename "$src")"
+    local src="$1" base dst
+    base="$(basename "$src")"
     [ -f "$src" ] || { echo "missing required tool: $src" >&2; exit 1; }
+    dst="$TOOLS/$base"
     if [ "${2:-host}" = host ] && file "$src" | grep -q Mach-O; then
         python3 "$CHECK" --minos "$MINOS" "$src"
-        HOST_TOOLS+=("$TOOLS/$base")
+        dst="$APP/Contents/MacOS/$base"
+        HOST_TOOLS+=("$dst")
+        # Remove the previous packaging layout's copy on incremental runs.
+        rm -f "$TOOLS/$base"
     fi
-    cp -f "$src" "$TOOLS/$base"
-    chmod u+wx "$TOOLS/$base"
+    cp -f "$src" "$dst"
+    chmod u+wx "$dst"
     [ "${2:-host}" = guest ] && return
     file "$src" | grep -q Mach-O || return 0
     local dep resolved
     while IFS=$'\t' read -r dep resolved; do
-        install_name_tool -change "$dep" "@rpath/$(basename "$resolved")" "$TOOLS/$base"
+        install_name_tool -change "$dep" "@rpath/$(basename "$resolved")" "$dst"
         copy_with_deps "$resolved"
     done < <(python3 "$CHECK" --deps "$src")
-    install_name_tool -add_rpath "@executable_path/../../Frameworks" "$TOOLS/$base" 2>/dev/null || true
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$dst" 2>/dev/null || true
 }
 
 echo "embedding compatible tools…"
@@ -138,6 +144,10 @@ done
 for stem in libimobiledevice-1.0 libplist-2.0; do
     python3 "$CHECK" --minos "$MINOS" "$DEPS/lib/$stem.dylib"
     copy_with_deps "$DEPS/lib/$stem.dylib"
+    canonical="$(python3 -c 'import os,sys; print(os.path.basename(os.path.realpath(sys.argv[1])))' "$DEPS/lib/$stem.dylib")"
+    if [ "$canonical" != "$stem.dylib" ]; then
+        ln -sf "$canonical" "$FRAMEWORKS/$stem.dylib"
+    fi
 done
 TZ_BIN="$WORK/lockdown-tz"
 cc -O2 -mmacosx-version-min="$MINOS" -o "$TZ_BIN" "$SRC/scripts/lockdown-tz.c" \
@@ -251,11 +261,13 @@ python3 "$CHECK" --minos "$MINOS" --bundle "$APP" \
 # Sign inside-out: frameworks first, then the app with entitlements.
 echo "signing (id: $SIGN_ID)…"
 for f in "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
+    [ -L "$f" ] && continue
     # Scripts are not signable and do not need to be; the app's signature covers
     # them as resources.
     [ -f "$f" ] && file "$f" | grep -q Mach-O && codesign -f -o runtime -s "$SIGN_ID" "$f"
 done
 codesign -f -o runtime --entitlements "$ENTITLEMENTS" -s "$SIGN_ID" "$APP"
+codesign --verify --deep --strict "$APP"
 codesign -dv "$APP" 2>&1 | grep -E "Identifier|Signature" || true
 
 if [ -n "${NOTARY_PROFILE:-}" ] && [ "$SIGN_ID" != "-" ]; then

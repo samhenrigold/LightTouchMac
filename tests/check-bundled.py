@@ -20,7 +20,17 @@ try FileManager.default.createDirectory(atPath: Bundled.toolsDirectory!, withInt
 try Data("bundled".utf8).write(to: URL(fileURLWithPath: bundled))
 try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: bundled)
 precondition(Bundled.resolveResource("com.qemu.it-agent.plist", fallbacks: [file]) == bundled)
-print("PASS: non-executable guest resources, missing resources, bundle precedence; executable checks retained")
+let host = Bundled.hostToolsDirectory! + "/helper"
+let legacy = Bundled.toolsDirectory! + "/helper"
+for path in [host, legacy] {
+    try Data("fixture".utf8).write(to: URL(fileURLWithPath: path))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+}
+precondition(Bundled.tool("helper") == host)
+try FileManager.default.removeItem(atPath: host)
+precondition(Bundled.tool("helper") == legacy)
+precondition(Bundled.binarySearchPaths.first == Bundled.hostToolsDirectory)
+print("PASS: native helper precedence and legacy fallback; non-executable guest resources, missing resources, bundle precedence; executable checks retained")
 ''')
     executable = work / 'Check.app/Contents/MacOS/check'
     executable.parent.mkdir(parents=True)
