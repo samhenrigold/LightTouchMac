@@ -1011,8 +1011,16 @@ final class EmulatorController {
     /// Worst case for a quit-time save: the liveness probe plus the save poll.
     static let quitSnapshotBudget: TimeInterval = Timeouts.serviceProbe * 2 + 3 + 15
 
+    private(set) var snapshotFailureReason: String?
+
     private func performSnapshot(completion: @escaping (Bool) -> Void) {
+        snapshotFailureReason = "The device's state could not be saved."
         guard isRunning else { completion(false); return }
+        guard qemu_ios_gles_contexts() == 0 else {
+            snapshotFailureReason = "Saving is unavailable while the device uses accelerated graphics."
+            NSLog("snapshot: skipped — live host OpenGL state")
+            completion(false); return
+        }
         Task { [weak self] in
             guard let self else { completion(false); return }
             guard await self.proveAlive() else {
@@ -1026,6 +1034,7 @@ final class EmulatorController {
                 // agree. Quarantine (never delete the overlay) so it stays
                 // diagnosable and the next launch cold-boots.
                 NSLog("snapshot: guest not healthy — quarantining stale snapshot, next launch cold-boots")
+                self.snapshotFailureReason = "The device is not responding. Its previous saved state has been set aside because it no longer matches the device storage."
                 self.quarantineSnapshot()
                 completion(false); return
             }
@@ -1046,18 +1055,21 @@ final class EmulatorController {
                         try DeviceStateStorage.promoteSnapshot(from: self.snapshotTmpURL, to: self.snapshotURL)
                     } catch {
                         NSLog("snapshot: could not promote saved state: \(error.localizedDescription)")
+                        self.snapshotFailureReason = error.localizedDescription
                         self.resumeAfterFailedSave(); completion(false); return
                     }
                     completion(true); return
                 }
                 if status == QEMU_IOS_SNAPSHOT_FAILED {
                     NSLog("snapshot: save failed: \(String(cString: buf))")
+                    self.snapshotFailureReason = String(cString: buf)
                     try? FileManager.default.removeItem(at: self.snapshotTmpURL)
                     self.resumeAfterFailedSave(); completion(false); return
                 }
                 try? await Task.sleep(for: .milliseconds(100))
             }
             NSLog("snapshot: save timed out")
+            self.snapshotFailureReason = "Saving the device state timed out."
             try? FileManager.default.removeItem(at: self.snapshotTmpURL)
             self.resumeAfterFailedSave()
             completion(false)

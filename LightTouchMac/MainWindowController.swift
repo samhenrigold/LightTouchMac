@@ -477,16 +477,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func saveStateNow(_ sender: Any?) {
         emulator.onSnapshotResult = { [weak self] ok in
             guard !ok, let window = self?.window else { return }
-            // Not just "it failed": the unhealthy-guest path also throws away
-            // the snapshot that was already there, because it no longer matches
-            // the device's storage. Saying nothing meant the user found out at
-            // the next launch, as an unexplained cold boot.
             let alert = NSAlert()
             alert.messageText = "Couldn't save the device's state"
-            alert.informativeText = "The device isn't responding, so its state could not be "
-                + "captured. Any previously saved state has been set aside as well, because it "
-                + "no longer matches what is on the device's storage — the next launch will "
-                + "start the device fresh."
+            alert.informativeText = self?.emulator.snapshotFailureReason
+                ?? "The device's state could not be saved."
             alert.beginSheetModal(for: window) { _ in }
         }
         emulator.saveSnapshotNow()
