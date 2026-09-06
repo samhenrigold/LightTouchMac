@@ -484,17 +484,32 @@ final class EmulatorController {
     func rotateRight()     { qemu_ios_ui_rotate(true) }
     func shake()           { qemu_ios_ui_shake() }
 
-    /// Point the accelerometer's gravity at a device tilted `angle` radians
-    /// from upright — positive is clockwise as seen on screen, matching the
-    /// shell layer's transform. ±0x40 counts is ±1 g in the LIS302DL model;
-    /// the axis signs are the ones lis302dl_apply_orientation uses for
-    /// orientations 1/3/4, so an angle of exactly ∓π/2 lands on the same
-    /// vector a real rotation would.
-    func setTilt(angle: Double) {
-        qemu_ios_ui_accel(Int32((64 * sin(angle)).rounded()),
-                          Int32((-64 * cos(angle)).rounded()), 0)
+    enum MotionPose: Int { case upright, flat }
+    private(set) var motionPose = MotionPose(rawValue: UserDefaults.standard.integer(forKey: "motionPose")) ?? .upright
+    var keyboardTiltRate: Double {
+        let saved = UserDefaults.standard.double(forKey: "keyboardTiltRateDegrees")
+        return [45.0, 90.0, 180.0].contains(saved) ? saved : 90
     }
-    
+
+    func setMotionPose(_ pose: MotionPose) {
+        motionPose = pose
+        UserDefaults.standard.set(pose.rawValue, forKey: "motionPose")
+        onStatusChange?()
+    }
+
+    func setKeyboardTiltRate(_ degrees: Double) {
+        guard [45.0, 90.0, 180.0].contains(degrees) else { return }
+        UserDefaults.standard.set(degrees, forKey: "keyboardTiltRateDegrees")
+    }
+
+    /// Layer rotation and mounted device roll have opposite signs. Normalize
+    /// across the upside-down seam before passing degrees to the shared model.
+    func setTilt(angle: Double, pitch: Double = 0) {
+        guard acceptsInput, !isSleeping else { return }
+        let roll = -atan2(sin(angle), cos(angle)) * 180 / .pi
+        qemu_ios_ui_attitude(pitch * 180 / .pi, roll, Int32(motionPose.rawValue))
+    }
+
     /// The device's orientation as degrees turned clockwise from portrait —
     /// the same value the LCD model calls its rotation, stepped in lockstep
     /// with the guest's own quarter-turn cycle (ipod_touch_kbd_rotate:

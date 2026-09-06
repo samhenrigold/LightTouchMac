@@ -278,7 +278,7 @@ final class DisplayView: NSView {
         let viewCenter = CGPoint(x: usable.midX, y: usable.midY)
         let shellCenter = CGPoint(x: Self.shellPixels.width / 2, y: Self.shellPixels.height / 2)
         let rest = Self.layerAngle(rotation)
-        let angle = rest + tiltAngle
+        let angle = (motionRestAngle ?? rest) + tiltAngle
 
         // The home button is an NSView, so it can't ride the shell's transform;
         // project its shell-native centre through the same rotation by hand.
@@ -332,8 +332,8 @@ final class DisplayView: NSView {
             CATransaction.setDisableActions(true)   // no implicit fade on plain resize
         }
         shellLayer.position = viewCenter
-        shellLayer.transform = CATransform3DScale(
-            CATransform3DMakeRotation(angle, 0, 0, 1), scale, scale, 1)
+        shellLayer.transform = motionTransform(angle: angle, scale: scale)
+        homeButton.isHidden = tiltAngle != 0 || pitchAngle != 0
         CATransaction.commit()
 
         homeButton.frame = buttonRect
@@ -371,6 +371,7 @@ final class DisplayView: NSView {
     @objc private func step() {
         emulator?.pollStorageFailure()
         updateTouchOverlay()
+        updateKeyboardTilt()
         var pixels: UnsafeRawPointer?
         var w: Int32 = 0
         var h: Int32 = 0
@@ -620,6 +621,13 @@ final class DisplayView: NSView {
     /// Live scroll-drag: the finger's current position, carried between events.
     private var scrollPoint: CGPoint?
     /// Tilt driven by a two-finger scroll off the panel.
+    private var scrollPitch = 0.0
+    private var pitchAngle: CGFloat = 0
+    private var motionRestAngle: CGFloat?
+    private var tiltKeys = Set<UInt16>()
+    private var consumedTiltKeys = Set<UInt16>()
+    private var lastTiltTick = CACurrentMediaTime()
+    private var motionWasEnabled = false
     private var scrollTilt = 0.0
     private var scrollTilting = false
 
@@ -810,6 +818,8 @@ final class DisplayView: NSView {
     // MARK: Tilt by scroll (cursor off the panel)
 
     private func beginScrollTilt() {
+        guard touchInteractionEnabled else { return }
+        motionRestAngle = Self.layerAngle(emulator?.rotationDegrees ?? 0)
         scrollTilting = true
         shellLayer.removeAnimation(forKey: "tiltSnap")
     }
@@ -821,9 +831,11 @@ final class DisplayView: NSView {
             // a quarter turn, which is as far as any tilt game needs.
             scrollTilt = min(max(scrollTilt + event.scrollingDeltaX * Self.scrollTiltGain,
                                  -.pi / 3), .pi / 3)
+            scrollPitch = min(max(scrollPitch + event.scrollingDeltaY * Self.scrollTiltGain, -.pi / 3), .pi / 3)
             tiltAngle = scrollTilt
+            pitchAngle = scrollPitch
             setShellAngle(restAngle + tiltAngle)
-            emulator?.setTilt(angle: restAngle + tiltAngle)
+            sendAttitude()
         case .ended, .cancelled:
             scrollTilt = 0
             endTilt()          // springs the shell back and restores gravity
@@ -834,7 +846,9 @@ final class DisplayView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        guard touchInteractionEnabled else { return }
         if let grab = chassisGrabAngle(event) {
+            motionRestAngle = Self.layerAngle(emulator?.rotationDegrees ?? 0)
             shellLayer.removeAnimation(forKey: "tiltSnap")
             tilting = true
             grabAngle = grab
@@ -862,7 +876,7 @@ final class DisplayView: NSView {
             let delta = mouseAngle(event) - grabAngle
             tiltAngle = atan2(sin(delta), cos(delta)) * Self.rotationGain   // wrap, then gear down
             setShellAngle(restAngle + tiltAngle)
-            emulator?.setTilt(angle: restAngle + tiltAngle)
+            sendAttitude()
             return
         }
         emit(event, Int32(QEMU_IOS_TOUCH_UPDATE))
@@ -906,7 +920,7 @@ final class DisplayView: NSView {
 
     /// The shell's resting rotation for the guest's current orientation —
     /// the same angle layout() starts from.
-    private var restAngle: CGFloat { Self.layerAngle(emulator?.rotationDegrees ?? 0) }
+    private var restAngle: CGFloat { motionRestAngle ?? Self.layerAngle(emulator?.rotationDegrees ?? 0) }
 
     /// If the press is on the chassis (inside the shell artwork, outside the
     /// screen cutout), the mouse's polar angle around the shell centre; nil
@@ -932,13 +946,53 @@ final class DisplayView: NSView {
 
     /// The same transform layout() computes, at an arbitrary angle, applied
     /// without animation — this is the per-mouse-move path.
+    private func motionTransform(angle: CGFloat, scale: CGFloat) -> CATransform3D {
+        var transform = CATransform3DIdentity
+        transform.m34 = -1 / 1400
+        transform = CATransform3DRotate(transform, angle, 0, 0, 1)
+        transform = CATransform3DRotate(transform, -pitchAngle, 1, 0, 0)
+        return CATransform3DScale(transform, scale, scale, 1)
+    }
+
+    private func sendAttitude() {
+        let roll = emulator?.motionPose == .flat ? tiltAngle : restAngle + tiltAngle
+        emulator?.setTilt(angle: roll, pitch: pitchAngle)
+    }
+
+    func resetMotion() {
+        tiltKeys.removeAll()
+        endTilt()
+    }
+
+    private func updateKeyboardTilt() {
+        let now = CACurrentMediaTime()
+        let dt = min(max(now - lastTiltTick, 0), 0.05)
+        lastTiltTick = now
+        let enabled = touchInteractionEnabled && window?.isKeyWindow == true
+        if !enabled {
+            if motionWasEnabled { resetMotion() }
+            motionWasEnabled = false
+            return
+        }
+        if !motionWasEnabled { sendAttitude() }
+        motionWasEnabled = true
+        guard !tiltKeys.isEmpty else { return }
+        let delta = CGFloat((emulator?.keyboardTiltRate ?? 90) * .pi / 180 * dt)
+        let roll = (tiltKeys.contains(124) ? 1.0 : 0) - (tiltKeys.contains(123) ? 1.0 : 0)
+        let pitch = (tiltKeys.contains(126) ? 1.0 : 0) - (tiltKeys.contains(125) ? 1.0 : 0)
+        tiltAngle = min(max(tiltAngle + roll * delta, -.pi / 4), .pi / 4)
+        pitchAngle = min(max(pitchAngle + pitch * delta, -.pi / 4), .pi / 4)
+        setShellAngle(restAngle + tiltAngle)
+        sendAttitude()
+    }
+
     private func setShellAngle(_ angle: CGFloat) {
         shellLayer.removeAnimation(forKey: "tiltSnap")
         shellLayer.removeAnimation(forKey: "transform")
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        shellLayer.transform = CATransform3DScale(
-            CATransform3DMakeRotation(angle, 0, 0, 1), appliedScale, appliedScale, 1)
+        shellLayer.transform = motionTransform(angle: angle, scale: appliedScale)
+        homeButton.isHidden = tiltAngle != 0 || pitchAngle != 0
         CATransaction.commit()
     }
 
@@ -946,6 +1000,9 @@ final class DisplayView: NSView {
         tilting = false
         scrollTilting = false
         scrollTilt = 0
+        scrollPitch = 0
+        pitchAngle = 0
+        motionRestAngle = nil
         let from = shellLayer.presentation()?.transform ?? shellLayer.transform
         tiltAngle = 0
         setShellAngle(restAngle)
@@ -959,7 +1016,7 @@ final class DisplayView: NSView {
         // Gravity snaps straight to rest; the spring is only visual.
         // ponytail: sample the presentation layer from the display link if a
         // game ever needs to see the settle.
-        emulator?.setTilt(angle: restAngle)
+        sendAttitude()
     }
 
     /// Is a mouse-driven touch currently down in the guest? The host and the
@@ -1005,6 +1062,18 @@ final class DisplayView: NSView {
     // MARK: - Keyboard passthrough
 
     override func keyDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.option), !event.modifierFlags.contains(.command),
+           [123, 124, 125, 126, 49].contains(event.keyCode), !isShowingLiveText {
+            consumedTiltKeys.insert(event.keyCode)
+            guard touchInteractionEnabled else { return }
+            if event.keyCode == 49 {
+                if !event.isARepeat { emulator?.shake() }
+            } else {
+                if tiltKeys.isEmpty { motionRestAngle = Self.layerAngle(emulator?.rotationDegrees ?? 0) }
+                tiltKeys.insert(event.keyCode)
+            }
+            return
+        }
         if isShowingLiveText {
             if event.keyCode == 53 { endLiveText() }
             else { super.keyDown(with: event) }
@@ -1019,12 +1088,27 @@ final class DisplayView: NSView {
     }
 
     override func keyUp(with event: NSEvent) {
+        if consumedTiltKeys.remove(event.keyCode) != nil {
+            tiltKeys.remove(event.keyCode)
+            if tiltKeys.isEmpty { endTilt() }
+            return
+        }
         if isShowingLiveText { return }
         if event.modifierFlags.contains(.command) {
             super.keyUp(with: event)
             return
         }
         emulator?.sendKey(macKeyCode: event.keyCode, down: false)
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        if !event.modifierFlags.contains(.option), !tiltKeys.isEmpty { resetMotion() }
+        super.flagsChanged(with: event)
+    }
+
+    override func resignFirstResponder() -> Bool {
+        resetMotion()
+        return super.resignFirstResponder()
     }
 
     // MARK: - Drag & drop

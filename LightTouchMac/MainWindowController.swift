@@ -9,6 +9,7 @@ import Cocoa
 import UniformTypeIdentifiers
 
 private extension NSToolbarItem.Identifier {
+    static let motion = NSToolbarItem.Identifier("motion")
     static let screenshot = NSToolbarItem.Identifier("screenshot")
     static let recording = NSToolbarItem.Identifier("recording")
     static let liveText = NSToolbarItem.Identifier("liveText")
@@ -87,6 +88,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             UserDefaults.standard.set(true, forKey: "captureToolbarItemsAdded")
         }
         
+        if !UserDefaults.standard.bool(forKey: "motionToolbarItemAdded") {
+            if !toolbar.items.contains(where: { $0.itemIdentifier == .motion }) {
+                let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == .rotate }).map { $0 + 1 } ?? 0
+                toolbar.insertItem(withItemIdentifier: .motion, at: index)
+            }
+            UserDefaults.standard.set(true, forKey: "motionToolbarItemAdded")
+        }
+
         // Out and in. Momentary, because both are commands rather than states
         // to sit in — which state you are in is the menu's job, where the
         // checkmarks live.
@@ -237,6 +246,35 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             return button(id, "Copy Screen", "doc.on.doc", #selector(copyScreen(_:)), "Copy the device screen (⇧⌘C)")
         case .fingerDots:
             return button(id, "Finger Dots", "hand.draw", #selector(toggleTouchOverlay(_:)), "Show or hide touches")
+        case .motion:
+            let item = NSMenuToolbarItem(itemIdentifier: id)
+            item.label = "Motion"
+            item.paletteLabel = "Motion Controls"
+            item.image = NSImage(systemSymbolName: "move.3d", accessibilityDescription: "Motion Controls")
+            item.toolTip = "Choose upright or flat; Option-arrow keys tilt, Option-Space shakes"
+            item.showsIndicator = true
+            item.isBordered = true
+            let menu = NSMenu(title: "Motion")
+            for (tag, title) in ["Upright", "Flat"].enumerated() {
+                let entry = menu.addItem(withTitle: title, action: #selector(selectMotionPose(_:)), keyEquivalent: "")
+                entry.target = self
+                entry.tag = tag
+            }
+            menu.addItem(.separator())
+            let rate = NSMenuItem(title: "Keyboard Tilt Speed", action: nil, keyEquivalent: "")
+            rate.submenu = NSMenu(title: "Keyboard Tilt Speed")
+            for (degrees, title) in [(45, "Slow"), (90, "Standard"), (180, "Fast")] {
+                let entry = rate.submenu!.addItem(withTitle: title, action: #selector(selectTiltSpeed(_:)), keyEquivalent: "")
+                entry.target = self
+                entry.tag = degrees
+            }
+            menu.addItem(rate)
+            let reset = menu.addItem(withTitle: "Reset Tilt", action: #selector(resetMotion(_:)), keyEquivalent: "")
+            reset.target = self
+            let shake = menu.addItem(withTitle: "Shake", action: #selector(deviceShake(_:)), keyEquivalent: "")
+            shake.target = self
+            item.menu = menu
+            return item
         case .home:
             return button(id, "Home", "house", #selector(deviceHome(_:)), "Press the Home button")
         case .lock:
@@ -324,12 +362,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// view's divider, so the toggle rides above the inspector rather than
     /// floating in the middle of the titlebar.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .zoom, .screenshot, .recording, .liveText,
+        [.home, .lock, .rotate, .motion, .zoom, .screenshot, .recording, .liveText,
          .flexibleSpace, .inspectorTrackingSeparator, .flexibleSpace, .searchCatalog, .toggleInspector]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .zoom, .screenshot, .recording, .liveText, .copyScreen, .fingerDots, .installApp, .openTerminal, .searchCatalog,
+        [.home, .lock, .rotate, .motion, .zoom, .screenshot, .recording, .liveText, .copyScreen, .fingerDots, .installApp, .openTerminal, .searchCatalog,
          .space, .flexibleSpace, .inspectorTrackingSeparator, .toggleInspector]
     }
     
@@ -442,6 +480,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private var rotateSymbolName: String { emulator.isLandscape ? "rotate.right" : "rotate.left" }
+    @objc private func selectMotionPose(_ sender: NSMenuItem) {
+        guard let pose = EmulatorController.MotionPose(rawValue: sender.tag) else { return }
+        emulator.setMotionPose(pose)
+        deviceVC.screen.resetMotion()
+    }
+    @objc private func selectTiltSpeed(_ sender: NSMenuItem) {
+        emulator.setKeyboardTiltRate(Double(sender.tag))
+    }
+    @objc private func resetMotion(_ sender: Any?) { deviceVC.screen.resetMotion() }
+
     @objc func deviceShake(_ sender: Any?)       { emulator.shake() }
     @objc func devicePause(_ sender: Any?)       { emulator.pause() }
     @objc func deviceResume(_ sender: Any?)      { emulator.resume() }
@@ -801,6 +849,15 @@ extension MainWindowController: NSToolbarItemValidation {
 extension MainWindowController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
+        case #selector(selectMotionPose(_:)):
+            menuItem.state = menuItem.tag == emulator.motionPose.rawValue ? .on : .off
+            return true
+        case #selector(selectTiltSpeed(_:)):
+            menuItem.state = Double(menuItem.tag) == emulator.keyboardTiltRate ? .on : .off
+            return true
+        case #selector(resetMotion(_:)):
+            return emulator.acceptsInput && !emulator.isSleeping
+
         // App management: needs USB, a live guest, and no install already running
         // (the guest serves ~one lockdown session).
         case #selector(installApp(_:)):
