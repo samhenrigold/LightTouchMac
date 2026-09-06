@@ -301,6 +301,7 @@ final class EmulatorController {
                     try await Task.sleep(for: .seconds(2))
                 }
                 try Task.checkCancellation()
+                guard generation == bootGeneration else { return }
                 logEvent("media: checking guest graphics components")
                 if try await tools().updateMediaComponents() {
                     try await waitForSpringBoard()

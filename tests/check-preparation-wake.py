@@ -16,7 +16,8 @@ struct Parser {
 @MainActor final class StubTools {
  var response="sblaunch: locked=1 passcode=0"
  var onQuery:(()->Void)?
- func updateMediaComponents() async throws -> Bool { false }
+ var updates=0
+ func updateMediaComponents() async throws -> Bool { updates+=1;return false }
  func screenIsLocked() async throws -> Bool {
   onQuery?()
   return try Parser.screenIsLocked(response:response)
@@ -30,7 +31,8 @@ struct Parser {
  var mediaPreparationFailure:String?, mediaPreparationTask:Task<Void,Never>?
  var bootGeneration=0, homes=0
  let stub=StubTools()
- func deviceReady() async ->Bool { true }
+ var onReady:(()->Void)?
+ func deviceReady() async ->Bool { onReady?();return true }
  func tools()->StubTools {stub}
  func waitForSpringBoard() async throws {}
  func logEvent(_ s:String){}
@@ -45,6 +47,9 @@ struct Parser {
    c.startMediaPreparation();await c.mediaPreparationTask?.value
    precondition(c.homes == (locked ? 1:0) && !c.preparingMedia)
   }
+  let stale=Controller();stale.onReady={stale.bootGeneration+=1}
+  stale.startMediaPreparation();await stale.mediaPreparationTask?.value
+  precondition(stale.stub.updates==0 && stale.preparingMedia)
   let c=Controller();c.stub.onQuery={c.bootGeneration+=1}
   c.startMediaPreparation();await c.mediaPreparationTask?.value
   precondition(c.homes==0 && c.preparingMedia)

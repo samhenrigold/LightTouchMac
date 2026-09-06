@@ -37,3 +37,18 @@ copy_tool "$WORK/guest" guest
 '''
     subprocess.run(['bash','-c',commands], env=env, check=True)
 print('PASS: canonical library copies, native helper placement, stale copy removal, guest resources')
+
+# Exercise the actual automatic-discovery branch against both product names.
+a=script.index('if [ -z "$APP" ]; then')
+b=script.index('\n[ -d "$APP" ]',a)
+with tempfile.TemporaryDirectory(prefix='ltm-package-discovery-') as tmp:
+    tree=Path(tmp)
+    for product in ['Light Touch.app', 'LightTouchMac.app']:
+        release=tree/'LightTouchMac-fixture/Build/Products/Release'/product
+        debug=tree/'LightTouchMac-fixture/Build/Products/Debug'/product
+        release.mkdir(parents=True);debug.mkdir(parents=True)
+        discovery=script[a:b].replace('$HOME/Library/Developer/Xcode/DerivedData', str(tree))
+        selected=subprocess.check_output(['bash','-c','APP=""\n'+discovery+'\nprintf "%s" "$APP"'], text=True)
+        assert selected==str(release), selected
+        release.rmdir();debug.rmdir()
+print('PASS: current and legacy Release bundle discovery excludes Debug products')

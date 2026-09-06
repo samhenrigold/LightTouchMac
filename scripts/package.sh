@@ -32,7 +32,8 @@ SIGN_ID="${SIGN_ID:--}"          # '-' == ad-hoc
 if [ -z "$APP" ]; then
     # Not Index.noindex — Xcode's index-build app there is not a signable bundle.
     APP="$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d \
-        -path "*LightTouchMac*/Build/Products/*/LightTouchMac.app" \
+        \( -path "*LightTouchMac*/Build/Products/Release/Light Touch.app" \
+           -o -path "*LightTouchMac*/Build/Products/Release/LightTouchMac.app" \) \
         -not -path "*/Index.noindex/*" 2>/dev/null | head -1)"
 fi
 [ -d "$APP" ] || { echo "no LightTouchMac.app found; build it first or pass a path" >&2; exit 1; }
