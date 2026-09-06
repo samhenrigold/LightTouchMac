@@ -84,6 +84,12 @@ nonisolated enum Bundled {
         tool(name) ?? candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
+    /// Guest data and libraries are read for upload, not executed by the host.
+    static func resolveResource(_ name: String, fallbacks candidates: [String]) -> String? {
+        let paths = [toolsDirectory.map { "\($0)/\(name)" }].compactMap { $0 } + candidates
+        return paths.first { FileManager.default.isReadableFile(atPath: $0) }
+    }
+
     /// Directories to search for command-line tools, ours before anyone's.
     static var binarySearchPaths: [String] {
         [toolsDirectory, "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].compactMap { $0 }

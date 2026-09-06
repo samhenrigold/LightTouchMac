@@ -419,8 +419,8 @@ struct DeviceTools: Sendable {
         ]) else { throw DeviceToolsError.toolMissing("MBXGLEngine") }
         let guestToolsRoot = "\(filesRoot)/../qemu-ios/contrib/it-agent"
         guard let agent = Bundled.resolve("it_agent", fallbacks: ["\(guestToolsRoot)/it_agent"]),
-              let typing = Bundled.resolve("it_typein.dylib", fallbacks: ["\(guestToolsRoot)/it_typein.dylib"]),
-              let agentJob = Bundled.resolve("com.qemu.it-agent.plist", fallbacks: ["\(guestToolsRoot)/com.qemu.it-agent.plist"]) else {
+              let typing = Bundled.resolveResource("it_typein.dylib", fallbacks: ["\(guestToolsRoot)/it_typein.dylib"]),
+              let agentJob = Bundled.resolveResource("com.qemu.it-agent.plist", fallbacks: ["\(guestToolsRoot)/com.qemu.it-agent.plist"]) else {
             throw DeviceToolsError.toolMissing("guest agent components")
         }
         let agentPath = "/usr/local/bin/it_agent"
