@@ -83,7 +83,7 @@ def check_env_parity():
 
     # The env 3.1.3 REQUIRES to boot — both must agree on these, or one side
     # boots a device the other cannot. (IT_DIRECT_IBOOT is path-derived on both,
-    # IT_IMG3_SIG_ASIS is an app-only cosmetic, and IT_LCD_BRIGHT is a
+    # and IT_LCD_BRIGHT is a
     # harness-only knob — its lit-pixel checks need full exposure, while the app
     # must show the real backlight or Lock looks dead — so none are compared.)
     required = ["IT_TVOUT_READY", "IT_TVOUT_VBLANK",

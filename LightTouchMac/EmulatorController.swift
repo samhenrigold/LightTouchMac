@@ -1555,7 +1555,6 @@ final class EmulatorController {
             "IT_H264_DECODE": "1",
             "IT_SCALER_DECODE": "1",
             "IT_LCD_PLANES": "1",
-            "IT_IMG3_SIG_ASIS": "1",   // restores the Apple boot logo on 3.1.3
             // `-v` when asked: iPhone OS shows the kernel's console output over
             // the boot logo instead of the Apple mark, which is the only view
             // of what the guest is doing between iBoot and SpringBoard. Off by
