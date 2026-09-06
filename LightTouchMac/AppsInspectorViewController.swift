@@ -375,7 +375,6 @@ final class AppsInspectorViewController: NSViewController {
     enum PaneMode: Int { case installed = 0, store = 1 }
     /// Store first: the default view is the suggested list, ready to install.
     private var mode: PaneMode = .store
-    private let deviceStatus = DeviceStatusView(frame: .zero)
     private let modeControl = NSSegmentedControl(labels: ["Installed", "Store"],
                                                  trackingMode: .selectOne,
                                                  target: nil, action: nil)
@@ -395,12 +394,6 @@ final class AppsInspectorViewController: NSViewController {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
-
-    func refreshDeviceStatus() {
-        deviceStatus.update(status: emulator.statusLine, proxyStatus: emulator.webProxyStatus,
-            agentStatus: emulator.agentStatusText, keyboardInput: emulator.keyboardInputEnabled,
-            canConfigureProxy: emulator.webProxyAvailable)
-    }
 
     override func loadView() {
         let container = NSView()
@@ -472,8 +465,7 @@ final class AppsInspectorViewController: NSViewController {
         // bulk uninstall / Copy Bundle Identifiers in Installed.
         tableView.allowsMultipleSelection = true
 
-        deviceStatus.translatesAutoresizingMaskIntoConstraints = false
-        [deviceStatus, modeControl, banner, scroll, placeholder].forEach(container.addSubview)
+        [modeControl, banner, scroll, placeholder].forEach(container.addSubview)
         // Everything hangs below the safe area — a hard edge at the toolbar,
         // so rows can never slide behind the search field (full-bleed +
         // automatic insets let them scroll under the glass, unblurred and
@@ -481,10 +473,7 @@ final class AppsInspectorViewController: NSViewController {
         // preferredScrollEdgeEffectStyle, exists on accessory controllers,
         // not plain toolbars). Pre-26 the safe area is simply the pane.
         var constraints = [
-            deviceStatus.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
-            deviceStatus.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            deviceStatus.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            modeControl.topAnchor.constraint(equalTo: deviceStatus.bottomAnchor, constant: 6),
+            modeControl.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: 6),
             modeControl.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
             modeControl.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
 
@@ -517,6 +506,7 @@ final class AppsInspectorViewController: NSViewController {
         NSLayoutConstraint.activate(constraints)
 
         view = container
+        updateFooterVisibility()
     }
 
     /// macOS 26 gives an inspector a proper bottom bar. Both this and the
@@ -625,7 +615,7 @@ final class AppsInspectorViewController: NSViewController {
     /// self-heals within one more tick either way.
     private func startInitialLoad() {
         guard emulator.canManageApps else {
-            showPlaceholder("App management needs a usbmux session. Relaunch with app sync enabled.")
+            showInstalledPlaceholder("App management needs a usbmux session. Relaunch with app sync enabled.")
             updateButtons()
             return
         }
@@ -876,7 +866,7 @@ final class AppsInspectorViewController: NSViewController {
 
     // GuestNotifications cancels its own loops in its deinit, which is what
     // this releasing it triggers; nothing else here may touch main-actor state.
-    deinit { loadTask?.cancel() }
+    deinit { loadTask?.cancel(); searchTask?.cancel() }
 
     static func freshnessText(since date: Date?, now: Date = Date()) -> String {
         guard let date else { return "not yet refreshed" }
@@ -956,15 +946,9 @@ final class AppsInspectorViewController: NSViewController {
     private var busyWithDevice: Bool { installing || !uninstalling.isEmpty }
 
     private func updateButtons() {
-        // Disabled until the device has answered at least once: canManageApps
-        // only means the usbmux session exists, not that the guest is up —
-        // without haveLoaded these stayed clickable through the entire boot
-        // wait shown by the "Waiting for the device…" placeholder.
-        // isRunning as well as haveLoaded: during the ~40s boot the daemon is
-        // alive (so canManageApps is true) and the list has never loaded, but
-        // the buttons started out enabled because nothing had called this yet —
-        // clicking + opened a picker for a device that could not install.
-        let ready = emulator.canManageApps && emulator.isRunning && haveLoaded
+        // A cached list can outlive the connection. Match the removal action's
+        // reachability gate so stale rows never advertise a usable Uninstall.
+        let ready = emulator.canReachDevice && haveLoaded
         addRemove.setEnabled(emulator.canQueueInstall, forSegment: 0)
         addRemove.setEnabled(ready && !selectedApps.isEmpty && !busyWithDevice, forSegment: 1)
     }
@@ -1110,6 +1094,7 @@ final class AppsInspectorViewController: NSViewController {
     }
 
     private func setMode(_ newMode: PaneMode) {
+        searchTask?.cancel()
         mode = newMode
         modeControl.selectedSegment = newMode.rawValue
         tableView.deselectAll(nil)
@@ -1151,14 +1136,16 @@ final class AppsInspectorViewController: NSViewController {
         guard mode == .store else { return }
         let query = searchField.stringValue.trimmingCharacters(in: .whitespaces)
         reloadTablePreservingSelection()
+        // Replace the other mode's overlay before any debounce/network await.
+        // Cached Store rows remain usable while their refresh is in flight.
+        showPlaceholder(catalogResults.isEmpty
+            ? (query.isEmpty ? "Loading Legacy Store…" : "Searching Legacy Store…")
+            : nil)
         searchTask = Task { [weak self] in
             if !query.isEmpty {
                 try? await Task.sleep(for: .milliseconds(300))   // debounce typing
             }
             guard let self, !Task.isCancelled else { return }
-            if self.catalogResults.isEmpty {
-                self.showPlaceholder(query.isEmpty ? "Loading Legacy Store…" : "Searching Legacy Store…")
-            }
             // Only the response to what's in the field now may land — a slower
             // older query resolving late must not overwrite a newer list.
             let current = {
