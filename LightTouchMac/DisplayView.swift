@@ -504,6 +504,7 @@ final class DisplayView: NSView {
         updatePowerPresentation()
         addSubview(view)
         needsLayout = true
+        window?.toolbar?.validateVisibleItems()
     }
     func endLiveText() {
         guard let liveTextView else { return }
@@ -511,6 +512,7 @@ final class DisplayView: NSView {
         self.liveTextView = nil
         updatePowerPresentation()
         window?.makeFirstResponder(self)
+        window?.toolbar?.validateVisibleItems()
     }
 
     var showsTouches = UserDefaults.standard.bool(forKey: "showsTouches") {
