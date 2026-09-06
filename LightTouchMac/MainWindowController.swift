@@ -909,7 +909,7 @@ extension MainWindowController: NSToolbarItemValidation {
         // blocking it was a regression. The terminal is gated, because it opens
         // a competing lockdown session.
         case .screenshot, .copyScreen:
-            return emulator.isRunning && !emulator.isSleeping
+            return (emulator.isRunning || emulator.isPaused) && !emulator.isSleeping
         case .recording:
             let active = recordingOutput != nil
             item.label = finishingRecording ? "Finishing…" : active ? "Stop Recording" : "Record"
@@ -920,7 +920,7 @@ extension MainWindowController: NSToolbarItemValidation {
         case .liveText:
             (item.view as? NSButton)?.state = deviceVC.screen.isShowingLiveText ? .on : .off
             item.label = deviceVC.screen.isShowingLiveText ? "Dismiss Live Text" : "Live Text"
-            return deviceVC.screen.isShowingLiveText || (emulator.isRunning && !emulator.isSleeping)
+            return deviceVC.screen.isShowingLiveText || ((emulator.isRunning || emulator.isPaused) && !emulator.isSleeping)
         case .fingerDots:
             (item.view as? NSButton)?.state = deviceVC.screen.showsTouches ? .on : .off
             item.label = deviceVC.screen.showsTouches ? "Hide Finger Dots" : "Show Finger Dots"
@@ -1003,9 +1003,9 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(showLiveText(_:)):
             menuItem.title = deviceVC.screen.isShowingLiveText ? "Done with Live Text" : "Live Text"
             menuItem.state = deviceVC.screen.isShowingLiveText ? .on : .off
-            return deviceVC.screen.isShowingLiveText || (emulator.isRunning && !emulator.isSleeping)
+            return deviceVC.screen.isShowingLiveText || ((emulator.isRunning || emulator.isPaused) && !emulator.isSleeping)
         case #selector(saveScreenshot(_:)), #selector(copyScreen(_:)):
-            return emulator.isRunning && !emulator.isSleeping
+            return (emulator.isRunning || emulator.isPaused) && !emulator.isSleeping
         case #selector(pasteToGuest(_:)):
             return emulator.acceptsInput && NSPasteboard.general.string(forType: .string) != nil
         case #selector(zoomIn(_:)):

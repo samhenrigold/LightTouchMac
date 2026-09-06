@@ -204,9 +204,11 @@ data detectors; Done or Escape returns to the live guest. Show Finger Dots uses
 preview, screenshots and recordings. Touches do nothing while sleeping or off.
 The sleeping presentation uses the bundled Sleeping.caar animation.
 
-Recordings use H.264 video on a fixed 480 × 480 canvas, preserving native pixels
-through rotation with black margins. The title bar and Dock indicate recording.
-Stopping or quitting finishes the movie and asks where to save it. Recordings include the device’s stereo audio, including silent timing gaps while
+Recordings use H.264 video at the native screen dimensions. A recording that
+changes orientation uses a 480 × 480 canvas with black margins. The Record
+button turns red while recording, without shifting the toolbar. Screenshots
+and finished movies save automatically to Downloads/Light Touch; Capture
+includes commands to choose another folder and reveal it in Finder. Recordings include the device’s stereo audio, including silent timing gaps while
 the emulator is paused.
 
 
