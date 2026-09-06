@@ -438,6 +438,22 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         syncRotateSymbol()
     }
 
+    @objc func configureBattery(_ sender: Any?) {
+        guard emulator.batteryControlsAvailable, let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Battery"
+        alert.informativeText = "Set the device’s target battery level and charging state. iOS updates its displayed estimate gradually. These settings also apply at the next boot."
+        alert.addButton(withTitle: "Apply")
+        alert.addButton(withTitle: "Cancel")
+        let editor = BatterySettingsView(level: emulator.batteryLevel, charging: emulator.batteryCharging)
+        alert.accessoryView = editor
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            do { try self.emulator.configureBattery(level: editor.level, charging: editor.charging) }
+            catch { NSAlert(error: error).beginSheetModal(for: window) }
+        }
+    }
+
     @objc func configureWebProxy(_ sender: Any?) {
         guard let window else { return }
         let alert = NSAlert()
@@ -885,6 +901,8 @@ extension MainWindowController: NSMenuItemValidation {
              #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)),
              #selector(deviceRotateRight(_:)), #selector(deviceShake(_:)):
             return emulator.acceptsInput
+        case #selector(configureBattery(_:)):
+            return emulator.batteryControlsAvailable
         case #selector(configureWebProxy(_:)):
             return emulator.webProxyAvailable
         case #selector(toggleVerboseBoot(_:)):

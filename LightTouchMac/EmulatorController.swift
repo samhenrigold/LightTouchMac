@@ -178,6 +178,10 @@ final class EmulatorController {
         + ",nand=\(nandBase)"
         + ",nor=\(options.nor)"
         + ",nandrw=\(overlay.path)"
+        if batterySetter != nil, UserDefaults.standard.object(forKey: "batteryLevel") != nil {
+            let mode = ["auto", "on", "off"][batteryCharging]
+            machine += ",battery-level=\(batteryLevel),battery-charging=\(mode)"
+        }
         if options.network {
             machine += ",wifi=on"          // brings up the emulated BCM4325
         }
@@ -483,6 +487,31 @@ final class EmulatorController {
     func rotateLeft()      { qemu_ios_ui_rotate(false) }
     func rotateRight()     { qemu_ios_ui_rotate(true) }
     func shake()           { qemu_ios_ui_shake() }
+
+    private typealias BatterySetter = @convention(c) (Int32, Int32) -> Bool
+    private var batterySetter: BatterySetter? {
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_battery") else { return nil }
+        return unsafeBitCast(symbol, to: BatterySetter.self)
+    }
+    var batteryControlsAvailable: Bool { batterySetter != nil && acceptsInput && !shuttingDown }
+    var batteryLevel: Int {
+        guard let saved = UserDefaults.standard.object(forKey: "batteryLevel") as? Int,
+              (0...100).contains(saved) else { return 96 } // Existing default ADC 850.
+        return saved
+    }
+    var batteryCharging: Int {
+        let saved = UserDefaults.standard.integer(forKey: "batteryCharging")
+        return (0...2).contains(saved) ? saved : 0
+    }
+    func configureBattery(level: Int, charging: Int) throws {
+        guard batteryControlsAvailable, (0...100).contains(level), (0...2).contains(charging),
+              batterySetter?(Int32(level), Int32(charging)) == true else {
+            throw DeviceToolsError.failed("Battery controls are unavailable while the device is stopped.")
+        }
+        UserDefaults.standard.set(level, forKey: "batteryLevel")
+        UserDefaults.standard.set(charging, forKey: "batteryCharging")
+        onStatusChange?()
+    }
 
     enum MotionPose: Int { case upright, flat }
     private(set) var motionPose = MotionPose(rawValue: UserDefaults.standard.integer(forKey: "motionPose")) ?? .upright
