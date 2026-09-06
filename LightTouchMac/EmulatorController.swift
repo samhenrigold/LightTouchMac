@@ -310,6 +310,8 @@ final class EmulatorController {
     func stop() {
         mediaPreparationTask?.cancel()
         foregroundTask?.cancel()
+        orientationTask?.cancel()
+        orientationTask = nil
         usbmux.stop()
         // Ends the ssh session, which is what tells the guest-side reporter to
         // exit; leaving it running would strand an iproxy and an ssh behind us.
@@ -372,6 +374,8 @@ final class EmulatorController {
         if state != .snapshotting { discardSavedState() }
         mediaPreparationTask?.cancel()
         foregroundTask?.cancel()
+        orientationTask?.cancel()
+        orientationTask = nil
         usbmux.stop()
         state = .dead(exitCode: code)
     }
@@ -611,11 +615,9 @@ final class EmulatorController {
     // setIconState / getIconPNGData, so libimobiledevice's
     // sbservices_get_interface_orientation has nothing to talk to.
     //
-    // So a 50 KB armv6 helper (qemu-ios/contrib/it-orientation) is streamed onto
-    // the guest over the ssh path the app already uses and left running; it
-    // polls SpringBoardServices' SBGetUIOrientation MIG stub — no injection, no
-    // respring, nothing baked into the NAND image — and prints a line every time
-    // the answer changes. Its header documents the whole chain.
+    // The guest agent reads SpringBoardServices' SBGetUIOrientation MIG stub.
+    // Images without the agent retain the streamed itorient/SSH compatibility
+    // path; its header documents the original ABI investigation.
     //
     // EDGES, NOT LEVELS, is the rule that keeps this from fighting the user.
     // We rotate when the guest's orientation *changes*; we never correct the
@@ -642,6 +644,7 @@ final class EmulatorController {
     /// the shell around on connect.
     private var lastGuestOrientation: Int?
     private var orientationWatch: Process?
+    private var orientationTask: Task<Void, Never>?
 
     /// SpringBoard's degrees are the angle the *content* is rotated by; ours are
     /// the angle the *device* is turned clockwise. They are mirror images.
@@ -694,25 +697,39 @@ final class EmulatorController {
     /// a boot, a respring, or a dropped USB session — the same "the guest drops
     /// its services and comes back" reality GuestNotifications backs off around.
     private func startOrientationWatch() {
-        guard Self.autoRotateEnabled,
-              let helper = orientationHelperPath,
-              let binary = try? Data(contentsOf: URL(fileURLWithPath: helper)),
-              let iproxy = Bundled.tool("iproxy")
-                ?? Bundled.binarySearchPaths.map({ "\($0)/iproxy" })
-                    .first(where: { FileManager.default.isExecutableFile(atPath: $0) })
-        else { return }
-
-        Task { [weak self] in
+        orientationTask?.cancel()
+        orientationWatch?.terminate()
+        orientationWatch = nil
+        orientationTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                if self.state == .running, self.canManageApps {
-                    await self.runOrientationWatch(iproxy: iproxy, binary: binary)
-                    // The session ended: SpringBoard restarted, the link dropped,
-                    // or sshd is not there at all (an image without it). Either
-                    // way the retry is cheap and silent.
-                    self.lastGuestOrientation = nil
+                if self.state == .running, !self.preparingMedia, !self.isSleeping, !self.isInstalling {
+                    let generation = self.bootGeneration
+                    do {
+                        if let degrees = try await self.tools().guestOrientation() {
+                            try Task.checkCancellation()
+                            guard generation == self.bootGeneration else { continue }
+                            self.guestOrientationChanged(to: degrees)
+                        } else if self.canReachDevice,
+                                  let helper = self.orientationHelperPath,
+                                  let binary = try? Data(contentsOf: URL(fileURLWithPath: helper)),
+                                  let iproxy = Bundled.tool("iproxy")
+                                    ?? Bundled.binarySearchPaths.map({ "\($0)/iproxy" }).first(where: {
+                                        FileManager.default.isExecutableFile(atPath: $0)
+                                    }) {
+                            // Compatibility for images without the agent only.
+                            await self.runOrientationWatch(iproxy: iproxy, binary: binary)
+                            try Task.checkCancellation()
+                            guard generation == self.bootGeneration else { continue }
+                            self.lastGuestOrientation = nil
+                        }
+                    } catch {
+                        if Task.isCancelled { return }
+                        self.lastGuestOrientation = nil
+                        do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                    }
                 }
-                try? await Task.sleep(for: .seconds(5))
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
             }
         }
     }
@@ -731,27 +748,30 @@ final class EmulatorController {
         // limit is what silently disabled every guest command once before.
         let script = """
         export PATH=/usr/bin:/bin:$PATH
-        "\(iproxy)" \(port) 22 >/dev/null 2>&1 &
+        "$1" "$2" 22 >/dev/null 2>&1 &
         IP=$!
         ASK="$(mktemp -t ltorient)"
         # EXIT alone is not enough: stop() sends SIGTERM, and a shell killed by an
         # uncaught signal never runs its EXIT trap — so every quit stranded an
         # iproxy holding a port and an ssh holding a guest process.
         trap 'kill $IP 2>/dev/null; rm -f "$ASK"; exit 0' EXIT INT TERM HUP
-        printf '#!/bin/sh\\necho %s\\n' "\(password)" > "$ASK"
+        printf '%s\\n' '#!/bin/sh' 'printf "%s" "$LTM_SSH_PASSWORD"' > "$ASK"
         chmod 700 "$ASK"
         sleep 1
         SSH_ASKPASS="$ASK" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
-            -p \(port) root@127.0.0.1 \
+            -p "$2" root@127.0.0.1 \
             'pkill -f /tmp/itorient 2>/dev/null; rm -f /tmp/itorient; \
              cat > /tmp/itorient && chmod 755 /tmp/itorient && exec /tmp/itorient'
         """
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/bash")
-        task.arguments = ["-c", script]
+        task.arguments = ["-c", script, "ltorient", iproxy, String(port)]
+        var environment = ProcessInfo.processInfo.environment
+        environment["LTM_SSH_PASSWORD"] = password
+        task.environment = environment
         let input = Pipe(), output = Pipe()
         task.standardInput = input
         task.standardOutput = output
@@ -764,7 +784,7 @@ final class EmulatorController {
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.orientationWatch === task else { return }
                 for line in pending.take(data) {
                     guard let value = Int(line) else { continue }
                     self.guestOrientationChanged(to: value)

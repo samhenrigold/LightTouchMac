@@ -552,6 +552,11 @@ struct DeviceTools: Sendable {
         return try PropertyListSerialization.data(fromPropertyList: job, format: format, options: 0)
     }
 
+    /// Nil means this image has no agent; failures must not start a second transport.
+    func guestOrientation() async throws -> Int? {
+        try await GuestAgentTransport.shared.orientationIfAvailable()
+    }
+
     /// Read-only helper uses SpringBoard's foreground identifier and localized
     /// display name. It never writes sblaunch's shared command file.
     func foregroundAppName(stageHelper: Bool) async throws -> String? {
@@ -851,9 +856,26 @@ private actor GuestAgentTransport {
             body = try Data(contentsOf: URL(fileURLWithPath: stdinPath))
         }
         guard body.count + command.utf8.count + 40 <= 256 * 1024 else { return nil }
+        return try await perform("exec", arguments: command, body: body)
+    }
+
+    func orientationIfAvailable() async throws -> Int? {
+        guard qemu_ios_agent_status() != 0 else { return nil }
+        let data = try await perform("orientation")
+        guard let degrees = Int(String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)),
+              [0, 90, 180, -90].contains(degrees) else {
+            throw DeviceToolsError.failed("The device returned an invalid orientation.")
+        }
+        return degrees
+    }
+
+    private func perform(_ operation: String, arguments: String = "", body: Data = Data()) async throws -> Data {
+        guard qemu_ios_agent_status() == 1 else {
+            throw DeviceToolsError.failed("The device agent is not ready.")
+        }
         try Task.checkCancellation()
         let id = UUID().uuidString
-        let request = "\(id) exec \(command)\n\(body.base64EncodedString())"
+        let request = "\(id) \(operation) \(arguments)\n\(body.base64EncodedString())"
         guard request.withCString({ qemu_ios_agent_request($0) }) else {
             throw DeviceToolsError.failed("The device command queue is full or unavailable.")
         }
