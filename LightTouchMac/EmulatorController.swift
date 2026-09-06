@@ -540,7 +540,11 @@ final class EmulatorController {
     func pressVolumeDown() { tapButton(Int32(QEMU_IOS_BUTTON_VOLUME_DOWN)) }
     func rotateLeft()      { qemu_ios_ui_rotate(false) }
     func rotateRight()     { qemu_ios_ui_rotate(true) }
-    func shake()           { qemu_ios_ui_shake() }
+    private(set) var shakeGeneration: UInt64 = 0
+    func shake() {
+        qemu_ios_ui_shake()
+        shakeGeneration &+= 1
+    }
 
     private typealias BatterySetter = @convention(c) (Int32, Int32, Double) -> Bool
     private var batterySetter: BatterySetter? {

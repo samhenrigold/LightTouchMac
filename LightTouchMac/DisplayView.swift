@@ -82,6 +82,8 @@ final class DisplayView: NSView {
         CATransaction.setAnimationDuration(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.3)
         shellLayer.opacity = next == .awake ? 1 : next == .sleeping ? 0.45 : 0.25
         contentLayer.isHidden = next == .poweredOff
+        modelView?.alphaValue = CGFloat(shellLayer.opacity)
+        modelView?.setScreenOff(next != .awake)
         CATransaction.commit()
         guard next != .awake else {
             setAccessibilityValue("Device awake")
@@ -134,6 +136,9 @@ final class DisplayView: NSView {
         if emulator.isPoweredOff { emulator.powerOn() } else { emulator.pressLock() }
     }
 
+    private var modelView: DeviceModelView?
+    private var modelLoadTask: Task<Void, Never>?
+    private var lastShakeGeneration: UInt64 = 0
     private let contentLayer = CALayer()
     private let shellLayer = CALayer()
     private let homeButton = HomeButton()
@@ -210,6 +215,25 @@ final class DisplayView: NSView {
         homeButton.target = self
         homeButton.action = #selector(homeTapped)
         addSubview(homeButton)
+        // macOS 14 keeps the photo shell; RealityKit texture rotation requires 15.
+        if #available(macOS 15, *), let url = Bundle.main.url(forResource: "N72", withExtension: "usdz") {
+            modelLoadTask = Task { [weak self] in
+                do {
+                    let model = try await DeviceModelView(url: url)
+                    try Task.checkCancellation()
+                    guard let self else { return }
+                    addSubview(model, positioned: .below, relativeTo: homeButton)
+                    modelView = model
+                    shellLayer.isHidden = true
+                    model.alphaValue = CGFloat(shellLayer.opacity)
+                    model.setScreenOff(powerPresentation != .awake)
+                    if let image = captureFrame(includeTouches: false) { model.updateFrame(image) }
+                    needsLayout = true
+                } catch is CancellationError {} catch {
+                    NSLog("N72 model could not load: %@", error.localizedDescription)
+                }
+            }
+        }
         attitudeIndicator.target = self
         attitudeIndicator.action = #selector(levelAttitude(_:))
         attitudeIndicator.isHidden = true
@@ -240,6 +264,7 @@ final class DisplayView: NSView {
         // deallocate and step() kept polling, deep-copying frames forever. Only
         // masked because closing the window usually quits the app.
         if window == nil {
+            modelLoadTask?.cancel()
             displayLink?.invalidate()
             displayLink = nil
             NotificationCenter.default.removeObserver(
@@ -360,12 +385,20 @@ final class DisplayView: NSView {
         }
         shellLayer.position = viewCenter
         shellLayer.transform = motionTransform(angle: angle, scale: scale)
-        homeButton.isHidden = tiltAngle != 0 || pitchAngle != 0
+        homeButton.isHidden = modelView == nil && (tiltAngle != 0 || pitchAngle != 0)
         CATransaction.commit()
 
-        homeButton.frame = buttonRect
+        modelView?.frame = usable
+        updateModelPose(animated: animate)
+        if let modelView, let rect = modelView.homeButtonRect {
+            homeButton.frame = convert(rect, from: modelView)
+        } else { homeButton.frame = buttonRect }
         if let liveTextView, let root = layer {
-            liveTextView.frame = contentLayer.convert(contentLayer.bounds, to: root)
+            if let modelView {
+                let a = convert(modelView.projectedPoint(.zero), from: modelView)
+                let b = convert(modelView.projectedPoint(CGPoint(x: 1, y: 1)), from: modelView)
+                liveTextView.frame = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x-a.x), height: abs(b.y-a.y))
+            } else { liveTextView.frame = contentLayer.convert(contentLayer.bounds, to: root) }
         }
     }
 
@@ -397,6 +430,14 @@ final class DisplayView: NSView {
 
     @objc private func step() {
         emulator?.pollStorageFailure()
+        if let generation = emulator?.shakeGeneration, generation != lastShakeGeneration {
+            lastShakeGeneration = generation
+            modelView?.shake()
+        }
+        if let modelView, let rect = modelView.homeButtonRect {
+            homeButton.frame = convert(rect, from: modelView)
+        }
+        modelView?.advanceAnimations()
         updateTouchOverlay()
         updateKeyboardTilt()
         updateKeyboardPointer()
@@ -424,8 +465,7 @@ final class DisplayView: NSView {
         // already compares against the same value to decide whether to animate.
         if emulator?.rotationDegrees != lastRotation { needsLayout = true }
         let bytes = width * height * 4
-        guard let provider = CGDataProvider(dataInfo: nil, data: pixels, size: bytes,
-                                            releaseData: { _, _, _ in }) else { return }
+        guard let provider = CGDataProvider(data: Data(bytes: pixels, count: bytes) as CFData) else { return }
         // noneSkipFirst, NOT premultipliedFirst: the panel is opaque and the
         // alpha byte is whatever last wrote the framebuffer. iBoot draws the
         // boot logo without setting alpha at all, so honouring it rendered the
@@ -442,6 +482,7 @@ final class DisplayView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         contentLayer.contents = image
+        modelView?.updateFrame(image)
         CATransaction.commit()
     }
 
@@ -450,6 +491,7 @@ final class DisplayView: NSView {
     func toggleLiveText() {
         if liveTextView != nil { endLiveText(); return }
         guard let image = captureFrame(includeTouches: false) else { return }
+        resetMotion()
         let view = InlineLiveTextView(image: image)
         view.onClose = { [weak self] in self?.endLiveText() }
         liveTextView = view
@@ -549,9 +591,7 @@ final class DisplayView: NSView {
                 touchLayers[touch.slot] = dot
             }
             dot.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
-            dot.position = contentLayer.convert(
-                CGPoint(x: touch.point.x * contentLayer.bounds.width,
-                        y: touch.point.y * contentLayer.bounds.height), to: touchOverlayLayer)
+            dot.position = projectedPanelPoint(touch.point)
             dot.opacity = Float(touch.opacity)
             dot.shadowRadius = 5
             dot.shadowOffset = CGSize(width: 0, height: 2)
@@ -624,6 +664,10 @@ final class DisplayView: NSView {
     /// it. (The emulator un-rotates touches itself — ipod_touch_lcd_map_touch —
     /// so coordinates over the surface as published are exactly what it wants.)
     private func normalized(_ event: NSEvent) -> (Double, Double)? {
+        if let modelView {
+            guard let p = modelView.panelPoint(modelView.convert(event.locationInWindow, from: nil)) else { return nil }
+            return (Double(p.x), Double(p.y))
+        }
         guard let rootLayer = layer else { return nil }
         let p = convert(event.locationInWindow, from: nil)
         let cp = contentLayer.convert(p, from: rootLayer)
@@ -666,6 +710,7 @@ final class DisplayView: NSView {
     /// `normalized` this does not fail when the cursor is just outside — a pinch
     /// that drifts off the edge mid-gesture should keep tracking, not stop dead.
     private func clampedPanelPoint(_ event: NSEvent) -> CGPoint? {
+        if let modelView { return modelView.panelPoint(modelView.convert(event.locationInWindow, from: nil), clamped: true) }
         guard let rootLayer = layer else { return nil }
         let cp = contentLayer.convert(convert(event.locationInWindow, from: nil), from: rootLayer)
         let b = contentLayer.bounds
@@ -752,11 +797,13 @@ final class DisplayView: NSView {
     /// Off the panel the gesture tilts the device instead: side-to-side runs
     /// the accelerometer, and letting go springs it back upright.
     override func scrollWheel(with event: NSEvent) {
-        if scrollPoint == nil && !scrollTilting && event.phase == .began && !cursorOverPanel(event) {
+        if scrollPoint == nil && !scrollTilting && (event.phase == .began || (event.phase.isEmpty && event.momentumPhase.isEmpty))
+            && (!cursorOverPanel(event) || event.modifierFlags.contains(.option)) {
             beginScrollTilt()
         }
         if scrollTilting {
             scrollTiltChanged(event)
+            if event.phase.isEmpty && event.momentumPhase.isEmpty { scrollTilting = false }
             return
         }
         guestScrollDrag(event)
@@ -857,7 +904,7 @@ final class DisplayView: NSView {
 
     private func scrollTiltChanged(_ event: NSEvent) {
         switch event.phase {
-        case .began, .changed:
+        case .began, .changed, []:
             // Sideways fingers roll the device. A full trackpad sweep is about
             // a quarter turn, which is as far as any tilt game needs.
             scrollTilt = min(max(scrollTilt + event.scrollingDeltaX * Self.scrollTiltGain,
@@ -958,6 +1005,9 @@ final class DisplayView: NSView {
     /// otherwise, in which case the press is a guest touch. Converting through
     /// the layer accounts for the current scale and rotation.
     private func chassisGrabAngle(_ event: NSEvent) -> CGFloat? {
+        if let modelView {
+            return modelView.isChassis(modelView.convert(event.locationInWindow, from: nil)) ? mouseAngle(event) : nil
+        }
         guard let rootLayer = layer else { return nil }
         let p = convert(event.locationInWindow, from: nil)
         let sp = shellLayer.convert(p, from: rootLayer)
@@ -983,6 +1033,17 @@ final class DisplayView: NSView {
         transform = CATransform3DRotate(transform, angle, 0, 0, 1)
         transform = CATransform3DRotate(transform, -pitchAngle, 1, 0, 0)
         return CATransform3DScale(transform, scale, scale, 1)
+    }
+
+    private func updateModelPose(animated: Bool = false) {
+        modelView?.pose(scale: appliedScale, rotation: emulator?.rotationDegrees ?? 0,
+                        roll: tiltAngle, pitch: pitchAngle, animated: animated)
+    }
+
+    private func projectedPanelPoint(_ point: CGPoint) -> CGPoint {
+        if let modelView { return convert(modelView.projectedPoint(point), from: modelView) }
+        return contentLayer.convert(CGPoint(x: point.x * contentLayer.bounds.width,
+                                           y: point.y * contentLayer.bounds.height), to: layer)
     }
 
     @objc private func levelAttitude(_ sender: Any?) { resetMotion() }
@@ -1053,13 +1114,14 @@ final class DisplayView: NSView {
         sendAttitude()
     }
 
-    private func setShellAngle(_ angle: CGFloat) {
+    private func setShellAngle(_ angle: CGFloat, animated: Bool = false) {
+        updateModelPose(animated: animated)
         shellLayer.removeAnimation(forKey: "tiltSnap")
         shellLayer.removeAnimation(forKey: "transform")
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         shellLayer.transform = motionTransform(angle: angle, scale: appliedScale)
-        homeButton.isHidden = tiltAngle != 0 || pitchAngle != 0
+        homeButton.isHidden = modelView == nil && (tiltAngle != 0 || pitchAngle != 0)
         CATransaction.commit()
     }
 
@@ -1072,7 +1134,7 @@ final class DisplayView: NSView {
         motionRestAngle = nil
         let from = shellLayer.presentation()?.transform ?? shellLayer.transform
         tiltAngle = 0
-        setShellAngle(restAngle)
+        setShellAngle(restAngle, animated: true)
         let spring = CASpringAnimation(keyPath: "transform")
         spring.fromValue = NSValue(caTransform3D: from)
         spring.toValue = NSValue(caTransform3D: shellLayer.transform)
@@ -1178,10 +1240,7 @@ final class DisplayView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         keyboardPointerLayer.isHidden = !active || !hasKeyboardPointer
-        if active, let layer {
-            let point = CGPoint(x: keyboardPoint.x * contentLayer.bounds.width, y: keyboardPoint.y * contentLayer.bounds.height)
-            keyboardPointerLayer.position = contentLayer.convert(point, to: layer)
-        }
+        if active { keyboardPointerLayer.position = projectedPanelPoint(keyboardPoint) }
         CATransaction.commit()
     }
 
