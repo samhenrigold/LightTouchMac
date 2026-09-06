@@ -14,6 +14,8 @@ actor ScreenMovieWriter {
     private var capture: GuestAudioCapture?
     private var finishing = false
     private var audioFrame: Int64 = 0
+    private var firstFrameSize: CGSize?
+    private var changedFrameSize = false
 
     func start(url: URL, recordGuestAudio: Bool = false) throws {
         guard self.writer == nil, !finishing else { throw CaptureError.failed("A recording is already active.") }
@@ -61,6 +63,8 @@ actor ScreenMovieWriter {
         self.writer = writer; self.input = input; self.adaptor = adaptor
         count = 0
         audioFrame = 0
+        firstFrameSize = nil
+        changedFrameSize = false
     }
     func append(_ image: CGImage?, seconds: Double) async throws {
         guard !finishing else { return }
@@ -95,6 +99,9 @@ actor ScreenMovieWriter {
         guard adaptor.append(buffer, withPresentationTime: CMTime(seconds: seconds, preferredTimescale: 600)) else {
             throw writer.error ?? CaptureError.failed("Could not encode a recording frame.")
         }
+        let size = CGSize(width: image.width, height: image.height)
+        if let firstFrameSize { changedFrameSize = changedFrameSize || firstFrameSize != size }
+        else { firstFrameSize = size }
         count += 1
     }
     private func drainAudio(through end: Double? = nil) async throws -> Bool {
@@ -172,6 +179,50 @@ actor ScreenMovieWriter {
         audioFrame += Int64(frames)
     }
 
+    /// Capture keeps a fixed canvas so rotation never interrupts audio or video.
+    /// When every encoded frame has the same geometry, remove only its padding.
+    private func cropFinishedMovie(at url: URL, to size: CGSize) async throws {
+        guard size != CGSize(width: 480, height: 480) else { return }
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+            throw CaptureError.failed("The recording has no video track.")
+        }
+        let duration = try await asset.load(.duration)
+        let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
+        layer.setTransform(CGAffineTransform(translationX: -(480 - size.width) / 2,
+                                             y: -(480 - size.height) / 2), at: .zero)
+        let instruction = AVMutableVideoCompositionInstruction()
+        instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+        instruction.layerInstructions = [layer]
+        let composition = AVMutableVideoComposition()
+        composition.instructions = [instruction]
+        composition.renderSize = size
+        composition.frameDuration = CMTime(value: 1, timescale: 30)
+        composition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
+        if #available(macOS 15.0, *) { composition.colorTransferFunction = AVVideoTransferFunction_IEC_sRGB }
+        else { composition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2 }
+        composition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
+        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
+            throw CaptureError.failed("Could not prepare the recording for export.")
+        }
+        export.videoComposition = composition
+        let cropped = url.deletingLastPathComponent().appendingPathComponent(".capture-\(UUID().uuidString).mov")
+        defer { try? FileManager.default.removeItem(at: cropped) }
+        if #available(macOS 15.0, *) {
+            try await export.export(to: cropped, as: .mov)
+        } else {
+            export.outputURL = cropped
+            export.outputFileType = .mov
+            await export.export()
+            guard export.status == .completed else {
+                throw export.error ?? CaptureError.failed("Could not export the recording.")
+            }
+        }
+        // Keep the complete original until the replacement is ready. The asset
+        // includes its audio track, preserving silence and the capture timeline.
+        _ = try FileManager.default.replaceItemAt(url, withItemAt: cropped)
+    }
+
     func finish(seconds: Double) async throws {
         guard let writer, let input, !finishing else { throw CaptureError.failed("No recording is active.") }
         finishing = true
@@ -195,6 +246,9 @@ actor ScreenMovieWriter {
             audioInput?.markAsFinished()
             await writer.finishWriting()
             guard writer.status == .completed else { throw writer.error ?? CaptureError.failed("Could not finish recording.") }
+            if let firstFrameSize, !changedFrameSize {
+                try await cropFinishedMovie(at: writer.outputURL, to: firstFrameSize)
+            }
         } catch { writer.cancelWriting(); throw error }
     }
 }
