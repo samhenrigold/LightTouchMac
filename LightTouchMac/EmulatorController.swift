@@ -923,6 +923,18 @@ final class EmulatorController {
         return "\(options.nand)-\(String(hash, radix: 36))"
     }
 
+    private func snapshotIdentity() throws -> DeviceStateStorage.SnapshotIdentity {
+        guard let build = qemu_ios_build_id() else { throw CocoaError(.fileReadCorruptFile) }
+        let nand: String
+        if let packedImage {
+            nand = packedImage.key
+        } else {
+            nand = try DeviceStateStorage.developmentImageIdentity(
+                at: URL(fileURLWithPath: options.nandImage), key: imageKey)
+        }
+        return .init(emulatorBuild: String(cString: build), nand: nand)
+    }
+
     private var snapshotURL: URL { stateDir.appendingPathComponent("snapshot-\(imageKey)") }
     private var snapshotTmpURL: URL { snapshotURL.appendingPathExtension("tmp") }
     private var snapshotBadURL: URL { snapshotURL.appendingPathExtension("bad") }
@@ -946,7 +958,7 @@ final class EmulatorController {
     /// held at launch, the muscle-memory escape from a bad saved state.
     private func restoreArgs(overlay: URL) -> [String] {
         if !EmulatorController.resumeOnLaunch {
-            NSLog("snapshot: resume disabled in Settings — cold boot, discarding saved state")
+            NSLog("snapshot: automatic resume disabled — cold boot, discarding saved state")
             discardSavedState()
             return []
         }
@@ -960,6 +972,12 @@ final class EmulatorController {
             return []
         }
         guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return [] }
+        guard let identity = try? snapshotIdentity(),
+              DeviceStateStorage.snapshotMatches(snapshotURL, identity: identity) else {
+            NSLog("snapshot: build or NAND identity does not match — cold boot")
+            discardSavedState()
+            return []
+        }
         // The snapshot holds RAM; the overlay holds flash. They are only a
         // matching pair if nothing wrote to flash after the save. An observed
         // exit already discards for this reason (qemuDidExit), but a crash or a
@@ -1052,7 +1070,8 @@ final class EmulatorController {
                         self.resumeAfterFailedSave(); completion(false); return
                     }
                     do {
-                        try DeviceStateStorage.promoteSnapshot(from: self.snapshotTmpURL, to: self.snapshotURL)
+                        try DeviceStateStorage.promoteSnapshot(from: self.snapshotTmpURL, to: self.snapshotURL,
+                                                               identity: try self.snapshotIdentity())
                     } catch {
                         NSLog("snapshot: could not promote saved state: \(error.localizedDescription)")
                         self.snapshotFailureReason = error.localizedDescription
@@ -1239,6 +1258,9 @@ final class EmulatorController {
         try? FileManager.default.removeItem(at: snapshotURL)
         try? FileManager.default.removeItem(at: snapshotTmpURL)
         try? FileManager.default.removeItem(at: snapshotBadURL)
+        for url in [snapshotURL, snapshotTmpURL, snapshotBadURL] {
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
+        }
     }
 
     var hasSavedState: Bool {
@@ -1270,6 +1292,9 @@ final class EmulatorController {
     private func quarantineSnapshot() {
         try? FileManager.default.removeItem(at: snapshotBadURL)
         try? FileManager.default.moveItem(at: snapshotURL, to: snapshotBadURL)
+        try? FileManager.default.removeItem(at: snapshotBadURL.appendingPathExtension("meta"))
+        try? FileManager.default.moveItem(at: snapshotURL.appendingPathExtension("meta"),
+                                         to: snapshotBadURL.appendingPathExtension("meta"))
     }
 
     /// Quit, and leave reopening to the user.

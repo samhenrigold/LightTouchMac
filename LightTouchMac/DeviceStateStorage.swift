@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 
 /// Disk operations shared by the controller and the device-free regression check.
 enum DeviceStateStorage {
@@ -15,13 +16,74 @@ enum DeviceStateStorage {
         return false
     }
 
-    static func promoteSnapshot(from temporary: URL, to saved: URL) throws {
-        let size = try FileManager.default.attributesOfItem(atPath: temporary.path)[.size] as? Int ?? 0
-        guard size > 0 else { throw CocoaError(.fileReadCorruptFile) }
-        // Both files are siblings: rename replaces the old file atomically.
-        guard rename(temporary.path, saved.path) == 0 else {
+    struct SnapshotIdentity: Codable, Equatable {
+        let emulatorBuild: String
+        let nand: String
+    }
+
+    private struct SnapshotMetadata: Codable {
+        let version: Int
+        let identity: SnapshotIdentity
+        let fileNumber: UInt64
+        let size: UInt64
+    }
+
+    /// Packed images use their content manifest. Development images also record
+    /// every page's identity/mtime so rebaking a directory invalidates old RAM.
+    static func developmentImageIdentity(at root: URL, key: String) throws -> String {
+        let fm = FileManager.default
+        var failure: Error?
+        guard let files = fm.enumerator(at: root, includingPropertiesForKeys: nil,
+                                       errorHandler: { _, error in failure = error; return false }) else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        var records = [key]
+        for case let url as URL in files {
+            let attributes = try fm.attributesOfItem(atPath: url.path)
+            guard let date = attributes[.modificationDate] as? Date,
+                  let inode = attributes[.systemFileNumber] as? NSNumber,
+                  let size = attributes[.size] as? NSNumber else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            records.append("\(url.path.dropFirst(root.path.count))\t\(inode)\t\(size)\t\(date.timeIntervalSince1970)")
+        }
+        if let failure { throw failure }
+        guard records.count > 1 else { throw CocoaError(.fileReadCorruptFile) }
+        return SHA256.hash(data: Data(records.sorted().joined(separator: "\n").utf8))
+            .map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func snapshotAttributes(_ url: URL) throws -> (number: UInt64, size: UInt64) {
+        let values = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard let number = values[.systemFileNumber] as? NSNumber,
+              let size = values[.size] as? NSNumber, size.uint64Value > 0 else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return (number.uint64Value, size.uint64Value)
+    }
+
+    static func promoteSnapshot(from temporary: URL, to saved: URL,
+                                identity: SnapshotIdentity) throws {
+        let attributes = try snapshotAttributes(temporary)
+        let metadata = SnapshotMetadata(version: 1, identity: identity,
+                                        fileNumber: attributes.number, size: attributes.size)
+        let stagedMetadata = temporary.appendingPathExtension("meta")
+        defer { try? FileManager.default.removeItem(at: stagedMetadata) }
+        try JSONEncoder().encode(metadata).write(to: stagedMetadata, options: .atomic)
+        // If a crash separates the renames, the metadata's inode/size will not
+        // match the snapshot. Restore rejects the pair instead of guessing.
+        guard rename(temporary.path, saved.path) == 0,
+              rename(stagedMetadata.path, saved.appendingPathExtension("meta").path) == 0 else {
             throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
         }
+    }
+
+    static func snapshotMatches(_ saved: URL, identity: SnapshotIdentity) -> Bool {
+        guard let data = try? Data(contentsOf: saved.appendingPathExtension("meta")),
+              let metadata = try? JSONDecoder().decode(SnapshotMetadata.self, from: data),
+              let attributes = try? snapshotAttributes(saved) else { return false }
+        return metadata.version == 1 && metadata.identity == identity
+            && metadata.fileNumber == attributes.number && metadata.size == attributes.size
     }
 
     static func overlayIsNewer(_ overlay: URL, than snapshot: URL) -> Bool {
