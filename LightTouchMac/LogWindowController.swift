@@ -108,3 +108,61 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 }
+
+@MainActor
+final class DeviceNoticeViewController: NSTitlebarAccessoryViewController {
+    var onShowLogs: (() -> Void)?
+    var onDismiss: (() -> Void)?
+    private let message = NSTextField(wrappingLabelWithString: "")
+    private let dismiss = NSButton()
+
+    init() {
+        super.init(nibName: nil, bundle: nil)
+        layoutAttribute = .bottom
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 56))
+        let icon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Device needs attention")!)
+        icon.contentTintColor = .labelColor
+        message.maximumNumberOfLines = 2
+        message.preferredMaxLayoutWidth = 400
+        message.lineBreakMode = .byTruncatingTail
+        message.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        message.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let logs = NSButton(title: "Show Logs", target: self, action: #selector(showLogs))
+        logs.bezelStyle = .rounded
+        dismiss.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Dismiss status")
+        dismiss.isBordered = false
+        dismiss.target = self; dismiss.action = #selector(dismissNotice)
+        dismiss.toolTip = "Dismiss this status message"
+        dismiss.setAccessibilityLabel("Dismiss status")
+        for child in [icon, message, logs, dismiss] {
+            child.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(child)
+            child.centerYAnchor.constraint(equalTo: view.centerYAnchor).isActive = true
+        }
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            icon.widthAnchor.constraint(equalToConstant: 16),
+            icon.heightAnchor.constraint(equalToConstant: 16),
+            message.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
+            message.trailingAnchor.constraint(equalTo: logs.leadingAnchor, constant: -12),
+            message.heightAnchor.constraint(lessThanOrEqualToConstant: 42),
+            logs.trailingAnchor.constraint(equalTo: dismiss.leadingAnchor, constant: -8),
+            dismiss.widthAnchor.constraint(equalToConstant: 24),
+            dismiss.heightAnchor.constraint(equalToConstant: 24),
+            dismiss.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func update(_ value: String, canDismiss: Bool) {
+        message.stringValue = value
+        message.toolTip = value
+        message.setAccessibilityLabel(value)
+        dismiss.isHidden = !canDismiss
+        dismiss.isEnabled = canDismiss
+    }
+
+    @objc private func showLogs() { onShowLogs?() }
+    @objc private func dismissNotice() { onDismiss?() }
+}

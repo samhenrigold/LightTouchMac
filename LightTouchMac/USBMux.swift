@@ -67,7 +67,7 @@ final class USBMux {
     @discardableResult
     func start(filesRoot: String, nand: String, overlay: String) -> Session? {
         guard FileManager.default.isExecutableFile(atPath: Self.binary) else {
-            NSLog("usbmux: no binary at \(Self.binary); app management disabled")
+            logEvent("usbmux: no binary at \(Self.binary); app management disabled")
             return nil
         }
         
@@ -160,7 +160,7 @@ final class USBMux {
     /// session so canManageApps flips false and tell whoever is listening.
     private func daemonDidDie() {
         guard session != nil else { return }   // already torn down by stop()
-        NSLog("usbmux: daemon exited unexpectedly; app management disabled")
+        logEvent("usbmux: daemon exited unexpectedly; app management disabled")
         session = nil
         daemonPID = nil
         onUnexpectedExit?()
@@ -176,7 +176,7 @@ final class USBMux {
         var buffer = [CChar](repeating: 0, count: 4096)
         guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0,
               String(cString: buffer).hasSuffix("/usbmuxd") else { return }
-        NSLog("usbmux: killing stale usbmuxd \(pid) from a previous run")
+        logEvent("usbmux: killing stale usbmuxd \(pid) from a previous run")
         kill(pid, SIGTERM)
     }
 
@@ -215,7 +215,7 @@ final class USBMux {
         } catch {
             // Not fatal — only the Terminal feature reads this — but no longer
             // silent: a write failure here used to be invisible.
-            NSLog("usbmux: could not write session.env: \(error.localizedDescription)")
+            logEvent("usbmux: could not write session.env: \(error.localizedDescription)")
         }
     }
     

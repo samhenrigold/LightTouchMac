@@ -38,3 +38,13 @@ Restart and Erase All Content and Settings require confirmation. Erase removes t
 Device logs
 
 File → Device Logs shows the latest boot/kernel console and USB logs, including the previous rotated files. Updates pause while text is selected or Pause updates is checked. Use Find to search the displayed tail, or File → Export Diagnostics for the complete retained logs. Kernel messages require Kernel Console to be enabled.
+
+Device status and logs
+
+A status message above the device explains preparation, saved-state, erase,
+or shutdown failures. Choose Show Logs for details, or Dismiss after reading.
+Successful retries clear the matching message. Storage-write failures keep
+the message visible until you free disk space and reopen Light Touch.
+File > Device Logs includes app events, the device console, and USB service
+logs. Text is selectable; use Find to search. Export Diagnostics includes
+these logs so you can attach them to a bug report.

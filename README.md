@@ -206,5 +206,13 @@ The sleeping presentation uses the bundled Sleeping.caar animation.
 
 Recordings use H.264 video on a fixed 480 × 480 canvas, preserving native pixels
 through rotation with black margins. The title bar and Dock indicate recording.
-Stopping or quitting finishes the movie and asks where to save it. This initial
-recording path is video-only; guest audio capture remains follow-up work.
+Stopping or quitting finishes the movie and asks where to save it. Recordings include the device’s stereo audio, including silent timing gaps while
+the emulator is paused.
+
+
+Device Logs includes app events, device console output, and USB service logs.
+App events are written off the main thread with a 32 KB per-entry limit and
+one current/one previous 1 MB file. Export Diagnostics includes those files.
+Preparation, save-state, erase, and shutdown failures appear in a persistent
+status bar with Show Logs and Dismiss. Successful retries clear the matching
+status; an active storage-write failure takes priority and cannot be dismissed.

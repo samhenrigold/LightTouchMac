@@ -298,7 +298,7 @@ struct DeviceServices: Sendable {
             for name in entries("PublicStaging") {
                 try Task.checkCancellation()
                 guard Self.isOrphanedStagingName(name) else { continue }
-                NSLog("device: removing orphaned staging upload \(name)")
+                logEvent("device: removing orphaned staging upload \(name)")
                 _ = "PublicStaging/\(name)".withCString { remove(client, $0) }
             }
             for directory in entries("LightTouch") where UUID(uuidString: directory) != nil {
@@ -581,7 +581,7 @@ nonisolated enum AbandonedWork {
 
     static func abandoned(_ operation: String) {
         let n = lock.withLock { outstanding += 1; return outstanding }
-        NSLog("device: abandoned a blocked thread in \(operation) (\(n) outstanding)")
+        logEvent("device: abandoned a blocked thread in \(operation) (\(n) outstanding)")
     }
 
     static func returned() {

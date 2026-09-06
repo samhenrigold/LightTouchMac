@@ -12,6 +12,7 @@ once = block(services, 'nonisolated private final class ResumeOnce', '// MARK: -
 inspector = (root/'LightTouchMac/AppsInspectorViewController.swift').read_text()
 freshness = block(inspector, '    static func freshnessText(', '    private func showStaleBanner')
 source = '''import Foundation
+nonisolated func logEvent(_ message: String) {}
 import Dispatch
 enum Archive {\n''' + archive + freshness + '''}\n''' + once + '''
 @main struct Check {

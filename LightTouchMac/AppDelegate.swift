@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let backstop = EmulatorController.cleanShutdownBudget
             + (EmulatorController.resumeOnLaunch ? EmulatorController.quitSnapshotBudget : 0)
         DispatchQueue.main.asyncAfter(deadline: .now() + backstop) {
-            if !replied { NSLog("quit: shutdown did not finish in time — quitting anyway") }
+            if !replied { logEvent("quit: shutdown did not finish in time — quitting anyway") }
             reply()
         }
 

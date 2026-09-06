@@ -46,6 +46,7 @@ text = (APP/'LightTouchMac/DeviceTools.swift').read_text()
 methods = text[text.index('    // MARK: - Music import'):text.index('    // MARK: - Install')]
 swift = r"""
 import Foundation
+nonisolated func logEvent(_ message: String) { NSLog("%@", message) }
 struct InstalledApp: Sendable { let id, name, version: String }
 enum DeviceToolsError: Error { case toolMissing(String), failed(String) }
 nonisolated enum Bundled {

@@ -45,7 +45,7 @@ nonisolated enum IPALibrary {
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
         } catch {
-            NSLog("library: could not preserve IPA for %@: %@", id, error.localizedDescription)
+            logEvent("library: could not preserve IPA for %@: %@", id, error.localizedDescription)
         }
     }
 

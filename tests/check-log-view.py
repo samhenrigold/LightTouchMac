@@ -9,6 +9,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-logs-') as tmp:
 @main struct Check {
  @MainActor static func main() async throws {
   _ = NSApplication.shared
+  NSApp.setActivationPolicy(.regular)
   let file=URL(fileURLWithPath:CommandLine.arguments[1])
   try Data("first\n".utf8).write(to:file)
   precondition(LogWindowController.tail(file)=="first\n")
@@ -47,7 +48,31 @@ with tempfile.TemporaryDirectory(prefix='ltm-logs-') as tmp:
   controller.showWindow(nil)
   try await Task.sleep(for:.milliseconds(300));precondition(text.string=="paused\n")
   controller.close()
-  print("PASS: bounded UTF-8 tail, empty/missing files, native polling, rotation, selection/pause and close/reopen")
+  let notice=DeviceNoticeViewController()
+  let window=NSWindow(contentRect:NSRect(x:0,y:0,width:640,height:320),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+  window.addTitlebarAccessoryViewController(notice)
+  var opened=false, dismissed=false
+  notice.onShowLogs={opened=true};notice.onDismiss={dismissed=true}
+  let detail="The device could not be erased. The erase is pending and will retry when Light Touch opens. Open Device Logs for details."
+  notice.update(detail,canDismiss:true)
+  window.makeKeyAndOrderFront(nil)
+  try await Task.sleep(for:.milliseconds(200))
+  let label=notice.view.subviews.compactMap{$0 as? NSTextField}.first!
+  let buttons=notice.view.subviews.compactMap{$0 as? NSButton}
+  let logs=buttons.first{$0.title=="Show Logs"}!, dismiss=buttons.first{$0 !== logs}!
+  precondition(label.stringValue==detail && label.toolTip==detail)
+  logs.performClick(nil);dismiss.performClick(nil)
+  precondition(opened && dismissed)
+  notice.update(detail,canDismiss:false)
+  precondition(dismiss.isHidden && !dismiss.isEnabled)
+  for width in [640.0,360.0]{
+   window.setContentSize(NSSize(width:width,height:320));notice.view.layoutSubtreeIfNeeded()
+   try await Task.sleep(for:.milliseconds(100))
+   precondition(label.frame.width>20 && logs.frame.minX>=label.frame.maxX)
+   precondition(!notice.view.isHidden && notice.view.superview != nil && !label.isHidden)
+  }
+  window.orderOut(nil)
+  print("PASS: bounded UTF-8 tail, empty/missing files, native polling, rotation, selection/pause, close/reopen and native status actions/narrow layout")
  }
 }
 """)

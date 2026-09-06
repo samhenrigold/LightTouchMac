@@ -277,7 +277,7 @@ struct DeviceTools: Sendable {
             throw DeviceError.preflight("Could not repair the IPA's executable permissions.")
         }
         succeeded = true
-        NSLog("install: \(member) archived non-executable — repacked 0755")
+        logEvent("install: \(member) archived non-executable — repacked 0755")
         return out
     }
 
@@ -794,7 +794,7 @@ struct DeviceTools: Sendable {
     /// without the bundled tool skip quietly — the zone is cosmetic.
     func setTimeZone(_ identifier: String) async throws {
         guard let tool = Bundled.tool("lockdown-tz") else {
-            NSLog("timezone: no bundled lockdown-tz (dev build) — leaving the guest's zone alone")
+            logEvent("timezone: no bundled lockdown-tz (dev build) — leaving the guest's zone alone")
             return
         }
         let result = try await run(
@@ -807,7 +807,7 @@ struct DeviceTools: Sendable {
             throw DeviceToolsError.failed(
                 "Could not set the device timezone. \(result.standardError)")
         }
-        NSLog("timezone: guest zone now \(result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))")
+        logEvent("timezone: guest zone now \(result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))")
     }
 
     // MARK: - SSH terminal (opens Terminal.app itself)

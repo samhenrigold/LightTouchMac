@@ -29,6 +29,32 @@ final class EmulatorController {
         webProxyStatus = "Waiting for device"
         onStatusChange?()
     }
+    enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff }
+    private(set) var deviceNotice = UserDefaults.standard.dictionary(forKey: "deviceNotice")?["message"] as? String
+    private var noticeOperation = UserDefaults.standard.dictionary(forKey: "deviceNotice")?["operation"] as? String
+    func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
+        let value = storageFailed
+            ? "Storage writes failed. The device is stopped and recent changes were not saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
+            : message
+        logEvent(value)
+        deviceNotice = value
+        let kind = (storageFailed ? .storage : operation).rawValue
+        noticeOperation = kind
+        UserDefaults.standard.set(["message": value, "operation": kind], forKey: "deviceNotice")
+        onStatusChange?()
+    }
+    func dismissDeviceNotice() {
+        guard !storageFailed else { return }
+        deviceNotice = nil
+        noticeOperation = nil
+        UserDefaults.standard.removeObject(forKey: "deviceNotice")
+        onStatusChange?()
+    }
+
+    func resolveDeviceNotice(for operation: NoticeOperation) {
+        if noticeOperation == operation.rawValue { dismissDeviceNotice() }
+    }
+
     private var foregroundTask: Task<Void, Never>?
     private var bootGeneration = 0
     var isPoweredOff: Bool { state == .poweredOff }
@@ -104,10 +130,10 @@ final class EmulatorController {
                 packedImage = selected.image
                 retainedPackedImage = selected.retained
                 if selected.retained {
-                    NSLog("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
+                    logEvent("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
                 }
             } catch {
-                NSLog("nand: could not resolve device image: \(error.localizedDescription)")
+                logEvent("nand: could not resolve device image: \(error.localizedDescription)")
                 state = .dead(exitCode: 1)
                 return
             }
@@ -120,7 +146,7 @@ final class EmulatorController {
         // A factory reset requested by the previous process: wipe the overlay
         // (and any snapshot) now, in this fresh process, before it is reopened.
         if FileManager.default.fileExists(atPath: resetMarkerURL.path) {
-            NSLog("reset: wiping device overlay back to the base image")
+            logEvent("reset: wiping device overlay back to the base image")
             do {
                 if FileManager.default.fileExists(atPath: overlay.path) {
                     try FileManager.default.removeItem(at: overlay)
@@ -132,8 +158,9 @@ final class EmulatorController {
                 // nothing at all — the device came back with everything the
                 // user had just asked to destroy, and no error anywhere.
                 try? FileManager.default.removeItem(at: resetMarkerURL)
+                if !FileManager.default.fileExists(atPath: resetMarkerURL.path) { resolveDeviceNotice(for: .erase) }
             } catch {
-                NSLog("reset: could not wipe the overlay (\(error.localizedDescription)) — "
+                logEvent("reset: could not wipe the overlay (\(error.localizedDescription)) — "
                       + "leaving the request armed for the next launch")
                 // And SAY so. The user confirmed a destructive, irreversible
                 // action, the app quit, and it came back with everything still
@@ -263,17 +290,19 @@ final class EmulatorController {
                     try await Task.sleep(for: .seconds(2))
                 }
                 try Task.checkCancellation()
-                NSLog("media: checking guest graphics components")
+                logEvent("media: checking guest graphics components")
                 if try await tools().updateMediaComponents() {
                     try await waitForSpringBoard()
-                    NSLog("media: guest graphics components updated")
+                    logEvent("media: guest graphics components updated")
                 } else {
-                    NSLog("media: guest graphics components already current")
+                    logEvent("media: guest graphics components already current")
                 }
+                resolveDeviceNotice(for: .preparation)
             } catch {
                 if !Task.isCancelled {
                     mediaPreparationFailure = error.localizedDescription
-                    NSLog("media: preparation failed: \(error.localizedDescription)")
+                    reportDeviceNotice("Device preparation failed. Reopen Light Touch to retry; open Device Logs for details.", for: .preparation)
+                    logEvent("media: preparation failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -324,10 +353,10 @@ final class EmulatorController {
     /// killed mid-unpack can't leave a torn base image that boots corrupt.
     nonisolated private static func unpackNAND(_ packed: String, into dest: String) -> Bool {
         guard let helper = Bundled.tool("ipod-helper") else {
-            NSLog("nand: packed image present but no bundled ipod-helper to unpack it")
+            logEvent("nand: packed image present but no bundled ipod-helper to unpack it")
             return false
         }
-        NSLog("nand: first launch — unpacking the device image")
+        logEvent("nand: first launch — unpacking the device image")
         let fm = FileManager.default
         let tmp = dest + ".partial"
         try? fm.removeItem(atPath: tmp)
@@ -337,7 +366,7 @@ final class EmulatorController {
         do {
             try fm.createDirectory(atPath: tmp, withIntermediateDirectories: true)
         } catch {
-            NSLog("nand: could not create \(tmp): \(error.localizedDescription)")
+            logEvent("nand: could not create \(tmp): \(error.localizedDescription)")
             return false
         }
         let task = Process()
@@ -346,7 +375,7 @@ final class EmulatorController {
         let errPipe = Pipe()
         task.standardError = errPipe
         do { try task.run() } catch {
-            NSLog("nand: could not run ipod-helper: \(error.localizedDescription)")
+            logEvent("nand: could not run ipod-helper: \(error.localizedDescription)")
             return false
         }
         // Drain before waiting: a full stderr pipe otherwise deadlocks unpack.
@@ -354,11 +383,11 @@ final class EmulatorController {
                          encoding: .utf8) ?? ""
         task.waitUntilExit()
         guard task.terminationStatus == 0 else {
-            NSLog("nand: unpack failed (exit \(task.terminationStatus)): \(err)")
+            logEvent("nand: unpack failed (exit \(task.terminationStatus)): \(err)")
             return false
         }
         do { try fm.moveItem(atPath: tmp, toPath: dest) } catch {
-            NSLog("nand: could not move the unpacked image into place: \(error.localizedDescription)")
+            logEvent("nand: could not move the unpacked image into place: \(error.localizedDescription)")
             return false
         }
         return true
@@ -419,7 +448,7 @@ final class EmulatorController {
         if storageFailed, !reportedStorageFailure {
             reportedStorageFailure = true
             discardSavedState()
-            onStatusChange?()
+            reportDeviceNotice(statusLine, for: .storage)
         }
     }
 
@@ -463,7 +492,7 @@ final class EmulatorController {
         return "dylib: \(path) (built \(built.map(String.init(describing:)) ?? "unknown"))"
     }
 
-    private func logEmulatorBuild() { NSLog("emulator \(dylibProvenance)") }
+    private func logEmulatorBuild() { logEvent("emulator \(dylibProvenance)") }
     
     // MARK: - Hardware buttons
     
@@ -841,7 +870,7 @@ final class EmulatorController {
         guard !shuttingDown else { return }
         guard !storageFailed else { return }
         guard state != .snapshotting else {
-            NSLog("reset: ignored while a state save is in flight")
+            logEvent("reset: ignored while a state save is in flight")
             return
         }
         reconnectUSB()
@@ -985,9 +1014,9 @@ final class EmulatorController {
             guard fm.fileExists(atPath: from.path), !fm.fileExists(atPath: to.path) else { continue }
             do {
                 try fm.moveItem(at: from, to: to)
-                NSLog("state: adopted \(old) as \(new)")
+                logEvent("state: adopted \(old) as \(new)")
             } catch {
-                NSLog("state: could not adopt \(old) (\(error.localizedDescription))")
+                logEvent("state: could not adopt \(old) (\(error.localizedDescription))")
             }
         }
     }
@@ -1044,7 +1073,7 @@ final class EmulatorController {
     /// held at launch, the muscle-memory escape from a bad saved state.
     private func restoreArgs(overlay: URL) -> [String] {
         if !EmulatorController.resumeOnLaunch {
-            NSLog("snapshot: automatic resume disabled — cold boot, discarding saved state")
+            logEvent("snapshot: automatic resume disabled — cold boot, discarding saved state")
             discardSavedState()
             return []
         }
@@ -1054,13 +1083,13 @@ final class EmulatorController {
             // launch, and this is meant to be the escape hatch from a bad
             // snapshot, not a way to lose a good one by accident. Discarding is
             // what Discard Saved State is for.
-            NSLog("snapshot: Option held at launch — cold boot, keeping saved state")
+            logEvent("snapshot: Option held at launch — cold boot, keeping saved state")
             return []
         }
         guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return [] }
         guard let identity = try? snapshotIdentity(),
               DeviceStateStorage.snapshotMatches(snapshotURL, identity: identity) else {
-            NSLog("snapshot: build or NAND identity does not match — cold boot")
+            logEvent("snapshot: build or NAND identity does not match — cold boot")
             discardSavedState()
             return []
         }
@@ -1072,7 +1101,7 @@ final class EmulatorController {
         // hour-old RAM onto an hour-newer filesystem. Stale HFS+ journal and
         // buffer-cache state over live flash is corruption, not a slow boot.
         if overlayIsNewerThanSnapshot(overlay: overlay) {
-            NSLog("snapshot: overlay has advanced past the saved state — cold boot, discarding")
+            logEvent("snapshot: overlay has advanced past the saved state — cold boot, discarding")
             discardSavedState()
             return []
         }
@@ -1103,8 +1132,9 @@ final class EmulatorController {
                 if await self.proveAlive() { return }
             }
             guard let self, !self.isDead else { return }
-            NSLog("snapshot: restored state never came alive — quarantining, cold-booting")
+            logEvent("snapshot: restored state never came alive — quarantining, cold-booting")
             self.quarantineSnapshot()
+            self.reportDeviceNotice("The saved state could not be restored. The device will start fresh; installed apps and files are kept. Open Device Logs for details.", for: .restore)
             self.quitForRelaunch(reason: "restored state never came alive")
         }
     }
@@ -1122,7 +1152,7 @@ final class EmulatorController {
         guard isRunning else { completion(false); return }
         guard qemu_ios_gles_contexts() == 0 else {
             snapshotFailureReason = "Saving is unavailable while the device uses accelerated graphics."
-            NSLog("snapshot: skipped — live host OpenGL state")
+            logEvent("snapshot: skipped — live host OpenGL state")
             completion(false); return
         }
         Task { [weak self] in
@@ -1137,7 +1167,7 @@ final class EmulatorController {
                 // discards for exactly this reason; the health-gate path must
                 // agree. Quarantine (never delete the overlay) so it stays
                 // diagnosable and the next launch cold-boots.
-                NSLog("snapshot: guest not healthy — quarantining stale snapshot, next launch cold-boots")
+                logEvent("snapshot: guest not healthy — quarantining stale snapshot, next launch cold-boots")
                 self.snapshotFailureReason = "The device is not responding. Its previous saved state has been set aside because it no longer matches the device storage."
                 self.quarantineSnapshot()
                 completion(false); return
@@ -1159,21 +1189,21 @@ final class EmulatorController {
                         try DeviceStateStorage.promoteSnapshot(from: self.snapshotTmpURL, to: self.snapshotURL,
                                                                identity: try self.snapshotIdentity())
                     } catch {
-                        NSLog("snapshot: could not promote saved state: \(error.localizedDescription)")
+                        logEvent("snapshot: could not promote saved state: \(error.localizedDescription)")
                         self.snapshotFailureReason = error.localizedDescription
                         self.resumeAfterFailedSave(); completion(false); return
                     }
                     completion(true); return
                 }
                 if status == QEMU_IOS_SNAPSHOT_FAILED {
-                    NSLog("snapshot: save failed: \(String(cString: buf))")
+                    logEvent("snapshot: save failed: \(String(cString: buf))")
                     self.snapshotFailureReason = String(cString: buf)
                     try? FileManager.default.removeItem(at: self.snapshotTmpURL)
                     self.resumeAfterFailedSave(); completion(false); return
                 }
                 try? await Task.sleep(for: .milliseconds(100))
             }
-            NSLog("snapshot: save timed out")
+            logEvent("snapshot: save timed out")
             self.snapshotFailureReason = "Saving the device state timed out."
             try? FileManager.default.removeItem(at: self.snapshotTmpURL)
             self.resumeAfterFailedSave()
@@ -1231,7 +1261,7 @@ final class EmulatorController {
         // Respect the user's intent: resume turned off, or a just-issued discard.
         // Either way, saving now would resurrect exactly the state they don't want.
         guard EmulatorController.resumeOnLaunch, !skipNextQuitSnapshot else {
-            NSLog("snapshot: skipping quit-save (resume off or state discarded)")
+            logEvent("snapshot: skipping quit-save (resume off or state discarded)")
             completion(false); return
         }
         performSnapshot(completion: completion)
@@ -1252,7 +1282,7 @@ final class EmulatorController {
         // running CPU and then promoted it as good, for the NEXT launch to
         // restore. reset() is guarded for exactly this reason.
         guard state != .snapshotting else {
-            NSLog("quit: a state save is in flight — leaving the guest alone")
+            logEvent("quit: a state save is in flight — leaving the guest alone")
             completion(false); return
         }
         // A stopped vCPU cannot run any of this. Pause, or a save that stopped
@@ -1274,7 +1304,7 @@ final class EmulatorController {
                 _ = await withSoftDeadline(30) { () -> Bool in
                     do { try await self.haltFilesystem(); return true }
                     catch {
-                        NSLog("quit: halt command ended without acknowledgement (\(error.localizedDescription)); waiting for guest power-off")
+                        logEvent("quit: halt command ended without acknowledgement (\(error.localizedDescription)); waiting for guest power-off")
                         return false
                     }
                 } ?? false
@@ -1282,7 +1312,7 @@ final class EmulatorController {
                 // The PMU event is authoritative even if the marker was lost.
                 if await DeviceStateStorage.waitForShutdown(until: haltDeadline,
                                                             confirmed: confirmed, stopped: stopped) {
-                    NSLog("quit: guest confirmed power-off — volume unmounted")
+                    logEvent("quit: guest confirmed power-off — volume unmounted")
                     completion(true); return
                 }
                 if confirmed() { completion(true); return }
@@ -1291,29 +1321,30 @@ final class EmulatorController {
                     (try? await self.syncFilesystem()) != nil
                 } ?? false
                 if synced {
-                    NSLog("quit: guest synced; unmount still unconfirmed")
+                    logEvent("quit: guest synced; unmount still unconfirmed")
                 }
             }
 
             if confirmed() { completion(true); return }
             if stopped() { completion(false); return }
-            NSLog("quit: guest did not shut down — this session's writes may be lost")
+            logEvent("quit: guest did not shut down — this session's writes may be lost")
             completion(false)
         }
     }
 
     /// Menu ▸ Save State Now: save, then resume the vCPU (the save stops it).
-    /// Set by the menu action so a failed save can be reported. The save is
+    /// A failed save is reported in the persistent device status. The save is
     /// otherwise indistinguishable from a successful one — including the case
     /// where it DISCARDS the user's existing saved state because the guest is
     /// not answering.
-    var onSnapshotResult: ((Bool) -> Void)?
-
     func saveSnapshotNow() {
         skipNextQuitSnapshot = false   // an explicit save clears a prior discard
         performSnapshot { [weak self] ok in
             guard let self else { return }
-            self.onSnapshotResult?(ok)
+            if ok { self.resolveDeviceNotice(for: .snapshot) }
+            else {
+                self.reportDeviceNotice("Couldn’t save the device state. " + (self.snapshotFailureReason ?? "Try again when the device is ready.") + " Open Device Logs for details.", for: .snapshot)
+            }
             // Only un-stop what THIS save stopped. Flipping to .running
             // unconditionally resurrected a VM that died during the save: the
             // dead-overlay vanished and input went to a process with no VM —
@@ -1371,7 +1402,7 @@ final class EmulatorController {
     /// reachable: the in-progress-install prompt on the quit path offers it.)
     func cancelFactoryReset() {
         guard FileManager.default.fileExists(atPath: resetMarkerURL.path) else { return }
-        NSLog("reset: quit cancelled — disarming the pending erase")
+        logEvent("reset: quit cancelled — disarming the pending erase")
         try? FileManager.default.removeItem(at: resetMarkerURL)
     }
 
@@ -1392,7 +1423,7 @@ final class EmulatorController {
     /// this regardless: QEMU cannot re-init in-process, so "relaunch" is only
     /// ever "quit, then the user reopens".
     private func quitForRelaunch(reason: String) {
-        NSLog("relaunch: \(reason) — quitting; reopen the app to continue")
+        logEvent("relaunch: \(reason) — quitting; reopen the app to continue")
         NSApp.terminate(nil)
     }
 

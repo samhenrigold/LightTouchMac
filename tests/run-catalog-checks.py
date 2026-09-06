@@ -7,7 +7,7 @@ def run(args, **kwargs):
     subprocess.run(args, cwd=root, check=True, **kwargs)
 with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
     work = Path(work)
-    env = dict(os.environ, CFFIXED_USER_HOME=str(work/'home'))
+    env = dict(os.environ, CFFIXED_USER_HOME=str(work/'home'), LTM_STATE_DIR=str(work/'state'))
     (work/'home').mkdir()
     portfile = work/'port'
     server = subprocess.Popen([sys.executable, str(root/'tests/catalog-server.py'), str(portfile)])
@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
             exe=work/name
             run(['swiftc','-parse-as-library','-module-cache-path',str(work/'modules'), *sources,'-o',str(exe)])
             run([str(exe),*arguments], env=env, timeout=30)
-        common = ['LightTouchMac/'+f+'.swift' for f in ['CatalogClient','CatalogCopy','Bundled']]
+        common = ['LightTouchMac/'+f+'.swift' for f in ['CatalogClient','CatalogCopy','Bundled','AppEventLog']]
         swift('catalog',common+['LightTouchMac/IPALibrary.swift','tests/catalog.swift'])
         swift('network',common+['tests/catalog-network.swift'],[port])
         swift('queue',['LightTouchMac/InstallationQueue.swift','tests/installation-queue.swift'])

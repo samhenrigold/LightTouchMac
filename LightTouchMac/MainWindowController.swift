@@ -148,20 +148,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// meant a destructive action appeared to do nothing, with the request still
     /// armed to fire at some later launch.
     private func reportEraseFailureIfNeeded() {
-        guard let reason = emulator.eraseFailure, let window else { return }
+        guard let reason = emulator.eraseFailure else { return }
         emulator.clearEraseFailure()
-        let alert = NSAlert()
-        alert.alertStyle = .critical
-        alert.messageText = "The device could not be erased"
-        alert.informativeText = "\(reason)\n\nThe device is unchanged, and the erase is still "
-            + "pending — it will be tried again the next time you open LightTouchMac. "
-            + "Choose Device ▸ Erase All Content and Settings again to cancel it."
-        alert.beginSheetModal(for: window) { _ in }
+        logEvent("Erase failed: \(reason)")
+        emulator.reportDeviceNotice("The device could not be erased. It is unchanged; the erase is still pending and will retry when Light Touch opens. Choose Erase All Content and Settings again to cancel it. Open Device Logs for details.", for: .erase)
     }
 
     // MARK: - Health / status surfacing
 
     private func refreshForState() {
+        updateDeviceNotice()
         // The window subtitle is where AppKit puts secondary window state, and
         // it styles and truncates itself to match the title. A custom titlebar
         // accessory was carrying this before — more code, its own constraints,
@@ -178,6 +174,27 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window?.toolbar?.validateVisibleItems()
         syncRotateSymbol()      // follows automatic rotations, not just manual ones
         updateDeadOverlay()
+    }
+
+    private var noticeAccessory: DeviceNoticeViewController?
+    private func updateDeviceNotice() {
+        guard let window else { return }
+        guard let message = emulator.deviceNotice else {
+            if let accessory = noticeAccessory,
+               let index = window.titlebarAccessoryViewControllers.firstIndex(of: accessory) {
+                window.removeTitlebarAccessoryViewController(at: index)
+            }
+            noticeAccessory = nil
+            return
+        }
+        if noticeAccessory == nil {
+            let accessory = DeviceNoticeViewController()
+            accessory.onShowLogs = { [weak self] in self?.showDeviceLogs(nil) }
+            accessory.onDismiss = { [weak self] in self?.emulator.dismissDeviceNotice() }
+            window.addTitlebarAccessoryViewController(accessory)
+            noticeAccessory = accessory
+        }
+        noticeAccessory?.update(message, canDismiss: !emulator.storageFailed)
     }
 
     /// When the emulator dies (QEMU can't re-init), cover the device with an
@@ -538,25 +555,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
     @objc func devicePowerOff(_ sender: Any?) {
         emulator.powerOff { [weak self] confirmed in
-            guard !confirmed, let self, let window = self.window else { return }
-            let alert = NSAlert()
-            alert.messageText = "The device did not finish powering off"
-            alert.informativeText = "Guest shutdown could not be confirmed. The window remains open so you can retry or restart the device."
-            alert.beginSheetModal(for: window) { _ in }
+            if confirmed { self?.emulator.resolveDeviceNotice(for: .powerOff); return }
+            self?.emulator.reportDeviceNotice("The device did not finish powering off. Try Power Off again or restart the device. Open Device Logs for details.", for: .powerOff)
         }
     }
 
-    @objc func saveStateNow(_ sender: Any?) {
-        emulator.onSnapshotResult = { [weak self] ok in
-            guard !ok, let window = self?.window else { return }
-            let alert = NSAlert()
-            alert.messageText = "Couldn't save the device's state"
-            alert.informativeText = self?.emulator.snapshotFailureReason
-                ?? "The device's state could not be saved."
-            alert.beginSheetModal(for: window) { _ in }
-        }
-        emulator.saveSnapshotNow()
-    }
+    @objc func saveStateNow(_ sender: Any?) { emulator.saveSnapshotNow() }
+
     @objc func discardSavedState(_ sender: Any?) {
         guard let window else { return }
         let alert = NSAlert()
@@ -797,7 +802,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// one click to collect means the next report arrives with its evidence.
     private var logWindow: LogWindowController?
     private var diagnosticLogs: [URL] {
-        [Bundled.stateDirectory.appendingPathComponent("serial.log"),
+        [Bundled.stateDirectory.appendingPathComponent("app.log"),
+         Bundled.stateDirectory.appendingPathComponent("app.log.1"),
+         Bundled.stateDirectory.appendingPathComponent("serial.log"),
          Bundled.stateDirectory.appendingPathComponent("serial.log.1"),
          Bundled.workDirectory.appendingPathComponent("usbmuxd.log"),
          Bundled.workDirectory.appendingPathComponent("usbmuxd.log.1")]
@@ -814,11 +821,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         if let zip = UTType(filenameExtension: "zip") { panel.allowedContentTypes = [zip] }
         panel.beginSheetModal(for: window!) { [weak self] response in
             guard let self, response == .OK, let dest = panel.url else { return }
-            self.writeDiagnostics(to: dest)
+            Task { await self.writeDiagnostics(to: dest) }
         }
     }
 
-    private func writeDiagnostics(to dest: URL) {
+    private func writeDiagnostics(to dest: URL) async {
+        await AppEventLog.shared.flush()
         let fm = FileManager.default
         let staging = Bundled.stateDirectory.appendingPathComponent("diagnostics-staging", isDirectory: true)
         try? fm.removeItem(at: staging)
