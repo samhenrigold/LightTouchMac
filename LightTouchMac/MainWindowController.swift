@@ -125,6 +125,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var recordingStartedAt: CFTimeInterval = 0
     private var finishingRecording = false
     private var recordingFailure: Error?
+    private var recordingStopRequested = false
     private var quitAfterRecording = false
     private var recordingIndicator: NSTitlebarAccessoryViewController?
 
@@ -657,6 +658,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let output = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mov")
         recordingOutput = output
         recordingFailure = nil
+        recordingStopRequested = false
         NSApp.dockTile.badgeLabel = "REC"
         let indicator = NSTitlebarAccessoryViewController()
         let label = NSTextField(labelWithString: "● Recording")
@@ -670,17 +672,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         recordingTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await movieWriter.start(url: output)
+                try await movieWriter.start(url: output, recordGuestAudio: true)
                 recordingStartedAt = CACurrentMediaTime()
-                while !Task.isCancelled {
+                while !Task.isCancelled && !recordingStopRequested {
                     let elapsed = Int(CACurrentMediaTime() - recordingStartedAt)
                     if let label = recordingIndicator?.view as? NSTextField {
                         let seconds = String(elapsed % 60)
                         label.stringValue = "● \(elapsed / 60):\(seconds.count == 1 ? "0" : "")\(seconds)"
                     }
-                    if let image = deviceVC.screen.captureFrame() {
-                        try await movieWriter.append(image, seconds: CACurrentMediaTime() - recordingStartedAt)
-                    }
+                    try await movieWriter.append(deviceVC.screen.captureFrame(),
+                        seconds: CACurrentMediaTime() - recordingStartedAt)
                     try await Task.sleep(for: .milliseconds(33))
                 }
             } catch is CancellationError {
@@ -708,7 +709,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         guard let output = recordingOutput, !finishingRecording else { return }
         finishingRecording = true
         let producer = recordingTask
-        producer?.cancel()
+        // Let the current audio packet finish before draining the capture queue.
+        recordingStopRequested = true
         NSApp.dockTile.badgeLabel = nil
         if let window, let indicator = recordingIndicator,
            let index = window.titlebarAccessoryViewControllers.firstIndex(of: indicator) {
@@ -734,7 +736,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 let panel = NSSavePanel()
                 panel.allowedContentTypes = [.quickTimeMovie]
                 panel.nameFieldStringValue = captureName("Recording") + ".mov"
-                panel.message = "Device video at native resolution on a 480 × 480 canvas. Audio is not included."
+                panel.message = "Device video at native resolution on a 480 × 480 canvas. Includes device audio."
                 let response = await panel.beginSheetModal(for: window)
                 if response != .OK { quitAfterRecording = false }
                 if response == .OK, let destination = panel.url {

@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreGraphics
+import Darwin
 
 /// The writer and pixel buffers stay on one actor. The producer awaits each
 /// append; encoding cannot accumulate an unbounded queue of guest frames.
@@ -8,8 +9,14 @@ actor ScreenMovieWriter {
     private var input: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var count = 0
+    private var audioInput: AVAssetWriterInput?
+    private var audioFormat: CMAudioFormatDescription?
+    private var capture: GuestAudioCapture?
+    private var finishing = false
+    private var audioFrame: Int64 = 0
 
-    func start(url: URL) throws {
+    func start(url: URL, recordGuestAudio: Bool = false) throws {
+        guard self.writer == nil, !finishing else { throw CaptureError.failed("A recording is already active.") }
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let transfer: String
         if #available(macOS 15.0, *) { transfer = AVVideoTransferFunction_IEC_sRGB }
@@ -35,12 +42,31 @@ actor ScreenMovieWriter {
             ])
         guard writer.canAdd(input) else { throw CaptureError.failed("Video encoding is unavailable.") }
         writer.add(input)
+        let audioInput: AVAssetWriterInput?
+        if recordGuestAudio {
+            let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100,
+                AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 128000
+            ])
+            audio.expectsMediaDataInRealTime = true
+            guard writer.canAdd(audio) else { throw CaptureError.failed("Audio encoding is unavailable.") }
+            writer.add(audio)
+            audioInput = audio
+        } else { audioInput = nil }
         guard writer.startWriting() else { throw writer.error ?? CaptureError.failed("Could not start recording.") }
         writer.startSession(atSourceTime: .zero)
+        do { capture = recordGuestAudio ? try GuestAudioCapture() : nil }
+        catch { writer.cancelWriting(); throw error }
+        self.audioInput = audioInput
         self.writer = writer; self.input = input; self.adaptor = adaptor
         count = 0
+        audioFrame = 0
     }
-    func append(_ image: CGImage, seconds: Double) throws {
+    func append(_ image: CGImage?, seconds: Double) async throws {
+        guard !finishing else { return }
+        _ = try await drainAudio()
+        guard let image else { return }
+        let seconds = capture?.seconds ?? seconds
         guard let writer, let input, let adaptor else { return }
         if writer.status == .failed { throw writer.error ?? CaptureError.failed("Recording failed.") }
         guard input.isReadyForMoreMediaData, let pool = adaptor.pixelBufferPool else { return }
@@ -71,18 +97,146 @@ actor ScreenMovieWriter {
         }
         count += 1
     }
+    private func drainAudio(through end: Double? = nil) async throws -> Bool {
+        guard let capture, let audioInput else { return true }
+        guard let writer, writer.status != .failed else {
+            throw self.writer?.error ?? CaptureError.failed("Audio recording failed.")
+        }
+        while audioInput.isReadyForMoreMediaData {
+            guard let packet = try capture.read() else { return true }
+            try await appendAudio(packet.data, seconds: packet.seconds, through: end)
+            if packet.data.isEmpty { return true }
+        }
+        return false
+    }
+
+    private func appendAudio(_ data: Data, seconds: Double, through end: Double? = nil) async throws {
+        guard audioInput != nil else { return }
+        guard seconds.isFinite, seconds >= 0, seconds < Double(Int64.max / 44100), data.count % 4 == 0 else {
+            throw CaptureError.failed("Invalid guest audio packet.")
+        }
+        let target = Int64((seconds * 44100).rounded())
+        let limit = end.map { Int64(max(0, $0 * 44100)) } ?? Int64.max
+        // AAC encoding closes timestamp gaps. Supply silence explicitly, in
+        // bounded chunks, so pauses and idle periods retain video alignment.
+        while audioFrame < min(target, limit) {
+            let frames = Int(min(4410, min(target, limit) - audioFrame))
+            try await encodeAudio(Data(count: frames * 4), frames: frames)
+        }
+        let skipped = Int(min(Int64(data.count / 4), max(0, audioFrame - target)))
+        let frames = min(data.count / 4 - skipped, Int(max(0, min(Int64(data.count / 4), limit - audioFrame))))
+        guard frames > 0 else { return }
+        try await encodeAudio(Data(data.dropFirst(skipped * 4)), frames: frames)
+    }
+
+    private func encodeAudio(_ data: Data, frames: Int) async throws {
+        guard let audioInput, let writer else { return }
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !audioInput.isReadyForMoreMediaData {
+            guard writer.status == .writing, ContinuousClock.now < deadline else {
+                throw writer.error ?? CaptureError.failed("Audio encoder did not become ready.")
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        if audioFormat == nil {
+            var format = AudioStreamBasicDescription(mSampleRate: 44100, mFormatID: kAudioFormatLinearPCM,
+                mFormatFlags: kLinearPCMFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+                mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4,
+                mChannelsPerFrame: 2, mBitsPerChannel: 16, mReserved: 0)
+            guard CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: &format,
+                layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
+                extensions: nil, formatDescriptionOut: &audioFormat) == noErr else {
+                throw CaptureError.failed("Could not describe guest audio.")
+            }
+        }
+        var block: CMBlockBuffer?
+        guard CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault, memoryBlock: nil,
+            blockLength: frames * 4, blockAllocator: kCFAllocatorDefault, customBlockSource: nil,
+            offsetToData: 0, dataLength: frames * 4, flags: 0, blockBufferOut: &block) == noErr,
+            let block else { throw CaptureError.failed("Could not allocate an audio packet.") }
+        let copied = data.withUnsafeBytes {
+            CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block,
+                offsetIntoDestination: 0, dataLength: frames * 4)
+        }
+        var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: 44100),
+            presentationTimeStamp: CMTime(value: audioFrame, timescale: 44100), decodeTimeStamp: .invalid)
+        var size = 4
+        var sample: CMSampleBuffer?
+        guard copied == noErr, CMSampleBufferCreateReady(allocator: kCFAllocatorDefault,
+            dataBuffer: block, formatDescription: audioFormat, sampleCount: frames,
+            sampleTimingEntryCount: 1, sampleTimingArray: &timing,
+            sampleSizeEntryCount: 1, sampleSizeArray: &size, sampleBufferOut: &sample) == noErr,
+            let sample, audioInput.append(sample) else {
+            throw writer.error ?? CaptureError.failed("Could not encode guest audio.")
+        }
+        audioFrame += Int64(frames)
+    }
+
     func finish(seconds: Double) async throws {
-        guard let writer, let input else { throw CaptureError.failed("No recording is active.") }
-        guard count > 0 else { writer.cancelWriting(); throw CaptureError.failed("No device frames were recorded.") }
-        writer.endSession(atSourceTime: CMTime(seconds: seconds, preferredTimescale: 600))
-        input.markAsFinished()
-        await writer.finishWriting()
-        self.writer = nil; self.input = nil; self.adaptor = nil
-        guard writer.status == .completed else { throw writer.error ?? CaptureError.failed("Could not finish recording.") }
+        guard let writer, let input, !finishing else { throw CaptureError.failed("No recording is active.") }
+        finishing = true
+        let end = capture?.seconds ?? seconds
+        capture?.stop()
+        defer {
+            capture = nil; audioInput = nil; audioFormat = nil
+            self.writer = nil; self.input = nil; self.adaptor = nil
+            finishing = false
+        }
+        do {
+            guard count > 0 else { throw CaptureError.failed("No device frames were recorded.") }
+            let deadline = ContinuousClock.now + .seconds(10)
+            while try await !drainAudio(through: end) {
+                guard ContinuousClock.now < deadline else { throw CaptureError.failed("Audio encoder did not finish in time.") }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            try await appendAudio(Data(), seconds: end, through: end)
+            writer.endSession(atSourceTime: CMTime(seconds: end, preferredTimescale: 44100))
+            input.markAsFinished()
+            audioInput?.markAsFinished()
+            await writer.finishWriting()
+            guard writer.status == .completed else { throw writer.error ?? CaptureError.failed("Could not finish recording.") }
+        } catch { writer.cancelWriting(); throw error }
     }
 }
 
 nonisolated enum CaptureError: LocalizedError {
     case failed(String)
     var errorDescription: String? { if case .failed(let message) = self { message } else { nil } }
+}
+
+
+private nonisolated struct GuestAudioCapture {
+    private typealias Start = @convention(c) () -> UInt64
+    private typealias Read = @convention(c) (UInt64, UnsafeMutableRawPointer?, Int32, UnsafeMutablePointer<Double>?) -> Int32
+    private typealias Time = @convention(c) (UInt64) -> Double
+    private typealias Stop = @convention(c) (UInt64) -> Void
+    private let token: UInt64
+    private let readFunction: Read
+    private let timeFunction: Time
+    private let stopFunction: Stop
+    init() throws {
+        func symbol<T>(_ name: String, _ type: T.Type) throws -> T {
+            guard let pointer = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) else {
+                throw CaptureError.failed("This emulator build does not support audio recording.")
+            }
+            return unsafeBitCast(pointer, to: type)
+        }
+        let start = try symbol("qemu_ios_audio_capture_start", Start.self)
+        readFunction = try symbol("qemu_ios_audio_capture_read", Read.self)
+        timeFunction = try symbol("qemu_ios_audio_capture_time", Time.self)
+        stopFunction = try symbol("qemu_ios_audio_capture_stop", Stop.self)
+        token = start()
+        guard token != 0 else { throw CaptureError.failed("The device is not ready to record audio.") }
+    }
+    var seconds: Double { timeFunction(token) }
+    func stop() { stopFunction(token) }
+    func read() throws -> (data: Data, seconds: Double)? {
+        var data = Data(count: 16384)
+        var seconds = -1.0
+        let count = data.withUnsafeMutableBytes { readFunction(token, $0.baseAddress, 16384, &seconds) }
+        guard count >= 0 else { throw CaptureError.failed("Guest audio capture stopped or its buffer overflowed.") }
+        guard count > 0 || seconds >= 0 else { return nil }
+        data.count = Int(count)
+        return (data, seconds)
+    }
 }

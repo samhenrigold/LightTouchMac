@@ -24,7 +24,9 @@ parser = argparse.ArgumentParser(description=__doc__)
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument('--photo',action='store_true')
 mode.add_argument('--aac',action='store_true',help='convert raw AAC, import it and verify native Music playback')
+parser.add_argument('--recording',action='store_true',help='record embedded QEMU video and guest audio across a pause (requires --aac)')
 args = parser.parse_args()
+if args.recording and not args.aac: parser.error('--recording requires --aac')
 APP = Path(__file__).resolve().parents[1]
 ROOT = APP.parent/'qemu-ios'
 sys.path.insert(0,str(ROOT/'tests/ipod'))
@@ -134,9 +136,31 @@ elif args.aac:
 else:
     source = out/"Song 'quoted' $title — été.m4a"
     shutil.copyfile(ROOT/'contrib/it-harness/build/Payload/Harness.app/aac.m4a',source)
-p = r.Procs()
+if args.recording:
+    recorder = out/'recorder'
+    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
+        str(APP/'LightTouchMac/ScreenMovieWriter.swift'),str(APP/'tests/recording-native.swift'),
+        '-o',str(recorder)],check=True)
+    class Embedded(r.Procs):
+        def spawn(self,argv,logpath,env=None):
+            if argv[0] == cfg.qemu:
+                directory = Path(logpath).parent
+                config = directory/'embedded-args.json'
+                config.write_text(json.dumps(argv))
+                argv = [str(recorder),str(Path(cfg.qemu).with_name('libqemu-arm.dylib')),
+                        str(config),str(directory)]
+            return super().spawn(argv,logpath,env)
+    p = Embedded()
+else:
+    p = r.Procs()
 d = r.Device(cfg,p,'device')
 server = None
+def recording_marker(name, reply):
+    (Path(d.dir)/name).touch()
+    deadline = time.monotonic()+30
+    while not (Path(d.dir)/reply).exists():
+        assert d.alive() and time.monotonic()<deadline, reply
+        time.sleep(0.1)
 r.START = time.time()
 print('OUTPUT',out,flush=True)
 try:
@@ -233,16 +257,42 @@ try:
         d.qmp.tap(160,455)
         time.sleep(2)
         # A one-song library has no Shuffle row; the song is the first row.
+        if args.recording: recording_marker('record-start','record-ready')
         d.qmp.tap(130,88)
         time.sleep(2)
+        if args.recording:
+            d.qmp.cmd('stop'); time.sleep(2); d.qmp.cmd('cont')
         print('PLAYING',r.itqmp.agent(d.qmp,'frontmost'),flush=True)
         time.sleep(6)
         r.to_png(d.qmp.shot(str(out/'playing.ppm')),str(out/'playing.png'))
+    if args.recording: recording_marker('record-stop','record-finished')
     assert d.powerdown(), 'guest shutdown not confirmed'
     if args.aac:
         audio = r.Result('converted AAC playback')
         assert r.verify_audio(str(out/'music.wav'),audio),audio.detail
         print('PASS: converted AAC played by native Music: '+audio.detail,flush=True)
+    if args.recording:
+        import numpy as np
+        import wave
+        movie = Path(d.dir)/'recording.mov'
+        probe = json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(movie)]))
+        streams = {s['codec_type']:s for s in probe['streams']}
+        duration = float(streams['video']['duration'])
+        assert 9 < duration < 15, duration
+        assert abs(float(streams['audio']['duration'])-duration)<0.15
+        decoded = out/'recording.wav'
+        subprocess.run(['ffmpeg','-v','error','-i',str(movie),'-acodec','pcm_s16le',str(decoded)],check=True)
+        with wave.open(str(decoded)) as wav:
+            assert wav.getnchannels()==2 and wav.getframerate()==44100
+            samples = np.frombuffer(wav.readframes(wav.getnframes()),dtype='<i2').reshape(-1,2).astype(float)
+        gap = samples[int(2.7*44100):int(3.7*44100)]
+        assert np.sqrt(np.mean(gap**2))<50, 'VM pause lost its silence'
+        for start in (1.5,5.0):
+            chunk = samples[int(start*44100):int((start+0.3)*44100)]
+            for channel,hz in enumerate((440,880)):
+                peak = np.fft.rfftfreq(len(chunk),1/44100)[np.argmax(np.abs(np.fft.rfft(chunk[:,channel])))]
+                assert abs(peak-hz)<4 and np.sqrt(np.mean(chunk[:,channel]**2))>1000,(start,channel,peak)
+        print('PASS: embedded QEMU recording, stereo Music, VM pause silence and resumed audio',movie,flush=True)
     print('PASS: native media preparation/upload, single library item, duplicate reconciliation and guest shutdown',flush=True)
 finally:
     if server:
