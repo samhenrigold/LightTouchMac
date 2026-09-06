@@ -159,6 +159,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func refreshForState() {
         updateDeviceNotice()
         inspectorVC.refreshDeviceStatus()
+        if !emulator.batteryControlsAvailable { batteryPopover?.close() }
         // The window subtitle is where AppKit puts secondary window state, and
         // it styles and truncates itself to match the title. A custom titlebar
         // accessory was carrying this before — more code, its own constraints,
@@ -461,19 +462,59 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         syncRotateSymbol()
     }
 
+    private var batteryPopover: NSPopover?
+    private var batteryEditor: BatterySettingsView?
+    private let batteryError = NSTextField(wrappingLabelWithString: "")
+
     @objc func configureBattery(_ sender: Any?) {
         guard emulator.batteryControlsAvailable, let window else { return }
-        let alert = NSAlert()
-        alert.messageText = "Battery"
-        alert.informativeText = "Set the device’s target battery level and charging state. iOS updates its displayed estimate gradually. Drain is percent per emulated minute; 0 disables it. Disconnect USB for normal discharge; installation and media sync need it connected. Battery settings also apply at the next boot."
-        alert.addButton(withTitle: "Apply")
-        alert.addButton(withTitle: "Cancel")
-        let editor = BatterySettingsView(level: emulator.batteryLevel, charging: emulator.batteryCharging, drain: emulator.batteryDrain, usbConnected: emulator.usbConnected)
-        alert.accessoryView = editor
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn, let self else { return }
-            do { try self.emulator.configureBattery(level: editor.level, charging: editor.charging, drain: editor.drain, usbConnected: editor.usbConnected) }
-            catch { NSAlert(error: error).beginSheetModal(for: window) }
+        if batteryPopover?.isShown == true { batteryPopover?.close(); return }
+        let editor = BatterySettingsView(level: emulator.batteryLevel, charging: emulator.batteryCharging,
+            drain: emulator.batteryDrain, usbConnected: emulator.usbConnected)
+        batteryEditor = editor
+        let heading = NSTextField(labelWithString: "Battery")
+        heading.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        let hint = NSTextField(wrappingLabelWithString: "Set a target level; iOS updates its estimate gradually. Drain is percent per emulated minute. USB is required for installation and media sync.")
+        hint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        hint.textColor = .secondaryLabelColor
+        batteryError.stringValue = ""
+        batteryError.textColor = .systemRed
+        batteryError.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        let apply = NSButton(title: "Apply", target: self, action: #selector(applyBatterySettings(_:)))
+        apply.bezelStyle = .rounded
+        let stack = NSStackView(views: [heading, hint, editor, batteryError, apply])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        NSLayoutConstraint.activate([
+            editor.widthAnchor.constraint(equalToConstant: editor.frame.width),
+            editor.heightAnchor.constraint(equalToConstant: editor.frame.height),
+            hint.widthAnchor.constraint(equalTo: editor.widthAnchor),
+            batteryError.widthAnchor.constraint(equalTo: editor.widthAnchor),
+        ])
+        let content = NSViewController()
+        content.view = stack
+        stack.setFrameSize(stack.fittingSize)
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = content
+        batteryPopover = popover
+        let anchor = (sender as? NSView).flatMap { $0.window === window ? $0 : nil } ?? deviceVC.view
+        let rect = sender is NSView ? anchor.bounds
+            : NSRect(x: anchor.bounds.midX, y: anchor.bounds.maxY - 8, width: 1, height: 1)
+        popover.show(relativeTo: rect, of: anchor, preferredEdge: .minX)
+    }
+
+    @objc private func applyBatterySettings(_ sender: Any?) {
+        guard let editor = batteryEditor else { return }
+        do {
+            try emulator.configureBattery(level: editor.level, charging: editor.charging,
+                drain: editor.drain, usbConnected: editor.usbConnected)
+            batteryPopover?.close()
+        } catch {
+            batteryError.stringValue = error.localizedDescription
+            logEvent("battery: \(error.localizedDescription)")
         }
     }
 
