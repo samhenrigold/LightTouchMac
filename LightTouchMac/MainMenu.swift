@@ -61,13 +61,16 @@ enum MainMenuBuilder {
     
     private static func captureMenu() -> NSMenu {
         let menu = NSMenu(title: "Capture")
-        menu.addItem(item("Save Screenshot…", #selector(MainWindowController.saveScreenshot(_:)), "s", [.shift, .command]))
+        menu.addItem(item("Save Screenshot", #selector(MainWindowController.saveScreenshot(_:)), "s", [.shift, .command]))
         menu.addItem(item("Copy Screen", #selector(MainWindowController.copyScreen(_:))))
         menu.addItem(item("Live Text", #selector(MainWindowController.showLiveText(_:)), "l", [.shift, .command]))
         menu.addItem(.separator())
         menu.addItem(item("Start Recording", #selector(MainWindowController.toggleRecording(_:)), "r", [.shift, .command]))
         menu.addItem(.separator())
         menu.addItem(item("Show Finger Dots", #selector(MainWindowController.toggleTouchOverlay(_:))))
+        menu.addItem(.separator())
+        menu.addItem(item("Show Captures in Finder", #selector(MainWindowController.showCaptures(_:))))
+        menu.addItem(item("Capture Folder…", #selector(MainWindowController.chooseCaptureFolder(_:))))
         return menu
     }
 

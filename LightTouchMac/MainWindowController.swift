@@ -84,24 +84,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         toolbar.allowsUserCustomization = true
         toolbar.autosavesConfiguration = true
         window.toolbar = toolbar
-        if !UserDefaults.standard.bool(forKey: "captureToolbarItemsAdded") {
-            for id: NSToolbarItem.Identifier in [.screenshot, .recording, .liveText] {
-                if !toolbar.items.contains(where: { $0.itemIdentifier == id }) {
-                    let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == .inspectorTrackingSeparator }) ?? toolbar.items.count
-                    toolbar.insertItem(withItemIdentifier: id, at: index)
-                }
-            }
-            UserDefaults.standard.set(true, forKey: "captureToolbarItemsAdded")
-        }
-        
-        if !UserDefaults.standard.bool(forKey: "motionToolbarItemAdded") {
-            if !toolbar.items.contains(where: { $0.itemIdentifier == .motion }) {
-                let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == .rotate }).map { $0 + 1 } ?? 0
-                toolbar.insertItem(withItemIdentifier: .motion, at: index)
-            }
-            UserDefaults.standard.set(true, forKey: "motionToolbarItemAdded")
-        }
-
         // Out and in. Momentary, because both are commands rather than states
         // to sit in — which state you are in is the menu's job, where the
         // checkmarks live.
@@ -133,7 +115,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var recordingFailure: Error?
     private var recordingStopRequested = false
     private var quitAfterRecording = false
-    private var recordingIndicator: NSTitlebarAccessoryViewController?
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
@@ -167,7 +148,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             }
         }
         updateDeviceNotice()
-        inspectorVC.refreshDeviceStatus()
         // The window subtitle is where AppKit puts secondary window state, and
         // it styles and truncates itself to match the title. A custom titlebar
         // accessory was carrying this before — more code, its own constraints,
@@ -177,7 +157,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         if emulator.isPoweredOff || emulator.isDead { deviceVC.screen.endLiveText() }
         deviceVC.screen.updatePowerPresentation()
         if let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .lock }) {
-            item.label = emulator.isPoweredOff ? "Power On" : "Lock"
+            item.label = emulator.isPoweredOff ? "Power On" : emulator.isSleeping ? "Wake" : "Lock"
             item.image = NSImage(systemSymbolName: emulator.isPoweredOff ? "power" : "lock", accessibilityDescription: item.label)
             item.toolTip = emulator.isPoweredOff ? "Power on the device" : "Lock or wake the device; open the menu for power options"
         }
@@ -387,6 +367,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         item.target = self
         item.action = action
         item.isBordered = true
+        if id == .liveText || id == .fingerDots {
+            let control = NSButton(image: item.image!, target: self, action: action)
+            control.setButtonType(.pushOnPushOff)
+            control.bezelStyle = .texturedRounded
+            control.toolTip = help
+            control.setAccessibilityLabel(label)
+            item.view = control
+        }
         return item
     }
     
@@ -396,7 +384,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// view's divider, so the toggle rides above the inspector rather than
     /// floating in the middle of the titlebar.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .motion, .zoom, .screenshot, .recording, .liveText,
+        [.home, .lock, .rotate, .zoom, .space, .screenshot, .recording, .liveText,
          .flexibleSpace, .inspectorTrackingSeparator, .flexibleSpace, .searchCatalog, .toggleInspector]
     }
 
@@ -677,13 +665,55 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func saveScreenshot(_ sender: Any?) {
         guard let window, let image = deviceVC.screen.captureFrame(),
               let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { return }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = captureName("Screenshot") + ".png"
+        do {
+            try data.write(to: captureDestination("Screenshot", extension: "png"), options: .atomic)
+            if let item = window.toolbar?.items.first(where: { $0.itemIdentifier == .screenshot }) {
+                item.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Screenshot saved")
+                item.toolTip = "Saved to " + captureFolder.path
+                Task { @MainActor [weak item] in
+                    try? await Task.sleep(for: .seconds(1))
+                    item?.image = NSImage(systemSymbolName: "camera", accessibilityDescription: "Screenshot")
+                }
+            }
+        }
+        catch { NSAlert(error: error).beginSheetModal(for: window) }
+    }
+
+    private var captureFolder: URL {
+        if let path = UserDefaults.standard.string(forKey: "captureFolder") {
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+        return FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Light Touch", isDirectory: true)
+    }
+
+    private func captureDestination(_ kind: String, extension suffix: String) throws -> URL {
+        let folder = captureFolder
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder.appendingPathComponent(captureName(kind) + " " + UUID().uuidString.prefix(8))
+            .appendingPathExtension(suffix)
+    }
+
+    @objc func showCaptures(_ sender: Any?) {
+        do {
+            try FileManager.default.createDirectory(at: captureFolder, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(captureFolder)
+        } catch { if let window { NSAlert(error: error).beginSheetModal(for: window) } }
+    }
+
+    @objc func chooseCaptureFolder(_ sender: Any?) {
+        guard let window else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = captureFolder
+        panel.prompt = "Choose"
         panel.beginSheetModal(for: window) { response in
-            guard response == .OK, let url = panel.url else { return }
-            do { try data.write(to: url, options: .atomic) }
-            catch { NSAlert(error: error).beginSheetModal(for: window) }
+            if response == .OK, let url = panel.url {
+                UserDefaults.standard.set(url.path, forKey: "captureFolder")
+            }
         }
     }
 
@@ -696,9 +726,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func showLiveText(_ sender: Any?) {
         if filesVC != nil { toggleFiles(nil) }
         deviceVC.screen.toggleLiveText()
+        window?.toolbar?.validateVisibleItems()
     }
 
-    @objc func toggleTouchOverlay(_ sender: Any?) { deviceVC.screen.showsTouches.toggle() }
+    @objc func toggleTouchOverlay(_ sender: Any?) {
+        deviceVC.screen.showsTouches.toggle()
+        window?.toolbar?.validateVisibleItems()
+    }
 
     @objc func toggleRecording(_ sender: Any?) {
         if recordingOutput != nil { stopRecording(sender); return }
@@ -707,27 +741,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         recordingOutput = output
         recordingFailure = nil
         recordingStopRequested = false
-        NSApp.dockTile.badgeLabel = "REC"
-        let indicator = NSTitlebarAccessoryViewController()
-        let label = NSTextField(labelWithString: "● Recording")
-        label.textColor = .systemRed
-        label.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        label.frame = CGRect(x: 0, y: 0, width: 145, height: 22)
-        indicator.view = label
-        indicator.layoutAttribute = .right
-        window.addTitlebarAccessoryViewController(indicator)
-        recordingIndicator = indicator
+        window.toolbar?.validateVisibleItems()
         recordingTask = Task { [weak self] in
             guard let self else { return }
             do {
                 try await movieWriter.start(url: output, recordGuestAudio: true)
                 recordingStartedAt = CACurrentMediaTime()
                 while !Task.isCancelled && !recordingStopRequested {
-                    let elapsed = Int(CACurrentMediaTime() - recordingStartedAt)
-                    if let label = recordingIndicator?.view as? NSTextField {
-                        let seconds = String(elapsed % 60)
-                        label.stringValue = "● \(elapsed / 60):\(seconds.count == 1 ? "0" : "")\(seconds)"
-                    }
                     try await movieWriter.append(deviceVC.screen.captureFrame(),
                         seconds: CACurrentMediaTime() - recordingStartedAt)
                     try await Task.sleep(for: .milliseconds(33))
@@ -759,12 +779,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let producer = recordingTask
         // Let the current audio packet finish before draining the capture queue.
         recordingStopRequested = true
-        NSApp.dockTile.badgeLabel = nil
-        if let window, let indicator = recordingIndicator,
-           let index = window.titlebarAccessoryViewControllers.firstIndex(of: indicator) {
-            window.removeTitlebarAccessoryViewController(at: index)
-        }
-        recordingIndicator = nil
+        window?.toolbar?.validateVisibleItems()
         Task { [weak self] in
             guard let self else { return }
             await producer?.value
@@ -772,6 +787,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 recordingOutput = nil
                 recordingTask = nil
                 finishingRecording = false
+                window?.toolbar?.validateVisibleItems()
                 if quitAfterRecording {
                     quitAfterRecording = false
                     NSApp.terminate(nil)
@@ -780,23 +796,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             do {
                 try await movieWriter.finish(seconds: max(CACurrentMediaTime() - recordingStartedAt, 0.034))
                 if let recordingFailure { throw recordingFailure }
-                guard let window else { return }
-                let panel = NSSavePanel()
-                panel.allowedContentTypes = [.quickTimeMovie]
-                panel.nameFieldStringValue = captureName("Recording") + ".mov"
-                panel.message = "Device video at native resolution on a 480 × 480 canvas. Includes device audio."
-                let response = await panel.beginSheetModal(for: window)
-                if response != .OK { quitAfterRecording = false }
-                if response == .OK, let destination = panel.url {
-                    // Copy into the destination volume, then atomically replace
-                    // any existing file only after the complete copy succeeds.
-                    let staged = destination.deletingLastPathComponent().appendingPathComponent(".ltm-" + UUID().uuidString + ".mov")
-                    defer { try? FileManager.default.removeItem(at: staged) }
-                    try FileManager.default.copyItem(at: output, to: staged)
-                    if FileManager.default.fileExists(atPath: destination.path) {
-                        _ = try FileManager.default.replaceItemAt(destination, withItemAt: staged)
-                    } else { try FileManager.default.moveItem(at: staged, to: destination) }
-                }
+                let destination = try captureDestination("Recording", extension: "mov")
+                // Stage on the destination volume so a failed copy never exposes a partial movie.
+                let staged = destination.deletingLastPathComponent().appendingPathComponent(".ltm-" + UUID().uuidString + ".mov")
+                defer { try? FileManager.default.removeItem(at: staged) }
+                try FileManager.default.copyItem(at: output, to: staged)
+                try FileManager.default.moveItem(at: staged, to: destination)
                 try? FileManager.default.removeItem(at: output)
             } catch {
                 quitAfterRecording = false
@@ -904,16 +909,20 @@ extension MainWindowController: NSToolbarItemValidation {
         // blocking it was a regression. The terminal is gated, because it opens
         // a competing lockdown session.
         case .screenshot, .copyScreen:
-            return !emulator.isPoweredOff && !emulator.isDead
+            return emulator.isRunning && !emulator.isSleeping
         case .recording:
             let active = recordingOutput != nil
             item.label = finishingRecording ? "Finishing…" : active ? "Stop Recording" : "Record"
             item.image = NSImage(systemSymbolName: active ? "stop.circle.fill" : "record.circle", accessibilityDescription: item.label)
-            return !finishingRecording && (active || emulator.isRunning)
+            if active { item.image = item.image?.withSymbolConfiguration(.init(paletteColors: [.systemRed])) }
+            item.toolTip = finishingRecording ? "Saving recording…" : active ? "Stop recording" : "Record device video and audio"
+            return !finishingRecording && (active || (emulator.isRunning && !emulator.isSleeping))
         case .liveText:
+            (item.view as? NSButton)?.state = deviceVC.screen.isShowingLiveText ? .on : .off
             item.label = deviceVC.screen.isShowingLiveText ? "Dismiss Live Text" : "Live Text"
-            return deviceVC.screen.isShowingLiveText || (!emulator.isPoweredOff && !emulator.isDead)
+            return deviceVC.screen.isShowingLiveText || (emulator.isRunning && !emulator.isSleeping)
         case .fingerDots:
+            (item.view as? NSButton)?.state = deviceVC.screen.showsTouches ? .on : .off
             item.label = deviceVC.screen.showsTouches ? "Hide Finger Dots" : "Show Finger Dots"
             return true
         case .installApp:
@@ -921,7 +930,7 @@ extension MainWindowController: NSToolbarItemValidation {
         case .openTerminal:
             return emulator.canReachDevice && !emulator.isInstalling
         case .lock:
-            item.label = emulator.isPoweredOff ? "Power On" : "Lock"
+            item.label = emulator.isPoweredOff ? "Power On" : emulator.isSleeping ? "Wake" : "Lock"
             item.image = NSImage(systemSymbolName: emulator.isPoweredOff ? "power" : "lock", accessibilityDescription: item.label)
             return emulator.acceptsInput || (emulator.isPoweredOff && !emulator.shuttingDown)
         case .home, .rotate:
@@ -958,7 +967,7 @@ extension MainWindowController: NSMenuItemValidation {
             return emulator.canReachDevice && !emulator.isInstalling
         // Device input only reaches a running guest.
         case #selector(deviceLock(_:)):
-            menuItem.title = emulator.isPoweredOff ? "Power On" : "Lock"
+            menuItem.title = emulator.isPoweredOff ? "Power On" : emulator.isSleeping ? "Wake" : "Lock"
             return emulator.acceptsInput || (emulator.isPoweredOff && !emulator.shuttingDown)
         case #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)), #selector(deviceRotateRight(_:)):
             return emulator.acceptsInput && !(window?.firstResponder is NSTextView)
@@ -985,18 +994,18 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(discardSavedState(_:)): return emulator.hasSavedState
         case #selector(eraseDevice(_:)): return !emulator.isDead
         case #selector(toggleRecording(_:)):
-            menuItem.title = recordingOutput == nil ? "Start Recording" : "Stop Recording…"
+            menuItem.title = recordingOutput == nil ? "Start Recording" : "Stop Recording"
             menuItem.state = recordingOutput == nil ? .off : .on
-            return !finishingRecording && (recordingOutput != nil || emulator.isRunning)
+            return !finishingRecording && (recordingOutput != nil || (emulator.isRunning && !emulator.isSleeping))
         case #selector(toggleTouchOverlay(_:)):
             menuItem.state = deviceVC.screen.showsTouches ? .on : .off
             return true
         case #selector(showLiveText(_:)):
             menuItem.title = deviceVC.screen.isShowingLiveText ? "Done with Live Text" : "Live Text"
             menuItem.state = deviceVC.screen.isShowingLiveText ? .on : .off
-            return deviceVC.screen.isShowingLiveText || (!emulator.isPoweredOff && !emulator.isDead)
+            return deviceVC.screen.isShowingLiveText || (emulator.isRunning && !emulator.isSleeping)
         case #selector(saveScreenshot(_:)), #selector(copyScreen(_:)):
-            return !emulator.isPoweredOff && !emulator.isDead
+            return emulator.isRunning && !emulator.isSleeping
         case #selector(pasteToGuest(_:)):
             return emulator.acceptsInput && NSPasteboard.general.string(forType: .string) != nil
         case #selector(zoomIn(_:)):
