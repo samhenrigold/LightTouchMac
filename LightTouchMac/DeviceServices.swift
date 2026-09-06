@@ -230,6 +230,7 @@ struct DeviceServices: Sendable {
             let result = close(client, handle)
             closed = true
             guard result == imd.success else { throw DeviceError.upload(.init(code: result), written: written, total: total) }
+            try Task.checkCancellation()
             if reuseIdentical {
                 let renamed = destination.withCString { from in
                     remote.withCString { to in imd.afc_rename_path!(client, from, to) }

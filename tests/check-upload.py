@@ -20,8 +20,9 @@ final class State: @unchecked Sendable {
  var existing: Data?, readOffset = 0
  var bytes = Data(), removed = false, closeCalls = 0
  var destination = "", directories: [String] = []
+ var cancelOnClose = false
  var failure = false, badCount = false, closeFailure = false
- func reset() { lock.withLock { bytes = Data(); existing = nil; readOffset = 0; destination = ""; directories = []; removed = false; closeCalls = 0; failure = false; badCount = false; closeFailure = false } }
+ func reset() { lock.withLock { bytes = Data(); cancelOnClose = false; existing = nil; readOffset = 0; destination = ""; directories = []; removed = false; closeCalls = 0; failure = false; badCount = false; closeFailure = false } }
 }
 nonisolated enum IMobileDevice {
  static let state = State(), success: Int32 = 0, afcWriteMode: UInt64 = 3
@@ -49,7 +50,7 @@ nonisolated enum IMobileDevice {
    w = min(n, 317); state.bytes.append(UnsafeRawPointer(p).assumingMemoryBound(to: UInt8.self), count: Int(w)); return 0
   }
  }
- static let afc_file_close: ((OpaquePointer, UInt64)->Int32)? = { _,_ in state.lock.withLock { state.closeCalls += 1;return state.closeFailure ? 20 : 0 } }
+ static let afc_file_close: ((OpaquePointer, UInt64)->Int32)? = { _,_ in state.lock.withLock { state.closeCalls += 1;if state.cancelOnClose { withUnsafeCurrentTask { $0?.cancel() } };return state.closeFailure ? 20 : 0 } }
  static let afc_remove_path: ((OpaquePointer, UnsafePointer<CChar>)->Int32)? = { _,_ in state.lock.withLock { state.removed=true;return 0 } }
  static let afc_client_free: ((OpaquePointer)->Int32)? = { _ in 0 }
 }
@@ -86,6 +87,10 @@ struct Services {
   do { try await Services().stageSong(MediaSong(id:"../escape",audio:audio)) { _ in }; fatalError("invalid destination accepted") }
   catch {}
   precondition(state.destination.isEmpty)
+  state.reset();state.cancelOnClose=true
+  do { try await Services().stageSong(MediaSong(id:id,audio:audio)) { _ in };fatalError("cancelled upload published") }
+  catch is CancellationError {}
+  precondition(state.removed && state.existing == nil && state.closeCalls == 1)
   for kind in 0..<3 {
    state.reset()
    state.failure = kind == 0; state.badCount = kind == 1; state.closeFailure = kind == 2
