@@ -6,7 +6,9 @@ final class BatterySettingsView: NSView {
     private let valueLabel = NSTextField(labelWithString: "")
     private let chargingMenu = NSPopUpButton(frame: .zero, pullsDown: false)
 
-    init(level: Int, charging: Int) {
+    private let drainField = NSTextField(string: "0")
+
+    init(level: Int, charging: Int, drain: Double) {
         super.init(frame: .zero)
         slider.integerValue = level
         slider.target = self
@@ -23,6 +25,14 @@ final class BatterySettingsView: NSView {
         capacity.isEditable = false
         chargingMenu.addItems(withTitles: ["Automatic (USB)", "Charging", "Not Charging"])
         chargingMenu.selectItem(at: charging)
+        let formatter = NumberFormatter()
+        formatter.minimum = 0
+        formatter.maximum = 100
+        formatter.maximumFractionDigits = 2
+        drainField.formatter = formatter
+        drainField.doubleValue = drain
+        drainField.setAccessibilityLabel("Battery drain percent per minute")
+        drainField.toolTip = "0 disables drain. Pausing the device or connecting USB power stops drain unless charging is set to Not Charging."
         let ends = NSStackView(views: [NSTextField(labelWithString: "Empty"), NSView(), NSTextField(labelWithString: "Full")])
         ends.orientation = .horizontal
         ends.views[1].setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -31,6 +41,7 @@ final class BatterySettingsView: NSView {
             [NSView(), slider, NSView()],
             [NSView(), ends, NSView()],
             [NSTextField(labelWithString: "Charging"), chargingMenu, NSView()],
+            [NSTextField(labelWithString: "Drain"), drainField, NSTextField(labelWithString: "%/min")],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.column(at: 0).width = 70
@@ -47,6 +58,7 @@ final class BatterySettingsView: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
     var level: Int { slider.integerValue }
     var charging: Int { chargingMenu.indexOfSelectedItem }
+    var drain: Double { drainField.doubleValue }
     @objc private func updateCapacity(_ sender: Any?) {
         capacity.integerValue = level
         valueLabel.stringValue = "\(level)%"

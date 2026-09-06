@@ -180,7 +180,7 @@ final class EmulatorController {
         + ",nandrw=\(overlay.path)"
         if batterySetter != nil, UserDefaults.standard.object(forKey: "batteryLevel") != nil {
             let mode = ["auto", "on", "off"][batteryCharging]
-            machine += ",battery-level=\(batteryLevel),battery-charging=\(mode)"
+            machine += ",battery-level=\(batteryLevel),battery-charging=\(mode),battery-drain=\(batteryDrain)"
         }
         if options.network {
             machine += ",wifi=on"          // brings up the emulated BCM4325
@@ -488,9 +488,9 @@ final class EmulatorController {
     func rotateRight()     { qemu_ios_ui_rotate(true) }
     func shake()           { qemu_ios_ui_shake() }
 
-    private typealias BatterySetter = @convention(c) (Int32, Int32) -> Bool
+    private typealias BatterySetter = @convention(c) (Int32, Int32, Double) -> Bool
     private var batterySetter: BatterySetter? {
-        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_battery") else { return nil }
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_battery_config") else { return nil }
         return unsafeBitCast(symbol, to: BatterySetter.self)
     }
     var batteryControlsAvailable: Bool { batterySetter != nil && acceptsInput && !shuttingDown }
@@ -503,13 +503,19 @@ final class EmulatorController {
         let saved = UserDefaults.standard.integer(forKey: "batteryCharging")
         return (0...2).contains(saved) ? saved : 0
     }
-    func configureBattery(level: Int, charging: Int) throws {
+    var batteryDrain: Double {
+        let saved = UserDefaults.standard.double(forKey: "batteryDrain")
+        return saved.isFinite && (0...100).contains(saved) ? saved : 0
+    }
+    func configureBattery(level: Int, charging: Int, drain: Double) throws {
         guard batteryControlsAvailable, (0...100).contains(level), (0...2).contains(charging),
-              batterySetter?(Int32(level), Int32(charging)) == true else {
+              drain.isFinite, (0...100).contains(drain),
+              batterySetter?(Int32(level), Int32(charging), drain) == true else {
             throw DeviceToolsError.failed("Battery controls are unavailable while the device is stopped.")
         }
         UserDefaults.standard.set(level, forKey: "batteryLevel")
         UserDefaults.standard.set(charging, forKey: "batteryCharging")
+        UserDefaults.standard.set(drain, forKey: "batteryDrain")
         onStatusChange?()
     }
 

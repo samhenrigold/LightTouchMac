@@ -60,7 +60,9 @@ photo conversion. These tests do not exercise the AppKit picker or drag interact
 
 Device > Battery sets the target level and automatic/forced charging state.
 iOS filters battery measurements, so the displayed estimate changes gradually.
-The settings also apply at the next boot. Automatic drain is not yet implemented.
+The settings also apply at the next boot. Drain accepts 0–100 percent per
+emulated minute; 0 disables it. Pausing freezes drain. USB power also freezes
+drain unless charging is set to Not Charging.
 
 ## Building (development)
 
