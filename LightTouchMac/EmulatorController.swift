@@ -63,9 +63,8 @@ final class EmulatorController {
     var deviceReachable: Bool? {
         didSet {
             if oldValue != deviceReachable { onStatusChange?() }
-            // First time the guest answers is the one safe moment to clear out
-            // staging uploads an earlier run abandoned: nothing of ours can be
-            // in flight yet, because installing needs this very flag.
+            // Clean abandoned uploads when the guest first answers. The sweep
+            // excludes this process’s session-tagged uploads even if it runs late.
             if deviceReachable == true, !didSweepStaging {
                 didSweepStaging = true
                 if let socket = usbmux.session?.clientSocket {

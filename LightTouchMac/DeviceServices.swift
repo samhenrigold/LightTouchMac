@@ -249,23 +249,21 @@ struct DeviceServices: Sendable {
     /// attempt — AFC refused it (the bare "File-transfer error: code 1") — and
     /// one install's fire-and-forget cleanup could delete the next install's
     /// upload out from under it. A unique suffix removes both.
+    private static let stagingSession = UUID().uuidString
+
     private static func stagingName(_ ipa: URL) -> String {
         let base = ipa.deletingPathExtension().lastPathComponent
         let safe = String(base.map { $0.isLetter || $0.isNumber ? $0 : "_" }.prefix(48))
-        return "\(safe)-\(UUID().uuidString.prefix(8)).ipa"
+        return "\(safe)-\(stagingSession)-\(UUID().uuidString.prefix(8)).ipa"
     }
 
-    /// Clear out /PublicStaging, once, before this session stages anything.
-    ///
-    /// Every install uploads the whole .ipa here first and deletes it after.
-    /// That delete is fire-and-forget and runs over the same connection the
-    /// install just failed on — so it fails in exactly the cases that leave a
-    /// file behind, and nothing else has ever swept. The uploads are tens of
-    /// megabytes on a partition with a few hundred, and when they finally fill
-    /// it the install fails as PackageExtractionFailed, which the app reports
-    /// as "device may be full" and blames the user's apps for. Safe to call
-    /// only before the first install of a session: anything here is by
-    /// definition from a run that is over.
+    /// Startup cleanup can run after a new upload begins. Session-tagged names
+    /// protect every upload from this process, including ones not yet queued.
+    private static func isOrphanedStagingName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/")
+            && !name.contains("-\(stagingSession)-")
+    }
+
     func sweepStaging() async {
         _ = try? await run(Timeouts.query, "staging sweep") { imd, device in
             guard let start = imd.afc_client_start_service,
@@ -285,7 +283,8 @@ struct DeviceServices: Sendable {
             while let entry = list[i] {
                 let name = String(cString: entry)
                 i += 1
-                guard name != ".", name != ".." else { continue }
+                try Task.checkCancellation()
+                guard Self.isOrphanedStagingName(name) else { continue }
                 NSLog("device: removing orphaned staging upload \(name)")
                 _ = "PublicStaging/\(name)".withCString { remove(client, $0) }
             }
