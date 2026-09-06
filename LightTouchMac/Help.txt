@@ -23,6 +23,8 @@ Recordings include device audio and use a 480 × 480 canvas that preserves nativ
 Browsing the web
 Device → Proxy selects no proxy, the built-in HTTP proxy, or a dated Internet Archive replay. Nothing separate needs installing. Archived pages depend on available captures and archive rate limits. A modern site’s scripts or layout may still exceed this old version of Safari.
 
+With the HTTP proxy enabled, Weather uses Open-Meteo forecasts and city search (https://open-meteo.com/, CC BY 4.0). The free service is for noncommercial use. If an old saved city no longer updates, remove it and add it again. The moon icon shows an approximate phase.
+
 Battery and device state
 Device → Battery controls target capacity, charging, drain per emulated minute, and virtual USB. The guest filters battery readings, so its displayed percentage can lag a changed target. Pausing stops drain. Automatic charging while USB is connected also stops drain.
 
