@@ -32,7 +32,7 @@ for setting in ['IT_AMC_DECODE','IT_MPVD_DECODE','IT_H264_DECODE','IT_SCALER_DEC
     os.environ[setting] = '1'
 out = Path(tempfile.mkdtemp(prefix='ltm-media-native-'))
 files = str(APP.parent/'qemu-ios-files')
-cfg = SimpleNamespace(out=str(out),files=files,base_nand=files+'/nand-agent-v3',
+cfg = SimpleNamespace(out=str(out),files=files,base_nand=files+'/nand-agent-v4',
     nor=files+'/ios3/nor_7E18.bin',overlay=str(out/'overlay'),
     qemu=str(ROOT/'build-native14/qemu-build/qemu-system-arm'),
     usbmuxd=str(ROOT/'build-native14/build/usbmuxd/src/usbmuxd'),usbmuxd_ok=True,
