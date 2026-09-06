@@ -285,13 +285,15 @@ final class EmulatorController {
         guard options.appsync else { return }
         preparingMedia = true
         mediaPreparationFailure = nil
+        let generation = bootGeneration
         mediaPreparationTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.preparingMedia = false }
+            defer { if generation == self.bootGeneration { self.preparingMedia = false } }
             do {
                 let deadline = ContinuousClock.now + .seconds(180)
                 while true {
                     try Task.checkCancellation()
+                    guard generation == bootGeneration else { return }
                     guard !isDead, !storageFailed, ContinuousClock.now < deadline else {
                         throw DeviceToolsError.failed("The device did not become ready for its media update.")
                     }
@@ -306,9 +308,36 @@ final class EmulatorController {
                 } else {
                     logEvent("media: guest graphics components already current")
                 }
+                try Task.checkCancellation()
+                guard generation == bootGeneration else { return }
+                // Setup can outlast the guest's idle timer. Home on a locked
+                // screen wakes it without unlocking; on unlocked Home it would
+                // open Spotlight, so consult SpringBoard before sending input.
+                do {
+                    let locked = try await tools().screenIsLocked()
+                    try Task.checkCancellation()
+                    guard generation == bootGeneration, !isDead, !shuttingDown else { return }
+                    if locked {
+                        pressHome()
+                        try await Task.sleep(for: .milliseconds(150))
+                        for _ in 0..<20 {
+                            try Task.checkCancellation()
+                            guard generation == bootGeneration, !isDead, !shuttingDown else { return }
+                            if !qemu_ios_ui_display_sleeping() { break }
+                            try await Task.sleep(for: .milliseconds(100))
+                        }
+                    }
+                } catch {
+                    try Task.checkCancellation()
+                    guard generation == bootGeneration else { return }
+                    logEvent("media: could not refresh the lock screen: \(error.localizedDescription)")
+                }
+                try Task.checkCancellation()
+                guard generation == bootGeneration else { return }
+                isSleeping = qemu_ios_ui_display_sleeping()
                 resolveDeviceNotice(for: .preparation)
             } catch {
-                if !Task.isCancelled {
+                if !Task.isCancelled, generation == bootGeneration {
                     mediaPreparationFailure = error.localizedDescription
                     reportDeviceNotice("Device preparation failed. Reopen Light Touch to retry; open Device Logs for details.", for: .preparation)
                     logEvent("media: preparation failed: \(error.localizedDescription)")

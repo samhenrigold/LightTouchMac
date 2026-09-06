@@ -624,6 +624,20 @@ struct DeviceTools: Sendable {
         try await guestRun("printf %s '\(id)' > /tmp/sblaunch.id && /usr/local/bin/sblaunch")
     }
 
+    /// Query SpringBoard rather than infer lock state from a dark framebuffer.
+    func screenIsLocked() async throws -> Bool {
+        let data = try await guestRun("printf %s ':lock-status' > /tmp/sblaunch.id && /usr/local/bin/sblaunch")
+        return try Self.screenIsLocked(response: String(decoding: data, as: UTF8.self))
+    }
+
+    static func screenIsLocked(response: String) throws -> Bool {
+        for line in response.split(separator: "\n") {
+            if line == "sblaunch: locked=1 passcode=0" || line == "sblaunch: locked=1 passcode=1" { return true }
+            if line == "sblaunch: locked=0 passcode=0" || line == "sblaunch: locked=0 passcode=1" { return false }
+        }
+        throw DeviceToolsError.failed("SpringBoard did not report its screen lock state.")
+    }
+
     /// Shut the guest's filesystem down through the kernel: sync, unmount
     /// everything, halt. No SpringBoard, no gesture, nothing drawn.
     ///
