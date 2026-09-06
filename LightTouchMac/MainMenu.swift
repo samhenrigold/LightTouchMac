@@ -107,7 +107,7 @@ enum MainMenuBuilder {
         menu.addItem(.separator())
         // One Find item, not the standard submenu: the only searchable thing
         // is the Legacy Store field, and ⌘F should simply put the caret there.
-        menu.addItem(item("Find", #selector(MainWindowController.findCatalog(_:)), "f"))
+        menu.addItem(item("Search Store", #selector(MainWindowController.findCatalog(_:)), "f", [.option, .command]))
         menu.addItem(.separator())
         menu.addItem(item("Copy Screen", #selector(MainWindowController.copyScreen(_:)), "c", [.shift, .command]))
         menu.addItem(item("Paste Text to Guest", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
@@ -143,8 +143,9 @@ enum MainMenuBuilder {
     }
     
     private static func deviceMenu() -> NSMenu {
-        // Targets are nil so these route up the responder chain to the window
-        // controller (the window's next responder).
+        // Home, Lock and rotation retain Simulator shortcuts for this audience.
+        // Rotation yields to text editors; volume uses separate chords from zoom.
+        // Nil targets route through the window's responder chain.
         let menu = NSMenu(title: "Device")
         menu.addItem(item("Home", #selector(MainWindowController.deviceHome(_:)), "H", [.shift, .command]))
         menu.addItem(item("Lock", #selector(MainWindowController.deviceLock(_:)), "l"))
@@ -156,7 +157,13 @@ enum MainMenuBuilder {
                           String(UnicodeScalar(NSLeftArrowFunctionKey)!)))
         menu.addItem(item("Rotate Right", #selector(MainWindowController.deviceRotateRight(_:)),
                           String(UnicodeScalar(NSRightArrowFunctionKey)!)))
-        menu.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
+        menu.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:)), "z", [.option, .command]))
+        menu.addItem(item("Volume Up", #selector(MainWindowController.deviceVolumeUp(_:)), String(UnicodeScalar(NSUpArrowFunctionKey)!), [.option, .command]))
+        menu.addItem(item("Volume Down", #selector(MainWindowController.deviceVolumeDown(_:)), String(UnicodeScalar(NSDownArrowFunctionKey)!), [.option, .command]))
+        menu.addItem(.separator())
+        menu.addItem(item("Pause", #selector(MainWindowController.toggleDevicePause(_:)), "p", [.option, .command]))
+        menu.addItem(item("Save State Now", #selector(MainWindowController.saveStateNow(_:)), "s", [.option, .command]))
+        menu.addItem(item("Discard Saved State…", #selector(MainWindowController.discardSavedState(_:))))
         menu.addItem(.separator())
 
         menu.addItem(item("Battery…", #selector(MainWindowController.configureBattery(_:))))
@@ -172,6 +179,7 @@ enum MainMenuBuilder {
 
         // Keep restart and erase together at the bottom, away from routine input.
         menu.addItem(item("Restart…", #selector(MainWindowController.deviceReset(_:))))
+        menu.addItem(item("Power Off", #selector(MainWindowController.devicePowerOff(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
         return menu
     }
@@ -188,8 +196,6 @@ enum MainMenuBuilder {
     private static func helpMenu(_ appName: String) -> NSMenu {
         let menu = NSMenu(title: "Help")
         menu.addItem(item("\(appName) Help", #selector(NSApplication.showHelp(_:)), "?"))
-        menu.addItem(.separator())
-        menu.addItem(item("Export Diagnostics…", #selector(MainWindowController.exportDiagnostics(_:))))
         return menu
     }
     

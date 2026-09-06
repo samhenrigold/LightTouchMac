@@ -14,6 +14,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsController?.showWindow(sender)
     }
 
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        guard let windowController else { return nil }
+        let menu = NSMenu()
+        for (title, action) in [("Home", #selector(MainWindowController.deviceHome(_:))),
+                                ("Lock", #selector(MainWindowController.deviceLock(_:))),
+                                ("Restart…", #selector(MainWindowController.deviceReset(_:)))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = windowController
+            menu.addItem(item)
+        }
+        return menu
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         // AppKit injects AutoFill, Start Dictation and Emoji & Symbols into the
         // Edit menu, and a Tab Bar section into View. All of them are dead here:

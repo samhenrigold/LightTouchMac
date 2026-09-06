@@ -508,6 +508,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc private func resetMotion(_ sender: Any?) { deviceVC.screen.resetMotion() }
 
     @objc func deviceShake(_ sender: Any?)       { emulator.shake() }
+    @objc func toggleDevicePause(_ sender: Any?) {
+        if emulator.isPaused { emulator.resume() } else if emulator.isRunning { emulator.pause() }
+    }
     @objc func devicePause(_ sender: Any?)       { emulator.pause() }
     @objc func deviceResume(_ sender: Any?)      { emulator.resume() }
     @objc func deviceReset(_ sender: Any?) {
@@ -551,11 +554,18 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         emulator.saveSnapshotNow()
     }
     @objc func discardSavedState(_ sender: Any?) {
-        emulator.discardSavedStateByUser()
+        guard let window else { return }
         let alert = NSAlert()
-        alert.messageText = "Saved state discarded"
-        alert.informativeText = "The next launch will cold-boot the device. The device's own data is untouched."
-        alert.beginSheetModal(for: window!) { _ in }
+        alert.messageText = "Discard the saved state?"
+        alert.informativeText = "This removes the saved memory state. Apps and data stored on the device are kept."
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons[0].hasDestructiveAction = true
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+        alert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertFirstButtonReturn { self?.emulator.discardSavedStateByUser() }
+        }
     }
 
     /// Factory-reset the device — the "nuke everything" button. Wipes the NAND
@@ -899,10 +909,14 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(deviceLock(_:)):
             menuItem.title = emulator.isPoweredOff ? "Power On" : "Lock"
             return emulator.acceptsInput || (emulator.isPoweredOff && !emulator.shuttingDown)
-        case #selector(deviceHome(_:)),
-             #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)),
-             #selector(deviceRotateRight(_:)), #selector(deviceShake(_:)):
+        case #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)), #selector(deviceRotateRight(_:)):
+            return emulator.acceptsInput && !(window?.firstResponder is NSTextView)
+        case #selector(deviceHome(_:)), #selector(deviceShake(_:)),
+             #selector(deviceVolumeUp(_:)), #selector(deviceVolumeDown(_:)):
             return emulator.acceptsInput
+        case #selector(toggleDevicePause(_:)):
+            menuItem.title = emulator.isPaused ? "Resume" : "Pause"
+            return (emulator.isRunning || emulator.isPaused) && !emulator.isInstalling && !AppInstaller.hasPendingWork
         case #selector(configureBattery(_:)):
             return emulator.batteryControlsAvailable
         case #selector(configureWebProxy(_:)):
