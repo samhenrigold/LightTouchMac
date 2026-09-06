@@ -204,7 +204,7 @@ final class EmulatorController {
                 ? nil : (options.packedNAND, dest)
         }
 
-        var machine = "iPod-Touch,h264-decode=on,scaler-decode=on,mpvd-decode=on,amc-mode=decode"
+        var machine = "iPod-Touch,h264-decode=on,scaler-decode=on,mpvd-decode=on,amc-mode=decode,lcd-planes=on"
         + ",bootrom=\(options.bootrom)"
         + ",nand=\(nandBase)"
         + ",nor=\(options.nor)"
@@ -1632,7 +1632,6 @@ final class EmulatorController {
         let env = [
             "IT_DIRECT_IBOOT": options.iBoot,
             "IT_TVOUT_READY": "1",
-            "IT_LCD_PLANES": "1",
             // `-v` when asked: iPhone OS shows the kernel's console output over
             // the boot logo instead of the Apple mark, which is the only view
             // of what the guest is doing between iBoot and SpringBoard. Off by
