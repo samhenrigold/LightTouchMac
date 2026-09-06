@@ -241,6 +241,9 @@ try:
     if not args.photo:
         d.qmp.tap(160,455)
     time.sleep(2)
+    if args.aac:
+        status,front = r.itqmp.agent(d.qmp,'frontmost')
+        assert status == 0 and front.startswith(bundle.encode()), 'Music exited after opening Songs: '+repr(front)
     r.to_png(d.qmp.shot(str(out/'library.ppm')),str(out/'library.png'))
     if args.aac:
         for _ in range(16): r.itqmp.button(d.qmp,'volup',hold_ms=100)
@@ -252,10 +255,8 @@ try:
                 if 'MobileMusicPlayer' in path or 'LowMemory' in path:
                     status,data = r.itqmp.agent(d.qmp,'get',path)
                     if status == 0: (out/('crash-'+str(number)+'.txt')).write_bytes(data)
-        assert r.itqmp.agent(d.qmp,'launch',bundle)[0] == 0
-        time.sleep(3)
-        d.qmp.tap(160,455)
-        time.sleep(2)
+        status,front = r.itqmp.agent(d.qmp,'frontmost')
+        assert status == 0 and front.startswith(bundle.encode()), 'Music exited during volume input: '+repr(front)
         # A one-song library has no Shuffle row; the song is the first row.
         if args.recording: recording_marker('record-start','record-ready')
         d.qmp.tap(130,88)
