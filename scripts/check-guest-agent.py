@@ -5,6 +5,7 @@ import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'LightTouchMac/DeviceTools.swift').read_text()
 actor=s[s.index('private actor GuestAgentTransport'):]
+configuration=s[s.index('    static func mediaLaunchConfiguration'):s.index('    /// Read-only helper')]
 header='''#include <stdbool.h>
 bool qemu_ios_agent_request(const char *);
 char *qemu_ios_agent_result(void);
@@ -40,7 +41,7 @@ void unavailable(void){alive=0;}
 '''
 swift='''import Foundation
 enum DeviceToolsError: Error { case failed(String) }
-'''+actor+'''
+'''+actor+'\nenum Components {\n'+configuration+'\n}\n'+'''
 @main struct Check {
  static func main() async throws {
    async let a = GuestAgentTransport.shared.runIfAvailable("first", stdinPath: nil)
@@ -56,7 +57,26 @@ enum DeviceToolsError: Error { case failed(String) }
    unavailable()
    let fallback = try await GuestAgentTransport.shared.runIfAvailable("first", stdinPath: nil)
    precondition(fallback == nil)
-   print("PASS: concurrent result routing, cancellation, absent-agent fallback")
+   for format in [PropertyListSerialization.PropertyListFormat.xml, .binary] {
+     let job: [String: Any] = ["Label": "com.apple.SpringBoard", "KeepAlive": true,
+       "EnvironmentVariables": ["OTHER": "preserved", "DYLD_INSERT_LIBRARIES": "/usr/lib/custom.dylib:/usr/lib/it_kbd_agent.dylib"]]
+     let data = try PropertyListSerialization.data(fromPropertyList: job, format: format, options: 0)
+     let upgraded = try Components.mediaLaunchConfiguration(data, includeTyping: true)!
+     let parsed = try PropertyListSerialization.propertyList(from: upgraded, format: nil) as! [String: Any]
+     let environment = parsed["EnvironmentVariables"] as! [String: String]
+     precondition(environment["OTHER"] == "preserved")
+     precondition(environment["DYLD_INSERT_LIBRARIES"] == "/usr/lib/custom.dylib:/usr/lib/it_typein.dylib")
+     precondition(environment["CA_ENABLE_OGL"] == "1" && environment["LK_ENABLE_OGL"] == "1")
+     precondition(parsed["KeepAlive"] as? Bool == true)
+     let unchanged = try Components.mediaLaunchConfiguration(upgraded, includeTyping: true)
+     precondition(unchanged == nil)
+     if format == .binary { precondition(upgraded.starts(with: Data("bplist00".utf8))) }
+   }
+   let malformed: [String: Any] = ["Label": "com.apple.SpringBoard", "EnvironmentVariables": ["DYLD_INSERT_LIBRARIES": 42]]
+   let data = try PropertyListSerialization.data(fromPropertyList: malformed, format: .binary, options: 0)
+   do { _ = try Components.mediaLaunchConfiguration(data, includeTyping: true); fatalError("invalid job accepted") }
+   catch DeviceToolsError.failed { }
+   print("PASS: result routing, cancellation, fallback, preserved/idempotent launch jobs and malformed rejection")
  }
 }
 '''

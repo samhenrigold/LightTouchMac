@@ -354,6 +354,24 @@ struct DeviceTools: Sendable {
         guard let engine = Bundled.resolve("MBXGLEngine", fallbacks: [
             "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-gles/MBXGLEngine",
         ]) else { throw DeviceToolsError.toolMissing("MBXGLEngine") }
+        let guestToolsRoot = "\(filesRoot)/../qemu-ios/contrib/it-agent"
+        guard let agent = Bundled.resolve("it_agent", fallbacks: ["\(guestToolsRoot)/it_agent"]),
+              let typing = Bundled.resolve("it_typein.dylib", fallbacks: ["\(guestToolsRoot)/it_typein.dylib"]),
+              let agentJob = Bundled.resolve("com.qemu.it-agent.plist", fallbacks: ["\(guestToolsRoot)/com.qemu.it-agent.plist"]) else {
+            throw DeviceToolsError.toolMissing("guest agent components")
+        }
+        let agentPath = "/usr/local/bin/it_agent"
+        let typingPath = "/usr/lib/it_typein.dylib"
+        let agentJobPath = "/System/Library/LaunchDaemons/com.qemu.it-agent.plist"
+        let agentData = try Data(contentsOf: URL(fileURLWithPath: agent))
+        let typingData = try Data(contentsOf: URL(fileURLWithPath: typing))
+        let jobData = try Data(contentsOf: URL(fileURLWithPath: agentJob))
+        guard [agentData, typingData, jobData].allSatisfy({ !$0.isEmpty && $0.count <= 250_000 }),
+              let job = try PropertyListSerialization.propertyList(from: jobData, format: nil) as? [String: Any],
+              job["Label"] as? String == "com.qemu.it-agent",
+              job["ProgramArguments"] as? [String] == [agentPath] else {
+            throw DeviceToolsError.failed("The bundled guest agent is invalid.")
+        }
         let enginePath = "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"
         let plistPath = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
         let engineData = try Data(contentsOf: URL(fileURLWithPath: engine))
@@ -364,9 +382,26 @@ struct DeviceTools: Sendable {
         let oldPreferences = try await guestRun("cat \(preferencesPath)")
         let newPreferences = try Self.lockButtonPreferences(oldPreferences)
         let oldPlist = try await guestRun("cat \(plistPath)")
-        let newPlist = try Self.mediaLaunchConfiguration(oldPlist)
+        let newPlist = try Self.mediaLaunchConfiguration(oldPlist, includeTyping: true)
         let oldEngine = try await guestRun("cat \(enginePath)")
         let changedEngine = oldEngine != engineData
+        let oldAgent = try await guestRun("if [ -f \(agentPath) ]; then cat \(agentPath); fi")
+        let oldTyping = try await guestRun("if [ -f \(typingPath) ]; then cat \(typingPath); fi")
+        let oldJob = try await guestRun("if [ -f \(agentJobPath) ]; then cat \(agentJobPath); fi")
+        let legacy = "/System/Library/LaunchDaemons/com.qemu.it-pbd.plist"
+        let legacyPresent = try await guestRun("test ! -e \(legacy) || printf legacy")
+        let changedAgent = oldAgent != agentData
+        let changedTyping = oldTyping != typingData
+        let changedJob = oldJob != jobData
+        for (changed, source, destination, mode) in [
+            (changedAgent, agent, agentPath, "755"),
+            (changedTyping, typing, typingPath, "755"),
+            (changedJob, agentJob, agentJobPath, "644")
+        ] where changed {
+            try Task.checkCancellation()
+            try await guestRun("cat > \(destination).ltm-new && chmod \(mode) \(destination).ltm-new"
+                               + " && mv -f \(destination).ltm-new \(destination)", stdinPath: source)
+        }
         // Validate both inputs before changing either guest file. Stage beside
         // the destination: /tmp is a different guest filesystem, so a move
         // from there is a non-atomic copy and can leave an unbootable plist.
@@ -383,7 +418,14 @@ struct DeviceTools: Sendable {
             try await guestRun("cat > \(plistPath).ltm-new && chmod 644 \(plistPath).ltm-new"
                                + " && mv -f \(plistPath).ltm-new \(plistPath)", stdinPath: file.path)
         }
-        let changed = changedEngine || newPlist != nil || newPreferences != nil
+        if changedAgent || changedJob || !legacyPresent.isEmpty || qemu_ios_agent_status() != 1 {
+            // A daemon cannot unload its own launch job and return a result.
+            // Use the independent USB/SSH path only for this lifecycle step.
+            try await guestRun("launchctl unload \(legacy) >/dev/null 2>&1 || :; rm -f \(legacy); "
+                               + "launchctl unload \(agentJobPath) >/dev/null 2>&1 || :; launchctl load \(agentJobPath)",
+                               usingAgent: false)
+        }
+        let changed = changedEngine || changedTyping || newPlist != nil || newPreferences != nil
         if changed {
             let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: file) }
@@ -421,7 +463,7 @@ struct DeviceTools: Sendable {
 
     /// Preserve the launch job and unrelated environment, including binary
     /// plists. A malformed job must never be replaced with a guessed default.
-    static func mediaLaunchConfiguration(_ data: Data) throws -> Data? {
+    static func mediaLaunchConfiguration(_ data: Data, includeTyping: Bool = false) throws -> Data? {
         var format = PropertyListSerialization.PropertyListFormat.xml
         guard var job = try PropertyListSerialization.propertyList(from: data, format: &format) as? [String: Any],
               job["Label"] as? String == "com.apple.SpringBoard",
@@ -429,9 +471,20 @@ struct DeviceTools: Sendable {
             throw DeviceToolsError.failed("The device's SpringBoard configuration is invalid.")
         }
         var environment = job["EnvironmentVariables"] as? [String: Any] ?? [:]
+        let original = environment
         let keys = ["CA_ENABLE_OGL", "LK_ENABLE_OGL"]
-        if keys.allSatisfy({ environment[$0] as? String == "1" }) { return nil }
         for key in keys { environment[key] = "1" }
+        if includeTyping {
+            guard environment["DYLD_INSERT_LIBRARIES"] == nil || environment["DYLD_INSERT_LIBRARIES"] is String else {
+                throw DeviceToolsError.failed("The device's injected-library configuration is invalid.")
+            }
+            var libraries = (environment["DYLD_INSERT_LIBRARIES"] as? String ?? "")
+                .split(separator: ":").map(String.init)
+                .filter { $0 != "/usr/lib/it_kbd_agent.dylib" }
+            if !libraries.contains("/usr/lib/it_typein.dylib") { libraries.append("/usr/lib/it_typein.dylib") }
+            environment["DYLD_INSERT_LIBRARIES"] = libraries.joined(separator: ":")
+        }
+        if NSDictionary(dictionary: environment).isEqual(to: original) { return nil }
         job["EnvironmentVariables"] = environment
         return try PropertyListSerialization.data(fromPropertyList: job, format: format, options: 0)
     }
@@ -592,8 +645,8 @@ struct DeviceTools: Sendable {
     /// session's installs. The marker is the guest's own stdout.
     @discardableResult
     private func guestRun(_ command: String, stdinPath: String? = nil,
-                         expecting marker: String? = nil) async throws -> Data {
-        if marker == nil,
+                         expecting marker: String? = nil, usingAgent: Bool = true) async throws -> Data {
+        if usingAgent, marker == nil,
            let result = try await GuestAgentTransport.shared.runIfAvailable(command, stdinPath: stdinPath) {
             return result
         }
