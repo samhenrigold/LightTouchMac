@@ -32,3 +32,7 @@ Recovery and diagnostics
 Device → Advanced contains Restart SpringBoard, Open SSH, Verbose Boot, and Kernel Console. Boot options apply on the next boot. File → Export Diagnostics collects information useful for reporting a problem. Prefer normal Power Off or Quit so the guest can finish writing its filesystem.
 
 Restart and Erase All Content and Settings require confirmation. Erase removes the device’s installed apps, media, and settings. It is not a routine repair step.
+
+Device logs
+
+File → Device Logs shows the latest boot/kernel console and USB logs, including the previous rotated files. Updates pause while text is selected or Pause updates is checked. Use Find to search the displayed tail, or File → Export Diagnostics for the complete retained logs. Kernel messages require Kernel Console to be enabled.

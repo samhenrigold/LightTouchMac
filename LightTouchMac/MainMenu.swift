@@ -77,6 +77,7 @@ enum MainMenuBuilder {
         // don't exist here). File carries the app-level actions that fit it:
         // diagnostics export and Close; app operations live in Apps.
         let menu = NSMenu(title: "File")
+        menu.addItem(item("Device Logs…", #selector(MainWindowController.showDeviceLogs(_:))))
         menu.addItem(item("Export Diagnostics…", #selector(MainWindowController.exportDiagnostics(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Close", #selector(NSWindow.performClose(_:)), "w"))

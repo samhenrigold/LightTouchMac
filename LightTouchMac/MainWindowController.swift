@@ -795,6 +795,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// Bundle the logs + provenance into a zip for a bug report. The logs are
     /// where the last two nights' failures were finally diagnosed; making them
     /// one click to collect means the next report arrives with its evidence.
+    private var logWindow: LogWindowController?
+    private var diagnosticLogs: [URL] {
+        [Bundled.stateDirectory.appendingPathComponent("serial.log"),
+         Bundled.stateDirectory.appendingPathComponent("serial.log.1"),
+         Bundled.workDirectory.appendingPathComponent("usbmuxd.log"),
+         Bundled.workDirectory.appendingPathComponent("usbmuxd.log.1")]
+    }
+
+    @objc func showDeviceLogs(_ sender: Any?) {
+        if logWindow == nil { logWindow = LogWindowController(logs: diagnosticLogs) }
+        logWindow?.showWindow(sender)
+    }
+
     @objc func exportDiagnostics(_ sender: Any?) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "LightTouchMac-diagnostics.zip"
@@ -811,14 +824,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         try? fm.removeItem(at: staging)
         try? fm.createDirectory(at: staging, withIntermediateDirectories: true)
 
-        // Logs from both writers.
-        let logs = [
-            Bundled.stateDirectory.appendingPathComponent("serial.log"),
-            Bundled.stateDirectory.appendingPathComponent("serial.log.1"),
-            Bundled.workDirectory.appendingPathComponent("usbmuxd.log"),
-            Bundled.workDirectory.appendingPathComponent("usbmuxd.log.1"),
-            Bundled.workDirectory.appendingPathComponent("session.env"),
-        ]
+        let logs = diagnosticLogs + [Bundled.workDirectory.appendingPathComponent("session.env")]
         for src in logs where fm.fileExists(atPath: src.path) {
             try? fm.copyItem(at: src, to: staging.appendingPathComponent(src.lastPathComponent))
         }
