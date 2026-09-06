@@ -1154,7 +1154,7 @@ final class DisplayView: NSView {
 
     private func droppedMedia(_ sender: NSDraggingInfo) -> [URL] {
         guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return [] }
-        return urls.filter { MediaSong.extensions.contains($0.pathExtension.lowercased()) }
+        return urls.filter { PreparedMedia.extensions.contains($0.pathExtension.lowercased()) }
     }
 
     /// Store rows dragged from the inspector: decode the private payload.

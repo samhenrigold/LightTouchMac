@@ -133,6 +133,13 @@ struct DeviceServices: Sendable {
                                 progress: progress)
     }
 
+    func stagePhoto(_ photo: MediaPhoto, progress: @escaping @Sendable (Double) -> Void) async throws {
+        guard UUID(uuidString: photo.id) != nil, photo.image.lastPathComponent == "image.jpg" else {
+            throw DeviceError.preflight("Invalid photo staging path.")
+        }
+        _ = try await stageFile(photo.image, remote: "LightTouch/\(photo.id)/image.jpg", progress: progress)
+    }
+
     /// Callers supply a validated relative destination. The same chunked AFC
     /// upload, cancellation and incomplete-file cleanup serve apps and songs.
     private func stageFile(_ ipa: URL, remote: String,

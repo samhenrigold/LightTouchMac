@@ -1430,16 +1430,16 @@ final class EmulatorController {
         return try await tools().install(ipa, placeholderRaised: placeholderRaised, progress: progress)
     }
 
-    func importSong(_ song: MediaSong, progress: @escaping @Sendable (Double) -> Void,
+    func importMedia(_ media: PreparedMedia, progress: @escaping @Sendable (Double) -> Void,
                     willCommit: () -> Void) async throws {
         guard canQueueInstall else { throw DeviceToolsError.failed("The device is not ready for media import.") }
         isInstalling = true
         defer { isInstalling = false }
         let device = try tools()
-        try await device.stageSong(song, progress: progress)
+        try await device.stageMedia(media, progress: progress)
         try Task.checkCancellation()
         willCommit()
-        try await device.commitSong(song)
+        try await device.commitMedia(media)
     }
 
     /// Fire-and-forget App Store-style "downloading" placeholder on the guest

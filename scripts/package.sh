@@ -165,6 +165,7 @@ copy_tool "$QEMU/contrib/it-agent/it_typein.dylib" guest
 copy_tool "$QEMU/contrib/it-agent/com.qemu.it-agent.plist" guest
 copy_tool "$QEMU/contrib/it-status/itstatus" guest
 copy_tool "$QEMU/contrib/it-media/itmedia" guest
+copy_tool "$QEMU/contrib/it-media/itphoto" guest
 copy_tool "$QEMU/contrib/it-proxy/itproxy" guest
 copy_tool "$QEMU/contrib/it-proxy/ittrust" guest
 # Auto-rotation's guest-side reporter. Without it the feature is silently absent
@@ -206,8 +207,13 @@ FILES="${LTM_ASSETS:-$HOME/Developer/qemu-ios-files}"
 # Prefer the validated current guest-tool image for new devices. Keep the
 # legacy asset layout usable, and always honor an explicit image selection.
 NAND_NAME="${LTM_NAND:-nand-ultimate}"
-if [ -z "${LTM_NAND:-}" ] && [ -d "$FILES/nand-agent-v3" ]; then
-    NAND_NAME=nand-agent-v3
+if [ -z "${LTM_NAND:-}" ]; then
+    for candidate in nand-agent-v4 nand-agent-v3; do
+        if [ -d "$FILES/$candidate" ]; then
+            NAND_NAME="$candidate"
+            break
+        fi
+    done
 fi
 if [ "$FILES" != none ]; then
     for f in "$FILES/bootrom_240_4" "$FILES/ios3/iBoot.bin" \

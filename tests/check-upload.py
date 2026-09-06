@@ -8,6 +8,7 @@ loop = s[s.index('    func stage('):s.index('    /// A stable device-side filena
 errors = s[s.index('nonisolated enum DeviceError'):s.index('// MARK: - Timeouts')]
 source = r'''import Foundation
 nonisolated enum Timeouts { static let stage = 300.0 }
+struct MediaPhoto: Sendable { let id: String; let image: URL }
 struct MediaSong: Sendable {
  let id: String
  let audio: URL

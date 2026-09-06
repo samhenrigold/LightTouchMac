@@ -5,6 +5,7 @@ The test-only HTTP adapter replaces guestRun's transport with the QMP agent of
 an isolated CLI guest. Production MediaSong, DeviceServices, IMobileDevice and
 the DeviceTools music methods are compiled unchanged. No user app is launched.
 """
+import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -19,11 +20,16 @@ import time
 import unicodedata
 from types import SimpleNamespace
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--photo',action='store_true')
+args = parser.parse_args()
 APP = Path(__file__).resolve().parents[1]
 ROOT = APP.parent/'qemu-ios'
 sys.path.insert(0,str(ROOT/'tests/ipod'))
 import regress as r
 os.environ['PATH'] = str(APP.parent/'qemu-ios-deps12/bin')+':'+os.environ['PATH']
+for setting in ['IT_AMC_DECODE','IT_MPVD_DECODE','IT_H264_DECODE','IT_SCALER_DECODE','IT_LCD_PLANES']:
+    os.environ[setting] = '1'
 out = Path(tempfile.mkdtemp(prefix='ltm-media-native-'))
 files = str(APP.parent/'qemu-ios-files')
 cfg = SimpleNamespace(out=str(out),files=files,base_nand=files+'/nand-agent-v3',
@@ -77,16 +83,25 @@ final class Progress: @unchecked Sendable {
 @main struct Check {
     static func main() async throws {
         let source = URL(fileURLWithPath:CommandLine.arguments[1])
-        let song = try await MediaSong.prepare(source)
-        defer { try? FileManager.default.removeItem(at: song.directory) }
+        let media = try await PreparedMedia.prepare(source)
+        defer { try? FileManager.default.removeItem(at: media.directory) }
+        let id: String
+        let file: URL
+        switch media {
+        case .song(let song): id = song.id; file = song.audio
+        case .photo(let photo): id = photo.id; file = photo.image
+        }
+        let prepared = URL(fileURLWithPath:CommandLine.arguments[6]).deletingLastPathComponent()
+            .appendingPathComponent("prepared." + file.pathExtension)
+        try FileManager.default.copyItem(at:file,to:prepared)
         let device = DeviceTools(clientSocket:CommandLine.arguments[3],filesRoot:CommandLine.arguments[2])
         let progress = Progress()
-        try await device.stageSong(song) { progress.update($0) }
+        try await device.stageMedia(media) { progress.update($0) }
         precondition(progress.complete())
-        try await device.commitSong(song)
-        try await device.commitSong(song) // Exact path reconciliation, no upload replay.
+        try await device.commitMedia(media)
+        try await device.commitMedia(media) // Exact path reconciliation, no upload replay.
         let manifest = try JSONSerialization.data(withJSONObject:[
-            "id":song.id,"filename":song.audio.lastPathComponent,"title":song.title,
+            "id":id,"filename":file.lastPathComponent,"title":media.title,
         ])
         try manifest.write(to:URL(fileURLWithPath:CommandLine.arguments[6]))
         print("PASS: actual Swift preflight, AFC upload/progress, guest import commands and duplicate reconciliation")
@@ -99,9 +114,20 @@ executable = out/'driver'
 subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
     '-module-cache-path',str(out/'modules'),
     str(APP/'LightTouchMac/MediaSong.swift'),str(APP/'LightTouchMac/DeviceServices.swift'),
-    str(APP/'LightTouchMac/IMobileDevice.swift'),str(driver),'-o',str(executable)],check=True)
-source = out/"Song 'quoted' $title — été.m4a"
-shutil.copyfile(ROOT/'contrib/it-harness/build/Payload/Harness.app/aac.m4a',source)
+    str(APP/'LightTouchMac/IMobileDevice.swift'),str(APP/'LightTouchMac/MediaPhoto.swift'),
+    str(APP/'LightTouchMac/PreparedMedia.swift'),str(driver),'-o',str(executable)],check=True)
+if args.photo:
+    from PIL import Image,ImageDraw
+    source = out/"Photo 'quoted' $title — été.png"
+    image = Image.new('RGBA',(4096,3072),(0,0,0,0))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0,0,2047,1535),fill=(220,30,30,255))
+    draw.rectangle((2048,0,4095,1535),fill=(30,210,30,255))
+    draw.rectangle((0,1536,2047,3071),fill=(30,30,220,255))
+    image.save(source)
+else:
+    source = out/"Song 'quoted' $title — été.m4a"
+    shutil.copyfile(ROOT/'contrib/it-harness/build/Payload/Harness.app/aac.m4a',source)
 p = r.Procs()
 d = r.Device(cfg,p,'device')
 server = None
@@ -140,33 +166,53 @@ try:
     server = None
     imported = json.loads(manifest.read_text())
     remote = '/var/mobile/Media/LightTouch/'+imported['id']+'/'+imported['filename']
-    status, data = r.itqmp.agent(d.qmp,'get',remote)
-    assert status == 0 and data == source.read_bytes(), 'AFC bytes changed'
-    status, data = r.itqmp.agent(d.qmp,'get',
-        '/var/mobile/Media/iTunes_Control/iTunes/iTunes Library.itlp/Library.itdb')
-    assert status == 0
-    database = out/'Library.itdb'
-    database.write_bytes(data)
-    with sqlite3.connect(database) as db:
-        rows = db.execute('SELECT title FROM item WHERE is_song=1').fetchall()
-    assert len(rows) == 1 and unicodedata.normalize('NFC',rows[0][0]) == unicodedata.normalize('NFC',source.stem), rows
+    if args.photo:
+        status, receipt = r.itqmp.agent(d.qmp,'get','/var/mobile/Media/LightTouch/'+imported['id']+'/.photo-receipt')
+        assert status == 0 and receipt == b'done\n',receipt
+        status, listing = r.itqmp.agent(d.qmp,'exec','find /var/mobile/Media/DCIM -type f')
+        assert status == 0
+        originals = [path for path in listing.decode().splitlines() if path.endswith('.JPG')]
+        assert len(originals) == 1,originals
+        status, data = r.itqmp.agent(d.qmp,'get',originals[0])
+        assert status == 0
+        (out/'saved.jpg').write_bytes(data)
+        with Image.open(out/'saved.jpg') as saved:
+            assert saved.size == (2048,1536),saved.size
+            for point,expected in [((512,384),(220,30,30)),((1536,384),(30,210,30)),
+                                   ((512,1152),(30,30,220)),((1536,1152),(255,255,255))]:
+                actual = saved.convert('RGB').getpixel(point)
+                assert all(abs(a-b)<20 for a,b in zip(actual,expected)),(point,actual)
+        bundle = 'com.apple.mobileslideshow'
+    else:
+        status, data = r.itqmp.agent(d.qmp,'get',remote)
+        assert status == 0 and data == source.read_bytes(), 'AFC bytes changed'
+        status, data = r.itqmp.agent(d.qmp,'get',
+            '/var/mobile/Media/iTunes_Control/iTunes/iTunes Library.itlp/Library.itdb')
+        assert status == 0
+        database = out/'Library.itdb'
+        database.write_bytes(data)
+        with sqlite3.connect(database) as db:
+            rows = db.execute('SELECT title FROM item WHERE is_song=1').fetchall()
+        assert len(rows) == 1 and unicodedata.normalize('NFC',rows[0][0]) == unicodedata.normalize('NFC',source.stem), rows
+        bundle = 'com.apple.mobileipod'
     control = r.prepare_app_control(cfg,p,d,r.Result('media control'))
     ok, detail = r.unlock(cfg,control,d)
     assert ok,detail
-    assert r.itqmp.agent(d.qmp,'launch','com.apple.mobileipod')[0] == 0
+    assert r.itqmp.agent(d.qmp,'launch',bundle)[0] == 0
     deadline = time.monotonic()+45
     while True:
         status, front = r.itqmp.agent(d.qmp,'frontmost')
-        if status == 0 and front.startswith(b'com.apple.mobileipod'):
+        if status == 0 and front.startswith(bundle.encode()):
             break
         assert time.monotonic()<deadline,front
         time.sleep(1)
     time.sleep(2)
-    d.qmp.tap(160,455)
+    if not args.photo:
+        d.qmp.tap(160,455)
     time.sleep(2)
-    r.to_png(d.qmp.shot(str(out/'songs.ppm')),str(out/'songs.png'))
+    r.to_png(d.qmp.shot(str(out/'library.ppm')),str(out/'library.png'))
     assert d.powerdown(), 'guest shutdown not confirmed'
-    print('PASS: byte-exact native AFC transfer, Unicode/quoted metadata, single library row and guest shutdown',flush=True)
+    print('PASS: native media preparation/upload, single library item, duplicate reconciliation and guest shutdown',flush=True)
 finally:
     if server:
         server.shutdown()

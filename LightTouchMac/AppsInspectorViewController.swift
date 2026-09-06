@@ -128,7 +128,7 @@ enum AppInstaller {
     static func startMedia(_ source: URL, with emulator: EmulatorController,
                            presenting window: NSWindow?) -> InstallJob {
         let job = InstallJob(name: source.deletingPathExtension().lastPathComponent)
-        job.status = "Preparing audio…"
+        job.status = "Preparing media…"
         jobs.append(job)
         NotificationCenter.default.post(name: .ltmInstallStarted, object: job)
         job.task = Task {
@@ -140,31 +140,31 @@ enum AppInstaller {
             let scoped = source.startAccessingSecurityScopedResource()
             defer { if scoped { source.stopAccessingSecurityScopedResource() } }
             do {
-                let song = try await MediaSong.prepare(source)
-                defer { try? FileManager.default.removeItem(at: song.directory) }
-                job.name = song.title
+                let media = try await PreparedMedia.prepare(source)
+                defer { try? FileManager.default.removeItem(at: media.directory) }
+                job.name = media.title
                 job.status = readyQueue.isPaused ? "Paused — resume from the context menu" : "Waiting for device…"
                 NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                 try await readyQueue.acquire()
                 acquired = true
                 try Task.checkCancellation()
-                job.status = "Copying audio…"
+                job.status = "Copying media…"
                 job.downloadProgress = 0
                 NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
-                try await emulator.importSong(song) { fraction in
+                try await emulator.importMedia(media) { fraction in
                     Task { @MainActor in
                         guard !job.isFinished, job.isCancellable else { return }
                         job.downloadProgress = fraction
-                        job.status = "Copying audio… \(Int(fraction * 100))%"
+                        job.status = "Copying media… \(Int(fraction * 100))%"
                         NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                     }
                 } willCommit: {
                     job.isCancellable = false
                     job.downloadProgress = nil
-                    job.status = "Adding to Music…"
+                    job.status = "Adding to \(media.destination)…"
                     NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                 }
-                job.status = "Added to Music"
+                job.status = "Added to \(media.destination)"
             } catch is CancellationError {
                 // The uploader removes incomplete files. A completed staged
                 // file is retained if the library outcome could be uncertain.

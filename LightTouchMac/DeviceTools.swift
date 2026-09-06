@@ -105,6 +105,40 @@ struct DeviceTools: Sendable {
         }
     }
 
+    // MARK: - Photo import
+
+    func stageMedia(_ media: PreparedMedia, progress: @escaping @Sendable (Double) -> Void) async throws {
+        switch media {
+        case .song(let song): try await stageSong(song, progress: progress)
+        case .photo(let photo): try await services.stagePhoto(photo, progress: progress)
+        }
+    }
+
+    func commitMedia(_ media: PreparedMedia) async throws {
+        switch media {
+        case .song(let song): try await commitSong(song)
+        case .photo(let photo): try await commitPhoto(photo)
+        }
+    }
+
+    func commitPhoto(_ photo: MediaPhoto) async throws {
+        guard UUID(uuidString: photo.id) != nil else {
+            throw DeviceToolsError.failed("Invalid photo staging identifier.")
+        }
+        guard let helper = Bundled.resolve("itphoto", fallbacks: [
+            "\(filesRoot)/../qemu-ios/contrib/it-media/itphoto",
+        ]) else { throw DeviceToolsError.toolMissing("itphoto") }
+        let executable = "/tmp/ltm-itphoto-\(photo.id)"
+        let result = try await guestRun(
+            "cat > \(executable) && chmod 755 \(executable) && "
+                + "chown 501:501 /var/mobile/Media/LightTouch /var/mobile/Media/LightTouch/\(photo.id) && "
+                + "\(executable) \(photo.id); result=$?; rm -f \(executable); exit $result",
+            stdinPath: helper)
+        guard String(decoding: result, as: UTF8.self).hasSuffix("imported\n") else {
+            throw DeviceToolsError.failed("Photos did not confirm the import. Check Saved Photos before importing it again.")
+        }
+    }
+
     // MARK: - Install
 
     /// Install a decrypted .ipa. Baked images go the fast in-process route

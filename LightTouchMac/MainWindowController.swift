@@ -573,9 +573,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     
     @objc func syncMedia(_ sender: Any?) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = MediaSong.extensions.sorted().compactMap { UTType(filenameExtension: $0) }
+        panel.allowedContentTypes = PreparedMedia.extensions.sorted().compactMap { UTType(filenameExtension: $0) }
         panel.allowsMultipleSelection = true
-        panel.message = "Choose MP3, M4A or WAV files to add to Music."
+        panel.message = "Choose audio files for Music or JPEG, PNG and HEIC images for Photos."
         panel.beginSheetModal(for: window!) { [weak self] response in
             guard let self, response == .OK else { return }
             for url in panel.urls {
