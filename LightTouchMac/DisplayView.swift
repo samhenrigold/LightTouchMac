@@ -945,12 +945,14 @@ final class DisplayView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         if tilting {
+            // Direct grabs rotate against the pointer; trackpad tilt keeps its
+            // independent scrolling convention.
             if modelView != nil {
                 let point = convert(event.locationInWindow, from: nil)
-                tiltAngle = min(max((point.x - grabPoint.x) * 0.004, -.pi / 4), .pi / 4)
-                pitchAngle = min(max((point.y - grabPoint.y) * 0.004, -.pi / 4), .pi / 4)
+                tiltAngle = min(max((grabPoint.x - point.x) * 0.004, -.pi / 4), .pi / 4)
+                pitchAngle = min(max((grabPoint.y - point.y) * 0.004, -.pi / 4), .pi / 4)
             } else {
-                let delta = mouseAngle(event) - grabAngle
+                let delta = grabAngle - mouseAngle(event)
                 tiltAngle = atan2(sin(delta), cos(delta)) * Self.rotationGain
             }
             setShellAngle(restAngle + tiltAngle)
