@@ -151,6 +151,7 @@ nonisolated enum IMobileDevice {
     static let afc_remove_path = symbol("afc_remove_path", AfcPath.self)
     static let afc_get_device_info_key = symbol("afc_get_device_info_key", AfcInfoKey.self)
     static let afc_read_directory = symbol("afc_read_directory", AfcReadDir.self)
+    static let afc_get_file_info = symbol("afc_get_file_info", AfcReadDir.self)
     static let afc_dictionary_free = symbol("afc_dictionary_free", AfcDictFree.self)
 
     static let np_client_start_service = symbol("np_client_start_service", StartService2.self)

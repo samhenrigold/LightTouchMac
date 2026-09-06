@@ -51,3 +51,6 @@ the message visible until you free disk space and reopen Light Touch.
 File > Device Logs includes app events, the device console, and USB service
 logs. Text is selectable; use Find to search. Export Diagnostics includes
 these logs so you can attach them to a bug report.
+
+DEVICE FILES
+Choose View → Files to browse the device’s Media folder in columns. Import copies a file into the selected folder; an existing file with different contents is preserved. Export saves a selected file to your Mac. Transfers show byte-based progress and can be cancelled. Choose Device to return to the screen. Files is also available when customizing the toolbar.

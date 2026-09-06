@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[1]
 s = (root/'LightTouchMac/DeviceServices.swift').read_text()
+validation = s[s.index("    nonisolated static func validateFilePath"):s.index("    // MARK: - Stage")]
 loop = s[s.index('    func stage('):s.index('    /// A stable device-side filename')]
 errors = s[s.index('nonisolated enum DeviceError'):s.index('// MARK: - Timeouts')]
 source = r'''import Foundation
@@ -60,7 +61,7 @@ struct Services {
  func run<T: Sendable>(_ seconds: Double, _ label: String, _ body: @escaping @Sendable (IMobileDevice.Type, OpaquePointer) throws -> T) async throws -> T {
   try await Task.detached { try body(IMobileDevice.self, OpaquePointer(bitPattern: 1)!) }.value
  }
-''' + loop + '\n}\n' + errors + r'''
+''' + validation + loop + '\n}\n' + errors + r'''
 @main struct Check {
  static func main() async throws {
   let path = URL(fileURLWithPath: CommandLine.arguments[1])

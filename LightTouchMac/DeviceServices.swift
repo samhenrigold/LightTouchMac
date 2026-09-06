@@ -115,6 +115,14 @@ struct DeviceServices: Sendable {
         }
     }
 
+    nonisolated static func validateFilePath(_ path: String) throws {
+        guard !path.hasPrefix("/"), !path.contains("\0"),
+              path.isEmpty || path.split(separator: "/", omittingEmptySubsequences: false)
+                .allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
+            throw DeviceError.preflight("Invalid device file path.")
+        }
+    }
+
     // MARK: - Stage (AFC upload into /PublicStaging)
 
     /// Upload the .ipa into the AFC jail and return its device-relative path,
@@ -140,9 +148,18 @@ struct DeviceServices: Sendable {
         _ = try await stageFile(photo.image, remote: "LightTouch/\(photo.id)/image.jpg", reuseIdentical: true, progress: progress)
     }
 
+    func uploadFile(_ source: URL, into directory: String,
+                    progress: @escaping @Sendable (Double) -> Void) async throws {
+        try Self.validateFilePath(directory)
+        let path = directory.isEmpty ? source.lastPathComponent : directory + "/" + source.lastPathComponent
+        try Self.validateFilePath(path)
+        guard !path.isEmpty else { throw DeviceError.preflight("Select a file to import.") }
+        _ = try await stageFile(source, remote: path, reuseIdentical: true, allowEmpty: true, progress: progress)
+    }
+
     /// Callers supply a validated relative destination. The same chunked AFC
     /// upload, cancellation and incomplete-file cleanup serve apps and songs.
-    private func stageFile(_ ipa: URL, remote: String, reuseIdentical: Bool = false,
+    private func stageFile(_ ipa: URL, remote: String, reuseIdentical: Bool = false, allowEmpty: Bool = false,
                            progress: @escaping @Sendable (Double) -> Void) async throws -> String {
         return try await run(Timeouts.stage, "upload") { imd, device in
             // File I/O stays on the detached worker, including opening the file.
@@ -150,7 +167,7 @@ struct DeviceServices: Sendable {
             defer { try? input.close() }
             let total = try input.seekToEnd()
             try input.seek(toOffset: 0)
-            guard total > 0 else { throw DeviceError.preflight("The file is empty.") }
+            guard total > 0 || allowEmpty else { throw DeviceError.preflight("The file is empty.") }
             guard let start = imd.afc_client_start_service,
                   let mkdir = imd.afc_make_directory,
                   let open = imd.afc_file_open,
@@ -238,6 +255,7 @@ struct DeviceServices: Sendable {
                 guard renamed == imd.success else { throw DeviceError.afc(.init(code: renamed)) }
             }
             complete = true
+            progress(1)
             return remote
         }
     }

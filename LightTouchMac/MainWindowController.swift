@@ -9,6 +9,7 @@ import Cocoa
 import UniformTypeIdentifiers
 
 private extension NSToolbarItem.Identifier {
+    static let files = NSToolbarItem.Identifier("files")
     static let motion = NSToolbarItem.Identifier("motion")
     static let screenshot = NSToolbarItem.Identifier("screenshot")
     static let recording = NSToolbarItem.Identifier("recording")
@@ -34,6 +35,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var rotateItem: NSToolbarItem?
     private(set) var zoom: ZoomMode = .fit
     private var deadOverlay: NSView?
+    private var filesVC: DeviceFilesViewController?
     
     init(emulator: EmulatorController) {
         self.emulator = emulator
@@ -157,6 +159,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     // MARK: - Health / status surfacing
 
     private func refreshForState() {
+        if let filesVC {
+            let socket = emulator.canReachDevice ? emulator.usbmuxSession : nil
+            if filesVC.services?.clientSocket != socket {
+                filesVC.services = socket.map { DeviceServices(clientSocket: $0) }
+                filesVC.reload()
+            }
+        }
         updateDeviceNotice()
         inspectorVC.refreshDeviceStatus()
         if !emulator.batteryControlsAvailable { batteryPopover?.close() }
@@ -299,6 +308,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             shake.target = self
             item.menu = menu
             return item
+        case .files:
+            return button(id, "Files", "folder", #selector(toggleFiles(_:)), "Browse and transfer device files")
         case .home:
             return button(id, "Home", "house", #selector(deviceHome(_:)), "Press the Home button")
         case .lock:
@@ -391,7 +402,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .motion, .zoom, .screenshot, .recording, .liveText, .copyScreen, .fingerDots, .installApp, .openTerminal, .searchCatalog,
+        [.files, .home, .lock, .rotate, .motion, .zoom, .screenshot, .recording, .liveText, .copyScreen, .fingerDots, .installApp, .openTerminal, .searchCatalog,
          .space, .flexibleSpace, .inspectorTrackingSeparator, .toggleInspector]
     }
     
@@ -536,7 +547,30 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc func toggleKeyboardInput(_ sender: Any?) { emulator.toggleKeyboardInput() }
 
+    @objc func toggleFiles(_ sender: Any?) {
+        if let filesVC {
+            filesVC.stop()
+            filesVC.view.removeFromSuperview()
+            filesVC.removeFromParent()
+            self.filesVC = nil
+            window?.makeFirstResponder(deviceVC.screen)
+            return
+        }
+        let files = DeviceFilesViewController()
+        files.services = (emulator.canReachDevice ? emulator.usbmuxSession : nil).map { DeviceServices(clientSocket: $0) }
+        files.dismiss = { [weak self] in self?.toggleFiles(nil) }
+        deviceVC.screen.endLiveText()
+        deviceVC.addChild(files)
+        files.view.frame = deviceVC.view.bounds
+        files.view.autoresizingMask = [.width, .height]
+        deviceVC.view.addSubview(files.view)
+        filesVC = files
+        files.reload()
+        files.focusBrowser()
+    }
+
     @objc func focusDeviceScreen(_ sender: Any?) {
+        if filesVC != nil { toggleFiles(nil) }
         deviceVC.screen.endLiveText()
         window?.makeFirstResponder(deviceVC.screen)
     }
@@ -716,7 +750,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         return "Light Touch \(kind) \(date)"
     }
 
-    @objc func showLiveText(_ sender: Any?) { deviceVC.screen.toggleLiveText() }
+    @objc func showLiveText(_ sender: Any?) {
+        if filesVC != nil { toggleFiles(nil) }
+        deviceVC.screen.toggleLiveText()
+    }
 
     @objc func toggleTouchOverlay(_ sender: Any?) { deviceVC.screen.showsTouches.toggle() }
 
@@ -759,7 +796,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 stopRecording(nil)
             }
         }
-        window.makeFirstResponder(deviceVC.screen)
+        if filesVC == nil { window.makeFirstResponder(deviceVC.screen) }
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -956,6 +993,10 @@ extension MainWindowController: NSToolbarItemValidation {
 
 extension MainWindowController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleFiles(_:)) {
+            menuItem.state = filesVC == nil ? .off : .on
+            return true
+        }
         switch menuItem.action {
         case #selector(selectMotionPose(_:)):
             menuItem.state = menuItem.tag == emulator.motionPose.rawValue ? .on : .off
