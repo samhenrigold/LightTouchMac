@@ -170,7 +170,15 @@ final class EmulatorController {
             }
             discardSavedState()
         }
-        try? FileManager.default.createDirectory(at: overlay, withIntermediateDirectories: true)
+        let writableNOR: URL
+        do {
+            writableNOR = try DeviceStateStorage.writableNOR(
+                base: URL(fileURLWithPath: options.nor), overlay: overlay)
+        } catch {
+            reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
+            state = .dead(exitCode: 1)
+            return
+        }
 
         setBootEnv()
 
@@ -200,6 +208,7 @@ final class EmulatorController {
         + ",bootrom=\(options.bootrom)"
         + ",nand=\(nandBase)"
         + ",nor=\(options.nor)"
+        + ",nor-rw=\(writableNOR.path)"
         + ",nandrw=\(overlay.path)"
         if let usbSession {
             machine += ",usb-tcp-addr=\(usbSession.guestAddress),osk=on"

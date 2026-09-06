@@ -16,6 +16,32 @@ enum DeviceStateStorage {
         return false
     }
 
+    /// Publish a complete private NOR copy beside the NAND pages. Keeping it
+    /// inside the overlay also includes it in erase and snapshot freshness.
+    static func writableNOR(base: URL, overlay: URL) throws -> URL {
+        let fm = FileManager.default
+        let destination = overlay.appendingPathComponent("nor.bin")
+        try fm.createDirectory(at: overlay, withIntermediateDirectories: true)
+        if !fm.fileExists(atPath: destination.path) {
+            let staged = overlay.appendingPathComponent(".nor-\(UUID().uuidString).tmp")
+            defer { try? fm.removeItem(at: staged) }
+            try fm.copyItem(at: base, to: staged)
+            let size = try fm.attributesOfItem(atPath: staged.path)[.size] as? NSNumber
+            guard size?.intValue == 1_048_576 else { throw CocoaError(.fileReadCorruptFile) }
+            try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staged.path)
+            let handle = try FileHandle(forWritingTo: staged)
+            defer { try? handle.close() }
+            try handle.synchronize()
+            try fm.moveItem(at: staged, to: destination)
+        }
+        let attributes = try fm.attributesOfItem(atPath: destination.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              (attributes[.size] as? NSNumber)?.intValue == 1_048_576 else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return destination
+    }
+
     struct SnapshotIdentity: Codable, Equatable {
         let emulatorBuild: String
         let nand: String

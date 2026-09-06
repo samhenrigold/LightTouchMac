@@ -9,6 +9,29 @@ struct Check {
         let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: root) }
+        let norBase = root.appendingPathComponent("base-nor")
+        let norOverlay = root.appendingPathComponent("nor-overlay")
+        try Data(repeating: 0xff, count: 1_048_576).write(to: norBase)
+        let writableNOR = try DeviceStateStorage.writableNOR(base: norBase, overlay: norOverlay)
+        var changedNOR = try Data(contentsOf: writableNOR)
+        changedNOR[0] = 0x12
+        try changedNOR.write(to: writableNOR)
+        let existingNOR = try DeviceStateStorage.writableNOR(base: norBase, overlay: norOverlay)
+        precondition(existingNOR == writableNOR)
+        precondition((try? Data(contentsOf: existingNOR))?[0] == 0x12 && (try? Data(contentsOf: norBase))?[0] == 0xff)
+        try Data([0]).write(to: writableNOR)
+        do {
+            _ = try DeviceStateStorage.writableNOR(base: norBase, overlay: norOverlay)
+            preconditionFailure("corrupt writable NOR replaced")
+        } catch {}
+        try fm.removeItem(at: norOverlay)
+        try Data([0]).write(to: norBase)
+        do {
+            _ = try DeviceStateStorage.writableNOR(base: norBase, overlay: norOverlay)
+            preconditionFailure("short NOR base accepted")
+        } catch {}
+        let remainingNORFiles = try fm.contentsOfDirectory(atPath: norOverlay.path)
+        precondition(remainingNORFiles.isEmpty)
         let identity = DeviceStateStorage.SnapshotIdentity(emulatorBuild: "build-a", nand: "nand-a")
         let saved = root.appendingPathComponent("snapshot")
         let tmp = root.appendingPathComponent("snapshot.tmp")
