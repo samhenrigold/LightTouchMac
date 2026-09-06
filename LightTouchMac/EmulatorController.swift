@@ -439,7 +439,20 @@ final class EmulatorController {
 
     var storageFailed: Bool { qemu_ios_ui_storage_failed() }
 
+    private var lastAgentStatusCheck = Date.distantPast
+    private var agentStatus: Int32 = 0
+    var agentStatusText: String {
+        guard state == .running || state == .paused else { return "Waiting for device" }
+        return agentStatus == 1 ? "Connected" : agentStatus == 2 ? "Not responding" : "Unavailable"
+    }
+
     func pollStorageFailure() {
+        let now = Date()
+        if now.timeIntervalSince(lastAgentStatusCheck) >= 1 {
+            lastAgentStatusCheck = now
+            let value = qemu_ios_agent_status()
+            if value != agentStatus { agentStatus = value; onStatusChange?() }
+        }
         if !poweringOn, qemu_ios_ui_guest_shutdown_confirmed(), !isDead, !isPoweredOff {
             foregroundTask?.cancel()
             foregroundAppName = nil
@@ -852,7 +865,16 @@ final class EmulatorController {
     
     /// Forward a host key by its macOS virtual keycode; the shim maps it to a
     /// QKeyCode exactly as ui/cocoa.m does.
+    var keyboardInputEnabled: Bool {
+        UserDefaults.standard.object(forKey: "keyboardInputEnabled") as? Bool ?? true
+    }
+    func toggleKeyboardInput() {
+        UserDefaults.standard.set(!keyboardInputEnabled, forKey: "keyboardInputEnabled")
+        onStatusChange?()
+    }
+
     func sendKey(macKeyCode: UInt16, down: Bool) {
+        guard !down || (keyboardInputEnabled && acceptsInput && !isSleeping) else { return }
         qemu_ios_ui_key_mac(Int32(macKeyCode), down)
     }
     

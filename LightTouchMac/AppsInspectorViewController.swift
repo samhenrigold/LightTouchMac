@@ -375,6 +375,7 @@ final class AppsInspectorViewController: NSViewController {
     enum PaneMode: Int { case installed = 0, store = 1 }
     /// Store first: the default view is the suggested list, ready to install.
     private var mode: PaneMode = .store
+    private let deviceStatus = DeviceStatusView(frame: .zero)
     private let modeControl = NSSegmentedControl(labels: ["Installed", "Store"],
                                                  trackingMode: .selectOne,
                                                  target: nil, action: nil)
@@ -394,6 +395,16 @@ final class AppsInspectorViewController: NSViewController {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    func refreshDeviceStatus() {
+        let charging = emulator.batteryCharging == 0 ? (emulator.usbConnected ? "USB power" : "On battery")
+            : emulator.batteryCharging == 1 ? "Charging" : "Not charging"
+        deviceStatus.update(status: emulator.statusLine, batteryLevel: emulator.batteryLevel,
+            charging: charging, proxyStatus: emulator.webProxyStatus,
+            agentStatus: emulator.agentStatusText, keyboardInput: emulator.keyboardInputEnabled,
+            canConfigureBattery: emulator.batteryControlsAvailable,
+            canConfigureProxy: emulator.webProxyAvailable)
+    }
 
     override func loadView() {
         let container = NSView()
@@ -465,7 +476,8 @@ final class AppsInspectorViewController: NSViewController {
         // bulk uninstall / Copy Bundle Identifiers in Installed.
         tableView.allowsMultipleSelection = true
 
-        [modeControl, banner, scroll, placeholder].forEach(container.addSubview)
+        deviceStatus.translatesAutoresizingMaskIntoConstraints = false
+        [deviceStatus, modeControl, banner, scroll, placeholder].forEach(container.addSubview)
         // Everything hangs below the safe area — a hard edge at the toolbar,
         // so rows can never slide behind the search field (full-bleed +
         // automatic insets let them scroll under the glass, unblurred and
@@ -473,7 +485,10 @@ final class AppsInspectorViewController: NSViewController {
         // preferredScrollEdgeEffectStyle, exists on accessory controllers,
         // not plain toolbars). Pre-26 the safe area is simply the pane.
         var constraints = [
-            modeControl.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: 6),
+            deviceStatus.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
+            deviceStatus.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            deviceStatus.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            modeControl.topAnchor.constraint(equalTo: deviceStatus.bottomAnchor, constant: 6),
             modeControl.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
             modeControl.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
 

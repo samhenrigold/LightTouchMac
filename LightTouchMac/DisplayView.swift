@@ -1114,7 +1114,7 @@ final class DisplayView: NSView {
     // MARK: - Keyboard passthrough
 
     override func keyDown(with event: NSEvent) {
-        if event.modifierFlags.contains(.option), !event.modifierFlags.contains(.command),
+        if event.modifierFlags.contains(.option), event.modifierFlags.intersection([.command, .control]).isEmpty,
            [123, 124, 125, 126, 49].contains(event.keyCode), !isShowingLiveText {
             consumedTiltKeys.insert(event.keyCode)
             guard touchInteractionEnabled else { return }
@@ -1132,7 +1132,7 @@ final class DisplayView: NSView {
             return
         }
         // Command combinations belong to the menu bar; let them pass.
-        if event.modifierFlags.contains(.command) {
+        if !event.modifierFlags.intersection([.command, .control]).isEmpty {
             super.keyDown(with: event)
             return
         }
@@ -1146,7 +1146,7 @@ final class DisplayView: NSView {
             return
         }
         if isShowingLiveText { return }
-        if event.modifierFlags.contains(.command) {
+        if !event.modifierFlags.intersection([.command, .control]).isEmpty {
             super.keyUp(with: event)
             return
         }

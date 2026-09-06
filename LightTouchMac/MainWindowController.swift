@@ -158,6 +158,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func refreshForState() {
         updateDeviceNotice()
+        inspectorVC.refreshDeviceStatus()
         // The window subtitle is where AppKit puts secondary window state, and
         // it styles and truncates itself to match the title. A custom titlebar
         // accessory was carrying this before — more code, its own constraints,
@@ -491,6 +492,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             catch { NSAlert(error: error).beginSheetModal(for: window) }
         }
     }
+
+    @objc func toggleKeyboardInput(_ sender: Any?) { emulator.toggleKeyboardInput() }
 
     @objc func toggleVerboseBoot(_ sender: Any?) {
         UserDefaults.standard.set(!EmulatorController.verboseBoot,
@@ -939,6 +942,9 @@ extension MainWindowController: NSMenuItemValidation {
             return emulator.batteryControlsAvailable
         case #selector(configureWebProxy(_:)):
             return emulator.webProxyAvailable
+        case #selector(toggleKeyboardInput(_:)):
+            menuItem.state = emulator.keyboardInputEnabled ? .on : .off
+            return true
         case #selector(toggleVerboseBoot(_:)):
             menuItem.state = EmulatorController.verboseBoot ? .on : .off
             return true

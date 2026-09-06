@@ -87,6 +87,10 @@ source = r'''import Cocoa
   e.motionPose = .upright; sendAttitude(); precondition(e.attitudes.last!.0 == restAngle + 0.2)
   keyDown(with: event(0, [])); keyUp(with: event(0, []))
   precondition(e.sent.count == 2 && e.sent[0].1 && !e.sent[1].1)
+  let count=e.sent.count
+  keyDown(with:event(0,[.control]));keyUp(with:event(0,[.control]))
+  keyDown(with:event(124,[.control,.option]));keyUp(with:event(124,[.control,.option]))
+  precondition(e.sent.count==count && tiltKeys.isEmpty,"Mac accessibility shortcuts must not reach guest or tilt")
   print("PASS: motion rates, clamp, pose, Option release, focus, sleep, Live Text and guest key isolation")
  }
 }
