@@ -21,7 +21,9 @@ import unicodedata
 from types import SimpleNamespace
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--photo',action='store_true')
+mode = parser.add_mutually_exclusive_group()
+mode.add_argument('--photo',action='store_true')
+mode.add_argument('--aac',action='store_true',help='convert raw AAC, import it and verify native Music playback')
 args = parser.parse_args()
 APP = Path(__file__).resolve().parents[1]
 ROOT = APP.parent/'qemu-ios'
@@ -125,6 +127,10 @@ if args.photo:
     draw.rectangle((2048,0,4095,1535),fill=(30,210,30,255))
     draw.rectangle((0,1536,2047,3071),fill=(30,30,220,255))
     image.save(source)
+elif args.aac:
+    source = out/"Song 'quoted' $title — été.aac"
+    subprocess.run(['ffmpeg','-v','error','-i',str(ROOT/'contrib/it-harness/build/Payload/Harness.app/aac.m4a'),
+                    '-c:a','copy','-f','adts',str(source)],check=True)
 else:
     source = out/"Song 'quoted' $title — été.m4a"
     shutil.copyfile(ROOT/'contrib/it-harness/build/Payload/Harness.app/aac.m4a',source)
@@ -134,7 +140,7 @@ server = None
 r.START = time.time()
 print('OUTPUT',out,flush=True)
 try:
-    d.start()
+    d.start(audio_wav=str(out/"music.wav") if args.aac else None)
     ok, detail, _ = d.wait_for_home(240)
     assert ok,detail
     deadline = time.monotonic()+90
@@ -185,7 +191,8 @@ try:
         bundle = 'com.apple.mobileslideshow'
     else:
         status, data = r.itqmp.agent(d.qmp,'get',remote)
-        assert status == 0 and data == source.read_bytes(), 'AFC bytes changed'
+        assert status == 0 and data == (out/'prepared.m4a').read_bytes(), 'AFC bytes changed'
+        if not args.aac: assert data == source.read_bytes(), 'immutable copy changed'
         status, data = r.itqmp.agent(d.qmp,'get',
             '/var/mobile/Media/iTunes_Control/iTunes/iTunes Library.itlp/Library.itdb')
         assert status == 0
@@ -211,7 +218,31 @@ try:
         d.qmp.tap(160,455)
     time.sleep(2)
     r.to_png(d.qmp.shot(str(out/'library.ppm')),str(out/'library.png'))
+    if args.aac:
+        for _ in range(16): r.itqmp.button(d.qmp,'volup',hold_ms=100)
+        print('AFTER VOLUME',r.itqmp.agent(d.qmp,'frontmost'),flush=True)
+        status, reports = r.itqmp.agent(d.qmp,'exec','find /var/mobile/Library/Logs/CrashReporter -type f')
+        print('CRASH REPORTS',status,reports,flush=True)
+        if status == 0:
+            for number,path in enumerate(reports.decode().splitlines()):
+                if 'MobileMusicPlayer' in path or 'LowMemory' in path:
+                    status,data = r.itqmp.agent(d.qmp,'get',path)
+                    if status == 0: (out/('crash-'+str(number)+'.txt')).write_bytes(data)
+        assert r.itqmp.agent(d.qmp,'launch',bundle)[0] == 0
+        time.sleep(3)
+        d.qmp.tap(160,455)
+        time.sleep(2)
+        # A one-song library has no Shuffle row; the song is the first row.
+        d.qmp.tap(130,88)
+        time.sleep(2)
+        print('PLAYING',r.itqmp.agent(d.qmp,'frontmost'),flush=True)
+        time.sleep(6)
+        r.to_png(d.qmp.shot(str(out/'playing.ppm')),str(out/'playing.png'))
     assert d.powerdown(), 'guest shutdown not confirmed'
+    if args.aac:
+        audio = r.Result('converted AAC playback')
+        assert r.verify_audio(str(out/'music.wav'),audio),audio.detail
+        print('PASS: converted AAC played by native Music: '+audio.detail,flush=True)
     print('PASS: native media preparation/upload, single library item, duplicate reconciliation and guest shutdown',flush=True)
 finally:
     if server:

@@ -19,23 +19,32 @@ written to the device's `serial.log` and included in Export Diagnostics; it star
 when XNU initializes its serial console, so the earliest kernel banner may not
 appear there.
 
-## Music import
+## Music and photo import
 
-Use File > Sync Media… or drop MP3, M4A or WAV files onto the device. Light Touch
+Use File > Sync Media… or drop MP3, M4A, AAC or WAV audio, or JPEG, PNG or HEIC
+photos onto the device. Light Touch
 prepares a private copy, checks the codec and duration, and queues the upload
 with app installations. Progress appears in the Apps inspector. The guest's
 native MusicLibrary service adds each song without replacing the existing
 library; imported tracks appear in Music.
 
 AAC, HE-AAC, MP3, Apple Lossless and PCM are accepted with one or two channels at
-8–48 kHz. Protected files and unsupported codecs are rejected before upload.
+8–48 kHz. Raw AAC is re-encoded as AAC-LC in an M4A container using macOS audio
+codecs; other accepted audio files keep their original bytes. Protected files
+and unsupported codecs are rejected before upload.
 Cancellation is available during preparation/upload; once “Adding to Music…”
 begins the library operation finishes. A failed/uncertain import keeps its
 staged audio, and the same staged request can be reconciled without duplication.
 Selecting the same source again starts a new import; content-based deduplication,
-photos, artwork and playlist editing remain future work.
+artwork and playlist editing remain future work.
 
-Build the guest helper before packaging:
+Photos are oriented upright, reduced to at most 2048 pixels on the longest
+edge and converted to baseline JPEG; transparent areas become white. The guest
+adds them through its native Saved Photos API, generating its own thumbnails.
+A persistent receipt prevents repeating a completed save or blindly replaying
+an uncertain save. Separate import jobs still create separate photos.
+
+Build the guest helpers before packaging:
 
     ARMV6_SDK=/path/to/iPhoneOS3.1.3.sdk bash ../qemu-ios/contrib/it-media/build.sh
 
@@ -43,7 +52,15 @@ Validation: tests/check-media-preflight.py, tests/check-upload.py, and the
 opt-in tests/check-media-native.py. The native check compiles the production
 Swift metadata/upload/import methods, uses real AFC and an isolated guest-agent
 adapter, verifies exact bytes and quoted/Unicode metadata, and cleanly shuts
-down its guest. It does not exercise the AppKit file picker or drag interaction.
+down its guest. Add --photo to check native Saved Photos, or --aac to check raw
+AAC conversion and native Music playback. tests/check-photo-preflight.py checks
+photo conversion. These tests do not exercise the AppKit picker or drag interaction.
+
+## Battery controls
+
+Device > Battery sets the target level and automatic/forced charging state.
+iOS filters battery measurements, so the displayed estimate changes gradually.
+The settings also apply at the next boot. Automatic drain is not yet implemented.
 
 ## Building (development)
 

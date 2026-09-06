@@ -11,14 +11,14 @@ struct MediaSong: Sendable {
     let metadata: URL
     let title: String
 
-    nonisolated static let extensions: Set<String> = ["mp3", "m4a", "wav"]
+    nonisolated static let extensions: Set<String> = ["mp3", "m4a", "aac", "wav"]
 
     nonisolated static func prepare(_ source: URL) async throws -> MediaSong {
         let worker = Task.detached {
             try Task.checkCancellation()
             let ext = source.pathExtension.lowercased()
             guard extensions.contains(ext) else {
-                throw DeviceToolsError.failed("Choose an MP3, M4A or WAV audio file.")
+                throw DeviceToolsError.failed("Choose an MP3, M4A, AAC or WAV audio file.")
             }
             let values = try source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true, let size = values.fileSize,
@@ -31,7 +31,7 @@ struct MediaSong: Sendable {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
             var complete = false
             defer { if !complete { try? FileManager.default.removeItem(at: directory) } }
-            let audio = directory.appendingPathComponent("audio." + ext)
+            var audio = directory.appendingPathComponent("audio." + ext)
             guard FileManager.default.createFile(atPath: audio.path, contents: nil) else {
                 throw DeviceToolsError.failed("Could not prepare the audio file.")
             }
@@ -52,6 +52,16 @@ struct MediaSong: Sendable {
                 throw DeviceToolsError.failed("The audio file changed while it was being prepared.")
             }
             try output.close()
+            if ext == "aac" {
+                let converted = directory.appendingPathComponent("audio.m4a")
+                try convertAAC(audio, to: converted)
+                let size = try converted.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                guard size > 0, size <= 1 << 30 else {
+                    throw DeviceToolsError.failed("The prepared audio must be nonempty and no larger than 1 GB.")
+                }
+                try FileManager.default.removeItem(at: audio)
+                audio = converted
+            }
             let asset = AVURLAsset(url: audio)
             let duration = try await asset.load(.duration).seconds
             guard duration.isFinite, duration > 0, duration <= 86400,
@@ -111,4 +121,51 @@ struct MediaSong: Sendable {
             return song
         } onCancel: { worker.cancel() }
     }
+
+    /// Stream raw ADTS AAC into an M4A file using macOS audio codecs. The
+    /// legacy Music library expects a container; no external converter is needed.
+    nonisolated private static func convertAAC(_ source: URL, to destination: URL) throws {
+        try autoreleasepool {
+            let input = try AVAudioFile(forReading: source)
+            let format = input.processingFormat
+            let codec = input.fileFormat.streamDescription.pointee.mFormatID
+            guard [kAudioFormatMPEG4AAC, kAudioFormatMPEG4AAC_HE].contains(codec),
+                  (1...2).contains(format.channelCount),
+                  (8000...48000).contains(format.sampleRate),
+                  let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096) else {
+                throw DeviceToolsError.failed("Use mono or stereo AAC audio at 8–48 kHz.")
+            }
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: format.sampleRate,
+                AVNumberOfChannelsKey: format.channelCount,
+                AVEncoderBitRateKey: 96000 * Int(format.channelCount),
+            ]
+            let output = try AVAudioFile(forWriting: destination, settings: settings,
+                                        commonFormat: format.commonFormat, interleaved: format.isInterleaved)
+            var frames: AVAudioFramePosition = 0
+            while input.framePosition < input.length {
+                try Task.checkCancellation()
+                let remaining = input.length - input.framePosition
+                try input.read(into: buffer, frameCount: AVAudioFrameCount(min(4096, remaining)))
+                guard buffer.frameLength > 0 else {
+                    throw DeviceToolsError.failed("The AAC file ended before all of its audio could be read.")
+                }
+                frames += AVAudioFramePosition(buffer.frameLength)
+                guard Double(frames) / format.sampleRate <= 86400 else {
+                    throw DeviceToolsError.failed("Audio files must be no longer than one day.")
+                }
+                try output.write(from: buffer)
+                // Bound encoded output too; a day of stereo audio can exceed 1 GB.
+                if frames % (4096 * 64) == 0 {
+                    let size = try destination.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                    guard size <= 1 << 30 else {
+                        throw DeviceToolsError.failed("The prepared audio is larger than 1 GB.")
+                    }
+                }
+            }
+            guard frames > 0 else { throw DeviceToolsError.failed("The AAC file contains no audio.") }
+        } // Release the audio file and finalize its M4A headers before inspection/upload.
+    }
+
 }
