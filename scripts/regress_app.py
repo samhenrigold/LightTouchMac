@@ -86,7 +86,7 @@ def check_env_parity():
     harness = boot_env_keys(m.group(0)) if m else {}
 
     # The env 3.1.3 REQUIRES to boot — both must agree on these, or one side
-    # boots a device the other cannot. (IT_DIRECT_IBOOT is path-derived on both,
+    # boots a device the other cannot. (Direct iBoot is now a machine property,
     # and IT_LCD_BRIGHT is a harness-only knob — its lit-pixel checks need full exposure, while the app
     # must show the real backlight or Lock looks dead — so none are compared.)
     required = ["IT_TVOUT_READY",
@@ -98,6 +98,9 @@ def check_env_parity():
     check("guest-reset-enabled", "IT_WDT_NORESET" not in app and
           "IT_WDT_NORESET" not in harness,
           "neither launcher suppresses guest watchdog reset commands")
+    check("direct-boot-property", ",direct-iboot=" in app_src and ",direct-llb=" in app_src
+          and '"IT_DIRECT_IBOOT":' not in app_src,
+          "app selects direct boot explicitly without a process-wide environment mutation")
     drift = env_drift(app, harness, required)
     check("env-parity", not drift,
           "app and harness boot env agree" if not drift

@@ -205,6 +205,7 @@ final class EmulatorController {
         }
 
         var machine = "iPod-Touch,h264-decode=on,scaler-decode=on,mpvd-decode=on,amc-mode=decode,lcd-planes=on"
+        + ",direct-iboot=\(options.iBoot.replacingOccurrences(of: ",", with: ",,")),direct-llb="
         + ",bootrom=\(options.bootrom)"
         + ",nand=\(nandBase)"
         + ",nor=\(options.nor)"
@@ -1634,7 +1635,6 @@ final class EmulatorController {
         // effect) never reached the window and Lock read as dead. The harness
         // keeps the override — its checks count lit pixels.
         let env = [
-            "IT_DIRECT_IBOOT": options.iBoot,
             "IT_TVOUT_READY": "1",
             // `-v` when asked: iPhone OS shows the kernel's console output over
             // the boot logo instead of the Apple mark, which is the only view
