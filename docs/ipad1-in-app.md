@@ -171,8 +171,8 @@ Proven without the app (qemu-ios `ipad1-guest`):
   `-incoming` and autostart): the page is still on screen (0.00% frame difference), Safari fetches a new
   page, `ideviceinfo` answers through the new bridge, and there's no panic.
 - With GL: a save on the home screen (3 GL contexts) and one 0.7 s into Test Harness's GL test (5
-  contexts) both complete. The restored test runs on to its frame badge, Home works, and relaunching the
-  GL test after the restore works.
+  contexts) both complete. After restore the triangle keeps turning (badge 300 -> 480 frames at 30 fps),
+  Home works, and relaunching the GL test works.
 
 ## Stubbed or absent
 
