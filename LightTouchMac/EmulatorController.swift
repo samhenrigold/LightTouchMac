@@ -838,10 +838,11 @@ final class EmulatorController {
     /// The iPad sets its accelerometer outright for the shell's angle rather
     /// than stepping it: the machine moves it on its own (the power-off
     /// gesture), and a relative step from there lands on the wrong side.
-    /// Values are the machine's clockwise order 1 -> 3 -> 2 -> 4 (rotate_bh).
+    /// Values are UIDeviceOrientation: a clockwise turn from portrait (1) puts
+    /// Home on the left (4), then upside down (2), then Home right (3).
     @discardableResult
     private func setAccelerometer(for degrees: Int) -> Bool {
-        guard !hasGuestTools, let value = [0: 1, 90: 3, 180: 2, 270: 4][degrees] else { return false }
+        guard !hasGuestTools, let value = [0: 1, 90: 4, 180: 2, 270: 3][degrees] else { return false }
         return bridgeCall("qemu_ios_ui_orientation", as: IntControl.self)?(Int32(value)) == true
     }
 
@@ -963,13 +964,12 @@ final class EmulatorController {
         }
     }
 
-    /// SpringBoard's UIInterfaceOrientation on the emulated iPad -> the app's
-    /// clockwise device angle. Measured, not derived from the enum names: the
-    /// iPad's accelerometer is mounted so that the app's upright pose reads
-    /// as 2 and each clockwise quarter turn steps 2 -> 3 -> 1 -> 4 (qemu
-    /// ipad1 rotate_bh / accel-orientation).
+    /// SpringBoard's UIInterfaceOrientation -> the app's clockwise device
+    /// angle, as on hardware: upright is Portrait (1); turned clockwise, Home
+    /// is on the left and the UI is LandscapeLeft (4); then upside down (2);
+    /// then LandscapeRight (3).
     static func iPadDegrees(forInterface orientation: Int) -> Int? {
-        [2: 0, 3: 90, 1: 180, 4: 270][orientation]
+        [1: 0, 4: 90, 2: 180, 3: 270][orientation]
     }
 
     /// Where the guest-side reporter comes from: the app bundle in a packaged

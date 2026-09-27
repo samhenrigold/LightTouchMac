@@ -104,7 +104,9 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   after each boot (iOS keeps the orientation it last had) and then follows
   changes. The accelerometer is set outright for the shell's angle
   (`qemu_ios_ui_orientation`), not stepped, because the machine's power-off
-  gesture moves it. Restart powers off with the gesture and then does Power
+  gesture moves it. Upright reads Portrait (1) and a clockwise turn reads 4,
+  2, 3, as on hardware (the LIS331 is modelled mounted 180 degrees about X);
+  the panel is shown turned a quarter clockwise. Restart powers off with the gesture and then does Power
   On, instead of an ssh sync and a hard reset.
 - Quit / Power Off: the iPad has no guest tools, so the clean shutdown sends
   `qemu_ios_ui_powerdown()`; the machine turns system_powerdown into the

@@ -14,9 +14,10 @@ nonisolated extension DeviceProfile {
     /// Quarter-turn from the scanned-out panel to the upright (portrait, home
     /// button down) device, clockwise-positive in the view's y-down space. The
     /// iPod LCD pre-rotates its surface; the iPad's panel is landscape-native
-    /// and portrait SpringBoard arrives with its status bar along the panel's
-    /// right edge (seen in a frame dump), so it is turned a quarter back.
-    var panelRotation: CGFloat { self == .iPad1 ? -.pi / 2 : 0 }
+    /// and portrait SpringBoard (interface orientation 1) arrives with its
+    /// status bar along the panel's left edge, so it is turned a quarter
+    /// clockwise to stand upright.
+    var panelRotation: CGFloat { self == .iPad1 ? .pi / 2 : 0 }
 
     /// The screen as it sits in the upright shell.
     var uprightScreenPixels: CGSize {
