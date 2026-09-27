@@ -2,6 +2,7 @@
 """Execute production shutdown control flow with a slow boot and uncooperative preparation."""
 from pathlib import Path
 import subprocess,tempfile
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 root=Path(__file__).resolve().parents[1]
 s=(root/'LightTouchMac/EmulatorController.swift').read_text()
 a=s.index('    static let preparationShutdownBudget:');b=s.index('    /// Menu ▸ Save State Now',a)
@@ -17,6 +18,7 @@ wait=s[a:b]
 source=r'''import Foundation
 @MainActor var powerOff=false
 @MainActor func qemu_ios_ui_guest_shutdown_confirmed()->Bool{powerOff}
+@MainActor func qemu_ios_ui_powerdown(){}
 @MainActor func qemu_ios_snapshot_resume(){}
 @MainActor var agentReady:Int32=0
 @MainActor func qemu_ios_agent_status()->Int32{agentReady}
@@ -82,5 +84,5 @@ enum DeviceStateStorage {
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-shutdown-') as d:
  p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc','-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc','-parse-as-library','-module-cache-path',d+'/modules',DEVICE_PROFILE,str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=8)

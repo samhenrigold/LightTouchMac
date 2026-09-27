@@ -69,8 +69,28 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   on ipad1 (ApplePinotLCD's display-off), so the window shows sleep and Space
   wakes it as for the iPod.
 - Tilt, shake, battery and cable use the iPod's machine property names on
-  ipad1, so the existing bridge calls work. Battery is read by 7B500 only at
-  boot, and its charging state is not shown yet.
+  ipad1, so the existing bridge calls work.
+- Device ▸ Battery (both devices): level presets and Charge Automatically /
+  Charging / Not Charging, via `qemu_ios_ui_battery`. On the iPad configd's
+  gas-gauge plugin reads the level at runtime; the status bar follows within
+  ~30 s. Whether it *charges* is the power source's call from the USB current
+  the host grants: the usbmuxd bridge sends Apple's vendor power request
+  (0x40/0x40, 500 + 1600 mA) as a Mac does, so with app management on the iPad
+  shows Charging. Device ▸ Battery ▸ High-Power USB Port (iPad only) sets the
+  machine's `usb-charger` and replugs USB; it only matters for the built-in
+  host, i.e. with app management off (`--no-appsync`), and is disabled
+  otherwise. Charging/Not Charging set the gauge and charger bits but do not
+  override the power source.
+- Device ▸ Orientation ▸ Compass Heading (iPad only): North/East/South/West,
+  via `qemu_ios_ui_compass` (machine `compass-heading`).
+- Location: not yet. It will come from a4-iboot's location responder and sit
+  beside the compass (`EmulatorController`, "Location comes later").
+- Quit / Power Off: the iPad has no guest tools, so the clean shutdown sends
+  `qemu_ios_ui_powerdown()`; the machine turns system_powerdown into the
+  power-off gesture and the D1815 power-off write sets
+  `qemu_ios_ui_guest_shutdown_confirmed()` (about 15 s when driven through the
+  dylib). If it isn't confirmed within `haltShutdownBudget` (30 s) the quit
+  continues as a failed clean shutdown and the existing hard stop applies.
 
 - Network: Wi-Fi, as on the iPod. The ipad1 machine brings it up by itself
   (`wifi` defaults on); `--no-network` passes `wifi=off`. With networking the
@@ -131,8 +151,8 @@ Proven without the app (qemu-ios `ipad1-guest`):
   was not observed either. Emulator-side (usb-kbd/EHCI wake), not app code.
 - No web proxy, no media preparation, no guest agent, no guest-driven
   orientation watch.
-- `guest_shutdown_confirmed()` and `storage_failed()` read iPod devices: a
-  guest power-off is not detected.
+- `storage_failed()` reads iPod devices: an iPad NAND write failure is not
+  reported to the app.
 - Paste is left to the guest pasteboard work.
 - The two-finger path was not exercised end to end.
 - The shell is a black slab, no art.

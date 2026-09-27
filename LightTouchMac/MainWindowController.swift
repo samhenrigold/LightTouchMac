@@ -639,6 +639,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func resetMotion(_ sender: Any?) { deviceVC.screen.resetMotion() }
 
     @objc func deviceShake(_ sender: Any?)       { emulator.shake() }
+    @objc func setBatteryLevel(_ sender: NSMenuItem)    { emulator.setBattery(level: sender.tag) }
+    @objc func setBatteryCharging(_ sender: NSMenuItem) { emulator.setBattery(charging: Int32(sender.tag)) }
+    @objc func toggleHighPowerUSB(_ sender: Any?)       { emulator.setHighPowerUSB(!emulator.highPowerUSB) }
+    @objc func setCompassHeading(_ sender: NSMenuItem)  { emulator.setCompassHeading(sender.tag) }
     @objc func toggleDevicePause(_ sender: Any?) {
         if emulator.isPaused { emulator.resume() } else if emulator.isRunning { emulator.pause() }
     }
@@ -1355,6 +1359,20 @@ extension MainWindowController: NSMenuItemValidation {
             return emulator.acceptsInput || (emulator.isPoweredOff && !emulator.shuttingDown)
         case #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:)), #selector(deviceRotateRight(_:)):
             return emulator.acceptsInput && !(window?.firstResponder is NSTextView)
+        case #selector(setBatteryLevel(_:)):
+            menuItem.state = menuItem.tag == emulator.batteryLevel ? .on : .off
+            return emulator.acceptsInput
+        case #selector(setBatteryCharging(_:)):
+            menuItem.state = Int32(menuItem.tag) == emulator.batteryCharging ? .on : .off
+            return emulator.acceptsInput
+        case #selector(toggleHighPowerUSB(_:)):
+            menuItem.state = emulator.highPowerUSB ? .on : .off
+            menuItem.toolTip = emulator.canChooseUSBCharger ? nil
+                : "The Mac's USB connection always grants high power, as a real Mac does."
+            return emulator.acceptsInput && emulator.canChooseUSBCharger
+        case #selector(setCompassHeading(_:)):
+            menuItem.state = menuItem.tag == emulator.compassHeading ? .on : .off
+            return emulator.acceptsInput && emulator.hasCompass
         case #selector(deviceHome(_:)), #selector(deviceShake(_:)),
              #selector(deviceVolumeUp(_:)), #selector(deviceVolumeDown(_:)):
             return emulator.acceptsInput

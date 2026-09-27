@@ -21,6 +21,8 @@ stubs='\n'.join('@objc func '+name+'(_ sender:Any?) {}' for name in sorted(selec
 source=r'''import Cocoa
 @MainActor final class Emulator {
  var isPaused=false,isRunning=true,isInstalling=false,acceptsInput=true,isSleeping=false
+ var batteryLevel:Int?=nil,batteryCharging:Int32=0,highPowerUSB=true,canChooseUSBCharger=false
+ var compassHeading:Int?=nil,hasCompass=false
  func pause(){isPaused=true;isRunning=false}
  func resume(){isPaused=false;isRunning=true}
 }

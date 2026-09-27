@@ -155,6 +155,14 @@ enum MainMenuBuilder {
         orientation.addItem(item("Rotate Automatically", #selector(AppDelegate.toggleAutomaticRotation(_:))))
         orientation.addItem(.separator())
         appendMotionPoseItems(to: orientation)
+        if DeviceProfile.current == .iPad1 {
+            orientation.addItem(.separator())
+            let compass = NSMenu(title: "Compass Heading")
+            for (degrees, title) in [(0, "North"), (90, "East"), (180, "South"), (270, "West")] {
+                compass.addItem(item(title, #selector(MainWindowController.setCompassHeading(_:)), tag: degrees))
+            }
+            orientation.addItem(submenu(compass, title: "Compass Heading"))
+        }
         menu.addItem(submenu(orientation, title: "Orientation"))
         let input = NSMenu(title: "Input")
         input.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
@@ -169,6 +177,19 @@ enum MainMenuBuilder {
         network.addItem(.separator())
         network.addItem(item("Proxy…", #selector(MainWindowController.configureWebProxy(_:))))
         menu.addItem(submenu(network, title: "Network"))
+        let battery = NSMenu(title: "Battery")
+        for level in [100, 80, 50, 20, 5] {
+            battery.addItem(item("\(level)%", #selector(MainWindowController.setBatteryLevel(_:)), tag: level))
+        }
+        battery.addItem(.separator())
+        for (mode, title) in ["Charge Automatically", "Charging", "Not Charging"].enumerated() {
+            battery.addItem(item(title, #selector(MainWindowController.setBatteryCharging(_:)), tag: mode))
+        }
+        if DeviceProfile.current == .iPad1 {
+            battery.addItem(.separator())
+            battery.addItem(item("High-Power USB Port", #selector(MainWindowController.toggleHighPowerUSB(_:))))
+        }
+        menu.addItem(submenu(battery, title: "Battery"))
         menu.addItem(.separator())
         menu.addItem(item("Pause", #selector(MainWindowController.toggleDevicePause(_:))))
         // Keep restart and erase together at the bottom, away from routine input.

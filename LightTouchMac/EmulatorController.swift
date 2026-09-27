@@ -726,6 +726,51 @@ final class EmulatorController {
         guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_usb_connection") else { return nil }
         return unsafeBitCast(symbol, to: USBConnectionSetter.self)
     }
+    // MARK: Battery, charger and compass
+    //
+    // The emulator can't be asked for these, so what the app last set is the
+    // menu's state. nil level = the machine's own default until one is chosen.
+    private(set) var batteryLevel: Int?
+    /// 0 automatic (the power source decides from the host's current), 1 on, 2 off.
+    private(set) var batteryCharging: Int32 = 0
+    func setBattery(level: Int? = nil, charging: Int32? = nil) {
+        let level = level ?? batteryLevel ?? 80
+        let charging = charging ?? batteryCharging
+        guard qemu_ios_ui_battery(Int32(level), charging) else { return }
+        batteryLevel = level
+        batteryCharging = charging
+    }
+
+    /// Optional entry points: absent from dylibs that predate them, and they
+    /// return false on a machine without the control (the iPod).
+    private func bridgeCall<T>(_ name: String, as type: T.Type) -> T? {
+        dlsym(UnsafeMutableRawPointer(bitPattern: -2), name).map { unsafeBitCast($0, to: type) }
+    }
+    private typealias BoolControl = @convention(c) (Bool) -> Bool
+    private typealias IntControl = @convention(c) (Int32) -> Bool
+
+    /// Whether the built-in USB host grants a high-power port's current. The
+    /// usbmuxd bridge always does, as a Mac does, so this only matters with
+    /// app management off (--no-appsync).
+    private(set) var highPowerUSB = true
+    var canChooseUSBCharger: Bool { usbmux.session == nil && DeviceProfile.current == .iPad1 }
+    func setHighPowerUSB(_ on: Bool) {
+        guard bridgeCall("qemu_ios_ui_usb_charger", as: BoolControl.self)?(on) == true else { return }
+        highPowerUSB = on
+        // The host grants current at enumeration: replug so it asks again.
+        guard usbConnectionSetter?(false) == true else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { _ = self.usbConnectionSetter?(true) }
+    }
+
+    private(set) var compassHeading: Int?
+    var hasCompass: Bool { DeviceProfile.current == .iPad1 }
+    func setCompassHeading(_ degrees: Int) {
+        guard bridgeCall("qemu_ios_ui_compass", as: IntControl.self)?(Int32(degrees)) == true else { return }
+        compassHeading = degrees
+    }
+    // Location comes later (a4-iboot's location responder); it will sit here
+    // beside the compass with the same bridgeCall shape.
+
     private(set) var usbConnected = true
     private func reconnectUSB() {
         if !usbConnected, usbConnectionSetter?(true) == true {
@@ -1489,6 +1534,18 @@ final class EmulatorController {
             }
             let confirmed = { !self.storageFailed && qemu_ios_ui_guest_shutdown_confirmed() }
             let stopped = { self.storageFailed || self.isDead }
+            if DeviceProfile.current == .iPad1 {
+                // No guest tools on a stock iPad: the machine turns
+                // system_powerdown into the user's power-off gesture (hold
+                // Lock, slide), and the D1815 power-off write confirms it.
+                qemu_ios_ui_powerdown()
+                let clean = await DeviceStateStorage.waitForShutdown(
+                    until: Date().addingTimeInterval(Self.haltShutdownBudget),
+                    confirmed: confirmed, stopped: stopped)
+                if clean { logEvent("quit: guest confirmed power-off — volume unmounted") }
+                else if !stopped() { logEvent("quit: guest did not shut down — this session's writes may be lost") }
+                finishCleanShutdown(clean); return
+            }
             if self.canManageApps || qemu_ios_agent_status() == 1 {
                 let haltDeadline = Date().addingTimeInterval(Self.haltShutdownBudget)
                 // During boot, USB can exist before sshd answers. Retry within
