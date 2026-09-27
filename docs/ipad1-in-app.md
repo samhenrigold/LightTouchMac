@@ -152,7 +152,12 @@ The iPad uses the iPod's snapshot path unchanged:
 - The overlay-newer rule works for the iPad's page-store overlay because the IOP model stamps the
   overlay file's mtime on every program/erase (qemu-ios `hw/arm/s5l8930_iop.c`, `nand_touch`).
 - Automatic resume follows `resumeOnLaunch`, which is currently off for both devices.
-- Saving is refused while the guest holds live host GL contexts (`qemu_ios_gles_contexts`), as on the iPod.
+- Saving works with live host GL contexts on macOS (CGL; the emulator serialises GL state). Only an
+  iOS-host EAGL build refuses, through the emulator's migration blocker.
+- Known risk: killing the emulator while the guest writes flash (force quit, Xcode's stop button, a
+  crash) can corrupt the overlay. One scratch overlay put through repeated restore-then-kill cycles came
+  up on "Connect to iTunes" (activation state lost); a fresh overlay booted normally. The app's own quit
+  powers the guest off cleanly first, so this needs a kill, not a normal quit.
 
 Proven without the app (qemu-ios `ipad1-guest`):
 
@@ -165,6 +170,9 @@ Proven without the app (qemu-ios `ipad1-guest`):
 - The same round trip through the app's dylib ABI (`qemu_ios_snapshot_save2`, then a relaunch with
   `-incoming` and autostart): the page is still on screen (0.00% frame difference), Safari fetches a new
   page, `ideviceinfo` answers through the new bridge, and there's no panic.
+- With GL: a save on the home screen (3 GL contexts) and one 0.7 s into Test Harness's GL test (5
+  contexts) both complete. The restored test runs on to its frame badge, Home works, and relaunching the
+  GL test after the restore works.
 
 ## Stubbed or absent
 
