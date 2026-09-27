@@ -154,6 +154,10 @@ TZ_BIN="$WORK/lockdown-tz"
 cc -O2 -mmacosx-version-min="$MINOS" -o "$TZ_BIN" "$SRC/scripts/lockdown-tz.c" \
    -I"$DEPS/include" -L"$DEPS/lib" -limobiledevice-1.0 -lplist-2.0
 copy_tool "$TZ_BIN"
+MC_BIN="$WORK/lockdown-mcinstall"
+cc -O2 -mmacosx-version-min="$MINOS" -o "$MC_BIN" "$SRC/scripts/lockdown-mcinstall.c" \
+   -I"$DEPS/include" -L"$DEPS/lib" -limobiledevice-1.0 -lplist-2.0
+copy_tool "$MC_BIN"
 mkdir -p "$WORK/it-webproxy"
 for source in build.sh itwebproxy.c tls-bridge.h weather.m; do
     cp "$QEMU/contrib/it-webproxy/$source" "$WORK/it-webproxy/"

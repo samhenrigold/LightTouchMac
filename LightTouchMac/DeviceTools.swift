@@ -594,6 +594,7 @@ struct DeviceTools: Sendable {
     }
 
     func configureWebProxy(enabled: Bool) async throws {
+        if DeviceProfile.current == .iPad1 { return try await configureIPadWebProxy(enabled: enabled) }
         guard let helper = Bundled.resolve("itproxy", fallbacks: [
             "\(filesRoot)/../qemu-ios/contrib/it-proxy/itproxy"
         ]) else { throw DeviceToolsError.toolMissing("itproxy") }
@@ -616,6 +617,35 @@ struct DeviceTools: Sendable {
         if !enabled && FileManager.default.fileExists(atPath: certificate) {
             try await configureProxyTrust(certificate: certificate, enabled: false)
         }
+    }
+
+    /// The iPad has no guest agent: routing is the image's PAC (always the proxy, DIRECT as fallback) and
+    /// the host's itwebproxy mode, so only trust needs the device. Turning the proxy on offers a
+    /// configuration profile with this device's CA through lockdown's stock MCInstall service
+    /// (lockdown-mcinstall, a child process like lockdown-tz); the user taps Install once in Settings.
+    /// ponytail: turning it off leaves the profile installed (the CA is this device's own and its key
+    /// never leaves the Mac); remove it in Settings > General > Profiles, or add RemoveProfile if asked.
+    private func configureIPadWebProxy(enabled: Bool) async throws {
+        guard enabled else { return }
+        guard let host = Bundled.resolve("itwebproxy", fallbacks: [
+            "\(filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
+        ]) else { throw DeviceToolsError.toolMissing("itwebproxy") }
+        // Packaged apps bundle it (package.sh); dev builds find it on the usual PATH directories.
+        guard let tool = Bundled.resolve("lockdown-mcinstall", fallbacks: Bundled.binarySearchPaths.map { "\($0)/lockdown-mcinstall" })
+        else { throw DeviceToolsError.toolMissing("lockdown-mcinstall") }
+        let prepared = try await run(.path(FilePath(host)), arguments: ["--init-ca", WebProxyConfiguration.file.path],
+                                     output: .discarded, error: .string(limit: 1 << 16))
+        guard prepared.terminationStatus.isSuccess else {
+            logEvent("proxy: certificate preparation failed: \(prepared.standardError)")
+            throw DeviceToolsError.failed("Could not prepare this device’s HTTP proxy certificate.")
+        }
+        let offered = try await run(.path(FilePath(tool)), arguments: [WebProxyConfiguration.file.path + ".ca.der"],
+                                    environment: toolEnvironment,
+                                    output: .string(limit: 1 << 10), error: .string(limit: 1 << 10))
+        guard offered.terminationStatus.isSuccess else {
+            throw DeviceToolsError.failed("Could not offer the proxy certificate to the device. \(offered.standardError)")
+        }
+        logEvent("proxy: certificate profile offered; confirm Install in the device's Settings")
     }
 
     private func configureProxyTrust(certificate: String, enabled: Bool) async throws {

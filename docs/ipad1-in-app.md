@@ -73,14 +73,23 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   boot, and its charging state is not shown yet.
 
 - Network: Wi-Fi, as on the iPod. The ipad1 machine brings it up by itself
-  (`wifi` defaults on and creates a `user,id=wifi0` slirp netdev), so the
-  launch adds nothing; `--no-network` passes `wifi=off`.
-  Stock 3.2.2 joins the BCM4329 model's open "qemu-ios" network by itself:
-  Settings shows Wi-Fi "qemu-ios", the guest takes 10.0.2.15 by DHCP, and the
-  host is reachable at 10.0.2.2. Works with the stock usbmuxd, no
-  `LTM_USBMUXD`; usbmux (ideviceinfo, AFC) is unaffected. No web proxy yet, so
-  sites that need modern TLS fail in 3.2's Safari (the iPod's itwebproxy is
-  not wired for the iPad).
+  (`wifi` defaults on); `--no-network` passes `wifi=off`. With networking the
+  launch replaces the machine's netdev with `user,id=wifi0` plus the
+  itwebproxy guestfwd (10.0.2.100:3128), the iPod's web proxy. Stock 3.2.2
+  joins the BCM4329 model's open "qemu-ios" network by itself: Settings shows
+  Wi-Fi "qemu-ios", the guest takes 10.0.2.15 by DHCP, the host is 10.0.2.2.
+  Works with the stock usbmuxd, no `LTM_USBMUXD`; usbmux is unaffected.
+- Web proxy (Device > Proxy): routing is the golden image's Wi-Fi PAC
+  (`ipad1_rootfs.py --web-proxy`: the proxy, falling back to DIRECT), so on,
+  off and archive are host-side itwebproxy modes and the guest is never
+  reconfigured. Turning it on offers the device's own CA as a configuration
+  profile over lockdown's stock MCInstall (`scripts/lockdown-mcinstall.c`, a
+  child process like lockdown-tz, bundled by package.sh; dev builds need it
+  on the PATH): Settings shows Install Profile, one tap on Install trusts it,
+  and HTTPS sites then open through the proxy's TLS bridge. Turning it off
+  leaves the profile (remove it in Settings > General > Profiles). Needs a
+  golden built with `--web-proxy` and the keychain ownership fix (qemu-ios
+  ipad1 912b8cac49): before that fix the certificate could not be installed.
 - USB Ethernet (opt-in, not needed for networking): golden-pristine carries
   `it_ethlink`; run with `LTM_USBMUXD=~/Developer/usbmuxd-qemu-ipad1-net/src/usbmuxd`
   (usbmuxd `ipad1` branch, 23c3afd), which selects USB configuration 4 when

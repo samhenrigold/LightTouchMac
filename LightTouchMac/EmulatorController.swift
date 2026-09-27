@@ -372,6 +372,19 @@ final class EmulatorController {
             // the active keyboard, so qemu_ios_ui_key_mac types into it.
             "-device", "usb-kbd,bus=usb-bus.0",
         ]
+        // The web proxy, as on the iPod: itwebproxy on a slirp guestfwd at 10.0.2.100:3128. This
+        // explicit wifi0 replaces the machine's own. The golden image's Wi-Fi service carries a PAC that
+        // uses the proxy and falls back to DIRECT, so Proxy off is purely host-side (itwebproxy "off").
+        if options.network, let helper = Bundled.resolve("itwebproxy", fallbacks: ["\(options.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"]) {
+            do {
+                try webProxy.writeRouting()
+                argv += ["-netdev", "user,id=wifi0" + WebProxyConfiguration.guestForward(helper: helper)]
+                webProxyAvailable = true
+            } catch {
+                webProxyStatus = .failed
+                logEvent("proxy routing: \(error.localizedDescription)")
+            }
+        }
         // After the overlay pin check above, so a snapshot only ever resumes
         // over the overlay it was saved with.
         argv += restoreArgs(overlay: overlay)      // -incoming, if a snapshot is trusted
