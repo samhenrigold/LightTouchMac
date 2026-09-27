@@ -68,11 +68,19 @@ struct LaunchOptions: ParsableArguments {
     /// qemu-ios contrib/macos-app/nandpack.py). Unpacked on first boot.
     var packedNAND: String { "\(filesRoot)/nand.itnand" }
 
+    /// iPad 1 (LIGHTTOUCH_DEVICE=ipad1): a kernel-direct boot bundle and a NAND
+    /// page store, both produced by qemu-ios/imgtools. See docs/ipad1-in-app.md.
+    var ipad1KBoot: String { "\(filesRoot)/ipad1/7B500/k48-kboot.bin" }
+    var ipad1NAND: String  { "\(filesRoot)/ipad1/userland/nand-pristine" }
+
     /// Required assets that don't exist, so the app can report them up front
     /// instead of failing inside the dylib on the QEMU thread with no UI — a
     /// missing NAND used to be an invisible hang.
     func missingAssets() -> [String] {
         let fm = FileManager.default
+        if DeviceProfile.current == .iPad1 {
+            return [filesRoot, ipad1KBoot, ipad1NAND].filter { !fm.fileExists(atPath: $0) }
+        }
         var missing = [filesRoot, bootrom, iBoot, nor].filter { !fm.fileExists(atPath: $0) }
         if !fm.fileExists(atPath: nandImage), !fm.fileExists(atPath: packedNAND) {
             missing.append(nandImage)

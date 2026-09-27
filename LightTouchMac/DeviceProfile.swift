@@ -1,0 +1,52 @@
+// Which emulated device this process runs.
+//
+// One per process for now (docs/device-library-architecture.md moves each
+// device into its own helper later), chosen by LIGHTTOUCH_DEVICE=ipad1 and
+// defaulting to the iPod so nothing changes for it. Geometry comes from the
+// dylib's qemu_ios_device_info(); the app only owns the device art.
+
+import CoreGraphics
+import Foundation
+
+nonisolated enum DeviceProfile: Equatable {
+    case iPodTouch2G
+    case iPad1
+
+    static let current: DeviceProfile =
+        ProcessInfo.processInfo.environment["LIGHTTOUCH_DEVICE"] == "ipad1" ? .iPad1 : .iPodTouch2G
+
+    /// The name passed to -M; also the key for qemu_ios_device_info().
+    var machineName: String { self == .iPad1 ? "ipad1" : "iPod-Touch" }
+    var displayName: String { self == .iPad1 ? "iPad" : "iPod touch" }
+
+    /// Framebuffer pixels at the machine's default orientation.
+    var screenPixels: CGSize {
+        guard let info = qemu_ios_device_info(machineName)?.pointee else {
+            fatalError("libqemu-arm.dylib does not know machine \(machineName)")
+        }
+        return CGSize(width: Int(info.screen_width), height: Int(info.screen_height))
+    }
+
+    // MARK: - Device art (shell-native pixels, top-left origin)
+
+    /// The iPod has shell.png and the N72 3D model; the iPad has neither yet
+    /// and is drawn as a flat black slab with the screen inset by `bezel`.
+    var hasShellArt: Bool { self == .iPodTouch2G }
+    private static let iPadBezel: CGFloat = 96
+
+    var shellPixels: CGSize {
+        switch self {
+        case .iPodTouch2G: CGSize(width: 737, height: 1318)
+        case .iPad1:
+            CGSize(width: screenPixels.width + 2 * Self.iPadBezel,
+                   height: screenPixels.height + 2 * Self.iPadBezel)
+        }
+    }
+
+    var screenCutout: CGRect {
+        switch self {
+        case .iPodTouch2G: CGRect(x: 74, y: 213, width: 594, height: 891)
+        case .iPad1: CGRect(origin: CGPoint(x: Self.iPadBezel, y: Self.iPadBezel), size: screenPixels)
+        }
+    }
+}

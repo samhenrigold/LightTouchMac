@@ -182,6 +182,7 @@ final class EmulatorController {
         }
         started = true
         state = .booting
+        if DeviceProfile.current == .iPad1 { startIPad1(); return }
 
         if !FileManager.default.fileExists(atPath: options.nandImage),
            FileManager.default.fileExists(atPath: options.packedNAND + ".sha256") {
@@ -321,6 +322,56 @@ final class EmulatorController {
         verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
         startOrientationWatch()   // idle until the guest is up and reachable
         startTimeZoneSync()       // guest zone follows the Mac's, incl. travel
+        startForegroundWatch()
+    }
+
+    /// iPad 1 bring-up: kernel-direct boot from a K48KBOOT bundle. No bootrom
+    /// chain, snapshots, USB, network, media or guest agent yet — just the
+    /// machine, its serial log and the frame/touch/button bridge. What is
+    /// stubbed is listed in docs/ipad1-in-app.md.
+    private func startIPad1() {
+        // The IOP mmaps the page store MAP_SHARED and writes through it, so
+        // the guest must never run on the pristine image: clone it into
+        // Application Support once (an APFS clone, so instant and free).
+        let nand = stateDir.appendingPathComponent("ipad1/\((options.ipad1NAND as NSString).lastPathComponent)",
+                                                   isDirectory: true)
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: nand.path) {
+            do {
+                try fm.createDirectory(at: nand.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(atPath: options.ipad1NAND, toPath: nand.path)
+            } catch {
+                try? fm.removeItem(at: nand)
+                reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
+                state = .dead(exitCode: 1)
+                return
+            }
+        }
+        do {
+            serialCapture = try SerialLogCapture(url: Bundled.logsDirectory.appendingPathComponent("serial.log"))
+        } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
+
+        let escape = { (path: String) in path.replacingOccurrences(of: ",", with: ",,") }
+        // No -m: the machine's default is the K48's 256 MiB.
+        let argv = [
+            "LightTouchMac",
+            "-M", "ipad1,kboot=\(escape(options.ipad1KBoot)),nand=\(escape(nand.path))",
+            "-display", "none",
+            "-no-shutdown",
+            "-serial", serialCapture?.argument ?? "null",
+        ]
+        logEmulatorBuild()
+        qemu_ios_ui_attach(nil, nil)
+        let thread = Thread {
+            var cargs = argv.map { strdup($0) }
+            cargs.append(nil)
+            let rc = qemu_ios_main(Int32(argv.count), &cargs)
+            DispatchQueue.main.async { self.qemuDidExit(code: rc) }
+        }
+        thread.name = "qemu-main"
+        thread.qualityOfService = .userInteractive
+        thread.stackSize = 16 << 20
+        thread.start()
         startForegroundWatch()
     }
 

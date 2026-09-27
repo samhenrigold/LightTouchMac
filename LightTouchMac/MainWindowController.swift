@@ -82,7 +82,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         split.addSplitViewItem(inspectorItem)
         
         let window = NSWindow(contentViewController: split)
-        window.title = "iPod touch"
+        window.title = DeviceProfile.current.displayName
         // .fullSizeContentView is what makes the inspector run the FULL HEIGHT
         // of the window rather than starting below the toolbar (WWDC23 "inspectors
         // use the full height of the window when the full size content view mask
@@ -90,7 +90,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // inspector's material still stops at it, which is the giveaway that the
         // pane is sitting under the titlebar instead of behind it.
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window.setContentSize(NSSize(width: 720, height: 640))
+        window.setContentSize(DeviceProfile.current == .iPad1 ? NSSize(width: 1100, height: 760)
+                                                              : NSSize(width: 720, height: 640))
         window.contentMinSize = NSSize(width: 360, height: 380)
         WindowRestorationPolicy.configure(window)
         window.center()

@@ -13,7 +13,7 @@ final class DeviceViewController: NSViewController {
     
     init(emulator: EmulatorController) {
         self.emulator = emulator
-        self.displayView = DisplayView(frame: NSRect(x: 0, y: 0, width: 320, height: 480))
+        self.displayView = DisplayView(frame: NSRect(origin: .zero, size: DeviceProfile.current.screenPixels))
         super.init(nibName: nil, bundle: nil)
         displayView.emulator = emulator
         displayView.onDropIPA = { [weak self] url in self?.installDropped(url) }

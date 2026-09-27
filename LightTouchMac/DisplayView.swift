@@ -19,16 +19,18 @@ enum ZoomMode: Equatable {
 
 final class DisplayView: NSView {
 
-    /// The original hardware: iPod touch 2G, 320×480 at 163 ppi (3.5" panel).
-    /// The live frame buffer swaps to 480×320 on rotation.
-    private static let nativeScreenPixels = CGSize(width: 320, height: 480)
+    /// The device this process runs; one per process, fixed at launch.
+    private static let profile = DeviceProfile.current
+    /// The panel at rest — iPod touch 2G: 320×480 at 163 ppi (3.5" panel).
+    /// The live frame buffer swaps its sides on rotation.
+    private static let nativeScreenPixels = profile.screenPixels
 
-    /// The shell.png asset: its full pixel size, the screen cutout rect within
+    /// The shell art: its full pixel size, the screen cutout rect within
     /// it (top-left origin, matching this view's isFlipped space), and the
     /// home button circle — all in the shell image's own native (portrait,
     /// unrotated) pixel space.
-    private static let shellPixels = CGSize(width: 737, height: 1318)
-    private static let screenCutout = CGRect(x: 74, y: 213, width: 594, height: 891)
+    private static let shellPixels = profile.shellPixels
+    private static let screenCutout = profile.screenCutout
     private static let homeButtonDiameter: CGFloat = 122
     private static let homeButtonBottomInset: CGFloat = 54
 
@@ -163,8 +165,13 @@ final class DisplayView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
 
-        shellLayer.contents = NSImage(named: "shell")?
-            .cgImage(forProposedRect: nil, context: nil, hints: nil)
+        if Self.profile.hasShellArt {
+            shellLayer.contents = NSImage(named: "shell")?
+                .cgImage(forProposedRect: nil, context: nil, hints: nil)
+        } else {
+            shellLayer.backgroundColor = NSColor.black.cgColor
+            shellLayer.cornerRadius = 60
+        }
         shellLayer.contentsGravity = .resize
         // The shell stays at its native pixel size forever; layout() scales and
         // rotates it with a single transform. The content layer lives INSIDE it
@@ -217,7 +224,8 @@ final class DisplayView: NSView {
         homeButton.action = #selector(homeTapped)
         addSubview(homeButton)
         // macOS 14 keeps the photo shell; RealityKit texture rotation requires 15.
-        if #available(macOS 15, *), let url = Bundle.main.url(forResource: "N72", withExtension: "usdz") {
+        if #available(macOS 15, *), Self.profile.hasShellArt,
+           let url = Bundle.main.url(forResource: "N72", withExtension: "usdz") {
             // Give RealityKit one second to present the device itself. Slower
             // startup shows a temporary photo while the live model keeps
             // loading; a busy GPU must never permanently disable 3D.
@@ -257,7 +265,7 @@ final class DisplayView: NSView {
         ])
 
         registerForDraggedTypes([.fileURL, .ltmCatalogApp])
-        setAccessibilityLabel("iPod touch screen")
+        setAccessibilityLabel("\(Self.profile.displayName) screen")
         setAccessibilityRole(.image)
         setAccessibilityHelp("Disable Keyboard Input in the Device menu to move a pointer with arrow keys. Hold Space to touch, or Shift-arrow to drag. Home is also available in the Device menu.")
     }
@@ -686,7 +694,8 @@ final class DisplayView: NSView {
     /// current even when paused/minimized and never retains a recycled slot.
     func captureFrame(includeTouches: Bool = true) -> CGImage? {
         if let liveTextView { return liveTextView.capturedImage }
-        var data = Data(count: 480 * 480 * 4)
+        let side = Int(max(Self.nativeScreenPixels.width, Self.nativeScreenPixels.height))
+        var data = Data(count: side * side * 4)
         var width: Int32 = 0, height: Int32 = 0
         let copied = data.withUnsafeMutableBytes {
             qemu_ios_ui_copy_frame($0.baseAddress, $0.count, &width, &height)
