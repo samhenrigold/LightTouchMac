@@ -9,6 +9,18 @@ struct Check {
         let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: root) }
+        // Overlay pinning: adopted when empty, kept for its base, refused for
+        // another base and for an unstamped overlay that already has pages.
+        let pinOverlay = root.appendingPathComponent("nandrw-pin")
+        let adopted = try DeviceStateStorage.pinOverlay(pinOverlay, toBase: "base-a")
+        precondition(adopted)
+        try Data([1]).write(to: pinOverlay.appendingPathComponent("bus0-ce0.pages"))
+        let kept = try DeviceStateStorage.pinOverlay(pinOverlay, toBase: "base-a")
+        let otherBase = try DeviceStateStorage.pinOverlay(pinOverlay, toBase: "base-b")
+        precondition(kept && !otherBase)
+        try fm.removeItem(at: pinOverlay.appendingPathComponent(".base-identity"))
+        let unstamped = try DeviceStateStorage.pinOverlay(pinOverlay, toBase: "base-a")
+        precondition(!unstamped)
         let norBase = root.appendingPathComponent("base-nor")
         let norOverlay = root.appendingPathComponent("nor-overlay")
         try Data(repeating: 0xff, count: 1_048_576).write(to: norBase)

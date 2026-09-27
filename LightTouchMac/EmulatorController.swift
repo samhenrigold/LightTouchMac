@@ -332,6 +332,19 @@ final class EmulatorController {
     /// snapshots, network, media or guest agent yet — see docs/ipad1-in-app.md.
     private func startIPad1() {
         let overlay = overlayURL
+        do {
+            let base = try DeviceStateStorage.developmentImageIdentity(
+                at: URL(fileURLWithPath: options.ipad1NAND), key: imageKey)
+            guard try DeviceStateStorage.pinOverlay(overlay, toBase: base) else {
+                reportDeviceNotice("This \(DeviceProfile.current.shortName)'s saved data was made from a different system image and can't be used with this one. Choose Erase All Content and Settings to start fresh.", for: .erase)
+                state = .dead(exitCode: 1)
+                return
+            }
+        } catch {
+            reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
+            state = .dead(exitCode: 1)
+            return
+        }
         let usbSession = options.appsync
             ? usbmux.start(filesRoot: options.filesRoot, nand: options.ipad1NAND, overlay: overlay.path)
             : nil

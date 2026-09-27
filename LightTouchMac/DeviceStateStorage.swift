@@ -89,6 +89,24 @@ nonisolated enum DeviceStateStorage {
             .map { String(format: "%02x", $0) }.joined()
     }
 
+    /// A copy-on-write overlay is only valid over the exact base it was made
+    /// from: over a rebuilt base its dirty pages mix with different clean ones
+    /// (seen as an unactivated iPad after a golden rebuild). The overlay
+    /// carries the base's identity; false means it belongs to another base,
+    /// or predates pinning, and must not be booted. An empty or missing
+    /// overlay is adopted by the base.
+    static func pinOverlay(_ overlay: URL, toBase identity: String) throws -> Bool {
+        let fm = FileManager.default
+        let stamp = overlay.appendingPathComponent(".base-identity")
+        let contents = (try? fm.contentsOfDirectory(atPath: overlay.path)) ?? []
+        if contents.isEmpty {
+            try fm.createDirectory(at: overlay, withIntermediateDirectories: true)
+            try Data(identity.utf8).write(to: stamp, options: .atomic)
+            return true
+        }
+        return (try? String(contentsOf: stamp, encoding: .utf8)) == identity
+    }
+
     private static func snapshotAttributes(_ url: URL) throws -> (number: UInt64, size: UInt64) {
         let values = try FileManager.default.attributesOfItem(atPath: url.path)
         guard let number = values[.systemFileNumber] as? NSNumber,
