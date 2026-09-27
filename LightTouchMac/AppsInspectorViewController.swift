@@ -692,7 +692,7 @@ final class AppsInspectorViewController: NSViewController {
                         if !self.readsSuppressed {
                             self.emulator.reportConnectionFailure(error, operation: "Checking USB connection")
                             if !self.haveLoaded, self.pending.isEmpty {
-                                self.showInstalledPlaceholder(self.emulator.connectionIssue?.summary ?? "Connecting to iPod…")
+                                self.showInstalledPlaceholder(self.emulator.connectionIssue?.summary ?? "Connecting to \(DeviceProfile.current.shortName)…")
                             } else if self.haveLoaded {
                                 self.showStaleBanner()
                             }
@@ -1001,7 +1001,7 @@ final class AppsInspectorViewController: NSViewController {
         else {
             banner.stringValue = usbUnavailable
                 ? "USB connection unavailable"
-                : emulator.connectionIssue?.summary ?? "Connecting to iPod…"
+                : emulator.connectionIssue?.summary ?? "Connecting to \(DeviceProfile.current.shortName)…"
         }
         banner.toolTip = [emulator.connectionIssue?.detail, when, "Open Device Logs for details."]
             .compactMap { $0 }.joined(separator: "\n")
@@ -1165,7 +1165,7 @@ final class AppsInspectorViewController: NSViewController {
             // reachability temporarily unknown until the next probe. The
             // already accepted removal must still enter the queue.
             guard self.emulator.isRunning, self.emulator.canManageApps else {
-                AppInstaller.presentError(DeviceToolsError.failed("The iPod is unavailable. Try again when it reconnects."),
+                AppInstaller.presentError(DeviceToolsError.failed("The \(DeviceProfile.current.shortName) is unavailable. Try again when it reconnects."),
                                           in: self.view.window)
                 return
             }
@@ -1407,8 +1407,8 @@ final class AppsInspectorViewController: NSViewController {
                 let alert = NSAlert()
                 if case AppLaunchError.locked = error {
                     alert.alertStyle = .informational
-                    alert.messageText = "Unlock the iPod"
-                    alert.informativeText = "Unlock the iPod, then try opening “\(displayName(app))” again."
+                    alert.messageText = "Unlock the \(DeviceProfile.current.shortName)"
+                    alert.informativeText = "Unlock the \(DeviceProfile.current.shortName), then try opening “\(displayName(app))” again."
                 } else {
                     alert.alertStyle = .warning
                     alert.messageText = "Couldn’t open “\(displayName(app))”"

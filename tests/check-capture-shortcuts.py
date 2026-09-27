@@ -2,6 +2,7 @@
 """Production capture key routing, native Copy, and recording sheet callbacks."""
 from pathlib import Path
 import subprocess, tempfile
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 
 root = Path(__file__).resolve().parents[1]
 source = (root / 'LightTouchMac/MainWindowController.swift').read_text()
@@ -267,7 +268,7 @@ import UniformTypeIdentifiers
 with tempfile.TemporaryDirectory(prefix='ltm-capture-shortcuts-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
+    subprocess.run(['xcrun', 'swiftc', DEVICE_PROFILE, '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
                     '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/CapturePreferences.swift'),
                     str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=25)

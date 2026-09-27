@@ -146,7 +146,7 @@ struct MediaVideo: Sendable {
         }
         guard exportedDuration.isFinite, abs(exportedDuration - duration) < 0.2,
               try await asset.loadTracks(withMediaType: .video).count == 1 else {
-            throw DeviceToolsError.failed("The whole video couldn’t be converted for the iPod. Try a shorter video.")
+            throw DeviceToolsError.failed("The whole video couldn’t be converted for the \(DeviceProfile.current.shortName). Try a shorter video.")
         }
         return exportedDuration
     }
@@ -167,7 +167,7 @@ private final class MediaVideoExport {
         // Apple's device preset produces the H.264/AAC profile, dimensions
         // and frame rate supported by the original iPod hardware.
         guard let session = AVAssetExportSession(asset: AVURLAsset(url: source), presetName: AVAssetExportPresetAppleM4ViPod) else {
-            throw DeviceToolsError.failed("This video couldn’t be converted for the iPod.")
+            throw DeviceToolsError.failed("This video couldn’t be converted for the \(DeviceProfile.current.shortName).")
         }
         self.session = session
         defer { self.session = nil }
@@ -181,7 +181,7 @@ private final class MediaVideoExport {
             await session.export()
             try Task.checkCancellation()
             guard session.status == .completed else {
-                throw session.error ?? DeviceToolsError.failed("This video couldn’t be converted for the iPod.")
+                throw session.error ?? DeviceToolsError.failed("This video couldn’t be converted for the \(DeviceProfile.current.shortName).")
             }
         }
     }

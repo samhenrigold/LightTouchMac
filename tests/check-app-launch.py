@@ -2,6 +2,7 @@
 """Production app-launch flow wakes the screen without bypassing guest locks."""
 from pathlib import Path
 import subprocess, tempfile
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[1]
 def method(source, signature):
     start = source.index(signature)
@@ -84,6 +85,6 @@ extension Notification.Name { static let ltmAppLaunched = Notification.Name("Lau
 with tempfile.TemporaryDirectory(prefix='ltm-app-launch-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
+    subprocess.run(['xcrun', 'swiftc', DEVICE_PROFILE, '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
                     '-module-cache-path', str(work / 'modules'), str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=20)

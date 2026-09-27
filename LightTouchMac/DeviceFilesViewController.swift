@@ -12,7 +12,7 @@ final class DeviceFilesViewController: NSViewController, NSBrowserDelegate, NSMe
     private let browser = NSBrowser()
     private let status = NSTextField(wrappingLabelWithString: "")
     private let progress = NSProgressIndicator()
-    private let upload = NSButton(title: "Copy to iPod…", target: nil, action: nil)
+    private let upload = NSButton(title: "Copy to \(DeviceProfile.current.shortName)…", target: nil, action: nil)
     private let download = NSButton(title: "Save to Mac…", target: nil, action: nil)
     private let refresh = NSButton(title: "Refresh", target: nil, action: nil)
     private let cancel = NSButton(title: "Cancel", target: nil, action: nil)
@@ -148,7 +148,7 @@ final class DeviceFilesViewController: NSViewController, NSBrowserDelegate, NSMe
         directories.removeAll()
         browser.loadColumnZero()
         updateControls()
-        guard let services else { status.stringValue = "The iPod is disconnected."; onActivityChange?(); return }
+        guard let services else { status.stringValue = "The \(DeviceProfile.current.shortName) is disconnected."; onActivityChange?(); return }
         let generation = revision
         tasks.append(Task { [weak self] in
             do {

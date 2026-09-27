@@ -49,7 +49,7 @@ struct SpringBoardIcons: Sendable {
             guard let from = ids.firstIndex(of: bundleID) else {
                 throw DeviceToolsError.failed(
                     "SpringBoard doesn't know about this app yet. "
-                    + "Restart the iPod, then try reordering it.")
+                    + "Restart the \(DeviceProfile.current.shortName), then try reordering it.")
             }
             ids.remove(at: from)
             let to = other.flatMap { ids.firstIndex(of: $0) } ?? ids.count

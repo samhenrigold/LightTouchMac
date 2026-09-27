@@ -5,7 +5,7 @@ enum WebProxyStatus: Equatable {
 
     var message: String? {
         switch self {
-        case .waiting: "Waiting for iPod…"
+        case .waiting: "Waiting for \(DeviceProfile.current.shortName)…"
         case .applying: "Updating proxy…"
         case .ready: nil
         case .failed: "Couldn’t update the proxy. Try again."

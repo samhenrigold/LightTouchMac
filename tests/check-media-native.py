@@ -19,6 +19,7 @@ import threading
 import time
 import unicodedata
 from types import SimpleNamespace
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 
 parser = argparse.ArgumentParser(description=__doc__)
 mode = parser.add_mutually_exclusive_group()
@@ -169,7 +170,7 @@ final class Progress: @unchecked Sendable {
 driver = out/'driver.swift'
 driver.write_text(swift)
 executable = out/'driver'
-subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
+subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
     '-module-cache-path',str(out/'modules'),
     str(APP/'LightTouchMac/MediaIdentity.swift'),str(APP/'LightTouchMac/MediaSong.swift'),str(APP/'LightTouchMac/DeviceServices.swift'),
     str(APP/'LightTouchMac/IMobileDevice.swift'),str(APP/'LightTouchMac/MediaPhoto.swift'),
@@ -195,7 +196,7 @@ else:
     shutil.copyfile(ROOT/'contrib/it-harness/build/Payload/Harness.app/aac.m4a',source)
 if args.recording:
     recorder = out/'recorder'
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
+    subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
         str(APP/'LightTouchMac/ScreenMovieWriter.swift'),str(APP/'tests/recording-native.swift'),
         '-o',str(recorder)],check=True)
     class Embedded(r.Procs):

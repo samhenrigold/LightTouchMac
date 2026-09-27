@@ -22,9 +22,9 @@ enum AppLaunchError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .locked: "Unlock the iPod, then try again."
-        case .unavailable: "Wait for the iPod to finish starting, then try again."
-        case .failed: "Try opening the app on the iPod."
+        case .locked: "Unlock the \(DeviceProfile.current.shortName), then try again."
+        case .unavailable: "Wait for the \(DeviceProfile.current.shortName) to finish starting, then try again."
+        case .failed: "Try opening the app on the \(DeviceProfile.current.shortName)."
         }
     }
 }

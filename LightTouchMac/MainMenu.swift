@@ -76,7 +76,7 @@ enum MainMenuBuilder {
         // Transfers belong to the active Files window, through its responder
         // chain. Opening that window belongs to Window; captures to Capture.
         let menu = NSMenu(title: "File")
-        menu.addItem(item("Copy to iPod…", #selector(DeviceFilesViewController.importFile)))
+        menu.addItem(item("Copy to \(DeviceProfile.current.shortName)…", #selector(DeviceFilesViewController.importFile)))
         menu.addItem(item("Save to Mac…", #selector(DeviceFilesViewController.exportFile)))
         menu.addItem(item("Cancel Transfer", #selector(DeviceFilesViewController.cancelTransfer)))
         menu.addItem(.separator())
@@ -105,7 +105,7 @@ enum MainMenuBuilder {
         menu.addItem(item("Search Apps", #selector(MainWindowController.findCatalog(_:)), "f", [.option, .command]))
         menu.addItem(.separator())
         menu.addItem(item("Select Text on Screen", #selector(MainWindowController.showLiveText(_:))))
-        menu.addItem(item("Paste Text to iPod", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
+        menu.addItem(item("Paste Text to \(DeviceProfile.current.shortName)", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
         return menu
     }
 
@@ -184,7 +184,7 @@ enum MainMenuBuilder {
         menu.addItem(item("Zoom", #selector(NSWindow.performZoom(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Show Device", #selector(AppDelegate.showDeviceWindow(_:)), "1"))
-        menu.addItem(item("Show iPod Files", #selector(AppDelegate.showFilesWindow(_:)), "2"))
+        menu.addItem(item("Show \(DeviceProfile.current.shortName) Files", #selector(AppDelegate.showFilesWindow(_:)), "2"))
         menu.addItem(.separator())
         menu.addItem(item("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         return menu

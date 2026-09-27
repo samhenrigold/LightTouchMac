@@ -2,6 +2,7 @@
 """Repeated management failures recover once, without reboot or transfer interruption."""
 from pathlib import Path
 import subprocess,tempfile
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 root=Path(__file__).resolve().parents[1]
 s=(root/'LightTouchMac/EmulatorController.swift').read_text()
 a=s.index('    private var connectionFailures =');b=s.index('    private var didSweepStaging',a)
@@ -67,5 +68,5 @@ extension Notification.Name {static let ltmAppsChanged=Self("apps")}
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-recovery-') as d:
  p=Path(d)/'check.swift';p.write_text(errors+issue+source)
- subprocess.run(['swiftc','-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc', DEVICE_PROFILE,'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=8)

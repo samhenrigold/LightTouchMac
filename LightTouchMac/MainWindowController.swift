@@ -250,7 +250,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             startupStatus.onPrimary = { [weak self] in self?.showDeviceLogs(nil) }
         }
         let elapsed = Int(Date().timeIntervalSince(startupBegan))
-        startupStatus.update(title: emulator.isErasing ? "Erasing iPod…" : emulator.preparationStatus,
+        startupStatus.update(title: emulator.isErasing ? "Erasing \(DeviceProfile.current.shortName)…" : emulator.preparationStatus,
                              detail: elapsed >= 90 ? "Check Device Logs." : "\(elapsed)s",
                              busy: true, primary: elapsed >= 90 ? "Device Logs" : nil)
         if startupTask == nil {
@@ -392,7 +392,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             item.menu = MainMenuBuilder.motionMenu(target: self)
             return item
         case .files:
-            return button(id, "iPod Files", "folder", #selector(toggleFiles(_:)), "Show iPod Files (⌘2)")
+            return button(id, "\(DeviceProfile.current.shortName) Files", "folder", #selector(toggleFiles(_:)), "Show \(DeviceProfile.current.shortName) Files (⌘2)")
         case .home:
             return button(id, "Home Screen", "square.grid.3x3.fill", #selector(deviceHome(_:)), "Home Screen (⇧⌘H)")
         case .lock:
@@ -694,7 +694,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = "Erase all content and settings?"
-        alert.informativeText = "This permanently removes all apps, settings, and saved state from this iPod. Light Touch closes after erasing it. This cannot be undone."
+        alert.informativeText = "This permanently removes all apps, settings, and saved state from this \(DeviceProfile.current.shortName). Light Touch closes after erasing it. This cannot be undone."
         alert.addButton(withTitle: "Erase")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -721,7 +721,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let panel = NSOpenPanel()
         panel.allowedContentTypes = PreparedMedia.extensions.sorted().compactMap { UTType(filenameExtension: $0) }
         panel.allowsMultipleSelection = true
-        panel.message = "Choose photos, audio files or videos to add to the iPod."
+        panel.message = "Choose photos, audio files or videos to add to the \(DeviceProfile.current.shortName)."
         panel.beginSheetModal(for: window!) { [weak self] response in
             guard let self, response == .OK else { return }
             for url in panel.urls {

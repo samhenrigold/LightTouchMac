@@ -96,7 +96,7 @@ final class CaptureNotifications: NSObject, UNUserNotificationCenterDelegate {
 
     static func reminderContent(recordingID: UUID) -> UNNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = "iPod is still recording"
+        content.title = "\(DeviceProfile.current.shortName) is still recording"
         content.categoryIdentifier = reminderCategory
         content.userInfo = ["recordingID": recordingID.uuidString]
         return content

@@ -182,5 +182,5 @@ source=r'''import Cocoa
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-menu-check-') as tmp:
     tmp=Path(tmp);(tmp/'check.swift').write_text(source)
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'MainMenu.swift'),str(root/'RotationControlAction.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'MainMenu.swift'),str(root/'DeviceProfile.swift'),str(root/'RotationControlAction.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
     subprocess.run([str(tmp/'check')],check=True)

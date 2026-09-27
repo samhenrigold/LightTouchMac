@@ -26,7 +26,7 @@ final class EmulatorController {
     private var proxyRevision = 0
     private(set) var webProxyAvailable = false
     func configureWebProxy(_ value: WebProxyConfiguration) throws {
-        guard webProxyAvailable else { throw DeviceToolsError.failed("The proxy is unavailable. Turn on the iPod and connect it to the internet.") }
+        guard webProxyAvailable else { throw DeviceToolsError.failed("The proxy is unavailable. Turn on the \(DeviceProfile.current.shortName) and connect it to the internet.") }
         try value.save()
         webProxy = value
         proxyRevision += 1
@@ -395,7 +395,7 @@ final class EmulatorController {
                 }
                 try Task.checkCancellation()
                 guard generation == bootGeneration else { return }
-                preparationStatus = "Preparing your iPod…"
+                preparationStatus = "Preparing your \(DeviceProfile.current.shortName)…"
                 logEvent("media: checking guest graphics components")
                 if try await tools().updateMediaComponents() {
                     logEvent("media: guest graphics components updated")
@@ -622,7 +622,7 @@ final class EmulatorController {
 
     /// One line for the window's status area.
     var statusLine: String {
-        if isErasing { return "Erasing iPod…" }
+        if isErasing { return "Erasing \(DeviceProfile.current.shortName)…" }
         if storageFailed { return "Storage write failed — device stopped; latest changes were not saved" }
         if shuttingDown, !isPoweredOff { return "Powering off…" }
         switch state {

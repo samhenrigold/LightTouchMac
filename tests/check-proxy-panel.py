@@ -2,6 +2,7 @@
 """Exercise the real proxy panel's choices and transient status layout."""
 from pathlib import Path
 import subprocess, tempfile
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[1]
 fixture = r'''import Cocoa
 struct Bundled { static let stateDirectory = URL(fileURLWithPath: NSTemporaryDirectory()) }
@@ -79,7 +80,7 @@ func descendants(_ view: NSView) -> [NSView] {
 with tempfile.TemporaryDirectory(prefix='ltm-proxy-panel-') as directory:
  work = Path(directory)
  (work/'check.swift').write_text(fixture)
- subprocess.run(['swiftc', '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
+ subprocess.run(['swiftc', DEVICE_PROFILE, '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
    str(root/'LightTouchMac/WebProxyConfiguration.swift'), str(root/'LightTouchMac/ProxySettingsView.swift'),
    str(work/'check.swift'), '-o', str(work/'check')], check=True)
  for zone in ['America/New_York', 'America/Los_Angeles', 'Asia/Tokyo']:

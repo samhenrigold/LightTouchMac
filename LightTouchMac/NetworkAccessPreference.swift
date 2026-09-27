@@ -15,8 +15,8 @@ enum NetworkAccessPreference {
             return
         }
         let alert = NSAlert()
-        alert.messageText = "Connect your iPod to the internet?"
-        alert.informativeText = "Your iPod can use your Mac’s internet connection. macOS may ask for Local Network access.\n\nOffline mode still lets you install apps and capture the screen. Change this later in the Device menu."
+        alert.messageText = "Connect your \(DeviceProfile.current.shortName) to the internet?"
+        alert.informativeText = "Your \(DeviceProfile.current.shortName) can use your Mac’s internet connection. macOS may ask for Local Network access.\n\nOffline mode still lets you install apps and capture the screen. Change this later in the Device menu."
         alert.addButton(withTitle: "Connect")
         alert.addButton(withTitle: "Use Offline")
         options.network = alert.runModal() == .alertFirstButtonReturn

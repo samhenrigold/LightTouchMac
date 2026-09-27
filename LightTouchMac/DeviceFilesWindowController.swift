@@ -6,7 +6,7 @@ final class DeviceFilesWindowController: NSWindowController {
     init() {
         let window = NSWindow(contentViewController: browser)
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
-        window.title = "iPod Files"
+        window.title = "\(DeviceProfile.current.shortName) Files"
         window.setContentSize(NSSize(width: 660, height: 440))
         window.contentMinSize = NSSize(width: 360, height: 280)
         window.isReleasedWhenClosed = false

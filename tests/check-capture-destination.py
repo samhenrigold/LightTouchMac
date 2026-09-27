@@ -2,6 +2,7 @@
 """Exercise the production capture destination without launching the emulator."""
 from pathlib import Path
 import subprocess, tempfile
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[1]
 source = (root/'LightTouchMac/MainWindowController.swift').read_text()
 def extract(start, end):
@@ -31,5 +32,5 @@ code = code.replace('assert(try Data(contentsOf: first) == Data([1,2,3]))', 'let
 with tempfile.TemporaryDirectory() as tmp:
     script = Path(tmp)/'main.swift'
     script.write_text(code)
-    subprocess.run(['swiftc', str(root/'LightTouchMac/CapturePreferences.swift'), str(script), '-o', str(Path(tmp)/'check')], check=True)
+    subprocess.run(['swiftc', DEVICE_PROFILE, str(root/'LightTouchMac/CapturePreferences.swift'), str(script), '-o', str(Path(tmp)/'check')], check=True)
     subprocess.run([str(Path(tmp)/'check')], check=True)

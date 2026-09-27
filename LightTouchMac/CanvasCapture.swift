@@ -20,7 +20,7 @@ final class CanvasCapture {
     private func configuration() throws -> SCStreamConfiguration {
         guard let view, let window = view.window, window.isVisible, !window.isMiniaturized,
               view.bounds.width > 1, view.bounds.height > 1 else {
-            throw CaptureError.failed("Open the iPod window to capture it.")
+            throw CaptureError.failed("Open the \(DeviceProfile.current.shortName) window to capture it.")
         }
         let rect = view.convert(view.safeAreaRect, to: nil)
         // SCK's independent-window crop is top-left based, in window points.
@@ -42,12 +42,12 @@ final class CanvasCapture {
     }
 
     private func contentFilter() async throws -> SCContentFilter {
-        guard let window = view?.window else { throw CaptureError.failed("The iPod window is unavailable.") }
+        guard let window = view?.window else { throw CaptureError.failed("The \(DeviceProfile.current.shortName) window is unavailable.") }
         let id = CGWindowID(window.windowNumber)
         if windowID == id, let filter { return filter }
         let content = try await SCShareableContent.currentProcess
         guard let ownWindow = content.windows.first(where: { $0.windowID == id && $0.owningApplication?.processID == getpid() }) else {
-            throw CaptureError.failed("The iPod window is unavailable for capture.")
+            throw CaptureError.failed("The \(DeviceProfile.current.shortName) window is unavailable for capture.")
         }
         let filter = SCContentFilter(desktopIndependentWindow: ownWindow)
         self.filter = filter

@@ -2,6 +2,7 @@
 """Native capture preferences, options-panel actions, and notification payloads."""
 from pathlib import Path
 import subprocess, tempfile
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[1]
 fixture = r'''import Cocoa
 import UserNotifications
@@ -114,7 +115,7 @@ func descendants(_ view: NSView) -> [NSView] {
 with tempfile.TemporaryDirectory(prefix='ltm-capture-preferences-') as directory:
  work = Path(directory)
  (work/'check.swift').write_text(fixture)
- subprocess.run(['swiftc', '-swift-version', '6', '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
+ subprocess.run(['swiftc', DEVICE_PROFILE, '-swift-version', '6', '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
    *[str(root/'LightTouchMac'/name) for name in ['CapturePreferences.swift', 'CaptureOptionsView.swift', 'CaptureNotifications.swift']],
    str(work/'check.swift'), '-o', str(work/'check')], check=True)
  subprocess.run([str(work/'check')], check=True, timeout=25)
