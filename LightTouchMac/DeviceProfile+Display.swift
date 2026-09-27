@@ -26,24 +26,34 @@ nonisolated extension DeviceProfile {
 
     // MARK: - Device art (shell-native pixels, top-left origin)
 
-    /// The iPod has shell.png and the N72 3D model; the iPad has neither yet
-    /// and is drawn as a flat black slab with the screen inset by `bezel`.
-    var hasShellArt: Bool { self == .iPodTouch2G }
-    private static let iPadBezel: CGFloat = 96
+    /// The iPod has shell.png and the N72 3D model. The iPad borrows the iPad
+    /// chrome from the iPhone Simulator in Xcode 3.2.4 (iPad.deviceinfo:
+    /// portrait.png, 852x1108, with the 768x1024 screen centred in it), as a
+    /// stand-in until it has a 3D model of its own.
+    var shellImageName: String { self == .iPad1 ? "ipad-frame" : "shell" }
+    var hasDeviceModel: Bool { self == .iPodTouch2G }
 
     var shellPixels: CGSize {
         switch self {
         case .iPodTouch2G: CGSize(width: 737, height: 1318)
-        case .iPad1:
-            CGSize(width: uprightScreenPixels.width + 2 * Self.iPadBezel,
-                   height: uprightScreenPixels.height + 2 * Self.iPadBezel)
+        case .iPad1: CGSize(width: 852, height: 1108)
         }
     }
 
     var screenCutout: CGRect {
         switch self {
         case .iPodTouch2G: CGRect(x: 74, y: 213, width: 594, height: 891)
-        case .iPad1: CGRect(origin: CGPoint(x: Self.iPadBezel, y: Self.iPadBezel), size: uprightScreenPixels)
+        // (852 - 768) / 2 and (1108 - 1024) / 2: the Simulator centres its screen.
+        case .iPad1: CGRect(x: 42, y: 42, width: 768, height: 1024)
         }
     }
+
+    /// The Home button's hit circle: diameter, and its gap to the shell's
+    /// bottom edge. The iPad's comes from iPad.deviceinfo's homeOriginX/Y
+    /// (412, 9, bottom-left origin) and its 29x31 home.png.
+    var homeButtonDiameter: CGFloat { self == .iPad1 ? 31 : 122 }
+    var homeButtonBottomInset: CGFloat { self == .iPad1 ? 9 : 54 }
+
+    /// Height of the real device, for Actual Size zoom.
+    var physicalHeightMillimeters: CGFloat { self == .iPad1 ? 242.8 : 110 }
 }

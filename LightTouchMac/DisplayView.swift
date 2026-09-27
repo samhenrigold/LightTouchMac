@@ -31,8 +31,8 @@ final class DisplayView: NSView {
     /// unrotated) pixel space.
     private static let shellPixels = profile.shellPixels
     private static let screenCutout = profile.screenCutout
-    private static let homeButtonDiameter: CGFloat = 122
-    private static let homeButtonBottomInset: CGFloat = 54
+    private static let homeButtonDiameter = profile.homeButtonDiameter
+    private static let homeButtonBottomInset = profile.homeButtonBottomInset
 
     /// Whatever the guest is actually sending right now — swaps on rotation.
     private var framePixels = nativeScreenPixels
@@ -165,13 +165,8 @@ final class DisplayView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
 
-        if Self.profile.hasShellArt {
-            shellLayer.contents = NSImage(named: "shell")?
-                .cgImage(forProposedRect: nil, context: nil, hints: nil)
-        } else {
-            shellLayer.backgroundColor = NSColor.black.cgColor
-            shellLayer.cornerRadius = 60
-        }
+        shellLayer.contents = NSImage(named: Self.profile.shellImageName)?
+            .cgImage(forProposedRect: nil, context: nil, hints: nil)
         shellLayer.contentsGravity = .resize
         // The shell stays at its native pixel size forever; layout() scales and
         // rotates it with a single transform. The content layer lives INSIDE it
@@ -224,7 +219,7 @@ final class DisplayView: NSView {
         homeButton.action = #selector(homeTapped)
         addSubview(homeButton)
         // macOS 14 keeps the photo shell; RealityKit texture rotation requires 15.
-        if #available(macOS 15, *), Self.profile.hasShellArt,
+        if #available(macOS 15, *), Self.profile.hasDeviceModel,
            let url = Bundle.main.url(forResource: "N72", withExtension: "usdz") {
             // Give RealityKit one second to present the device itself. Slower
             // startup shows a temporary photo while the live model keeps
@@ -356,7 +351,7 @@ final class DisplayView: NSView {
         let center = window.convertPoint(toScreen: convert(CGPoint(x: bounds.midX, y: bounds.midY), to: nil))
         let screen = NSScreen.screens.first { $0.frame.contains(center) } ?? window.screen
         return screen.flatMap { DisplayMeasurements.pointsPerMillimeter($0) }.map {
-            let height = 110 * $0
+            let height = Self.profile.physicalHeightMillimeters * $0
             return modelView?.physicalScale(heightInPoints: height) ?? height / Self.shellPixels.height
         }
     }
