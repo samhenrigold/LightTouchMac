@@ -72,6 +72,14 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   ipad1, so the existing bridge calls work. Battery is read by 7B500 only at
   boot, and its charging state is not shown yet.
 
+- Network: `k48-kboot.bin` carries the USB Ethernet link patch (inert unless
+  usbmuxd selects Ethernet). For Safari/Maps over slirp (guest 10.0.2.0/24),
+  run with `LTM_USBMUXD=~/Developer/usbmuxd-qemu-ipad1-net/src/usbmuxd`, the
+  usbmuxd `ipad1` branch (23c3afd), which picks USB configuration 4 when the
+  device offers Ethernet and is unchanged for the iPod. No extra flags.
+  **Release packaging** bundles the usbmuxd built from `--usbmuxd-source`, so
+  it needs usbmuxd's `ipad1` branch merged into `qemu-backend` (Sam's call).
+
 ## Stubbed or absent
 
 - **With the USB keyboard attached, Lock does not stick**: the panel goes off
