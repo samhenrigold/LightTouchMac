@@ -61,18 +61,30 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
 - USB: the same `USBMux` daemon session as the iPod; `ideviceinfo` against it
   reports DeviceClass iPad, 3.2.2 (7B500).
 
+- Buttons: the Device menu's Home (⇧⌘H), Lock (⌘L) and Volume (⌥⌘↑/↓)
+  are menu shortcuts that call `qemu_ios_ui_button` → the iPad's GPIO/PMU
+  buttons. Command/Control chords never reach the guest keyboard, so the
+  usb-kbd holding host keys does not take them.
+- Sleep: `qemu_ios_ui_display_sleeping()` reports the panel's DSI power state
+  on ipad1 (ApplePinotLCD's display-off), so the window shows sleep and Space
+  wakes it as for the iPod.
+- Tilt, shake, battery and cable use the iPod's machine property names on
+  ipad1, so the existing bridge calls work. Battery is read by 7B500 only at
+  boot, and its charging state is not shown yet.
+
 ## Stubbed or absent
 
+- **With the USB keyboard attached, Lock does not stick**: the panel goes off
+  and straight back on (`_lcdEnable: 0` then `1`). Without `usb-kbd` it stays
+  asleep and the sleep indicator holds. Idle sleep with the keyboard attached
+  was not observed either. Emulator-side (usb-kbd/EHCI wake), not app code.
 - No snapshots (every launch cold-boots), no Wi-Fi/proxy, no media
   preparation, no guest agent, no guest-driven orientation watch.
-- `qemu_ios_ui_display_sleeping()`, `guest_shutdown_confirmed()` and
-  `storage_failed()` read iPod devices: the window never shows the iPad as
-  asleep (its backlight does go off after the stock idle time) and a guest
-  power-off is not detected.
-- Shake, tilt, battery and pasteboard set iPod machine properties; on the
-  iPad they log an error and do nothing.
-- The two-finger path was not exercised end to end in this pass.
-- Menus and alerts still say "iPod"; the shell is a black slab, no art.
+- `guest_shutdown_confirmed()` and `storage_failed()` read iPod devices: a
+  guest power-off is not detected.
+- Paste is left to the guest pasteboard work.
+- The two-finger path was not exercised end to end.
+- The shell is a black slab, no art.
 
 ## Verifying frames without the app
 
