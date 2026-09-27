@@ -328,8 +328,9 @@ final class EmulatorController {
     /// iPad 1: kernel-direct boot from a K48KBOOT bundle over the read-only
     /// golden NAND, with this device's writes in its copy-on-write overlay
     /// (so Erase is "delete the overlay", as for the iPod). USB goes to the
-    /// same usbmuxd bridge; host keys go to an emulated USB keyboard. No
-    /// snapshots, network, media or guest agent yet — see docs/ipad1-in-app.md.
+    /// same usbmuxd bridge; host keys go to an emulated USB keyboard. Snapshots
+    /// work as for the iPod (RAM in the migration stream, flash in the overlay);
+    /// no media or guest agent yet — see docs/ipad1-in-app.md.
     private func startIPad1() {
         let overlay = overlayURL
         do {
@@ -361,7 +362,7 @@ final class EmulatorController {
         // itself. Stock 3.2.2 joins the model's open "qemu-ios" network; guest 10.0.2.15, host 10.0.2.2.
         if !options.network { machine += ",wifi=off" }
         // No -m: the machine's default is the K48's 256 MiB.
-        let argv = [
+        var argv = [
             "LightTouchMac",
             "-M", machine,
             "-display", "none",
@@ -371,6 +372,9 @@ final class EmulatorController {
             // the active keyboard, so qemu_ios_ui_key_mac types into it.
             "-device", "usb-kbd,bus=usb-bus.0",
         ]
+        // After the overlay pin check above, so a snapshot only ever resumes
+        // over the overlay it was saved with.
+        argv += restoreArgs(overlay: overlay)      // -incoming, if a snapshot is trusted
         logEmulatorBuild()
         qemu_ios_ui_attach(nil, nil)
         let thread = Thread {
@@ -383,6 +387,7 @@ final class EmulatorController {
         thread.qualityOfService = .userInteractive
         thread.stackSize = 16 << 20
         thread.start()
+        verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
         startForegroundWatch()
     }
 
@@ -1203,7 +1208,10 @@ final class EmulatorController {
     private func snapshotIdentity() throws -> DeviceStateStorage.SnapshotIdentity {
         guard let build = qemu_ios_build_id() else { throw CocoaError(.fileReadCorruptFile) }
         let nand: String
-        if let packedImage {
+        if DeviceProfile.current == .iPad1 {
+            nand = try DeviceStateStorage.developmentImageIdentity(
+                at: URL(fileURLWithPath: options.ipad1NAND), key: imageKey)
+        } else if let packedImage {
             nand = packedImage.key
         } else {
             nand = try DeviceStateStorage.developmentImageIdentity(

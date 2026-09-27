@@ -87,14 +87,41 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   the device offers Ethernet and is unchanged for the iPod. **Release
   packaging** would need that branch merged into `qemu-backend` (Sam's call).
 
+## Snapshots
+
+The iPad uses the iPod's snapshot path unchanged:
+
+- Save State Now and save-on-quit go through `qemu_ios_snapshot_save2`/`_status` (a migration stream of
+  RAM and devices, taken with the vCPU stopped). The NAND overlay beside it is the flash half.
+- `startIPad1` adds `restoreArgs`, which is `-incoming` when a trusted snapshot exists. It runs after the
+  overlay pin check, so a snapshot only ever resumes over the overlay it was saved with.
+- `verifyRestoreIfNeeded` quarantines a restore that never comes alive.
+- `snapshotIdentity` keys the iPad on its golden store (`options.ipad1NAND`).
+- The overlay-newer rule works for the iPad's page-store overlay because the IOP model stamps the
+  overlay file's mtime on every program/erase (qemu-ios `hw/arm/s5l8930_iop.c`, `nand_touch`).
+- Automatic resume follows `resumeOnLaunch`, which is currently off for both devices.
+- Saving is refused while the guest holds live host GL contexts (`qemu_ios_gles_contexts`), as on the iPod.
+
+Proven without the app (qemu-ios `ipad1-guest`):
+
+- `tests/ipad1/snapshot-check.py` saves a live machine and restores it three ways:
+  - With Safari showing a page, a USB keyboard and Wi-Fi: the page survives, touch, typing and a
+    Wi-Fi-only fetch work after resume, and a new usbmuxd reattaches.
+  - Mid-sound: audio continues after resume.
+  - Pairing: the overlay is not newer than the state after save + quit, and is newer once the resumed
+    guest writes.
+- The same round trip through the app's dylib ABI (`qemu_ios_snapshot_save2`, then a relaunch with
+  `-incoming` and autostart): the page is still on screen (0.00% frame difference), Safari fetches a new
+  page, `ideviceinfo` answers through the new bridge, and there's no panic.
+
 ## Stubbed or absent
 
 - **With the USB keyboard attached, Lock does not stick**: the panel goes off
   and straight back on (`_lcdEnable: 0` then `1`). Without `usb-kbd` it stays
   asleep and the sleep indicator holds. Idle sleep with the keyboard attached
   was not observed either. Emulator-side (usb-kbd/EHCI wake), not app code.
-- No snapshots (every launch cold-boots), no web proxy, no media
-  preparation, no guest agent, no guest-driven orientation watch.
+- No web proxy, no media preparation, no guest agent, no guest-driven
+  orientation watch.
 - `guest_shutdown_confirmed()` and `storage_failed()` read iPod devices: a
   guest power-off is not detected.
 - Paste is left to the guest pasteboard work.
