@@ -72,13 +72,19 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   ipad1, so the existing bridge calls work. Battery is read by 7B500 only at
   boot, and its charging state is not shown yet.
 
-- Network: `k48-kboot.bin` carries the USB Ethernet link patch (inert unless
-  usbmuxd selects Ethernet). For Safari/Maps over slirp (guest 10.0.2.0/24),
-  run with `LTM_USBMUXD=~/Developer/usbmuxd-qemu-ipad1-net/src/usbmuxd`, the
-  usbmuxd `ipad1` branch (23c3afd), which picks USB configuration 4 when the
-  device offers Ethernet and is unchanged for the iPod. No extra flags.
-  **Release packaging** bundles the usbmuxd built from `--usbmuxd-source`, so
-  it needs usbmuxd's `ipad1` branch merged into `qemu-backend` (Sam's call).
+- Network: Wi-Fi, as on the iPod. With `--network` (the default) the iPad
+  launch adds `wifi=on` to the machine and `-netdev user,id=wifi0` (slirp).
+  Stock 3.2.2 joins the BCM4329 model's open "qemu-ios" network by itself:
+  Settings shows Wi-Fi "qemu-ios", the guest takes 10.0.2.15 by DHCP, and the
+  host is reachable at 10.0.2.2. Works with the stock usbmuxd, no
+  `LTM_USBMUXD`; usbmux (ideviceinfo, AFC) is unaffected. No web proxy yet, so
+  sites that need modern TLS fail in 3.2's Safari (the iPod's itwebproxy is
+  not wired for the iPad).
+- USB Ethernet (opt-in, not needed for networking): golden-pristine carries
+  `it_ethlink`; run with `LTM_USBMUXD=~/Developer/usbmuxd-qemu-ipad1-net/src/usbmuxd`
+  (usbmuxd `ipad1` branch, 23c3afd), which selects USB configuration 4 when
+  the device offers Ethernet and is unchanged for the iPod. **Release
+  packaging** would need that branch merged into `qemu-backend` (Sam's call).
 
 ## Stubbed or absent
 
@@ -86,7 +92,7 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   and straight back on (`_lcdEnable: 0` then `1`). Without `usb-kbd` it stays
   asleep and the sleep indicator holds. Idle sleep with the keyboard attached
   was not observed either. Emulator-side (usb-kbd/EHCI wake), not app code.
-- No snapshots (every launch cold-boots), no Wi-Fi/proxy, no media
+- No snapshots (every launch cold-boots), no web proxy, no media
   preparation, no guest agent, no guest-driven orientation watch.
 - `guest_shutdown_confirmed()` and `storage_failed()` read iPod devices: a
   guest power-off is not detected.

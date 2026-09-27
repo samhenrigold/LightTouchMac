@@ -357,8 +357,11 @@ final class EmulatorController {
             + ",nand-overlay=\(escape(overlay.path))"
         // Without a bridge the machine's built-in USB host keeps it charging.
         if let usbSession { machine += ",usb-tcp-addr=\(usbSession.guestAddress)" }
+        // The default network, as on the iPod: the BCM4329 on a slirp netdev. Stock 3.2.2 joins
+        // the model's open "qemu-ios" network by itself; the guest gets 10.0.2.15, host = 10.0.2.2.
+        if options.network { machine += ",wifi=on" }
         // No -m: the machine's default is the K48's 256 MiB.
-        let argv = [
+        var argv = [
             "LightTouchMac",
             "-M", machine,
             "-display", "none",
@@ -368,6 +371,7 @@ final class EmulatorController {
             // the active keyboard, so qemu_ios_ui_key_mac types into it.
             "-device", "usb-kbd,bus=usb-bus.0",
         ]
+        if options.network { argv += ["-netdev", "user,id=wifi0"] }
         logEmulatorBuild()
         qemu_ios_ui_attach(nil, nil)
         let thread = Thread {
