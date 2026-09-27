@@ -1362,8 +1362,10 @@ extension MainWindowController: NSMenuItemValidation {
 
         // App management: needs USB, a live guest, and no install already running
         // (the guest serves ~one lockdown session).
-        case #selector(installApp(_:)), #selector(syncMedia(_:)):
+        case #selector(installApp(_:)):
             return emulator.canQueueInstall
+        case #selector(syncMedia(_:)):
+            return emulator.canQueueInstall && emulator.hasGuestTools
         case #selector(openDeviceTerminal(_:)), #selector(restartSpringBoard(_:)):
             return emulator.canReachDevice && !emulator.isInstalling
         // Device input only reaches a running guest.

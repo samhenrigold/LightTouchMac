@@ -71,7 +71,7 @@ struct LaunchOptions: ParsableArguments {
     /// iPad 1 (LIGHTTOUCH_DEVICE=ipad1): a kernel-direct boot bundle and a NAND
     /// page store, both produced by qemu-ios/imgtools. See docs/ipad1-in-app.md.
     var ipad1KBoot: String { "\(filesRoot)/ipad1/7B500/k48-kboot.bin" }
-    var ipad1NAND: String  { "\(filesRoot)/ipad1/userland/golden-pristine" }
+    var ipad1NAND: String  { "\(filesRoot)/ipad1/userland/golden-appsync" }
 
     /// Required assets that don't exist, so the app can report them up front
     /// instead of failing inside the dylib on the QEMU thread with no UI — a

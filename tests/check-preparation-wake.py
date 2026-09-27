@@ -24,6 +24,8 @@ struct DeviceToolsError: Error {static func failed(_ s:String)->Self{Self()}}
 @MainActor final class Controller {
  struct Options{var appsync=true};enum State{case running,booting,poweredOff};enum Notice{case preparation}
  var options=Options(),state=State.running
+ var hasGuestTools=true
+ func setAccelerometer(for degrees:Int){}
  var isSleeping=false,preparingMedia=false,isDead=false,storageFailed=false,shuttingDown=false,restoringFromSnapshot=false
  var mediaPreparationFailure:String?,mediaPreparationTask:Task<Void,Never>?
  var bootGeneration=0,homes=0,rotationDegrees=0

@@ -143,6 +143,48 @@ struct SpringBoardIcons: Sendable {
     private func withState<T: Sendable>(
         _ body: @Sendable @escaping ([Any], OpaquePointer) throws -> T
     ) async throws -> T {
+        try await withClient { client in
+            let imd = IMobileDevice.self
+            guard let sbservices_get_icon_state = imd.sbservices_get_icon_state,
+                  let plist_free = imd.plist_free else {
+                throw DeviceToolsError.failed("libimobiledevice is not installed (brew install libimobiledevice).")
+            }
+            var raw: OpaquePointer?
+            // "2" is the format version SpringBoard has spoken since iOS 3 —
+            // the one that reports the dock as its own list.
+            guard sbservices_get_icon_state(client, &raw, "2") == imd.success,
+                  let raw else {
+                throw DeviceToolsError.failed("SpringBoard would not report its icon layout.")
+            }
+            defer { plist_free(raw) }
+
+            guard let state = try Self.decode(raw) as? [Any] else {
+                throw DeviceToolsError.failed("SpringBoard's icon layout was not a list of pages.")
+            }
+            return try body(state, client)
+        }
+    }
+
+    /// SpringBoard's UIInterfaceOrientation (1 portrait, 2 upside down,
+    /// 3 landscape right, 4 landscape left). 3.2's springboardservicesrelay
+    /// answers it; 3.1.3's doesn't (see EmulatorController's auto-rotation).
+    func interfaceOrientation() async throws -> Int {
+        try await withClient { client in
+            guard let get = IMobileDevice.sbservices_get_interface_orientation else {
+                throw DeviceToolsError.failed("libimobiledevice has no interface orientation call.")
+            }
+            var orientation: Int32 = 0
+            guard get(client, &orientation) == IMobileDevice.success else {
+                throw DeviceToolsError.failed("SpringBoard would not report its orientation.")
+            }
+            return Int(orientation)
+        }
+    }
+
+    /// Connect to springboardservices, run `body`, disconnect.
+    private func withClient<T: Sendable>(
+        _ body: @Sendable @escaping (OpaquePointer) throws -> T
+    ) async throws -> T {
         let socket = clientSocket
         return try await DeviceGate.shared.serialized {
             try await withDeadline(Timeouts.browse, "home-screen layout") {
@@ -150,9 +192,7 @@ struct SpringBoardIcons: Sendable {
                 guard let idevice_new = imd.idevice_new,
                       let lockdownd_client_new_with_handshake = imd.lockdownd_client_new_with_handshake,
                       let lockdownd_start_service = imd.lockdownd_start_service,
-                      let sbservices_client_new = imd.sbservices_client_new,
-                      let sbservices_get_icon_state = imd.sbservices_get_icon_state,
-                      let plist_free = imd.plist_free else {
+                      let sbservices_client_new = imd.sbservices_client_new else {
                     throw DeviceToolsError.failed(
                         "libimobiledevice is not installed (brew install libimobiledevice).")
                 }
@@ -188,20 +228,7 @@ struct SpringBoardIcons: Sendable {
                     throw DeviceToolsError.failed("Could not talk to SpringBoard.")
                 }
                 defer { _ = imd.sbservices_client_free?(client) }
-
-                var raw: OpaquePointer?
-                // "2" is the format version SpringBoard has spoken since iOS 3 —
-                // the one that reports the dock as its own list.
-                guard sbservices_get_icon_state(client, &raw, "2") == imd.success,
-                      let raw else {
-                    throw DeviceToolsError.failed("SpringBoard would not report its icon layout.")
-                }
-                defer { plist_free(raw) }
-
-                guard let state = try Self.decode(raw) as? [Any] else {
-                    throw DeviceToolsError.failed("SpringBoard's icon layout was not a list of pages.")
-                }
-                return try body(state, client)
+                return try body(client)
             }
         }
     }

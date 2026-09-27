@@ -19,6 +19,7 @@ func logEvent(_ message: String) { }
 @MainActor func qemu_ios_ui_display_sleeping() -> Bool { displaySleeping }
 @MainActor final class DeviceTools {
  var bakedGuestTools = true
+ var guestShell = true
  var failure: Error?
  var foreground: String?
  var commands: [String] = []

@@ -409,12 +409,18 @@ final class EmulatorController {
         thread.start()
         verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
         startForegroundWatch()
+        startTimeZoneSync()       // lockdown-tz child process, as on the iPod
+        startInterfaceOrientationWatch()
     }
 
     /// Existing images need the same media engine/configuration as newly
     /// packaged images before apps can use the native compositor.
+    /// The iPod images carry guest tools (SSH, agent); a stock iPad has none,
+    /// so their preparation, media import and SSH extras are skipped.
+    var hasGuestTools: Bool { DeviceProfile.current != .iPad1 }
+
     private func startMediaPreparation() {
-        guard options.appsync, !shuttingDown else { return }
+        guard options.appsync, !shuttingDown, hasGuestTools else { return }
         mediaPreparationTask?.cancel()
         preparingMedia = true
         preparationStatus = "Starting iOS…"
@@ -824,8 +830,19 @@ final class EmulatorController {
 
     /// Rotate a quarter turn in a named direction.
     func rotate(clockwise: Bool) {
-        clockwise ? rotateRight() : rotateLeft()
-        rotationDegrees = (rotationDegrees + (clockwise ? 90 : 270)) % 360
+        let next = (rotationDegrees + (clockwise ? 90 : 270)) % 360
+        if !setAccelerometer(for: next) { clockwise ? rotateRight() : rotateLeft() }
+        rotationDegrees = next
+    }
+
+    /// The iPad sets its accelerometer outright for the shell's angle rather
+    /// than stepping it: the machine moves it on its own (the power-off
+    /// gesture), and a relative step from there lands on the wrong side.
+    /// Values are the machine's clockwise order 1 -> 3 -> 2 -> 4 (rotate_bh).
+    @discardableResult
+    private func setAccelerometer(for degrees: Int) -> Bool {
+        guard !hasGuestTools, let value = [0: 1, 90: 3, 180: 2, 270: 4][degrees] else { return false }
+        return bridgeCall("qemu_ios_ui_orientation", as: IntControl.self)?(Int32(value)) == true
     }
 
     /// Quarter-turn our way to `target`, the short way round. Every step goes
@@ -919,6 +936,40 @@ final class EmulatorController {
         guard let previous = lastGuestOrientation, previous != degrees else { return }
         guard Self.autoRotateEnabled, state == .running else { return }
         rotate(toward: target)
+    }
+
+    /// The iPad: 3.2's springboardservicesrelay answers getInterfaceOrientation,
+    /// so no guest tools are needed. iOS comes back up in the orientation it
+    /// last had while the app starts every process portrait, so the first
+    /// reading after boot is adopted; after that only changes are followed
+    /// (the edges rule above). rotate(toward:) moves the shell and the
+    /// accelerometer together.
+    private func startInterfaceOrientationWatch() {
+        orientationTask?.cancel()
+        orientationTask = Task { [weak self] in
+            var last: Int?
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard let self else { return }
+                if self.state == .booting { last = nil }   // a restart: adopt again
+                guard self.state == .running, self.canManageApps, !self.isSleeping, !self.isInstalling,
+                      let reading = try? await self.springBoard().interfaceOrientation(),
+                      let target = Self.iPadDegrees(forInterface: reading) else { continue }
+                if last == nil || (last != reading && Self.autoRotateEnabled), target != self.rotationDegrees {
+                    self.rotate(toward: target)
+                }
+                last = reading
+            }
+        }
+    }
+
+    /// SpringBoard's UIInterfaceOrientation on the emulated iPad -> the app's
+    /// clockwise device angle. Measured, not derived from the enum names: the
+    /// iPad's accelerometer is mounted so that the app's upright pose reads
+    /// as 2 and each clockwise quarter turn steps 2 -> 3 -> 1 -> 4 (qemu
+    /// ipad1 rotate_bh / accel-orientation).
+    static func iPadDegrees(forInterface orientation: Int) -> Int? {
+        [2: 0, 3: 90, 1: 180, 4: 270][orientation]
     }
 
     /// Where the guest-side reporter comes from: the app bundle in a packaged
@@ -1103,13 +1154,28 @@ final class EmulatorController {
         Task { [weak self] in
             guard let self else { return }
             await preparation?.value
-            if self.canManageApps {
+            if !self.hasGuestTools {
+                // No guest shell to sync through: power off cleanly (the
+                // power-off gesture) so the reset doesn't cut off unwritten
+                // catalog updates.
+                let clean = await withCheckedContinuation { done in
+                    self.beginCleanShutdown { done.resume(returning: $0) }
+                }
+                // Powered off cleanly: Power On is the reset plus the resume
+                // a stopped VM needs (and puts the accelerometer upright).
+                if clean {
+                    self.state = .poweredOff
+                    self.powerOn()
+                    return
+                }
+            } else if self.canManageApps {
                 _ = await withSoftDeadline(20) { try? await self.syncFilesystem() }
             }
             guard !self.storageFailed, self.state != .snapshotting else { return }
             qemu_ios_ui_reset()
             self.restoringFromSnapshot = false
             self.rotationDegrees = 0
+            self.setAccelerometer(for: 0)
             self.state = .booting
             self.startMediaPreparation()
         }
@@ -1136,6 +1202,7 @@ final class EmulatorController {
         isSleeping = false
         deviceReachable = nil
         rotationDegrees = 0
+        setAccelerometer(for: 0)
         state = .booting
         qemu_ios_ui_reset()
         Task { [weak self] in
@@ -1764,8 +1831,11 @@ final class EmulatorController {
         // nand-ultimate ships the GL engine shim + sblaunch baked in, so the
         // fast in-process install path is safe; other images need the script's
         // ssh engine copy.
+        // The iPad has no guest shell: in-process lockdown services only (the
+        // script fallback needs ssh and would sit at "Installing…" forever).
         return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot,
-                           bakedGuestTools: options.nand.contains("ultimate"))
+                           bakedGuestTools: !hasGuestTools || options.nand.contains("ultimate"),
+                           guestShell: hasGuestTools)
     }
     
     /// Cheap in-process check that the USB bridge sees the guest. App-service

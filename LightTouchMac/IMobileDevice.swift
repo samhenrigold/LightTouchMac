@@ -89,6 +89,9 @@ nonisolated enum IMobileDevice {
     static let sbservices_client_free = symbol("sbservices_client_free", FreeHandle.self)
     static let sbservices_get_icon_state = symbol("sbservices_get_icon_state", GetIconState.self)
     static let sbservices_set_icon_state = symbol("sbservices_set_icon_state", SetIconState.self)
+    typealias GetInterfaceOrientation = @convention(c) (OpaquePointer?, UnsafeMutablePointer<Int32>) -> Int32
+    static let sbservices_get_interface_orientation = symbol("sbservices_get_interface_orientation",
+                                                             GetInterfaceOrientation.self)
     static let plist_to_xml = symbol("plist_to_xml", PlistToXML.self)
     static let plist_from_xml = symbol("plist_from_xml", PlistFromXML.self)
     static let plist_free = symbol("plist_free", PlistFree.self)

@@ -52,6 +52,9 @@ struct DeviceTools: Sendable {
     /// sblaunch (nand-ultimate). When false, a GL app needs the ssh engine
     /// copy, which only the install script does — so we fall back to it.
     var bakedGuestTools: Bool = true
+    /// False on a stock image with no guest shell (the iPad): everything goes
+    /// through lockdown services, and SSH-only extras are skipped, not failed.
+    var guestShell: Bool = true
 
     private var services: DeviceServices { DeviceServices(clientSocket: clientSocket) }
 
@@ -217,8 +220,10 @@ struct DeviceTools: Sendable {
             // up at download start (installPlaceholder derives the same id from
             // the same bundle id). Adding it again drew a SECOND placeholder —
             // so adopt the existing one and only own the cancel.
-            let raised = placeholderRaised ? nil : placeholderIcon("add", placeholder)
-            defer { placeholderIcon("cancel", placeholder, after: raised) }
+            // The placeholder is an SSH call into SpringBoard; without a guest
+            // shell there is none, and installd shows its own progress.
+            let raised = placeholderRaised || !guestShell ? nil : placeholderIcon("add", placeholder)
+            defer { if guestShell { placeholderIcon("cancel", placeholder, after: raised) } }
 
             // An .ipa whose binary is archived 0644 installs fine and then never
             // launches: posix_spawn fails EACCES, SpringBoard logs only "exited
@@ -267,6 +272,37 @@ struct DeviceTools: Sendable {
     /// 0755 (via the bundled ipod-helper, the same tool install-ipa.sh uses);
     /// nil if no repair is needed or anything is unreadable — callers fall back
     /// to the original, which is exactly today's behaviour.
+    /// A development build has no bundled lockdown helpers (package.sh builds
+    /// them), so the time zone was never synced when running from Xcode.
+    /// Debug builds compile scripts/<name>.c against Homebrew's
+    /// libimobiledevice into the work directory, once per source change.
+    static func developmentHelper(_ name: String) -> String? {
+        #if DEBUG
+        let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("scripts/\(name).c")
+        let binary = Bundled.workDirectory.appendingPathComponent("dev-tools/\(name)")
+        let fm = FileManager.default
+        guard let sourceDate = (try? fm.attributesOfItem(atPath: source.path))?[.modificationDate] as? Date else { return nil }
+        if let built = (try? fm.attributesOfItem(atPath: binary.path))?[.modificationDate] as? Date,
+           built >= sourceDate, fm.isExecutableFile(atPath: binary.path) { return binary.path }
+        try? fm.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let build = Process()
+        build.executableURL = URL(fileURLWithPath: "/bin/sh")
+        build.arguments = ["-c", "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; "
+            + "cc -O2 -o \"$1\" \"$2\" $(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)",
+            "sh", binary.path, source.path]
+        do { try build.run() } catch { return nil }
+        build.waitUntilExit()
+        guard build.terminationStatus == 0 else {
+            logEvent("\(name): could not build the development helper")
+            return nil
+        }
+        return binary.path
+        #else
+        return nil
+        #endif
+    }
+
     private static func execBitRepaired(_ ipa: URL) async throws -> URL? {
         guard let member = await AppMetadataCache.executableMember(of: ipa),
               let helper = Bundled.tool("ipod-helper") else { return nil }
@@ -342,29 +378,43 @@ struct DeviceTools: Sendable {
         // reach it, and re-runs the whole script.
         var lastOutput = "install failed"
         for attempt in 0..<3 {
-            let result = try await run(
-                .path(FilePath("/bin/bash")),
-                arguments: [script, ipa.path],
-                environment: toolEnvironment,
-                input: .none,
-                output: .sequence, error: .string(limit: 1 << 20)
-            ) { execution in
-                var collected = ""
-                var partial = ""
-                for try await buffer in execution.standardOutput {
-                    let chunk = buffer.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
-                    collected += chunk
-                    partial += chunk
-                    while let newline = partial.firstIndex(of: "\n") {
-                        let line = String(partial[..<newline])
-                        partial = String(partial[partial.index(after: newline)...])
-                        if let status = Self.status(of: line) { progress(status) }
-                    }
+            // Bounded like the in-process path: a script stuck on an ssh that
+            // never answers used to leave the row at "Installing…" forever.
+            let environment = toolEnvironment
+            let outcome: Result<(output: String, succeeded: Bool), Error>? =
+                await withSoftDeadline(Timeouts.installAbsolute) {
+                    do {
+                        let result = try await run(
+                            .path(FilePath("/bin/bash")),
+                            arguments: [script, ipa.path],
+                            environment: environment,
+                            input: .none,
+                            output: .sequence, error: .string(limit: 1 << 20)
+                        ) { execution in
+                            var collected = ""
+                            var partial = ""
+                            for try await buffer in execution.standardOutput {
+                                let chunk = buffer.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
+                                collected += chunk
+                                partial += chunk
+                                while let newline = partial.firstIndex(of: "\n") {
+                                    let line = String(partial[..<newline])
+                                    partial = String(partial[partial.index(after: newline)...])
+                                    if let status = Self.status(of: line) { progress(status) }
+                                }
+                            }
+                            return collected
+                        }
+                        return .success((result.closureResult + result.standardError,
+                                         result.terminationStatus.isSuccess))
+                    } catch { return .failure(error) }
                 }
-                return collected
+            guard let outcome else {
+                try Task.checkCancellation()
+                throw DeviceToolsError.failed("The install did not finish in \(Int(Timeouts.installAbsolute / 60)) minutes. The device may be busy; try again.")
             }
-            let out = result.closureResult + result.standardError
-            if result.terminationStatus.isSuccess {
+            let (out, succeeded) = try outcome.get()
+            if succeeded {
                 return out
             }
             lastOutput = out.isEmpty ? "install failed" : out
@@ -667,6 +717,9 @@ struct DeviceTools: Sendable {
     /// argv (these guest binaries have no crt1), so the bundle id travels via
     /// /tmp/sblaunch.id. SpringBoard refuses the request on a locked device.
     func launchApp(_ bundleID: String) async throws {
+        guard guestShell else {
+            throw DeviceToolsError.failed("Open the app on the device’s Home screen; launching from the sidebar isn’t available for this device yet.")
+        }
         guard bakedGuestTools else {
             throw DeviceToolsError.failed("Launching apps from the sidebar needs the standard device image.")
         }
@@ -764,7 +817,7 @@ struct DeviceTools: Sendable {
     @discardableResult
     func installPlaceholder(_ action: String, bundleID: String,
                             after previous: Task<Void, Never>? = nil) -> Task<Void, Never>? {
-        guard bakedGuestTools else { return nil }
+        guard bakedGuestTools, guestShell else { return nil }
         return placeholderIcon(action, Self.placeholderID(for: bundleID), after: previous)
     }
 
@@ -868,7 +921,7 @@ struct DeviceTools: Sendable {
     /// first, sets only on mismatch, and prints the zone in effect. Dev builds
     /// without the bundled tool skip quietly — the zone is cosmetic.
     func setTimeZone(_ identifier: String) async throws {
-        guard let tool = Bundled.tool("lockdown-tz") else {
+        guard let tool = Bundled.tool("lockdown-tz") ?? Self.developmentHelper("lockdown-tz") else {
             logEvent("timezone: no bundled lockdown-tz (dev build) — leaving the guest's zone alone")
             return
         }

@@ -17,9 +17,13 @@ final class DeviceViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
         displayView.emulator = emulator
         displayView.onDropIPA = { [weak self] url in self?.installDropped(url) }
-        displayView.onDropMedia = { [weak self] url in
-            guard let self, self.emulator.canQueueInstall else { return }
-            AppInstaller.startMedia(url, with: self.emulator, presenting: self.view.window)
+        // Media import runs through the iPod's guest tools; the iPad has none,
+        // so its screen doesn't take media drops (Import Media… is disabled too).
+        if DeviceProfile.current != .iPad1 {
+            displayView.onDropMedia = { [weak self] url in
+                guard let self, self.emulator.canQueueInstall else { return }
+                AppInstaller.startMedia(url, with: self.emulator, presenting: self.view.window)
+            }
         }
         displayView.onDropUnsupportedFiles = { [weak self] urls in
             guard let self else { return }

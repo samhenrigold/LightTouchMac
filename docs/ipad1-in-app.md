@@ -85,6 +85,27 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   via `qemu_ios_ui_compass` (machine `compass-heading`).
 - Location: not yet. It will come from a4-iboot's location responder and sit
   beside the compass (`EmulatorController`, "Location comes later").
+- Image: `golden-appsync` by default (installs need AppSync); the overlay
+  pin is keyed to it, so switching images gives a fresh device.
+- Installs go through lockdown services in-process (installation_proxy over
+  AFC staging) with its idle/absolute watchdog; the iPad has no guest shell,
+  so the ssh script fallback and the home-screen placeholder are skipped. The
+  script path (iPod images without baked tools) is now bounded too: no
+  install waits forever at "Installing…".
+- No guest tools on the iPad: device preparation and media import are off
+  (no error banner; Import Media… is disabled and media drops are refused),
+  and launching from the sidebar says to use the Home screen.
+- Time zone: the Mac's zone through the lockdown-tz child process, as on the
+  iPod. Debug builds compile scripts/lockdown-tz.c against Homebrew's
+  libimobiledevice on first use (packaged builds bundle it), so the zone is
+  also right when running from Xcode.
+- Orientation: 3.2's springboardservices answers getInterfaceOrientation; the
+  app polls it every 3 s once the device is up, adopts the first reading
+  after each boot (iOS keeps the orientation it last had) and then follows
+  changes. The accelerometer is set outright for the shell's angle
+  (`qemu_ios_ui_orientation`), not stepped, because the machine's power-off
+  gesture moves it. Restart powers off with the gesture and then does Power
+  On, instead of an ssh sync and a hard reset.
 - Quit / Power Off: the iPad has no guest tools, so the clean shutdown sends
   `qemu_ios_ui_powerdown()`; the machine turns system_powerdown into the
   power-off gesture and the D1815 power-off write sets
