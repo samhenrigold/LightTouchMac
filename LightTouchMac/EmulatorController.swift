@@ -1452,11 +1452,11 @@ final class EmulatorController {
     private func performSnapshot(completion: @escaping (Bool) -> Void) {
         snapshotFailureReason = "The device's state could not be saved."
         guard isRunning else { completion(false); return }
-        guard qemu_ios_gles_contexts() == 0 else {
-            snapshotFailureReason = "Saving is unavailable while the device uses accelerated graphics."
-            logEvent("snapshot: skipped — live host OpenGL state")
-            completion(false); return
-        }
+        // Live GL state saves and restores in the macOS (CGL) emulator
+        // (gles-host-snapshot). Only an iOS-host EAGL build can't, and there
+        // the emulator itself refuses with a migration blocker, which lands in
+        // the ordinary failed-save path below.
+        if qemu_ios_gles_contexts() > 0 { logEvent("snapshot: saving with live GL state") }
         Task { [weak self] in
             guard let self else { completion(false); return }
             guard await self.proveAlive() else {
