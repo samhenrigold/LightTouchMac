@@ -114,8 +114,11 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
 final class DeviceNoticeViewController: NSTitlebarAccessoryViewController {
     var onShowLogs: (() -> Void)?
     var onDismiss: (() -> Void)?
+    /// The notice's own remedy (e.g. "Erase…"), shown only when update() names one.
+    var onAction: (() -> Void)?
     private let message = NSTextField(wrappingLabelWithString: "")
     private let dismiss = NSButton()
+    private let action = NSButton(title: "", target: nil, action: nil)
 
     init() {
         super.init(nibName: nil, bundle: nil)
@@ -130,12 +133,18 @@ final class DeviceNoticeViewController: NSTitlebarAccessoryViewController {
         message.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let logs = NSButton(title: "Show Logs", target: self, action: #selector(showLogs))
         logs.bezelStyle = .rounded
+        action.bezelStyle = .rounded
+        action.target = self; action.action = #selector(performAction)
+        action.isHidden = true
+        let buttons = NSStackView(views: [action, logs])
+        buttons.spacing = 8
+        buttons.detachesHiddenViews = true
         dismiss.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Dismiss status")
         dismiss.isBordered = false
         dismiss.target = self; dismiss.action = #selector(dismissNotice)
         dismiss.toolTip = "Dismiss this status message"
         dismiss.setAccessibilityLabel("Dismiss status")
-        for child in [icon, message, logs, dismiss] {
+        for child in [icon, message, buttons, dismiss] {
             child.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(child)
             child.centerYAnchor.constraint(equalTo: view.centerYAnchor).isActive = true
@@ -145,9 +154,9 @@ final class DeviceNoticeViewController: NSTitlebarAccessoryViewController {
             icon.widthAnchor.constraint(equalToConstant: 16),
             icon.heightAnchor.constraint(equalToConstant: 16),
             message.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
-            message.trailingAnchor.constraint(equalTo: logs.leadingAnchor, constant: -12),
+            message.trailingAnchor.constraint(equalTo: buttons.leadingAnchor, constant: -12),
             message.heightAnchor.constraint(lessThanOrEqualToConstant: 42),
-            logs.trailingAnchor.constraint(equalTo: dismiss.leadingAnchor, constant: -8),
+            buttons.trailingAnchor.constraint(equalTo: dismiss.leadingAnchor, constant: -8),
             dismiss.widthAnchor.constraint(equalToConstant: 24),
             dismiss.heightAnchor.constraint(equalToConstant: 24),
             dismiss.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
@@ -156,7 +165,9 @@ final class DeviceNoticeViewController: NSTitlebarAccessoryViewController {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func update(_ value: String, canDismiss: Bool) {
+    func update(_ value: String, canDismiss: Bool, action actionTitle: String? = nil) {
+        action.title = actionTitle ?? ""
+        action.isHidden = actionTitle == nil
         message.stringValue = value
         message.toolTip = value
         message.setAccessibilityLabel(value)
@@ -166,4 +177,5 @@ final class DeviceNoticeViewController: NSTitlebarAccessoryViewController {
 
     @objc private func showLogs() { onShowLogs?() }
     @objc private func dismissNotice() { onDismiss?() }
+    @objc private func performAction() { onAction?() }
 }

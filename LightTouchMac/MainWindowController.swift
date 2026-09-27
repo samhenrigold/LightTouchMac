@@ -279,10 +279,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             let accessory = DeviceNoticeViewController()
             accessory.onShowLogs = { [weak self] in self?.showDeviceLogs(nil) }
             accessory.onDismiss = { [weak self] in self?.emulator.dismissDeviceNotice() }
+            accessory.onAction = { [weak self] in self?.eraseDevice(nil) }
             window.addTitlebarAccessoryViewController(accessory)
             noticeAccessory = accessory
         }
-        noticeAccessory?.update(message, canDismiss: !emulator.storageFailed)
+        noticeAccessory?.update(message, canDismiss: !emulator.storageFailed,
+                                action: emulator.deviceNoticeOffersErase ? "Erase…" : nil)
     }
 
     /// When the emulator dies (QEMU can't re-init), cover the device with an
@@ -293,16 +295,27 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             deadOverlay = nil
             return
         }
-        guard deadOverlay == nil, let content = window?.contentView else { return }
+        // Over the device pane only, centred where the device is laid out
+        // (its safe area), not on the whole window with the inspector.
+        guard deadOverlay == nil else { return }
+        let content = deviceVC.view
         let overlay = NSView()
         overlay.wantsLayer = true
         overlay.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
         overlay.translatesAutoresizingMaskIntoConstraints = false
 
-        let label = NSTextField(labelWithString: "The emulator stopped.")
+        // A refused boot says why and offers the remedy; anything else relaunches.
+        let refused = emulator.baseImageMismatch
+        let label = NSTextField(wrappingLabelWithString: refused
+            ? "This \(DeviceProfile.current.shortName)'s data was made with an older system image. Erase it to start fresh."
+            : "The emulator stopped.")
         label.font = .systemFont(ofSize: 15, weight: .medium)
         label.textColor = .white
-        let button = NSButton(title: "Relaunch", target: self, action: #selector(relaunchApp(_:)))
+        label.alignment = .center
+        label.preferredMaxLayoutWidth = 280
+        let button = refused
+            ? NSButton(title: "Erase…", target: self, action: #selector(eraseDevice(_:)))
+            : NSButton(title: "Relaunch", target: self, action: #selector(relaunchApp(_:)))
         button.bezelStyle = .rounded
         let stack = NSStackView(views: [label, button])
         stack.orientation = .vertical
@@ -315,8 +328,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             overlay.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             overlay.topAnchor.constraint(equalTo: content.topAnchor),
             overlay.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            stack.centerXAnchor.constraint(equalTo: content.safeAreaLayoutGuide.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: content.safeAreaLayoutGuide.centerYAnchor),
         ])
         deadOverlay = overlay
     }

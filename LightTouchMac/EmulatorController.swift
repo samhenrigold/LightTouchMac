@@ -47,6 +47,12 @@ final class EmulatorController {
         UserDefaults.standard.set(["message": value, "operation": kind], forKey: "deviceNotice")
         onStatusChange?()
     }
+    /// The notice's remedy is Erase All Content and Settings (a refused
+    /// overlay, an unfinished or failed erase).
+    var deviceNoticeOffersErase: Bool { noticeOperation == NoticeOperation.erase.rawValue && !storageFailed }
+    /// Boot refused: the overlay belongs to a different base image.
+    private(set) var baseImageMismatch = false
+
     func dismissDeviceNotice() {
         guard !storageFailed else { return }
         deviceNotice = nil
@@ -337,7 +343,8 @@ final class EmulatorController {
             let base = try DeviceStateStorage.developmentImageIdentity(
                 at: URL(fileURLWithPath: options.ipad1NAND), key: imageKey)
             guard try DeviceStateStorage.pinOverlay(overlay, toBase: base) else {
-                reportDeviceNotice("This \(DeviceProfile.current.shortName)'s saved data was made from a different system image and can't be used with this one. Choose Erase All Content and Settings to start fresh.", for: .erase)
+                baseImageMismatch = true
+                reportDeviceNotice("This \(DeviceProfile.current.shortName)'s data was made with an older system image.", for: .erase)
                 state = .dead(exitCode: 1)
                 return
             }

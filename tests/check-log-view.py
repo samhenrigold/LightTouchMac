@@ -51,24 +51,33 @@ with tempfile.TemporaryDirectory(prefix='ltm-logs-') as tmp:
   let notice=DeviceNoticeViewController()
   let window=NSWindow(contentRect:NSRect(x:0,y:0,width:640,height:320),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
   window.addTitlebarAccessoryViewController(notice)
-  var opened=false, dismissed=false
-  notice.onShowLogs={opened=true};notice.onDismiss={dismissed=true}
+  var opened=false, dismissed=false, acted=false
+  notice.onShowLogs={opened=true};notice.onDismiss={dismissed=true};notice.onAction={acted=true}
   let detail="The device could not be erased. The erase is pending and will retry when Light Touch opens. Open Device Logs for details."
   notice.update(detail,canDismiss:true)
   window.makeKeyAndOrderFront(nil)
   try await Task.sleep(for:.milliseconds(200))
   let label=notice.view.subviews.compactMap{$0 as? NSTextField}.first!
-  let buttons=notice.view.subviews.compactMap{$0 as? NSButton}
-  let logs=buttons.first{$0.title=="Show Logs"}!, dismiss=buttons.first{$0 !== logs}!
+  func allButtons(_ v:NSView)->[NSButton]{v.subviews.flatMap{($0 as? NSButton).map{[$0]} ?? allButtons($0)}}
+  let buttons=allButtons(notice.view)
+  let logs=buttons.first{$0.title=="Show Logs"}!, dismiss=buttons.first{$0.accessibilityLabel()=="Dismiss status"}!
+  let action=buttons.first{$0 !== logs && $0 !== dismiss}!
+  precondition(action.isHidden, "no remedy unless update() names one")
   precondition(label.stringValue==detail && label.toolTip==detail)
   logs.performClick(nil);dismiss.performClick(nil)
   precondition(opened && dismissed)
   notice.update(detail,canDismiss:false)
   precondition(dismiss.isHidden && !dismiss.isEnabled)
+  let refused="This iPad's data was made with an older system image."
+  notice.update(refused,canDismiss:true,action:"Erase…")
+  notice.view.layoutSubtreeIfNeeded()
+  precondition(!action.isHidden && action.title=="Erase…")
+  action.performClick(nil);precondition(acted)
   for width in [640.0,360.0]{
    window.setContentSize(NSSize(width:width,height:320));notice.view.layoutSubtreeIfNeeded()
    try await Task.sleep(for:.milliseconds(100))
-   precondition(label.frame.width>20 && logs.frame.minX>=label.frame.maxX)
+   let logsX=logs.convert(logs.bounds,to:notice.view).minX, actionX=action.convert(action.bounds,to:notice.view).minX
+   precondition(label.frame.width>20 && actionX>=label.frame.maxX && logsX>actionX)
    precondition(!notice.view.isHidden && notice.view.superview != nil && !label.isHidden)
   }
   window.orderOut(nil)
