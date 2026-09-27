@@ -707,7 +707,7 @@ final class DisplayView: NSView {
         guard let image = capturePanelFrame(includeTouches: includeTouches) else { return nil }
         guard Self.profile.panelRotation != 0 else { return image }
         // Match the window: panel-to-upright plus the device's own quarter-turn.
-        let turns = (Int((Self.profile.panelRotation * 2 / .pi).rounded()) + (emulator?.rotationDegrees ?? 0) / 90) % 4
+        let turns = ((Int((Self.profile.panelRotation * 2 / .pi).rounded()) + (emulator?.rotationDegrees ?? 0) / 90) % 4 + 4) % 4
         return Self.rotated(image, clockwiseQuarterTurns: turns) ?? image
     }
 

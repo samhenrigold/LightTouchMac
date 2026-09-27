@@ -28,11 +28,11 @@ nonisolated enum DeviceProfile: Equatable {
     }
 
     /// Quarter-turn from the scanned-out panel to the upright (portrait, home
-    /// button down) device, clockwise in the view's y-down space. The iPod LCD
-    /// pre-rotates its surface; the iPad's panel is landscape-native and
-    /// SpringBoard draws portrait into it turned a quarter counter-clockwise
-    /// (the inverse of ipad1_map_touch), so it is shown turned back.
-    var panelRotation: CGFloat { self == .iPad1 ? .pi / 2 : 0 }
+    /// button down) device, clockwise-positive in the view's y-down space. The
+    /// iPod LCD pre-rotates its surface; the iPad's panel is landscape-native
+    /// and portrait SpringBoard arrives with its status bar along the panel's
+    /// right edge (seen in a frame dump), so it is turned a quarter back.
+    var panelRotation: CGFloat { self == .iPad1 ? -.pi / 2 : 0 }
 
     /// The screen as it sits in the upright shell.
     var uprightScreenPixels: CGSize {
