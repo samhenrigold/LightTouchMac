@@ -10,7 +10,7 @@ copy-on-write overlay and answers lockdown over usbmuxd-qemu.
 | --- | --- |
 | `qemu-ios` branch `ipad1-app` | `ipad1` machine (merged from `ipad1`), `qemu_ios_device_info()`, bridge buttons, rotate via `accel-orientation` |
 | `LightTouchMac` branch `ipad1` | `DeviceProfile` and the iPad start path |
-| `~/Developer/qemu-ios-files/ipad1/7B500/k48-kboot-usbhost.bin` | K48KBOOT bundle from `imgtools/ipad1_kboot.py` at `ipad1-app` HEAD; carries the `hsic-enabled` DT property the USB keyboard needs (the older `k48-kboot.bin` does not) |
+| `~/Developer/qemu-ios-files/ipad1/7B500/k48-kboot.bin` | K48KBOOT bundle from `imgtools/ipad1_kboot.py` at `ipad1-app` HEAD; must carry the `hsic-enabled` DT property (the builder adds it) or the USB keyboard never enumerates |
 | `~/Developer/qemu-ios-files/ipad1/userland/golden-pristine` | read-only NAND page store |
 
 ## Build
@@ -81,7 +81,7 @@ glyph top-left before userland, so a lit frame means the bridge works:
 
     cc -o framecheck framecheck.c    # loads the dylib, boots, counts lit pixels
     ./framecheck build/libqemu-arm.dylib framecheck \
-        -M ipad1,kboot=.../k48-kboot-usbhost.bin,nand=<golden>,nand-overlay=<dir> -display none -serial null
+        -M ipad1,kboot=.../k48-kboot.bin,nand=<golden>,nand-overlay=<dir> -display none -serial null
 
 (`framecheck.c` is a 50-line harness kept out of the repo; write it against
 `qemu_ios_main`, `qemu_ios_ui_frame`, `qemu_ios_ui_quit`.)
