@@ -1373,6 +1373,15 @@ final class DisplayView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
+        // Shift and Option only ever arrive here, never as keyDown, so the
+        // guest keyboard missed them (no capitals, no "!"). Command and
+        // Control stay with the menu bar. sendKey lets key-ups through while
+        // input is off, so a modifier can't stick down.
+        switch event.keyCode {
+        case 56, 60: emulator?.sendKey(macKeyCode: event.keyCode, down: event.modifierFlags.contains(.shift))
+        case 58, 61: emulator?.sendKey(macKeyCode: event.keyCode, down: event.modifierFlags.contains(.option))
+        default: break
+        }
         if !event.modifierFlags.contains(.shift), !keyboardTouchKeys.isDisjoint(with: [123, 124, 125, 126]) {
             endKeyboardTouch()
         }

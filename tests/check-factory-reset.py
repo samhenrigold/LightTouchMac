@@ -12,7 +12,7 @@ source=r'''import Foundation
 @MainActor var current:Controller!
 @MainActor func qemu_ios_ui_quit(){events.append("stop");if exitNative {current.isDead=true}}
 nonisolated func logEvent(_ s:String){}
-@MainActor enum AppInstaller {static let hasPendingWork=false}
+@MainActor enum AppInstaller {static let hasPendingWork=false; static var discarded=0; static func discardAll(){discarded+=1}}
 @MainActor enum AppDelegate {
  static func requestTermination(){
   precondition(!current.isErasing && current.isDead)

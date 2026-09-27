@@ -1183,7 +1183,8 @@ final class EmulatorController {
     /// Retain the QEMU main loop at guest power-off; a reset can cold boot it
     /// again without reinitializing QEMU or opening a second NAND writer.
     func powerOff(completion: @escaping (Bool) -> Void) {
-        guard isRunning, !isInstalling, !AppInstaller.hasPendingWork else { completion(false); return }
+        guard isRunning else { completion(false); return }
+        AppInstaller.discardAll()
         beginCleanShutdown { [weak self] confirmed in
             guard let self else { completion(false); return }
             self.pollStorageFailure()
@@ -1726,7 +1727,10 @@ final class EmulatorController {
     /// Stop the guest and its native writers, erase this device, then quit.
     /// No request is left behind for an unrelated future launch.
     func requestFactoryReset() {
-        guard !isErasing, !isInstalling, !AppInstaller.hasPendingWork else { return }
+        guard !isErasing else { return }
+        // Nothing queued can land on an erased device: drop installs first
+        // rather than refusing the erase (or leaving Retry rows behind).
+        AppInstaller.discardAll()
         isErasing = true
         skipNextQuitSnapshot = true
         foregroundTask?.cancel()

@@ -421,7 +421,10 @@ struct DeviceTools: Sendable {
             guard attempt < 2, Self.isTransientServiceError(out) else { break }
             try await Task.sleep(for: .seconds(2))   // throws if cancelled, which ends the retry
         }
-        throw DeviceToolsError.failed(lastOutput)
+        // The script's output is a transcript, not a message: it goes to the
+        // log, and the row gets its last recognisable status line.
+        logEvent("install \(ipa.lastPathComponent): \(lastOutput)")
+        throw DeviceToolsError.failed(Self.installFailureReason(lastOutput))
     }
 
     /// One line of installer output as a row subtitle, translated for a human.
@@ -449,6 +452,21 @@ struct DeviceTools: Sendable {
         return nil
     }
     
+    /// A one-line reason for a failed install row: the installer's last error
+    /// line (ideviceinstaller's "ERROR: …", installd's "Error: …"), short, or a
+    /// pointer to the log. Never the transcript.
+    static func installFailureReason(_ output: String) -> String {
+        let error = output.split(separator: "\n").reversed().lazy
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { $0.range(of: "error", options: .caseInsensitive) != nil }
+        guard var reason = error else { return "Couldn’t install this app. Open Device Logs for details." }
+        if let colon = reason.range(of: #"^(ERROR|Error):\s*"#, options: .regularExpression) {
+            reason.removeSubrange(colon)
+        }
+        if reason.count > 90 { reason = String(reason.prefix(89)) + "…" }
+        return "Couldn’t install: \(reason)"
+    }
+
     private static func isTransientServiceError(_ output: String) -> Bool {
         let markers = ["com.apple.afc", "Invalid service", "Could not start",
                        "Could not connect", "lockdown"]

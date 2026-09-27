@@ -711,7 +711,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = "Erase all content and settings?"
-        alert.informativeText = "This permanently removes all apps, settings, and saved state from this \(DeviceProfile.current.shortName). Light Touch closes after erasing it. This cannot be undone."
+        alert.informativeText = "This permanently removes all apps, settings, and saved state from this \(DeviceProfile.current.shortName). "
+            + (AppInstaller.hasPendingWork ? "Installs in progress are cancelled. " : "")
+            + "Light Touch closes after erasing it. This cannot be undone."
         alert.addButton(withTitle: "Erase")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -1405,11 +1407,11 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleKernelConsole(_:)):
             menuItem.state = EmulatorController.kernelConsole ? .on : .off
             return true
-        case #selector(devicePowerOff(_:)): return emulator.acceptsInput && !emulator.isInstalling && !AppInstaller.hasPendingWork
+        case #selector(devicePowerOff(_:)): return emulator.acceptsInput
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState
-        case #selector(eraseDevice(_:)): return !emulator.isErasing && !emulator.isInstalling && !AppInstaller.hasPendingWork && !hasFileTransfer && !recording.isActive
+        case #selector(eraseDevice(_:)): return !emulator.isErasing && !hasFileTransfer && !recording.isActive
         case #selector(discardRecording(_:)):
             return recording.canStop
         case #selector(toggleRecording(_:)):

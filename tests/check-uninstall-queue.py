@@ -11,7 +11,7 @@ remove = block('    static func remove(_ apps:', '    @MainActor\n    static fun
 code = r'''import Foundation
 final class NSWindow {}
 struct InstalledApp { let id: String }
-final class InstallJob { var isCancellable = true; var downloadProgress: Double?; var status = "Waiting"; func cancel() {} }
+final class InstallJob { var isCancellable = true; var downloadProgress: Double?; var status = "Waiting"; var task: Task<Void, Never>?; var dismissed = false; func cancel() {} }
 enum DeviceError: Error { case timedOut; var shouldPauseInstallQueue: Bool { true } }
 extension Notification.Name {
  static let ltmAppsChanged = Notification.Name("changed")

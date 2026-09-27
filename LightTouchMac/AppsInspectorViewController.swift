@@ -88,6 +88,25 @@ enum AppInstaller {
         for task in removals.values { task.cancel() }
     }
 
+    /// Every row this session put up, including failed ones still offering
+    /// Retry (they have left `jobs`), so an erase can take them all down.
+    private static let rows = NSHashTable<InstallJob>.weakObjects()
+
+    /// The device is being erased or powered off: nothing queued or failed can
+    /// land on it any more, and a Retry would target a wiped device. Cancel
+    /// what can be cancelled and drop every install row. An install already
+    /// inside installation_proxy can't be stopped; its row goes too and the
+    /// erase makes the outcome moot.
+    static func discardAll() {
+        for job in rows.allObjects {
+            job.task?.cancel()
+            job.dismissed = true
+        }
+        for task in removals.values { task.cancel() }
+        if readyQueue.isPaused { readyQueue.resume() }
+        NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+    }
+
     private static let readyQueue = InstallationQueue()
     static var isUsingDevice: Bool { readyQueue.isBusy }
     static var isPaused: Bool { readyQueue.isPaused }
@@ -114,6 +133,7 @@ enum AppInstaller {
             start(ipa, with: emulator, presenting: window)
         }
         jobs.append(job)
+        rows.add(job)
         NotificationCenter.default.post(name: .ltmInstallStarted, object: job)
         job.task = Task {
             defer { finish(job) }
@@ -146,6 +166,7 @@ enum AppInstaller {
         }
         job.status = "Preparing media…"
         jobs.append(job)
+        rows.add(job)
         NotificationCenter.default.post(name: .ltmInstallStarted, object: job)
         job.task = Task {
             var acquired = false
@@ -217,6 +238,7 @@ enum AppInstaller {
         job.status = "Downloading…"
         job.downloadProgress = app.size.map { _ in 0 } ?? -1
         jobs.append(job)
+        rows.add(job)
         NotificationCenter.default.post(name: .ltmInstallStarted, object: job)
         job.task = Task {
             defer { finish(job) }
