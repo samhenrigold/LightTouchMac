@@ -72,8 +72,9 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
   ipad1, so the existing bridge calls work. Battery is read by 7B500 only at
   boot, and its charging state is not shown yet.
 
-- Network: Wi-Fi, as on the iPod. With `--network` (the default) the iPad
-  launch adds `wifi=on` to the machine and `-netdev user,id=wifi0` (slirp).
+- Network: Wi-Fi, as on the iPod. The ipad1 machine brings it up by itself
+  (`wifi` defaults on and creates a `user,id=wifi0` slirp netdev), so the
+  launch adds nothing; `--no-network` passes `wifi=off`.
   Stock 3.2.2 joins the BCM4329 model's open "qemu-ios" network by itself:
   Settings shows Wi-Fi "qemu-ios", the guest takes 10.0.2.15 by DHCP, and the
   host is reachable at 10.0.2.2. Works with the stock usbmuxd, no
