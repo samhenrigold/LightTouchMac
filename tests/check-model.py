@@ -157,6 +157,10 @@ let QEMU_IOS_TOUCH_BEGIN=0, QEMU_IOS_TOUCH_UPDATE=1, QEMU_IOS_TOUCH_END=2
 }
 @MainActor func qemu_ios_ui_touch(_ slot: Int32,_ phase: Int32,_ x: Double,_ y: Double) { touches.append((x,y)) }
 @MainActor func qemu_ios_ui_touch2(_ phase: Int32,_ x: Double,_ y: Double) {}
+struct QemuIosDeviceInfo { var screen_width: Int32 = 320, screen_height: Int32 = 480 }
+nonisolated func qemu_ios_device_info(_ name: String) -> UnsafePointer<QemuIosDeviceInfo>? {
+ let info = UnsafeMutablePointer<QemuIosDeviceInfo>.allocate(capacity: 1); info.initialize(to: .init()); return UnsafePointer(info)
+}
 struct CatalogApp: Decodable {}
 extension NSPasteboard.PasteboardType { static let ltmCatalogApp=Self("test.catalog") }
 enum PreparedMedia { static let extensions: Set<String> = [] }
@@ -257,7 +261,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
         raise SystemExit("Set QEMU_SRC to the QEMU source tree for the production accelerometer comparison")
     for name,source,extra in [
         ("model",model_source,[]),
-        ("display",display_source,["DisplayView", "DisplayMeasurements", "AttitudeIndicatorButton", "InlineLiveTextView"])
+        ("display",display_source,["DisplayView", "DeviceProfile", "DisplayMeasurements", "AttitudeIndicatorButton", "InlineLiveTextView"])
     ]:
         swift=work/(name+".swift");swift.write_text(source)
         exe=app/"MacOS"/name

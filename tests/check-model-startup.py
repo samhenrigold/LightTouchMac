@@ -128,7 +128,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-model-startup-') as tmp:
         (app/'Resources'/name).symlink_to(root/'LightTouchMac'/name)
     for name, source, actual_model in [('stub', stub_source, False), ('renderer', real_source, True)]:
         swift=work/f'{name}.swift';swift.write_text(source);exe=app/'MacOS'/name
-        sources=['DisplayView','DisplayMeasurements','AttitudeIndicatorButton','InlineLiveTextView']
+        sources=['DisplayView','DeviceProfile','DisplayMeasurements','AttitudeIndicatorButton','InlineLiveTextView']
         if actual_model: sources.append('DeviceModelView')
         subprocess.run(['swiftc','-module-cache-path',str(work/'modules'),'-default-isolation','MainActor',
                         *[str(root/'LightTouchMac'/f'{item}.swift') for item in sources],

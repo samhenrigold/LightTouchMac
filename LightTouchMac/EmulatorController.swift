@@ -325,40 +325,35 @@ final class EmulatorController {
         startForegroundWatch()
     }
 
-    /// iPad 1 bring-up: kernel-direct boot from a K48KBOOT bundle. No bootrom
-    /// chain, snapshots, USB, network, media or guest agent yet — just the
-    /// machine, its serial log and the frame/touch/button bridge. What is
-    /// stubbed is listed in docs/ipad1-in-app.md.
+    /// iPad 1: kernel-direct boot from a K48KBOOT bundle over the read-only
+    /// golden NAND, with this device's writes in its copy-on-write overlay
+    /// (so Erase is "delete the overlay", as for the iPod). USB goes to the
+    /// same usbmuxd bridge; host keys go to an emulated USB keyboard. No
+    /// snapshots, network, media or guest agent yet — see docs/ipad1-in-app.md.
     private func startIPad1() {
-        // The IOP mmaps the page store MAP_SHARED and writes through it, so
-        // the guest must never run on the pristine image: clone it into
-        // Application Support once (an APFS clone, so instant and free).
-        let nand = stateDir.appendingPathComponent("ipad1/\((options.ipad1NAND as NSString).lastPathComponent)",
-                                                   isDirectory: true)
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: nand.path) {
-            do {
-                try fm.createDirectory(at: nand.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try fm.copyItem(atPath: options.ipad1NAND, toPath: nand.path)
-            } catch {
-                try? fm.removeItem(at: nand)
-                reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
-                state = .dead(exitCode: 1)
-                return
-            }
-        }
+        let overlay = overlayURL
+        let usbSession = options.appsync
+            ? usbmux.start(filesRoot: options.filesRoot, nand: options.ipad1NAND, overlay: overlay.path)
+            : nil
         do {
             serialCapture = try SerialLogCapture(url: Bundled.logsDirectory.appendingPathComponent("serial.log"))
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
 
         let escape = { (path: String) in path.replacingOccurrences(of: ",", with: ",,") }
+        var machine = "ipad1,kboot=\(escape(options.ipad1KBoot)),nand=\(escape(options.ipad1NAND))"
+            + ",nand-overlay=\(escape(overlay.path))"
+        // Without a bridge the machine's built-in USB host keeps it charging.
+        if let usbSession { machine += ",usb-tcp-addr=\(usbSession.guestAddress)" }
         // No -m: the machine's default is the K48's 256 MiB.
         let argv = [
             "LightTouchMac",
-            "-M", "ipad1,kboot=\(escape(options.ipad1KBoot)),nand=\(escape(nand.path))",
+            "-M", machine,
             "-display", "none",
             "-no-shutdown",
             "-serial", serialCapture?.argument ?? "null",
+            // On the always-on EHCI (hsic-enabled in the kboot DT). It becomes
+            // the active keyboard, so qemu_ios_ui_key_mac types into it.
+            "-device", "usb-kbd,bus=usb-bus.0",
         ]
         logEmulatorBuild()
         qemu_ios_ui_attach(nil, nil)
@@ -1171,7 +1166,14 @@ final class EmulatorController {
     /// snapshot — image B read through image A's overlay, and a snapshot taken
     /// on A restored onto B. That is the stale-RAM-over-different-flash
     /// corruption this file's own comments spend paragraphs avoiding.
-    private var imageKey: String { packedImage?.key ?? legacyImageKey }
+    private var imageKey: String {
+        if DeviceProfile.current == .iPad1 {
+            var hash: UInt64 = 5381
+            for byte in options.ipad1NAND.utf8 { hash = hash &* 33 &+ UInt64(byte) }
+            return "ipad1-\((options.ipad1NAND as NSString).lastPathComponent)-\(String(hash, radix: 36))"
+        }
+        return packedImage?.key ?? legacyImageKey
+    }
 
     private var legacyImageKey: String {
         let root = options.filesRoot

@@ -23,7 +23,7 @@ final class DisplayView: NSView {
     private static let profile = DeviceProfile.current
     /// The panel at rest — iPod touch 2G: 320×480 at 163 ppi (3.5" panel).
     /// The live frame buffer swaps its sides on rotation.
-    private static let nativeScreenPixels = profile.screenPixels
+    private static let nativeScreenPixels = profile.uprightScreenPixels
 
     /// The shell art: its full pixel size, the screen cutout rect within
     /// it (top-left origin, matching this view's isFlipped space), and the
@@ -389,7 +389,11 @@ final class DisplayView: NSView {
         lastRotation = rotation
         let isLandscape = rotation == 90 || rotation == 270
 
-        let cutoutSize = isLandscape
+        // A panel fixed to the shell (the iPad's) never swaps sides; the
+        // iPod's pre-rotated surface does.
+        let cutoutSize = Self.profile.panelRotation != 0
+            ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
+            : isLandscape
             ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
             : Self.screenCutout.size
         // The shell's own on-screen bounding box once rotated — this, not just
@@ -457,7 +461,13 @@ final class DisplayView: NSView {
         contentLayer.bounds = CGRect(origin: .zero, size: cutoutSize)
         // Counter only the guest's quarter-turn, never the temporary tilt.
         // A layout during a gesture must not leave the panel crooked after release.
-        contentLayer.transform = CATransform3DMakeRotation(-rest, 0, 0, 1)
+        if Self.profile.panelRotation != 0 {
+            // The iPad's guest turns its own UI inside a panel that turns with
+            // the shell: only the fixed panel-to-upright quarter-turn applies.
+            contentLayer.transform = CATransform3DRotate(CATransform3DIdentity, Self.profile.panelRotation, 0, 0, 1)
+        } else {
+            contentLayer.transform = CATransform3DMakeRotation(-rest, 0, 0, 1)
+        }
         CATransaction.commit()
 
         // Scale and rotation live in ONE transform, and the content is a child
@@ -694,7 +704,32 @@ final class DisplayView: NSView {
     /// current even when paused/minimized and never retains a recycled slot.
     func captureFrame(includeTouches: Bool = true) -> CGImage? {
         if let liveTextView { return liveTextView.capturedImage }
-        let side = Int(max(Self.nativeScreenPixels.width, Self.nativeScreenPixels.height))
+        guard let image = capturePanelFrame(includeTouches: includeTouches) else { return nil }
+        guard Self.profile.panelRotation != 0 else { return image }
+        // Match the window: panel-to-upright plus the device's own quarter-turn.
+        let turns = (Int((Self.profile.panelRotation * 2 / .pi).rounded()) + (emulator?.rotationDegrees ?? 0) / 90) % 4
+        return Self.rotated(image, clockwiseQuarterTurns: turns) ?? image
+    }
+
+    private static func rotated(_ image: CGImage, clockwiseQuarterTurns turns: Int) -> CGImage? {
+        let w = CGFloat(image.width), h = CGFloat(image.height)
+        let size = turns % 2 == 0 ? CGSize(width: w, height: h) : CGSize(width: h, height: w)
+        guard turns != 0, let context = CGContext(data: nil, width: Int(size.width), height: Int(size.height),
+                                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                                  space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+                                                  bitmapInfo: image.bitmapInfo.rawValue) else { return image }
+        // CG is y-up, so a visual clockwise turn is a negative angle.
+        switch turns {
+        case 1: context.translateBy(x: 0, y: w); context.rotate(by: -.pi / 2)
+        case 2: context.translateBy(x: w, y: h); context.rotate(by: .pi)
+        default: context.translateBy(x: h, y: 0); context.rotate(by: .pi / 2)
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return context.makeImage()
+    }
+
+    private func capturePanelFrame(includeTouches: Bool) -> CGImage? {
+        let side = Int(max(Self.profile.screenPixels.width, Self.profile.screenPixels.height))
         var data = Data(count: side * side * 4)
         var width: Int32 = 0, height: Int32 = 0
         let copied = data.withUnsafeMutableBytes {
