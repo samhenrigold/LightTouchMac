@@ -49,6 +49,7 @@ tests/check-device-menus.py     check.swift:133: a fresh MainWindowController no
 tests/check-factory-reset.py    its slice calls Erase without the instance it now takes (check.swift:80)
 tests/check-firmware-jobs.py    PreparationJob.swift now needs BootRecipe (DeviceSession.swift), which its slice omits
 scripts/test-zoom.py            its slice reads Screen.screenCutout/nativeScreenPixels on an instance; they are static now
+scripts/regress-app.sh          its env checks parse EmulatorController.swift for a boot configuration that moved to DeviceSession.swift (BootRecipe); the snapshot round trip passes
 '
 known_reason() { printf '%s\n' "$KNOWN" | awk -v n="$1" '$1 == n { $1 = ""; sub(/^ +/, ""); print }'; }
 export -f known_reason
@@ -112,10 +113,17 @@ if [ "$TIER" = --full ]; then
         else
             skip "tests/check-sessions.py --ipad-device" "no iPad device at $LTM_IPAD_DEVICE (LTM_IPAD_DEVICE)"
         fi
+        # The shipping image has no loader, so --guest upgrades its components from the checkout's own builds
+        # (contrib/*/build.sh) and imports the photo with the host-side itphoto from there.
+        tool=""; for t in it-agent/it_agent it-agent/it_typein.dylib it-gles/MBXGLEngine it-media/itphoto; do
+            [ -e "$QEMU_IOS_DIR/contrib/$t" ] || { tool=$t; break; }
+        done
         if [ -z "$LTM_IPOD_DEVICE" ]; then
             skip "tests/check-sessions.py --guest" "LTM_IPOD_DEVICE unset: a fresh device.py 7E18 iPod"
         elif [ ! -f "$LTM_ITPACK" ]; then
             skip "tests/check-sessions.py --guest" "no armv6 package at $LTM_ITPACK (LTM_ITPACK)"
+        elif [ -n "$tool" ]; then
+            skip "tests/check-sessions.py --guest" "no $QEMU_IOS_DIR/contrib/$tool: build it with its build.sh"
         else
             suite "tests/check-sessions.py --guest" python3 tests/check-sessions.py --guest --ipod-device "$LTM_IPOD_DEVICE" \
                 --itpack "$LTM_ITPACK" --contrib "$QEMU_IOS_DIR/contrib" --dylib "$LTM_QEMU_DYLIB"
