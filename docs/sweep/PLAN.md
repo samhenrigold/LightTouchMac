@@ -11,10 +11,10 @@ that hurt the user may be suppressed.
 
 | # | Decision | Recommendation |
 |---|---|---|
-| S1 | Retire the Python pipeline: Swift only; Python stays as `research/` and test drivers; oracle = golden lock hashes per firmware | Yes. The two already diverge silently (iBoot, boot-args); each new mechanism costs ~400 Swift lines of re-port |
-| S2 | Bundled iPod becomes a prepared device (one Erase prompt for old state) | Yes, now on `multidevice`; it deletes ~1,100 app lines and the bundled image's stale shim |
-| S3 | Quit-with-resume snapshots: delete the unreachable code, or wire it up | Delete. Stop is a hard halt and boots take 20–40 s; the helper's snapshot ops stay for tests |
-| S4 | IPA UX: "Install on ▸" context menu, drops on sidebar rows, Store dedupe by hash | Yes |
+| S1 | Retire the Python pipeline: Swift only; Python stays as `research/` and test drivers; oracle = golden lock hashes per firmware | **Approved by Sam 2026-09-28.** Order: C0 iBoot → C4 one Recipe → C5 |
+| S2 | Bundled iPod becomes a prepared device (one Erase prompt for old state) | **Approved by Sam 2026-09-28.** C6, after Track A merges |
+| S3 | Quit-with-resume snapshots: delete the unreachable code, or wire it up | **Sam: "Delete the code."** A9 on `app-correctness` |
+| S4 | IPA UX: "Install on ▸" context menu, drops on sidebar rows, Store dedupe by hash | Proceeding as recommended (Track B) |
 | S5 | Push `multidevice` and `ipad1` to the private remotes as backup (107 + N commits exist only here) | Sam runs pushes |
 | S6 | Repo boundary | Two repos + contract now (decided); revisit moving tools at the main merge |
 
