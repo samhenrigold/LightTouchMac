@@ -97,6 +97,13 @@ esac
 
 APP_BIN="$APP/Contents/MacOS/$APP_EXECUTABLE"
 
+# The per-device helper (the LightTouchDevice target, embedded by Xcode). It
+# links only system libraries and dlopens Frameworks/libqemu-arm.dylib, whose
+# closure is embedded above; its build-tree rpath is dropped below.
+DEVICE_HELPER="$APP/Contents/MacOS/LightTouchDevice"
+[ -f "$DEVICE_HELPER" ] || { echo "missing $DEVICE_HELPER; build the LightTouchMac scheme (it embeds the helper)" >&2; exit 1; }
+python3 "$CHECK" --minos "$MINOS" "$DEVICE_HELPER"   # Swift binaries weak-import their FORCE_LOAD markers
+
 # ---------------------------------------------------------- tools the app runs
 #
 # The app is meant to work on a Mac with no Homebrew and no source checkout, so
@@ -260,7 +267,7 @@ if [ -n "${LTM_BUILD_RECORD:-}" ]; then
 fi
 
 # Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
-for f in "$APP_BIN" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
+for f in "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
     while IFS= read -r path; do
         case "$path" in /*) install_name_tool -delete_rpath "$path" "$f" ;; esac
     done < <(python3 "$CHECK" --rpaths "$f")
@@ -270,7 +277,7 @@ done
 # Guest ARMv6 helpers are resources, not executable on macOS.
 echo "sealing…"
 python3 "$CHECK" --minos "$MINOS" --bundle "$APP" \
-    "$APP_BIN" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"
+    "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"
 
 # Ad-hoc signatures have no Team ID, so hardened library validation cannot
 # establish shared identity between a helper and its bundled dylibs. Use plain
@@ -282,7 +289,9 @@ sign_nested_code() {
     codesign -f -o "$options" -s "$SIGN_ID" "$1"
 }
 
-# Sign inside-out: frameworks first, then the app with entitlements.
+# Sign inside-out: frameworks, then Contents/MacOS/* (the device helper with the
+# QEMU entitlements: JIT, unsigned executable memory, no library validation),
+# then the app with entitlements.
 echo "signing (id: $SIGN_ID)…"
 for f in "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
     [ -L "$f" ] && continue
@@ -290,6 +299,7 @@ for f in "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
     # them as resources.
     [ -f "$f" ] && file "$f" | grep -q Mach-O && sign_nested_code "$f"
 done
+codesign -f -o runtime --entitlements "$ENTITLEMENTS" -s "$SIGN_ID" "$DEVICE_HELPER"
 codesign -f -o runtime --entitlements "$ENTITLEMENTS" -s "$SIGN_ID" "$APP"
 codesign --verify --deep --strict "$APP"
 codesign -dv "$APP" 2>&1 | grep -E "Identifier|Signature" || true

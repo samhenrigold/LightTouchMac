@@ -31,50 +31,90 @@ and [device-library-architecture.md](device-library-architecture.md) as a produc
 - XPC services inherit no environment or stdout.
 - A bundled executable can also be run headless from tests.
 
-**Rendezvous:**
-- The app runs an `NSXPCListener(machServiceName: "<bundle>.devices.<pid>")`.
-- The helper's argv carries the instance UUID and a one-time token.
-- The app checks the peer pid and `setCodeSigningRequirement` (same Team). This is **Risk 1: spike it first.**
+**Rendezvous** (`Shared/DeviceRendezvous.swift`, `Shared/CLink/ltm_link.c`). A dynamic `NSXPCListener` is refused (Risk 1), so:
+- The app checks in `<bundle id>.devices.<app pid>` once with `bootstrap_check_in`, and a thread receives hellos on it.
+- The app spawns `Contents/MacOS/LightTouchDevice --connect NAME --token T --instance UUID` with `posix_spawn` (`Process` can't pass an extra descriptor): stdin `/dev/null`, stdout+stderr on the caller's descriptor (the instance's `native.log` via `ProcessLogCapture`), one end of a `socketpair` as fd 3, `POSIX_SPAWN_CLOEXEC_DEFAULT` and default signal dispositions.
+- The helper sends a Mach **hello**: the token, the protocol version, a ring generation and the `IOSurfaceCreateMachPort` send rights of [status block] at start, then [status, ring0, ring1, ring2] for each ring (the first frame, and any resize).
+- Every hello is validated before a port is used: the audit-token pid is one this app spawned and hasn't reaped; the code behind that audit token satisfies the requirement (`anchor apple generic and certificate leaf[subject.OU] = "<the app's Team ID>"`; an ad-hoc app falls back to the helper's own designated requirement, its cdhash); the token matches; the version matches. The name is visible to the whole session; the socketpair isn't, so only the hello needs the gate.
 
 **Lifetime:**
-- The helper watches its parent (a process-exit source plus XPC invalidation). If the parent dies, it runs `qemu_ios_ui_powerdown`, waits for `guest_shutdown_confirmed` (bounded), and exits.
-- The app sees a helper death and sets the session to `.dead(reason)` with **Restart**. `quitForRelaunch` leaves the self-heal path.
-- The helper holds `beginActivity(.userInitiated, .latencyCritical)`.
+- The helper watches its parent (a process-exit source on the ppid, plus EOF on fd 3), and treats SIGTERM/SIGINT the same. It then runs the device's clean shutdown, bounded by EC's `cleanShutdownBudget` (60 s), quits QEMU and exits:
+  - iPad: `qemu_ios_ui_powerdown`, wait for `guest_shutdown_confirmed` (≤ 30 s; ~15.6 s measured).
+  - iPod: the agent's `halt` (`reboot2(RB_HALT)`, what `requestIndependentHalt` sends) when `agent_status == 1`, wait ≤ 30 s (1.3 s measured), then powerdown as the fallback. The SSH `ithalt` path needs the app's usbmuxd, so the helper doesn't use it.
+- The app sees a helper death (`onInvalidated`, then `onTerminated`, ~11 ms after a `kill -9`) and sets the session to `.dead(reason)` with **Restart**. `quitForRelaunch` leaves the self-heal path.
+- The helper holds `beginActivity(.userInitiated, .latencyCritical)` from boot to exit.
+- **The helper never calls `dispatchMain()`**: the dylib's `rcu_init` registered the main thread, so the main thread stays in `CFRunLoopRun()`.
 
-### XPC protocol — `Shared/DeviceLink.swift` (both targets)
+**Helper modes** (`LightTouchDevice/main.swift`). The dylib is `$LTM_QEMU_DYLIB`, else `@executable_path/../Frameworks/libqemu-arm.dylib`, else `@rpath` (Debug: `QEMU_BUILD_DIR`). The helper never links it.
+- `--connect …`: spawned by `DeviceLink`.
+- `--headless config.json`: `{dylib?, boot: BootConfig, actions: ["dump NAME", "tap X Y", "drag X0 Y0 X1 Y1", "button N", "key CODE", "snapshot PATH", "resume", "wait S", "shutdown", "quit"], dumpDir, litFraction, maxSeconds}`. PNG dumps come from the ring; JSON lines (`ring`, `status` each second, `lit`, `dump`, `snapshot`, `exit`) go to stdout.
+- `--oneshot config.json`: `{dylib?, boot, serialLog, stopMarker?, timeout}`. It runs until QEMU exits by itself or the serial log contains `stopMarker`, then prints `{"event":"oneshot","exited","exitCode","marker","seconds"}`. Exit 0 on the marker, QEMU's code on a natural exit, 124 on the timeout. This replaces `qemu-system-arm` in the seal and keybag boots.
+- `--probe MACHINE`: loads the dylib and prints the hello's `HelperInfo` (packaging tests).
+- Exit codes: QEMU's; 64 usage, 70 no dylib, 72 the rendezvous failed.
+
+### Link protocol — `Shared/DeviceLinkProtocol.swift` (both targets)
+
+Framed JSON on the socketpair: a 4-byte big-endian length, then one message, at most `DeviceLinkWire.maxMessageBytes` (4 MiB; a bigger frame closes the link). Writes go through a serial queue per end, so a wedged peer never blocks the app's main thread. `protocolVersion = 1` covers the messages, the status layout and the Mach hello.
 
 ```swift
-@objc protocol DeviceHostXPC {            // app -> helper
-  func command(_ message: Data)                                  // LinkCommand, one-way, ordered
-  func request(_ message: Data, reply: @escaping (Data) -> Void) // LinkRequest -> LinkReply
-}
-@objc protocol DeviceClientXPC {          // helper -> app
-  func event(_ message: Data)                                    // LinkEvent
-  func surfacesChanged(_ surfaces: [IOSurface])                  // [0] status block, [1...3] frame ring
-}
-enum LinkCommand: Codable { case touch(slot: Int8, phase: Int8, x: Double, y: Double), touch2(phase: Int8, x: Double, y: Double),
-  button(Int8, down: Bool), key(macKeyCode: UInt16, down: Bool), rotate(clockwise: Bool), shake,
-  attitude(pitch: Double, roll: Double, pose: Int8), paste(String), machine(MachineOp /*pause,resume,reset,powerdown,quit*/),
-  snapshotSave(path: String), snapshotResume, agentCancel(id: String), audioStop(UInt64) }
-enum LinkRequest: Codable { case hello(protocolVersion: Int), boot(BootConfig), snapshotStatus, agent(request: String, deadline: Double),
-  audioStart, battery(level: Int, charging: Int32), usbConnection(Bool), compass(Int), usbCharger(Bool), orientation(Int) }
-enum LinkReply: Codable { case hello(HelperInfo /*protocol, dylib path+mtime, build_id, device_info*/), ok(Bool),
-  snapshot(status: Int, error: String?), agent(String?), audio(generation: UInt64), failure(String) }
-enum LinkEvent: Codable { case qemuExited(Int32), audio(generation: UInt64, seconds: Double, pcm: Data) }
-struct BootConfig: Codable { var argv: [String]; var environment: [String: String]; var serialLog: String; var machine: String }
+enum AppMessage: Codable { case command(LinkCommand), request(id: UInt64, LinkRequest) }   // app -> helper
+enum HelperMessage: Codable { case reply(id: UInt64, LinkReply), event(LinkEvent) }         // helper -> app
+enum LinkCommand: Codable {           // fire-and-forget, in order
+  case touch(slot: Int, phase: Int, x: Double, y: Double), touch2(phase: Int, x: Double, y: Double),
+       button(Int, down: Bool), key(macKeyCode: Int, down: Bool), rotate(clockwise: Bool), shake,
+       attitude(pitch: Double, roll: Double, pose: Int), paste(String), machine(MachineOp /*pause,resume,reset,powerdown,quit*/),
+       snapshotSave(path: String), snapshotResume, agentCancel(id: String), audioStop(generation: UInt64) }
+enum LinkRequest: Codable {           // exactly one reply per id
+  case hello(protocolVersion: Int, machine: String?), boot(BootConfig), snapshotStatus,
+       agent(request: String, deadline: Double), audioStart,
+       battery(level: Int, charging: Int), usbConnection(Bool), compass(Int), usbCharger(Bool), orientation(Int) }
+enum LinkReply: Codable { case hello(HelperInfo), ok(Bool), snapshot(status: Int, error: String?), agent(String?),
+                          audio(generation: UInt64), failure(String) }
+enum LinkEvent: Codable { case qemuExited(Int32), audio(generation: UInt64, seconds: Double, pcm: Data),
+                          audioEnded(generation: UInt64, failed: Bool) }
+struct BootConfig: Codable { var argv: [String]; var environment: [String: String]; var machine: String }  // machine picks the orphan shutdown
+struct HelperInfo: Codable { var protocolVersion: Int; var pid: Int32; var dylibPath: String; var dylibModified: Double
+                             var buildID: String?; var deviceInfo: DeviceInfo? }   // qemu_ios_device_info(hello.machine)
 ```
 
-- **Frames:** a ring of three BGRA IOSurfaces. The helper copies `qemu_ios_ui_frame` into a surface that is neither front nor `IOSurfaceIsInUse`, then publishes `front` and `serial`. The app's display link sets `layer.contents = surface` when the serial changes. Nothing crosses XPC per frame.
-- **Status block** (IOSurface #0, 4 KB, atomics, `Shared/SharedStatus.swift`), written at 20 Hz and on edges: `magic, version, heartbeat, frameSerial, front, width, height, uiReady, storageFailed, shutdownConfirmed, displaySleeping, agentStatus, glesContexts, iconGeneration`. A stalled heartbeat means the helper is wedged; stalled frames mean the guest is wedged.
+- `hello` is always first; the helper replies `.failure` for another protocol version, or when no dylib loaded (then it exits 70).
+- `boot` replies `.ok(true)` once the QEMU thread runs; a second boot gets `.failure`. `qemuExited` follows when `qemu_ios_main` returns, and the helper exits with that code.
+- `agent(request, deadline)` takes one `qemu_ios_agent_request` wire string. The helper owns `qemu_ios_agent_result`: it routes results by id, frees them, and replies `.agent(wire)`, or `.agent(nil)` after the deadline (and cancels). `deadline <= 0` only submits and replies `.ok(submitted)` (the halt). A refused queue gets `.failure`.
+- `audioStart` replies `.audio(generation)`, then pushes `.audio` events (an empty `pcm` with `seconds >= 0` marks silence). After `audioStop`, what's queued is drained (≤ 1 s), then `.audioEnded(failed: false)`. An overflow or stop inside QEMU gives `.audioEnded(failed: true)`.
+- `snapshotStatus` replies QemuIosSnapshotStatus (0 idle, 1 running, 2 done, 3 failed + error).
+
+**Frames and status** (`Shared/SharedStatus.swift`):
+- **Frames:** a ring of three BGRA IOSurfaces at the guest's size. The helper copies `qemu_ios_ui_frame` into a surface that is neither `front`, nor the reader's `held`, nor `IOSurfaceIsInUse`, then publishes `front` and `frameSerial` (seq-cst). The reader (`FrameRingReader.front()`) stores `held` and re-reads the serial. The app's display link sets `layer.contents = surface` when `isNew`. A capture should `incrementUseCount()` around its read (as `FrameTools` does). Nothing crosses the socket per frame.
+- **Status block:** IOSurface #0, 4 KB of UInt64 slots with atomics. Frames are published at 60 Hz, status at 20 Hz, and the heartbeat on every tick (from launch, before boot). Slots: `magic ("LTMSTAT2"), layoutVersion, heartbeat, frameSerial, front, width, height, ringGeneration, held, uiReady, storageFailed, shutdownConfirmed, displaySleeping, agentStatus, glesContexts, iconGeneration, qemuState (0 not started, 1 running, 2 exited), exitCode, publishTicks, helperPID`. A stalled heartbeat means the helper is wedged; stalled frames mean the guest is wedged.
+
+### The app-side client — `Shared/DeviceLink.swift`
+
+```swift
+let link = DeviceLink(configuration: .init(instance: id, outputDescriptor: capture.writeDescriptor), queue: .main)
+// Configuration: helper (default Contents/MacOS/LightTouchDevice), dylib (dev: LTM_QEMU_DYLIB), environment,
+//                machine (hello's deviceInfo), requirement (nil = same Team), connectTimeout (15 s), arguments
+link.onEvent = { (e: LinkEvent) in … }                 // .qemuExited, .audio, .audioEnded
+link.onInvalidated = { (e: DeviceLinkError) in … }     // once: EOF, rejected hello, protocol, timeout
+link.onTerminated = { (t: DeviceTermination) in … }    // once: .exited(code) / .signaled(sig) / .unknown
+link.start { (r: Result<HelperInfo, DeviceLinkError>) in … }   // spawn + validated hello + hello reply
+link.send(.touch(slot: 0, phase: 0, x: 0.5, y: 0.5))            // LinkCommand
+link.request(.battery(level: 80, charging: 0), timeout: 10) { (r: Result<LinkReply, DeviceLinkError>) in … }
+let reply = try await link.request(.snapshotStatus)
+link.status        // SharedStatus?, read synchronously from the block
+link.frontSurface() // (surface: IOSurface, serial: UInt64, isNew: Bool)?, for one display-link thread
+link.info, link.pid, link.terminate() /* SIGTERM: clean shutdown */, link.kill()
+```
+
+Callbacks run on `queue`. Pending requests fail with `.closed` when the link goes, and with `.timedOut` after their timeout. `tests/check-helper-boot.py` drives this through `tests/helper-driver`.
 
 ### How each C call crosses
 
 | C call (today's file) | Crossing |
 |---|---|
-| `qemu_ios_main` (EC.start/startIPad1) | `request(.boot)`: the helper applies the env from `setBootEnv`. Then `.qemuExited` and the helper exits. |
+| `qemu_ios_main` (EC.start/startIPad1) | `request(.boot)`: the helper applies `BootConfig.environment` (EC's `setBootEnv`). Then `.qemuExited` and the helper exits. |
 | `qemu_ios_device_info` (DeviceProfile+Display) | Board constants in `DeviceProfile`. `hello` returns the dylib's values, and a mismatch fails the boot. |
 | `ui_attach` | Internal to the helper |
-| `ui_frame`, `ui_copy_frame` (DisplayView) | Status block + IOSurface; capture locks the front surface |
+| `ui_frame`, `ui_copy_frame` (DisplayView) | Status block + IOSurface; capture holds a use count on the front surface |
 | `ui_touch/touch2/button/key_mac/rotate/shake/attitude/paste` | `command` |
 | `ui_battery/compass/usb_charger/orientation/usb_connection` | `request`, reply `.ok(Bool)` |
 | `ui_pause/resume/reset/powerdown/quit` | `command(.machine)` |
@@ -82,11 +122,11 @@ struct BootConfig: Codable { var argv: [String]; var environment: [String: Strin
 | `agent_request/result/free_result`, `agent_cancel` (DeviceTools) | `request(.agent)` (the helper polls and frees within the deadline); `command(.agentCancel)` |
 | `build_id` / dladdr provenance | `hello`, cached per session |
 | `snapshot_save2/_status/_resume` | `command` + `request(.snapshotStatus)` polled every 100 ms |
-| `audio_capture_*` (ScreenMovieWriter) | `request(.audioStart)`, then pushed `.audio` events, then `command(.audioStop)` |
+| `audio_capture_*` (ScreenMovieWriter) | `request(.audioStart)`, then pushed `.audio` events, then `command(.audioStop)` and `.audioEnded` |
 | Audio playback | Stays in the helper |
 | `setenv USBMUXD_SOCKET_ADDRESS` + DeviceGate | In the app for phase 1, with per-instance sockets. Phase 4 option: move services into the helper. |
 
-EC stays in the app: every `qemu_ios_*` call becomes a `link.…` call. `DeviceLink.swift` (app) is about 300 lines; `LightTouchDevice/DeviceHost.swift` about 500 and `main.swift` about 150. `NativeLogging.swift` moves to `Shared/`.
+EC stays in the app: every `qemu_ios_*` call becomes a `link.…` call. `NativeLogging.swift` stays in the app: the helper writes plain stdout/stderr, and `DeviceLink` takes `ProcessLogCapture.writeDescriptor`.
 
 ## B. Data model and storage
 
@@ -329,6 +369,19 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 - **The iPod 3.1.3 IPSW isn't on api.ipsw.me**, so a future from-IPSW entry needs another source.
 - **Still open for W4:** Export Diagnostics and the log window still read the global `serial.log`, `usbmuxd.log` and `session.env`.
 - **Still open for W2/W4:** EC still resolves its own instance in `init(options:profile:)`. It should receive one chosen from the library.
+
+
+**W1, 2026-09-28** (helper, link, packaging):
+- **The link is framed JSON on a socketpair, plus a Mach hello for the surfaces**, not NSXPC (section A). DeviceLink spawns with `posix_spawn`, not `Process`, because only `posix_spawn` can put the socket on fd 3. It's otherwise the same: logs go to a descriptor, and termination is observed.
+- **The client lives in `Shared/`** (compiled into the app, the helper and the test driver), so W2 doesn't write an app-side `DeviceLink.swift`. `NativeLogging.swift` doesn't move.
+- **The C glue is a Clang module** (`Shared/CLink`, `import LTMLinkC`, `SWIFT_INCLUDE_PATHS`), not the app's bridging header, which stays W2's. The audit-token pid is read without libbsm.
+- **`BootConfig` has no `serialLog`**: the argv carries `-serial` (the app's FIFO works across processes). The one-shot config has one.
+- **`LinkEvent.audioEnded(generation, failed)`** tells the recorder the drain after `audioStop` finished. `hello` takes a `machine` for `deviceInfo`. `HelperInfo` adds `pid`.
+- **The orphan shutdown on the iPod is the agent halt** (1.3 s to a confirmed power-off), then powerdown. The iPad powerdown confirmed in 15.6 s.
+- **Packaging:** Xcode embeds the helper in `Contents/MacOS` (an "Embed Device Helper" copy phase). Its embedded Info.plist identifier is `gold.samhenri.LightTouchMac.LightTouchDevice`. `CODE_SIGN_ENTITLEMENTS` is `$(QEMU_IOS_DIR)/contrib/macos-app/entitlements.plist`, and `OTHER_LDFLAGS` is empty (no qemu link). `package.sh` checks the helper, drops its absolute rpaths and signs it with those entitlements after the frameworks and tools and before the app. `scripts/test-package.py APP` checks the signature, entitlements, closure and a `--probe` that loads `Frameworks/libqemu-arm.dylib`.
+- **A Release build with the helper was notarized** (Accepted, stapled, `spctl`: Notarized Developer ID). It was `package.sh` with `LTM_ASSETS=none`, not `build-release.py`. `build-release.py` can't run end to end under a 10-minute step limit: its fresh native build is one long script, and `--native-build` would relink the prior release's native dir, which is configured for `~/Developer/qemu-ios`. That dir's ipod-branch dylib also lacks the iPad exports the app links (`qemu_ios_ui_compass`, `usb_charger`, `orientation`). **A multidevice release needs a native build from `qemu-ios-ipad1`.** The one used here was `qemu-ios-ipad1/build-w1-native`: the native recipe's QEMU configure, over the 09-26 release's prefix and static deps.
+- **Tests boot with `-audio driver=none`**; the app keeps its own audio arguments.
+- **`tests/check-helper-boot.py`: 22/22** (reject, iPod, iPad, restore, iPad orphan, one-shot, headless). The PNG dumps and driver logs are in `~/Developer/qemu-ios-files/w1-helper/dumps/`.
 
 ## Preparer contract (Sam, 2026-09-28: no Python bridge; the app runs the Swift preparer only)
 

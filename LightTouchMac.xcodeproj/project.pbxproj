@@ -9,17 +9,76 @@
 /* Begin PBXBuildFile section */
 		EA17D84D3023A55900BDF83E /* Subprocess in Frameworks */ = {isa = PBXBuildFile; productRef = EA17D84C3023A55900BDF83E /* Subprocess */; };
 		EA17D8503023A56800BDF83E /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = EA17D84F3023A56800BDF83E /* ArgumentParser */; };
+		A1D0C0DE3100000000000002 /* LightTouchDevice in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3100000000000001 /* LightTouchDevice */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A1D0C0DE3100000000000005 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EA17D82A30239D9B00BDF83E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1D0C0DE3100000000000006;
+			remoteInfo = LightTouchDevice;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A1D0C0DE3100000000000003 /* Embed Device Helper */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (
+				A1D0C0DE3100000000000002 /* LightTouchDevice in Embed Device Helper */,
+			);
+			name = "Embed Device Helper";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		EA17D83230239D9B00BDF83E /* Light Touch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Light Touch.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB72984030B2091100000001 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		A1D0C0DE3100000000000001 /* LightTouchDevice */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LightTouchDevice; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A1D0C0DE3100000000000014 /* Exceptions for "Shared" folder in "Light Touch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				CLink/ltm_link.h,
+				CLink/module.modulemap,
+			);
+			target = EA17D83130239D9B00BDF83E /* Light Touch */;
+		};
+		A1D0C0DE3100000000000015 /* Exceptions for "Shared" folder in "LightTouchDevice" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				CLink/ltm_link.h,
+				CLink/module.modulemap,
+			);
+			target = A1D0C0DE3100000000000006 /* LightTouchDevice */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		EA17D83430239D9B00BDF83E /* LightTouchMac */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = LightTouchMac;
+			sourceTree = "<group>";
+		};
+		A1D0C0DE3100000000000012 /* LightTouchDevice */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LightTouchDevice;
+			sourceTree = "<group>";
+		};
+		A1D0C0DE3100000000000013 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1D0C0DE3100000000000014 /* Exceptions for "Shared" folder in "Light Touch" target */,
+				A1D0C0DE3100000000000015 /* Exceptions for "Shared" folder in "LightTouchDevice" target */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,6 +91,11 @@
 				EA17D84D3023A55900BDF83E /* Subprocess in Frameworks */,
 			);
 		};
+		A1D0C0DE3100000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -39,6 +103,8 @@
 			isa = PBXGroup;
 			children = (
 				EA17D83430239D9B00BDF83E /* LightTouchMac */,
+				A1D0C0DE3100000000000012 /* LightTouchDevice */,
+				A1D0C0DE3100000000000013 /* Shared */,
 				EB72984030B2091100000002 /* Configuration */,
 				EA17D83330239D9B00BDF83E /* Products */,
 			);
@@ -48,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				EA17D83230239D9B00BDF83E /* Light Touch.app */,
+				A1D0C0DE3100000000000001 /* LightTouchDevice */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,11 +137,16 @@
 				EA17D82E30239D9B00BDF83E /* Sources */,
 				EA17D82F30239D9B00BDF83E /* Frameworks */,
 				EA17D83030239D9B00BDF83E /* Resources */,
+				A1D0C0DE3100000000000003 /* Embed Device Helper */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+				A1D0C0DE3100000000000004 /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				EA17D83430239D9B00BDF83E /* LightTouchMac */,
+				A1D0C0DE3100000000000013 /* Shared */,
 			);
 			name = "Light Touch";
 			packageProductDependencies = (
@@ -84,6 +156,26 @@
 			productName = LightTouchMac;
 			productReference = EA17D83230239D9B00BDF83E /* Light Touch.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A1D0C0DE3100000000000006 /* LightTouchDevice */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1D0C0DE3100000000000009 /* Build configuration list for PBXNativeTarget "LightTouchDevice" */;
+			buildPhases = (
+				A1D0C0DE3100000000000007 /* Sources */,
+				A1D0C0DE3100000000000008 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1D0C0DE3100000000000012 /* LightTouchDevice */,
+				A1D0C0DE3100000000000013 /* Shared */,
+			);
+			name = LightTouchDevice;
+			productName = LightTouchDevice;
+			productReference = A1D0C0DE3100000000000001 /* LightTouchDevice */;
+			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
 
@@ -96,6 +188,9 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					EA17D83130239D9B00BDF83E = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					A1D0C0DE3100000000000006 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -119,6 +214,7 @@
 			projectRoot = "";
 			targets = (
 				EA17D83130239D9B00BDF83E /* Light Touch */,
+				A1D0C0DE3100000000000006 /* LightTouchDevice */,
 			);
 		};
 /* End PBXProject section */
@@ -137,7 +233,20 @@
 			files = (
 			);
 		};
+		A1D0C0DE3100000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1D0C0DE3100000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1D0C0DE3100000000000006 /* LightTouchDevice */;
+			targetProxy = A1D0C0DE3100000000000005 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		EA17D83C30239D9B00BDF83E /* Debug configuration for PBXProject "LightTouchMac" */ = {
@@ -299,6 +408,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(inherited) $(SRCROOT)/Shared/CLink";
 				SWIFT_OBJC_BRIDGING_HEADER = "LightTouchMac/Shim/LightTouchMac-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
@@ -344,8 +454,49 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(inherited) $(SRCROOT)/Shared/CLink";
 				SWIFT_OBJC_BRIDGING_HEADER = "LightTouchMac/Shim/LightTouchMac-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A1D0C0DE3100000000000010 /* Debug configuration for PBXNativeTarget "LightTouchDevice" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "$(QEMU_IOS_DIR)/contrib/macos-app/entitlements.plist";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SM75355Y6R;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "";
+				PRODUCT_BUNDLE_IDENTIFIER = gold.samhenri.LightTouchMac.LightTouchDevice;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_INCLUDE_PATHS = "$(inherited) $(SRCROOT)/Shared/CLink";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A1D0C0DE3100000000000011 /* Release configuration for PBXNativeTarget "LightTouchDevice" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "$(QEMU_IOS_DIR)/contrib/macos-app/entitlements.plist";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SM75355Y6R;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "";
+				PRODUCT_BUNDLE_IDENTIFIER = gold.samhenri.LightTouchMac.LightTouchDevice;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_INCLUDE_PATHS = "$(inherited) $(SRCROOT)/Shared/CLink";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -366,6 +517,14 @@
 			buildConfigurations = (
 				EA17D83F30239D9B00BDF83E /* Debug configuration for PBXNativeTarget "Light Touch" */,
 				EA17D84030239D9B00BDF83E /* Release configuration for PBXNativeTarget "Light Touch" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		A1D0C0DE3100000000000009 /* Build configuration list for PBXNativeTarget "LightTouchDevice" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1D0C0DE3100000000000010 /* Debug configuration for PBXNativeTarget "LightTouchDevice" */,
+				A1D0C0DE3100000000000011 /* Release configuration for PBXNativeTarget "LightTouchDevice" */,
 			);
 			defaultConfigurationName = Release;
 		};

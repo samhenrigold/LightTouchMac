@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Exercise deployment-target and relocation checks against real Mach-O files."""
+"""Exercise deployment-target and relocation checks against real Mach-O files.
+
+    scripts/test-package.py [PACKAGED.app]
+
+With an app (package.sh output), also check its device helper: present in
+Contents/MacOS, hardened runtime with the QEMU entitlements, its load closure and
+the dlopened Frameworks/libqemu-arm.dylib resolved inside the bundle, and a
+--probe that actually loads the bundled emulator library.
+"""
+import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -74,3 +84,33 @@ with tempfile.TemporaryDirectory() as directory:
     verify(weaklib, no_weak_imports=True, error='unexpected weak imports')
     verify(root / 'lib26.0.dylib', no_weak_imports=True, error='requires macOS 26.0')
 print('PASS: compatible closure, newer transitive library, external path, bundle relocation, missing dependency, weak imports')
+
+
+def check_helper(app):
+    app = pathlib.Path(app)
+    helper = app / 'Contents/MacOS/LightTouchDevice'
+    assert helper.is_file() and helper.stat().st_mode & 0o111, f'missing executable {helper}'
+    details = subprocess.run(['codesign', '-dvv', '--entitlements', ':-', helper], capture_output=True, text=True)
+    assert details.returncode == 0, details.stderr
+    for key in ('com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory',
+                'com.apple.security.cs.disable-library-validation'):
+        assert key in details.stdout, f'helper lacks entitlement {key}'
+    assert 'flags=0x10000(runtime)' in details.stderr, 'helper is not signed with the hardened runtime'
+    assert 'Identifier=gold.samhenri.LightTouchMac.LightTouchDevice' in details.stderr, details.stderr
+    subprocess.run(['codesign', '--verify', '--strict', helper], check=True)
+    info = subprocess.run(['/usr/libexec/PlistBuddy', '-c', 'Print :LSMinimumSystemVersion', app / 'Contents/Info.plist'],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    dylib = app / 'Contents/Frameworks/libqemu-arm.dylib'
+    closure = subprocess.run([sys.executable, CHECK, '--minos', info, '--bundle', app, helper, dylib],
+                             capture_output=True, text=True)
+    assert closure.returncode == 0, closure.stderr
+    probe = subprocess.run([helper, '--probe', 'ipad1'], capture_output=True, text=True, timeout=60,
+                           env={k: v for k, v in os.environ.items() if k != 'LTM_QEMU_DYLIB'})
+    assert probe.returncode == 0, probe.stderr
+    loaded = json.loads(probe.stdout)['dylibPath']
+    assert pathlib.Path(loaded).resolve() == dylib.resolve(), f'helper loaded {loaded}, not the bundled {dylib}'
+    print(f'PASS: {helper.name} signed (runtime, QEMU entitlements, minos {info}), closure in-bundle, loads {dylib.name} from Frameworks')
+
+
+if len(sys.argv) > 1:
+    check_helper(sys.argv[1])

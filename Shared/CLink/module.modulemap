@@ -1,0 +1,4 @@
+module LTMLinkC {
+    header "ltm_link.h"
+    export *
+}
