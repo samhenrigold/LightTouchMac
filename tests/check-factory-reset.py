@@ -14,7 +14,7 @@ source=r'''import Foundation
 /// The helper's link: quit stands for the helper exiting (it releases every writer).
 @MainActor struct FakeLink { func send(_ c:LinkCommand){ if case .machine(.quit)=c {events.append("stop");if exitNative {current.isDead=true}} } }
 nonisolated func logEvent(_ s:String){}
-@MainActor enum AppInstaller {static let hasPendingWork=false; static var discarded=0; static func discardAll(){discarded+=1}}
+@MainActor enum AppInstaller {static let hasPendingWork=false; static var discarded=0; static func discard(for id:UUID){discarded+=1}}
 @MainActor func restart(){
  precondition(!current.isErasing && current.isDead)
  precondition(!FileManager.default.fileExists(atPath:current.overlayURL.path))
@@ -22,8 +22,10 @@ nonisolated func logEvent(_ s:String){}
 }
 @MainActor final class Controller {
  enum State {case running,notStarted}
- enum Notice {case erase}
- var isErasing=false,isInstalling=false,isDead=false,skipNextQuitSnapshot=false
+ enum Notice {case erase,activation}
+ struct Instance { let id=UUID() }
+ let instance=Instance()
+ var isErasing=false,isInstalling=false,isDead=false
  var state=State.running
  var started=true
  var link:FakeLink?=FakeLink()

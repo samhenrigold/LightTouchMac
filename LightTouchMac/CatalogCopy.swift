@@ -18,7 +18,8 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
         let device_family_macho: [String]?
     }
 
-    static func osIssue(_ value: String?) -> String? {
+    /// `deviceOS`: the device's iOS version (its catalog entry).
+    static func osIssue(_ value: String?, deviceOS: String = "3.1.3") -> String? {
         guard let value else { return nil }
         let parts = value.split(separator: ".", omittingEmptySubsequences: false)
         let numbers = parts.compactMap { part -> Int? in
@@ -28,11 +29,14 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
         guard numbers.count == parts.count, !numbers.isEmpty, numbers.count <= 3,
               numbers[0] > 0 else { return "The minimum iOS version could not be verified." }
         let padded = numbers + Array(repeating: 0, count: 3 - numbers.count)
-        return [3, 1, 3].lexicographicallyPrecedes(padded)
-            ? "Requires iOS \(value); this device runs iOS 3.1.3." : nil
+        let device = deviceOS.split(separator: ".").compactMap { Int($0) }
+        let devicePadded = device + Array(repeating: 0, count: max(0, 3 - device.count))
+        return devicePadded.lexicographicallyPrecedes(padded)
+            ? "Requires iOS \(value); this device runs iOS \(deviceOS)." : nil
     }
 
-    func unavailableReason(minimumOS: String?) -> String? {
+    /// `arch`: the device's executable slice (armv6 on the iPod touch 2G, armv7 on the iPad).
+    func unavailableReason(minimumOS: String?, deviceOS: String = "3.1.3", arch: String = "armv6") -> String? {
         guard available else { return "This archived download is no longer available." }
         guard let binary else { return "This copy has not been analyzed for compatibility." }
         guard binary.install_status == "installable" else {
@@ -40,13 +44,13 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
                 ? "This copy is FairPlay-encrypted and cannot launch in the emulator."
                 : "This copy has not been classified as installable."
         }
-        guard binary.architectures?.contains("armv6") == true else {
-            return "This copy has no ARMv6 executable for the iPod touch 2G."
+        guard binary.architectures?.contains(arch) == true else {
+            return "This copy has no \(arch.uppercased()) executable for this device."
         }
-        if let family = binary.device_family_macho, !family.isEmpty, !family.contains("1") {
-            return "This copy does not support iPhone or iPod touch."
+        if let family = binary.device_family_macho, !family.isEmpty, !family.contains("1"), !family.contains("2") {
+            return "This copy does not support iPhone, iPod touch or iPad."
         }
-        return Self.osIssue(minimumOS) ?? Self.osIssue(binary.macho_min_os)
+        return Self.osIssue(minimumOS, deviceOS: deviceOS) ?? Self.osIssue(binary.macho_min_os, deviceOS: deviceOS)
     }
 
     /// MD5 is the archive's file-integrity check, not a signature or trust decision.

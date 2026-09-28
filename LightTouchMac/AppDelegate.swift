@@ -35,16 +35,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func showDeviceWindow(_ sender: Any?) { windowController?.focusDeviceScreen(sender) }
     @objc func showFilesWindow(_ sender: Any?) { windowController?.toggleFiles(sender) }
 
-    @objc func toggleAutomaticRotation(_ sender: Any?) {
-        UserDefaults.standard.set(!EmulatorController.autoRotateEnabled, forKey: EmulatorController.autoRotateDefaultsKey)
-    }
+    @objc func toggleAutomaticRotation(_ sender: Any?) { emulator?.toggleAutoRotate() }
     @objc func toggleInternetAccess(_ sender: Any?) {
         let current = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.options.network ?? true
         UserDefaults.standard.set(!current, forKey: NetworkAccessPreference.key)
     }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(toggleAutomaticRotation(_:)) {
-            item.state = EmulatorController.autoRotateEnabled ? .on : .off
+            item.state = emulator?.autoRotateEnabled ?? true ? .on : .off
+            return emulator != nil
         } else if item.action == #selector(toggleInternetAccess(_:)) {
             let desired = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.options.network ?? true
             item.state = desired ? .on : .off
@@ -155,6 +154,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         DeviceStateStorage.sweepDeleting(state: state)
         IPALibrary.migrateShared(state: state, devices: records)
         for record in records { USBMux.secure(DeviceInstance.url(record.storage.usbmuxConf, state: state)) }
+        // Bases published by earlier builds become immutable too.
+        for record in records where record.base.kind == .prepared {
+            DeviceStateStorage.lockBase(DeviceInstance.url(record.base.path, state: state))
+        }
         // Logs of devices that no longer exist, and the single-device logs
         // from before per-device ones (Logs/serial.log*, usbmuxd.log*).
         let fm = FileManager.default
@@ -177,8 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         emulators.forEach { $0.stop() }
     }
 
-    /// On quit: guard an in-flight install, then save the RAM state (resume on)
-    /// or halt each device (EmulatorController.halt: storage flushed, no guest shutdown).
+    /// On quit: guard an in-flight install, then halt each device
+    /// (EmulatorController.halt: storage flushed, no guest shutdown).
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if emulators.contains(where: \.isErasing) { return .terminateCancel }
         if awaitingTermination { return .terminateLater }
@@ -225,7 +228,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         }
         let backstop = EmulatorController.stopBudget
-            + (EmulatorController.resumeOnLaunch ? EmulatorController.quitSnapshotBudget : 0)
         terminationBackstop = Task {
             do { try await Task.sleep(for: .seconds(backstop)) } catch { return }
             logEvent("quit: shutdown did not finish in time — quitting anyway")
@@ -238,19 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             remaining -= 1
             if remaining == 0 { reply() }
         }
-        for emulator in running {
-            // Save the RAM state if resume is on (the VM stays paused and its storage
-            // is flushed; the helper halts when the app exits), else halt now. Never
-            // a guest shutdown after the save: flash moving past the snapshot is the
-            // stale-RAM-over-newer-flash corruption the snapshot code warns about.
-            if EmulatorController.resumeOnLaunch, !emulator.isInstalling, !AppInstaller.hasPendingWork {
-                emulator.beginQuitSnapshot { saved in
-                    if saved { finished() } else { emulator.halt { _ in finished() } }
-                }
-            } else {
-                emulator.halt { _ in finished() }
-            }
-        }
+        for emulator in running { emulator.halt { _ in finished() } }
         return .terminateLater
     }
 

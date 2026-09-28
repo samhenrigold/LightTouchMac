@@ -340,10 +340,11 @@ private final class DeviceRowCell: NSTableCellView {
         case .unavailable(.comingSoon): show("Coming Soon")
         case .unavailable(.requiresIPSW): show("Requires IPSW")
         }
+        if let note = row.note, detail.isHidden { show(note) }
         // One element per row for VoiceOver: "iOS 3.2.2, Experimental, Running".
         setAccessibilityElement(true)
         setAccessibilityRole(.cell)
-        setAccessibilityLabel(([row.title] + (row.isExperimental ? ["Experimental"] : []) + [row.stateDescription])
+        setAccessibilityLabel(([row.title] + (row.isExperimental ? ["Experimental"] : []) + [row.stateDescription] + [row.note].compactMap { $0 })
             .joined(separator: ", "))
         if case let .error(reason) = row.state { setAccessibilityHelp(reason) } else { setAccessibilityHelp(nil) }
     }

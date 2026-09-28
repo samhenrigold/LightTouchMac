@@ -259,6 +259,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             try? DeviceStateStorage.removeTree(publishing)
             throw error
         }
+        DeviceStateStorage.lockBase(directory.appendingPathComponent("base", isDirectory: true))
         return instance
     }
 

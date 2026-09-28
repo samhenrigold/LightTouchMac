@@ -13,6 +13,8 @@ fixture=r'''import Cocoa
  struct Options { var network = true }; var options = Options()
  static let autoRotateDefaultsKey="autoRotateWithGuest"
  static var autoRotateEnabled:Bool { UserDefaults.standard.object(forKey:autoRotateDefaultsKey) as? Bool ?? true }
+ var autoRotateEnabled:Bool { Self.autoRotateEnabled }
+ func toggleAutoRotate() { UserDefaults.standard.set(!autoRotateEnabled, forKey:Self.autoRotateDefaultsKey) }
 }
 @MainActor final class AppDelegate:NSObject, NSMenuItemValidation {
  var emulator:EmulatorController? = EmulatorController()

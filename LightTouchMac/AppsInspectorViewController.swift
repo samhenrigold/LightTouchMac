@@ -11,7 +11,8 @@ import Cocoa
 import UniformTypeIdentifiers
 
 extension Notification.Name {
-    /// Posted after an install/uninstall completes so any open list refreshes.
+    /// Posted after an install/uninstall completes so any open list refreshes;
+    /// object is the device's instance id (nil: every device).
     static let ltmAppsChanged = Notification.Name("LTMAppsChanged")
     /// Posted when an install begins; object is the InstallJob.
     static let ltmInstallStarted = Notification.Name("LTMInstallStarted")
@@ -26,6 +27,9 @@ extension Notification.Name {
 /// script traps TERM for exactly this).
 @MainActor
 final class InstallJob {
+    /// The device this job lands on (DeviceInstance.id): each inspector shows
+    /// its own device's rows, and an erase drops only that device's jobs.
+    let deviceID: UUID
     /// Starts as the .ipa's filename and is replaced by the app's real display
     /// name as soon as the archive has been read.
     fileprivate(set) var name: String
@@ -49,10 +53,10 @@ final class InstallJob {
     fileprivate var dismissed = false
     func dismiss() {
         dismissed = true
-        NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+        NotificationCenter.default.post(name: .ltmAppsChanged, object: deviceID)
     }
 
-    fileprivate init(name: String) { self.name = name }
+    fileprivate init(name: String, device: UUID) { self.name = name; deviceID = device }
 
     /// False once the install has passed the last point cancellation can reach.
     /// instproxy_install runs on a detached thread that ignores cancellation, so
@@ -74,18 +78,24 @@ final class InstallJob {
 
 /// Shared install flow used by the inspector's Add button and by drag-and-drop
 /// onto the device. Announces start, progress and finish so the list can follow
-/// along, and owns the task so the row can cancel it.
+/// along, and owns the task so the row can cancel it. Jobs, removals and the
+/// ready queue are per device (the job's `deviceID`): one device's erase,
+/// pause or long install never touches another's.
 @MainActor
 enum AppInstaller {
 
     /// Queued removals need the same quit/restart protection as installs.
+    /// Any device's: the quit guard.
     static var hasPendingWork: Bool { !jobs.isEmpty || !removals.isEmpty }
+    static func hasPendingWork(for device: UUID) -> Bool {
+        jobs.contains { $0.deviceID == device } || removals.values.contains { $0.device == device }
+    }
     private static var jobs: [InstallJob] = []
-    private static var removals: [UUID: Task<Void, Never>] = [:]
+    private static var removals: [UUID: (device: UUID, task: Task<Void, Never>)] = [:]
 
     static func cancelPendingWork() {
         for job in jobs where job.isCancellable { job.cancel() }
-        for task in removals.values { task.cancel() }
+        for removal in removals.values { removal.task.cancel() }
     }
 
     /// Every row this session put up, including failed ones still offering
@@ -94,26 +104,33 @@ enum AppInstaller {
 
     /// The device is being erased or powered off: nothing queued or failed can
     /// land on it any more, and a Retry would target a wiped device. Cancel
-    /// what can be cancelled and drop every install row. An install already
-    /// inside installation_proxy can't be stopped; its row goes too and the
-    /// erase makes the outcome moot.
-    static func discardAll() {
-        for job in rows.allObjects {
+    /// what can be cancelled and drop every install row of that device. An
+    /// install already inside installation_proxy can't be stopped; its row goes
+    /// too and the erase makes the outcome moot. Other devices' work continues.
+    static func discard(for device: UUID) {
+        for job in rows.allObjects where job.deviceID == device {
             job.task?.cancel()
             job.dismissed = true
         }
-        for task in removals.values { task.cancel() }
-        if readyQueue.isPaused { readyQueue.resume() }
-        NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+        for removal in removals.values where removal.device == device { removal.task.cancel() }
+        if let queue = queues[device], queue.isPaused { queue.resume() }
+        NotificationCenter.default.post(name: .ltmAppsChanged, object: device)
     }
 
-    private static let readyQueue = InstallationQueue()
-    static var isUsingDevice: Bool { readyQueue.isBusy }
-    static var isPaused: Bool { readyQueue.isPaused }
+    /// One ready queue per device; a queue outlives its jobs (it is tiny).
+    private static var queues: [UUID: InstallationQueue] = [:]
+    private static func queue(for device: UUID) -> InstallationQueue {
+        if let queue = queues[device] { return queue }
+        let queue = InstallationQueue()
+        queues[device] = queue
+        return queue
+    }
+    static func isUsingDevice(_ device: UUID) -> Bool { queues[device]?.isBusy ?? false }
+    static func isPaused(_ device: UUID) -> Bool { queues[device]?.isPaused ?? false }
 
-    static func resume() {
-        readyQueue.resume()
-        for job in jobs where job.status.hasPrefix("Paused") {
+    static func resume(_ device: UUID) {
+        queue(for: device).resume()
+        for job in jobs where job.deviceID == device && job.status.hasPrefix("Paused") {
             job.status = "Waiting for device…"
             NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
         }
@@ -126,7 +143,7 @@ enum AppInstaller {
         // a couple of unzips, and the point of the row is to appear the moment
         // the drop happens — then takes the app's real display name as soon as
         // the archive has been read.
-        let job = InstallJob(name: ipa.deletingPathExtension().lastPathComponent)
+        let job = InstallJob(name: ipa.deletingPathExtension().lastPathComponent, device: emulator.instance.id)
         job.retry = { [weak job, weak emulator, weak window] in
             guard let emulator else { return }
             job?.dismiss()
@@ -158,7 +175,7 @@ enum AppInstaller {
     @discardableResult
     static func startMedia(_ source: URL, with emulator: EmulatorController,
                            presenting window: NSWindow?) -> InstallJob {
-        let job = InstallJob(name: source.deletingPathExtension().lastPathComponent)
+        let job = InstallJob(name: source.deletingPathExtension().lastPathComponent, device: emulator.instance.id)
         job.retry = { [weak job, weak emulator, weak window] in
             guard let emulator else { return }
             job?.dismiss()
@@ -168,6 +185,7 @@ enum AppInstaller {
         jobs.append(job)
         rows.add(job)
         NotificationCenter.default.post(name: .ltmInstallStarted, object: job)
+        let readyQueue = queue(for: emulator.instance.id)
         job.task = Task {
             var acquired = false
             defer {
@@ -223,7 +241,7 @@ enum AppInstaller {
     @discardableResult
     static func startCatalog(_ app: CatalogApp, with emulator: EmulatorController,
                              presenting window: NSWindow?) -> InstallJob {
-        let job = InstallJob(name: app.name)
+        let job = InstallJob(name: app.name, device: emulator.instance.id)
         job.retry = { [weak job, weak emulator, weak window] in
             guard let emulator else { return }
             job?.dismiss()
@@ -267,7 +285,7 @@ enum AppInstaller {
                 }
             }
             do {
-                let ipa = try await CatalogClient.download(app) { fraction in
+                let ipa = try await CatalogClient.download(app, deviceOS: emulator.iosVersion, arch: emulator.guestArch) { fraction in
                     guard !job.isFinished, !job.isCancelled, job.downloadProgress != nil else { return }
                     let percent = fraction < 0 ? -1 : Int(fraction * 100)
                     let previousPercent = job.downloadProgress.map { $0 < 0 ? -1 : Int($0 * 100) }
@@ -302,7 +320,7 @@ enum AppInstaller {
         job.isFinished = true
         job.finishedAt = Date()
         job.downloadProgress = nil
-        NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+        NotificationCenter.default.post(name: .ltmAppsChanged, object: job.deviceID)
     }
 
     /// Queue when bytes are ready, not when the app was selected.
@@ -310,6 +328,7 @@ enum AppInstaller {
                                 with emulator: EmulatorController,
                                 presenting window: NSWindow?,
                                 placeholderRaised: Bool = false) async {
+        let readyQueue = queue(for: emulator.instance.id)
         if readyQueue.isBusy || readyQueue.isPaused {
             job.status = readyQueue.isPaused ? "Paused" : "Waiting for device…"
             NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
@@ -330,7 +349,7 @@ enum AppInstaller {
                     NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                 }
             }
-            // Only when the app's own MinimumOSVersion is above 3.1.3 —
+            // Only when the app's own MinimumOSVersion is above the device's —
             // the version iPhone OS actually enforces. (Gating on the SDK
             // it was BUILT with fired on most of a 2009-era library and
             // taught people to click straight through this.)
@@ -343,9 +362,10 @@ enum AppInstaller {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
                 alert.messageText = "“\(job.name)” installed, but may not launch"
-                alert.informativeText = "It requires a newer version of iOS than 3.1.3, "
-                    + "and iPhone OS refuses to launch such apps. "
-                    + "Look for a version of this app built for iOS 3 or earlier."
+                let version = emulator.iosVersion
+                alert.informativeText = "It requires a newer version of iOS than \(version), "
+                    + "and iOS refuses to launch such apps. "
+                    + "Look for a version of this app built for iOS \(version.split(separator: ".").first ?? "3") or earlier."
                 if let window { alert.beginSheetModal(for: window) { _ in } }
                 else { alert.runModal() }
             }
@@ -370,14 +390,14 @@ enum AppInstaller {
                        willRemove: @escaping (InstalledApp) -> Void,
                        didRemove: @escaping (InstalledApp) -> Void,
                        didFinish: @escaping () -> Void) {
-        let id = UUID()
-        removals[id] = Task {
+        let id = UUID(), device = emulator.instance.id, readyQueue = queue(for: device)
+        removals[id] = (device, Task {
             var acquired = false
             defer {
                 if acquired { readyQueue.release() }
                 removals[id] = nil
                 didFinish()
-                NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+                NotificationCenter.default.post(name: .ltmAppsChanged, object: device)
             }
             do {
                 try await readyQueue.acquire()
@@ -397,17 +417,18 @@ enum AppInstaller {
                 pauseIfNeeded(error, with: emulator)
                 presentError(error, in: window)
             }
-        }
+        })
     }
 
-    /// Every queued device mutation shares this policy: an unavailable guest
-    /// must not receive another write immediately after a failed removal.
+    /// Every queued mutation of one device shares this policy: an unavailable
+    /// guest must not receive another write immediately after a failed removal.
     private static func pauseIfNeeded(_ error: Error, with emulator: EmulatorController,
                                       excluding failedJob: InstallJob? = nil) {
         guard let deviceError = error as? DeviceError, deviceError.shouldPauseInstallQueue else { return }
-        readyQueue.pause()
+        let device = emulator.instance.id
+        queue(for: device).pause()
         emulator.reportConnectionFailure(error, operation: "Transfer interrupted")
-        for waiting in jobs where waiting !== failedJob && waiting.downloadProgress == nil {
+        for waiting in jobs where waiting.deviceID == device && waiting !== failedJob && waiting.downloadProgress == nil {
             waiting.status = "Paused"
             NotificationCenter.default.post(name: .ltmInstallProgress, object: waiting)
         }
@@ -659,7 +680,7 @@ final class AppsInspectorViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         let nc = NotificationCenter.default
-        nc.addObserver(self, selector: #selector(appsChanged), name: .ltmAppsChanged, object: nil)
+        nc.addObserver(self, selector: #selector(appsChanged(_:)), name: .ltmAppsChanged, object: nil)
         nc.addObserver(self, selector: #selector(installStarted(_:)), name: .ltmInstallStarted, object: nil)
         nc.addObserver(self, selector: #selector(installProgressed(_:)), name: .ltmInstallProgress, object: nil)
         nc.addObserver(self, selector: #selector(refreshIconDimming), name: NSApplication.didBecomeActiveNotification, object: nil)
@@ -727,8 +748,9 @@ final class AppsInspectorViewController: NSViewController {
                 // After that this is only a BACKSTOP: notification_proxy pushes
                 // install/uninstall the moment they happen, so the poll exists
                 // for what the guest never publishes (icon reordering) and for
-                // a dropped session, neither of which needs a 3 s cadence.
-                try? await Task.sleep(for: .seconds(self.haveLoaded ? 15 : 1))
+                // a dropped session, neither of which needs a 3 s cadence. An
+                // unactivated guest refuses every service: nothing to press for.
+                try? await Task.sleep(for: .seconds(self.haveLoaded || self.emulator.connectionIssue?.persistent == true ? 15 : 1))
             }
         }
     }
@@ -859,7 +881,8 @@ final class AppsInspectorViewController: NSViewController {
         tableView.selectRowIndexes(indexes, byExtendingSelection: false)
     }
 
-    @objc private func appsChanged() {
+    @objc private func appsChanged(_ note: Notification) {
+        if let device = note.object as? UUID, device != emulator.instance.id { return }
         prunePending()
         // Reload NOW, not from loadOnce: its failure path doesn't touch the
         // table, and an install that failed because the device died is exactly
@@ -872,7 +895,7 @@ final class AppsInspectorViewController: NSViewController {
     }
 
     @objc private func installStarted(_ note: Notification) {
-        guard let job = note.object as? InstallJob else { return }
+        guard let job = note.object as? InstallJob, job.deviceID == emulator.instance.id else { return }
         pending.append(job)
         // Files dropped on the canvas have no Store row to carry their
         // progress. Reveal the accepted transfer immediately, even when the
@@ -889,7 +912,7 @@ final class AppsInspectorViewController: NSViewController {
     }
 
     @objc private func installProgressed(_ note: Notification) {
-        guard note.object is InstallJob else { return }
+        guard let job = note.object as? InstallJob, job.deviceID == emulator.instance.id else { return }
         reloadTablePreservingSelection()
         updateButtons()
     }
@@ -1002,13 +1025,13 @@ final class AppsInspectorViewController: NSViewController {
         let emulator = self.emulator
         watcher.start(attachAllowed: {
             await MainActor.run {
-                emulator.isRunning && !emulator.preparingMedia && emulator.usbConnected && !AppInstaller.isUsingDevice
+                emulator.isRunning && !emulator.preparingMedia && emulator.usbConnected && !AppInstaller.isUsingDevice(emulator.instance.id)
                     && !emulator.isInstalling && !emulator.hasFileTransfer && !emulator.isReconnecting
             }
         }) {
             // Off the library's callback thread and onto ours.
             Task { @MainActor in
-                NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+                NotificationCenter.default.post(name: .ltmAppsChanged, object: emulator.instance.id)
             }
         }
     }
@@ -1093,7 +1116,7 @@ final class AppsInspectorViewController: NSViewController {
     }
 
     /// Network downloads and waiting rows do not hold a device session.
-    private var installing: Bool { AppInstaller.isUsingDevice || emulator.isInstalling }
+    private var installing: Bool { AppInstaller.isUsingDevice(emulator.instance.id) || emulator.isInstalling }
 
     /// Apps with an uninstall in flight. Without this the row stayed, the
     /// buttons stayed live, and nothing said anything for up to two minutes —
@@ -1108,7 +1131,7 @@ final class AppsInspectorViewController: NSViewController {
 
     private func removalStatus(for bundleID: String) -> String {
         if removingApp == bundleID { return "Removing…" }
-        return AppInstaller.isPaused ? "Removal paused" : "Waiting to remove…"
+        return AppInstaller.isPaused(emulator.instance.id) ? "Removal paused" : "Waiting to remove…"
     }
 
     /// Any device operation of ours in flight.
@@ -1122,8 +1145,8 @@ final class AppsInspectorViewController: NSViewController {
     private func updateButtons() {
         // A cached list can outlive the connection. Match the removal action's
         // reachability gate so stale rows never advertise a usable Uninstall.
-        resumeButton.isHidden = !AppInstaller.isPaused
-        if AppInstaller.isPaused {
+        resumeButton.isHidden = !AppInstaller.isPaused(emulator.instance.id)
+        if AppInstaller.isPaused(emulator.instance.id) {
             banner.stringValue = "Transfers paused"
             banner.isHidden = false
             bannerHeight?.constant = 28
@@ -1250,7 +1273,7 @@ final class AppsInspectorViewController: NSViewController {
                 return
             }
             emulator.deviceReachable = true
-            AppInstaller.resume()
+            AppInstaller.resume(emulator.instance.id)
             hideStaleBanner()
             reloadTablePreservingSelection()
             updateButtons()
@@ -1471,7 +1494,8 @@ final class AppsInspectorViewController: NSViewController {
             guard let self else { return false }
             return self.emulator.canQueueInstall && self.catalogJob(for: app)?.isFinished != false
         }
-        let sheet = CatalogDetailsViewController(app: app, canInstall: canInstall) { [weak self] copy in
+        let sheet = CatalogDetailsViewController(app: app, deviceOS: emulator.iosVersion, arch: emulator.guestArch,
+                                                 canInstall: canInstall) { [weak self] copy in
             guard let self, canInstall() else { return }
             AppInstaller.startCatalog(copy, with: self.emulator, presenting: self.view.window)
         }
@@ -1547,7 +1571,7 @@ extension AppsInspectorViewController: NSMenuDelegate {
     }
 
     private func appendAppActions(to menu: NSMenu, row: Int) {
-        if AppInstaller.isPaused {
+        if AppInstaller.isPaused(emulator.instance.id) {
             menu.addItem(withTitle: "Resume Transfers", action: #selector(resumeInstallsClicked(_:)),
                          keyEquivalent: "").target = self
             menu.addItem(.separator())
@@ -2034,7 +2058,7 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         let action = InlineActionButton(title: job?.failed == true ? "Retry" : job?.status == "Paused" ? "Resume" : "Cancel") { [weak self, weak job] in
             guard let job else { return }
             if job.failed { job.retry?() }
-            else if AppInstaller.isPaused { self?.resumeInstallsClicked(nil) }
+            else if AppInstaller.isPaused(job.deviceID) { self?.resumeInstallsClicked(nil) }
             else { job.cancel() }
         }
         action.isHidden = job == nil

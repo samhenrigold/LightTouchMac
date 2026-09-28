@@ -3,13 +3,12 @@
 
 Reuses the qemu-ios harness (tests/ipod/regress.py) for the boot/device
 machinery and adds the checks that are specific to the app's stability work:
-env parity with the harness, and the snapshot save/restore round trip that
-Phase 4/5 depend on — including the negative case that a bad snapshot is
-detectable rather than silently "working" (the app quarantines it; here we
-prove the mechanism it keys on).
+env parity with the harness. (The snapshot round trip went with the app's
+quit-with-resume feature; the helper's snapshot ops are covered by
+tests/check-helper-boot.py's restore case.)
 
     scripts/regress_app.py                 # all checks
-    scripts/regress_app.py --checks env    # just the fast, device-free ones
+    scripts/regress_app.py --checks env    # the fast, device-free ones
 
 Needs the qemu-ios checkout and its images; run locally / pre-release, not per-PR.
 """
@@ -156,128 +155,9 @@ def check_env_parity():
           else f"DRIFT (app, harness): {drift}")
 
 
-# --------------------------------------------------------------------------
-# snapshot round trip (harness-level, validates the exact qmp mechanism)
-# --------------------------------------------------------------------------
-
-def make_cfg(out):
-    class Cfg: pass
-    c = Cfg()
-    c.files = os.path.expanduser("~/Developer/qemu-ios-files")
-    c.base_nand = os.path.join(c.files, "nand-current")
-    if not os.path.exists(c.base_nand):
-        c.base_nand = os.path.join(c.files, "nand-appsync3")
-    c.nor = os.path.join(c.files, "ios3", "nor_7E18.bin")
-    c.qemu = os.environ.get("QEMU", os.path.join(QEMU_IOS, "build-min12b", "qemu-system-arm"))
-    c.cpu = None; c.mem = "128M"; c.out = out
-    c.overlay = os.path.join(out, "overlay"); os.makedirs(c.overlay, exist_ok=True)
-    c.usbmuxd = os.path.expanduser("~/Developer/usbmuxd-qemu/usbmuxd/src/usbmuxd")
-    c.usbmuxd_ok = False   # snapshot checks don't need USB
-    c.wifi = False
-    c.usb_port = R.free_port(1541, 1549)
-    c.mux_port = R.free_port(27341, 27349)
-    c.qmp_port = R.free_port(28041, 28049)
-    c.proxy_lo, c.proxy_hi = 28141, 28159
-    return c
-
-
-def boot(cfg, procs, tag, incoming=None):
-    """Boot via the harness Device, optionally restoring from a snapshot.
-
-    Device.start() has no -incoming hook, so for a restore we spawn qemu here
-    with the same argv shape plus -incoming, and hand back a QMP client.
-    """
-    if incoming is None:
-        dev = R.Device(cfg, procs, tag)
-        dev.start()
-        return dev
-    # Restore path: same machine string as Device.start, plus -incoming.
-    machine = ("iPod-Touch,bootrom=%s/bootrom_240_4,nand=%s,nor=%s,nandrw=%s"
-               % (cfg.files, cfg.base_nand, cfg.nor, cfg.overlay))
-    qmp_port = R.free_port(28041, 28049)
-    serial = os.path.join(cfg.out, f"{tag}-serial.log")
-    argv = [cfg.qemu, "-M", machine, "-m", cfg.mem, "-display", "none",
-            "-audio", "driver=none", "-serial", "file:" + serial,
-            "-qmp", "tcp:127.0.0.1:%d,server=on,wait=off" % qmp_port,
-            "-incoming", "file:" + incoming]
-    proc = procs.spawn(argv, os.path.join(cfg.out, f"{tag}-qemu.log"), env=R.boot_env(cfg))
-
-    class Restored:
-        def __init__(self):
-            self.qmp = R.QMP(qmp_port, timeout=180)
-            self.dir = cfg.out
-            self.tag = tag
-            self.proc = proc
-        def alive(self): return proc.poll() is None
-        def wait_for_home(self, timeout): return R.Device.wait_for_home(self, timeout)
-    return Restored()
-
-
-def check_snapshot_roundtrip():
-    out = os.path.join("/tmp", "ltm-snap-%d" % os.getpid())
-    os.makedirs(out, exist_ok=True)
-    cfg = make_cfg(out)
-    procs = R.Procs()
-    snapshot = os.path.join(out, "snap.migrate")
-    try:
-        dev = boot(cfg, procs, "boot1")
-        ok, detail, _ = dev.wait_for_home(900)
-        if not check("snap-boot", ok, detail):
-            return
-        # Save exactly as the app's bottom half does: stop + migrate file:.
-        dev.qmp.cmd("stop")
-        dev.qmp.cmd("migrate", uri="file:" + snapshot)
-        for _ in range(60):
-            info = dev.qmp.cmd("query-migrate")
-            if info.get("status") == "completed":
-                break
-            time.sleep(0.5)
-        migrated = (info.get("status") == "completed" and
-                    os.path.exists(snapshot) and os.path.getsize(snapshot) > 0)
-        if not check("snap-save", migrated,
-                     f"status={info.get('status')}, {os.path.getsize(snapshot) if migrated else 0} bytes"):
-            return
-        procs.stop(dev.proc if hasattr(dev, "proc") else dev.qemu)
-
-        # Restore: -incoming, and assert it comes alive FAST (restored, not cold).
-        t0 = time.time()
-        r = boot(cfg, procs, "restore", incoming=snapshot)
-        ok, detail, _ = r.wait_for_home(120)
-        dt = time.time() - t0
-        check("snap-restore", ok and dt < 60,
-              f"home in {dt:.0f}s (restored)" if ok else f"restore failed: {detail}")
-
-        # Negative: a truncated snapshot must be DETECTABLE — the app keys its
-        # quarantine on exactly this, so a bad snapshot can never silently loop.
-        # A bad -incoming makes qemu exit almost immediately (so QMP never even
-        # accepts a connection); that early exit IS the detection. Spawn qemu
-        # directly and assert it dies rather than reaching a live home screen.
-        bad = os.path.join(out, "bad.migrate")
-        with open(snapshot, "rb") as f, open(bad, "wb") as g:
-            g.write(f.read(4096))   # header only — not a valid stream
-        machine = ("iPod-Touch,bootrom=%s/bootrom_240_4,nand=%s,nor=%s,nandrw=%s"
-                   % (cfg.files, cfg.base_nand, cfg.nor, cfg.overlay))
-        argv = [cfg.qemu, "-M", machine, "-m", cfg.mem, "-display", "none",
-                "-audio", "driver=none",
-                "-serial", "file:" + os.path.join(out, "badrestore-serial.log"),
-                "-incoming", "file:" + bad]
-        bp = procs.spawn(argv, os.path.join(out, "badrestore-qemu.log"), env=R.boot_env(cfg))
-        exited = False
-        for _ in range(45):
-            if bp.poll() is not None:
-                exited = True
-                break
-            time.sleep(1)
-        check("snap-bad-detected", exited,
-              "truncated snapshot makes qemu exit (quarantinable — no silent loop)"
-              if exited else "BAD: qemu stayed up on a truncated snapshot")
-    finally:
-        procs.stop_all()
-
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--checks", default="env,snapshot")
+    ap.add_argument("--checks", default="env")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
     if args.self_test:
@@ -287,8 +167,6 @@ def main():
     print("LightTouchMac app regression")
     if "env" in selected:
         check_env_parity()
-    if "snapshot" in selected:
-        check_snapshot_roundtrip()
     print("=" * 50)
     if FAILURES:
         print("FAILED:", ", ".join(FAILURES))

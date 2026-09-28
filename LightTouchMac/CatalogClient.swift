@@ -136,14 +136,14 @@ enum CatalogClient {
 
     /// Revalidate each selection, then let URLSession stream the transfer to disk.
     /// A failed or cancelled transfer owns no permanent scratch directory.
-    static func download(_ app: CatalogApp,
+    static func download(_ app: CatalogApp, deviceOS: String = "3.1.3", arch: String = "armv6",
                          progress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> URL {
         let current = try await compatibleCopy(app.ipaID)
         let details = try await copyDetails(app.ipaID)
         guard current.bundleID == app.bundleID, details.bundle_id == current.bundleID else {
             throw CatalogError.invalidCopy("The archived copy no longer matches this app.")
         }
-        if let reason = details.unavailableReason(minimumOS: current.minOS) {
+        if let reason = details.unavailableReason(minimumOS: current.minOS, deviceOS: deviceOS, arch: arch) {
             throw CatalogError.invalidCopy(reason)
         }
         let delegate = CatalogDownloadProgress(report: progress)

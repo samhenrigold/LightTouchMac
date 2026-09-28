@@ -19,14 +19,16 @@ selectors.update(re.findall(r'#selector\((\w+)\(',validation))
 selectors.discard('toggleDevicePause')
 stubs='\n'.join('@objc func '+name+'(_ sender:Any?) {}' for name in sorted(selectors))
 source=r'''import Cocoa
+struct Instance { let id=UUID() }
 @MainActor final class Emulator {
  var isPaused=false,isRunning=true,isInstalling=false,acceptsInput=true,isSleeping=false
+ let instance=Instance()
  var batteryLevel:Int?=nil,batteryCharging:Int32=0,highPowerUSB=true,canChooseUSBCharger=false
  var compassHeading:Int?=nil,hasCompass=false
  func pause(){isPaused=true;isRunning=false}
  func resume(){isPaused=false;isRunning=true}
 }
-@MainActor enum AppInstaller { static var hasPendingWork=false }
+@MainActor enum AppInstaller { static var hasPendingWork=false; static func hasPendingWork(for id:UUID)->Bool {hasPendingWork} }
 @MainActor final class AppDelegate:NSObject { @objc func toggleAutomaticRotation(_ sender:Any?) {}
  @objc func toggleInternetAccess(_ sender:Any?) {}
  @objc func showHelp(_ sender:Any?) {}

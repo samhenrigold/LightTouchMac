@@ -5,6 +5,7 @@ import CryptoKit
 /// Disk operations shared by the controller and the device-free regression check.
 nonisolated enum DeviceStateStorage {
     /// Only call after the native VM has exited and released its files.
+    /// `snapshots`: saved-state files older builds wrote (and their .meta), swept with the overlay.
     /// `owner` is the device being erased; every path must pass checkRemovable.
     static func erase(overlay: URL, snapshots: [URL], legacyMarker: URL, state: URL, owner: UUID?) throws {
         let fm = FileManager.default
@@ -58,21 +59,37 @@ nonisolated enum DeviceStateStorage {
     }
 
     /// Removes a tree even where a preparer made it read-only (the NAND is
-    /// chmod a-w): on a refusal every directory in it is made writable, then
-    /// the removal is tried once more and its error thrown.
+    /// chmod a-w) or lockBase made it immutable: on a refusal every directory
+    /// in it is unlocked and made writable, then the removal is tried once
+    /// more and its error thrown.
     static func removeTree(_ url: URL) throws {
         let fm = FileManager.default
         guard (try? fm.attributesOfItem(atPath: url.path)) != nil else { return }
         if (try? fm.removeItem(at: url)) != nil { return }
+        for directory in directories(under: url) {
+            chflags(directory.path, 0)
+            chmod(directory.path, 0o700)
+        }
+        try fm.removeItem(at: url)
+    }
+
+    /// `url` and every directory below it (symlinks not followed).
+    private static func directories(under url: URL) -> [URL] {
         var directories = [url]
-        if let walk = fm.enumerator(at: url, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
+        if let walk = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
             for case let item as URL in walk {
                 let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 if values?.isDirectory == true, values?.isSymbolicLink != true { directories.append(item) }
             }
         }
-        for directory in directories { chmod(directory.path, 0o700) }
-        try fm.removeItem(at: url)
+        return directories
+    }
+
+    /// A published base is immutable (chflags uchg on it and every directory
+    /// in it): the Finder refuses to delete, rename or add to it with a system
+    /// dialog, and nothing here writes into it. Idempotent; removeTree undoes it.
+    static func lockBase(_ base: URL) {
+        for directory in directories(under: base) { chflags(directory.path, UInt32(UF_IMMUTABLE)) }
     }
 
     /// Delete Device: Devices/<uuid> is renamed to Devices/.deleting-<uuid>
@@ -127,18 +144,6 @@ nonisolated enum DeviceStateStorage {
         return destination
     }
 
-    struct SnapshotIdentity: Codable, Equatable {
-        let emulatorBuild: String
-        let nand: String
-    }
-
-    private struct SnapshotMetadata: Codable {
-        let version: Int
-        let identity: SnapshotIdentity
-        let fileNumber: UInt64
-        let size: UInt64
-    }
-
     /// Packed images use their content manifest. Development images also record
     /// every page's identity/mtime so rebaking a directory invalidates old RAM.
     static func developmentImageIdentity(at root: URL, key: String) throws -> String {
@@ -180,67 +185,6 @@ nonisolated enum DeviceStateStorage {
             return true
         }
         return (try? String(contentsOf: stamp, encoding: .utf8)) == identity
-    }
-
-    private static func snapshotAttributes(_ url: URL) throws -> (number: UInt64, size: UInt64) {
-        let values = try FileManager.default.attributesOfItem(atPath: url.path)
-        guard let number = values[.systemFileNumber] as? NSNumber,
-              let size = values[.size] as? NSNumber, size.uint64Value > 0 else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        return (number.uint64Value, size.uint64Value)
-    }
-
-    static func promoteSnapshot(from temporary: URL, to saved: URL,
-                                identity: SnapshotIdentity) throws {
-        let attributes = try snapshotAttributes(temporary)
-        // Saved RAM is recreatable (a cold boot): keep it out of backups.
-        var excluded = URLResourceValues()
-        excluded.isExcludedFromBackup = true
-        var file = temporary
-        try? file.setResourceValues(excluded)
-        let metadata = SnapshotMetadata(version: 1, identity: identity,
-                                        fileNumber: attributes.number, size: attributes.size)
-        let stagedMetadata = temporary.appendingPathExtension("meta")
-        defer { try? FileManager.default.removeItem(at: stagedMetadata) }
-        try JSONEncoder().encode(metadata).write(to: stagedMetadata, options: .atomic)
-        // If a crash separates the renames, the metadata's inode/size will not
-        // match the snapshot. Restore rejects the pair instead of guessing.
-        guard rename(temporary.path, saved.path) == 0,
-              rename(stagedMetadata.path, saved.appendingPathExtension("meta").path) == 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-        }
-    }
-
-    static func snapshotMatches(_ saved: URL, identity: SnapshotIdentity) -> Bool {
-        guard let data = try? Data(contentsOf: saved.appendingPathExtension("meta")),
-              let metadata = try? JSONDecoder().decode(SnapshotMetadata.self, from: data),
-              let attributes = try? snapshotAttributes(saved) else { return false }
-        return metadata.version == 1 && metadata.identity == identity
-            && metadata.fileNumber == attributes.number && metadata.size == attributes.size
-    }
-
-    static func overlayIsNewer(_ overlay: URL, than snapshot: URL) -> Bool {
-        let fm = FileManager.default
-        do {
-            func modified(_ url: URL) throws -> Date {
-                guard let date = try fm.attributesOfItem(atPath: url.path)[.modificationDate] as? Date else {
-                    throw CocoaError(.fileReadCorruptFile)
-                }
-                return date
-            }
-            let saved = try modified(snapshot)
-            if try modified(overlay) > saved { return true }
-            // FMSS atomically renames each page into its cs directory, updating
-            // that directory's mtime even when replacing an existing page.
-            for child in try fm.contentsOfDirectory(at: overlay, includingPropertiesForKeys: nil) {
-                if try modified(child) > saved { return true }
-            }
-            return false
-        } catch {
-            // Missing/unreadable metadata cannot establish a coherent pair.
-            return true
-        }
     }
 
     struct PackedImage: Codable, Equatable {

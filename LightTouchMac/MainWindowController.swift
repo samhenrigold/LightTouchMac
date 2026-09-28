@@ -377,9 +377,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .cancel: FirmwareJobs.shared.cancel(entry)
         case .erase: erase(entry)
         case .showInFinder:
-            // An adopted device lives under its legacy names in the state root, not in Devices/<uuid>.
+            // Every device has its Devices/<uuid> (an adopted one keeps its record, work and IPAs there).
             if let instance = host.instance(for: entry) {
-                NSWorkspace.shared.activateFileViewerSelecting([instance.legacy != nil ? Bundled.stateDirectory : instance.paths.directory])
+                NSWorkspace.shared.activateFileViewerSelecting([instance.paths.directory])
             }
         case .delete: confirmDelete(entry)
         }
@@ -943,26 +943,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
-    @objc func saveStateNow(_ sender: Any?) { emulator?.saveSnapshotNow() }
-
-    @objc func discardSavedState(_ sender: Any?) {
-        guard let window, let emulator else { return }
-        let alert = NSAlert()
-        alert.messageText = "Discard the saved state?"
-        alert.informativeText = "This removes the saved memory state. Apps and data stored on the device are kept."
-        alert.addButton(withTitle: "Discard")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons[0].hasDestructiveAction = true
-        alert.buttons[0].keyEquivalent = ""
-        alert.buttons[1].keyEquivalent = "\r"
-        alert.beginSheetModal(for: window) { response in
-            if response == .alertFirstButtonReturn { emulator.discardSavedStateByUser() }
-        }
-    }
-
     /// Factory-reset the device — the "nuke everything" button. Wipes the NAND
-    /// overlay (all installed apps + settings) and any snapshot, back to the
-    /// base image; a running device then restarts. The base image is never touched.
+    /// overlay (all installed apps + settings), back to the base image; a
+    /// running device then restarts. The base image is never touched.
     @objc func eraseDevice(_ sender: Any?) { selectedEntry.map { perform(.erase, for: $0) } }
 
     /// For a device that isn't running, a controller that never starts does
@@ -973,7 +956,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.alertStyle = .critical
         alert.messageText = "Erase all content and settings?"
         alert.informativeText = "This permanently removes all apps, settings, and saved state from this \(emulator.profile.shortName). "
-            + (AppInstaller.hasPendingWork ? "Installs in progress are cancelled. " : "")
+            + (AppInstaller.hasPendingWork(for: emulator.instance.id) ? "Installs in progress are cancelled. " : "")
             + (host.session(for: entry) != nil ? "It restarts after erasing. " : "")
             + "This cannot be undone."
         alert.addButton(withTitle: "Erase")
@@ -1751,7 +1734,7 @@ extension MainWindowController: NSMenuItemValidation {
             return emulator.acceptsInput
         case #selector(toggleDevicePause(_:)):
             menuItem.title = emulator.isPaused ? "Resume" : "Pause"
-            return (emulator.isRunning || emulator.isPaused) && !emulator.isInstalling && !AppInstaller.hasPendingWork
+            return (emulator.isRunning || emulator.isPaused) && !emulator.isInstalling && !AppInstaller.hasPendingWork(for: emulator.instance.id)
         case #selector(configureWebProxy(_:)):
             return emulator.webProxyAvailable
         case #selector(toggleKeyboardInput(_:)):
@@ -1768,8 +1751,6 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(restartWithLatestGuestTools(_:)):
             menuItem.isHidden = !emulator.canRestart(with: .latest)
             return emulator.canRestart(with: .latest)
-        case #selector(saveStateNow(_:)): return emulator.isRunning
-        case #selector(discardSavedState(_:)): return emulator.hasSavedState
         case #selector(toggleTouchOverlay(_:)):
             menuItem.title = deviceVC.screen.showsTouches ? "Hide Finger Dots" : "Show Finger Dots"
             return true

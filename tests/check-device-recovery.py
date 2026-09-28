@@ -17,13 +17,15 @@ struct FakeLink {}
 nonisolated func logEvent(_ message:String){}
 nonisolated enum AbandonedWork {static let count=0}
 extension Notification.Name {static let ltmAppsChanged=Self("apps")}
-@MainActor enum AppInstaller {static var isUsingDevice=false}
+@MainActor enum AppInstaller {static var isUsingDevice=false; static func isUsingDevice(_ id:UUID)->Bool {isUsingDevice}}
 @MainActor enum DeviceTools {
  static var recoveries=0
  static func reconnectManagementService(agent: FakeLink?, cache: Int) async throws -> Bool {recoveries+=1;return true}
 }
+struct Instance { let id=UUID() }
 @MainActor final class Controller {
  let profile = DeviceProfile.iPodTouch2G
+ let instance=Instance()
  var isRunning=true,isInstalling=false,hasFileTransfer=false,preparingMedia=false
  var usbConnected=true
  var link:FakeLink?=FakeLink()

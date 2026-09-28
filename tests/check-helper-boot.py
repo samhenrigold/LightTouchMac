@@ -14,6 +14,9 @@ status block, frame ring, framed link). Cases:
   restore    -incoming the second snapshot: lit, tap Settings, Home; then SIGKILL the
              helper: the client notices (invalidated + terminated)
   ipad-orphan  fresh overlay, lit, parent SIGKILLed: hard halt (NAND synced), helper exits
+  meddle     iPod, lit, the app's DeviceFileWatch on its overlay; the overlay's NOR is unlinked
+             under the running helper: the watch reports it (the app's notice), then SIGTERM
+             halts the helper, which exits (the flush lands in the dead inode, harmlessly)
   oneshot    --oneshot: an iPad boot stopped at FTL_Open [OK] (stopPattern, newlines removed)
   headless   --headless: an iPod boot to a lit lock screen, dump, quit
 
@@ -62,6 +65,7 @@ def build(args, out):
     subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)
     subprocess.run(["swiftc", "-O", "-swift-version", "5", "-I", ROOT / "Shared/CLink", out / "ltm_link.o",
                     *sorted((ROOT / "Shared").glob("*.swift")), ROOT / "LightTouchDevice/FrameTools.swift",
+                    ROOT / "LightTouchMac/DeviceFileWatch.swift",
                     ROOT / "tests/helper-driver/main.swift", "-o", out / "helper-driver"], check=True)
     if args.helper:
         return Path(args.helper)
@@ -182,7 +186,7 @@ def main():
     ap.add_argument("--work", type=Path)
     ap.add_argument("--only")
     args = ap.parse_args()
-    cases = ["reject", "lease", "ipod", "ipad", "restore", "ipad-orphan", "oneshot", "headless"]
+    cases = ["reject", "lease", "ipod", "ipad", "restore", "ipad-orphan", "oneshot", "headless", "meddle"]
     if args.only:
         cases = [c for c in cases if c in args.only.split(",")]
     if not args.ipad_device:
@@ -294,6 +298,30 @@ def main():
             out, _ = p.communicate(timeout=150)
             result = json.loads(out.strip().splitlines()[-1]) if out.strip() else {}
             check(p.returncode == 0 and result.get("marker"), f"stopped at the serial marker after {result.get('seconds', 0):.1f} s", "oneshot", results)
+
+        if "meddle" in cases:
+            print("meddle", flush=True)
+            ovl = work / "meddle/overlay"
+            d = Driver(args, bin_dir, helper, work, "meddle", {"machine": "iPod-Touch", "boot": ipod_boot(files, ovl),
+                       "steps": ["boot", "lit 0.03 240", "wait 3", f"watch {ovl}", "hold"]})
+            hold = d.wait_event("hold", 400)
+            if check(hold, "lit and holding with the overlay watched", "meddle", results):
+                helper = hold["helperPid"]
+                started.append(helper)
+                check((d.find("watching") or [{}])[0].get("count", 0) >= 2, "the watch covers the overlay and its files", "meddle", results)
+                (ovl / "nor.bin").unlink()   # the writable NOR QEMU has open
+                m = d.wait_event("meddled", 5)
+                check(m and m["path"].endswith("nor.bin") and m["notice"] == "Files of this iPod were changed while it was running. Stop and start it again; unsaved changes may be lost.",
+                      f"the watch reported {m and m['path']} with the app's notice", "meddle", results)
+                check(alive(helper) and d.p.poll() is None, "the helper and guest kept running on the unlinked inode", "meddle", results)
+                os.kill(helper, signal.SIGTERM)
+                gone = wait_gone(helper, 15)
+                check(gone is not None, f"SIGTERM: the helper exited {gone:.1f} s later" if gone else "SIGTERM: the helper exited", "meddle", results)
+                check("halt:" in d.log.read_text(errors="replace"), "the helper logged its halt", "meddle", results)
+                os.kill(d.p.pid, signal.SIGKILL)
+                d.p.wait()
+            else:
+                print(d.tail())
 
         if "headless" in cases:
             print("headless", flush=True)

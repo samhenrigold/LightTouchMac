@@ -43,7 +43,7 @@ final class EmulatorController {
         webProxyStatus = .waiting
         onStatusChange?()
     }
-    enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff, lowSpace }
+    enum NoticeOperation: String { case storage, preparation, erase, powerOff, lowSpace, activation, files }
     private(set) lazy var deviceNotice = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["message"] as? String
     private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
@@ -58,8 +58,10 @@ final class EmulatorController {
         onStatusChange?()
     }
     /// The notice's remedy is Erase All Content and Settings (a refused
-    /// overlay, an unfinished or failed erase).
-    var deviceNoticeOffersErase: Bool { noticeOperation == NoticeOperation.erase.rawValue && !storageFailed }
+    /// overlay, an unfinished or failed erase, an unactivated guest).
+    var deviceNoticeOffersErase: Bool {
+        [NoticeOperation.erase.rawValue, NoticeOperation.activation.rawValue].contains(noticeOperation) && !storageFailed
+    }
     /// Boot refused: the overlay belongs to a different base image.
     private(set) var baseImageMismatch = false
 
@@ -94,7 +96,7 @@ final class EmulatorController {
     /// `.dead` is the one that used to be invisible — QEMU would exit and the
     /// app kept a frozen frame with every control live.
     enum VMState: Equatable {
-        case notStarted, booting, running, paused, snapshotting, poweredOff
+        case notStarted, booting, running, paused, poweredOff
         case dead(exitCode: Int32?)
     }
     private(set) var state: VMState = .notStarted {
@@ -109,9 +111,14 @@ final class EmulatorController {
     /// Set by the inspector's poll: nil = never checked, true/false = last read.
     var deviceReachable: Bool? {
         didSet {
-            if deviceReachable == true { connectionIssue = nil }
+            if deviceReachable == true, connectionIssue?.persistent != true { connectionIssue = nil }
+            if deviceReachable == true, reachableSince == nil {
+                reachableSince = Date()
+                startFileWatch()   // iOS is up: every file the helper depends on exists now
+            }
             if oldValue != deviceReachable { onStatusChange?() }
             considerConnectionRecovery()
+            checkActivationIfNeeded()
             // Clean abandoned uploads when the guest first answers. The sweep
             // excludes this process’s session-tagged uploads even if it runs late.
             if deviceReachable == true, !didSweepStaging {
@@ -127,6 +134,8 @@ final class EmulatorController {
 
     func reportConnectionFailure(_ error: Error, operation: String) {
         guard let issue = DeviceConnectionIssue(error: error, operation: operation, profile: profile) else { return }
+        // An unactivated guest stays that way for the boot; a transient failure doesn't replace the message.
+        if connectionIssue?.persistent == true, !issue.persistent { return }
         if connectionIssue != issue {
             logEvent("device connection: \(issue.detail); USB=\(usbConnected), agent=\(liveAgentStatus), blocked requests=\(AbandonedWork.count)")
         }
@@ -154,7 +163,7 @@ final class EmulatorController {
               connectionIssue?.reconnectManagement == true else { return }
         connectionFailures += 1
         guard connectionFailures >= 2, connectionRecoveryTask == nil,
-              !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice, liveAgentStatus == 1,
+              !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice(instance.id), liveAgentStatus == 1,
               Date().timeIntervalSince(lastConnectionRecovery) >= 60 else { return }
         lastConnectionRecovery = Date()
         connectionFailures = 0
@@ -163,12 +172,12 @@ final class EmulatorController {
             guard let self else { return }
             defer { connectionRecoveryTask = nil; isReconnecting = false }
             do {
-                guard isRunning, !preparingMedia, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice else { return }
+                guard isRunning, !preparingMedia, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice(instance.id) else { return }
                 if try await DeviceTools.reconnectManagementService(agent: link, cache: agentCache) {
                     logEvent("device: restarted unresponsive management service; reconnecting")
                     try await Task.sleep(for: .seconds(2))
                     guard isRunning else { return }
-                    NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+                    NotificationCenter.default.post(name: .ltmAppsChanged, object: instance.id)
                 }
             } catch {
                 if !Task.isCancelled { logEvent("device: connection recovery failed: \(error.localizedDescription)") }
@@ -195,7 +204,7 @@ final class EmulatorController {
         usbmux.onUnexpectedExit = { [weak self] in self?.onStatusChange?() }
     }
 
-    /// Per-user machine state (the NAND copy-on-write overlay, snapshots, logs).
+    /// Per-user machine state (the NAND copy-on-write overlay, logs).
     private var stateDir: URL { Bundled.stateDirectory }
 
     // MARK: - Helper
@@ -228,6 +237,7 @@ final class EmulatorController {
         }
         started = true
         state = .booting
+        resolveDeviceNotice(for: .files)   // a fresh helper opens the files as they are now
         if let instanceError {
             logEvent("nand: could not resolve device image: \(instanceError.localizedDescription)")
             state = .dead(exitCode: 1)
@@ -260,8 +270,7 @@ final class EmulatorController {
                 guard unpacked else { self?.helperDied("The device image could not be unpacked."); return }
             }
             guard let self, self.process === process, !releasing else { return }
-            // The boot is built after the hello: snapshot identity needs the
-            // helper's build id, and usbmuxd must listen before the guest's USB.
+            // The boot is built after the hello: usbmuxd must listen before the guest's USB.
             process.start({ [weak self] _ in self?.bootConfiguration() }) { [weak self] result in
                 if case let .failure(error) = result, let self { logEvent("boot: \(instance.name): \(error)") }
             }
@@ -283,8 +292,8 @@ final class EmulatorController {
         let config = profile == .iPad1 ? iPadBoot() : iPodBoot()
         if config != nil {
             logEmulatorBuild()
-            verifyRestoreIfNeeded()   // a bad restore self-heals with a fresh helper
             startGuestPackageWatch()  // after composeGuestOffer(): a watch with no offer judges nothing
+            startBootWatch()
         }
         return config
     }
@@ -337,8 +346,7 @@ final class EmulatorController {
                 nand = iPodNAND().base
             }
         } catch {
-            reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
-            state = .dead(exitCode: 1)
+            failBoot(error)
             return nil
         }
         // usbmuxd must be listening before the guest USB core comes up.
@@ -353,7 +361,7 @@ final class EmulatorController {
                                      gidBlobs: gidBlobs, guestPackage: composeGuestOffer(), machineOptions: machineOptions),
                                serial: serialCapture?.argument ?? "null",
                                audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
-                               netdev: netdev, restore: restoreArgs(overlay: overlay))   // -incoming, if a snapshot is trusted
+                               netdev: netdev, restore: [])
     }
 
     /// iPad 1: kernel-direct boot from a K48KBOOT bundle over a read-only NAND,
@@ -392,8 +400,7 @@ final class EmulatorController {
                 return nil
             }
         } catch {
-            reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
-            state = .dead(exitCode: 1)
+            failBoot(error)
             return nil
         }
         let usbSession = options.appsync
@@ -404,19 +411,109 @@ final class EmulatorController {
         // explicit wifi0 replaces the machine's own. The golden image's Wi-Fi service carries a PAC that
         // uses the proxy and falls back to DIRECT, so Proxy off is purely host-side (itwebproxy "off").
         let netdev = options.network ? proxyForward().map { "user,id=wifi0" + $0 } : nil
-        // After the overlay pin check above, so a snapshot only ever resumes
-        // over the overlay it was saved with.
         return BootRecipe.iPad(.init(kboot: kboot, nand: nand, overlay: overlay.path, dieID: dieID, writableNOR: writableNOR,
                                      gidBlobs: gidBlobs, usbAddress: usbSession?.guestAddress, wifi: options.network,
                                      guestPackage: composeGuestOffer(), machineOptions: machineOptions),
-                               serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev,
-                               restore: restoreArgs(overlay: overlay))
+                               serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev, restore: [])
     }
 
     private func openSerialLog() {
         do {
-            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"))
+            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"),
+                                                 watch: [Self.recoveryMarker, Self.ethlinkMarker]) { [weak self] phrase in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if phrase == Self.ethlinkMarker { self.ethlinkUp = true; self.onStatusChange?(); return }
+                    self.inRecovery = true
+                    self.abortBoot(Self.recoveryReason(self.profile))
+                }
+            }
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
+    }
+
+    // MARK: - Files under a running device
+
+    private var fileWatch: DeviceFileWatch?
+    /// Something deleted, renamed or replaced the device's files while its helper
+    /// had them open: the guest runs on dead inodes until Stop, which then quits
+    /// without flushing into them.
+    private(set) var filesMeddled = false
+
+    private func startFileWatch() {
+        guard fileWatch == nil, !filesMeddled else { return }
+        let paths = instance.paths
+        fileWatch = DeviceFileWatch(directories: [paths.directory, paths.overlay],
+                                    base: instance.base.kind == .prepared ? paths.base : nil) { [weak self] path in
+            Task { @MainActor in self?.filesChanged(path) }
+        }
+    }
+
+    private func filesChanged(_ path: String) {
+        guard !filesMeddled, !isDead, !isPoweredOff else { return }
+        filesMeddled = true
+        fileWatch = nil
+        logEvent("files: \(path) changed under the running device; Stop will quit without a flush")
+        reportDeviceNotice(DeviceFileWatch.notice(shortName: profile.shortName), for: .files)
+    }
+
+    // MARK: - Boot deadline
+
+    /// iBoot's last words before it waits for a restore.
+    static let recoveryMarker = "Entering recovery mode"
+    /// it_ethlink (the iPad's guest package) bringing the USB Ethernet link up.
+    static let ethlinkMarker = "it_ethlink: LinkStatus 0 -> 1"
+    static func recoveryReason(_ profile: DeviceProfile) -> String {
+        "The \(profile.shortName) entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
+    }
+    static func deadlineReason(_ profile: DeviceProfile) -> String {
+        "The \(profile.shortName) didn’t start within \(Int(profile.bootBudget)) seconds. Open Device Logs for details."
+    }
+    /// A boot file the base lacks (BootRecipe.preparedFiles), else the storage error as it is.
+    static func bootFilesReason(_ error: Error, profile: DeviceProfile) -> String {
+        if let cocoa = error as? CocoaError, cocoa.code == .fileNoSuchFile, let path = cocoa.userInfo[NSFilePathErrorKey] as? String {
+            return "This \(profile.shortName)’s system files are incomplete: \(URL(fileURLWithPath: path).lastPathComponent) is missing. Delete it and prepare it again."
+        }
+        return "Could not prepare device storage: \(error.localizedDescription)"
+    }
+
+    /// The boot can't be built: dead with a named reason (the row and the overlay show it).
+    private func failBoot(_ error: Error) {
+        let reason = Self.bootFilesReason(error, profile: profile)
+        deathReason = reason
+        reportDeviceNotice(reason, for: .storage)
+        state = .dead(exitCode: 1)
+    }
+
+    private var bootWatchTask: Task<Void, Never>?
+
+    /// iOS is up: lockdown answered (the helper's uiReady is QEMU's display, lit
+    /// by iBoot too). Without a USB bridge (--no-appsync) painting has to do.
+    private var bootFinished: Bool { deviceReachable == true || (usbmux.session == nil && state == .running) }
+
+    /// Never "Booting…" forever: no answer within the board's budget ends the
+    /// boot as a named error, with the helper halted. Per boot (also after
+    /// Power On and Restart).
+    private func startBootWatch() {
+        bootWatchTask?.cancel()
+        let generation = bootGeneration
+        bootWatchTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(self?.profile.bootBudget ?? 0))
+            guard let self, !Task.isCancelled, generation == bootGeneration, !bootFinished else { return }
+            abortBoot(Self.deadlineReason(profile))
+        }
+    }
+
+    /// The guest will not come up (recovery mode, or out of time): halt the
+    /// helper and become `.dead` with `reason`; the row offers Start again.
+    private func abortBoot(_ reason: String) {
+        guard !isDead, !isPoweredOff, !shuttingDown, !halting, let process, !process.isDead else { return }
+        logEvent("boot: \(reason)")
+        deathReason = reason
+        bootWatchTask?.cancel()
+        process.terminate()
+        Task {
+            if await !process.waitForExit(timeout: Self.haltBudget) { process.kill() }
+        }
     }
 
     /// The guestfwd for itwebproxy, reading this device's routing file; nil
@@ -475,7 +572,7 @@ final class EmulatorController {
             guard let self else { return }
             defer { if generation == self.bootGeneration { self.preparingMedia = false } }
             do {
-                let deadline = ContinuousClock.now + .seconds(180)
+                let deadline = ContinuousClock.now + .seconds(profile.bootBudget)
                 while true {
                     try Task.checkCancellation()
                     guard generation == bootGeneration else { return }
@@ -507,10 +604,9 @@ final class EmulatorController {
                 // Read the emulated backlight, not sblaunch's optional lock
                 // query: older bundled images do not implement that command.
                 // Home is safe while the display is off; an awake Home screen
-                // must not receive it (that would open Spotlight). Do this
-                // once per cold boot, preserving sleep in restored sessions.
+                // must not receive it (that would open Spotlight). Once per boot.
                 guard !isDead, !shuttingDown else { return }
-                if !restoringFromSnapshot, status?.displaySleeping == true {
+                if status?.displaySleeping == true {
                     logEvent("boot: waking the display after device preparation")
                     pressHome()
                     for _ in 0..<20 {
@@ -574,9 +670,11 @@ final class EmulatorController {
         statusTimer?.invalidate()
         statusTimer = nil
         process?.terminate()
+        fileWatch = nil
         // Unlink the owned FIFO paths now, keeping readers alive until the
         // helper is finished writing.
         serialCapture?.removeEndpoints()
+        bootWatchTask?.cancel()
         mediaPreparationTask?.cancel()
         foregroundTask?.cancel()
         guestPackageTask?.cancel()
@@ -654,14 +752,12 @@ final class EmulatorController {
     /// `.dead`; the window shows a Restart overlay, and the other devices keep running.
     private func helperDied(_ reason: String) {
         guard !isDead else { return }
-        if !halting { deathReason = reason }
+        if !halting, deathReason == nil { deathReason = reason }   // an aborted boot keeps its own reason
+        bootWatchTask?.cancel()
+        fileWatch = nil
         statusTimer?.invalidate()
         statusTimer = nil
         audioSink?(.audioEnded(generation: 0, failed: true))
-        // A VM that exited on its own ran the overlay PAST any saved snapshot;
-        // restoring stale RAM onto an advanced NAND is worse than a cold boot,
-        // so drop the snapshot (unless a clean save is in progress).
-        if state != .snapshotting { discardSavedState() }
         mediaPreparationTask?.cancel()
         foregroundTask?.cancel()
         orientationTask?.cancel()
@@ -675,8 +771,7 @@ final class EmulatorController {
     // MARK: - Liveness
 
     /// When the guest last painted a new frame. Advanced by the status poll on
-    /// every new ring serial; the signal behind `booting → running` and the snapshot
-    /// health gate — a 100%-CPU wedge stops painting.
+    /// every new ring serial; the signal behind `booting → running`.
     private(set) var lastFrameAdvance = Date.distantPast
 
     private func noteFrameAdvanced() {
@@ -684,9 +779,8 @@ final class EmulatorController {
         if state == .booting, !poweringOn { state = .running }
     }
 
-    /// Frames within the last ~2s. Not sufficient alone for "healthy" — a
-    /// locked/idle device legitimately stops painting — so the snapshot gate
-    /// (Phase 5) also consults deviceReady(); this is the cheap synchronous half.
+    /// Frames within the last ~2s. Not sufficient alone for "healthy": a
+    /// locked/idle device legitimately stops painting.
     var framesRecentlyAdvanced: Bool {
         Date().timeIntervalSince(lastFrameAdvance) < 2.0
     }
@@ -719,6 +813,7 @@ final class EmulatorController {
                 agentStatus = status.agentStatus
                 onStatusChange?()
             }
+            if status.agentStatus == 2 { agentStaleSince = agentStaleSince ?? now } else { agentStaleSince = nil }
         }
         if !poweringOn, status.shutdownConfirmed, !isDead, !isPoweredOff {
             // Publish terminal state before observable fields: their callbacks
@@ -728,7 +823,6 @@ final class EmulatorController {
             foregroundAppName = nil
             isSleeping = false
             deviceReachable = false
-            discardSavedState()
         }
         if state == .running, !preparingMedia, !shuttingDown {
             isSleeping = status.displaySleeping
@@ -738,7 +832,6 @@ final class EmulatorController {
 
         if storageFailed, !reportedStorageFailure {
             reportedStorageFailure = true
-            discardSavedState()
             reportDeviceNotice(statusLine, for: .storage)
         }
     }
@@ -759,18 +852,39 @@ final class EmulatorController {
         case .notStarted: return "Starting…"
         case .booting:    return "Booting…"
         case .running:
+            if let issue = connectionIssue, issue.persistent { return issue.summary }
             if preparingMedia { return preparationStatus }
             if isSleeping { return "Sleeping" }
             if restartingSpringBoard { return "Restarting SpringBoard…" }
             if let mediaPreparationFailure { return "Media update failed — \(mediaPreparationFailure)" }
-            if guestToolsStatus != .legacy, let text = guestToolsStatus.text { return "Running — \(text)" }
             if retainedPackedImage { return "Running — existing image retained; erase device to upgrade" }
-            return canManageApps ? "Running" : "Running — USB unavailable"
+            guard canManageApps else { return "Running — USB unavailable" }
+            return "Running — " + guestToolsLine
         case .paused:     return "Paused"
-        case .snapshotting: return "Saving state…"
         case .dead:       return "Emulator stopped"
         }
     }
+
+    /// The "Guest tools" line: the loader's report as the package watch judged it
+    /// (GuestPackage.status), overridden by what the boot and the agent show now.
+    var guestToolsLine: String { "Guest tools: " + guestToolsState.text }
+    var guestToolsState: GuestPackage.Status {
+        if inRecovery { return .recovery }
+        if !bootFinished { return .notBooted }
+        let stale = agentStaleSince.map { Date().timeIntervalSince($0) > 60 } ?? false
+        let reachable = reachableSince.map { Date().timeIntervalSince($0) > 60 } ?? false
+        // The iPad has no agent: it_ethlink's serial line is its sign of life once a package with jobs runs.
+        let ethlinkMissing = !hasGuestTools && guestOffer?.serial ?? 0 > 0 && (status?.guestPackage?.serial ?? 0) > 0 && !ethlinkUp && reachable
+        if hasGuestTools ? stale : ethlinkMissing { return .notResponding }
+        return guestToolsStatus
+    }
+    /// Set by the status poll: when the agent last went stale (2), nil while it answers.
+    private var agentStaleSince: Date?
+    /// When lockdown first answered this boot.
+    private var reachableSince: Date?
+    /// it_ethlink reported LinkStatus 0 -> 1 on serial (the iPad's guest package).
+    private(set) var ethlinkUp = false
+    private var inRecovery = false
 
     /// Which libqemu-arm.dylib this device's helper loaded, and when it was
     /// built (its hello). The dylib lives in a build tree other sessions rebuild
@@ -975,12 +1089,20 @@ final class EmulatorController {
     // loses their manual angle when the front app actually changes what it wants,
     // which is the moment they asked us to follow.
 
-    /// Off switch, for anyone who would rather the device never move on its own:
-    /// `defaults write <bundle-id> autoRotateWithGuest -bool NO`. On by default —
-    /// it is only ever driven by an explicit change on the guest's side.
+    /// Off switch, for anyone who would rather the device never move on its own.
+    /// Per device (`autoRotateWithGuest.<uuid>`), seeded from the app-wide value
+    /// of earlier builds; on by default — it is only ever driven by an explicit
+    /// change on the guest's side.
     static let autoRotateDefaultsKey = "autoRotateWithGuest"
-    static var autoRotateEnabled: Bool {
-        UserDefaults.standard.object(forKey: autoRotateDefaultsKey) as? Bool ?? true
+    var autoRotateEnabled: Bool { perDeviceSetting(Self.autoRotateDefaultsKey) }
+    func toggleAutoRotate() {
+        UserDefaults.standard.set(!autoRotateEnabled, forKey: instance.defaultsKey(Self.autoRotateDefaultsKey))
+        onStatusChange?()
+    }
+    /// A per-device on/off setting, falling back to the app-wide key it replaced, then on.
+    private func perDeviceSetting(_ name: String) -> Bool {
+        let defaults = UserDefaults.standard
+        return defaults.object(forKey: instance.defaultsKey(name)) as? Bool ?? defaults.object(forKey: name) as? Bool ?? true
     }
 
     /// The last value SpringBoard reported, in SpringBoard's degrees (0, 90,
@@ -1010,20 +1132,9 @@ final class EmulatorController {
     private func guestOrientationChanged(to degrees: Int) {
         guard let target = hostDegrees(forGuest: degrees) else { return }
         defer { lastGuestOrientation = degrees }
-        // A restored guest can already be in landscape, and the app starts every
-        // process at 0 — so on the restore path the FIRST reading is the truth,
-        // not a seed. Left seeded, the shell posed portrait over a landscape
-        // buffer and every later quarter turn stayed 90° out, which no amount of
-        // rotating could fix (the same failure reset() re-derives for).
-        if restoringFromSnapshot, lastGuestOrientation == nil,
-           let target = hostDegrees(forGuest: degrees), target != rotationDegrees {
-            lastGuestOrientation = degrees
-            rotate(toward: target)
-            return
-        }
         // First reading seeds only: see lastGuestOrientation.
         guard let previous = lastGuestOrientation, previous != degrees else { return }
-        guard Self.autoRotateEnabled, state == .running else { return }
+        guard autoRotateEnabled, state == .running else { return }
         rotate(toward: target)
     }
 
@@ -1044,7 +1155,7 @@ final class EmulatorController {
                 guard self.state == .running, self.canManageApps, !self.isSleeping, !self.isInstalling,
                       let reading = try? await self.springBoard().interfaceOrientation(),
                       let target = Self.iPadDegrees(forInterface: reading) else { continue }
-                if last == nil || (last != reading && Self.autoRotateEnabled), target != self.rotationDegrees {
+                if last == nil || (last != reading && self.autoRotateEnabled), target != self.rotationDegrees {
                     self.rotate(toward: target)
                 }
                 last = reading
@@ -1149,7 +1260,6 @@ final class EmulatorController {
         guestToolsStatus = .unknown
         guard let offer = guestOffer else { return }
         let generation = bootGeneration
-        let restored = restoringFromSnapshot
         guestPackageTask = Task { [weak self] in
             let started = ContinuousClock.now
             var healthySince: ContinuousClock.Instant?
@@ -1174,7 +1284,7 @@ final class EmulatorController {
                 if healthy { healthySince = healthySince ?? .now } else { healthySince = nil }
                 let steady = healthySince.map { ContinuousClock.now - $0 } ?? .zero
                 switch GuestPackage.verdict(report: report, healthyFor: steady, elapsed: ContinuousClock.now - started,
-                                            record: self.guestRecord, restored: restored) {
+                                            record: self.guestRecord, restored: false) {
                 case nil: continue
                 case .good(let serial)?:
                     self.updateGuestRecord { $0.lastGood = serial; $0.bad.removeAll { $0 == serial } }
@@ -1225,19 +1335,17 @@ final class EmulatorController {
             }
         }
         logEvent("guest package: restarting with \(choice) guest tools")
-        discardSavedState()   // a restored session would not run the loader
         halt { [weak self] _ in self?.onRestartRequested?() }
     }
 
     // MARK: - Keyboard passthrough
     
     /// Forward a host key by its macOS virtual keycode; the shim maps it to a
-    /// QKeyCode exactly as ui/cocoa.m does.
-    var keyboardInputEnabled: Bool {
-        UserDefaults.standard.object(forKey: "keyboardInputEnabled") as? Bool ?? true
-    }
+    /// QKeyCode exactly as ui/cocoa.m does. Per device (`keyboardInputEnabled.<uuid>`),
+    /// seeded from the app-wide value of earlier builds.
+    var keyboardInputEnabled: Bool { perDeviceSetting("keyboardInputEnabled") }
     func toggleKeyboardInput() {
-        UserDefaults.standard.set(!keyboardInputEnabled, forKey: "keyboardInputEnabled")
+        UserDefaults.standard.set(!keyboardInputEnabled, forKey: instance.defaultsKey("keyboardInputEnabled"))
         onStatusChange?()
     }
 
@@ -1259,19 +1367,11 @@ final class EmulatorController {
     /// and sizing the cutout landscape while the guest published a portrait
     /// buffer — a permanently rotated, stretched screen that no amount of
     /// rotating could fix, since every later quarter turn stayed 90° out.
-    /// Restart the guest. Refused mid-save: the save has already stopped the
-    /// vCPU, so `system_reset` would not restart it, and overwriting the state
-    /// with `.booting` meant the save's own completion declined to resume it —
-    /// leaving a stopped machine labelled "Booting…" with all input dead, and no
-    /// way back except stumbling onto Device ▸ Resume.
+    /// Restart the guest.
     func reset() {
         if isPoweredOff { powerOn(); return }
         guard !shuttingDown else { return }
         guard !storageFailed else { return }
-        guard state != .snapshotting else {
-            logEvent("reset: ignored while a state save is in flight")
-            return
-        }
         reconnectUSB()
         // Flush first. A bare system_reset is the same hard cut as a SIGKILL as
         // far as the guest's filesystem is concerned — it loses the HFS+ catalog
@@ -1292,21 +1392,21 @@ final class EmulatorController {
             } else if self.canManageApps {
                 _ = await withSoftDeadline(20) { try? await self.syncFilesystem() }
             }
-            guard !self.storageFailed, self.state != .snapshotting else { return }
+            guard !self.storageFailed else { return }
             self.link?.send(.machine(.reset))
-            self.restoringFromSnapshot = false
             self.rotationDegrees = 0
             self.setAccelerometer(for: 0)
             self.state = .booting
             self.startMediaPreparation()
             self.startGuestPackageWatch()
+            self.startBootWatch()
         }
     }
     /// Retain the QEMU main loop at guest power-off; a reset can cold boot it
     /// again without reinitializing QEMU or opening a second NAND writer.
     func powerOff(completion: @escaping (Bool) -> Void) {
         guard canStop else { completion(false); return }
-        AppInstaller.discardAll()
+        AppInstaller.discard(for: instance.id)
         halt(completion: completion)
     }
 
@@ -1317,11 +1417,12 @@ final class EmulatorController {
         if process?.isDead != false { onRestartRequested?(); return }
         reconnectUSB()
         poweringOn = true
-        restoringFromSnapshot = false
         bootGeneration += 1
         foregroundAppName = nil
         isSleeping = false
         deviceReachable = nil
+        reachableSince = nil
+        ethlinkUp = false
         rotationDegrees = 0
         setAccelerometer(for: 0)
         state = .booting
@@ -1345,6 +1446,7 @@ final class EmulatorController {
             self.startMediaPreparation()
             self.startForegroundWatch()
             self.startGuestPackageWatch()
+            self.startBootWatch()
         }
     }
 
@@ -1355,7 +1457,7 @@ final class EmulatorController {
             var appliedProxyRevision: Int?
             while !Task.isCancelled {
                 guard let self else { return }
-                if self.canReachDevice, !self.isSleeping, !self.isInstalling, !AppInstaller.hasPendingWork {
+                if self.canReachDevice, !self.isSleeping, !self.isInstalling, !AppInstaller.hasPendingWork(for: self.instance.id) {
                     if self.webProxyAvailable && appliedProxyRevision != self.proxyRevision {
                         let revision = self.proxyRevision
                         if self.webProxyStatus == .waiting {
@@ -1412,35 +1514,12 @@ final class EmulatorController {
         return capture
     }
 
-    // MARK: - Snapshot persistence
-    //
-    // Snapshots persist RAM alongside the NAND overlay. The invariant: it
-    // must be impossible to get STUCK on a bad snapshot. Two gates enforce it —
-    // never SAVE a wedged guest (health gate below), and never stay on a bad
-    // RESTORE (a restored snapshot is provisional; if it doesn't come alive it
-    // is quarantined and the next launch cold-boots). The overlay is never
-    // auto-deleted — nuking the device is always the user's deliberate choice.
+    // MARK: - Device storage paths
 
     /// Frozen in the device record; LegacyAdoption derived it once.
     private var imageKey: String { instance.storage.key }
 
-    private func snapshotIdentity() throws -> DeviceStateStorage.SnapshotIdentity {
-        guard let build = process?.info?.buildID else { throw CocoaError(.fileReadCorruptFile) }
-        let nand: String
-        if instance.base.kind == .prepared {
-            nand = instance.storage.key
-        } else if profile == .iPad1 {
-            nand = try DeviceStateStorage.developmentImageIdentity(
-                at: URL(fileURLWithPath: options.ipad1NAND), key: imageKey)
-        } else if let packedImage {
-            nand = packedImage.key
-        } else {
-            nand = try DeviceStateStorage.developmentImageIdentity(
-                at: URL(fileURLWithPath: options.nandImage), key: imageKey)
-        }
-        return .init(emulatorBuild: build, nand: nand)
-    }
-
+    /// Saved-state files older builds wrote beside the overlay; Erase removes them.
     private var snapshotURL: URL { instance.paths.snapshot }
     private var snapshotTmpURL: URL { snapshotURL.appendingPathExtension("tmp") }
     private var snapshotBadURL: URL { snapshotURL.appendingPathExtension("bad") }
@@ -1450,221 +1529,6 @@ final class EmulatorController {
     private var preparedNORURL: URL? { instance.base.kind == .prepared ? instance.paths.writableNOR : nil }
     /// Legacy marker, removed without erasing when opening an older device.
     private var resetMarkerURL: URL { instance.paths.resetMarker }
-    private var restoringFromSnapshot = false
-
-    /// UserDefaults key for the Settings toggle.
-    ///
-    /// Opt-in until resume is validated across the supported guest workloads.
-    static let resumeDefaultsKey = "resumeOnLaunch"
-    static var resumeOnLaunch: Bool { false }
-    /// Set when the user explicitly discards saved state, so the very next quit
-    /// doesn't silently re-save the current guest and drop them right back into
-    /// the state they just cleared (the "discard doesn't stick" bug).
-    private var skipNextQuitSnapshot = false
-
-    /// `-incoming file:…` when a trusted snapshot exists — unless ⌥Option is
-    /// held at launch, the muscle-memory escape from a bad saved state.
-    private func restoreArgs(overlay: URL) -> [String] {
-        if !EmulatorController.resumeOnLaunch {
-            logEvent("snapshot: automatic resume disabled — cold boot, discarding saved state")
-            discardSavedState()
-            return []
-        }
-        if NSEvent.modifierFlags.contains(.option) {
-            // IGNORE, not delete — the log said "ignoring" while the code
-            // removed the file. Option is held for all sorts of reasons at
-            // launch, and this is meant to be the escape hatch from a bad
-            // snapshot, not a way to lose a good one by accident. Discarding is
-            // what Discard Saved State is for.
-            logEvent("snapshot: Option held at launch — cold boot, keeping saved state")
-            return []
-        }
-        guard FileManager.default.fileExists(atPath: snapshotURL.path) else { return [] }
-        guard let identity = try? snapshotIdentity(),
-              DeviceStateStorage.snapshotMatches(snapshotURL, identity: identity) else {
-            logEvent("snapshot: build or NAND identity does not match — cold boot")
-            discardSavedState()
-            return []
-        }
-        // The snapshot holds RAM; the overlay holds flash. They are only a
-        // matching pair if nothing wrote to flash after the save. An observed
-        // exit already discards for this reason (helperDied), but a crash or a
-        // SIGKILL — Xcode's stop button, a force quit — never gets there, so a
-        // "Save State Now" followed by an hour of play and a kill would restore
-        // hour-old RAM onto an hour-newer filesystem. Stale HFS+ journal and
-        // buffer-cache state over live flash is corruption, not a slow boot.
-        if overlayIsNewerThanSnapshot(overlay: overlay) {
-            logEvent("snapshot: overlay has advanced past the saved state — cold boot, discarding")
-            discardSavedState()
-            return []
-        }
-        restoringFromSnapshot = true
-        return ["-incoming", "file:\(snapshotURL.path)"]
-    }
-
-    private func overlayIsNewerThanSnapshot(overlay: URL) -> Bool {
-        DeviceStateStorage.overlayIsNewer(overlay, than: snapshotURL)
-    }
-
-    /// A restored snapshot is provisional. If the guest doesn't paint or answer
-    /// within the window, the restore is bad — quarantine it and cold-relaunch,
-    /// so a bad snapshot heals on the VERY NEXT launch instead of looping.
-    private func verifyRestoreIfNeeded() {
-        guard restoringFromSnapshot else { return }
-        Task { [weak self] in
-            let deadline = Date().addingTimeInterval(20)
-            while Date() < deadline {
-                try? await Task.sleep(for: .seconds(1))
-                guard let self else { return }
-                // Deliberately not framesRecentlyAdvanced on its own: consuming
-                // the incoming stream repaints the framebuffer, so the frame
-                // signal says "alive" at t≈0 of the restore, before the vCPU has
-                // proven it can execute at all. That made the self-heal a no-op
-                // for the exact failure it was written for. proveAlive asks the
-                // guest to do something instead of watching for it.
-                if await self.proveAlive() { return }
-            }
-            guard let self, !self.isDead else { return }
-            logEvent("snapshot: restored state never came alive — quarantining, cold-booting")
-            self.quarantineSnapshot()
-            self.reportDeviceNotice("The saved state could not be restored. The device will start fresh; installed apps and files are kept. Open Device Logs for details.", for: .restore)
-            logEvent("relaunch: restored state never came alive — restarting the device with a cold boot")
-            self.onRestartRequested?()
-        }
-    }
-
-    /// Health-gate + save + atomic promote. `completion(true)` iff a good
-    /// snapshot now exists on disk. Never overwrites a good snapshot with a bad
-    /// one: an unhealthy guest is skipped entirely.
-    /// Worst case for a quit-time save: the liveness probe plus the save poll.
-    static let quitSnapshotBudget: TimeInterval = Timeouts.serviceProbe * 2 + 3 + 15
-
-    private(set) var snapshotFailureReason: String?
-
-    private func performSnapshot(completion: @escaping (Bool) -> Void) {
-        snapshotFailureReason = "The device's state could not be saved."
-        guard isRunning else { completion(false); return }
-        // Live GL state saves and restores in the macOS (CGL) emulator
-        // (gles-host-snapshot). Only an iOS-host EAGL build can't, and there
-        // the emulator itself refuses with a migration blocker, which lands in
-        // the ordinary failed-save path below.
-        if (status?.glesContexts ?? 0) > 0 { logEvent("snapshot: saving with live GL state") }
-        Task { [weak self] in
-            guard let self else { completion(false); return }
-            guard await self.proveAlive() else {
-                // Do NOT keep the older snapshot. The NAND overlay is not part
-                // of the snapshot and every guest write since it was taken is
-                // already durable (fmss_store_page renames per page), so an old
-                // snapshot restored now would put stale RAM — stale HFS journal,
-                // buffer cache, inode state — on top of a NAND that has moved
-                // on. That is corruption, not just a wedge. helperDied already
-                // discards for exactly this reason; the health-gate path must
-                // agree. Quarantine (never delete the overlay) so it stays
-                // diagnosable and the next launch cold-boots.
-                logEvent("snapshot: guest not healthy — quarantining stale snapshot, next launch cold-boots")
-                self.snapshotFailureReason = "The device is not responding. Its previous saved state has been set aside because it no longer matches the device storage."
-                self.quarantineSnapshot()
-                completion(false); return
-            }
-            guard self.isRunning else { completion(false); return }
-            self.state = .snapshotting
-            try? FileManager.default.removeItem(at: self.snapshotTmpURL)
-            self.link?.send(.snapshotSave(path: self.snapshotTmpURL.path))
-
-            // QemuIosSnapshotStatus: 0 idle, 1 running, 2 done, 3 failed.
-            let deadline = Date().addingTimeInterval(15)
-            while Date() < deadline, !self.isDead {
-                guard case let .snapshot(status, error)? = try? await self.link?.request(.snapshotStatus, timeout: 2) else {
-                    try? await Task.sleep(for: .milliseconds(100))
-                    continue
-                }
-                if status == 2 {
-                    guard !self.storageFailed else {
-                        self.resumeAfterFailedSave(); completion(false); return
-                    }
-                    do {
-                        try DeviceStateStorage.promoteSnapshot(from: self.snapshotTmpURL, to: self.snapshotURL,
-                                                               identity: try self.snapshotIdentity())
-                    } catch {
-                        logEvent("snapshot: could not promote saved state: \(error.localizedDescription)")
-                        self.snapshotFailureReason = error.localizedDescription
-                        self.resumeAfterFailedSave(); completion(false); return
-                    }
-                    completion(true); return
-                }
-                if status == 3 {
-                    logEvent("snapshot: save failed: \(error ?? "")")
-                    self.snapshotFailureReason = error ?? "The device's state could not be saved."
-
-                    try? FileManager.default.removeItem(at: self.snapshotTmpURL)
-                    self.resumeAfterFailedSave(); completion(false); return
-                }
-                try? await Task.sleep(for: .milliseconds(100))
-            }
-            logEvent("snapshot: save timed out")
-            self.snapshotFailureReason = "Saving the device state timed out."
-            try? FileManager.default.removeItem(at: self.snapshotTmpURL)
-            self.resumeAfterFailedSave()
-            completion(false)
-        }
-    }
-
-    /// Put the machine back the way a save found it.
-    ///
-    /// The save stops the vCPU (`qmp_stop` inside the migration bottom half) and
-    /// parks the controller in `.snapshotting`. Every failure exit used to leave
-    /// both that way, which is worse than the failed save: `.snapshotting` is
-    /// not `.running`, so input is refused, and — the expensive one — the quit
-    /// path's clean shutdown checks for a running guest and declined, so a
-    /// failed quit-save silently cost the user the filesystem flush as well as
-    /// the snapshot. Success deliberately does NOT resume: the caller decides
-    /// (Save State Now resumes; the quit path is about to exit).
-    private func resumeAfterFailedSave() {
-        guard state == .snapshotting else { return }
-        link?.send(.snapshotResume)
-        state = .running
-    }
-
-    /// Make the guest prove it is executing, rather than watching for a sign.
-    ///
-    /// "Is the guest alive" has three answers here and only two used to be
-    /// handled. Painting means alive. Answering lockdownd means alive. But
-    /// *silence* is ambiguous — a locked, idle device paints nothing and a
-    /// wedged one paints nothing, and neither answers when there is no usbmuxd
-    /// session at all (`--no-appsync`), when usbmuxd has died, or when the gate
-    /// is refusing work after earlier timeouts. Every one of those read as
-    /// "unhealthy", which quarantined a perfectly good snapshot and, on the
-    /// restore path, force-quit a perfectly good guest.
-    ///
-    /// So when the passive signals say nothing, ask a question: a Home press
-    /// wakes the screen and repaints. A guest that is executing answers within
-    /// a frame or two; a wedged one never does.
-    func proveAlive() async -> Bool {
-        guard !storageFailed else { return false }
-        if framesRecentlyAdvanced { return true }
-        if canManageApps, await deviceReady() { return true }
-        pressHome()
-        let deadline = Date().addingTimeInterval(3)
-        while Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(200))
-            if framesRecentlyAdvanced { return true }
-        }
-        return false
-    }
-
-    /// Quit path: save, then let the app terminate. `completion` runs whether
-    /// or not a snapshot was written (worst case is today's behaviour: a cold
-    /// boot next launch).
-    func beginQuitSnapshot(completion: @escaping (Bool) -> Void) {
-        // Respect the user's intent: resume turned off, or a just-issued discard.
-        // Either way, saving now would resurrect exactly the state they don't want.
-        guard EmulatorController.resumeOnLaunch, !skipNextQuitSnapshot else {
-            logEvent("snapshot: skipping quit-save (resume off or state discarded)")
-            completion(false); return
-        }
-        performSnapshot(completion: completion)
-    }
-
     /// Stop is a hard halt (Sam, 2026-09-28), never a guest shutdown: a booting or
     /// wedged guest ignores those and left the window on "Powering off…". SIGTERM
     /// makes the helper pause the VM, which flushes storage, and quit QEMU
@@ -1682,19 +1546,23 @@ final class EmulatorController {
         if isPoweredOff || process?.isDead != false { completion(true); return }
         // Multiple requests join one halt.
         if haltTask != nil { haltCompletions.append(completion); return }
-        guard state != .snapshotting else {
-            logEvent("stop: a state save is in flight — leaving the device running")
-            completion(false); return
-        }
         shuttingDown = true
         halting = true
         connectionRecoveryTask?.cancel()
+        bootWatchTask?.cancel()
         orientationTask?.cancel()
         foregroundTask?.cancel()
         mediaPreparationTask?.cancel()
         haltCompletions = [completion]
         let process = process
-        process?.terminate()
+        if filesMeddled {
+            // The overlay or NOR the helper has open is gone from disk: a flush would
+            // write into dead inodes, so quit QEMU outright (no pause first).
+            logEvent("stop: files were changed under the device; quitting without a flush")
+            link?.send(.machine(.quit))
+        } else {
+            process?.terminate()
+        }
         haltTask = Task { [weak self] in
             var exited = await process?.waitForExit(timeout: Self.haltBudget) ?? true
             if !exited {
@@ -1712,59 +1580,6 @@ final class EmulatorController {
         }
     }
 
-    /// Menu ▸ Save State Now: save, then resume the vCPU (the save stops it).
-    /// A failed save is reported in the persistent device status. The save is
-    /// otherwise indistinguishable from a successful one — including the case
-    /// where it DISCARDS the user's existing saved state because the guest is
-    /// not answering.
-    func saveSnapshotNow() {
-        skipNextQuitSnapshot = false   // an explicit save clears a prior discard
-        performSnapshot { [weak self] ok in
-            guard let self else { return }
-            if ok { self.resolveDeviceNotice(for: .snapshot) }
-            else {
-                self.reportDeviceNotice("Couldn’t save the device state. " + (self.snapshotFailureReason ?? "Try again when the device is ready.") + " Open Device Logs for details.", for: .snapshot)
-            }
-            // Only un-stop what THIS save stopped. Flipping to .running
-            // unconditionally resurrected a VM that died during the save: the
-            // dead-overlay vanished and input went to a process with no VM —
-            // exactly the "dead emulator looked alive" failure .dead exists to
-            // prevent. It also silently un-paused a deliberately paused guest.
-            guard self.state == .snapshotting else { return }
-            self.link?.send(.snapshotResume)
-            self.state = .running
-        }
-    }
-
-    /// The user explicitly chose Discard Saved State. Arms the quit guard so the
-    /// next quit won't re-save — otherwise discarding then quitting recreates
-    /// the snapshot and the next launch resumes it anyway.
-    ///
-    /// Separate from `discardSavedState()` on purpose: the automatic callers
-    /// (resume-off at launch, ⌥, the exited-VM coherence rule) must NOT latch
-    /// it. When resume-off latched the flag at launch, ticking "resume" on in
-    /// Settings couldn't take effect until the launch after next — the setting
-    /// read as broken and the log blamed a discard the user never performed.
-    func discardSavedStateByUser() {
-        skipNextQuitSnapshot = true
-        discardSavedState()
-    }
-
-    /// Removes the snapshot and its quarantine — never the overlay.
-    func discardSavedState() {
-        try? FileManager.default.removeItem(at: snapshotURL)
-        try? FileManager.default.removeItem(at: snapshotTmpURL)
-        try? FileManager.default.removeItem(at: snapshotBadURL)
-        for url in [snapshotURL, snapshotTmpURL, snapshotBadURL] {
-            try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
-        }
-    }
-
-    var hasSavedState: Bool {
-        FileManager.default.fileExists(atPath: snapshotURL.path)
-            || FileManager.default.fileExists(atPath: snapshotBadURL.path)
-    }
-
     /// Stop the guest and its helper, erase this device, then start it fresh
     /// (a running device) or leave it ready (a stopped one). The app keeps
     /// running. No request is left behind for an unrelated future launch.
@@ -1772,9 +1587,8 @@ final class EmulatorController {
         guard !isErasing else { return }
         // Nothing queued can land on an erased device: drop installs first
         // rather than refusing the erase (or leaving Retry rows behind).
-        AppInstaller.discardAll()
+        AppInstaller.discard(for: instance.id)
         isErasing = true
-        skipNextQuitSnapshot = true
         foregroundTask?.cancel()
         orientationTask?.cancel()
         Task {
@@ -1816,6 +1630,7 @@ final class EmulatorController {
                     }
                 }.value
                 resolveDeviceNotice(for: .erase)
+                resolveDeviceNotice(for: .activation)
                 isErasing = false
                 if started {
                     logEvent("reset: device erased; starting it fresh")
@@ -1832,14 +1647,6 @@ final class EmulatorController {
 
     func cancelFactoryReset() {
         try? FileManager.default.removeItem(at: resetMarkerURL)
-    }
-
-    private func quarantineSnapshot() {
-        try? FileManager.default.removeItem(at: snapshotBadURL)
-        try? FileManager.default.moveItem(at: snapshotURL, to: snapshotBadURL)
-        try? FileManager.default.removeItem(at: snapshotBadURL.appendingPathExtension("meta"))
-        try? FileManager.default.moveItem(at: snapshotURL.appendingPathExtension("meta"),
-                                         to: snapshotBadURL.appendingPathExtension("meta"))
     }
 
     // MARK: - App management
@@ -1862,7 +1669,7 @@ final class EmulatorController {
     /// Adding to the ready queue opens no guest session. A probe suppressed by
     /// our own install must not disable File → Install App or drag-and-drop.
     var canQueueInstall: Bool {
-        usbConnected && canManageApps && isRunning && (deviceReachable == true || AppInstaller.isUsingDevice || isInstalling)
+        usbConnected && canManageApps && isRunning && (deviceReachable == true || AppInstaller.isUsingDevice(instance.id) || isInstalling)
     }
     /// The usbmuxd socket to talk to this device on, for the long-lived
     /// notification_proxy watcher (which owns its own session, not a gated one).
@@ -1874,8 +1681,14 @@ final class EmulatorController {
         }
         return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot,
                            proxyDirectory: proxyDirectory, agent: link, agentCache: agentCache,
-                           packaged: status?.guestPackage != nil)
+                           packaged: status?.guestPackage != nil, deviceOS: iosVersion)
     }
+
+    /// This device's firmware, from its catalog entry: what an app's minimum
+    /// iOS and architecture are checked against.
+    private var catalogEntry: FirmwareCatalog.Entry? { FirmwareCatalog.bundled.entry(id: instance.firmware) }
+    var iosVersion: String { catalogEntry?.version ?? "3.1.3" }
+    var guestArch: String { catalogEntry?.recipe?.guest?.arch ?? GuestPackage.arch(board: instance.board) ?? "armv6" }
     
     /// Cheap in-process check that the USB bridge sees the guest. App-service
     /// reads establish lockdownd readiness separately.
@@ -1922,6 +1735,35 @@ final class EmulatorController {
     func activationState() async -> String? {
         guard let socket = usbmux.session?.clientSocket else { return nil }
         return await DeviceServices(clientSocket: socket).activationState()
+    }
+
+    // MARK: - Activation (verified once per boot; activating is the preparer's job)
+
+    private var activationCheckedGeneration: Int?
+
+    /// On the first lockdown answer of a boot, ask ActivationState once. Anything
+    /// but Activated is a persistent issue: commands stay blocked, nothing
+    /// retries, the notice offers Erase. An activated guest clears an old notice.
+    private func checkActivationIfNeeded() {
+        guard deviceReachable == true, activationCheckedGeneration != bootGeneration else { return }
+        activationCheckedGeneration = bootGeneration
+        let generation = bootGeneration
+        Task { [weak self] in
+            guard let self else { return }
+            let state = await activationState()
+            guard generation == bootGeneration else { return }
+            guard let state else { activationCheckedGeneration = nil; return }   // couldn't ask: again on the next answer
+            logEvent("activation: lockdown reports \(state)")
+            guard let issue = DeviceConnectionIssue.activation(state: state, profile: profile) else {
+                resolveDeviceNotice(for: .activation)
+                return
+            }
+            connectionIssue = issue
+            deviceReachable = false
+            mediaPreparationTask?.cancel()
+            preparingMedia = false
+            reportDeviceNotice(issue.summary, for: .activation)
+        }
     }
     func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
     func launchApp(_ bundleID: String) async throws {
