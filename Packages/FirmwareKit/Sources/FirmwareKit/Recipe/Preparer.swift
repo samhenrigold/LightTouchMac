@@ -54,6 +54,7 @@ public enum Preparer {
             if s.hasPrefix("warning: ") { emit(.warning(String(s.dropFirst(9)))) }
             FileHandle.standardError.write(Data((s + "\n").utf8))
         }
+        if e.board == "n72ap" { return try N72Recipe.create(o, emit: emit) }
         guard e.board == "k48ap", let recipe = e.recipe, recipe.name == "k48" else {
             throw FirmwareError(.unsupported, "\(e.id): no preparer for board \(e.board) recipe \(e.recipe?.name ?? "none")")
         }
