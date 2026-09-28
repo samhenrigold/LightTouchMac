@@ -6,7 +6,7 @@
 //
 //   session-driver CONFIG.json
 //
-// config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase, guest?}
+// config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase, ipadItpack?, guest?}
 // With `guest` it runs the guest-services scenario instead (guest.swift).
 
 import Foundation
@@ -15,6 +15,8 @@ import IOSurface
 struct Config: Decodable {
     var helper: String, requirement: String, usbmuxd: String, ipa: String, bundleID: String
     var work: String, files: String, ipodNAND: String, ipadBase: String
+    /// The app's armv7.itpack: the iPad boots with the offer EmulatorController composes from it.
+    var ipadItpack: String?
     var guest: GuestConfig?
 }
 
@@ -116,6 +118,7 @@ extension String {
             let dieID = (identity["die-id"] as? [String])?.joined(separator: ":")
             config = BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: dieID,
                                            writableNOR: files.writableNOR?.path, usbAddress: mux.guestAddress, wifi: true,
+                                           guestPackage: try iPadOffer(base: base),
                                            machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: nil, restore: [])
         } else {
@@ -147,6 +150,19 @@ extension String {
             }
         }
     }
+    /// EmulatorController.composeGuestOffer for a prepared iPad: the bundled itpack, the base's lock record.
+    func iPadOffer(base: URL) throws -> String? {
+        guard let itpack = config.ipadItpack else { return nil }
+        let lockURL = base.appendingPathComponent("device.lock.json")
+        let lock = try JSONSerialization.jsonObject(with: Data(contentsOf: lockURL)) as? [String: Any]
+        let dir = dir.appendingPathComponent("work/guest-offer")
+        try FileManager.default.createDirectory(at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let offer = try GuestPackage.compose(itpack: URL(fileURLWithPath: itpack), board: "k48ap", build: lock?["build"] as? String ?? "",
+                                             lock: GuestPackage.lockRecord(lockURL), guest: nil, into: dir)
+        emit("offer", ["device": name, "serial": offer?.serial ?? -1, "seed": GuestPackage.lockRecord(lockURL)?.seed ?? -1])
+        return offer == nil ? nil : dir.path
+    }
+
     static var helper: String { config.helper }
     static var requirement: String { config.requirement }
     static var files: String { config.files }
@@ -243,6 +259,28 @@ extension String {
     fail("\(d.name): install failed: \(lastError)")
 }
 
+/// With an offer: the loader's report, then the agent through the app's GuestServices (the window
+/// title's foreground app, the sidebar's launch) and the lock state.
+@MainActor func iPadGuest(_ d: Device) async {
+    let start = Date()
+    while d.process.status?.guestPackage == nil, Date().timeIntervalSince(start) < 60 { try? await Task.sleep(for: .seconds(1)) }
+    let report = d.process.status?.guestPackage
+    emit("ipadReport", ["serial": report?.serial ?? -1, "result": report?.result ?? -99])
+    let agent = GuestAgent(link: d.process.link, cache: GuestAgentCache())
+    let alive = await agent.waitAlive(seconds: 60)
+    let guest = GuestServices(agent: agent, packaged: report != nil)
+    let home = try? await guest.foregroundAppName()
+    let locked = try? await agent.isLocked()
+    var launched: String?
+    do { try await guest.launch("com.apple.mobilesafari") } catch { emit("ipadLaunchError", ["error": "\(error)"]) }
+    for _ in 0..<20 where launched != "Safari" {
+        try? await Task.sleep(for: .seconds(1))
+        launched = try? await guest.foregroundAppName()
+    }
+    d.screenshot("ipad-launched")
+    emit("ipadAgent", ["alive": alive, "home": home ?? "", "locked": locked.map { $0 ? 1 : 0 } ?? -1, "launched": launched ?? ""])
+}
+
 // MARK: - Prepared first-boot files, on a fake base
 
 func checkPreparedFiles() throws {
@@ -308,6 +346,7 @@ func checkPreparedFiles() throws {
     async let i2: Void = install(ipad)
     _ = await (i1, i2)
     ipod.screenshot("ipod-installed"); ipad.screenshot("ipad-installed")
+    if config.ipadItpack != nil { await iPadGuest(ipad) }
 
     // kill -9 the iPad's helper: it dies, the iPod doesn't notice.
     let killedPID = ipad.process.link.pid

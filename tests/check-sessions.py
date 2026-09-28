@@ -14,12 +14,14 @@ DeviceStateStorage.writableNOR, and W1's DeviceLink, and runs:
   screenshot one from each, read from its ring surface under a use count
   usb        lockdown ProductType through each device's own usbmuxd (no cross-talk)
   install    one IPA into each at once, through the gate; each lists it
+  guest      (--ipad-itpack) the iPad booted with the app's offer: the loader's report, then the
+             agent through GuestServices: foreground app, lock state, launch Safari
   kill       kill -9 of the iPad helper: it is noticed as dead, the iPod keeps running
   restart    a fresh iPad helper and usbmuxd on the same overlay lights and answers USB
   quit       both shut down cleanly in parallel (power-off confirmed), helpers exit 0
   base       the prepared iPad base is byte- and mode-identical afterwards
 
-    tests/check-sessions.py --ipad-device DIR [--helper PATH] [--dylib PATH] [--ipa PATH] [--work DIR]
+    tests/check-sessions.py --ipad-device DIR [--ipad-itpack ARMV7.itpack] [--helper PATH] [--dylib PATH] [--ipa PATH] [--work DIR]
     tests/check-sessions.py --guest --ipod-device DIR --itpack ARMV6.itpack [...]
 
 --guest runs the no-shell guest-services scenario (tests/session-driver/guest.swift) on two
@@ -148,6 +150,8 @@ def main():
     ap.add_argument("--ipa", type=Path, default=HOME / "Developer/qemu-ios-ipad1/contrib/it-harness/build/Harness.ipa")
     ap.add_argument("--bundle-id", default="com.qemuios.harness")
     ap.add_argument("--work", type=Path)
+    ap.add_argument("--ipad-itpack", type=Path, help="boot the iPad with the app's offer from this armv7.itpack and check "
+                    "the loader's report and the agent (foreground app, lock state, launch)")
     args = ap.parse_args()
     if not args.guest and not args.ipad_device:
         ap.error("--ipad-device is required (or --guest)")
@@ -162,6 +166,8 @@ def main():
     cfg = {"helper": str(helper), "requirement": TEAM_REQ, "usbmuxd": args.usbmuxd, "ipa": str(args.ipa),
            "bundleID": args.bundle_id, "work": str(work), "files": str(args.files),
            "ipodNAND": str(args.files / os.readlink(args.files / "nand-current")), "ipadBase": str(args.ipad_device or "")}
+    if args.ipad_itpack:
+        cfg["ipadItpack"] = str(args.ipad_itpack)
     if args.guest:
         tz = work / "lockdown-tz"
         # The app's Debug build compiles the same source (DeviceTools.developmentHelper).
@@ -252,6 +258,15 @@ def main():
     inst = {e["device"]: e for e in find("installed")}
     check(all(inst.get(d, {}).get("has") for d in ("ipod", "ipad")),
           "IPA installed into each through the gate: " + ", ".join(f"{k} {v['seconds']:.0f} s (attempt {v['attempt']})" for k, v in inst.items()))
+    if args.ipad_itpack:
+        offer, rep = (find("offer", device="ipad") or [{}])[0], (find("ipadReport") or [{}])[0]
+        check(offer.get("serial", -1) > 0 and rep.get("serial") == offer.get("serial") and rep.get("result", -99) >= 0,
+              f"iPad guest package: offered serial {offer.get('serial')} (seed {offer.get('seed')}), "
+              f"loader reports serial {rep.get('serial')} result {rep.get('result')}")
+        ag = (find("ipadAgent") or [{}])[0]
+        check(ag.get("alive") and ag.get("home") == "Home Screen" and ag.get("locked") == 0 and ag.get("launched") == "Safari",
+              f"iPad agent through GuestServices: foreground {ag.get('home')!r}, locked {ag.get('locked')}, "
+              f"launch -> {ag.get('launched')!r}")
     killed = (find("killed") or [{}])[0]
     check(killed.get("noticed") and killed.get("seconds", 9) < 1 and "signal 9" in killed.get("reason", ""),
           f"kill -9 iPad: noticed in {killed.get('seconds', -1) * 1000:.0f} ms: {killed.get('reason')}")
