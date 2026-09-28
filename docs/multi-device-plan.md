@@ -383,3 +383,8 @@ The app publishes STAGING_DIR by rename.
   - When `storage.writableNOR` is set, clone `base/nor.bin` to that path on first boot (`cp -c`, then `chmod u+w`) and pass it as the writable NOR.
   - Create the overlay and usbmuxd-conf directories on first boot.
   - Never write inside `base/`, and skip `missingAssets` and the legacy development paths.
+
+**FirmwareKit wave A2, 2026-09-28** (`2907d45`, `45fdbdd`, `2dbe750`):
+- **GL dispatch tables are generated at prepare time from the IPSW's shared cache.** They use one shipped base table (`gli-dispatch-7B500.tsv`) for the per-function columns. The catalog's `gli_dispatch` field is unused and can be dropped.
+- **No MachOSigner in FirmwareKit.** Guest helpers are signed once when the app is built (`build-release.py` on the dev Mac), so FirmwareKit never signs at run time.
+- **Hook contract change:** the activation hook must leave its target file validly signed. FirmwareKit checks that a CodeDirectory is present and records the sha256 values, but doesn't re-sign. This replaces the Python pipeline's post-hook `ldid` re-sign. Sam's activation agent owns the hook side of this.
