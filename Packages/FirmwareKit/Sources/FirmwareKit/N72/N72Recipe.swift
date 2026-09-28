@@ -8,7 +8,8 @@
 // The recipe: storage "8g" (model MB528; 16g MB531, 32g MB533; region LL/A), system_mib = the volume
 // (7168 MiB = 1835008 blocks), options gles_shim / appsync / web_proxy, gli_dispatch the shim's ABI table
 // (default gli-dispatch-7E18.tsv). --guest-tools holds MBXGLEngine, sblaunch, sbdlicon (optional), it_agent,
-// it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib and that TSV.
+// it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib, armv6.itpack (the guest-package loader and seed
+// package, as ipod2g_device.py bakes them) and that TSV.
 
 import CryptoKit
 import Foundation
@@ -139,7 +140,8 @@ public enum N72Recipe {
             return try bake(m, options: recipe.options, tools: major >= 3, helpers: o.guestTools, tsv: tsv,
                             owners: &owners, log: log)
         }
-        for (k, v) in baked { derived[k] = v }
+        for (k, v) in baked where k != "guest_package" { derived[k] = v }
+        let guestPackage = baked["guest_package"] as? GuestPackage.Record
         let hfs = try HFSPlusVolume(volume, writable: true)
         for uid in Set(owners.map(\.0)).sorted() {
             let n = try hfs.setOwner(owners.filter { $0.0 == uid }.map(\.1), uid: uid, gid: uid)
@@ -183,7 +185,7 @@ public enum N72Recipe {
             "identity": ["seed": seed, "udid": ident.udid ?? "", "sha256": try Preparer.digest(file("identity.json"), SHA256())],
             "outputs": ["nand": ["path": "nand", "pages": pages.count, "listing_sha256": listing.finalize().map { String(format: "%02x", $0) }.joined()],
                         "nor": try sha("nor.bin"), "iboot": major >= 3 ? try sha("iBoot.bin") as Any : NSNull(), "gid_blobs": try sha("gid-blobs.bin")],
-            "derived": derived,
+            "derived": derived, "guest_package": guestPackage?.object ?? NSNull(),
             // machine options the device must boot with (ipod2g_device.py): every device built here uses the
             // engine UID path; adopted and shipping images keep the legacy default
             "machine": machine,
@@ -302,7 +304,6 @@ public enum N72Recipe {
         } else {
             for rel in [agentJob] + (1...3).map({ "private/var/mobile/Media/.lt-guest-tools-v\($0)" }) { try? fm.removeItem(at: at(rel)) }
         }
-        owners += guestToolOwners.filter { (try? fm.destinationOfSymbolicLink(atPath: at($0.1).path)) != nil || fm.fileExists(atPath: at($0.1).path) }
 
         if opt["appsync"] == true {   // patch-appsync-dylib.sh
             let line = try AppSyncCachePatch.patchCache(at: at(armv6Cache))
@@ -329,7 +330,15 @@ public enum N72Recipe {
         log("Activating device")
         report["activation"] = try Activation.run(on: at(SystemEdits.lockdownd))
         owners.append((0, SystemEdits.lockdownd))
-        log("bake: \(report.filter { $0.key != "activation" })")
+        // mkpkg.seed: the loader and the seed package; it_boot loads the package's jobs (com.qemu.it-agent), so
+        // the baked copies it provides are removed. Owners after it, for only what is left.
+        let gli = problem == nil ? String(tsv.deletingPathExtension().lastPathComponent.dropFirst("gli-dispatch-".count)) : nil
+        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent("armv6.itpack"), gli: gli)
+        log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
+        report["guest_package"] = record
+        owners += seeded.map { (UInt32(0), $0) }
+        owners += guestToolOwners.filter { (try? fm.destinationOfSymbolicLink(atPath: at($0.1).path)) != nil || fm.fileExists(atPath: at($0.1).path) }
+        log("bake: \(report.filter { $0.key != "activation" && $0.key != "guest_package" })")
         return report
     }
 }
