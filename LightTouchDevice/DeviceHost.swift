@@ -6,13 +6,6 @@ import Foundation
 import IOSurface
 
 final class DeviceHost: @unchecked Sendable {
-    /// EmulatorController.haltShutdownBudget / cleanShutdownBudget.
-    static let haltBudget: TimeInterval = 30
-    /// EmulatorController.iPadPowerdownBudget: 4.2.1 power-offs take 16–25 s and
-    /// once passed 30 s, leaving the FTL unclosed.
-    static let iPadPowerdownBudget: TimeInterval = 45
-    static let cleanShutdownBudget: TimeInterval = 60
-
     let qemu: Qemu
     let status: StatusBlock
     let ring: FrameRingWriter
@@ -44,7 +37,6 @@ final class DeviceHost: @unchecked Sendable {
 
     var booted: Bool { stateLock.withLock { bootConfig != nil } }
     var hasExited: Bool { stateLock.withLock { exited } }
-    var isIPad: Bool { stateLock.withLock { bootConfig?.machine.hasPrefix("ipad") ?? false } }
 
     func info(machine: String?) -> HelperInfo {
         HelperInfo(protocolVersion: DeviceLinkWire.protocolVersion, pid: getpid(), dylibPath: qemu.path,
@@ -193,59 +185,34 @@ final class DeviceHost: @unchecked Sendable {
         }
     }
 
-    // MARK: Clean shutdown
+    // MARK: Halt
 
-    /// The app is gone (or asked with SIGTERM): unmount the guest's storage the
-    /// way the app would, bounded by the app's clean-shutdown budget, then quit.
-    ///   iPad: system_powerdown (the machine's power-off gesture), wait for the
-    ///         PMU power-off confirmation.
-    ///   iPod: powerdown alone is unreliable (1 of 2 in the spikes); the app's
-    ///         path is the guest-tools halt, and in here that is the agent's
-    ///         reboot2(RB_HALT). Then powerdown as the fallback.
-    func cleanShutdown(reason: String) {
+    /// Stop, the app's quit and a vanished app: a hard halt, never a guest
+    /// shutdown (a booting or wedged guest cannot be asked to unmount). Pause
+    /// the VM, which flushes storage (the iPad IOP msyncs its NAND overlay on
+    /// every VM stop; the iPod's pages and both NORs are written through), then
+    /// quit QEMU. The guest's filesystems are crash-consistent: HFS+ replays its
+    /// journal on the next boot. A guest that already powered off just quits.
+    func halt(reason: String) {
         let proceed: Bool = stateLock.withLock {
             guard !shuttingDown else { return false }
             shuttingDown = true
             return true
         }
         guard proceed else { return }
-        helperLog("clean shutdown: \(reason)")
-        guard booted, !hasExited else { helperLog("clean shutdown: no VM running"); exit(0) }
+        helperLog("halt: \(reason)")
+        guard booted, !hasExited else { helperLog("halt: no VM running"); exit(0) }
         Thread.detachNewThread { [self] in
             let start = Date()
-            let deadline = start.addingTimeInterval(Self.cleanShutdownBudget)
-            let stopped = { self.hasExited || self.qemu.storageFailed() }
-            let confirmed = { self.qemu.shutdownConfirmed() }
-            func wait(until limit: Date) -> Bool {
-                while !confirmed(), !stopped(), Date() < limit { usleep(50_000) }
-                return confirmed()
-            }
-            // Still in qemu_init: nothing can be scheduled on the VM yet.
-            while !qemu.ready(), !stopped(), Date().timeIntervalSince(start) < 5 { usleep(50_000) }
-            // Already powered off (-no-shutdown keeps QEMU in 'shutdown'): just quit.
-            // Resuming that VM is an invalid runstate transition and aborts QEMU,
-            // which is what a quit after Power Off (or after the app's own halt) did.
-            if qemu.ready(), !confirmed() {
-                qemu.snapshotResume()          // a paused vCPU cannot unmount
-                if !isIPad, qemu.agentStatus() == 1 {
-                    let submitted = "\(UUID().uuidString) halt \n".withCString { qemu.agentRequest($0) }
-                    helperLog("clean shutdown: agent halt \(submitted ? "submitted" : "refused")")
-                    if submitted { _ = wait(until: min(deadline, Date().addingTimeInterval(Self.haltBudget))) }
-                }
-                if !confirmed(), !stopped() {
-                    helperLog("clean shutdown: powerdown")
-                    qemu.powerdown()
-                    _ = wait(until: isIPad ? min(deadline, Date().addingTimeInterval(Self.iPadPowerdownBudget)) : deadline)
-                }
-            }
-            let ok = confirmed()
-            status[.shutdownConfirmed] = ok ? 1 : 0
-            helperLog(String(format: "clean shutdown: %@ after %.1f s", ok ? "guest confirmed power-off (volume unmounted)"
-                             : "NOT confirmed; this session's writes may be lost", Date().timeIntervalSince(start)))
+            // Still in qemu_init: nothing can be scheduled on the VM yet, and nothing is written.
+            while !qemu.ready(), !hasExited, Date().timeIntervalSince(start) < 5 { usleep(50_000) }
+            if qemu.ready() { qemu.pause() }   // vm_stop: storage flushed before the quit runs
             if !hasExited { qemu.quit() }
             let quitDeadline = Date().addingTimeInterval(5)
             while !hasExited, Date() < quitDeadline { usleep(50_000) }
-            if !hasExited { helperLog("clean shutdown: QEMU did not return; exiting"); exit(ok ? 0 : 1) }
+            helperLog(String(format: "halt: %@ after %.1f s", hasExited ? "QEMU returned" : "QEMU did not return; exiting",
+                             Date().timeIntervalSince(start)))
+            if !hasExited { exit(1) }
         }
     }
 }

@@ -337,22 +337,11 @@ func checkPreparedFiles() throws {
     let apps = (try? await ipad.services.installedApps())?.map(\.id) ?? []
     emit("restartedApps", ["device": "ipad", "has": apps.contains(config.bundleID)])
 
-    // Clean quit of both, in parallel: the first rung of EmulatorController's
-    // clean shutdown for each board, then stop() (SIGTERM).
+    // Stop both at once, as EmulatorController.halt does: SIGTERM, and the helper
+    // pauses (storage flushed) and quits QEMU without asking the guest.
     let quit = Date()
-    ipad.process.link.send(.machine(.powerdown))
-    let halt = try? await ipod.process.link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5)
-    emit("halt", ["device": "ipod", "reply": "\(String(describing: halt))"])
-    var confirmed: [String: Double] = [:]
-    while confirmed.count < 2, Date().timeIntervalSince(quit) < 50 {
-        for d in [ipod, ipad] where confirmed[d.name] == nil && d.process.status?.shutdownConfirmed == true {
-            confirmed[d.name] = Date().timeIntervalSince(quit)
-        }
-        try? await Task.sleep(for: .milliseconds(100))
-    }
-    emit("confirmed", ["ipod": confirmed["ipod"] ?? -1, "ipad": confirmed["ipad"] ?? -1])
     ipod.process.terminate(); ipad.process.terminate()
-    let exited0 = await ipod.process.waitForExit(timeout: 30), exited1 = await ipad.process.waitForExit(timeout: 30)
+    let exited0 = await ipod.process.waitForExit(timeout: 10), exited1 = await ipad.process.waitForExit(timeout: 10)
     emit("quit", ["ipodExited": exited0, "ipadExited": exited1, "seconds": Date().timeIntervalSince(quit),
                   "ipodReason": ipod.process.deathReason ?? "", "ipadReason": ipad.process.deathReason ?? ""])
     ipod.mux.stop(); ipad.mux.stop()

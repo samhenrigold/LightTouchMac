@@ -6,11 +6,11 @@ status block, frame ring, framed link). Cases:
 
   reject     an ad-hoc re-signed helper is refused by the Team requirement
   ipod       iPod nand-current: lit, unlock drag, battery request, agent RPC, then the
-             parent is SIGKILLed: the helper halts the guest (agent) and exits cleanly
+             parent is SIGKILLed: the helper hard-halts (pause, flush, quit) and exits
   ipad       iPad 3.2.2: lit, unlock, snapshot, resume, snapshot, quit -> qemuExited(0)
   restore    -incoming the second snapshot: lit, tap Settings, Home; then SIGKILL the
              helper: the client notices (invalidated + terminated)
-  ipad-orphan  fresh overlay, lit, parent SIGKILLed: powerdown confirmed, helper exits
+  ipad-orphan  fresh overlay, lit, parent SIGKILLed: hard halt (NAND synced), helper exits
   oneshot    --oneshot: an iPad boot stopped at FTL_Open [OK] (stopPattern, newlines removed)
   headless   --headless: an iPod boot to a lit lock screen, dump, quit
 
@@ -154,7 +154,7 @@ def ipad_boot(device, ovl, serial, restore=None, shutdown=True):
 
 
 def parent_kill(d, case, results, budget):
-    """SIGKILL the driver (the 'app') once it holds; the helper must shut the guest down and exit."""
+    """SIGKILL the driver (the 'app') once it holds; the helper must halt (no guest shutdown) and exit."""
     hold = d.wait_event("hold", 400)
     if not check(hold, "reached hold", case, results):
         print(d.tail()); return
@@ -165,11 +165,10 @@ def parent_kill(d, case, results, budget):
     gone = wait_gone(helper, budget)
     check(gone is not None, f"helper exited {gone:.1f} s after the parent died" if gone else "helper exited", case, results)
     log = d.log.read_text(errors="replace")
-    check("clean shutdown: parent exited" in log or "clean shutdown: link closed" in log, "helper noticed the parent's death", case, results)
-    confirmed = [l for l in log.splitlines() if "clean shutdown:" in l]
-    print("   " + "\n   ".join(l.split("] ", 1)[-1] for l in confirmed))
-    check("guest confirmed power-off" in log, "guest confirmed power-off (volume unmounted)", case, results)
-
+    check("halt: parent exited" in log or "halt: link closed" in log, "helper noticed the parent's death", case, results)
+    lines = [l for l in log.splitlines() if "halt:" in l or "NAND synced" in l]
+    print("   " + "\n   ".join(l.split("] ", 1)[-1] for l in lines))
+    check("did not return" not in log and "powerdown" not in log, "hard halt: paused (storage flushed), QEMU quit, no guest shutdown", case, results)
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -213,7 +212,7 @@ def main():
             d = Driver(args, bin_dir, helper, work, "ipod", {"machine": "iPod-Touch", "boot": ipod_boot(files, work / "ipod/overlay"),
                        "steps": ["boot", "lit 0.03 240", "dump lock", IPOD_UNLOCK, "wait 4", "dump home", "battery 50 0",
                                  "wait 20", "agent echo agent-ok", "status", "hold"]})
-            parent_kill(d, "ipod", results, 75)
+            parent_kill(d, "ipod", results, 10)
             ev = {e["event"]: e for e in d.events()}
             check("lit" in ev, f"lit through the ring after {ev.get('lit', {}).get('seconds', 0):.1f} s", "ipod", results)
             dumps = {e["name"]: e for e in d.find("dump")}
@@ -257,7 +256,7 @@ def main():
             d = Driver(args, bin_dir, helper, work, "ipad-orphan", {"machine": "ipad1",
                        "boot": ipad_boot(dev, work / "ipad-orphan/overlay", work / "ipad-orphan/serial.log"),
                        "steps": ["boot", "lit 0.2 240", "dump lock", "wait 3", "hold"]})
-            parent_kill(d, "ipad-orphan", results, 45)
+            parent_kill(d, "ipad-orphan", results, 10)
 
         if "oneshot" in cases:
             print("oneshot", flush=True)

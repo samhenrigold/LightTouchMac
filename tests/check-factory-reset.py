@@ -46,7 +46,10 @@ nonisolated func logEvent(_ s:String){}
   try Data("personal data".utf8).write(to:overlayURL.appendingPathComponent("file"))
   try Data("nvram".utf8).write(to:preparedNORURL!)
  }
- func beginCleanShutdown(completion:@escaping(Bool)->Void){events.append("halt");completion(true)}
+ func halt(completion:@escaping(Bool)->Void){events.append("halt");completion(true)}
+ /// The helper process: gone once the fake link quit it.
+ struct Helper { let isDead: Bool }
+ var process:Helper?{Helper(isDead:isDead)}
  func resolveDeviceNotice(for operation:Notice){}
  func reportDeviceNotice(_ text:String,for operation:Notice){events.append("failure")}
 '''+reset+r'''}

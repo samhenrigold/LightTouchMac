@@ -33,7 +33,7 @@ func parkMainThread() -> Never {
     while true { CFRunLoopRun() }
 }
 
-/// SIGTERM / SIGINT run the same clean shutdown as a vanished parent.
+/// SIGTERM / SIGINT run the same halt as a vanished parent.
 var signalSources: [DispatchSourceSignal] = []
 func onTerminationSignals(_ handler: @escaping (String) -> Void) {
     for sig in [SIGTERM, SIGINT] {
@@ -93,7 +93,7 @@ func runLinked(service: String, token: String) -> Never {
     var channel: LinkChannel<AppMessage, HelperMessage>!
     func shutdown(_ reason: String) {
         guard let host else { exit(0) }
-        host.cleanShutdown(reason: reason)
+        host.halt(reason: reason)
     }
     channel = LinkChannel<AppMessage, HelperMessage>(fd: 3, queue: linkQueue, onMessage: { message in
         switch message {
@@ -178,7 +178,7 @@ func runHeadless(configPath: String) -> Never {
         exit(rc)
     }
     host.startPump()
-    onTerminationSignals { host.cleanShutdown(reason: $0) }
+    onTerminationSignals { host.halt(reason: $0) }
     _ = host.boot(config.boot)
 
     func front() -> IOSurface? { readerLock.withLock { reader?.front()?.surface } }
@@ -245,7 +245,7 @@ func runHeadless(configPath: String) -> Never {
                 }
                 emit(["event": "snapshot", "status": code, "error": error ?? "", "seconds": Date().timeIntervalSince(t0)])
             case "resume": host.perform(.snapshotResume)
-            case "shutdown": host.cleanShutdown(reason: "action")
+            case "shutdown": host.halt(reason: "action")
             case "quit": host.perform(.machine(.quit))
             default: emit(["event": "unknown-action", "action": action])
             }

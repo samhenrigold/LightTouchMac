@@ -16,7 +16,7 @@ DeviceStateStorage.writableNOR, and W1's DeviceLink, and runs:
   install    one IPA into each at once, through the gate; each lists it
   kill       kill -9 of the iPad helper: it is noticed as dead, the iPod keeps running
   restart    a fresh iPad helper and usbmuxd on the same overlay lights and answers USB
-  quit       both shut down cleanly in parallel (power-off confirmed), helpers exit 0
+  quit       both halted in parallel (SIGTERM: pause, flush, quit QEMU), helpers exit 0 within 5 s
   base       the prepared iPad base is byte- and mode-identical afterwards
 
     tests/check-sessions.py --ipad-device DIR [--helper PATH] [--dylib PATH] [--ipa PATH] [--work DIR]
@@ -262,12 +262,10 @@ def main():
           and len(find("usb", device="ipad")) == 2, "restart: a fresh iPad helper lit and answered USB on the same overlay")
     # Not a check: a kill -9 right after an install, with no guest sync, can lose it (powerdown-fixed.md).
     print(f"  note: after the kill -9 the installed app is {'still there' if (find('restartedApps') or [{}])[0].get('has') else 'gone (no guest sync before the kill)'}")
-    conf = (find("confirmed") or [{}])[0]
     quit_ = (find("quit") or [{}])[0]
-    check(conf.get("ipod", -1) >= 0 and conf.get("ipad", -1) >= 0,
-          f"clean quit in parallel: power-off confirmed, iPod {conf.get('ipod', -1):.1f} s, iPad {conf.get('ipad', -1):.1f} s")
-    check(quit_.get("ipodExited") and quit_.get("ipadExited") and quit_.get("ipodReason") == "The emulator stopped."
-          and quit_.get("ipadReason") == "The emulator stopped.", f"both helpers exited cleanly after SIGTERM: {quit_}")
+    check(quit_.get("ipodExited") and quit_.get("ipadExited") and quit_.get("seconds", 99) < 5
+          and quit_.get("ipodReason") == "The emulator stopped." and quit_.get("ipadReason") == "The emulator stopped.",
+          f"Stop halts both at once (SIGTERM: pause, flush, quit; no guest shutdown) in {quit_.get('seconds', -1):.1f} s: {quit_}")
     check(tree(args.ipad_device) == base_before, "the prepared base is unchanged (paths, sizes, modes, mtimes)")
     check(find("done") and driver.returncode == 0, f"driver finished (exit {driver.returncode})")
     fails = find("fail")

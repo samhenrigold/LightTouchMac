@@ -26,12 +26,12 @@ source=r'''import AppKit
  func finishRecordingBeforeQuit()->Bool{false}
 }
 @MainActor final class EmulatorController {
- static let cleanShutdownBudget=0.25,quitSnapshotBudget=0.0,resumeOnLaunch=false
+ static let stopBudget=0.25,quitSnapshotBudget=0.0,resumeOnLaunch=false
  let isInstalling=false,isDead=false,isPoweredOff=false,isErasing=false
  var requests=0
  func cancelFactoryReset(){}
  func beginQuitSnapshot(completion:@escaping(Bool)->Void){completion(false)}
- func beginCleanShutdown(completion:@escaping(Bool)->Void){
+ func halt(completion:@escaping(Bool)->Void){
   requests+=1;logEvent("shutdown-started")
   if mode=="backstop"{return}
   if mode=="synchronous"{completion(true);return}

@@ -145,9 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         emulators.forEach { $0.stop() }
     }
 
-    /// On quit: guard an in-flight install, then shut the guest down so it
-    /// unmounts. beginCleanShutdown requires explicit guest confirmation;
-    /// native halt without PMU power-off remains a known limitation.
+    /// On quit: guard an in-flight install, then save the RAM state (resume on)
+    /// or halt each device (EmulatorController.halt: storage flushed, no guest shutdown).
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if emulators.contains(where: \.isErasing) { return .terminateCancel }
         if awaitingTermination { return .terminateLater }
@@ -193,7 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 NSApp.reply(toApplicationShouldTerminate: true)
             }
         }
-        let backstop = EmulatorController.cleanShutdownBudget
+        let backstop = EmulatorController.stopBudget
             + (EmulatorController.resumeOnLaunch ? EmulatorController.quitSnapshotBudget : 0)
         terminationBackstop = Task {
             do { try await Task.sleep(for: .seconds(backstop)) } catch { return }
@@ -208,22 +207,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if remaining == 0 { reply() }
         }
         for emulator in running {
-            // Exactly ONE of these two runs, and that is the whole point.
-            //
-            // Both make the session durable, by opposite means. The snapshot freezes
-            // RAM while flash stays where it is; the powerdown makes the guest
-            // unmount, which pushes RAM's HFS+ catalog INTO flash. Doing the save
-            // and then the powerdown — which is what this used to ask for — leaves
-            // the snapshot describing a filesystem that has since moved on, i.e.
-            // exactly the stale-RAM-over-newer-flash corruption the snapshot code
-            // spends its comments warning about. So: save if resume is on, and fall
-            // back to unmounting only if the save did not happen.
+            // Save the RAM state if resume is on (the VM stays paused and its storage
+            // is flushed; the helper halts when the app exits), else halt now. Never
+            // a guest shutdown after the save: flash moving past the snapshot is the
+            // stale-RAM-over-newer-flash corruption the snapshot code warns about.
             if EmulatorController.resumeOnLaunch, !emulator.isInstalling, !AppInstaller.hasPendingWork {
                 emulator.beginQuitSnapshot { saved in
-                    if saved { finished() } else { emulator.beginCleanShutdown { _ in finished() } }
+                    if saved { finished() } else { emulator.halt { _ in finished() } }
                 }
             } else {
-                emulator.beginCleanShutdown { _ in finished() }
+                emulator.halt { _ in finished() }
             }
         }
         return .terminateLater
