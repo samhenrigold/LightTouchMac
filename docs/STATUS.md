@@ -4,7 +4,7 @@ The one place that says what is done, what is running and what is left. Updated 
 `multidevice` (this repo) or `ipad1` (qemu-ios). Every "done" line names how it was checked. Answer
 status questions from this file, after checking it against the commits it cites.
 
-Last update: 2026-09-28, multidevice `5ae9620`, qemu-ios ipad1 `821f1b5428`.
+Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b5428`.
 
 ## Done
 
@@ -23,6 +23,7 @@ Last update: 2026-09-28, multidevice `5ae9620`, qemu-ios ipad1 `821f1b5428`.
 | Guest tools without SSH | Typed agent v2 ops replace SSH, OpenSSH, OpenSSL, freeze | `tests/ipod/regress.py` (no `guest_ssh`) |
 | USB zero-length packets | Sent by usbmuxd (`qemu-zlp`, pinned `41631a7`), not faked by the emulator | AFC 16384/16385/65536 round trips in the release verify |
 | Offline root-FS read (F1) | `firmwarekit mount/export` for both boards, oracle-checked | `docs/filesystem-f0-findings.md` U1 table |
+| Storage fixes from the audit | App and device locks, atomic delete/publish, launch sweeps, TM exclusions, disk checks, Settings ▸ Storage | `221ef9a`; check-sessions 17/17, check-helper-boot lease 6/6, offline checks |
 | Silent headless boots | `-audio driver=none` everywhere headless | grep of tests and helper modes |
 
 ## Catalog (LightTouchMac/Resources/firmware-catalog.json)
@@ -41,7 +42,6 @@ Last update: 2026-09-28, multidevice `5ae9620`, qemu-ios ipad1 `821f1b5428`.
 | Work | Branch | Covers |
 |---|---|---|
 | iPad app bugs, 3.2.2 and 4.2.1 | `ipad4-app-bugs` | boot progress, running app in the title bar, proxy, popover shadow blur, 4.2.1 keyboard, Stop as a hard halt |
-| Storage fixes | `storage-fixes` | app and device locks, atomic delete/publish, leftovers sweep, TM exclusions, disk checks, Settings ▸ Storage |
 
 Then: a notarized build, verified in-app on every firmware, for Sam to test. That build is the first
 in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e71588`).
