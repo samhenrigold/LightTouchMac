@@ -148,7 +148,7 @@ def guest_source_hashes(qemu):
                     and path.suffix in ('.c', '.h', '.sh', '.py', '.xml', '.plist', '.entitlements', '.txt')):
                 selected[str(path.relative_to(qemu))] = digest(path)
     if ipad:
-        for path in (qemu / 'docs/ipad1').glob('gli-dispatch-*.tsv'):
+        for path in [*(qemu / 'docs/ipad1').glob('gli-dispatch-*.tsv'), qemu / 'docs/ipod/gli-dispatch-7E18.tsv']:
             selected[str(path.relative_to(qemu))] = digest(path)
     return selected
 
