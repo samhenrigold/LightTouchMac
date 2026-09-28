@@ -45,6 +45,8 @@ enum MainMenuBuilder {
         let menu = NSMenu(title: appName)
         menu.addItem(item("About \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
         menu.addItem(.separator())
+        menu.addItem(item("Settings…", #selector(MainWindowController.showStorageSettings(_:)), ","))
+        menu.addItem(.separator())
         let services = NSMenu(title: "Services")
         menu.addItem(submenu(services, title: "Services"))
         NSApp.servicesMenu = services

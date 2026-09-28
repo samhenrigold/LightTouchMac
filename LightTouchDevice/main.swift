@@ -1,7 +1,8 @@
 // LightTouchDevice: one emulated device per process (docs/multi-device-plan.md, section A).
 //
-//   LightTouchDevice --connect SERVICE --token T --instance UUID   spawned by the app (DeviceLink);
-//                                                                  the link socket is fd 3
+//   LightTouchDevice --connect SERVICE --token T --instance UUID [--lease PATH]
+//                                             spawned by the app (DeviceLink); the link socket is fd 3.
+//                                             Hello fails (exit 75) if another process holds PATH's flock.
 //   LightTouchDevice --headless config.json   boot, run scripted actions, PNG dumps, status on stdout
 //   LightTouchDevice --oneshot config.json    boot until QEMU exits or a serial marker (seal/keybag)
 //   LightTouchDevice --probe MACHINE          load the dylib, print the hello's HelperInfo (packaging tests)
@@ -61,6 +62,22 @@ func emit(_ object: [String: Any]) {
     FileHandle.standardOutput.write(data + Data("\n".utf8))
 }
 
+/// The device's lease (Devices/<uuid>/work/lease), held until this process
+/// exits: a second helper on the same storage, from another Light Touch or
+/// beside one still finishing its shutdown, is refused before it boots.
+let leaseRefusal = "This device is in use by another Light Touch."
+var leaseDescriptor: Int32 = -1
+func takeLease(_ path: String?) -> Bool {
+    guard let path else { return true }
+    try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent,
+                                             withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+    guard fd >= 0 else { helperLog("lease \(path): \(String(cString: strerror(errno)))"); return false }
+    guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { helperLog("lease \(path) is held"); close(fd); return false }
+    leaseDescriptor = fd
+    return true
+}
+
 if let service = arguments["--connect"] {
     runLinked(service: service, token: arguments["--token"] ?? "")
 } else if let path = arguments["--headless"] {
@@ -108,6 +125,11 @@ func runLinked(service: String, token: String) -> Never {
                 channel.send(.reply(id: id, .failure("The device helper could not load libqemu-arm.dylib.")))
                 channel.drain()
                 exit(70)
+            }
+            guard takeLease(arguments["--lease"]) else {
+                channel.send(.reply(id: id, .failure(leaseRefusal)))
+                channel.drain()
+                exit(75)
             }
             channel.send(.reply(id: id, .hello(host.info(machine: machine))))
         case .request(let id, let request):
@@ -294,7 +316,13 @@ func runOneShot(configPath: String) -> Never {
     }
     host.onExit = { rc in finish(exited: !stopping, code: rc) }
     onTerminationSignals { _ in qemu.quit() }
+    // The preparer (firmwarekit) died: nobody will read this boot's result.
+    let parent = getppid()
+    let parentWatch = DispatchSource.makeProcessSource(identifier: parent, eventMask: .exit, queue: .main)
+    parentWatch.setEventHandler { helperLog("parent \(parent) exited"); stopping = true; qemu.quit() }
+    parentWatch.resume()
     _ = host.boot(config.boot)
+    if getppid() != parent || parent == 1 { stopping = true; qemu.quit() }
     Thread.detachNewThread {
         while !host.hasExited {
             usleep(500_000)
@@ -314,5 +342,5 @@ func runOneShot(configPath: String) -> Never {
             }
         }
     }
-    parkMainThread()
+    withExtendedLifetime(parentWatch) { parkMainThread() }
 }

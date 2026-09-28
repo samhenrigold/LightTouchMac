@@ -132,7 +132,7 @@ extension String {
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: "user,id=wifi0", restore: [])
         }
         let process = DeviceProcess(instance: UUID(), profile: profile, log: dir.appendingPathComponent("native.log"),
-                                    helper: URL(fileURLWithPath: Self.helper), requirement: Self.requirement)
+                                    lease: dir.appendingPathComponent("work/lease"), helper: URL(fileURLWithPath: Self.helper), requirement: Self.requirement)
         self.process = process
         process.onDeath = { [weak self] reason in
             self?.deaths.append(reason)

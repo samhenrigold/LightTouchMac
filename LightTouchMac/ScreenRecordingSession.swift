@@ -14,6 +14,8 @@ final class ScreenRecordingSession {
     struct RecoveryReport {
         var saved: [URL] = []
         var remaining: [URL] = []
+        /// Unplayable takes: deleted, since nothing can recover them.
+        var deleted: [URL] = []
     }
 
     private(set) var phase: Phase = .idle { didSet { onChange?() } }
@@ -54,6 +56,15 @@ final class ScreenRecordingSession {
         Bundled.stateDirectory.appendingPathComponent("Recordings", isDirectory: true)
     }
 
+    /// Recordings/ is out of backups while a take is being written into it
+    /// (a large, changing file), and back in once it's idle.
+    private static func excludeRecordingsFromBackup(_ excluded: Bool) {
+        var folder = recoveryDirectory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = excluded
+        try? folder.setResourceValues(values)
+    }
+
     /// `audio` starts the device's guest audio capture (nil: a silent movie).
     func start(frame: @escaping () throws -> CGImage?, audio: @escaping () async throws -> GuestAudioCapture? = { nil }, prepare: @escaping () async throws -> CGSize? = { nil }, cleanup: @escaping () async -> Void = {}, background: CGImage? = nil, destination: @escaping () throws -> URL) {
         guard !isActive else { return }
@@ -77,6 +88,7 @@ final class ScreenRecordingSession {
             do {
                 let folder = Self.recoveryDirectory
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                Self.excludeRecordingsFromBackup(true)
                 let url = folder.appendingPathComponent("Recording \(UUID().uuidString).mov")
                 output = url
                 let canvasSize = try await prepare()
@@ -122,6 +134,7 @@ final class ScreenRecordingSession {
     }
 
     private func complete() async {
+        defer { Self.excludeRecordingsFromBackup(false) }
         // Also announce an interrupted take, once, if frames had started.
         if didBeginRecording {
             didBeginRecording = false
@@ -227,8 +240,8 @@ final class ScreenRecordingSession {
         }
     }
 
-    /// Recover only older, playable recordings. Incomplete files are retained
-    /// for inspection; new takes and unrelated files are never swept up.
+    /// Recover only older, playable recordings. An unplayable one is deleted
+    /// (report.deleted, for the log); new takes and unrelated files are never swept up.
     static func recoverRecordings(createdBefore cutoff: Date,
                                   destination: (URL) throws -> URL) async throws -> RecoveryReport {
         let folder = recoveryDirectory
@@ -246,7 +259,8 @@ final class ScreenRecordingSession {
             guard let duration = try? await asset.load(.duration), duration.isNumeric, duration.seconds > 0,
                   let tracks = try? await asset.loadTracks(withMediaType: .video), !tracks.isEmpty,
                   (try? await asset.load(.isPlayable)) == true else {
-                report.remaining.append(source)
+                if (try? FileManager.default.removeItem(at: source)) != nil { report.deleted.append(source) }
+                else { report.remaining.append(source) }
                 continue
             }
             do {

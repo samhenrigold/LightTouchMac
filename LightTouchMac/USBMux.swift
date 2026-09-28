@@ -49,10 +49,12 @@ final class USBMux {
     /// never persist. Seed a copy in Application Support once and use that.
     /// Each device has its own (DeviceInstance.Storage.usbmuxConf); the
     /// adopted iPod keeps work/usbmuxd-conf.
+    /// Pairing records are secrets: the directory is 0700 and its plists
+    /// 0600, including ones an older build or the daemon left wider.
     private static func conf(_ work: URL) -> String {
         let fm = FileManager.default
         if !fm.fileExists(atPath: work.path) {
-            try? fm.createDirectory(at: work, withIntermediateDirectories: true)
+            try? fm.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             if let seed = Bundled.resource("usbmuxd-conf") {
                 for name in (try? fm.contentsOfDirectory(atPath: seed)) ?? [] {
                     try? fm.copyItem(at: URL(fileURLWithPath: seed).appendingPathComponent(name),
@@ -60,7 +62,19 @@ final class USBMux {
                 }
             }
         }
+        secure(work)
         return work.path
+    }
+
+    /// Also run over every device's conf at launch.
+    nonisolated static func secure(_ conf: URL) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: conf.path) else { return }
+        chmod(conf.path, 0o700)
+        for name in (try? fm.contentsOfDirectory(atPath: conf.path)) ?? [] {
+            let path = conf.appendingPathComponent(name).path
+            if (try? fm.attributesOfItem(atPath: path))?[.type] as? FileAttributeType == .typeRegular { chmod(path, 0o600) }
+        }
     }
     
     /// Start usbmuxd and record a session. Returns nil (and does nothing) if the
@@ -77,7 +91,10 @@ final class USBMux {
         
         // All writable scratch lives under Application Support, never files-root
         // (which is read-only inside a packaged app's signed bundle).
-        do { try StorageLocations.privateDirectory(paths.work) }
+        do {
+            try StorageLocations.privateDirectory(paths.work)
+            StorageLocations.excludeFromBackup(paths.work)
+        }
         catch {
             logEvent("usbmux: no work directory \(paths.work.path): \(error.localizedDescription); app management disabled")
             return nil
@@ -196,9 +213,10 @@ final class USBMux {
               let text = try? String(contentsOfFile: pidFile, encoding: .utf8),
               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
               pid > 0, kill(pid, 0) == 0 else { return }
-        var buffer = [CChar](repeating: 0, count: 4096)
-        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0,
-              String(cString: buffer).hasSuffix("/usbmuxd") else { return }
+        // Only an orphan (reparented to launchd): a daemon with a live parent
+        // belongs to another running Light Touch, never to this launch.
+        guard let identity = StorageLocations.daemonIdentity(pid), identity.parent == 1,
+              identity.uid == geteuid(), identity.path.hasSuffix("/usbmuxd") else { return }
         logEvent("usbmux: killing stale usbmuxd \(pid) from a previous run")
         kill(pid, SIGTERM)
     }

@@ -4,6 +4,7 @@
 // swiftc from Shared/*.swift + LightTouchDevice/FrameTools.swift.
 //
 //   helper-driver --helper PATH --scenario scenario.json --dump DIR [--log native.log] [--requirement R]
+//                 [--lease PATH] [--expect-failure TEXT]   (exit 0 if the start fails with TEXT)
 //
 // scenario: {"dylib": "...", "machine": "ipad1", "boot": BootConfig, "steps": ["boot", "lit 0.2 300", ...]}
 
@@ -44,6 +45,7 @@ configuration.helper = URL(fileURLWithPath: opts["--helper"]!)
 configuration.dylib = scenario.dylib
 configuration.machine = scenario.machine
 configuration.requirement = opts["--requirement"]
+if let lease = opts["--lease"] { configuration.arguments = ["--lease", lease] }
 let link = DeviceLink(configuration: configuration, queue: queue)
 
 let exitedEvent = DispatchSemaphore(value: 0)
@@ -107,9 +109,11 @@ case .success(let info):
                        "status": statusFields()])
 case .failure(let error):
     emit("startFailed", ["error": "\(error)"])
+    if let text = opts["--expect-failure"] { exit("\(error)".contains(text) ? 0 : 1) }
     exit(opts["--expect-reject"] != nil && "\(error)".contains("rejected") ? 0 : 1)
 }
 if opts["--expect-reject"] != nil { fail("an impostor was accepted") }
+if opts["--expect-failure"] != nil { fail("the start was expected to fail") }
 display.resume()
 
 Thread.detachNewThread {

@@ -5,6 +5,9 @@ tests/helper-driver stands in for the app (spawn, Mach rendezvous + validation,
 status block, frame ring, framed link). Cases:
 
   reject     an ad-hoc re-signed helper is refused by the Team requirement
+  lease      two helpers on one device's work/lease (temp state dir): the second is refused
+             ("in use by another Light Touch"), another device's lease is not; after the
+             holder's parent dies and its helper exits, the lease is taken again. No boot.
   ipod       iPod nand-current: lit, unlock drag, battery request, agent RPC, then the
              parent is SIGKILLed: the helper halts the guest (agent) and exits cleanly
   ipad       iPad 3.2.2: lit, unlock, snapshot, resume, snapshot, quit -> qemuExited(0)
@@ -22,7 +25,7 @@ target (Debug). Bases are read-only; overlays, snapshots, logs and PNG dumps go 
 Every boot uses -audio driver=none: no test plays sound through the Mac.
 Run in the foreground; every process it starts is gone when it returns.
 """
-import argparse, json, os, shutil, signal, subprocess, sys, tempfile, time
+import argparse, json, os, shutil, signal, subprocess, sys, tempfile, time, uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -180,7 +183,7 @@ def main():
     ap.add_argument("--work", type=Path)
     ap.add_argument("--only")
     args = ap.parse_args()
-    cases = ["reject", "ipod", "ipad", "restore", "ipad-orphan", "oneshot", "headless"]
+    cases = ["reject", "lease", "ipod", "ipad", "restore", "ipad-orphan", "oneshot", "headless"]
     if args.only:
         cases = [c for c in cases if c in args.only.split(",")]
     if not args.ipad_device:
@@ -207,6 +210,26 @@ def main():
             d = Driver(args, bin_dir, impostor, work, "reject",
                        {"dylib": args.dylib or (str(bundled) if bundled.exists() else None), "steps": []}, ["--expect-reject", "1"])
             check(d.wait(30) == 0 and "requirement failed" in d.out.read_text(), "ad-hoc impostor rejected", "reject", results)
+
+        if "lease" in cases:
+            print("lease", flush=True)
+            state = work / "lease-state"
+            lease = state / f"Devices/{uuid.uuid4()}/work/lease"
+            other = state / f"Devices/{uuid.uuid4()}/work/lease"
+            a = Driver(args, bin_dir, helper, work, "lease-a", {"steps": ["hold"]}, ["--lease", lease])
+            check(a.wait_event("hold", 30), "first helper takes the lease and connects", "lease", results) or print(a.tail())
+            b = Driver(args, bin_dir, helper, work, "lease-b", {"steps": []},
+                       ["--lease", lease, "--expect-failure", "in use by another Light Touch"])
+            check(b.wait(30) == 0, "second helper on the same device is refused", "lease", results) or print(b.tail())
+            o = Driver(args, bin_dir, helper, work, "lease-other", {"steps": []}, ["--lease", other])
+            check(o.wait(30) == 0 and o.find("connected"), "another device's helper connects meanwhile", "lease", results)
+            holder = a.helper_pid()
+            if a.p.poll() is None:
+                os.kill(a.p.pid, signal.SIGKILL)
+            a.p.wait()
+            check(holder and wait_gone(holder, 60) is not None, "the holder exits after its parent dies", "lease", results)
+            c = Driver(args, bin_dir, helper, work, "lease-c", {"steps": []}, ["--lease", lease])
+            check(c.wait(30) == 0 and c.find("connected"), "the lease is taken again once released", "lease", results)
 
         if "ipod" in cases:
             print("ipod", flush=True)

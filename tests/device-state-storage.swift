@@ -111,10 +111,20 @@ struct Check {
         // A legacy marker must never erase or change the device on launch.
         let unchanged = try select()
         precondition(unchanged.image == pinned.image)
-        try DeviceStateStorage.adoptBundledImageAfterErase(state: root, nand: "nand", manifest: manifest)
+        // Erase repoints, then removes the bases nothing names any more: the
+        // old one, a torn .partial unpack. A base another record names stays.
+        let torn = root.appendingPathComponent("device/nand-\(second).partial")
+        let keptBase = root.appendingPathComponent("device/nand-kept")
+        try fm.createDirectory(at: torn, withIntermediateDirectories: true)
+        try fm.createDirectory(at: keptBase, withIntermediateDirectories: true)
+        let other = root.appendingPathComponent("Devices/\(UUID().uuidString)")
+        try fm.createDirectory(at: other, withIntermediateDirectories: true)
+        try Data(#"{"base":{"kind":"legacyBundled","path":"device/nand-kept"}}"#.utf8).write(to: other.appendingPathComponent("device.json"))
+        try DeviceStateStorage.adoptBundledImageAfterErase(state: root, nand: "nand", manifest: manifest, owner: UUID())
         let reset = try select()
         precondition(!reset.retained && reset.image.key == "nand-\(second)")
-        precondition(fm.fileExists(atPath: legacy.path))
+        precondition(!fm.fileExists(atPath: legacy.path) && !fm.fileExists(atPath: torn.path) && fm.fileExists(atPath: keptBase.path))
+        try fm.removeItem(at: other)
         precondition(!fm.fileExists(atPath: root.appendingPathComponent(".reset-nand-\(second)").path))
         // A freshly extracted content image remains pinned across app updates
         // and installation-path changes.
@@ -158,10 +168,10 @@ struct Check {
         }
         let base = eraseRoot.appendingPathComponent("base-image")
         try Data("base".utf8).write(to: base)
-        try DeviceStateStorage.erase(overlay: eraseOverlay, snapshots: [eraseSnapshot], legacyMarker: eraseMarker)
+        try DeviceStateStorage.erase(overlay: eraseOverlay, snapshots: [eraseSnapshot], legacyMarker: eraseMarker, state: root, owner: nil)
         precondition(!fm.fileExists(atPath: eraseOverlay.path) && !fm.fileExists(atPath: eraseSnapshot.path))
         precondition(!fm.fileExists(atPath: eraseMarker.path) && tryData(base)=="base")
-        try DeviceStateStorage.erase(overlay: eraseOverlay, snapshots: [eraseSnapshot], legacyMarker: eraseMarker)
+        try DeviceStateStorage.erase(overlay: eraseOverlay, snapshots: [eraseSnapshot], legacyMarker: eraseMarker, state: root, owner: nil)
         print("device state checks passed")
     }
     static func tryData(_ url: URL) -> String { try! String(contentsOf: url, encoding: .utf8) }

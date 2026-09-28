@@ -5,8 +5,8 @@
     fake-firmwarekit.py create --entry ENTRY.json --ipsw IPSW --out STAGING [--seed S]
                                [--helper PATH] [--cache DIR]
 
-FAKE_MODE picks the run: ok (default), error, crash, incomplete, slow (waits for SIGTERM
-after step 2, with a read-only nand/ like the real one). FAKE_ARGV, if set, gets argv as JSON.
+FAKE_MODE picks the run: ok (default), error, sha (a sha_mismatch error), crash, incomplete,
+slow (waits for SIGTERM after step 2, with a read-only nand/ like the real one). FAKE_ARGV, if set, gets argv as JSON.
 """
 import argparse, hashlib, json, os, signal, sys, time
 
@@ -43,6 +43,9 @@ if mode == "crash":
     sys.exit(3)
 if mode == "error":
     emit(event="error", code="key_missing", message="no key for rootfs")
+    sys.exit(1)
+if mode == "sha":
+    emit(event="error", code="sha_mismatch", message="sha1 of the IPSW")
     sys.exit(1)
 emit(event="step", index=2, name="Building the NAND")
 os.makedirs(os.path.join(out, "nand"), exist_ok=True)

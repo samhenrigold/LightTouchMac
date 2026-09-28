@@ -41,7 +41,7 @@ final class EmulatorController {
         webProxyStatus = .waiting
         onStatusChange?()
     }
-    enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff }
+    enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff, lowSpace }
     private(set) lazy var deviceNotice = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["message"] as? String
     private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
@@ -235,7 +235,8 @@ final class EmulatorController {
             logEvent("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
         }
         let process = DeviceProcess(instance: instance.id, profile: profile,
-                                    log: instance.paths.logs.appendingPathComponent("native.log"))
+                                    log: instance.paths.logs.appendingPathComponent("native.log"),
+                                    lease: instance.paths.lease)
         self.process = process
         lastFrameSerial = 0
         process.onDeath = { [weak self, weak process] reason in
@@ -245,10 +246,14 @@ final class EmulatorController {
         process.onAudio = { [weak self] event in self?.audioSink?(event) }
         startStatusPoll()
         let unpack = profile == .iPodTouch2G && instance.base.kind != .prepared ? iPodNAND().unpack : nil
+        // Low space doesn't stop a boot; it's said before writes start failing.
+        warnIfLowOnSpace()
         Task { [weak self] in
             // First boot of a packaged app: inflate the device image before the
             // helper opens it, off the main actor (the window says "Booting…").
             if let unpack {
+                do { try IPSWStore.checkSpace(Self.unpackedNANDBytes, at: URL(fileURLWithPath: unpack.dest)) }
+                catch { self?.helperDied("The device image could not be unpacked. \(error.localizedDescription)"); return }
                 let unpacked = await Task.detached { Self.unpackNAND(unpack.packed, into: unpack.dest) }.value
                 guard unpacked else { self?.helperDied("The device image could not be unpacked."); return }
             }
@@ -561,6 +566,17 @@ final class EmulatorController {
         orientationTask = nil
         usbmux.stop()
     }
+
+    /// Booting and recording: a notice (non-blocking) below 2 GB free, gone once there's room.
+    func warnIfLowOnSpace() {
+        if let warning = IPSWStore.lowSpaceWarning(at: stateDir) { reportDeviceNotice(warning, for: .lowSpace) }
+        else { resolveDeviceNotice(for: .lowSpace) }
+    }
+
+    /// Allocated size of an unpacked iPod image, with headroom.
+    // ponytail: measured, not read from the blob (nand-agent-v4: 1.25 GiB allocated);
+    // record it beside nand.itnand.sha256 if images grow.
+    nonisolated static let unpackedNANDBytes: Int64 = 1_500_000_000
 
     /// Inflate the packed device image with the bundled ipod-helper. Into a
     /// .partial sibling first, renamed only on success, so a first launch
@@ -1840,14 +1856,17 @@ final class EmulatorController {
             let nand = options.nand
             let manifest = packedImage.map { _ in URL(fileURLWithPath: options.packedNAND + ".sha256") }
             let preparedNOR = preparedNORURL
+            let owner = instance.id
             do {
                 try await Task.detached {
-                    try DeviceStateStorage.erase(overlay: overlay, snapshots: snapshots, legacyMarker: marker)
+                    try DeviceStateStorage.erase(overlay: overlay, snapshots: snapshots, legacyMarker: marker,
+                                                 state: stateDirectory, owner: owner)
                     if let preparedNOR, FileManager.default.fileExists(atPath: preparedNOR.path) {
+                        try DeviceStateStorage.checkRemovable(preparedNOR, state: stateDirectory, owner: owner)
                         try FileManager.default.removeItem(at: preparedNOR)
                     }
                     if let manifest {
-                        try DeviceStateStorage.adoptBundledImageAfterErase(state: stateDirectory, nand: nand, manifest: manifest)
+                        try DeviceStateStorage.adoptBundledImageAfterErase(state: stateDirectory, nand: nand, manifest: manifest, owner: owner)
                     }
                 }.value
                 resolveDeviceNotice(for: .erase)

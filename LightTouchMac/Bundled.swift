@@ -45,7 +45,21 @@ nonisolated enum Bundled {
             })
     }
 
-    static func requireStorage() throws { _ = try layout.get() }
+    /// One app per library: State/.app-lock, held (flock) for the process's
+    /// life. Launch sweeps and device starts run only after this succeeds.
+    static let appLockMessage = "Light Touch is already running with this library"
+    private static let appLock: Result<Int32, any Error> = Result {
+        let state = try layout.get().state
+        let fd = open(state.appendingPathComponent(".app-lock").path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        guard fd >= 0 else { throw StorageLocations.posixError() }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            close(fd)
+            throw CocoaError(.fileLocking, userInfo: [NSLocalizedDescriptionKey: appLockMessage + "."])
+        }
+        return fd
+    }
+
+    static func requireStorage() throws { _ = try appLock.get() }
 
     /// The fallback is only a path for error reporting, never an alternate
     /// writable root. App startup requires the successful layout above.
