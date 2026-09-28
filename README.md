@@ -71,7 +71,20 @@ the older build walkthrough, is kept at `docs/archive/README-2026-09-26.md`.
 
 ## Gates
 
-There is no single gate command yet (`scripts/gate.sh` is planned, `docs/sweep/PLAN.md` E3). Today:
+One command, two tiers:
+
+```sh
+scripts/gate.sh --quick    # host only, a few minutes: swift test, the catalog checks, every offline
+                           # check-*.py and scripts/test-*.py (except the network one), in parallel
+scripts/gate.sh --full     # quick + the emulator-backed checks one after the other: check-helper-boot,
+                           # check-sessions (--ipad-device, then --guest), check-guest-package, regress-app.sh
+```
+
+One line per check (PASS, FAIL, SKIP with the reason, XFAIL for a check the script lists as known failing
+on today's code, XPASS once it passes again); non-zero exit only on FAIL; every log under the printed
+directory. The script's header names its inputs (`QEMU_IOS_DIR`, the helper's dylib, the iPad and iPod
+device directories, the armv6 package) and their defaults; a check whose input is missing is SKIP with the
+path it wanted. The table below is what the tiers are made of:
 
 | Gate | Runs | Needs |
 |---|---|---|
