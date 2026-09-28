@@ -23,6 +23,7 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 | Guest tools without SSH | Typed agent v2 ops replace SSH, OpenSSH, OpenSSL, freeze | `tests/ipod/regress.py` (no `guest_ssh`) |
 | USB zero-length packets | Sent by usbmuxd (`qemu-zlp`, pinned `41631a7`), not faked by the emulator | AFC 16384/16385/65536 round trips in the release verify |
 | Offline root-FS read (F1) | `firmwarekit mount/export` for both boards, oracle-checked | `docs/filesystem-f0-findings.md` U1 table |
+| iPad app bugs (09-28) | 4.x keyboard (`enable-hsic`, usb-kbd max-power), guest-package report read on every boot, iPad readiness pipeline (boot progress, ready notice, proxy apply), it_agent on k48 via package serial 2 (foreground app in the title bar), A008 alpha surfaces for CA shadows, Stop = flush + hard halt (helper exits in ~0.04 s) | check-sessions 18/18 on 7B500 and 8C148 with `--ipad-itpack`; check-helper-boot 22/22; KBootTests byte-equal to Python; regress `shadow` check |
 | Storage fixes from the audit | App and device locks, atomic delete/publish, launch sweeps, TM exclusions, disk checks, Settings ▸ Storage | `221ef9a`; check-sessions 17/17, check-helper-boot lease 6/6, offline checks |
 | Silent headless boots | `-audio driver=none` everywhere headless | grep of tests and helper modes |
 
@@ -35,13 +36,12 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 | iPod 2.1.1 (5F138) | coming soon | emulator done; needs the N72 recipe path, keys, in-app check |
 | iPad 3.2.2 (7B500) | available | |
 | iPad 3.2 (7B367) | available | |
-| iPad 4.2.1 (8C148) | experimental | keyboard bug open (below) |
+| iPad 4.2.1 (8C148) | experimental | keyboard fixed 09-28; devices prepared before need re-preparing |
 
 ## Running now (2026-09-28)
 
 | Work | Branch | Covers |
 |---|---|---|
-| iPad app bugs, 3.2.2 and 4.2.1 | `ipad4-app-bugs` | boot progress, running app in the title bar, proxy, popover shadow blur, 4.2.1 keyboard, Stop as a hard halt |
 
 | Consolidation sweep, survey phase (read-only) | — | five surveys: emulator models and per-address logic; guest tools + Python/Swift pipeline; app layering, legacy paths, singletons; repo organization, docs, branches; app QA (multi-device, file meddling, IPAs across devices, guest-service and activation verification) |
 
