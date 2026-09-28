@@ -25,6 +25,7 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 | Offline root-FS read (F1) | `firmwarekit mount/export` for both boards, oracle-checked | `docs/filesystem-f0-findings.md` U1 table |
 | iPad app bugs (09-28) | 4.x keyboard (`enable-hsic`, usb-kbd max-power), guest-package report read on every boot, iPad readiness pipeline (boot progress, ready notice, proxy apply), it_agent on k48 via package serial 2 (foreground app in the title bar), A008 alpha surfaces for CA shadows, Stop = flush + hard halt (helper exits in ~0.04 s) | check-sessions 18/18 on 7B500 and 8C148 with `--ipad-itpack`; check-helper-boot 22/22; KBootTests byte-equal to Python; regress `shadow` check |
 | USB "not supported" alert gone on both iPad versions (Sam's call: an Apple bug that also blocked manual lock) | `it_msmquiet.dylib` in the mounter's own job interposes the notice, matched on the mounter's localized strings at runtime; one armv7 binary for 3.2.x (DisplayNotice) and 4.2.1 (Create + Cancel); guest package serial 3 | qemu-ios regress boot on 7B500, 8C148 (upgrade path), 7E18: no alert; Hold locks the panel in 5 s (was: stayed lit) |
+| One gate command per repo | qemu-ios `tests/gate.sh --quick|--full|--fresh`; app `scripts/gate.sh --quick|--full`; known failures listed as XFAIL with reasons | qemu-ios quick 73 PASS/26 SKIP/12 XFAIL, full: iPad 7/7, iPod 7/8 (gles on the shipping image's old shim); app quick 67 PASS/2 SKIP/5 XFAIL |
 | Storage fixes from the audit | App and device locks, atomic delete/publish, launch sweeps, TM exclusions, disk checks, Settings ▸ Storage | `221ef9a`; check-sessions 17/17, check-helper-boot lease 6/6, offline checks |
 | Silent headless boots | `-audio driver=none` everywhere headless | grep of tests and helper modes |
 
@@ -66,6 +67,8 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - Finder native device recognition: deferred, needs Apple's USB host-controller entitlement (don't raise unless Sam does).
 
 ### Debts
+- 12 qemu-ios unit-test slices and 5 app check slices are behind the tree (listed as XFAIL in tests/gate.sh and scripts/gate.sh); E4 retires slicing.
+- The app's QEMU-backed checks look for `$QEMU_IOS_DIR/build-native14/qemu-build/libqemu-arm.dylib` (xcconfig), which no ipad1 worktree provides; E1's pin file fixes the lookup.
 - Real iBoot chain for app-prepared iPads: **done** on `fk-k48-iboot` (see Done table). Remaining: the iboot strategy's NAND store isn't yet byte-equal to Python's end-to-end (HFS timestamps/volume UUID, the pre-existing store non-determinism), so the NAND comparison is by structure/boot, not by hash; the full in-bundle `firmwarekit create` (needs a signed k48 guest-tools dir) was not run this session — the byte-equal artifacts + a real iBoot boot were verified instead.
 - Survey reports live in docs/sweep/.
 - `tests/ipod/test_regress.py`: one test's mock lacks `guest_package_status`.
