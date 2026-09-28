@@ -44,9 +44,7 @@ mkdir -p "$OUT" && : > "$OUT/results" || exit 2
 
 # Failing on today's code (2026-09-28), each for a known reason.
 export KNOWN='
-tests/run-catalog-checks.py     its catalog slice compiles IPALibrary.swift without DeviceInstance.swift (per-device IPAs)
 tests/check-device-menus.py     check.swift:133: a fresh MainWindowController no longer reports canTakeScreenshot/canStartRecording (capture follows the selected device)
-tests/check-factory-reset.py    its slice calls Erase without the instance it now takes (check.swift:80)
 tests/check-firmware-jobs.py    PreparationJob.swift now needs BootRecipe (DeviceSession.swift), which its slice omits
 scripts/test-zoom.py            its slice reads Screen.screenCutout/nativeScreenPixels on an instance; they are static now
 '

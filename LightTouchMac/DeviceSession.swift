@@ -570,10 +570,15 @@ nonisolated enum BootRecipe {
     /// Why a device last failed to start, by catalog entry id.
     private var failures: [String: String] = [:]
 
+    /// The one host this process runs (AppDelegate's), for the places that
+    /// need every running device rather than their own: "Install on ▸".
+    private(set) static weak var shared: DeviceSessionHost?
+
     init(options: LaunchOptions) {
         self.options = options
         library = .shared
         catalog = .bundled
+        Self.shared = self
     }
 
     func session(for entry: FirmwareCatalog.Entry) -> DeviceSession? {

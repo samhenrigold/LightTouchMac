@@ -235,16 +235,30 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
         delegate?.library(self, perform: action, for: entry)
     }
 
-    // MARK: - IPSW drops
+    // MARK: - IPSW and .ipa drops
 
-    private static func ipsws(_ info: NSDraggingInfo) -> [URL] {
+    private static func files(_ info: NSDraggingInfo, _ pathExtension: String) -> [URL] {
         let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
                                                         options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        return urls.filter { $0.pathExtension.lowercased() == "ipsw" }
+        return urls.filter { $0.pathExtension.lowercased() == pathExtension }
+    }
+    private static func ipsws(_ info: NSDraggingInfo) -> [URL] { files(info, "ipsw") }
+
+    /// The running device behind a row that can take an .ipa now.
+    private func installTarget(_ item: Any?) -> EmulatorController? {
+        guard let entry = (item as? Entry)?.entry, let emulator = host.session(for: entry)?.emulator,
+              emulator.canQueueInstall else { return nil }
+        return emulator
     }
 
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo,
                      proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
+        // An .ipa installs on the running device whose row it lands on.
+        if !Self.files(info, "ipa").isEmpty {
+            guard installTarget(item) != nil else { return [] }
+            if index != NSOutlineViewDropOnItemIndex { outlineView.setDropItem(item, dropChildIndex: NSOutlineViewDropOnItemIndex) }
+            return .copy
+        }
         guard !Self.ipsws(info).isEmpty else { return [] }
         // Onto a version row names the entry; anywhere else lets the catalog decide.
         if !(item is Entry) { outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex) }
@@ -253,6 +267,12 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
     }
 
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
+        let ipas = Self.files(info, "ipa")
+        if !ipas.isEmpty {
+            guard let emulator = installTarget(item) else { return false }
+            ipas.forEach { AppInstaller.start($0, with: emulator, presenting: view.window) }
+            return true
+        }
         let urls = Self.ipsws(info)
         for url in urls { delegate?.library(self, importIPSW: url, for: (item as? Entry)?.entry) }
         return !urls.isEmpty

@@ -357,7 +357,13 @@ enum AppInstaller {
             // library keeps the bytes, which is what makes the installed row
             // draggable out of the app as a file.
             await AppMetadataCache.shared.learn(from: ipa)
-            if let id = job.bundleID { await IPALibrary.adopt(ipa, for: id, device: emulator.instance) }
+            if let id = job.bundleID {
+                let info = await AppMetadataCache.info(of: ipa) ?? [:]
+                await IPALibrary.adopt(ipa, .init(bundleID: id, name: job.name,
+                                                  version: (info["CFBundleShortVersionString"] ?? info["CFBundleVersion"]) as? String,
+                                                  minOS: info["MinimumOSVersion"] as? String, catalogIpaID: job.catalogIpaID),
+                                       device: emulator.instance)
+            }
             if output.contains("newer than the device's") {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
@@ -406,8 +412,9 @@ enum AppInstaller {
                     try Task.checkCancellation()
                     willRemove(app)
                     try await emulator.uninstall(app.id)
-                    AppMetadataCache.shared.forget(app.id)
                     IPALibrary.forget(app.id, device: emulator.instance)
+                    // The name and icon are app-wide: another device that still has the app keeps them.
+                    if !IPALibrary.retained(app.id, by: DeviceLibrary.shared.instances) { AppMetadataCache.shared.forget(app.id) }
                     didRemove(app)
                 }
             } catch is CancellationError {
@@ -1258,6 +1265,12 @@ final class AppsInspectorViewController: NSViewController {
         (sender.representedObject as? InstallJob)?.cancel()
     }
 
+    /// Install on ▸ <device>: this device's retained copy, queued on the other one.
+    @objc private func installOnClicked(_ sender: NSMenuItem) {
+        guard let target = sender.representedObject as? (file: URL, emulator: EmulatorController) else { return }
+        AppInstaller.start(target.file, with: target.emulator, presenting: view.window)
+    }
+
     @objc private func showInLegacyStoreClicked(_ sender: NSMenuItem) {
         guard let app = sender.representedObject as? InstalledApp else { return }
         // /app/<bundle_id> is a first-class route on the site (301s to the
@@ -1673,6 +1686,22 @@ extension AppsInspectorViewController: NSMenuDelegate {
                 uninstall.target = self
                 uninstall.representedObject = app
                 uninstall.isEnabled = canUninstall([app])
+                // The retained copy can go to any other running device that takes installs.
+                if let file = IPALibrary.url(for: app.id, device: emulator.instance) {
+                    let targets = (DeviceSessionHost.shared?.sessions ?? [])
+                        .filter { $0.emulator !== emulator && $0.emulator.canQueueInstall }
+                    if !targets.isEmpty {
+                        let submenu = NSMenu()
+                        for session in targets {
+                            let entry = FirmwareCatalog.bundled.entry(id: session.instance.firmware)
+                            let title = entry.map { "\($0.profile?.displayName ?? $0.productType) iOS \($0.version)" } ?? session.instance.name
+                            let item = submenu.addItem(withTitle: title, action: #selector(installOnClicked(_:)), keyEquivalent: "")
+                            item.target = self
+                            item.representedObject = (file: file, emulator: session.emulator)
+                        }
+                        menu.addItem(withTitle: "Install on", action: nil, keyEquivalent: "").submenu = submenu
+                    }
+                }
 
                 let store = menu.addItem(withTitle: "View on Legacy Store",
                                          action: #selector(showInLegacyStoreClicked(_:)), keyEquivalent: "")

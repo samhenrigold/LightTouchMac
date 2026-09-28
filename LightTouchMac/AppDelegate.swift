@@ -152,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let records = DeviceInstance.all(state: state)
         _ = FirmwareJobs.shared
         DeviceStateStorage.sweepDeleting(state: state)
-        IPALibrary.migrateShared(state: state, devices: records)
+        IPALibrary.sweep(devices: records)
         for record in records { USBMux.secure(DeviceInstance.url(record.storage.usbmuxConf, state: state)) }
         // Bases published by earlier builds become immutable too.
         for record in records where record.base.kind == .prepared {

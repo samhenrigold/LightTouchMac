@@ -23,8 +23,16 @@ struct CatalogApp { let bundleID:String; let name:String; var appURL:URL?=URL(st
 final class InstallJob { var isFinished=false,isCancelled=false,isCancellable=true,failed=false }
 enum CatalogRowState { case installable, unavailable }
 @MainActor enum AppInstaller { static var isPaused=false; static func isPaused(_ id:UUID)->Bool {isPaused} }
-struct Instance { let id=UUID() }
+struct Instance { let id=UUID(); let firmware="ipod-3.1.3"; let name="iPod" }
 @MainActor final class Emulator { var canQueueInstall=true,canReachDevice=true; let instance=Instance() }
+@MainActor enum IPALibrary { static var kept=Set<String>(); static func url(for id:String,device:Instance)->URL? { kept.contains(id) ? URL(fileURLWithPath:"/tmp/\(id).ipa") : nil } }
+@MainActor final class DeviceSession { let instance=Instance(); let emulator=Emulator() }
+@MainActor final class DeviceSessionHost { static var shared:DeviceSessionHost?; var sessions:[DeviceSession]=[] }
+struct FirmwareCatalog {
+ struct Entry { let productType="iPad1,1",version="3.2.2"; var profile:Profile?; struct Profile { let displayName:String } }
+ static let bundled=FirmwareCatalog()
+ func entry(id:String)->Entry? { Entry(profile:.init(displayName:"iPad")) }
+}
 @MainActor final class MainWindowController:NSObject {
  @objc func installApp(_ sender:Any?) {}
  @objc func syncMedia(_ sender:Any?) {}
@@ -107,7 +115,22 @@ struct Instance { let id=UUID() }
   precondition(main.items.allSatisfy{ !$0.isEnabled },"No app actions behind another main window")
   application.frontWindow=window;c.menuNeedsUpdate(main)
   precondition(main.item(withTitle:"Refresh Apps")?.isEnabled==true)
-  print("PASS: main/context selection, unavailable devices, stable empty selection, and front-window scope")
+  // Install on ▸: only with a retained copy and another running device that takes installs, never this one.
+  c.busyWithDevice=false;c.tableView.selectedRow=0
+  let host=DeviceSessionHost();DeviceSessionHost.shared=host
+  let remote=DeviceSession(),mine=DeviceSession()
+  host.sessions=[remote,mine]
+  c.menuNeedsUpdate(main)
+  precondition(main.item(withTitle:"Install on")==nil,"no retained copy, nothing to install elsewhere")
+  IPALibrary.kept=["one"];c.menuNeedsUpdate(main)
+  let installOn=main.item(withTitle:"Install on")
+  precondition(installOn?.submenu?.items.map(\.title)==["iPad iOS 3.2.2","iPad iOS 3.2.2"])
+  precondition((installOn?.submenu?.items.first?.representedObject as? (file:URL,emulator:Emulator))?.emulator===remote.emulator)
+  remote.emulator.canQueueInstall=false;c.menuNeedsUpdate(main)
+  precondition(main.item(withTitle:"Install on")?.submenu?.items.count==1,"a device that can't take installs is left out")
+  host.sessions=[];c.menuNeedsUpdate(main)
+  precondition(main.item(withTitle:"Install on")==nil,"no other running device, no submenu")
+  print("PASS: main/context selection, unavailable devices, stable empty selection, front-window scope, and Install on ▸ targets")
  }
 }
 """

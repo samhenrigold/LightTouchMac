@@ -40,11 +40,17 @@ that hurt the user may be suppressed.
 | A8 usbmuxd idle poll interval (3 ms → 50 ms after 1 s idle, back on the first packet) — **done** on the fork's `idle-poll` branch (off `qemu-zlp` 41631a7, not pushed, not pinned) | 0.25 | 3 idle iPods: 6.3% → 0.3% of a core (usbmuxd CPU time over 30 s) |
 | A9 Quit-with-resume snapshot code deleted (S3) — **done**; helper snapshot ops kept | 0.5 | app/helper/firmwarekit build; check-clean-shutdown, check-termination, check-helper-boot restore |
 
-## Track B: IPA library (after A3; ~2 d)
+## Track B: IPA library (done 2026-09-28 on `ipa-library`; to merge)
 
-Content-addressed `State/Library/IPAs/<sha256>.ipa` + `index.json`; per-device copies become APFS clones; Store downloads
-dedupe by hash; "Install on ▸"; sidebar-row drops; launch sweep hashes existing copies. Gate: new offline check (same IPA on two
-records → one blob; uninstall on A keeps B), check-uninstall-queue, check-sessions install step.
+Content-addressed `State/Library/IPAs/<sha256>.ipa` + `index.json`; per-device copies are APFS clones of the blob; Store
+downloads dedupe by the catalog copy's md5 (hashed alongside sha256 at store time); "Install on ▸ <running device>"; `.ipa`
+drops on running sidebar rows; the launch sweep stores existing device copies once (the `State/IPAs` move folded in);
+Settings ▸ Storage "Library" line + Remove Unused. Uninstall keeps the app-wide icon while another device has the app.
+Gate: `tests/check-ipa-library.py` (two records → one blob, two clones, one entry; uninstall on A keeps B's copy and icon;
+Remove Unused spares referenced blobs; Store dedupe with the fixture's IPA route disabled; sweep idempotent),
+check-uninstall-queue, check-install-queue-scope, check-media-queue, check-storage-lifecycle, gate --quick, check-sessions
+--ipad-device. Skipped: a per-device `installed.json` (the clone is the reference); hashing device copies to decide
+"unused" (bundle id + size instead, which only ever keeps a blob longer).
 
 ## Track C: pipeline, Swift only (after S1; ~10 d)
 

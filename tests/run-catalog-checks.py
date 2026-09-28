@@ -21,9 +21,12 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
             exe=work/name
             run(['swiftc','-parse-as-library','-module-cache-path',str(work/'modules'), *sources,'-o',str(exe)])
             run([str(exe),*arguments], env=env, timeout=30)
-        common = ['LightTouchMac/'+f+'.swift' for f in ['CatalogClient','CatalogCopy','Bundled','AppEventLog','StorageLocations','NativeLogging']]
+        # CatalogClient consults the IPA library, whose device paths DeviceLibrary.swift resolves in the app.
+        (work/'paths.swift').write_text('extension DeviceInstance { var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) } }\n')
+        common = ['LightTouchMac/'+f+'.swift' for f in ['CatalogClient','CatalogCopy','Bundled','AppEventLog','StorageLocations','NativeLogging',
+                                                        'IPALibrary','DeviceInstance','DeviceProfile','FirmwareCatalog']] + [str(work/'paths.swift')]
         if '--ui-only' not in sys.argv:
-            swift('catalog',common+['LightTouchMac/IPALibrary.swift','tests/catalog.swift'])
+            swift('catalog',common+['tests/catalog.swift'])
             swift('network',common+['tests/catalog-network.swift'],[port])
             swift('queue',['LightTouchMac/InstallationQueue.swift','tests/installation-queue.swift'])
             run([sys.executable,'tests/check-extracted.py'])
