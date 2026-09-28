@@ -311,6 +311,8 @@ nonisolated enum BootRecipe {
         var usbAddress: String?
         var wifi: Bool
         var memory = "128M"
+        /// A device.py/prepared device's KBAG table (the emulated AES has no GID key).
+        var gidBlobs: String? = nil
     }
 
     struct IPad {
@@ -335,6 +337,7 @@ nonisolated enum BootRecipe {
             + ",nor-rw=\(escape(d.writableNOR)),nandrw=\(escape(d.overlay))"
         if let usb = d.usbAddress { machine += ",usb-tcp-addr=\(usb),osk=on" }
         if d.wifi { machine += ",wifi=on" }          // brings up the emulated BCM4325
+        if let blobs = d.gidBlobs { machine += ",gid-blobs=\(escape(blobs))" }
         let argv = ["LightTouchMac", "-M", machine, "-m", d.memory, "-display", "none", "-no-shutdown"]
             + audio + ["-serial", serial] + (netdev.map { ["-netdev", $0] } ?? []) + restore
         // The settings 3.1.3 will not boot without (contrib/run-ipod-touch.sh). No

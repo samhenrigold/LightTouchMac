@@ -21,6 +21,7 @@ source=r'''import Foundation
 /// The helper's link: commands go nowhere; status comes from the fixture.
 struct FakeLink: Sendable { func send(_ c: LinkCommand) {} }
 nonisolated func logEvent(_ s:String){}
+enum DeviceToolsError: Error { case failed(String) }
 enum DeviceStateStorage {
 '''+wait+'}\n'+helpers+r'''
 @MainActor final class Controller {
@@ -80,7 +81,7 @@ enum DeviceStateStorage {
   precondition(independent && noUSB.haltAttempts==1)
   try await MissingUSB().haltFilesystem()
   DeviceTools.available=false
-  do {try await MissingUSB().haltFilesystem();preconditionFailure("USB fallback must fail")} catch {}
+  do {try await MissingUSB().haltFilesystem();preconditionFailure("a halt without an agent must fail (no SSH fallback)")} catch {}
   print("PASS: independent halt without USB, bounded preparation cancellation, boot-time halt retry, joined completions, sync fallback, snapshot guard")
  }
 }

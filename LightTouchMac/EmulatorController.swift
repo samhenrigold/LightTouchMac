@@ -162,7 +162,7 @@ final class EmulatorController {
             defer { connectionRecoveryTask = nil; isReconnecting = false }
             do {
                 guard isRunning, !preparingMedia, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice else { return }
-                if try await DeviceTools.reconnectManagementService(agent: link) {
+                if try await DeviceTools.reconnectManagementService(agent: link, cache: agentCache) {
                     logEvent("device: restarted unresponsive management service; reconnecting")
                     try await Task.sleep(for: .seconds(2))
                     guard isRunning else { return }
@@ -422,8 +422,8 @@ final class EmulatorController {
 
     /// Existing images need the same media engine/configuration as newly
     /// packaged images before apps can use the native compositor.
-    /// The iPod images carry guest tools (SSH, agent); a stock iPad has none,
-    /// so their preparation, media import and SSH extras are skipped.
+    /// The iPod machine has the guest agent's channel; a stock iPad has none,
+    /// so its preparation, media import and agent extras are skipped.
     var hasGuestTools: Bool { profile.hasGuestTools }
 
     private func startMediaPreparation() {
@@ -538,10 +538,6 @@ final class EmulatorController {
         orientationTask?.cancel()
         orientationTask = nil
         usbmux.stop()
-        // Ends the ssh session, which is what tells the guest-side reporter to
-        // exit; leaving it running would strand an iproxy and an ssh behind us.
-        orientationWatch?.terminate()
-        orientationWatch = nil
     }
 
     /// Inflate the packed device image with the bundled ipod-helper. Into a
@@ -643,6 +639,8 @@ final class EmulatorController {
     /// The guest agent, live: 0 absent or not running, 1 alive, 2 stale.
     var liveAgentStatus: Int { status?.agentStatus ?? 0 }
 
+    /// The agent's ping (its ops), until it restarts.
+    let agentCache = GuestAgentCache()
     private var lastAgentStatusCheck = Date.distantPast
     private var agentStatus = 0
     var agentStatusText: String {
@@ -659,7 +657,12 @@ final class EmulatorController {
         let now = Date()
         if now.timeIntervalSince(lastAgentStatusCheck) >= 1 {
             lastAgentStatusCheck = now
-            if status.agentStatus != agentStatus { agentStatus = status.agentStatus; onStatusChange?() }
+            if status.agentStatus != agentStatus {
+                // A restarted agent may be a different version: ping it again.
+                agentCache.reset()
+                agentStatus = status.agentStatus
+                onStatusChange?()
+            }
         }
         if !poweringOn, status.shutdownConfirmed, !isDead, !isPoweredOff {
             // Publish terminal state before observable fields: their callbacks
@@ -901,9 +904,8 @@ final class EmulatorController {
     // setIconState / getIconPNGData, so libimobiledevice's
     // sbservices_get_interface_orientation has nothing to talk to.
     //
-    // The guest agent reads SpringBoardServices' SBGetUIOrientation MIG stub.
-    // Images without the agent retain the streamed itorient/SSH compatibility
-    // path; its header documents the original ABI investigation.
+    // The guest agent reads SpringBoardServices' SBGetUIOrientation MIG stub
+    // (7E18's ABI; other builds answer ENOSYS and the shell stays put).
     //
     // EDGES, NOT LEVELS, is the rule that keeps this from fighting the user.
     // We rotate when the guest's orientation *changes*; we never correct the
@@ -929,7 +931,6 @@ final class EmulatorController {
     /// this, so a watcher that attaches to an already-running guest never yanks
     /// the shell around on connect.
     private var lastGuestOrientation: Int?
-    private var orientationWatch: Process?
     private var orientationTask: Task<Void, Never>?
 
     /// SpringBoard's degrees are the angle the *content* is rotated by; ours are
@@ -1002,23 +1003,11 @@ final class EmulatorController {
         [1: 0, 4: 90, 2: 180, 3: 270][orientation]
     }
 
-    /// Where the guest-side reporter comes from: the app bundle in a packaged
-    /// build, the qemu-ios checkout in a dev one. Same shape as the ssh terminal
-    /// script — no helper, no auto-rotation, and nothing else changes.
-    private var orientationHelperPath: String? {
-        Bundled.resolve("itorient", fallbacks: [
-            "\(options.filesRoot)/../qemu-ios/contrib/it-orientation/itorient",
-            "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-orientation/itorient",
-        ])
-    }
-
     /// Keeps one reporter alive for as long as the app runs, re-attaching after
     /// a boot, a respring, or a dropped USB session — the same "the guest drops
     /// its services and comes back" reality GuestNotifications backs off around.
     private func startOrientationWatch() {
         orientationTask?.cancel()
-        orientationWatch?.terminate()
-        orientationWatch = nil
         orientationTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -1029,18 +1018,6 @@ final class EmulatorController {
                             try Task.checkCancellation()
                             guard generation == self.bootGeneration else { continue }
                             self.guestOrientationChanged(to: degrees)
-                        } else if self.canReachDevice,
-                                  let helper = self.orientationHelperPath,
-                                  let binary = try? Data(contentsOf: URL(fileURLWithPath: helper)),
-                                  let iproxy = Bundled.tool("iproxy")
-                                    ?? Bundled.binarySearchPaths.map({ "\($0)/iproxy" }).first(where: {
-                                        FileManager.default.isExecutableFile(atPath: $0)
-                                    }) {
-                            // Compatibility for images without the agent only.
-                            await self.runOrientationWatch(iproxy: iproxy, binary: binary)
-                            try Task.checkCancellation()
-                            guard generation == self.bootGeneration else { continue }
-                            self.lastGuestOrientation = nil
                         }
                     } catch {
                         if Task.isCancelled { return }
@@ -1051,82 +1028,6 @@ final class EmulatorController {
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
             }
         }
-    }
-
-    /// One session. Streams the helper into the guest over ssh's stdin, runs it
-    /// in place, and reads its lines until the connection dies.
-    ///
-    /// `cat > … && exec …` rather than scp: it needs one connection instead of
-    /// two, and it is the only way to be sure the binary that just landed is the
-    /// one that runs. The write end is closed straight after the bytes go in,
-    /// which is what gives `cat` its EOF.
-    private func runOrientationWatch(iproxy: String, binary: Data) async {
-        let port = Int.random(in: 29400...29599)
-        let password = ProcessInfo.processInfo.environment["DEVICE_PASSWORD"] ?? "alpine"
-        // ControlPath is deliberately absent here too — the 104-byte socket-path
-        // limit is what silently disabled every guest command once before.
-        let script = """
-        export PATH=/usr/bin:/bin:$PATH
-        "$1" "$2" 22 >/dev/null 2>&1 &
-        IP=$!
-        ASK="$(mktemp -t ltorient)"
-        # EXIT alone is not enough: stop() sends SIGTERM, and a shell killed by an
-        # uncaught signal never runs its EXIT trap — so every quit stranded an
-        # iproxy holding a port and an ssh holding a guest process.
-        trap 'kill $IP 2>/dev/null; rm -f "$ASK"; exit 0' EXIT INT TERM HUP
-        printf '%s\\n' '#!/bin/sh' 'printf "%s" "$LTM_SSH_PASSWORD"' > "$ASK"
-        chmod 700 "$ASK"
-        sleep 1
-        SSH_ASKPASS="$ASK" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
-            -p "$2" root@127.0.0.1 \
-            'pkill -f /tmp/itorient 2>/dev/null; rm -f /tmp/itorient; \
-             cat > /tmp/itorient && chmod 755 /tmp/itorient && exec /tmp/itorient'
-        """
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/bash")
-        task.arguments = ["-c", script, "ltorient", iproxy, String(port)]
-        var environment = ProcessInfo.processInfo.environment
-        environment["LTM_SSH_PASSWORD"] = password
-        task.environment = environment
-        let input = Pipe(), output = Pipe()
-        task.standardInput = input
-        task.standardOutput = output
-        task.standardError = FileHandle.nullDevice
-
-        // The handler runs on Foundation's own queue and a read can split a line
-        // anywhere, so the tail lives in a box that outlives each call. Every
-        // complete line hops to the main actor; nothing is parsed off it.
-        let pending = LineBuffer()
-        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            Task { @MainActor [weak self] in
-                guard let self, self.orientationWatch === task else { return }
-                for line in pending.take(data) {
-                    guard let value = Int(line) else { continue }
-                    self.guestOrientationChanged(to: value)
-                }
-            }
-        }
-
-        orientationWatch = task
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            // Set before run(): a process that exits immediately would otherwise
-            // finish before there was a handler to notice, and park us forever.
-            task.terminationHandler = { _ in continuation.resume() }
-            do {
-                try task.run()
-                input.fileHandleForWriting.write(binary)
-                try? input.fileHandleForWriting.close()
-            } catch {
-                task.terminationHandler = nil
-                continuation.resume()
-            }
-        }
-        output.fileHandleForReading.readabilityHandler = nil
-        if orientationWatch === task { orientationWatch = nil }
     }
 
     // MARK: - Keyboard passthrough
@@ -1261,7 +1162,6 @@ final class EmulatorController {
         foregroundTask?.cancel()
         let generation = bootGeneration
         foregroundTask = Task { [weak self] in
-            var staged = false
             var appliedProxyRevision: Int?
             while !Task.isCancelled {
                 guard let self else { return }
@@ -1291,14 +1191,12 @@ final class EmulatorController {
                         }
                     }
                     do {
-                        let name = try await self.tools().foregroundAppName(stageHelper: !staged)
+                        let name = try await self.tools().foregroundAppName()
                         try Task.checkCancellation()
                         guard generation == self.bootGeneration else { return }
-                        staged = true
                         self.foregroundAppName = name
                     } catch {
                         if Task.isCancelled { return }
-                        staged = false
                         self.foregroundAppName = nil
                     }
                 }
@@ -1634,7 +1532,7 @@ final class EmulatorController {
             }
             if self.canManageApps || self.liveAgentStatus == 1 {
                 let haltDeadline = Date().addingTimeInterval(Self.haltShutdownBudget)
-                // During boot, USB can exist before sshd answers. Retry within
+                // During boot, USB can exist before the agent answers. Retry within
                 // one shared deadline instead of spending the whole timeout
                 // waiting for a command that never reached the guest.
                 while !confirmed(), !stopped(), Date() < haltDeadline, !Task.isCancelled {
@@ -1814,7 +1712,7 @@ final class EmulatorController {
     /// `canManageApps` only says the host daemon is alive, and it is true from
     /// the moment usbmuxd starts — through the whole boot and USB enumeration,
     /// which is ~40s on a warm image and past three minutes on a first boot.
-    /// Gating on it alone left Install App… and Open SSH enabled that whole
+    /// Gating on it alone left Install App… enabled that whole
     /// time, so choosing them opened a file picker (or a Terminal window) for a
     /// device that could only answer "not reachable over USB yet". The
     /// inspector's own buttons already waited for a real round trip; the menu
@@ -1835,15 +1733,8 @@ final class EmulatorController {
         guard let session = usbmux.session else {
             throw DeviceToolsError.failed("The device is not reachable over USB yet.")
         }
-        // nand-ultimate ships the GL engine shim + sblaunch baked in, so the
-        // fast in-process install path is safe; other images need the script's
-        // ssh engine copy.
-        // The iPad has no guest shell: in-process lockdown services only (the
-        // script fallback needs ssh and would sit at "Installing…" forever).
         return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot,
-                           proxyDirectory: proxyDirectory,
-                           bakedGuestTools: !hasGuestTools || options.nand.contains("ultimate"),
-                           guestShell: hasGuestTools, agent: link)
+                           proxyDirectory: proxyDirectory, agent: link, agentCache: agentCache)
     }
     
     /// Cheap in-process check that the USB bridge sees the guest. App-service
@@ -1907,12 +1798,13 @@ final class EmulatorController {
         }
         try await tools().launchApp(bundleID)
     }
-    func openTerminal() async throws                     { try await tools().openTerminal() }
     func syncFilesystem() async throws                   { try await tools().syncFilesystem() }
+    /// The agent's halt (reboot2: sync, unmount, halt); the caller waits for
+    /// the PMU's power-off. Needs no USB session.
     func haltFilesystem() async throws {
-        // Do not require a USB session to reach the independent guest channel.
-        if await DeviceTools.requestIndependentHalt(agent: link) { return }
-        try await tools().haltFilesystem()
+        guard await DeviceTools.requestIndependentHalt(agent: link) else {
+            throw DeviceToolsError.failed("The device agent is not ready.")
+        }
     }
     func restartSpringBoard() async throws {
         guard isRunning, !isInstalling else { return }
@@ -2004,26 +1896,4 @@ final class EmulatorController {
         return args
     }
 
-}
-
-/// Splits a byte stream into whole lines across reads.
-///
-/// `@unchecked Sendable` with no lock is deliberate: Foundation serialises a
-/// pipe's readability callbacks, so `take` is only ever on one thread at a time.
-/// A line-per-read assumption would have been shorter and is very nearly always
-/// true here — but "very nearly" on a parser that decides which way a device
-/// turns is how you get a 9 out of a torn "90".
-private final class LineBuffer: @unchecked Sendable {
-    private var tail = Data()
-
-    func take(_ chunk: Data) -> [String] {
-        tail.append(chunk)
-        var lines: [String] = []
-        while let newline = tail.firstIndex(of: 0x0a) {
-            lines.append(String(decoding: tail[tail.startIndex..<newline], as: UTF8.self)
-                .trimmingCharacters(in: .whitespaces))
-            tail.removeSubrange(tail.startIndex...newline)
-        }
-        return lines
-    }
 }

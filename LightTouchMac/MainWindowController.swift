@@ -1013,13 +1013,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
-    @objc func openDeviceTerminal(_ sender: Any?) {
-        guard let emulator else { return }
-        Task {
-            do { try await emulator.openTerminal() }
-            catch { AppInstaller.presentError(error, in: window) }
-        }
-    }
     
     // MARK: - View menu (inspector), synced with the toolbar
 
@@ -1687,7 +1680,7 @@ extension MainWindowController: NSMenuItemValidation {
             return emulator.canQueueInstall
         case #selector(syncMedia(_:)):
             return emulator.canQueueInstall && emulator.hasGuestTools
-        case #selector(openDeviceTerminal(_:)), #selector(restartSpringBoard(_:)):
+        case #selector(restartSpringBoard(_:)):
             return emulator.canReachDevice && !emulator.isInstalling
         // Device input only reaches a running guest.
         case #selector(deviceLock(_:)):

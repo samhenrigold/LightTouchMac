@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Native app-side media pipeline: actual Swift AFC upload and import commands.
 
-The test-only HTTP adapter replaces guestRun's transport with the QMP agent of
-an isolated CLI guest. Production MediaSong, DeviceServices, IMobileDevice and
-the DeviceTools music methods are compiled unchanged. No user app is launched.
+The test-only HTTP adapter stands in for the helper's DeviceLink: it carries the
+app's own agent wire (GuestAgent, typed ops or a v1 agent's exec) to the QMP agent
+of an isolated CLI guest. Production MediaSong, DeviceServices, IMobileDevice,
+GuestServices and the DeviceTools media methods are compiled unchanged. No user
+app is launched.
 """
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,7 +53,6 @@ swift = r"""
 import Foundation
 nonisolated func logEvent(_ message: String) { NSLog("%@", message) }
 struct InstalledApp: Sendable { let id, name, version: String }
-enum DeviceToolsError: Error { case toolMissing(String), failed(String) }
 nonisolated enum Bundled {
     static var frameworksDirectory: String? { CommandLine.arguments[5] }
     static func resolve(_ name: String, fallbacks: [String]) -> String? {
@@ -62,27 +63,32 @@ nonisolated enum Bundled {
         return fallbacks.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 }
+/// DeviceLink's agent surface, relayed over HTTP to the guest's QMP agent.
+struct SharedStatus { var agentStatus: Int }
+enum DeviceLinkError: Error { case timedOut, closed(String) }
+final class DeviceLink: Sendable {
+    var status: SharedStatus? { SharedStatus(agentStatus: 1) }
+    func send(_ command: LinkCommand) {}
+    func request(_ request: LinkRequest, timeout: TimeInterval = 10) async throws -> LinkReply {
+        guard case let .agent(wire, _) = request else { fatalError() }
+        var http = URLRequest(url: URL(string: CommandLine.arguments[4])!)
+        http.httpMethod = "POST"
+        http.timeoutInterval = 90
+        http.httpBody = Data(wire.utf8)
+        let (data, _) = try await URLSession.shared.data(for: http)
+        return .agent(String(decoding: data, as: UTF8.self))
+    }
+}
 struct DeviceTools: Sendable {
     let clientSocket: String
     let filesRoot: String
+    var agent: DeviceLink? = DeviceLink()
+    var agentCache = GuestAgentCache()
+    var packaged = false
     private var services: DeviceServices { DeviceServices(clientSocket: clientSocket) }
+    var guestAgent: GuestAgent { GuestAgent(link: agent, cache: agentCache) }
+    private var guest: GuestServices { GuestServices(agent: guestAgent, packaged: packaged) }
 """ + methods + r"""
-    @discardableResult func guestRun(_ command: String, stdinPath: String? = nil) async throws -> Data {
-        let input = try stdinPath.map { try Data(contentsOf: URL(fileURLWithPath: $0)) } ?? Data()
-        var request = URLRequest(url: URL(string: CommandLine.arguments[4])!)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 90
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "command":command,"body":input.base64EncodedString(),
-        ])
-        let (data,_) = try await URLSession.shared.data(for: request)
-        let result = try JSONSerialization.jsonObject(with: data) as! [String:Any]
-        let output = Data(base64Encoded:result["body"] as! String)!
-        guard result["status"] as? Int == 0 else {
-            throw DeviceToolsError.failed(String(decoding:output,as:UTF8.self))
-        }
-        return output
-    }
 }
 final class Progress: @unchecked Sendable {
     private let lock = NSLock()
@@ -97,9 +103,9 @@ final class Progress: @unchecked Sendable {
         let source = URL(fileURLWithPath:CommandLine.arguments[1])
         func prepare() async throws -> PreparedMedia {
             if MediaVideo.extensions.contains(source.pathExtension.lowercased()) {
-                return .video(try await MediaVideo.prepare(source, cacheDirectory: source.deletingLastPathComponent().appendingPathComponent("video-cache")))
+                return .video(try await MediaVideo.prepare(source, cacheDirectory: source.deletingLastPathComponent().appendingPathComponent("video-cache"), profile: .iPodTouch2G))
             }
-            return try await PreparedMedia.prepare(source)
+            return try await PreparedMedia.prepare(source, profile: .iPodTouch2G)
         }
         let media = try await prepare()
         defer { try? FileManager.default.removeItem(at: media.directory) }
@@ -155,9 +161,16 @@ final class Progress: @unchecked Sendable {
         let directory = "/var/mobile/Media/LightTouch/" + id
         let orphan = directory + "/image.jpg.upload-" + UUID().uuidString
         let keep = directory + "/image.jpg.upload-not-a-valid-id"
-        try await device.guestRun("printf old > /var/mobile/Media/PublicStaging/old-test.ipa; printf old > " + orphan + "; printf keep > " + keep)
+        let agent = device.guestAgent
+        for (path, text) in [("/var/mobile/Media/PublicStaging/old-test.ipa", "old"), (orphan, "old"), (keep, "keep")] {
+            try await agent.put(path, mode: 0o644, Data(text.utf8))
+        }
         await services.sweepStaging()
-        try await device.guestRun("test -f /var/mobile/Media/" + owned + " && test ! -f /var/mobile/Media/PublicStaging/old-test.ipa && test ! -f " + orphan + " && test -f " + keep)
+        let ownedKept = try await agent.get("/var/mobile/Media/" + owned) != nil
+        let oldGone = try await agent.get("/var/mobile/Media/PublicStaging/old-test.ipa") == nil
+        let orphanGone = try await agent.get(orphan) == nil
+        let keepKept = try await agent.get(keep) != nil
+        precondition(ownedKept && oldGone && orphanGone && keepKept, "staging sweep")
         await services.removeStaged(owned)
         let manifest = try JSONSerialization.data(withJSONObject:[
             "id":id,"filename":file.lastPathComponent,"title":media.title,
@@ -174,7 +187,8 @@ subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-
     '-module-cache-path',str(out/'modules'),
     str(APP/'LightTouchMac/MediaIdentity.swift'),str(APP/'LightTouchMac/MediaSong.swift'),str(APP/'LightTouchMac/DeviceServices.swift'),
     str(APP/'LightTouchMac/IMobileDevice.swift'),str(APP/'LightTouchMac/MediaPhoto.swift'),
-    str(APP/'LightTouchMac/MediaVideo.swift'),str(APP/'LightTouchMac/PreparedMedia.swift'),str(driver),'-o',str(executable)],check=True)
+    str(APP/'LightTouchMac/MediaVideo.swift'),str(APP/'LightTouchMac/PreparedMedia.swift'),
+    str(APP/'LightTouchMac/GuestServices.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
 if args.photo:
     from PIL import Image,ImageDraw
     source = out/"Photo 'quoted' $title — été.png"
@@ -234,9 +248,12 @@ try:
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             import base64
-            body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-            status, output = r.itqmp.agent(d.qmp,'exec',body['command'],base64.b64decode(body['body']))
-            result = json.dumps(dict(status=status,body=base64.b64encode(output).decode())).encode()
+            # The app's agent wire: "<id> <op> <args>\n<base64 body>" -> "<id> <status>\n<base64 output>".
+            wire = self.rfile.read(int(self.headers['Content-Length'])).decode()
+            head, body = wire.split('\n', 1)
+            ident, op, arguments = (head.split(' ', 2) + [''])[:3]
+            status, output = r.itqmp.agent(d.qmp,op,arguments,base64.b64decode(body))
+            result = ('%s %d\n%s' % (ident, status, base64.b64encode(output).decode())).encode()
             self.send_response(200)
             self.send_header('Content-Length',str(len(result)))
             self.end_headers()

@@ -20,13 +20,14 @@ extension Notification.Name {static let ltmAppsChanged=Self("apps")}
 @MainActor enum AppInstaller {static var isUsingDevice=false}
 @MainActor enum DeviceTools {
  static var recoveries=0
- static func reconnectManagementService(agent: FakeLink?) async throws -> Bool {recoveries+=1;return true}
+ static func reconnectManagementService(agent: FakeLink?, cache: Int) async throws -> Bool {recoveries+=1;return true}
 }
 @MainActor final class Controller {
  let profile = DeviceProfile.iPodTouch2G
  var isRunning=true,isInstalling=false,hasFileTransfer=false,preparingMedia=false
  var usbConnected=true
  var link:FakeLink?=FakeLink()
+ let agentCache=0
  var liveAgentStatus:Int{agentReady}
  var onStatusChange:(()->Void)?
  var deviceReachable:Bool? {didSet{if deviceReachable==true {connectionIssue=nil};considerConnectionRecovery()}}

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Production app-launch flow wakes the screen without bypassing guest locks."""
+"""Production app-launch flow wakes the screen without bypassing guest locks.
+
+The guest side (the agent's launch, and lockstatus telling a locked refusal apart) is
+tests/check-agent-transport.py; this checks the controller and the inspector around it."""
 from pathlib import Path
 import subprocess, tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
@@ -7,7 +10,7 @@ root = Path(__file__).resolve().parents[1]
 def method(source, signature):
     start = source.index(signature)
     return source[start:source.index('\n    }', start) + 6]
-tools = (root / 'LightTouchMac/DeviceTools.swift').read_text()
+tools = (root / 'LightTouchMac/GuestServices.swift').read_text()
 controller = (root / 'LightTouchMac/EmulatorController.swift').read_text()
 inspector = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
 error = tools[tools.index('enum AppLaunchError:'):tools.index('enum DeviceToolsError:')]
@@ -17,21 +20,12 @@ enum DeviceToolsError: LocalizedError { case failed(String); var errorDescriptio
 func logEvent(_ message: String) { }
 @MainActor var displaySleeping = false
 @MainActor final class DeviceTools {
- var bakedGuestTools = true
- var guestShell = true
  var failure: Error?
- var foreground: String?
  var commands: [String] = []
- var lockChecks = 0
- @discardableResult func guestRun(_ command: String) async throws -> Data {
-  commands.append(command)
+ func launchApp(_ bundleID: String) async throws {
+  commands.append(bundleID)
   if let failure { throw failure }
-  return Data()
  }
- func foregroundAppName(stageHelper: Bool) async throws -> String? {
-  precondition(!stageHelper); lockChecks += 1; return foreground
- }
-''' + method(tools, '    func launchApp(_ bundleID: String) async throws {') + r'''
 }
 @MainActor final class EmulatorController {
  let profile = DeviceProfile.iPodTouch2G
@@ -59,22 +53,15 @@ extension Notification.Name { static let ltmAppLaunched = Notification.Name("Lau
   device.isSleeping = true; displaySleeping = true
   try await device.launchApp("com.example.game")
   precondition(device.wakes == 1 && !displaySleeping && device.deviceTools.commands.count == 2)
-  // The launch API still refuses a locked device. We ask its read-only lock
-  // helper for the reason; the app never issues an unlock request.
+  // Typed launch errors reach the caller unchanged; a cancellation stays one.
   device.isSleeping = false
-  device.deviceTools.failure = DeviceToolsError.failed("sblaunch: com.example.game -> 3")
-  device.deviceTools.foreground = "Lock Screen"
+  device.deviceTools.failure = AppLaunchError.locked
   do { try await device.launchApp("com.example.game"); preconditionFailure("locked launch accepted") }
   catch AppLaunchError.locked { }
-  precondition(device.deviceTools.lockChecks == 1 && device.wakes == 1)
-  device.deviceTools.foreground = "Home Screen"
-  do { try await device.launchApp("com.example.game"); preconditionFailure("failed launch accepted") }
-  catch AppLaunchError.failed { }
-  precondition(device.deviceTools.lockChecks == 2)
+  precondition(device.wakes == 1)
   device.deviceTools.failure = CancellationError()
   do { try await device.launchApp("com.example.game"); preconditionFailure("cancelled launch accepted") }
   catch is CancellationError { }
-  precondition(device.deviceTools.lockChecks == 2)
   device.acceptsInput = false
   let commands = device.deviceTools.commands.count
   do { try await device.launchApp("com.example.game"); preconditionFailure("unavailable device accepted") }

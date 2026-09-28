@@ -188,9 +188,9 @@ copy_tool "${USBMUXD_BIN:-$QEMU/build-native14/build/usbmuxd/src/usbmuxd}"
 # Application Support before use — see USBMux.confDirectory — because the bundle
 # is read-only and signed. Ship only the seed, never a pairing record.
 copy_tool "$QEMU/imgtools/install-ipa.sh"
-copy_tool "$QEMU/contrib/it-ssh-terminal.sh"
-# Guest-side binaries install-ipa.sh copies onto the device, and the helper that
-# stands in for the python3 a clean Mac does not have.
+# Guest-side binaries the app uploads through the guest agent to images without
+# the guest-package loader, and the helper that stands in for the python3 a clean
+# Mac does not have. Nothing here needs a guest shell or SSH.
 copy_guest() {
     if [ -n "$GUEST" ]; then
         copy_tool "$GUEST/$(basename "$1")" guest
@@ -200,22 +200,10 @@ copy_guest() {
     fi
 }
 copy_guest it-gles/MBXGLEngine
-copy_guest it-instprogress/sbdlicon
-# The quit-time helper asks launchd to shut down through reboot2(RB_HALT);
-# the host still waits for an actual guest PMU power-off event.
-copy_guest it-halt/ithalt
 copy_guest it-agent/it_agent
 copy_guest it-agent/it_typein.dylib
-copy_guest it-agent/com.qemu.it-agent.plist
-copy_guest it-status/itstatus
 copy_guest it-media/itmedia
 copy_guest it-media/itphoto
-copy_guest it-proxy/itproxy
-copy_guest it-proxy/ittrust
-# Auto-rotation's guest-side reporter. Without it the feature is silently absent
-# from every packaged build — the app resolves it bundle-first and then falls
-# back to a checkout path a user's Mac does not have.
-copy_guest it-orientation/itorient
 # Build directly from source; the old launcher app is no longer a dependency.
 cc -O2 -Wall -mmacosx-version-min="$MINOS" \
     "$QEMU/contrib/macos-app/ipod-helper.c" -lz -o "$WORK/ipod-helper"

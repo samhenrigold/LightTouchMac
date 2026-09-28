@@ -1,10 +1,9 @@
 // Created by Sam on 2026-08-05.
 //
-// Host-side app management over USB, reusing the existing qemu-ios scripts
-// (which carry fixes the raw ideviceinstaller path lacks: the 0644 exec-bit
-// repair, the GL-engine swap, cryptid/OpenGLES warnings). Listing and
-// uninstalling go straight to ideviceinstaller; installs and the SSH terminal
-// go through the scripts. All external processes run via swift-subprocess.
+// Host-side app management over USB. Installs, listing, uninstalls and media
+// staging are stock lockdown services in-process (DeviceServices); guest
+// commands are the agent's typed ops (GuestServices). No SSH, no guest shell.
+// External host tools run via swift-subprocess.
 
 import Foundation
 import Subprocess
@@ -17,79 +16,32 @@ struct InstalledApp: Identifiable, Sendable {
     let version: String
 }
 
-enum AppLaunchError: Error {
-    case locked, unavailable, failed
-
-    func message(for profile: DeviceProfile) -> String {
-        switch self {
-        case .locked: "Unlock the \(profile.shortName), then try again."
-        case .unavailable: "Wait for the \(profile.shortName) to finish starting, then try again."
-        case .failed: "Try opening the app on the \(profile.shortName)."
-        }
-    }
-}
-
-enum DeviceToolsError: LocalizedError {
-    case toolMissing(String)
-    case failed(String)
-    var errorDescription: String? {
-        switch self {
-        case .toolMissing(let t):
-            return "\(t) is missing from this build of LightTouchMac."
-        case .failed(let msg): return msg
-        }
-    }
-}
-
 /// Talks to one running device, identified by its usbmuxd client socket. The
-/// facade the UI calls; list/install/uninstall run in-process through
-/// DeviceServices, and only the SSH terminal (and the fallback install for a
-/// non-baked NAND) still shell out.
+/// facade the UI calls.
 struct DeviceTools: Sendable {
     let clientSocket: String
     let filesRoot: String
     /// This device's web-proxy files (WebProxyConfiguration.directory).
     let proxyDirectory: URL
-    /// True when the guest image already carries the GL engine shim and
-    /// sblaunch (nand-ultimate). When false, a GL app needs the ssh engine
-    /// copy, which only the install script does — so we fall back to it.
-    var bakedGuestTools: Bool = true
-    /// False on a stock image with no guest shell (the iPad): everything goes
-    /// through lockdown services, and SSH-only extras are skipped, not failed.
-    var guestShell: Bool = true
     /// The device's helper, for the guest agent (DeviceLink `.agent` requests).
     var agent: DeviceLink?
+    /// The agent's capabilities, per device (EmulatorController's).
+    var agentCache = GuestAgentCache()
+    /// A guest-package report arrived: the guest runs a loader package.
+    var packaged = false
 
     private var proxyFile: String { WebProxyConfiguration.file(in: proxyDirectory).path }
-    private var agentTransport: GuestAgentTransport { GuestAgentTransport(link: agent) }
+    private var guestAgent: GuestAgent { GuestAgent(link: agent, cache: agentCache) }
+    private var guest: GuestServices { GuestServices(agent: guestAgent, packaged: packaged) }
 
     private var services: DeviceServices { DeviceServices(clientSocket: clientSocket) }
 
     // The app's own tools first, then Homebrew's — without assuming any PATH.
     private static let searchPaths = Bundled.binarySearchPaths
 
+    /// The raw libimobiledevice tools (lockdown-mcinstall) find this device here.
     private var toolEnvironment: Environment {
-        var environment: [Environment.Key: String?] = [
-            // SOCK is what apps/install-app.sh keys on; USBMUXD_SOCKET_ADDRESS is
-            // what it-ssh-terminal.sh and the raw libimobiledevice tools use.
-            // Passing both means neither needs the session.env file to exist.
-            "SOCK": clientSocket,
-            "USBMUXD_SOCKET_ADDRESS": clientSocket,
-            "IPOD_FILES": filesRoot,
-            "PATH": (Self.searchPaths + ["/bin", "/usr/sbin", "/sbin"]).joined(separator: ":"),
-        ]
-        // The scripts look these up themselves and fall back to a source
-        // checkout when they are unset. Pointing them at the bundle is what
-        // makes an install work on a Mac that has neither the checkout nor
-        // Homebrew: install-ipa.sh carries the exec-bit repair and the GL
-        // engine, ipod-helper stands in for the python3 a clean Mac lacks, and
-        // the guest tools are the binaries it copies onto the device.
-        for (key, name) in [(Environment.Key("INSTALL_IPA"), "install-ipa.sh"),
-                            (Environment.Key("IT_HELPER"), "ipod-helper")] {
-            if let path = Bundled.tool(name) { environment[key] = path }
-        }
-        if let tools = Bundled.toolsDirectory { environment["IT_GUEST_TOOLS"] = tools }
-        return .inherit.updating(environment)
+        .inherit.updating(["USBMUXD_SOCKET_ADDRESS": clientSocket])
     }
     
     // MARK: - List (in-process)
@@ -111,24 +63,18 @@ struct DeviceTools: Sendable {
     }
 
     private func commitLibraryMedia(id: String, metadata: URL, destination: String) async throws {
-        guard UUID(uuidString: id) != nil else {
-            throw DeviceToolsError.failed("Invalid media staging identifier.")
-        }
-        guard let helper = Bundled.resolve("itmedia", fallbacks: [
-            "\(filesRoot)/../qemu-ios/contrib/it-media/itmedia",
-        ]) else { throw DeviceToolsError.toolMissing("itmedia") }
-        let executable = "/tmp/ltm-itmedia-\(id)"
-        let remoteMetadata = "/tmp/ltm-media-\(id).plist"
-        try await guestRun("cat > \(executable) && chmod 755 \(executable) && "
-                           + "chown 501:501 /var/mobile/Media/LightTouch /var/mobile/Media/LightTouch/\(id)",
-                           stdinPath: helper)
-        let result = try await guestRun(
-            "cat > \(remoteMetadata) && chmod 644 \(remoteMetadata) && \(executable) \(remoteMetadata) \(id); "
-                + "result=$?; rm -f \(executable) \(remoteMetadata); exit $result",
-            stdinPath: metadata.path)
-        guard String(decoding: result, as: UTF8.self).hasSuffix("imported\n") else {
+        guard try await guest.commitMedia(id: id, helper: "itmedia", localHelper: { try Self.guestTool("itmedia", filesRoot) },
+                                          metadata: metadata) else {
             throw DeviceToolsError.failed("\(destination) did not confirm the import. The copied media has been retained.")
         }
+    }
+
+    /// The app's copy of a guest helper for images whose loader package lacks it.
+    private static func guestTool(_ name: String, _ filesRoot: String) throws -> URL {
+        guard let path = Bundled.resolve(name, fallbacks: ["\(filesRoot)/../qemu-ios/contrib/it-media/\(name)"]) else {
+            throw DeviceToolsError.toolMissing(name)
+        }
+        return URL(fileURLWithPath: path)
     }
 
     // MARK: - Photo import
@@ -150,35 +96,21 @@ struct DeviceTools: Sendable {
     }
 
     func commitPhoto(_ photo: MediaPhoto) async throws {
-        guard UUID(uuidString: photo.id) != nil else {
-            throw DeviceToolsError.failed("Invalid photo staging identifier.")
-        }
-        guard let helper = Bundled.resolve("itphoto", fallbacks: [
-            "\(filesRoot)/../qemu-ios/contrib/it-media/itphoto",
-        ]) else { throw DeviceToolsError.toolMissing("itphoto") }
-        let executable = "/tmp/ltm-itphoto-\(photo.id)"
-        let result = try await guestRun(
-            "cat > \(executable) && chmod 755 \(executable) && "
-                + "chown 501:501 /var/mobile/Media/LightTouch /var/mobile/Media/LightTouch/\(photo.id) && "
-                + "\(executable) \(photo.id); result=$?; rm -f \(executable); exit $result",
-            stdinPath: helper)
-        guard String(decoding: result, as: UTF8.self).hasSuffix("imported\n") else {
+        guard try await guest.commitMedia(id: photo.id, helper: "itphoto", localHelper: { try Self.guestTool("itphoto", filesRoot) },
+                                          metadata: nil) else {
             throw DeviceToolsError.failed("Photos did not confirm the import. Check Saved Photos before importing it again.")
         }
     }
 
     // MARK: - Install
 
-    /// Install a decrypted .ipa. Baked images go the fast in-process route
-    /// (AFC stage + instproxy, no shell); a non-baked image falls back to the
-    /// install script, which copies the GL engine over ssh. `progress` gets
+    /// Install a decrypted .ipa: AFC stage + instproxy, in-process, no shell.
+    /// Every supported image carries its GL engine shim. `progress` gets
     /// short, human phase strings for the sidebar row. The return string is
     /// non-empty only to carry the "SDK too new" marker the caller warns on.
     @discardableResult
     func install(_ ipa: URL, placeholderRaised: Bool = false,
                  progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
-        // A GL app on a non-baked image needs the ssh engine copy that only the
-        // script performs — installing it in-process would wedge the device.
         // MinimumOSVersion, NOT DTSDKName. The SDK an app was BUILT with says
         // nothing about whether it runs: Temple Run 1.0 is DTSDKName
         // iphoneos4.2 with MinimumOSVersion 3.0 and runs fine on 3.1.3. Gating
@@ -201,7 +133,7 @@ struct DeviceTools: Sendable {
                 + "it has no Payload/…app/Info.plist inside.")
         }
 
-        if bakedGuestTools {
+        do {
             // Placeholder first, before anything slow: the exec-bit repair
             // repacks the whole archive and the free-space check is a round
             // trip, and until now this path put nothing on the home screen for
@@ -216,9 +148,9 @@ struct DeviceTools: Sendable {
             let key = await AppMetadataCache.bundleID(of: ipa)
                 ?? ipa.deletingPathExtension().lastPathComponent
             let placeholder = Self.placeholderID(for: key)
-            // The add and the cancel are two independent fire-and-forget ssh
-            // sessions, each with a ~1s floor, so a fast failure below (disk
-            // full answers in about that long) could run the cancel FIRST and
+            // The add and the cancel are two independent fire-and-forget agent
+            // requests, so a fast failure below (disk full answers in about a
+            // second) could run the cancel FIRST and
             // strand a "downloading" placeholder on the home screen with nothing
             // ever coming to replace it. Chaining the cancel behind the add's
             // own task is what orders them.
@@ -227,10 +159,10 @@ struct DeviceTools: Sendable {
             // up at download start (installPlaceholder derives the same id from
             // the same bundle id). Adding it again drew a SECOND placeholder —
             // so adopt the existing one and only own the cancel.
-            // The placeholder is an SSH call into SpringBoard; without a guest
-            // shell there is none, and installd shows its own progress.
-            let raised = placeholderRaised || !guestShell ? nil : placeholderIcon("add", placeholder)
-            defer { if guestShell { placeholderIcon("cancel", placeholder, after: raised) } }
+            // The placeholder is the agent's dlicon; without it (the iPad, a
+            // v1 agent) installd shows no icon and nothing is lost.
+            let raised = placeholderRaised ? nil : placeholderIcon("add", placeholder, bundleID: key)
+            defer { placeholderIcon("cancel", placeholder, after: raised) }
 
             // An .ipa whose binary is archived 0644 installs fine and then never
             // launches: posix_spawn fails EACCES, SpringBoard logs only "exited
@@ -272,7 +204,6 @@ struct DeviceTools: Sendable {
             }
             return "installed" + sdkMarker
         }
-        return try await installViaScript(ipa, progress: progress) + sdkMarker
     }
 
     /// If the .ipa stores its main binary without the exec bit, a copy repacked
@@ -370,116 +301,6 @@ struct DeviceTools: Sendable {
         throw lastError
     }
 
-    // MARK: - Install fallback (non-baked image, through apps/install-app.sh)
-
-    private func installViaScript(_ ipa: URL, progress: @escaping @Sendable (String) -> Void) async throws -> String {
-        let script = "\(filesRoot)/apps/install-app.sh"
-        guard FileManager.default.isExecutableFile(atPath: script) else {
-            throw DeviceToolsError.toolMissing(script)
-        }
-
-        // The guest's lockdown/AFC service is briefly unavailable right after an
-        // uninstall ("Could not start com.apple.afc: Invalid service"), so a
-        // reinstall can fail transiently. install-ipa.sh retries the one failing
-        // command itself; this outer loop is the net for the paths that don't
-        // reach it, and re-runs the whole script.
-        var lastOutput = "install failed"
-        for attempt in 0..<3 {
-            // Bounded like the in-process path: a script stuck on an ssh that
-            // never answers used to leave the row at "Installing…" forever.
-            let environment = toolEnvironment
-            let outcome: Result<(output: String, succeeded: Bool), Error>? =
-                await withSoftDeadline(Timeouts.installAbsolute) {
-                    do {
-                        let result = try await run(
-                            .path(FilePath("/bin/bash")),
-                            arguments: [script, ipa.path],
-                            environment: environment,
-                            input: .none,
-                            output: .sequence, error: .string(limit: 1 << 20)
-                        ) { execution in
-                            var collected = ""
-                            var partial = ""
-                            for try await buffer in execution.standardOutput {
-                                let chunk = buffer.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
-                                collected += chunk
-                                partial += chunk
-                                while let newline = partial.firstIndex(of: "\n") {
-                                    let line = String(partial[..<newline])
-                                    partial = String(partial[partial.index(after: newline)...])
-                                    if let status = Self.status(of: line) { progress(status) }
-                                }
-                            }
-                            return collected
-                        }
-                        return .success((result.closureResult + result.standardError,
-                                         result.terminationStatus.isSuccess))
-                    } catch { return .failure(error) }
-                }
-            guard let outcome else {
-                try Task.checkCancellation()
-                throw DeviceToolsError.failed("The install did not finish in \(Int(Timeouts.installAbsolute / 60)) minutes. The device may be busy; try again.")
-            }
-            let (out, succeeded) = try outcome.get()
-            if succeeded {
-                return out
-            }
-            lastOutput = out.isEmpty ? "install failed" : out
-            guard attempt < 2, Self.isTransientServiceError(out) else { break }
-            try await Task.sleep(for: .seconds(2))   // throws if cancelled, which ends the retry
-        }
-        // The script's output is a transcript, not a message: it goes to the
-        // log, and the row gets its last recognisable status line.
-        logEvent("install \(ipa.lastPathComponent): \(lastOutput)")
-        throw DeviceToolsError.failed(Self.installFailureReason(lastOutput))
-    }
-
-    /// One line of installer output as a row subtitle, translated for a human.
-    /// The script narrates for its log ("device is up: iOS 3.1.3",
-    /// "TakingInstallLock (0%)") and none of that reads as status under an
-    /// app's name in a sidebar. Only lines that map to a phase someone would
-    /// recognise become a subtitle; everything else returns nil so the last
-    /// real status stays put instead of being replaced by noise.
-    static func status(of line: String) -> String? {
-        let text = line.trimmingCharacters(in: .whitespaces)
-        // ideviceinstaller's per-phase progress: `Install: StagingPackage (10%)`.
-        // The phase names are installd internals; the percentage is the story.
-        if let match = text.range(of: #"^Install: \w+ \((\d+)%\)"#, options: .regularExpression) {
-            let percent = text[match].drop { !$0.isNumber }.prefix { $0.isNumber }
-            return "Installing… \(percent)%"
-        }
-        let lower = text.lowercased()
-        if lower.contains("waiting for the device") ||
-           lower.contains("services are still starting") { return "Waiting for the device…" }
-        if lower.contains("retrying in") { return "Device is busy — retrying…" }
-        if lower.contains("gl engine") { return "Setting up graphics support…" }
-        if lower.hasPrefix("--- installing") || lower.hasPrefix("copying ") {
-            return "Sending to device…"
-        }
-        return nil
-    }
-    
-    /// A one-line reason for a failed install row: the installer's last error
-    /// line (ideviceinstaller's "ERROR: …", installd's "Error: …"), short, or a
-    /// pointer to the log. Never the transcript.
-    static func installFailureReason(_ output: String) -> String {
-        let error = output.split(separator: "\n").reversed().lazy
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { $0.range(of: "error", options: .caseInsensitive) != nil }
-        guard var reason = error else { return "Couldn’t install this app. Open Device Logs for details." }
-        if let colon = reason.range(of: #"^(ERROR|Error):\s*"#, options: .regularExpression) {
-            reason.removeSubrange(colon)
-        }
-        if reason.count > 90 { reason = String(reason.prefix(89)) + "…" }
-        return "Couldn’t install: \(reason)"
-    }
-
-    private static func isTransientServiceError(_ output: String) -> Bool {
-        let markers = ["com.apple.afc", "Invalid service", "Could not start",
-                       "Could not connect", "lockdown"]
-        return markers.contains { output.localizedCaseInsensitiveContains($0) }
-    }
-    
     // MARK: - Uninstall (in-process)
 
     func uninstall(_ bundleID: String) async throws {
@@ -490,217 +311,49 @@ struct DeviceTools: Sendable {
 
     func freeSpaceBytes() async throws -> Int64 { try await services.freeSpaceBytes() }
 
-    /// Respring: kill SpringBoard and let launchd bring it straight back.
+    /// Respring: launchd stops SpringBoard and KeepAlive brings it straight back.
     ///
     /// This is the cheap fix for the "a freshly sideloaded app crashes until I
     /// restart the iPod" problem — SpringBoard caches what it knows about
     /// installed apps, and a respring rebuilds that in a few seconds where a
-    /// full boot costs ~40. ssh is the only route (there is no service for it),
-    /// which is why this is a deliberate, user-invoked action rather than
-    /// something the install path does behind your back.
-    ///
-    /// Non-interactive password auth via SSH_ASKPASS_REQUIRE=force, the
-    /// supported way since OpenSSH 8.4; macOS ships 9.x.
-    func restartSpringBoard() async throws {
-        try await guestRun("killall SpringBoard")
-    }
+    /// full boot costs ~40. A deliberate, user-invoked action, never something
+    /// the install path does behind your back.
+    func restartSpringBoard() async throws { try await guest.respring() }
 
-    /// Upgrade existing images, including legacy lock-disabling preferences.
-    /// Reload SpringBoard after changes; the caller waits for it to answer.
+    /// Upgrade an image without the guest-package loader in place (the
+    /// agent, typein, the GL engine, SpringBoard's environment, old lock
+    /// preferences). Reloads SpringBoard after changes; the caller waits for
+    /// it to answer. A packaged image is the loader's (GuestServices).
     func updateMediaComponents() async throws -> Bool {
-        guard let engine = Bundled.resolve("MBXGLEngine", fallbacks: [
-            "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-gles/MBXGLEngine",
-        ]) else { throw DeviceToolsError.toolMissing("MBXGLEngine") }
-        let guestToolsRoot = "\(filesRoot)/../qemu-ios/contrib/it-agent"
-        guard let agent = Bundled.resolve("it_agent", fallbacks: ["\(guestToolsRoot)/it_agent"]),
-              let typing = Bundled.resolveResource("it_typein.dylib", fallbacks: ["\(guestToolsRoot)/it_typein.dylib"]),
-              let agentJob = Bundled.resolveResource("com.qemu.it-agent.plist", fallbacks: ["\(guestToolsRoot)/com.qemu.it-agent.plist"]) else {
+        let checkout = "\(filesRoot)/../qemu-ios/contrib"
+        guard let engine = Bundled.resolve("MBXGLEngine", fallbacks: ["\(checkout)/it-gles/MBXGLEngine"]),
+              let agent = Bundled.resolve("it_agent", fallbacks: ["\(checkout)/it-agent/it_agent"]),
+              let typing = Bundled.resolveResource("it_typein.dylib", fallbacks: ["\(checkout)/it-agent/it_typein.dylib"]) else {
             throw DeviceToolsError.toolMissing("guest agent components")
         }
-        let agentPath = "/usr/local/bin/it_agent"
-        let typingPath = "/usr/lib/it_typein.dylib"
-        let agentJobPath = "/System/Library/LaunchDaemons/com.qemu.it-agent.plist"
-        let agentData = try Data(contentsOf: URL(fileURLWithPath: agent))
-        let typingData = try Data(contentsOf: URL(fileURLWithPath: typing))
-        let jobData = try Data(contentsOf: URL(fileURLWithPath: agentJob))
-        guard [agentData, typingData, jobData].allSatisfy({ !$0.isEmpty && $0.count <= 250_000 }),
-              let job = try PropertyListSerialization.propertyList(from: jobData, format: nil) as? [String: Any],
-              job["Label"] as? String == "com.qemu.it-agent",
-              job["ProgramArguments"] as? [String] == [agentPath] else {
-            throw DeviceToolsError.failed("The bundled guest agent is invalid.")
-        }
-        let enginePath = "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"
-        let plistPath = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
-        let engineData = try Data(contentsOf: URL(fileURLWithPath: engine))
-        guard !engineData.isEmpty, engineData.count <= 1 << 20 else {
-            throw DeviceToolsError.failed("The bundled graphics engine is invalid.")
-        }
-        let preferencesPath = "/var/mobile/Library/Preferences/com.apple.springboard.plist"
-        let legacy = "/System/Library/LaunchDaemons/com.qemu.it-pbd.plist"
-        let paths = [preferencesPath, plistPath, enginePath, agentPath, typingPath, agentJobPath, legacy]
-        let request = GuestFileSnapshot(paths: paths)
-        let snapshot = try await guestRun(request.command)
-        let files = try request.decode(snapshot)
-        let newPreferences = try Self.lockButtonPreferences(files[preferencesPath] ?? Data())
-        let newPlist = try Self.mediaLaunchConfiguration(files[plistPath] ?? Data(), includeTyping: true)
-        let changedEngine = files[enginePath] != engineData
-        let oldAgent = files[agentPath]
-        let oldTyping = files[typingPath]
-        let oldJob = files[agentJobPath]
-        let legacyPresent = files[legacy] ?? Data()
-        let changedAgent = oldAgent != agentData
-        let changedTyping = oldTyping != typingData
-        let changedJob = oldJob != jobData
-        for (changed, source, destination, mode) in [
-            (changedAgent, agent, agentPath, "755"),
-            (changedTyping, typing, typingPath, "755"),
-            (changedJob, agentJob, agentJobPath, "644")
-        ] where changed {
-            try Task.checkCancellation()
-            try await guestRun("cat > \(destination).ltm-new && chmod \(mode) \(destination).ltm-new"
-                               + " && mv -f \(destination).ltm-new \(destination)", stdinPath: source)
-        }
-        // Validate both inputs before changing either guest file. Stage beside
-        // the destination: /tmp is a different guest filesystem, so a move
-        // from there is a non-atomic copy and can leave an unbootable plist.
-        if changedEngine {
-            try Task.checkCancellation()
-            try await guestRun("cat > \(enginePath).ltm-new && chmod 755 \(enginePath).ltm-new"
-                               + " && mv -f \(enginePath).ltm-new \(enginePath)", stdinPath: engine)
-        }
-        if let newPlist {
-            try Task.checkCancellation()
-            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            try newPlist.write(to: file, options: .atomic)
-            defer { try? FileManager.default.removeItem(at: file) }
-            try await guestRun("cat > \(plistPath).ltm-new && chmod 644 \(plistPath).ltm-new"
-                               + " && mv -f \(plistPath).ltm-new \(plistPath)", stdinPath: file.path)
-        }
-        if changedAgent || changedJob || !legacyPresent.isEmpty || agentTransport.status != 1 {
-            // A daemon cannot unload its own launch job and return a result.
-            // Use the independent USB/SSH path only for this lifecycle step.
-            try await guestRun("launchctl unload \(legacy) >/dev/null 2>&1 || :; rm -f \(legacy); "
-                               + "launchctl unload \(agentJobPath) >/dev/null 2>&1 || :; launchctl load \(agentJobPath)",
-                               usingAgent: false)
-        }
-        let changed = changedEngine || changedTyping || newPlist != nil || newPreferences != nil
-        if changed {
-            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            defer { try? FileManager.default.removeItem(at: file) }
-            if let newPreferences { try newPreferences.write(to: file, options: .atomic) }
-            try await reloadMediaCompositor(preferencesFile: newPreferences == nil ? nil : file.path)
-        }
-        return changed
-    }
-
-    private func reloadMediaCompositor(preferencesFile: String?) async throws {
-        try Task.checkCancellation()
-        let plist = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
-        let preferences = "/var/mobile/Library/Preferences/com.apple.springboard.plist"
-        // Stop SpringBoard before replacing its preferences: it can flush its
-        // cached copy on exit. Reload the job even if the replacement fails.
-        var command = "set -e; sync; launchctl unload \(plist); trap 'result=$?; launchctl load \(plist) || exit $?; exit $result' EXIT; trap 'exit 1' HUP INT TERM; "
-        if preferencesFile != nil {
-            command += "cat > \(preferences).ltm-new; chown 501:501 \(preferences).ltm-new"
-                + "; chmod 600 \(preferences).ltm-new; mv -f \(preferences).ltm-new \(preferences); "
-        }
-        command += "sync"
-        try await guestRun(command, stdinPath: preferencesFile)
-    }
-
-    static func lockButtonPreferences(_ data: Data) throws -> Data? {
-        var format = PropertyListSerialization.PropertyListFormat.xml
-        guard var preferences = try PropertyListSerialization.propertyList(from: data, format: &format) as? [String: Any] else {
-            throw DeviceToolsError.failed("The device's SpringBoard preferences are invalid.")
-        }
-        let keys = ["SBDontLockEver", "SBDisableCABlanking"]
-        guard keys.contains(where: { preferences[$0] != nil }) else { return nil }
-        for key in keys { preferences.removeValue(forKey: key) }
-        return try PropertyListSerialization.data(fromPropertyList: preferences, format: format, options: 0)
-    }
-
-    /// Preserve the launch job and unrelated environment, including binary
-    /// plists. A malformed job must never be replaced with a guessed default.
-    static func mediaLaunchConfiguration(_ data: Data, includeTyping: Bool = false) throws -> Data? {
-        var format = PropertyListSerialization.PropertyListFormat.xml
-        guard var job = try PropertyListSerialization.propertyList(from: data, format: &format) as? [String: Any],
-              job["Label"] as? String == "com.apple.SpringBoard",
-              job["EnvironmentVariables"] == nil || job["EnvironmentVariables"] is [String: Any] else {
-            throw DeviceToolsError.failed("The device's SpringBoard configuration is invalid.")
-        }
-        var environment = job["EnvironmentVariables"] as? [String: Any] ?? [:]
-        let original = environment
-        let keys = ["CA_ENABLE_OGL", "LK_ENABLE_OGL"]
-        for key in keys { environment[key] = "1" }
-        if includeTyping {
-            guard environment["DYLD_INSERT_LIBRARIES"] == nil || environment["DYLD_INSERT_LIBRARIES"] is String else {
-                throw DeviceToolsError.failed("The device's injected-library configuration is invalid.")
-            }
-            var libraries = (environment["DYLD_INSERT_LIBRARIES"] as? String ?? "")
-                .split(separator: ":").map(String.init)
-                .filter { $0 != "/usr/lib/it_kbd_agent.dylib" }
-            if !libraries.contains("/usr/lib/it_typein.dylib") { libraries.append("/usr/lib/it_typein.dylib") }
-            environment["DYLD_INSERT_LIBRARIES"] = libraries.joined(separator: ":")
-        }
-        if NSDictionary(dictionary: environment).isEqual(to: original) { return nil }
-        job["EnvironmentVariables"] = environment
-        return try PropertyListSerialization.data(fromPropertyList: job, format: format, options: 0)
+        return try await guest.updateComponents(.init(engine: URL(fileURLWithPath: engine), agent: URL(fileURLWithPath: agent),
+                                                      typing: URL(fileURLWithPath: typing)))
     }
 
     /// Nil means this image has no agent; failures must not start a second transport.
     func guestOrientation() async throws -> Int? {
-        try await agentTransport.orientationIfAvailable()
+        guard guestAgent.status != 0 else { return nil }
+        return try await guestAgent.orientation()
     }
 
-    /// Read-only helper uses SpringBoard's foreground identifier and localized
-    /// display name. It never writes sblaunch's shared command file.
-    func foregroundAppName(stageHelper: Bool) async throws -> String? {
-        let data: Data
-        if stageHelper {
-            guard let helper = Bundled.resolve("itstatus", fallbacks: [
-                "\(filesRoot)/../qemu-ios/contrib/it-status/itstatus"
-            ]) else { throw DeviceToolsError.toolMissing("itstatus") }
-            data = try await guestRun("cat > /tmp/ltm-itstatus.new && chmod 755 /tmp/ltm-itstatus.new && mv /tmp/ltm-itstatus.new /tmp/ltm-itstatus && /tmp/ltm-itstatus", stdinPath: helper)
-        } else {
-            data = try await guestRun("/tmp/ltm-itstatus")
-        }
-        let value = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : String(value.prefix(200))
+    /// SpringBoard's foreground app name (the agent's frontmost); nil without an agent.
+    func foregroundAppName() async throws -> String? {
+        guard guestAgent.isAlive else { return nil }
+        return try await guest.foregroundAppName()
     }
 
-    func configureWebProxy(enabled: Bool) async throws {
-        if !guestShell { return try await configureIPadWebProxy(enabled: enabled) }
-        guard let helper = Bundled.resolve("itproxy", fallbacks: [
-            "\(filesRoot)/../qemu-ios/contrib/it-proxy/itproxy"
-        ]) else { throw DeviceToolsError.toolMissing("itproxy") }
-        let certificate = proxyFile + ".ca.der"
-        if enabled {
-            guard let host = Bundled.resolve("itwebproxy", fallbacks: [
-                "\(filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
-            ]) else { throw DeviceToolsError.toolMissing("itwebproxy") }
-            let result = try await run(.path(FilePath(host)),
-                                       arguments: ["--init-ca", proxyFile],
-                                       output: .discarded, error: .string(limit: 1 << 16))
-            guard result.terminationStatus.isSuccess else {
-                logEvent("proxy: certificate preparation failed: \(result.standardError)")
-                throw DeviceToolsError.failed("Could not prepare this device’s HTTP proxy certificate.")
-            }
-            try await configureProxyTrust(certificate: certificate, enabled: true)
-        }
-        let action = enabled ? "on" : "off"
-        try await guestRun("cat > /tmp/ltm-itproxy.new && chmod 755 /tmp/ltm-itproxy.new && mv /tmp/ltm-itproxy.new /tmp/ltm-itproxy && /tmp/ltm-itproxy \(action)", stdinPath: helper)
-        if !enabled && FileManager.default.fileExists(atPath: certificate) {
-            try await configureProxyTrust(certificate: certificate, enabled: false)
-        }
-    }
-
-    /// The iPad has no guest agent: routing is the image's PAC (always the proxy, DIRECT as fallback) and
+    /// Both boards, no guest helper: routing is the image's PAC (always the proxy, DIRECT as fallback) and
     /// the host's itwebproxy mode, so only trust needs the device. Turning the proxy on offers a
     /// configuration profile with this device's CA through lockdown's stock MCInstall service
     /// (lockdown-mcinstall, a child process like lockdown-tz); the user taps Install once in Settings.
     /// ponytail: turning it off leaves the profile installed (the CA is this device's own and its key
     /// never leaves the Mac); remove it in Settings > General > Profiles, or add RemoveProfile if asked.
-    private func configureIPadWebProxy(enabled: Bool) async throws {
+    func configureWebProxy(enabled: Bool) async throws {
         guard enabled else { return }
         guard let host = Bundled.resolve("itwebproxy", fallbacks: [
             "\(filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
@@ -723,110 +376,34 @@ struct DeviceTools: Sendable {
         logEvent("proxy: certificate profile offered; confirm Install in the device's Settings")
     }
 
-    private func configureProxyTrust(certificate: String, enabled: Bool) async throws {
-        guard let helper = Bundled.resolve("ittrust", fallbacks: [
-            "\(filesRoot)/../qemu-ios/contrib/it-proxy/ittrust"
-        ]) else { throw DeviceToolsError.toolMissing("ittrust") }
-        try await guestRun("cat > /tmp/ltm-ittrust.new && chmod 755 /tmp/ltm-ittrust.new && mv /tmp/ltm-ittrust.new /tmp/ltm-ittrust", stdinPath: helper)
-        let action = enabled ? "add" : "remove"
-        try await guestRun("cat > /tmp/ltm-proxy-ca.der && /tmp/ltm-ittrust \(action) /tmp/ltm-proxy-ca.der", stdinPath: certificate)
-    }
-
     /// Push the guest's dirty buffers to flash.
-    func syncFilesystem() async throws {
-        try await guestRun("sync")
-    }
+    func syncFilesystem() async throws { try await guestAgent.sync() }
 
     /// Ask SpringBoard to launch an installed app — the same path a tap on
-    /// its icon takes (SBSLaunchApplicationWithIdentifier). sblaunch has no
-    /// argv (these guest binaries have no crt1), so the bundle id travels via
-    /// /tmp/sblaunch.id. SpringBoard refuses the request on a locked device.
+    /// its icon takes (the agent's SBSLaunchApplicationWithIdentifier).
+    /// SpringBoard refuses the request on a locked device.
     func launchApp(_ bundleID: String) async throws {
-        guard guestShell else {
+        guard guestAgent.isAlive else {
             throw DeviceToolsError.failed("Open the app on the device’s Home screen; launching from the sidebar isn’t available for this device yet.")
         }
-        guard bakedGuestTools else {
-            throw DeviceToolsError.failed("Launching apps from the sidebar needs the standard device image.")
-        }
-        // The filter is what makes the value safe inside the single quotes.
-        let id = bundleID.filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
-        do {
-            try await guestRun("printf %s '\(id)' > /tmp/sblaunch.id && /usr/local/bin/sblaunch")
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            logEvent("launch \(id): \(error.localizedDescription)")
-            // A dark display and an awake Lock Screen are different states.
-            // Ask SpringBoard rather than treating every launch error as a lock.
-            if (try? await foregroundAppName(stageHelper: false)) == "Lock Screen" {
-                throw AppLaunchError.locked
-            }
-            throw AppLaunchError.failed
-        }
+        try await guest.launch(bundleID)
     }
 
-    static func reconnectManagementService(agent: DeviceLink?) async throws -> Bool {
-        // Do not fall back to SSH here: recovery must not queue on the broken
-        // management transport. launchd owns and relaunches lockdownd.
-        try await GuestAgentTransport(link: agent).reconnectManagementIfAvailable()
+    static func reconnectManagementService(agent: DeviceLink?, cache: GuestAgentCache) async throws -> Bool {
+        // Recovery must not queue on the broken management transport: the agent
+        // is independent of lockdown. launchd owns and relaunches lockdownd.
+        let guest = GuestServices(agent: GuestAgent(link: agent, cache: cache))
+        guard guest.agent.isAlive else { return false }
+        try await guest.reconnectManagement()
+        return true
     }
 
     static func requestIndependentHalt(agent: DeviceLink?) async -> Bool {
         // Submission is not proof of shutdown. The controller still requires
         // the guest PMU power-off confirmation before reporting success.
-        await GuestAgentTransport(link: agent).requestHaltIfAvailable()
+        await GuestAgent(link: agent, cache: GuestAgentCache()).requestHalt()
     }
 
-    /// Shut the guest's filesystem down through the kernel: sync, unmount
-    /// everything, halt. No SpringBoard, no gesture, nothing drawn.
-    ///
-    /// The alternative — the machine model's synthetic press-and-hold plus a
-    /// slide across the power-off sheet — only works while the UI is healthy,
-    /// which is not when a shutdown gets asked for. Measured: a powerdown
-    /// requested while a full-screen GL app was foreground never completed,
-    /// while the same build powers off in 14s from the home screen. A hung game
-    /// is not going to draw the slider.
-    ///
-    /// `reboot(2)` needs nobody's cooperation: XNU syncs, calls
-    /// vfs_unmountall() and halts. /sbin/halt does not exist on these images,
-    /// so the helper is a 20-line armv6 binary streamed in and exec'd from
-    /// /tmp, exactly the way the orientation reporter is.
-    ///
-    /// Throws if the helper is missing or ssh cannot reach the guest — the
-    /// caller falls back from there. Note that a SUCCESSFUL halt kills the
-    /// connection, so a non-zero exit from ssh is the expected outcome, not a
-    /// failure: `guestRun` is asked to tolerate it and the caller checks the
-    /// guest instead.
-    func haltFilesystem() async throws {
-        guard let helper = Self.haltHelperPath else {
-            throw DeviceToolsError.toolMissing("ithalt")
-        }
-        // rm first: /tmp/ithalt from a previous run may still be a RUNNING image,
-        // and Darwin answers ETXTBSY to opening one for write — which would make
-        // the whole command fail with no clue why.
-        try await guestRun("rm -f /tmp/ithalt && cat > /tmp/ithalt && chmod 755 /tmp/ithalt"
-                           + " && exec /tmp/ithalt",
-                           stdinPath: helper, expecting: "syncing and halting")
-    }
-
-    /// The bundled guest-side halt helper, or the checkout's copy in a dev build.
-    static var haltHelperPath: String? {
-        Bundled.resolve("ithalt", fallbacks: [
-            "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-halt/ithalt",
-        ])
-    }
-
-    /// Raise or drop the App Store-style "downloading" placeholder on the
-    /// guest's home screen. `sbdlicon` is baked into nand-ultimate at this path;
-    /// see qemu-ios/contrib/it-instprogress for what SpringBoard does with it.
-    ///
-    /// Deliberately fire-and-forget. This is the only ssh left on the in-process
-    /// install path and it is cosmetic, so a slow or unreachable guest must cost
-    /// the install nothing and can never fail it. An unstructured Task does not
-    /// inherit cancellation, which is what lets the `cancel` in a defer still
-    /// run when the install itself was cancelled; and if even that is lost, the
-    /// icon is placed with saveIconState:NO and dies with the running
-    /// SpringBoard rather than being written to disk.
     /// The one id both phases share for a given app, so a placeholder raised
     /// at download start is the SAME icon the install phase adopts and
     /// cancels — never two. (Two ids was tried: the download's icon and the
@@ -842,97 +419,23 @@ struct DeviceTools: Sendable {
     @discardableResult
     func installPlaceholder(_ action: String, bundleID: String,
                             after previous: Task<Void, Never>? = nil) -> Task<Void, Never>? {
-        guard bakedGuestTools, guestShell else { return nil }
-        return placeholderIcon(action, Self.placeholderID(for: bundleID), after: previous)
+        guard guestAgent.isAlive else { return nil }
+        return placeholderIcon(action, Self.placeholderID(for: bundleID), bundleID: bundleID, after: previous)
     }
 
+    /// Deliberately fire-and-forget and cosmetic: a slow or absent agent costs
+    /// the install nothing. An unstructured Task does not inherit cancellation,
+    /// which lets the `cancel` in a defer still run when the install was
+    /// cancelled; if even that is lost, the icon dies with the running SpringBoard.
     @discardableResult
-    private func placeholderIcon(_ action: String, _ id: String,
+    private func placeholderIcon(_ action: String, _ id: String, bundleID: String? = nil,
                                  after previous: Task<Void, Never>? = nil) -> Task<Void, Never> {
-        Task {
+        let agent = guestAgent
+        return Task {
             await previous?.value
-            _ = try? await guestRun("/usr/local/bin/sbdlicon \(action) '\(id)'")
-        }
-    }
-
-    /// Run one command on the guest over USB, bounded and cancellable.
-    ///
-    /// `expecting` is how a command that KILLS ITS OWN SESSION proves it ran:
-    /// the halt takes the system down, so ssh always exits non-zero and the
-    /// exit status cannot tell "the guest halted" from "ssh never got there".
-    /// Tolerating the failure without demanding evidence made haltFilesystem
-    /// report success when sshd was not up yet — and the caller then skipped
-    /// the sync and the powerdown, which is the entire ladder, and lost the
-    /// session's installs. The marker is the guest's own stdout.
-    @discardableResult
-    private func guestRun(_ command: String, stdinPath: String? = nil,
-                         expecting marker: String? = nil, usingAgent: Bool = true) async throws -> Data {
-        if usingAgent, marker == nil,
-           let result = try await agentTransport.runIfAvailable(command, stdinPath: stdinPath) {
-            return result
-        }
-        guard let iproxy = Bundled.tool("iproxy")
-                ?? Self.searchPaths.map({ "\($0)/iproxy" }).first(where: {
-                    FileManager.default.isExecutableFile(atPath: $0)
-                }) else {
-            throw DeviceToolsError.toolMissing("iproxy")
-        }
-        let port = Int.random(in: 29200...29399)
-        let password = ProcessInfo.processInfo.environment["DEVICE_PASSWORD"] ?? "alpine"
-        // ControlPath is deliberately absent: it is the 104-byte socket-path
-        // limit that silently disabled every guest command once before.
-        let script = """
-        set -e
-        "$1" "$2" 22 >/dev/null 2>&1 &
-        IP=$!
-        ASK=""
-        trap 'kill "$IP" 2>/dev/null || :; rm -f "$ASK"' EXIT
-        trap 'exit 143' INT TERM HUP
-        sleep 1
-        kill -0 "$IP" 2>/dev/null || { echo "iproxy could not bind port $2" >&2; exit 1; }
-        ASK="$(mktemp -t ltmask)"
-        printf '%s\\n' '#!/bin/sh' 'printf "%s" "$LTM_SSH_PASSWORD"' > "$ASK"
-        chmod 700 "$ASK"
-        export LTM_SSH_PASSWORD="$3"
-        SSH_ASKPASS="$ASK" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o LogLevel=ERROR -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 \
-            -o ServerAliveInterval=5 -o ServerAliveCountMax=3 \
-            -p "$2" root@127.0.0.1 "$4" < "$5"
-        """
-        var platform = PlatformOptions()
-        platform.createSession = true
-        platform.teardownSequence = [.gracefulShutDown(toProcessGroup: true,
-                                                       allowedDurationToNextStep: .seconds(2))]
-        let environment = toolEnvironment
-        let options = platform
-        return try await withThrowingTaskGroup(of: Data.self) { group in
-            group.addTask {
-                let result = try await run(
-                    .path(FilePath("/bin/bash")),
-                    arguments: ["-c", script, "ltm-ssh", iproxy, String(port), password, command, stdinPath ?? "/dev/null"],
-                    environment: environment, platformOptions: options,
-                    output: .data(limit: 1 << 20), error: .string(limit: 1 << 16)
-                )
-                if let marker {
-                    guard String(decoding: result.standardOutput, as: UTF8.self).contains(marker) else {
-                        throw DeviceToolsError.failed(
-                            "The device did not run the command. \(result.standardError)")
-                    }
-                    return result.standardOutput // it ran; its own exit status is meaningless by then
-                }
-                guard result.terminationStatus.isSuccess else {
-                    throw DeviceToolsError.failed(
-                        "Could not reach the device over SSH. \(result.standardError)")
-                }
-                return result.standardOutput
-            }
-            group.addTask {
-                try await Task.sleep(for: .seconds(30))
-                throw DeviceToolsError.failed("The device's SSH command timed out.")
-            }
-            defer { group.cancelAll() }
-            return try await group.next()!
+            guard agent.isAlive else { return }
+            do { try await agent.placeholder(action, id: id, bundleID: bundleID) }
+            catch { logEvent("install placeholder \(action): \(error.localizedDescription)") }
         }
     }
 
@@ -950,129 +453,7 @@ struct DeviceTools: Sendable {
             logEvent("timezone: no bundled lockdown-tz (dev build) — leaving the guest's zone alone")
             return
         }
-        let result = try await run(
-            .path(FilePath(tool)),
-            arguments: [identifier],
-            environment: toolEnvironment,
-            output: .string(limit: 1 << 10), error: .string(limit: 1 << 10)
-        )
-        guard result.terminationStatus.isSuccess else {
-            throw DeviceToolsError.failed(
-                "Could not set the device timezone. \(result.standardError)")
-        }
-        logEvent("timezone: guest zone now \(result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines))")
-    }
-
-    // MARK: - SSH terminal (opens Terminal.app itself)
-    
-    func openTerminal() async throws {
-        guard let resolved = Bundled.resolve("it-ssh-terminal.sh", fallbacks: [
-            "\(filesRoot)/../qemu-ios/contrib/it-ssh-terminal.sh",
-            "\(NSHomeDirectory())/Developer/qemu-ios/contrib/it-ssh-terminal.sh",
-        ]) else {
-            throw DeviceToolsError.toolMissing("it-ssh-terminal.sh")
-        }
-        let result = try await run(
-            .path(FilePath("/bin/bash")),
-            arguments: [resolved],
-            environment: toolEnvironment,
-            output: .discarded, error: .string(limit: 1 << 16)
-        )
-        // Was `.discarded` with the status ignored, so every failure — no sshd
-        // on this image, a refused connection, a wrong password — produced
-        // no Terminal window, no error, nothing. This is the command people
-        // reach for when things are already broken.
-        guard result.terminationStatus.isSuccess else {
-            throw DeviceToolsError.failed(
-                "Could not open a shell on the device. This NAND image may not have sshd "
-                + "installed. \(result.standardError)")
-        }
-    }
-}
-
-
-/// The guest agent of one device, through its helper: the helper owns the
-/// dylib's result queue, routes each result to its request by id and frees it
-/// (LinkRequest.agent). A submitted command is never retried through SSH: a
-/// lost response may follow a mutation.
-private struct GuestAgentTransport: Sendable {
-    let link: DeviceLink?
-    /// 0 absent or not running, 1 alive, 2 stale.
-    var status: Int { link?.status?.agentStatus ?? 0 }
-
-    func runIfAvailable(_ command: String, stdinPath: String?) async throws -> Data? {
-        guard status == 1,
-              command.utf8.allSatisfy({ $0 >= 32 && $0 <= 126 }),
-              command.utf8.count < 4000 else { return nil }
-        var body = Data()
-        if let stdinPath {
-            let size = try FileManager.default.attributesOfItem(atPath: stdinPath)[.size] as? NSNumber
-            guard let size, size.intValue <= 250_000 else { return nil }
-            body = try Data(contentsOf: URL(fileURLWithPath: stdinPath))
-        }
-        guard body.count + command.utf8.count + 40 <= 256 * 1024 else { return nil }
-        return try await perform("exec", arguments: command, body: body)
-    }
-
-    func reconnectManagementIfAvailable() async throws -> Bool {
-        guard status == 1 else { return false }
-        _ = try await perform("exec", arguments: "launchctl stop com.apple.mobile.lockdown")
-        return true
-    }
-
-    /// Submit only (deadline 0): the halt takes the agent down with the guest.
-    func requestHaltIfAvailable() async -> Bool {
-        guard let link, status == 1 else { return false }
-        let reply = try? await link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5)
-        return reply == .ok(true)
-    }
-
-    func orientationIfAvailable() async throws -> Int? {
-        guard status != 0 else { return nil }
-        let data = try await perform("orientation")
-        guard let degrees = Int(String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)),
-              [0, 90, 180, -90].contains(degrees) else {
-            throw DeviceToolsError.failed("The device returned an invalid orientation.")
-        }
-        return degrees
-    }
-
-    private func perform(_ operation: String, arguments: String = "", body: Data = Data()) async throws -> Data {
-        guard let link, status == 1 else {
-            throw DeviceToolsError.failed("The device agent is not ready.")
-        }
-        try Task.checkCancellation()
-        let id = UUID().uuidString
-        let request = "\(id) \(operation) \(arguments)\n\(body.base64EncodedString())"
-        let reply: LinkReply
-        do {
-            // The helper answers `.agent(nil)` at the deadline (and cancels the
-            // request); the link's own timeout is only the backstop.
-            reply = try await withTaskCancellationHandler {
-                try await link.request(.agent(request: request, deadline: 65), timeout: 75)
-            } onCancel: {
-                link.send(.agentCancel(id: id))
-            }
-        } catch {
-            throw DeviceToolsError.failed("The device stopped before its command completed.")
-        }
-        try Task.checkCancellation()
-        switch reply {
-        case let .agent(wire?):
-            // "<id> <status>\n<base64 output>"
-            let parts = wire.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
-            let header = parts.first?.split(separator: " ", maxSplits: 1) ?? []
-            guard parts.count == 2, header.count == 2, header[0] == id, let code = Int(header[1]),
-                  let output = Data(base64Encoded: String(parts[1])) else {
-                throw DeviceToolsError.failed("The device returned an invalid command result.")
-            }
-            guard code == 0 else {
-                throw DeviceToolsError.failed("The device command failed (\(code)). \(String(decoding: output.prefix(4096), as: UTF8.self))")
-            }
-            return output
-        case .agent(nil): throw DeviceToolsError.failed("The device command timed out; its outcome is unknown.")
-        case let .failure(message): throw DeviceToolsError.failed(message)
-        default: throw DeviceToolsError.failed("The device returned an invalid command result.")
-        }
+        let zone = try await GuestServices.setTimeZone(identifier, tool: tool, socket: clientSocket)
+        logEvent("timezone: guest zone now \(zone)")
     }
 }
