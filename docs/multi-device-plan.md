@@ -293,6 +293,39 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 - The Python bridge is `#if DEBUG` only, and `test-release.py` checks for it.
 - **Notarize a helper build in phase 1.**
 
+### Multi-device release build
+
+`scripts/build-release.py --stage …` runs the release as resumable stages. Each stage takes under 10 minutes and skips work that is already current, so run them one at a time (or `--stage all`). Without `--stage`, the one-step iPod build from `~/Developer/qemu-ios` is unchanged.
+
+It needs these trees and SDKs:
+- `~/Developer/qemu-ios-ipad1` (the `ipad1` branch) as `--qemu-ios`, with a private `--qemu-build` dir inside it. The default is `build-release-native`; the 09-28 build reused `build-w1-native`. Never use `build/`.
+- A native root to reuse as `--native-deps`, e.g. `~/Developer/LightTouchMac/.build/releases/release-20260926/native`. Its prefix and static deps take longer than 10 minutes to build, so a fresh one comes from a one-step build.
+- `~/Developer/usbmuxd-qemu/usbmuxd` (branch `qemu-backend`). The native stage rebuilds usbmuxd from it over the reused prefix, and fails unless libslirp (the iPad's USB Ethernet) was found.
+- `--sdk ~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk` and `ldid` for the guest tools. Also the assets in `~/Developer/qemu-ios-files`: the iPod `nand-current` still ships as `nand.itnand`.
+- Xcode, and the Developer ID identity plus the `ltm-notary` profile.
+
+```
+R=(scripts/build-release.py --output .build/releases/multidevice-YYYYMMDD
+   --qemu-ios ~/Developer/qemu-ios-ipad1 --qemu-build ~/Developer/qemu-ios-ipad1/build-w1-native
+   --native-deps ~/Developer/LightTouchMac/.build/releases/release-20260926/native
+   --sdk ~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk
+   --sign-id "Developer ID Application: Sam Gold (SM75355Y6R)" --notary-profile ltm-notary)
+for s in native qemu dylib guest app package notarize staple verify; do python3 "${R[@]}" --stage $s || break; done
+```
+
+What each stage does:
+- **native:** usbmuxd.
+- **qemu:** configure once, then ninja.
+- **dylib:** `make-dylib-macos.sh`.
+- **guest:** the armv6 helpers.
+- **app:** xcodebuild Release (it embeds `LightTouchDevice` and `firmware-catalog.json`). This stage also runs `swift build -c release` for `Packages/FirmwareKit`. If that builds, package.sh ships it as `Contents/MacOS/firmwarekit` (hardened runtime, no entitlements); if not, the app ships without it.
+- **package:** a fresh copy of the product, `build-inputs.json` and package.sh. Notarization is not done here.
+- **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
+- **staple.**
+- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
+
+After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source-revisions.json` and the release notes are made by hand, and nothing here publishes.
+
 ## G. Phases
 
 **Phase 0 – spikes** (Risks 1–6 below).
