@@ -16,9 +16,9 @@ FirmwareKit already has most of the host side:
 
 ## Storage contract, additions to today's code
 
-- **Lease:** the helper takes `flock(Devices/<uuid>/work/lease)` with `LOCK_EX|LOCK_NB` before it boots.
-  Exports take `LOCK_SH` only while they clone. Today nothing stops a second app copy from booting the same
-  overlay.
+- **Lease:** the helper takes `flock(Devices/<uuid>/work/lease)` with `LOCK_EX|LOCK_NB` before it answers hello
+  (done on `storage-fixes`: a second helper is refused with "in use by another Light Touch", and the app holds
+  `State/.app-lock`). Exports take `LOCK_SH` only while they clone.
 - **Edit intent:** a durable `work/edit.json` for an edit session. Boot refuses to start until it's resolved.
 - **Clean marker:** write `overlay/.clean` after `shutdownConfirmed`, and delete it at boot. That's the only way to
   tell a clean stop from a crash after the fact.
@@ -32,6 +32,12 @@ FirmwareKit already has most of the host side:
   The source files are never opened for writing.
 - **Snapshots:** any commit explicitly deletes the RAM snapshot. Don't rely on mtimes: a clone keeps them.
 - **Erase:** refuse while a lease or edit intent exists, and delete `work/export-*`.
+- **App wiring (not done yet; mount/export isn't in the app).** When it is wired in, it must:
+  - put every image and staging directory in `Devices/<uuid>/work/export-*`, never in a temp dir or beside the
+    base, so Delete Device and the launch sweeps find them;
+  - on any failure, detach what it attached and delete its `export-*` directory before reporting the error;
+  - make Erase and Delete Device refuse while one of the device's images is attached (`hdiutil info` names an
+    image under its `work/export-*`), and say so, instead of removing files under a mounted volume.
 
 | State | Allowed | Label |
 |---|---|---|
