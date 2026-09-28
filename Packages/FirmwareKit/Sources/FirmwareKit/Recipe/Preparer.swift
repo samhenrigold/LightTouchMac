@@ -46,7 +46,13 @@ public enum Preparer {
         }
     }
 
-    static let halting = "it_seal: halting", ftlOpen = "[FTL:MSG] FTL_Open", rescan = "CXT is not valid"
+    static let halting = "it_seal: halting", rescan = "CXT is not valid"
+    /// Matched over the serial log with its newlines removed: other kernel messages interleave with this line
+    /// (qemu-ios imgtools/ipad1_seal.py FTL_OPEN_RE).
+    static let ftlOpen = #"FTL_Open\s*\[OK\]"#
+    static func ftlOpened(_ serial: String) -> Bool {
+        serial.replacingOccurrences(of: "\n", with: "").range(of: ftlOpen, options: .regularExpression) != nil
+    }
     static let keybagDone = "it_keybag: effaceable formatted, system keybag created", keybagHelper = "usr/local/bin/restored_external"
 
     public static func create(_ o: Options, emit: @escaping @Sendable (PrepareEvent) -> Void) throws {
@@ -213,13 +219,14 @@ public enum Preparer {
     static func esc(_ p: URL) -> String { p.path.replacingOccurrences(of: ",", with: ",,") }
 
     /// One `LightTouchDevice --oneshot` boot of the ipad1 machine; `machine` follows kboot= in -machine.
-    static func oneshot(_ helper: URL, kboot: URL, machine: String, serial: URL, stop: String?, timeout: Double, work: URL,
-                        log: (String) -> Void) throws -> (OneShot, String) {
+    static func oneshot(_ helper: URL, kboot: URL, machine: String, serial: URL, stop: String?, stopPattern: String? = nil, timeout: Double,
+                        work: URL, log: (String) -> Void) throws -> (OneShot, String) {
         let argv = ["LightTouchDevice", "-machine", "ipad1,kboot=\(esc(kboot)),\(machine)", "-display", "none", "-audio", "driver=none",
                     "-monitor", "none", "-serial", "file:\(serial.path)"]
         var config: [String: Any] = ["boot": ["argv": argv, "environment": [String: String](), "machine": "ipad1"],
                                      "serialLog": serial.path, "timeout": timeout]
         if let stop { config["stopMarker"] = stop }
+        if let stopPattern { config["stopPattern"] = stopPattern }
         let cfg = work.appendingPathComponent("oneshot.json")
         try JSONSerialization.data(withJSONObject: config).write(to: cfg)
         let p = Process(), out = Pipe()
@@ -253,12 +260,13 @@ public enum Preparer {
         let overlay = work.appendingPathComponent("seal-overlay")
         try FileManager.default.createDirectory(at: overlay, withIntermediateDirectories: true)
         let (c, check) = try oneshot(helper, kboot: kboot, machine: "nand=\(esc(store)),nand-overlay=\(esc(overlay))" + extra,
-                                     serial: work.appendingPathComponent("check.log"), stop: ftlOpen, timeout: 120, work: work, log: log)
-        guard c.marker, !check.contains(rescan) else {
+                                     serial: work.appendingPathComponent("check.log"), stop: nil, stopPattern: ftlOpen, timeout: 120,
+                                     work: work, log: log)
+        guard c.marker, ftlOpened(check), !check.contains(rescan) else {
             throw FirmwareError(.oneshotFailed, "check boot: \(check.contains(rescan) ? "the store still rescans" : "no FTL_Open")")
         }
         try? FileManager.default.removeItem(at: overlay)
-        log(check.split(separator: "\n").first { $0.contains(ftlOpen) }.map(String.init) ?? "")
+        log(check.split(separator: "\n").first { $0.contains("FTL_Open") }.map(String.init) ?? "FTL_Open [OK]")
     }
 
     /// ipad1_keybag: the restore ramdisk with it_keybag as restored_external, booted once as md0 on the store +

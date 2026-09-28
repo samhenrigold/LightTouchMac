@@ -11,7 +11,7 @@ status block, frame ring, framed link). Cases:
   restore    -incoming the second snapshot: lit, tap Settings, Home; then SIGKILL the
              helper: the client notices (invalidated + terminated)
   ipad-orphan  fresh overlay, lit, parent SIGKILLed: powerdown confirmed, helper exits
-  oneshot    --oneshot: an iPad boot stopped at the FTL_Open serial marker
+  oneshot    --oneshot: an iPad boot stopped at FTL_Open [OK] (stopPattern, newlines removed)
   headless   --headless: an iPod boot to a lit lock screen, dump, quit
 
     tests/check-helper-boot.py --ipad-device DIR [--helper PATH] [--dylib PATH] [--work DIR] [--only a,b]
@@ -32,7 +32,7 @@ SIGN_ID = "Developer ID Application: Sam Gold (SM75355Y6R)"
 IPOD_UNLOCK = "drag 0.18 0.9 0.92 0.9"              # the lock screen slider, 320x480 portrait
 IPAD_UNLOCK = "drag 0.9365 0.621 0.9365 0.0612"     # tests/ipad1/boot-smoke.py over 1024x768
 IPAD_SETTINGS = "tap 0.4375 0.846"
-FTL_OPEN = "[FTL:MSG] FTL_Open"
+FTL_OPEN = r"FTL_Open\s*\[OK\]"   # Preparer.ftlOpen
 esc = lambda p: str(p).replace(",", ",,")
 started = []        # every pid this script started, reaped in finally
 
@@ -264,7 +264,7 @@ def main():
             o = work / "oneshot"
             o.mkdir(exist_ok=True)
             config = {"dylib": args.dylib, "boot": ipad_boot(dev, o / "overlay", o / "serial.log", shutdown=False),
-                      "serialLog": str(o / "serial.log"), "stopMarker": FTL_OPEN, "timeout": 120}
+                      "serialLog": str(o / "serial.log"), "stopPattern": FTL_OPEN, "timeout": 120}
             (o / "config.json").write_text(json.dumps({k: v for k, v in config.items() if v is not None}))
             p = subprocess.Popen([helper, "--oneshot", o / "config.json"], stdout=subprocess.PIPE,
                                  stderr=open(o / "native.log", "w"), stdin=subprocess.DEVNULL, text=True)

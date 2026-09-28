@@ -87,6 +87,13 @@ import Testing
         }
     }
 
+    /// The check boot's FTL_Open [OK], split by interleaved serial lines (ipad1_seal.py FTL_OPEN_RE).
+    @Test func ftlOpenAcrossLines() {
+        #expect(Preparer.ftlOpened("[FTL:MSG] FTL_Open            [OK]\n"))
+        #expect(Preparer.ftlOpened("AppleNANDFTL: [FTL:MSG] FTL_Open\n            [OK]\n"))
+        #expect(!Preparer.ftlOpened("[FTL:MSG] FTL_Open            [FAIL]\n") && !Preparer.ftlOpened("CXT is not valid\n"))
+    }
+
     @Test func errorCodes() {
         func code(_ e: Error) -> String? { if case .error(let c, _) = Preparer.errorEvent(e) { return c }; return nil }
         #expect(code(FirmwareError(.activationFailed, "x")) == "activation_failed")

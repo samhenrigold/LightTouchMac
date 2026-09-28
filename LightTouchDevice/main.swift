@@ -272,6 +272,9 @@ struct OneShotConfig: Decodable {
     var serialLog: String
     /// Stop (quit QEMU) as soon as the serial log contains this.
     var stopMarker: String?
+    /// Or as soon as this regular expression matches the log with its newlines removed: other kernel
+    /// messages interleave with a line on the serial log (qemu-ios ipad1_seal.py FTL_OPEN_RE).
+    var stopPattern: String?
     var timeout: Double
 }
 
@@ -295,9 +298,11 @@ func runOneShot(configPath: String) -> Never {
     Thread.detachNewThread {
         while !host.hasExited {
             usleep(500_000)
-            if let stop = config.stopMarker,
-               let text = try? String(contentsOfFile: config.serialLog, encoding: .isoLatin1), text.contains(stop) {
-                marker = true
+            if config.stopMarker != nil || config.stopPattern != nil,
+               let text = try? String(contentsOfFile: config.serialLog, encoding: .isoLatin1) {
+                if let stop = config.stopMarker, text.contains(stop) { marker = true }
+                if let pattern = config.stopPattern,
+                   text.replacingOccurrences(of: "\n", with: "").range(of: pattern, options: .regularExpression) != nil { marker = true }
             }
             if marker || Date().timeIntervalSince(start) > config.timeout {
                 stopping = true

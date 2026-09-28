@@ -26,12 +26,12 @@ struct StepPlan: Sendable {
         "Building the system and data volumes": .init(seconds: 12, text: "Building the system and data volumes"),
         "Writing the NAND": .init(seconds: 8, text: "Writing the flash image"),
         "Creating the data-protection keybag": .init(seconds: 6, text: "Booting the restore ramdisk", milestones: [
-            .init(file: "keybag-", marker: "[FTL:MSG] FTL_Open", at: 2, text: "Opening the flash"),
+            .init(file: "keybag-", marker: "FTL_Open", at: 2, text: "Opening the flash"),
             .init(file: "keybag-", marker: "it_keybag:", at: 4, text: "Creating the keybag"),
         ]),
         "Sealing the NAND": .init(seconds: 72, text: "Booting to seal the flash", milestones: [
             .init(file: "seal.log", marker: "CXT is not valid", at: 1, text: "Booting to seal the flash: indexing the new flash"),
-            .init(file: "seal.log", marker: "[FTL:MSG] FTL_Open", at: 6, text: "Booting to seal the flash: opening the flash"),
+            .init(file: "seal.log", marker: "FTL_Open", at: 6, text: "Booting to seal the flash: opening the flash"),
             .init(file: "seal.log", marker: "launchd[1] has started", at: 19, text: "Booting to seal the flash: starting iOS"),
             .init(file: "seal.log", marker: "it_prefs:", at: 41, text: "Booting to seal the flash: first-boot setup"),
             .init(file: "seal.log", marker: "it_seal:", at: 65, text: "Shutting down to seal the flash"),
