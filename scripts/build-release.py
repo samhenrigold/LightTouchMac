@@ -538,7 +538,7 @@ def native_stage(args, env, log, deps, root, static):
     if 'HAVE_LIBSLIRP 1' not in (usb / 'config.h').read_text():
         raise RuntimeError('usbmuxd configured without libslirp; the iPad USB Ethernet bridge would be missing')
     run([sys.executable, SCRIPTS / 'check-macho.py', '--no-weak-imports', usb / 'src/usbmuxd'], env, log)
-    record.update(usbmuxd=json.loads((root / 'usbmuxd-source.json').read_text()),
+    record.update(usbmuxd=json.loads((root / 'usbmuxd-source.json').read_text()), usbmuxd_source=str(args.usbmuxd_source),
                   usbmuxd_binary=str(usb / 'src/usbmuxd'), deps_prefix=str(root / 'prefix'),
                   qemu_source=str(args.qemu_source), qemu_build=str(args.qemu_build),
                   reused_native_deps=str(deps), usbmuxd_rebuilt_by='build-release.py --stage native')
