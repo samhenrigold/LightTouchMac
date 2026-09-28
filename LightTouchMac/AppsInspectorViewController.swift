@@ -285,7 +285,7 @@ enum AppInstaller {
                 }
             }
             do {
-                let ipa = try await CatalogClient.download(app) { fraction in
+                let ipa = try await CatalogClient.download(app, deviceOS: emulator.iosVersion, arch: emulator.guestArch) { fraction in
                     guard !job.isFinished, !job.isCancelled, job.downloadProgress != nil else { return }
                     let percent = fraction < 0 ? -1 : Int(fraction * 100)
                     let previousPercent = job.downloadProgress.map { $0 < 0 ? -1 : Int($0 * 100) }
@@ -349,7 +349,7 @@ enum AppInstaller {
                     NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                 }
             }
-            // Only when the app's own MinimumOSVersion is above 3.1.3 —
+            // Only when the app's own MinimumOSVersion is above the device's —
             // the version iPhone OS actually enforces. (Gating on the SDK
             // it was BUILT with fired on most of a 2009-era library and
             // taught people to click straight through this.)
@@ -362,9 +362,10 @@ enum AppInstaller {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
                 alert.messageText = "“\(job.name)” installed, but may not launch"
-                alert.informativeText = "It requires a newer version of iOS than 3.1.3, "
-                    + "and iPhone OS refuses to launch such apps. "
-                    + "Look for a version of this app built for iOS 3 or earlier."
+                let version = emulator.iosVersion
+                alert.informativeText = "It requires a newer version of iOS than \(version), "
+                    + "and iOS refuses to launch such apps. "
+                    + "Look for a version of this app built for iOS \(version.split(separator: ".").first ?? "3") or earlier."
                 if let window { alert.beginSheetModal(for: window) { _ in } }
                 else { alert.runModal() }
             }
@@ -1493,7 +1494,8 @@ final class AppsInspectorViewController: NSViewController {
             guard let self else { return false }
             return self.emulator.canQueueInstall && self.catalogJob(for: app)?.isFinished != false
         }
-        let sheet = CatalogDetailsViewController(app: app, canInstall: canInstall) { [weak self] copy in
+        let sheet = CatalogDetailsViewController(app: app, deviceOS: emulator.iosVersion, arch: emulator.guestArch,
+                                                 canInstall: canInstall) { [weak self] copy in
             guard let self, canInstall() else { return }
             AppInstaller.startCatalog(copy, with: self.emulator, presenting: self.view.window)
         }

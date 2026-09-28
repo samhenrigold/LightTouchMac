@@ -126,6 +126,7 @@ def build(args, out):
                     ROOT / "LightTouchDevice/FrameTools.swift", *[ROOT / f"LightTouchMac/{n}.swift" for n in APP_SOURCES],
                     out / "DeviceProcess.swift", ROOT / "tests/session-driver/main.swift", ROOT / "tests/session-driver/guest.swift",
                     ROOT / "tests/session-driver/single.swift", ROOT / "tests/session-driver/activation.swift",
+                    ROOT / "tests/session-driver/deadline.swift",
                     "-o", out / "session-driver"],
                    check=True, stdout=open(out / "swiftc.log", "w"), stderr=subprocess.STDOUT)
     if args.helper:

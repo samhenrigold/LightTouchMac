@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
             run([sys.executable,'tests/check-files-ui.py'])
             source=(root/'LightTouchMac/AppsInspectorViewController.swift').read_text()
             start=source.index('    private enum RowIdentity:')
-            end=source.index('    @objc private func appsChanged()',start)
+            end=source.index('    @objc private func appsChanged(',start)
             rows=source[start:end]
             def method(signature):
                 start = source.index(signature)

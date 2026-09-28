@@ -29,6 +29,8 @@ struct DeviceTools: Sendable {
     var agentCache = GuestAgentCache()
     /// A guest-package report arrived: the guest runs a loader package.
     var packaged = false
+    /// The device's iOS version (its catalog entry), which MinimumOSVersion is checked against.
+    var deviceOS = "3.1.3"
 
     private var proxyFile: String { WebProxyConfiguration.file(in: proxyDirectory).path }
     private var guestAgent: GuestAgent { GuestAgent(link: agent, cache: agentCache) }
@@ -113,12 +115,13 @@ struct DeviceTools: Sendable {
                  progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
         // MinimumOSVersion, NOT DTSDKName. The SDK an app was BUILT with says
         // nothing about whether it runs: Temple Run 1.0 is DTSDKName
-        // iphoneos4.2 with MinimumOSVersion 3.0 and runs fine on 3.1.3. Gating
+        // iphoneos4.2 with MinimumOSVersion 3.0 and runs fine on 3.1.3 (the
+        // device's own version is what it is compared with). Gating
         // on the build SDK cried wolf on most of the library, which trains
         // people to click through the one warning that is real. iPhone OS
         // enforces MinimumOSVersion, so that is what we check.
         let minOS = await AppMetadataCache.shared.minimumOS(from: ipa)
-        let sdkMarker = Self.sdkTooNew(minOS) ? "\nnewer than the device's SDK" : ""
+        let sdkMarker = Self.sdkTooNew(minOS, deviceOS: deviceOS) ? "\nnewer than the device's SDK" : ""
 
         // Cheapest possible pre-flight, and the app had none: without a
         // Payload/<name>.app/Info.plist this is not an iPhone app archive at

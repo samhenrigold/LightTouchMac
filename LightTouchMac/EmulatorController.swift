@@ -447,7 +447,11 @@ final class EmulatorController {
 
     private var bootWatchTask: Task<Void, Never>?
 
-    /// Never "Booting…" forever: no uiReady within the board's budget ends the
+    /// iOS is up: lockdown answered (the helper's uiReady is QEMU's display, lit
+    /// by iBoot too). Without a USB bridge (--no-appsync) painting has to do.
+    private var bootFinished: Bool { deviceReachable == true || (usbmux.session == nil && state == .running) }
+
+    /// Never "Booting…" forever: no answer within the board's budget ends the
     /// boot as a named error, with the helper halted. Per boot (also after
     /// Power On and Restart).
     private func startBootWatch() {
@@ -455,7 +459,7 @@ final class EmulatorController {
         let generation = bootGeneration
         bootWatchTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(self?.profile.bootBudget ?? 0))
-            guard let self, !Task.isCancelled, generation == bootGeneration, status?.uiReady != true else { return }
+            guard let self, !Task.isCancelled, generation == bootGeneration, !bootFinished else { return }
             abortBoot(Self.deadlineReason(profile))
         }
     }
@@ -529,7 +533,7 @@ final class EmulatorController {
             guard let self else { return }
             defer { if generation == self.bootGeneration { self.preparingMedia = false } }
             do {
-                let deadline = ContinuousClock.now + .seconds(180)
+                let deadline = ContinuousClock.now + .seconds(profile.bootBudget)
                 while true {
                     try Task.checkCancellation()
                     guard generation == bootGeneration else { return }
@@ -1935,8 +1939,14 @@ final class EmulatorController {
         }
         return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot,
                            proxyDirectory: proxyDirectory, agent: link, agentCache: agentCache,
-                           packaged: status?.guestPackage != nil)
+                           packaged: status?.guestPackage != nil, deviceOS: iosVersion)
     }
+
+    /// This device's firmware, from its catalog entry: what an app's minimum
+    /// iOS and architecture are checked against.
+    private var catalogEntry: FirmwareCatalog.Entry? { FirmwareCatalog.bundled.entry(id: instance.firmware) }
+    var iosVersion: String { catalogEntry?.version ?? "3.1.3" }
+    var guestArch: String { catalogEntry?.recipe?.guest?.arch ?? GuestPackage.arch(board: instance.board) ?? "armv6" }
     
     /// Cheap in-process check that the USB bridge sees the guest. App-service
     /// reads establish lockdownd readiness separately.

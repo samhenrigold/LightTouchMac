@@ -26,11 +26,12 @@ nonisolated enum DeviceProfile: Equatable {
     var productType: String { self == .iPad1 ? "iPad1,1" : "iPod2,1" }
     var marketingName: String { self == .iPad1 ? "iPad" : "iPod touch (2nd generation)" }
 
-    /// How long a boot may take to light its UI (the helper's uiReady) before the
-    /// app gives up on it. Home is normally 25 s (iPod) / 40 s (iPad); a first
-    /// boot after an erase replays journals and rebuilds caches.
+    /// How long a boot may take until lockdown answers (the app's "iOS is up")
+    /// before the app gives up on it. The lock screen is normally there in 25 s
+    /// (iPod) / 40 s (iPad) and lockdown ~40 s later; a first boot after an
+    /// erase replays journals, rebuilds caches and re-enumerates USB for minutes.
     // ponytail: fixed per board; make it per firmware in the catalog if 4.x first boots need more.
-    var bootBudget: TimeInterval { self == .iPad1 ? 240 : 180 }
+    var bootBudget: TimeInterval { self == .iPad1 ? 300 : 240 }
 
     /// The iPod image carries our guest shell and agent; the stock iPad has none.
     var hasGuestTools: Bool { self != .iPad1 }

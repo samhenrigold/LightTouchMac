@@ -1,7 +1,8 @@
 // A base that never starts iOS (tests/check-boot-deadline.py): booted as the app boots it, with the
 // app's serial watch for iBoot's "Entering recovery mode" and the board's boot budget. Emits what the
-// app would act on first: the recovery marker (seconds after boot), uiReady, or the deadline. Then a
-// halt, as EmulatorController.abortBoot does (SIGTERM, kill after the halt budget).
+// app would act on first: the recovery marker (seconds after boot), lockdown answering (the app's
+// "iOS is up"), or the deadline. Then a halt, as EmulatorController.abortBoot does (SIGTERM, kill
+// after the halt budget).
 
 import Foundation
 
@@ -27,11 +28,14 @@ struct DeadlineConfig: Decodable {
     let budget = c.budget ?? d.profile.bootBudget
     do { try d.boot(generation: 1) } catch { fail("boot: \(error)") }
     let start = Date()
-    var outcome = "deadline"
+    var outcome = "deadline", lastProbe = Date.distantPast
     while Date().timeIntervalSince(start) < budget {
         if d.process.isDead { outcome = "died"; break }
         if let phrase = matched.get() { outcome = "recovery"; emit("recovery", ["phrase": phrase, "seconds": Date().timeIntervalSince(start)]); break }
-        if d.process.status?.uiReady == true { outcome = "uiReady"; break }
+        if Date().timeIntervalSince(lastProbe) >= 2 {
+            lastProbe = Date()
+            if let type = await d.productType() { outcome = "lockdown"; emit("usb", ["device": d.name, "productType": type]); break }
+        }
         try? await Task.sleep(for: .milliseconds(250))
     }
     emit("outcome", ["outcome": outcome, "seconds": Date().timeIntervalSince(start), "budget": budget, "deaths": d.deaths])

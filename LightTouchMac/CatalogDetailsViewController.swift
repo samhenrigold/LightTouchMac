@@ -4,6 +4,8 @@ import Cocoa
 /// rechecked by the emulator endpoint when the user chooses a copy.
 final class CatalogDetailsViewController: NSViewController {
     private let app: CatalogApp
+    /// The device's iOS version and executable slice (its catalog entry).
+    private let deviceOS: String, arch: String
     private let install: (CatalogApp) -> Void
     private let canInstall: () -> Bool
     private let picker = NSPopUpButton()
@@ -14,8 +16,11 @@ final class CatalogDetailsViewController: NSViewController {
     private var selectionTask: Task<Void, Never>?
     private var selected: CatalogApp?
 
-    init(app: CatalogApp, canInstall: @escaping () -> Bool, install: @escaping (CatalogApp) -> Void) {
+    init(app: CatalogApp, deviceOS: String = "3.1.3", arch: String = "armv6",
+         canInstall: @escaping () -> Bool, install: @escaping (CatalogApp) -> Void) {
         self.app = app
+        self.deviceOS = deviceOS
+        self.arch = arch
         self.canInstall = canInstall
         self.install = install
         super.init(nibName: nil, bundle: nil)
@@ -71,9 +76,9 @@ final class CatalogDetailsViewController: NSViewController {
                 versions = records.flatMap { version in
                     version.copies.filter { copy in
                         copy.ipa_id == String(self.app.ipaID) || (
-                            copy.install_status == "installable" && copy.architectures?.contains("armv6") == true
-                            && CatalogCopy.osIssue(version.minimum_os_version) == nil
-                            && CatalogCopy.osIssue(copy.macho_min_os) == nil)
+                            copy.install_status == "installable" && copy.architectures?.contains(self.arch) == true
+                            && CatalogCopy.osIssue(version.minimum_os_version, deviceOS: self.deviceOS) == nil
+                            && CatalogCopy.osIssue(copy.macho_min_os, deviceOS: self.deviceOS) == nil)
                     }.map { (version, $0) }
                 }
                 for row in versions {
@@ -81,7 +86,7 @@ final class CatalogDetailsViewController: NSViewController {
                     picker.addItem(withTitle: "Version \(row.version.version ?? "unknown") · \(size) · Copy \(row.copy.ipa_id)")
                 }
                 guard !versions.isEmpty else {
-                    details.stringValue = "No candidate ARMv6 copies are currently available."
+                    details.stringValue = "No candidate \(arch.uppercased()) copies are currently available."
                     return
                 }
                 picker.isEnabled = true
@@ -115,13 +120,13 @@ final class CatalogDetailsViewController: NSViewController {
                 }
                 let copy = try await CatalogClient.copyDetails(id)
                 try Task.checkCancellation()
-                let issue = copy.unavailableReason(minimumOS: row.version.minimum_os_version)
+                let issue = copy.unavailableReason(minimumOS: row.version.minimum_os_version, deviceOS: deviceOS, arch: arch)
                 details.stringValue = [
                     "File: \(copy.filename ?? "Unknown")",
                     "Architecture: \(copy.binary?.architectures?.joined(separator: ", ") ?? "Unknown")",
                     "Minimum iOS: \(row.version.minimum_os_version ?? "Unknown") (binary: \(copy.binary?.macho_min_os ?? "Unknown"))",
                     "Download check: \(copy.md5 == nil ? "Size only; no archive checksum" : "Size and archive MD5")",
-                    issue ?? "ARMv6 candidate for iOS 3.1.3; not runtime-tested."
+                    issue ?? "\(arch.uppercased()) candidate for iOS \(deviceOS); not runtime-tested."
                 ].joined(separator: "\n")
                 guard issue == nil else { return }
                 let candidate = try await CatalogClient.compatibleCopy(id)

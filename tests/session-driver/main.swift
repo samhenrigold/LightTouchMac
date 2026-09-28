@@ -23,6 +23,8 @@ struct Config: Decodable {
     var single: SingleConfig?
     /// One base's activation question (activation.swift).
     var activation: ActivationConfig?
+    /// A base that never starts iOS (deadline.swift).
+    var deadline: DeadlineConfig?
     var frameworks: String?
 }
 
@@ -101,6 +103,8 @@ extension String {
     var process: DeviceProcess!
     var mux: Mux!
     var serial: SerialLogCapture?
+    /// The app's serial watch (EmulatorController.openSerialLog): phrases and what to do on the first sight.
+    var serialWatch: (phrases: [String], onMatch: @Sendable (String) -> Void)?
     var deaths: [String] = []
     /// An iPod's own files (a device.py device); nil: the shipping image in `files`.
     struct IPodFiles { var nand, nor, iBoot: String; var gidBlobs: String?; var machine: [String: String] = [:] }
@@ -112,7 +116,8 @@ extension String {
     func boot(generation: Int, guestPackage: String? = nil) throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         mux = try Mux(name: name)
-        serial = try SerialLogCapture(url: dir.appendingPathComponent("serial.log"), temporaryRoot: work)
+        serial = try SerialLogCapture(url: dir.appendingPathComponent("serial.log"), temporaryRoot: work,
+                                      watch: serialWatch?.phrases ?? [], onMatch: serialWatch?.onMatch ?? { _ in })
         let overlay = dir.appendingPathComponent("overlay")
         let config: BootConfig
         if profile == .iPad1 {
@@ -397,7 +402,8 @@ func checkPreparedFiles() throws {
 
 Task { @MainActor in
     if let guest = config.guest { await runGuest(guest) } else if let single = config.single { await runSingle(single) }
-    else if let activation = config.activation { await runActivation(activation) } else { await run() }
+    else if let activation = config.activation { await runActivation(activation) }
+    else if let deadline = config.deadline { await runDeadline(deadline) } else { await run() }
 }
 DispatchQueue.main.asyncAfter(deadline: .now() + 560) { fail("driver timed out") }
 CFRunLoopRun()
