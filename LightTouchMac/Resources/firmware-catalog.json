@@ -30,7 +30,7 @@
   },
   "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}, "gli_dispatch": "gli-dispatch-7E18.tsv"},
   "emulator": {"min_protocol": 1},
-  "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
+  "estimates": {"prepared_bytes": 907124736, "peak_bytes": 2410758859, "seconds": 50}
  },
  {
   "id": "n72ap-8C148",
