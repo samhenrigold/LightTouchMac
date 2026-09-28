@@ -358,6 +358,7 @@ It needs these trees and SDKs:
 - `~/Developer/qemu-ios-ipad1` (the `ipad1` branch) as `--qemu-ios`, with a private `--qemu-build` dir inside it. The default is `build-release-native`; the 09-28 build reused `build-w1-native`. Never use `build/`.
 - A native root to reuse as `--native-deps`, e.g. `~/Developer/LightTouchMac/.build/releases/release-20260926/native`. Its prefix and static deps take longer than 10 minutes to build, so a fresh one comes from a one-step build.
 - `~/Developer/usbmuxd-qemu/usbmuxd` as `--usbmuxd-source`. The native stage rebuilds usbmuxd over the reused prefix from `USBMUXD_COMMIT` (41631a7, branch `qemu-zlp`) through a temporary worktree, records it as `usbmuxd_commit`, and fails unless libslirp (the iPad's USB Ethernet) was found. The emulator and usbmuxd ship together: from qemu-ios `ipad1` abb1a1b817 the emulator invents no USB ZLPs, so usbmuxd must send them.
+- iBoot32Patcher, which firmwarekit runs for the iPad's real-iBoot chain, is pinned in `build-support/dependencies.json` (group `tools`: LukeZGD's fork at `1ff9bd14648efae691ed23ae0abb55a4635111e3`, the build Legacy-iOS-Kit ships; archive sha256; license GPL-3.0). Both native paths (`build-package-native.sh` and `--stage native`) fetch that archive and build it with `scripts/build-iboot32patcher.sh` into `native/build/iBoot32Patcher` (arm64, macOS 14; `build.json` records commit, license and sha256). package.sh ships it as `Contents/MacOS/iBoot32Patcher`, signed with the other tools, with `LICENSE` and `SOURCE.txt` under `Resources/licenses/iBoot32Patcher/`. `K48IBootTests.patcherMatchesReference` (with `FIRMWAREKIT_IBOOT_PATCHER` pointing at a built copy) checks its output on the 7B500, 8C148 and 7B367 iBoots byte-for-byte against the Legacy-iOS-Kit v25.09.01 binary. Because the manifest and this script are native recipes, adding the patcher invalidated every earlier native root: the first `--native-deps` with it came from a one-step `build-package-native.sh` (`.build/native-iboot-ship`, 2026-09-28).
 - `--sdk ~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk` and `ldid` for the guest tools. Also the assets in `~/Developer/qemu-ios-files`: the iPod `nand-current` still ships as `nand.itnand`.
 - Xcode, and the Developer ID identity plus the `ltm-notary` profile.
 
@@ -371,7 +372,7 @@ for s in native qemu dylib guest app package notarize staple verify; do python3 
 ```
 
 What each stage does:
-- **native:** usbmuxd.
+- **native:** usbmuxd and iBoot32Patcher.
 - **qemu:** configure once, then ninja.
 - **dylib:** `make-dylib-macos.sh`.
 - **guest:** the armv6 helpers, and (from a checkout with `contrib/ipad1-guest`) the iPad helpers firmwarekit reads, built by `contrib/ipad1-guest`, `contrib/appsync` and `contrib/ipad1-gles` `build.sh` from a source copy into `guest/ipad-guest-tools` (ldid-signed; `IPAD_SDK` picks the 3.2 SDK). package.sh ships them flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without them. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed. The guest packages (`armv6.itpack`, `armv7.itpack`, qemu-ios `contrib/guest-package/build.sh`) join that directory; the app composes each boot's offer from them (guest-package-bootstrap.md, P5).
@@ -490,6 +491,7 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 - `--helper` runs the seal and keybag one-shots (`LightTouchDevice --oneshot`).
 - `--cache` holds decrypted components by IPSW sha1. It's recreatable.
 - `--guest-tools` is a flat directory of the prebuilt, signed guest helpers (tools, launchd jobs, GLEngine-*, gli-dispatch-*.tsv, the gld plugin, libappsync.dylib, it_keybag), by file name. It defaults to `../Resources/guest-tools` next to the executable, the app bundle's copy.
+- The k48 `iboot` recipe runs `iBoot32Patcher` (a separate process, `--rsa --debug -b <boot-args>`). `K48IBoot.patcher` takes the bundled copy first (`Contents/MacOS/iBoot32Patcher`, next to firmwarekit or the helper), then `FIRMWAREKIT_IBOOT_PATCHER` / `IBOOT32PATCHER` for development runs, then the bare name on PATH. The lock records the copy it used (`tool.iboot32patcher`: path, sha256).
 
 **stdout is JSON Lines only, one object per line.** Diagnostics go to stderr.
 ```
@@ -521,6 +523,8 @@ STAGING_DIR exists and is empty when firmwarekit starts; the app creates it.
 - `nand/`, kept sparse (the k48 iboot store carries the IPSW's img3 kernelcache in its system volume, for iBoot's fsboot);
 - `identity.json` (mode 600);
 - `device.lock.json`: the inputs and their hashes, the tool version, the UDID, the activation input/output hashes, the product version, and — for k48 — `boot_strategy` (`iboot`/`kboot`), `gid_components`, `iboot_signature_checks`, and `outputs.nand.listing_sha256`.
+
+**Reproducible stores (2026-09-28, `iboot-ship`):** `outputs.nand.built_listing_sha256` (both boards) is the listing of the store as built from the volumes, before any boot writes into it. It is the same for the same entry, seed, IPSW and guest tools: the host mount's traces are normalized after the unmount (`HFSPlusVolume.normalize`: every date the recipe touched becomes the IPSW's newest file date, macOS's "date added" is cleared, B-tree slack is zeroed, the data volume's identifier derives from the seed; `VolumeMount.withMounted` puts a journaled volume's empty journal back as it was). `listing_sha256` stays the identity of the shipped store; for k48 it differs run to run by design, because the keybag (4.x) and seal boots write the guest's first-boot state (SpringBoard, lockdownd, guest-clock timestamps) into the store, and for n72 8C148 the keybag boot folds guest pages in. Golden-lock tests compare `built_listing_sha256` (and `iboot`/`nor`/`gid_blobs`), never `listing_sha256`. `SystemEditsTests.volumesAreReproducible` builds the k48 volumes and store twice and names any differing page.
 
 The app publishes STAGING_DIR by rename.
 

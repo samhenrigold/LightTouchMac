@@ -33,6 +33,10 @@ enum K48Oracle {
 
     static var available: Bool { HFSOracle.available && sources.values.allSatisfy(Oracle.exists) }
 
+    /// FIRMWAREKIT_GUEST_TOOLS: a flat guest-tools directory (build-guest-tools.sh's ipad-guest-tools, or the app's
+    /// Resources/guest-tools) that stands in for the qemu-ios build outputs where those aren't built.
+    static let guestTools = ProcessInfo.processInfo.environment["FIRMWAREKIT_GUEST_TOOLS"].map { URL(fileURLWithPath: $0) }
+
     /// A helpers directory of symlinks to the qemu-ios build outputs.
     static func helpers(in dir: URL) throws -> URL {
         let h = dir.appendingPathComponent("helpers")
@@ -226,6 +230,100 @@ enum K48Oracle {
             // the activation's output is lockdownd as installed (re-signed ad hoc, entitlements kept)
             let lockd = try HFSPlusVolume(swift.appendingPathComponent("system.img")).listing(under: "usr/libexec/lockdownd")
             #expect(lockd.first?.sha256 == r.activation?.outputSHA256 && lockd.first?.mode == 0o100755 && lockd.first?.uid == 0)
+        }
+    }
+
+    /// Two builds from the same inputs give the same system and data volumes, and the same store from them: the
+    /// lock's built_listing_sha256 (the golden-lock oracle) relies on it. Dates, the data volume's identifier and
+    /// the journals are normalized after the mount (HFSPlusVolume.normalize, VolumeMount.withMounted). A
+    /// difference is reported by 4 KiB page, HFS+ region and its first differing bytes.
+    @Test(arguments: HFSOracle.ipads) func volumesAreReproducible(_ fw: Oracle.Firmware) throws {
+        guard let cache = fw.cache, Oracle.exists(cache.appendingPathComponent("rootfs.dmg")),
+              K48Oracle.guestTools != nil || K48Oracle.available else { return }
+        try Oracle.withTemp { dir in
+            let entry = try Oracle.entry(fw.entryID), recipe = try #require(entry.recipe)
+            let mbr = dir.appendingPathComponent("mbr.bin")
+            try K48NAND.makeMBR(systemMiB: recipe.systemMiB).write(to: mbr)
+            let parts = K48NAND.partitions(mbr: [UInt8](try Data(contentsOf: mbr)))
+            let helpers = try K48Oracle.guestTools ?? K48Oracle.helpers(in: dir)
+            var volumes: [[URL]] = []
+            for run in ["a", "b"] {
+                let work = dir.appendingPathComponent(run)
+                try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+                let r = try Oracle.time("SystemEdits.buildK48 \(fw.entryID) \(run)") {
+                    try SystemEdits.buildK48(rootfs: cache.appendingPathComponent("rootfs.dmg"), work: work, systemBytes: parts[0].count * 4096,
+                                             dataBytes: Int64(parts[1].count) * 4096, options: .init(recipe: recipe), helpers: helpers,
+                                             gliDispatch: recipe.gliDispatch, dataVolumeUUID: [1, 2, 3, 4, 5, 6, 7, 8]) { _ in }
+                }
+                volumes.append([r.system, r.data])
+            }
+            var same = true
+            for (a, b) in zip(volumes[0], volumes[1]) {
+                let diff = try Self.differingPages(a, b)
+                same = same && diff.isEmpty
+                #expect(diff.isEmpty, "\(fw.entryID) \(a.lastPathComponent): \(diff.count) differing pages: \(diff.prefix(16).joined(separator: "; "))")
+            }
+            guard same else { return }
+            let kv = try K48NAND.kernelVersion(kernelcache: cache.appendingPathComponent("kernelcache.mach"))
+            var listings: [String] = []
+            for run in ["a", "b"] {
+                let store = dir.appendingPathComponent("store-" + run)
+                try K48NAND.build(mbr: mbr, kernelVersion: kv, system: volumes[0][0], data: .image(volumes[0][1]), out: store)
+                let files = try FileManager.default.contentsOfDirectory(atPath: store.path).sorted()
+                listings.append(try Preparer.nandListing(store, files: files).sha256)
+            }
+            #expect(listings[0] == listings[1], "\(fw.entryID): the store differs between two builds from the same volumes")
+        }
+    }
+
+    /// "offset (region)" for every 4 KiB page that differs between two images of the same size; the region names
+    /// the HFS+ structure at that offset of `a` (volume header, allocation/extents/catalog/attributes file, journal,
+    /// or the file whose data fork covers it).
+    static func differingPages(_ a: URL, _ b: URL) throws -> [String] {
+        let da = try Data(contentsOf: a, options: .alwaysMapped), db = try Data(contentsOf: b, options: .alwaysMapped)
+        guard da.count == db.count else { return ["sizes differ: \(da.count) vs \(db.count)"] }
+        let page = 4096
+        var pages: [Int] = []
+        da.withUnsafeBytes { pa in db.withUnsafeBytes { pb in
+            var off = 0
+            while off < da.count {
+                let n = min(page, da.count - off)
+                if memcmp(pa.baseAddress! + off, pb.baseAddress! + off, n) != 0 { pages.append(off) }
+                off += n
+            }
+        } }
+        guard !pages.isEmpty else { return [] }
+        let v = try HFSPlusVolume(a)
+        var vh = [UInt8](repeating: 0, count: 512)
+        _ = try Data(contentsOf: a, options: .alwaysMapped).withUnsafeBytes { memcpy(&vh, $0.baseAddress! + 1024, 512) }
+        var regions: [(String, Int, Int)] = [("volume header", 0, page), ("alternate volume header", v.totalBlocks * v.blockSize - 1024, 1024)]
+        if da.count - 1024 != v.totalBlocks * v.blockSize - 1024 { regions.append(("alternate volume header (file end)", da.count - 1024, 1024)) }
+        func forks(_ name: String, _ f: HFSPlusVolume.Fork) { for e in f.extents { regions.append((name, Int(e.start) * v.blockSize, Int(e.count) * v.blockSize)) } }
+        forks("allocation file", HFSPlusVolume.Fork(vh, 112)); forks("extents file", v.extentsFork); forks("catalog file", v.catalogFork); forks("attributes file", v.attributesFork)
+        if let j = try v.journal() { regions.append(("journal", j.offset, j.size)) }
+        let records = try v.catalog(), tree = try v.btree(v.catalogFork, fileID: HFSPlusVolume.catalogID)
+        let catalogExtents = try v.extents(v.catalogFork, fileID: HFSPlusVolume.catalogID)
+        return pages.map { off -> String in
+            let at = (0..<page).first { da[off + $0] != db[off + $0] } ?? 0
+            let hex = { (d: Data) in d[off + at..<min(off + at + 16, d.count)].map { String(format: "%02x", $0) }.joined() }
+            let where_ = "\(off)+\(at) \(hex(da)) vs \(hex(db))"
+            if let r = regions.first(where: { off >= $0.1 && off < $0.1 + $0.2 }) {
+                guard r.0 == "catalog file" else { return "\(where_) (\(r.0))" }
+                // the catalog record (and the field offset in its body) at that byte
+                var forkOff = 0, base = 0
+                for e in catalogExtents {
+                    let len = Int(e.count) * v.blockSize, start = Int(e.start) * v.blockSize
+                    if off + at >= start && off + at < start + len { forkOff = base + (off + at - start); break }
+                    base += len
+                }
+                let node = forkOff / tree.nodeSize, inNode = forkOff % tree.nodeSize
+                let rec = records.first { $0.node == node && inNode >= $0.bodyOffset && inNode < $0.bodyOffset + ($0.kind == .file ? 248 : 88) }
+                return "\(where_) (catalog node \(node) byte \(inNode)\(rec.map { ": \($0.kind) \($0.name) cnid \($0.cnid) body+\(inNode - $0.bodyOffset)" } ?? ""))"
+            }
+            if let r = records.first(where: { $0.data?.extents.contains { off >= Int($0.start) * v.blockSize && off < Int($0.start + $0.count) * v.blockSize } ?? false }) {
+                return "\(where_) (\(r.name))"
+            }
+            return where_
         }
     }
 }

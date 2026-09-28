@@ -182,6 +182,12 @@ OPENSSL_PREFIX="$STATIC" CFLAGS="-mmacosx-version-min=$MINOS" \
     bash "$WORK/it-webproxy/build.sh"
 copy_tool "$WORK/it-webproxy/itwebproxy"
 copy_tool "${USBMUXD_BIN:-$QEMU/build-native14/build/usbmuxd/src/usbmuxd}"
+# iBoot32Patcher (GPL-3.0, built by build-iboot32patcher.sh next to usbmuxd): firmwarekit's k48
+# real-iBoot recipe runs it from Contents/MacOS, where K48IBoot.patcher looks first.
+PATCHER="${IBOOT32PATCHER_BIN:-$(dirname "$DEPS")/build/iBoot32Patcher/iBoot32Patcher}"
+copy_tool "$PATCHER"
+mkdir -p "$APP/Contents/Resources/licenses/iBoot32Patcher"
+cp "$(dirname "$PATCHER")/LICENSE" "$(dirname "$PATCHER")/SOURCE.txt" "$APP/Contents/Resources/licenses/iBoot32Patcher/"
 
 # NOTE: usbmuxd's -C directory is writable state (it stores SystemConfiguration
 # and a pairing record per device). The app copies the bundled seed out to

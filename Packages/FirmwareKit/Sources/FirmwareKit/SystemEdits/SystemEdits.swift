@@ -111,7 +111,7 @@ public enum SystemEdits {
     public static let kernelcachePath = "System/Library/Caches/com.apple.kernelcaches/kernelcache"
 
     public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
-                                gliDispatch: String? = nil, kernelcache: Data? = nil,
+                                gliDispatch: String? = nil, kernelcache: Data? = nil, dataVolumeUUID: [UInt8]? = nil,
                                 log: (String) -> Void = { _ in }) throws -> Result {
         let fm = FileManager.default
         let system = work.appendingPathComponent("system.img"), data = work.appendingPathComponent("data.img")
@@ -139,12 +139,14 @@ public enum SystemEdits {
 
         log("system volume from \(rootfs.lastPathComponent)")
         try UDIF.extractRootfs(dmg: rootfs, to: system)
+        let newest: UInt32   // the IPSW's newest file: everything the recipe writes gets dated as of it
         do {
             let v = try HFSPlusVolume(system)
             guard v.totalBlocks * v.blockSize <= systemBytes else {
                 throw FirmwareError(.unsupported, "system volume (\(v.totalBlocks * v.blockSize) bytes) is larger than partition 1 (\(systemBytes))")
             }
             log("\(v.signature) \(v.totalBlocks) x \(v.blockSize) B blocks, \(v.freeBlocks) free; partition 1 is \(systemBytes >> 20) MiB")
+            newest = try v.newestDate()
         }
         try VolumeMount.grow(system, toBytes: systemBytes)
 
@@ -214,7 +216,8 @@ public enum SystemEdits {
         let sys = try HFSPlusVolume(system, writable: true)
         let n = try sys.setOwner(rootOwned, uid: 0, gid: 0)
         let owners = try sys.owners(under: "private/var")
-        log("system volume: \(n) catalog records set to root")
+        let dated = try sys.normalize(after: newest, to: newest)
+        log("system volume: \(n) catalog records set to root, \(dated) dated as of the IPSW's newest file")
 
         log("data volume (\(dataBytes / 1_000_000) MB, sparse) seeded from /private/var")
         defer { try? fm.removeItem(at: skeleton) }
@@ -243,6 +246,7 @@ public enum SystemEdits {
         }
         let summary = byOwner.sorted { $0.key.lexicographicallyPrecedes($1.key) }.map { "\($0.key[0]):\($0.key[1]) x\($0.value.count)" }
         log("owners from the skeleton, else root / mobile by rule: \(summary.joined(separator: ", ")) (\(patched) catalog records patched)")
+        try dv.normalize(after: newest, to: newest, uuid: dataVolumeUUID)
         for d in ["mnt-system", "mnt-data"] { try? fm.removeItem(at: work.appendingPathComponent(d)) }
         return result
     }

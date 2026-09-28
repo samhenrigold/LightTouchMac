@@ -82,7 +82,7 @@ class ReleaseTests(unittest.TestCase):
         self.put(self.static / 'lib/libcrypto.a')
         for name in ('qemu-build/build.ninja', 'qemu-build/libqemu-arm.dylib',
                      'prefix/lib/libimobiledevice-1.0.dylib', 'prefix/lib/libplist-2.0.dylib',
-                     'build/usbmuxd/src/usbmuxd'):
+                     'build/usbmuxd/src/usbmuxd', 'build/iBoot32Patcher/iBoot32Patcher'):
             self.put(self.native / name)
         for name in release.FFMPEG_PATCHES:
             self.put(self.qemu / 'contrib/ffmpeg' / name, 'patch ' + name)
@@ -183,6 +183,13 @@ class ReleaseTests(unittest.TestCase):
         release.validate_native(self.args, self.native)
         self.put(self.usb / 'configure.ac', 'new configure source')
         with self.assertRaisesRegex(ValueError, 'usbmuxd source has changed'):
+            release.validate_native(self.args, self.native)
+
+    def test_missing_iboot32patcher_is_rejected(self):
+        self.native_fixture()
+        release.validate_native(self.args, self.native)
+        (self.native / 'build/iBoot32Patcher/iBoot32Patcher').unlink()
+        with self.assertRaisesRegex(ValueError, 'iBoot32Patcher'):
             release.validate_native(self.args, self.native)
 
     def test_static_override_must_match_configured_prefix(self):

@@ -129,6 +129,7 @@ public enum Preparer {
         let dieID = (ident.dieID ?? []).joined(separator: ":")
         let bootArgs = KBoot.defaultBootArgs
         var gidComponents: [String] = []
+        let patcher = K48IBoot.patcher(helper: o.helper)
         if iboot {
             // The real iBoot chain: catalog GID records, a re-encrypted hsic-enabled DeviceTree, the pattern-patched
             // iBoot, and the packed NOR (ipad1_device build's "iBoot + NOR" step; ipad1_gid + ipad1_iboot).
@@ -146,8 +147,7 @@ public enum Preparer {
             allFlash["dtre"] = try K48IBoot.hostUSBDeviceTree(img3: dtImg3, plaintext: try Data(contentsOf: decFile("DeviceTree.bin")), gidBlobs: blobs)
             let manifest = String(decoding: try ipsw.read(prefix + "manifest"), as: UTF8.self).split(whereSeparator: \.isWhitespace)
             let order = try manifest.map { try N72NOR.type(of: ipsw.read(prefix + String($0))) }
-            let patched = try K48IBoot.patchIBoot(try Data(contentsOf: decFile("iBoot.bin")),
-                                                  patcher: K48IBoot.patcher(helper: o.helper), bootArgs: bootArgs, log: log)
+            let patched = try K48IBoot.patchIBoot(try Data(contentsOf: decFile("iBoot.bin")), patcher: patcher, bootArgs: bootArgs, log: log)
             try patched.write(to: file("iBoot.bin"))
             try K48IBoot.buildNOR(identity: ident, allFlash: allFlash, order: order, bootArgs: bootArgs).write(to: file("nor.bin"))
         } else {
@@ -165,7 +165,8 @@ public enum Preparer {
         }
         let vols = try SystemEdits.buildK48(rootfs: decFile("rootfs.dmg"), work: work, systemBytes: parts[0].count * 4096,
                                             dataBytes: Int64(parts[1].count) * 4096, options: .init(recipe: recipe),
-                                            helpers: o.guestTools, gliDispatch: recipe.gliDispatch, kernelcache: kernelcacheImg3, log: log)
+                                            helpers: o.guestTools, gliDispatch: recipe.gliDispatch, kernelcache: kernelcacheImg3,
+                                            dataVolumeUUID: Array(SHA256.hash(data: Data("k48 data volume \(seed)".utf8)).prefix(8)), log: log)
         for n in vols.notes { emit(.warning(n)) }
 
         step()   // NAND store
@@ -173,6 +174,10 @@ public enum Preparer {
         try K48NAND.build(geometry: .k48_16g, mbr: mbr, kernelVersion: K48NAND.kernelVersion(kernelcache: decFile("kernelcache.mach")),
                           system: vols.system, data: .image(vols.data), out: nand, log: log)
         try? fm.removeItem(at: vols.system); try? fm.removeItem(at: vols.data)
+        // The store as built, before the keybag and seal boots write the guest's first-boot state into it: the same
+        // for the same inputs (the lock's built_listing_sha256), which listing_sha256 of the sealed store cannot be.
+        let built = try nandListing(nand, files: try fm.contentsOfDirectory(atPath: nand.path).sorted()).sha256
+        log("store as built: listing sha256 \(built)")
 
         var ramdisk: String?
         let norURL: URL? = (iboot || dataProtection) ? file("nor.bin") : nil
@@ -197,19 +202,10 @@ public enum Preparer {
         let nandFiles = try fm.contentsOfDirectory(atPath: nand.path).sorted()
         let nandBytes = ByteCount(total: nandFiles.reduce(0) { $0 + ((try? fm.attributesOfItem(atPath: nand.appendingPathComponent($1).path)[.size] as? Int) ?? 0) })
         progress.measure = { nandBytes.fraction }
-        final class Hashes: @unchecked Sendable { let lock = NSLock(); var sha: [String: String] = [:]; var error: Error? }
-        let hashes = Hashes()
-        DispatchQueue.concurrentPerform(iterations: nandFiles.count) { i in   // 16.5 GB of sparse files: one core each
-            do { let h = try digest(nand.appendingPathComponent(nandFiles[i]), SHA256(), count: nandBytes.add); hashes.lock.withLock { hashes.sha[nandFiles[i]] = h } }
-            catch { hashes.lock.withLock { hashes.error = error } }
-        }
-        if let error = hashes.error { throw error }
-        var listing = SHA256()
-        for n in nandFiles { listing.update(data: Data("\(n) \(hashes.sha[n]!)\n".utf8)) }
-        let listingSHA = listing.finalize().map { String(format: "%02x", $0) }.joined()
+        let (nandSHA, listingSHA) = try nandListing(nand, files: nandFiles, count: nandBytes.add)
         func opt(_ v: Any?) -> Any { v ?? NSNull() }
         let null = NSNull()
-        var outputs: [String: Any] = ["nand": ["path": "nand", "files": hashes.sha, "listing_sha256": listingSHA]]
+        var outputs: [String: Any] = ["nand": ["path": "nand", "files": nandSHA, "listing_sha256": listingSHA, "built_listing_sha256": built]]
         if iboot {
             outputs["iboot"] = ["path": "iBoot.bin", "sha256": try digest(file("iBoot.bin"), SHA256())]
             outputs["gid_blobs"] = ["path": "gid-blobs.bin", "sha256": try digest(file("gid-blobs.bin"), SHA256())]
@@ -228,6 +224,7 @@ public enum Preparer {
             "iboot_signature_checks": iboot ? "pattern-patched" : null,
             "tool": ["name": "firmwarekit", "version": FirmwareKit.version, "helper": helper.path,
                      "helper_sha256": try digest(helper, SHA256()),
+                     "iboot32patcher": opt(iboot ? ["path": patcher.path, "sha256": try digest(patcher, SHA256())] as [String: Any] : nil),
                      "built": ["guest tools": Dictionary(uniqueKeysWithValues: try tools.map { ($0, try digest(o.guestTools.appendingPathComponent($0), SHA256())) }),
                                "GLEngine": opt(vols.engine)]],
             "inputs": ["ipsw": ["path": o.ipsw.path, "sha1": got], "decrypted": dec.path, "identity": "identity.json",
@@ -240,8 +237,7 @@ public enum Preparer {
             "gl_test": false, "guest_package": opt(vols.guestPackage?.object),
         ]
         try fm.removeItem(at: work)
-        try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-            .write(to: file("device.lock.json"))
+        try lockData(lock).write(to: file("device.lock.json"))
         log("\(o.out.path): UDID \(ident.udid ?? "-")")
         progress.finish()
         emit(.done(lock: "device.lock.json"))
@@ -448,6 +444,28 @@ public enum Preparer {
     }
 
     static func sha256(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
+
+    /// device.lock.json's bytes. A value JSONSerialization cannot write (a Swift box, an Optional) is an error
+    /// event, not an NSException abort with no event.
+    static func lockData(_ lock: [String: Any]) throws -> Data {
+        guard JSONSerialization.isValidJSONObject(lock) else { throw FirmwareError(.internal, "the lock holds a value that is not JSON") }
+        return try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+    }
+
+    /// sha256 of each of `files` (relative to `nand`, in listing order) and the listing's sha256 over
+    /// "path sha256\n" lines: what identifies a store. 16.5 GB of sparse files: one core each.
+    static func nandListing(_ nand: URL, files: [String], count: ((Int) -> Void)? = nil) throws -> (files: [String: String], sha256: String) {
+        final class Hashes: @unchecked Sendable { let lock = NSLock(); var sha: [String: String] = [:]; var error: Error? }
+        let hashes = Hashes()
+        DispatchQueue.concurrentPerform(iterations: files.count) { i in
+            do { let h = try digest(nand.appendingPathComponent(files[i]), SHA256(), count: count); hashes.lock.withLock { hashes.sha[files[i]] = h } }
+            catch { hashes.lock.withLock { hashes.error = error } }
+        }
+        if let error = hashes.error { throw error }
+        var listing = SHA256()
+        for n in files { listing.update(data: Data("\(n) \(hashes.sha[n]!)\n".utf8)) }
+        return (hashes.sha, listing.finalize().map { String(format: "%02x", $0) }.joined())
+    }
 
     /// chmod -R a-w: children first, so a directory is still writable while its entries change.
     static func readOnly(_ url: URL) throws {

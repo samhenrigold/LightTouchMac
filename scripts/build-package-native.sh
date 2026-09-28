@@ -45,11 +45,14 @@ for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair idevic
     python3 "$SRC/scripts/check-macho.py" --no-weak-imports "$STATIC/bin/$tool"
 done
 [ -f "$STATIC/lib/libcrypto.a" ] || { echo "missing static prefix: $STATIC" >&2; exit 1; }
-SOURCE_ARGS=(fetch --group native --destination "$ROOT/src")
-if [ -n "${LTM_SOURCE_CACHE:-}" ]; then SOURCE_ARGS+=(--cache "$LTM_SOURCE_CACHE"); fi
-if [ -d "$ROOT/static/src" ]; then SOURCE_ARGS+=(--cache "$ROOT/static/src"); fi
-if [ "${LTM_OFFLINE:-0}" = 1 ]; then SOURCE_ARGS+=(--offline); fi
-python3 "$SRC/scripts/dependency-sources.py" "${SOURCE_ARGS[@]}"
+fetch_group() {   # GROUP: its pinned archives into src/, from the caches when they have them
+    local args=(fetch --group "$1" --destination "$ROOT/src")
+    if [ -n "${LTM_SOURCE_CACHE:-}" ]; then args+=(--cache "$LTM_SOURCE_CACHE"); fi
+    if [ -d "$ROOT/static/src" ]; then args+=(--cache "$ROOT/static/src"); fi
+    if [ "${LTM_OFFLINE:-0}" = 1 ]; then args+=(--offline); fi
+    python3 "$SRC/scripts/dependency-sources.py" "${args[@]}"
+}
+fetch_group native
 cd "$ROOT/build"
 for archive in glib-2.88.3.tar.xz pcre2-10.48.tar.bz2 pixman-0.46.4.tar.gz libslirp-v4.9.4.tar.gz libusb-1.0.30.tar.bz2 libplist-2.7.0.tar.bz2 libimobiledevice-1.4.0.tar.bz2 ffmpeg-9.0.1.tar.xz; do
     tar -xf "$ROOT/src/$archive"
@@ -84,6 +87,10 @@ export PKG_CONFIG_LIBDIR="$P/lib/pkgconfig:$STATIC/lib/pkgconfig"
 for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair idevice_id; do cp "$STATIC/bin/$tool" "$P/bin/"; done
 (cd usbmuxd && glibtoolize --copy --force && autoreconf -fi)
 (cd usbmuxd && LDFLAGS="$LDFLAGS -framework IOKit -framework CoreFoundation -framework Security" ./configure --prefix="$P" --without-systemd && make -j"$JOBS")
+# iBoot32Patcher (GPL-3.0, the "tools" group of the manifest): firmwarekit runs it for the k48 real-iBoot
+# recipe. Built into build/iBoot32Patcher with its LICENSE and a SOURCE.txt; package.sh ships all three.
+fetch_group tools
+bash "$SRC/scripts/build-iboot32patcher.sh" "$ROOT/src" "$ROOT/build/iBoot32Patcher"
 # AMC audio and incremental H.264 slices use libavcodec/libavutil. Keep the closure native
 # to macOS 14, with no automatically discovered Homebrew codec dependencies.
 (cd ffmpeg-9.0.1 && patch -p1 < "$QEMU/contrib/ffmpeg/h264-chunk-er.patch" && patch -p1 < "$QEMU/contrib/ffmpeg/h264-cavlc-pcm-offset.patch")
@@ -112,7 +119,7 @@ cd "$ROOT/qemu-build"
     --extra-ldflags="-L$STATIC/lib -lcrypto -mmacosx-version-min=14.0"
 ninja -j"$JOBS" qemu-system-arm
 bash "$QEMU/contrib/macos-app/make-dylib-macos.sh" "$ROOT/qemu-build"
-python3 "$SRC/scripts/check-macho.py" --no-weak-imports "$ROOT/qemu-build/libqemu-arm.dylib" "$P/lib/libimobiledevice-1.0.dylib" "$P/lib/libplist-2.0.dylib" "$ROOT/build/usbmuxd/src/usbmuxd"
+python3 "$SRC/scripts/check-macho.py" --no-weak-imports "$ROOT/qemu-build/libqemu-arm.dylib" "$P/lib/libimobiledevice-1.0.dylib" "$P/lib/libplist-2.0.dylib" "$ROOT/build/usbmuxd/src/usbmuxd" "$ROOT/build/iBoot32Patcher/iBoot32Patcher"
 python3 "$SRC/scripts/test-glib-compat.py" --native-build "$ROOT"
 python3 - "$SRC" "$ROOT" "$STATIC" "$QEMU" "$USB" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
@@ -132,11 +139,12 @@ record = {
     'deployment_target': '14.0', 'architecture': 'arm64',
     'sources': json.loads((root / 'src/native-sources.json').read_text()),
     'usbmuxd': json.loads((root / 'usbmuxd-source.json').read_text()),
+    'iboot32patcher': json.loads((root / 'build/iBoot32Patcher/build.json').read_text()),
     'qemu_commit': git('rev-parse', 'HEAD').decode().strip(),
     'qemu_tracked_diff_sha256': hashlib.sha256(git('diff', '--binary', 'HEAD')).hexdigest(),
     'recipes': {str(path.relative_to(source)): digest(path) for path in (
         source / 'scripts/build-package-native.sh', source / 'scripts/build-static-deps.sh',
-        source / 'scripts/dependency-sources.py', source / 'build-support/dependencies.json',
+        source / 'scripts/dependency-sources.py', source / 'build-support/dependencies.json', source / 'scripts/build-iboot32patcher.sh',
         source / 'build-support/patches/glib-pipe2-availability.patch',
         source / 'scripts/test-glib-compat.py', source / 'scripts/check-macho.py')},
     'static_inputs': [{'path': str(path.relative_to(static)), 'sha256': digest(path)}
