@@ -224,7 +224,7 @@ public enum Preparer {
             "iboot_signature_checks": iboot ? "pattern-patched" : null,
             "tool": ["name": "firmwarekit", "version": FirmwareKit.version, "helper": helper.path,
                      "helper_sha256": try digest(helper, SHA256()),
-                     "iboot32patcher": iboot ? ["path": patcher.path, "sha256": try digest(patcher, SHA256())] : null,
+                     "iboot32patcher": opt(iboot ? ["path": patcher.path, "sha256": try digest(patcher, SHA256())] as [String: Any] : nil),
                      "built": ["guest tools": Dictionary(uniqueKeysWithValues: try tools.map { ($0, try digest(o.guestTools.appendingPathComponent($0), SHA256())) }),
                                "GLEngine": opt(vols.engine)]],
             "inputs": ["ipsw": ["path": o.ipsw.path, "sha1": got], "decrypted": dec.path, "identity": "identity.json",
@@ -237,8 +237,7 @@ public enum Preparer {
             "gl_test": false, "guest_package": opt(vols.guestPackage?.object),
         ]
         try fm.removeItem(at: work)
-        try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-            .write(to: file("device.lock.json"))
+        try lockData(lock).write(to: file("device.lock.json"))
         log("\(o.out.path): UDID \(ident.udid ?? "-")")
         progress.finish()
         emit(.done(lock: "device.lock.json"))
@@ -445,6 +444,13 @@ public enum Preparer {
     }
 
     static func sha256(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
+
+    /// device.lock.json's bytes. A value JSONSerialization cannot write (a Swift box, an Optional) is an error
+    /// event, not an NSException abort with no event.
+    static func lockData(_ lock: [String: Any]) throws -> Data {
+        guard JSONSerialization.isValidJSONObject(lock) else { throw FirmwareError(.internal, "the lock holds a value that is not JSON") }
+        return try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+    }
 
     /// sha256 of each of `files` (relative to `nand`, in listing order) and the listing's sha256 over
     /// "path sha256\n" lines: what identifies a store. 16.5 GB of sparse files: one core each.

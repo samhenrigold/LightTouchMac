@@ -214,8 +214,7 @@ public enum N72Recipe {
             "machine": machine,
         ]
         try fm.removeItem(at: work)
-        try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-            .write(to: file("device.lock.json"))
+        try Preparer.lockData(lock).write(to: file("device.lock.json"))
         log("\(o.out.path): UDID \(ident.udid ?? "-")")
         progress.finish()
         emit(.done(lock: "device.lock.json"))
