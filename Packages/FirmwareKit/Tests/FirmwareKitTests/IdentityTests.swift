@@ -5,11 +5,11 @@ import Testing
 struct IdentityTests {
     // sha256 of json.dumps(ipad1_kboot.synth_identity(seed), indent=1).
     static let python: [(String, String)] = [
-        ("ipad1-7B500-default", "595d9cbe1639ee298432b45df61d9db799eb9a63687002f5c349603631971b5a"),
-        ("x", "4c6a3fb839c497921b43c49d0f61aade4290eafb34f559bb83804e6d2b565f51"),
-        ("y", "5b6f01f2286a02ff6c8224e97de52e0dc28554962966d58ab4f0ac57473b93db"),
-        ("", "916229c01499fefdd555f59559c00eb92624582aa639ca40fc1a815bdf28e086"),
-        ("caf\u{e9} \u{2713} \"q\"\\\n\t\u{7f}\u{1F600}", "f3bdaa8749c8216500055c2590c72c2269e9a4b4cb80f4ca76bd2b670bf34135"),
+        ("ipad1-7B500-default", "4d379949478173c02768a25adbd7e91c02f63daccd0e65c0e6506b81da61e861"),
+        ("x", "40db97bd11bf40b3734a6d5a9fde47e7c0ad135178b25c48bb28553a19d4e2b4"),
+        ("y", "0a0ef7113474b96bf46f646f4fb74c0fa01260f800a3f6c791170f796ff4101f"),
+        ("", "e78717179783745bef5ecf24f96391e07bb9a9b1ccd97ccc31b231889d04005f"),
+        ("caf\u{e9} \u{2713} \"q\"\\\n\t\u{7f}\u{1F600}", "bd4f2ab2194d18d4c25738444a4ba831213ffa0b362bbac56e1bffaedab49dc7"),
     ]
 
     @Test(arguments: python) func jsonMatchesPython(seed: String, sha: String) throws {
@@ -24,8 +24,8 @@ struct IdentityTests {
              "mlb-serial-number": "83FGZ84AP5CMG",
              "unique-chip-id": "0x6bb6bf76e7",
              "die-id": [
-              "0x03ba0042",
-              "0x68659681"
+              "0xe7e35db5",
+              "0x686525db"
              ],
              "wifi-mac": "02:ea:75:42:31:de",
              "bt-mac": "02:ea:75:42:31:df",

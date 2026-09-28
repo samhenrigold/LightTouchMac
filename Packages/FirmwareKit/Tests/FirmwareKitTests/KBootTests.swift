@@ -98,16 +98,16 @@ struct KBootTests {
     }
 
     // sha256 of `ipad1_kboot.py --identity ID [--ramdisk DEC/<UpdateRamDisk>-ramdisk.dmg] DEC OUT` at qemu-ios
-    // ipad1 abb1a1b817 (enable-hsic=1), DEC = ipad1_fw.py's output, ID = UnitIdentity.synthesize("ipad1-7B500-default")
-    // (IdentityTests' sha 595d9c..., the synth_identity of 5f365778a4; ff331e1ef9 later derived die-id from the ECID
-    // for real iBoot, which this identity does not follow).
+    // ipad1 5e4ab3e6bf (enable-hsic=1), DEC = ipad1_fw.py's output, ID = UnitIdentity.synthesize("ipad1-7B500-default")
+    // (IdentityTests' sha 4d3799...), whose die-id now follows ff331e1ef9's ECID-derived words, as the DT's
+    // chosen/die-id shows.
     static let python: [(String, String, String, String)] = [
         ("k48ap-7B500", "018-8374-001-ramdisk.dmg",
-         "6f129cac23ba83ea2cd02b2f08936d2d2056367d4d418026b70c8e6164bda697", "b28e46a32fe28d37aec0db3abb461244ae91609a4a63cc0bb3223736ada10b6e"),
+         "71f2b5c862f4b2445bcb085071c2b6264f36e0750ea701d2d9a588f0b6d97423", "5f921d8a7dfa60f9203c653d7524cbcc23bbfe4f4402858e4ebafe54a5eb754f"),
         ("k48ap-8C148", "038-0024-002-ramdisk.dmg",
-         "b97d456161f5a3039f19dbee2de2001590626e4228095a769dc68dfb2fa921a4", "c0569fe6566d9960102ff8a293e585d2a60d5c3ab9ac5b02e22c8b31e595d365"),
+         "b983e3f72a757f3c7581c1d55cb7b5432550935d4fba5ebe4ea64560bcd6f98e", "fc3e36b72520d33cabad48d58385d1787d1a55510164e4a7d771eb8810117324"),
         ("k48ap-7B367", "018-7225-009-ramdisk.dmg",
-         "f241d3e30774fb903bc30bc08fca66adb2408e4611536cbd4b4d792a140eadf3", "4b517e490c8dfc1d4144a79fa4f4ab20fd06a18b85419943dbc24aa7d258aa7b"),
+         "9df137569c86ad51d814f1da56ac33bf178f8763b27f96fdd4784b95a652770e", "94703af6dbba02cc7ba691bfecaa6801662345d5e18a135e5384126bec31d495"),
     ].filter { Oracle.firmware($0.0).available }
 
     /// The whole Swift chain (IPSW -> FirmwareDecryptor -> KBoot) against the Python chain's kboot.bin.

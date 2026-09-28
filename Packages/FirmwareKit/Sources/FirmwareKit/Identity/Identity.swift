@@ -56,11 +56,16 @@ public struct UnitIdentity: Equatable, Sendable {
         let bt = Array(wifi[0..<5]) + [wifi[5] + 1]
         let beInt = { (b: [UInt8]) in b.reduce(UInt64(0)) { $0 << 8 | UInt64($1) } }
         let ecid = beInt(Array(h[20..<25])) | 1
+        // SecureROM builds ECID from CHIPID words 2/3 and CPRV from bits 10..15 of word 3 (revision 0x11);
+        // derive the die-id words from the ECID so the ROM-advertised identity agrees (ipad1_kboot.synth_identity,
+        // qemu-ios ff331e1ef9). die-id[1]'s high 16 bits keep the original h[2:6] value.
+        let dieLo = beInt(Array(h[2..<6]))
+        let word2 = ((ecid >> 21) & 0x1FFFFF) | (((ecid >> 16) & 31) << 21) | (((ecid >> 2) & 63) << 26)
+        let word3 = (dieLo & 0xFFFF_0000) | 0x2400 | (((ecid >> 8) & 255) << 2) | (ecid & 3)
         var id = UnitIdentity(fields: [
             ("serial-number", .string(chars(0, 11))), ("mlb-serial-number", .string(chars(11, 13))),
             ("unique-chip-id", .string(String(format: "0x%010llx", ecid))),
-            ("die-id", .list([String(format: "0x%08llx", beInt(Array(h[25..<27] + h[0..<2]))),
-                              String(format: "0x%08llx", beInt(Array(h[2..<6])))])),
+            ("die-id", .list([String(format: "0x%08llx", word2), String(format: "0x%08llx", word3)])),
             ("wifi-mac", .string(mac(wifi))), ("bt-mac", .string(mac(bt))),
             ("model-number", .string(model)), ("region-info", .string(iPadRegion)), ("seed", .string(seed)),
         ])

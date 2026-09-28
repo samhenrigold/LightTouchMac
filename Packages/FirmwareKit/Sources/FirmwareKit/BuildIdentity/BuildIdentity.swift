@@ -45,8 +45,11 @@ public struct FirmwareEntry: Codable, Sendable, Equatable {
         public var options: [String: Bool]
         public var gliDispatch: String?
         public var guest: Guest?
+        /// The k48 boot chain: "iboot" (SecureROM -> LLB -> iBoot -> kernel; default when absent) or "kboot"
+        /// (direct-kernel, for debugging). Ignored by n72ap.
+        public var boot: String?
         enum CodingKeys: String, CodingKey {
-            case name, version, storage, options, guest
+            case name, version, storage, options, guest, boot
             case systemMiB = "system_mib", dataSize = "data_size", gliDispatch = "gli_dispatch"
         }
     }
