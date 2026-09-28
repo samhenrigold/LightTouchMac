@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Erase completes after native writers exit, before quit; failures stay visible."""
+"""Erase completes after the helper exits, then restarts the device (never quits
+the app); a stopped device just erases; failures stay visible."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
@@ -10,21 +11,23 @@ source=r'''import Foundation
 @MainActor var events:[String]=[]
 @MainActor var exitNative=true
 @MainActor var current:Controller!
-@MainActor func qemu_ios_ui_quit(){events.append("stop");if exitNative {current.isDead=true}}
+/// The helper's link: quit stands for the helper exiting (it releases every writer).
+@MainActor struct FakeLink { func send(_ c:LinkCommand){ if case .machine(.quit)=c {events.append("stop");if exitNative {current.isDead=true}} } }
 nonisolated func logEvent(_ s:String){}
 @MainActor enum AppInstaller {static let hasPendingWork=false; static var discarded=0; static func discardAll(){discarded+=1}}
-@MainActor enum AppDelegate {
- static func requestTermination(){
-  precondition(!current.isErasing && current.isDead)
-  precondition(!FileManager.default.fileExists(atPath:current.overlayURL.path))
-  events.append("quit")
- }
+@MainActor func restart(){
+ precondition(!current.isErasing && current.isDead)
+ precondition(!FileManager.default.fileExists(atPath:current.overlayURL.path))
+ events.append("restart")
 }
 @MainActor final class Controller {
  enum State {case running,notStarted}
  enum Notice {case erase}
  var isErasing=false,isInstalling=false,isDead=false,skipNextQuitSnapshot=false
  var state=State.running
+ var started=true
+ var link:FakeLink?=FakeLink()
+ var onRestartRequested:(()->Void)?={restart()}
  var foregroundTask:Task<Void,Never>?,orientationTask:Task<Void,Never>?
  struct Options {let nand="nand",packedNAND="/missing"}
  let options=Options()
@@ -52,7 +55,7 @@ nonisolated func logEvent(_ s:String){}
   current=try Controller(root.appendingPathComponent("success"))
   current.requestFactoryReset();current.requestFactoryReset()
   while current.isErasing {try await Task.sleep(for:.milliseconds(5))}
-  precondition(events==["halt","stop","quit"])
+  precondition(events==["halt","stop","restart"])
   events=[];exitNative=false
   current=try Controller(root.appendingPathComponent("stuck"))
   current.requestFactoryReset()
@@ -63,12 +66,18 @@ nonisolated func logEvent(_ s:String){}
   events=[];current.isDead=true
   current.requestFactoryReset()
   while current.isErasing {try await Task.sleep(for:.milliseconds(5))}
-  precondition(events==["quit"])
-  print("PASS: erase waits for native exit, removes data before quit, coalesces requests, preserves data on stop failure, and retries from stopped state")
+  precondition(events==["restart"])
+  // A device that isn't running (DeviceSessionHost.stoppedController): erase only.
+  events=[];current=try Controller(root.appendingPathComponent("stopped"))
+  current.started=false;current.state = .notStarted;current.onRestartRequested=nil
+  current.requestFactoryReset()
+  while current.isErasing {try await Task.sleep(for:.milliseconds(5))}
+  precondition(events==[] && !FileManager.default.fileExists(atPath:current.overlayURL.path))
+  print("PASS: erase waits for the helper to exit, removes data before restarting the device, coalesces requests, preserves data on stop failure, retries from a dead helper, and erases a stopped device without quitting")
  }
 }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-erase-') as d:
  p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc','-module-cache-path',d+'/modules',str(root/'LightTouchMac/DeviceStateStorage.swift'),str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc','-module-cache-path',d+'/modules',str(root/'LightTouchMac/DeviceStateStorage.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=10)

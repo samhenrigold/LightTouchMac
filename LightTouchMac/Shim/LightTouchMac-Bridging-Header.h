@@ -1,8 +1,7 @@
-// The C ABI into libqemu-arm.dylib. Headers live in the qemu-ios checkout;
-// QEMU_IOS_DIR (a build setting) puts their directories on the search path.
 
-#include "qemu-ios-ui.h"
-#include "qemu-macos-extras.h"
+// The app no longer links libqemu-arm.dylib: every device runs in its own
+// LightTouchDevice helper, reached through Shared/DeviceLink.swift (whose C
+// glue is the LTMLinkC module, not this header).
 
 // libimobiledevice is deliberately NOT included here. SpringBoard's icon
 // layout needs it (there is no CLI for com.apple.springboardservices), but

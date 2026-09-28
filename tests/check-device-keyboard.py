@@ -10,8 +10,10 @@ source=r"""import Foundation
  let defaults=UserDefaults(suiteName:"ltm-keyboard-check-"+UUID().uuidString)!
  var acceptsInput=true,isSleeping=false
  var onStatusChange:(()->Void)?
- var sent:[Bool]=[]
- func qemu_ios_ui_key_mac(_ code:Int32,_ down:Bool) {sent.append(down)}
+ final class FakeLink { var commands:[LinkCommand]=[]; func send(_ c:LinkCommand){commands.append(c)} }
+ let fake=FakeLink()
+ var link:FakeLink? {fake}
+ var sent:[Bool] { fake.commands.compactMap { if case let .key(_,down)=$0 {down} else {nil} } }
 """+s[a:b].replace('UserDefaults.standard','defaults')+r"""
  func run() {
   precondition(keyboardInputEnabled)
@@ -31,5 +33,5 @@ source=r"""import Foundation
 """
 with tempfile.TemporaryDirectory() as tmp:
  tmp=Path(tmp);(tmp/'check.swift').write_text(source)
- subprocess.run(['xcrun','swiftc','-parse-as-library',str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+ subprocess.run(['xcrun','swiftc','-parse-as-library',str(root/'Shared/DeviceLinkProtocol.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
  subprocess.run([str(tmp/'check')],check=True)

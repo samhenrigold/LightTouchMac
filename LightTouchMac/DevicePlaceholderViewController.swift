@@ -100,9 +100,9 @@ final class DevicePlaceholderViewController: NSViewController {
         case let .downloading(fraction):
             status.stringValue = "Downloading…"
             show(progress: fraction, step: "\(Int((fraction * 100).rounded()))%")
-        case let .preparing(index, count, name):
+        case let .preparing(index, count, name, _):
             status.stringValue = "Preparing…"
-            show(progress: count > 0 ? Double(index) / Double(count) : 0, step: "Step \(index) of \(count): \(name)")
+            show(progress: row.progress ?? 0, step: count > 0 ? "Step \(index) of \(count): \(name)" : name)
         case .ready: status.stringValue = "Ready"
         case .running: status.stringValue = "Running"
         case .stopping: status.stringValue = "Stopping…"

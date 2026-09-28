@@ -15,7 +15,7 @@ def section(file, start, end):
 
 metadata = section("AppMetadataCache.swift", "    nonisolated static func prepareDirectory", "    #if DEBUG")
 metadata_save = section("AppMetadataCache.swift", "    private func save()", "    // MARK: - .ipa reading")
-unpack = section("EmulatorController.swift", "    nonisolated private static func unpackNAND", "    /// The QEMU thread")
+unpack = section("EmulatorController.swift", "    nonisolated private static func unpackNAND", "    /// The helper is gone")
 diagnostics = section("MainWindowController.swift", "nonisolated enum DiagnosticsExport", "// MARK: - Toolbar item validation")
 
 source = r'''

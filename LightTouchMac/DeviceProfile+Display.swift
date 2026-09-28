@@ -4,8 +4,8 @@ import CoreGraphics
 
 nonisolated extension DeviceProfile {
     /// Framebuffer pixels as the panel scans them out. Constants, so geometry
-    /// doesn't need the dylib; a Debug EmulatorController logs if the loaded
-    /// dylib's qemu_ios_device_info() disagrees.
+    /// doesn't need the dylib; DeviceProcess logs if the device info in the
+    /// helper's hello disagrees.
     var screenPixels: CGSize {
         switch self {
         case .iPodTouch2G: CGSize(width: 320, height: 480)

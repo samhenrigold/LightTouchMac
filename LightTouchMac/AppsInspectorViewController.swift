@@ -988,7 +988,7 @@ final class AppsInspectorViewController: NSViewController {
     /// Subscribe to the guest's own install/uninstall notifications.
     private func startGuestNotifications() {
         guard notifications == nil, let session = emulator.usbmuxSession else { return }
-        let watcher = GuestNotifications(clientSocket: session)
+        let watcher = GuestNotifications(clientSocket: session) { [weak emulator] in emulator?.status?.iconGeneration }
         notifications = watcher
         let emulator = self.emulator
         watcher.start(attachAllowed: {

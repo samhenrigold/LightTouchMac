@@ -12,7 +12,7 @@ nonisolated enum DeviceProfile: Equatable {
     case iPodTouch2G
     case iPad1
 
-    /// The name passed to -M; also the key for qemu_ios_device_info().
+    /// The name passed to -M; also the key for the hello's device info.
     var machineName: String { self == .iPad1 ? "ipad1" : "iPod-Touch" }
     var displayName: String { self == .iPad1 ? "iPad" : "iPod touch" }
     /// What the device is called in menus, titles and messages ("the iPod").
@@ -33,7 +33,7 @@ nonisolated enum DeviceProfile: Equatable {
         /// accelerometer a quarter-turn at a time (ipod_touch_kbd_rotate).
         case guestHelper
         /// SpringBoard's getInterfaceOrientation over lockdown reports it; the
-        /// host sets the accelerometer outright (qemu_ios_ui_orientation).
+        /// host sets the accelerometer outright (LinkRequest.orientation).
         case springBoard
     }
     var orientationSource: OrientationSource { self == .iPad1 ? .springBoard : .guestHelper }

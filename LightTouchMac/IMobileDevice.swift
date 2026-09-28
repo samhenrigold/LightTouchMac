@@ -254,7 +254,7 @@ nonisolated enum IMobileDevice {
     /// only the USB bridge check; it says nothing about app-service readiness.
     static func checkAttachment(socket: String) throws {
         guard let idevice_new else { throw DeviceError.unavailable }
-        setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
+        DeviceGate.point(at: socket)
         var device: OpaquePointer?
         guard idevice_new(&device, nil) == success, let device else { throw DeviceError.notAttached }
         _ = idevice_free?(device)

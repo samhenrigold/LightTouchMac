@@ -156,7 +156,9 @@ final class DisplayView: NSView {
     private let homeButton = HomeButton()
     private let attitudeIndicator = AttitudeIndicatorButton(frame: .zero)
     private var displayLink: CADisplayLink?
-    private var serial: UInt64 = 0
+    /// The ring serial on screen, and its surface (captures read it).
+    private var shownSerial: UInt64 = 0
+    private var shownSurface: IOSurface?
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
     private var pinching = false
 
@@ -529,8 +531,11 @@ final class DisplayView: NSView {
 
     // MARK: - Frame polling
 
+    /// Frames come from the helper's IOSurface ring: the layer shows the front
+    /// surface itself (no copy), and only the 3D model, which needs a texture,
+    /// gets a CGImage made from it. Liveness and status are EmulatorController's
+    /// own poll, so a hidden device (no display link) keeps them.
     @objc private func step() {
-        emulator?.pollStorageFailure()
         if let generation = emulator?.shakeGeneration, generation != lastShakeGeneration {
             lastShakeGeneration = generation
             modelView?.shake()
@@ -541,17 +546,17 @@ final class DisplayView: NSView {
         modelView?.advanceAnimations()
         updateTouchOverlay()
         updateKeyboardPointer()
-        var pixels: UnsafeRawPointer?
-        var w: Int32 = 0
-        var h: Int32 = 0
-        guard qemu_ios_ui_frame(&pixels, &w, &h, &serial), let pixels else { return }
-        // A true return means the serial advanced — the guest painted. This is
-        // the liveness signal behind booting→running and the snapshot health
-        // gate; a wedged guest stops here.
-        emulator?.noteFrameAdvanced()
+        _ = currentFrame()
+    }
 
-        let width = Int(w), height = Int(h)
-        let newFramePixels = CGSize(width: width, height: height)
+    /// The newest ring surface, shown if it is new. The ring reader belongs to
+    /// one thread; the display link and captures are both on main.
+    private func currentFrame() -> IOSurface? {
+        guard let frame = emulator?.link?.frontSurface() else { return shownSurface }
+        guard frame.serial != shownSerial || frame.surface !== shownSurface else { return frame.surface }
+        shownSerial = frame.serial
+        shownSurface = frame.surface
+        let newFramePixels = CGSize(width: frame.surface.width, height: frame.surface.height)
         if newFramePixels != framePixels {
             framePixels = newFramePixels
             needsLayout = true
@@ -563,26 +568,32 @@ final class DisplayView: NSView {
         // directly — it is the source of truth for the pose, and layout()
         // already compares against the same value to decide whether to animate.
         if emulator?.rotationDegrees != lastRotation { needsLayout = true }
-        let bytes = width * height * 4
-        guard let provider = CGDataProvider(data: Data(bytes: pixels, count: bytes) as CFData) else { return }
-        // noneSkipFirst, NOT premultipliedFirst: the panel is opaque and the
-        // alpha byte is whatever last wrote the framebuffer. iBoot draws the
-        // boot logo without setting alpha at all, so honouring it rendered the
-        // logo fully transparent — a black screen until SpringBoard (which does
-        // write alpha) took over. ui/cocoa.m ignores alpha for the same reason.
-        let bitmapInfo: CGBitmapInfo = [.byteOrder32Little,
-                                        CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue)]
-        guard let image = CGImage(width: width, height: height,
-                                  bitsPerComponent: 8, bitsPerPixel: 32,
-                                  bytesPerRow: width * 4,
-                                  space: colorSpace, bitmapInfo: bitmapInfo,
-                                  provider: provider, decode: nil,
-                                  shouldInterpolate: false, intent: .defaultIntent) else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        contentLayer.contents = image
-        (modelView ?? pendingModelView)?.updateFrame(image)
+        // The helper forces the alpha byte opaque (FrameRingWriter.copy): iBoot
+        // and the iPod's framebuffer leave it 0, which a layer would honour.
+        contentLayer.contents = frame.surface
+        if let model = modelView ?? pendingModelView, let image = Self.image(frame.surface, colorSpace: colorSpace) {
+            model.updateFrame(image)
+        }
         CATransaction.commit()
+        return frame.surface
+    }
+
+    /// A copy of a ring surface, held in use while it is read so the helper
+    /// never writes into it. noneSkipFirst, NOT premultipliedFirst: the panel
+    /// is opaque (ui/cocoa.m ignores alpha for the same reason).
+    private static func image(_ surface: IOSurface, colorSpace: CGColorSpace) -> CGImage? {
+        surface.incrementUseCount()
+        surface.lock(options: .readOnly, seed: nil)
+        let data = Data(bytes: surface.baseAddress, count: surface.bytesPerRow * surface.height)
+        surface.unlock(options: .readOnly, seed: nil)
+        surface.decrementUseCount()
+        let info: CGBitmapInfo = [.byteOrder32Little, CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue)]
+        guard let provider = CGDataProvider(data: data as CFData) else { return nil }
+        return CGImage(width: surface.width, height: surface.height, bitsPerComponent: 8, bitsPerPixel: 32,
+                       bytesPerRow: surface.bytesPerRow, space: colorSpace, bitmapInfo: info,
+                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 
     private var liveTextView: InlineLiveTextView?
@@ -624,24 +635,24 @@ final class DisplayView: NSView {
     private func sendVisualTouch(_ slot: Int32, _ phase: Int32, _ x: Double, _ y: Double, keyboard: Bool = false) {
         if !keyboard { endKeyboardTouch() }
         guard touchInteractionEnabled else {
-            if phase == Int32(QEMU_IOS_TOUCH_END) { qemu_ios_ui_touch(slot, phase, x, y) }
+            if phase == TouchPhase.end { emulator?.link?.send(.touch(slot: Int(slot), phase: Int(phase), x: x, y: y)) }
             clearTouchOverlay()
             return
         }
         noteTouch(slot: Int(slot), phase: phase, x: x, y: y)
-        qemu_ios_ui_touch(slot, phase, x, y)
+        emulator?.link?.send(.touch(slot: Int(slot), phase: Int(phase), x: x, y: y))
     }
     private func sendVisualTouch2(_ phase: Int32, _ x: Double, _ y: Double) {
         guard touchInteractionEnabled else {
-            if phase == Int32(QEMU_IOS_TOUCH_END) { qemu_ios_ui_touch2(phase, x, y) }
+            if phase == TouchPhase.end { emulator?.link?.send(.touch2(phase: Int(phase), x: x, y: y)) }
             clearTouchOverlay()
             return
         }
         noteTouch(slot: 1, phase: phase, x: x, y: y)
-        qemu_ios_ui_touch2(phase, x, y)
+        emulator?.link?.send(.touch2(phase: Int(phase), x: x, y: y))
     }
     private func noteTouch(slot: Int, phase: Int32, x: Double, y: Double) {
-        visibleTouches[slot] = (CGPoint(x: x, y: y), phase == Int32(QEMU_IOS_TOUCH_END) ? CACurrentMediaTime() + Self.touchFadeDuration : .infinity)
+        visibleTouches[slot] = (CGPoint(x: x, y: y), phase == TouchPhase.end ? CACurrentMediaTime() + Self.touchFadeDuration : .infinity)
         updateTouchOverlay()
     }
     private var touchInteractionEnabled: Bool {
@@ -702,8 +713,8 @@ final class DisplayView: NSView {
         CATransaction.commit()
     }
 
-    /// The bridge copies while holding its publication lock, so capture is
-    /// current even when paused/minimized and never retains a recycled slot.
+    /// Reads the newest ring surface under a use count, so capture is current
+    /// even when paused, hidden or minimized and never reads a recycled slot.
     func captureFrame(includeTouches: Bool = true) -> CGImage? {
         if let liveTextView { return liveTextView.capturedImage }
         guard let image = capturePanelFrame(includeTouches: includeTouches) else { return nil }
@@ -731,24 +742,13 @@ final class DisplayView: NSView {
     }
 
     private func capturePanelFrame(includeTouches: Bool) -> CGImage? {
-        let side = Int(max(profile.screenPixels.width, profile.screenPixels.height))
-        var data = Data(count: side * side * 4)
-        var width: Int32 = 0, height: Int32 = 0
-        let copied = data.withUnsafeMutableBytes {
-            qemu_ios_ui_copy_frame($0.baseAddress, $0.count, &width, &height)
-        }
-        guard copied, width > 0, height > 0 else { return nil }
-        data.count = Int(width * height * 4)
+        guard let surface = currentFrame(), let image = Self.image(surface, colorSpace: colorSpace) else { return nil }
+        let width = image.width, height = image.height
         let info: CGBitmapInfo = [.byteOrder32Little, CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue)]
-        guard let provider = CGDataProvider(data: data as CFData),
-              let image = CGImage(width: Int(width), height: Int(height), bitsPerComponent: 8,
-                                  bitsPerPixel: 32, bytesPerRow: Int(width) * 4, space: colorSpace,
-                                  bitmapInfo: info, provider: provider, decode: nil,
-                                  shouldInterpolate: false, intent: .defaultIntent) else { return nil }
         let touches = includeTouches ? activeTouches : []
         guard !touches.isEmpty,
               let context = CGContext(data: nil, width: Int(width), height: Int(height),
-                                      bitsPerComponent: 8, bytesPerRow: Int(width) * 4,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
                                       space: colorSpace, bitmapInfo: info.rawValue) else { return image }
         context.draw(image, in: CGRect(x: 0, y: 0, width: Int(width), height: Int(height)))
         let pixelScale = CGFloat(width) / max(contentLayer.bounds.width * appliedScale, 1)
@@ -867,15 +867,15 @@ final class DisplayView: NSView {
             gestureAnchor = p
             pinchSpread = 0.12          // a comfortable starting separation
             pinchingGuest = true
-            sendPinch(Int32(QEMU_IOS_TOUCH_BEGIN))
+            sendPinch(TouchPhase.begin)
         case .changed:
             guard pinchingGuest else { return }
             // Track the fingers: the separation scales exactly as they do.
             pinchSpread = min(max(pinchSpread * (1 + event.magnification), 0.01), 0.6)
-            sendPinch(Int32(QEMU_IOS_TOUCH_UPDATE))
+            sendPinch(TouchPhase.update)
         case .ended, .cancelled:
             guard pinchingGuest else { return }
-            sendPinch(Int32(QEMU_IOS_TOUCH_END))
+            sendPinch(TouchPhase.end)
             pinchingGuest = false
         default:
             break
@@ -902,9 +902,9 @@ final class DisplayView: NSView {
         }
         Task { @MainActor in
             for _ in 0..<2 {
-                sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), nx, ny)
+                sendVisualTouch(0, TouchPhase.begin, nx, ny)
                 try? await Task.sleep(for: .milliseconds(40))
-                sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), nx, ny)
+                sendVisualTouch(0, TouchPhase.end, nx, ny)
                 try? await Task.sleep(for: .milliseconds(70))
             }
         }
@@ -963,14 +963,14 @@ final class DisplayView: NSView {
         case .began:
             guard let p = clampedPanelPoint(event) else { return }
             scrollPoint = p
-            sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), Double(p.x), Double(p.y))
+            sendVisualTouch(0, TouchPhase.begin, Double(p.x), Double(p.y))
         case .changed:
             guard var p = scrollPoint else { return }
             let d = rotatedPanelDelta(dx, dy)
             p.x = min(max(p.x + d.dx / b.width, 0), 1)
             p.y = min(max(p.y + d.dy / b.height, 0), 1)
             scrollPoint = p
-            sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
+            sendVisualTouch(0, TouchPhase.update, Double(p.x), Double(p.y))
         case .ended, .cancelled:
             // Lift only if no momentum follows; otherwise ride it out below.
             if event.momentumPhase == [] { endScrollDrag() }
@@ -986,7 +986,7 @@ final class DisplayView: NSView {
             p.x = min(max(p.x + d.dx / b.width, 0), 1)
             p.y = min(max(p.y + d.dy / b.height, 0), 1)
             scrollPoint = p
-            sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
+            sendVisualTouch(0, TouchPhase.update, Double(p.x), Double(p.y))
         }
     }
 
@@ -997,16 +997,16 @@ final class DisplayView: NSView {
         let delta = Self.scrollMovement(event)
         let dx = delta.dx, dy = delta.dy
         let d = rotatedPanelDelta(dx, dy)
-        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), Double(p.x), Double(p.y))
+        sendVisualTouch(0, TouchPhase.begin, Double(p.x), Double(p.y))
         p.x = min(max(p.x + d.dx / b.width, 0), 1)
         p.y = min(max(p.y + d.dy / b.height, 0), 1)
-        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_UPDATE), Double(p.x), Double(p.y))
-        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), Double(p.x), Double(p.y))
+        sendVisualTouch(0, TouchPhase.update, Double(p.x), Double(p.y))
+        sendVisualTouch(0, TouchPhase.end, Double(p.x), Double(p.y))
     }
 
     private func endScrollDrag() {
         guard let p = scrollPoint else { return }
-        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), Double(p.x), Double(p.y))
+        sendVisualTouch(0, TouchPhase.end, Double(p.x), Double(p.y))
         scrollPoint = nil
     }
 
@@ -1099,7 +1099,7 @@ final class DisplayView: NSView {
             return
         }
         pinching = event.modifierFlags.contains(.option)
-        emit(event, Int32(QEMU_IOS_TOUCH_BEGIN))
+        emit(event, TouchPhase.begin)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -1115,12 +1115,12 @@ final class DisplayView: NSView {
             sendAttitude()
             return
         }
-        emit(event, Int32(QEMU_IOS_TOUCH_UPDATE))
+        emit(event, TouchPhase.update)
     }
 
     override func mouseUp(with event: NSEvent) {
         if tilting { endTilt(); return }
-        emit(event, Int32(QEMU_IOS_TOUCH_END))
+        emit(event, TouchPhase.end)
         pinching = false
     }
 
@@ -1267,14 +1267,14 @@ final class DisplayView: NSView {
     ///   which is also what a real finger sliding onto the bezel does;
     /// - an END is delivered whenever a touch is down, wherever the cursor is.
     private func emit(_ event: NSEvent, _ phase: Int32) {
-        if phase == Int32(QEMU_IOS_TOUCH_BEGIN) {
+        if phase == TouchPhase.begin {
             guard let (nx, ny) = normalized(event) else { return }
             touchDown = true
             send(phase, nx, ny)
             return
         }
         guard touchDown, let p = clampedPanelPoint(event) else { return }
-        if phase == Int32(QEMU_IOS_TOUCH_END) { touchDown = false }
+        if phase == TouchPhase.end { touchDown = false }
         send(phase, Double(p.x), Double(p.y))
     }
 
@@ -1297,7 +1297,7 @@ final class DisplayView: NSView {
     private func endKeyboardTouch() {
         guard !keyboardTouchKeys.isEmpty else { return }
         keyboardTouchKeys.removeAll()
-        sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_END), keyboardPoint.x, keyboardPoint.y, keyboard: true)
+        sendVisualTouch(0, TouchPhase.end, keyboardPoint.x, keyboardPoint.y, keyboard: true)
     }
 
     private func keyboardPointerKey(_ event: NSEvent, down: Bool) -> Bool {
@@ -1316,7 +1316,7 @@ final class DisplayView: NSView {
         if touching, !keyboardTouchKeys.contains(code) {
             let began = keyboardTouchKeys.isEmpty
             keyboardTouchKeys.insert(code)
-            if began { sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_BEGIN), keyboardPoint.x, keyboardPoint.y, keyboard: true) }
+            if began { sendVisualTouch(0, TouchPhase.begin, keyboardPoint.x, keyboardPoint.y, keyboard: true) }
         }
         if code != 49 {
             let delta: CGFloat = 0.02
@@ -1327,7 +1327,7 @@ final class DisplayView: NSView {
             default: keyboardPoint.y = max(0, keyboardPoint.y - delta)
             }
             if !keyboardTouchKeys.isEmpty {
-                sendVisualTouch(0, Int32(QEMU_IOS_TOUCH_UPDATE), keyboardPoint.x, keyboardPoint.y, keyboard: true)
+                sendVisualTouch(0, TouchPhase.update, keyboardPoint.x, keyboardPoint.y, keyboard: true)
             }
         }
         return true
@@ -1409,6 +1409,11 @@ final class DisplayView: NSView {
         // greyed out, but the drop still showed the green copy badge, accepted,
         // and then queued one "The device isn't ready yet" sheet per .ipa to be
         // dismissed one at a time.
+        // An IPSW is for the library, not this device: any time, from outside.
+        if sender.draggingSource == nil, !droppedIPSWs(sender).isEmpty {
+            sender.numberOfValidItemsForDrop = droppedIPSWs(sender).count
+            return .copy
+        }
         guard emulator?.canQueueInstall == true else { return [] }
         let catalog = droppedCatalogApps(sender)
         if !catalog.isEmpty, onDropCatalogApp != nil {
@@ -1434,6 +1439,11 @@ final class DisplayView: NSView {
         // Readiness can change after the drag entered. Never animate a
         // successful drop when its owner will reject the import.
         guard draggingEntered(sender) == .copy else { return false }
+        let ipsws = droppedIPSWs(sender)
+        if sender.draggingSource == nil, !ipsws.isEmpty {
+            ipsws.forEach { FirmwareJobs.shared.importIPSW($0, for: nil) }   // matched by its SHA1
+            return true
+        }
         let catalog = droppedCatalogApps(sender)
         if !catalog.isEmpty, let onDropCatalogApp {
             catalog.forEach(onDropCatalogApp)
@@ -1458,6 +1468,11 @@ final class DisplayView: NSView {
         return urls.filter { $0.isFileURL && $0.pathExtension.lowercased() == "ipa" }
     }
 
+    private func droppedIPSWs(_ sender: NSDraggingInfo) -> [URL] {
+        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return [] }
+        return urls.filter { $0.isFileURL && $0.pathExtension.lowercased() == "ipsw" }
+    }
+
     private func droppedMedia(_ sender: NSDraggingInfo) -> [URL] {
         guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return [] }
         return urls.filter { $0.isFileURL && PreparedMedia.extensions.contains($0.pathExtension.lowercased()) }
@@ -1475,6 +1490,11 @@ final class DisplayView: NSView {
 /// The shell's home button: invisible until pressed, then a soft black circle
 /// — drawn directly rather than via a bezel/image since it sits on shell
 /// artwork with a shape (and press state) no stock NSButton style covers.
+/// The touch phases of qemu-ios-ui.h (LinkCommand.touch).
+private enum TouchPhase {
+    static let begin: Int32 = 0, update: Int32 = 1, end: Int32 = 2
+}
+
 private final class HomeButton: NSButton {
     init() {
         super.init(frame: .zero)

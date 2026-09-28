@@ -1,9 +1,12 @@
 // Created by Sam on 2026-08-05.
 //
-// Owns the emulator: builds argv/env from the parsed launch options, starts
-// usbmuxd (for app management) before handing the main loop to a background
-// thread, and exposes device input + app operations to the UI. QEMU can only
-// be started once per process, so this is a single-shot controller.
+// Owns one device: builds its boot from the device record and launch options,
+// starts its usbmuxd (for app management), then runs it in its own
+// LightTouchDevice helper (DeviceProcess) and exposes input and app operations
+// to the UI. Everything that used to be a direct call into the dylib crosses the
+// helper's DeviceLink: status and frames are read from shared memory, input is a
+// command, the rest are requests. One controller per boot: a restart is a new
+// session (DeviceSessionHost.restart).
 
 import Cocoa
 
@@ -22,13 +25,17 @@ final class EmulatorController {
     private(set) var shuttingDown = false { didSet { onStatusChange?() } }
     private(set) var isSleeping = false { didSet { if oldValue != isSleeping { onStatusChange?() } } }
     private(set) var foregroundAppName: String? { didSet { if oldValue != foregroundAppName { onStatusChange?() } } }
-    private(set) var webProxy = WebProxyConfiguration.load()
+    /// Each device's proxy routing and certificate live beside its own state
+    /// (WebProxyConfiguration.directory): the itwebproxy of one device's
+    /// guestfwd never reads another's mode.
+    private var proxyDirectory: URL { WebProxyConfiguration.directory(for: instance) }
+    private(set) lazy var webProxy = WebProxyConfiguration.load(from: proxyDirectory)
     private(set) var webProxyStatus: WebProxyStatus = .waiting
     private var proxyRevision = 0
     private(set) var webProxyAvailable = false
     func configureWebProxy(_ value: WebProxyConfiguration) throws {
         guard webProxyAvailable else { throw DeviceToolsError.failed("The proxy is unavailable. Turn on the \(profile.shortName) and connect it to the internet.") }
-        try value.save()
+        try value.save(in: proxyDirectory)
         webProxy = value
         proxyRevision += 1
         webProxyStatus = .waiting
@@ -119,7 +126,7 @@ final class EmulatorController {
     func reportConnectionFailure(_ error: Error, operation: String) {
         guard let issue = DeviceConnectionIssue(error: error, operation: operation, profile: profile) else { return }
         if connectionIssue != issue {
-            logEvent("device connection: \(issue.detail); USB=\(usbConnected), agent=\(qemu_ios_agent_status()), blocked requests=\(AbandonedWork.count)")
+            logEvent("device connection: \(issue.detail); USB=\(usbConnected), agent=\(liveAgentStatus), blocked requests=\(AbandonedWork.count)")
         }
         connectionIssue = issue
         if issue.blocksCommands {
@@ -145,7 +152,7 @@ final class EmulatorController {
               connectionIssue?.reconnectManagement == true else { return }
         connectionFailures += 1
         guard connectionFailures >= 2, connectionRecoveryTask == nil,
-              !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice, qemu_ios_agent_status() == 1,
+              !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice, liveAgentStatus == 1,
               Date().timeIntervalSince(lastConnectionRecovery) >= 60 else { return }
         lastConnectionRecovery = Date()
         connectionFailures = 0
@@ -155,7 +162,7 @@ final class EmulatorController {
             defer { connectionRecoveryTask = nil; isReconnecting = false }
             do {
                 guard isRunning, !preparingMedia, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice else { return }
-                if try await DeviceTools.reconnectManagementService() {
+                if try await DeviceTools.reconnectManagementService(agent: link) {
                     logEvent("device: restarted unresponsive management service; reconnecting")
                     try await Task.sleep(for: .seconds(2))
                     guard isRunning else { return }
@@ -189,6 +196,24 @@ final class EmulatorController {
     /// Per-user machine state (the NAND copy-on-write overlay, snapshots, logs).
     private var stateDir: URL { Bundled.stateDirectory }
 
+    // MARK: - Helper
+
+    /// This device's LightTouchDevice, from start() until the next restart.
+    private(set) var process: DeviceProcess?
+    /// Its link: status and frames (synchronous), commands and requests.
+    var link: DeviceLink? { process?.link }
+    /// The status block, read now; nil before the helper's first hello.
+    var status: SharedStatus? { process?.status }
+    /// Why the helper died, for the row and the dead overlay.
+    private(set) var deathReason: String?
+    /// The session replaces this controller with a fresh helper (DeviceSessionHost.restart).
+    var onRestartRequested: (() -> Void)?
+    /// The active recording's audio (GuestAudioCapture).
+    var audioSink: ((LinkEvent) -> Void)?
+    private var statusTimer: Timer?
+    private var lastFrameSerial: UInt64 = 0
+    private var releasing = false
+
     // MARK: - Boot
 
     func start() {
@@ -201,19 +226,77 @@ final class EmulatorController {
         }
         started = true
         state = .booting
-        #if DEBUG
-        checkScreenGeometry()
-        #endif
         if let instanceError {
             logEvent("nand: could not resolve device image: \(instanceError.localizedDescription)")
             state = .dead(exitCode: 1)
             return
         }
-        if profile == .iPad1 { startIPad1(); return }
+        if instance.base.kind == .prepared, profile != .iPad1 {
+            reportDeviceNotice("This \(profile.shortName) can’t start in this version of Light Touch.", for: .storage)
+            state = .dead(exitCode: 1)
+            return
+        }
         if retainedPackedImage {
             logEvent("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
         }
+        let process = DeviceProcess(instance: instance.id, profile: profile,
+                                    log: instance.paths.logs.appendingPathComponent("native.log"))
+        self.process = process
+        lastFrameSerial = 0
+        process.onDeath = { [weak self, weak process] reason in
+            guard let self, let process, self.process === process else { return }
+            helperDied(reason)
+        }
+        process.onAudio = { [weak self] event in self?.audioSink?(event) }
+        startStatusPoll()
+        let unpack = profile == .iPodTouch2G ? iPodNAND().unpack : nil
+        Task { [weak self] in
+            // First boot of a packaged app: inflate the device image before the
+            // helper opens it, off the main actor (the window says "Booting…").
+            if let unpack {
+                let unpacked = await Task.detached { Self.unpackNAND(unpack.packed, into: unpack.dest) }.value
+                guard unpacked else { self?.helperDied("The device image could not be unpacked."); return }
+            }
+            guard let self, self.process === process, !releasing else { return }
+            // The boot is built after the hello: snapshot identity needs the
+            // helper's build id, and usbmuxd must listen before the guest's USB.
+            process.start({ [weak self] _ in self?.bootConfiguration() }) { [weak self] result in
+                if case let .failure(error) = result, let self { logEvent("boot: \(instance.name): \(error)") }
+            }
+        }
+        if hasGuestTools {
+            startMediaPreparation()
+            startOrientationWatch()   // idle until the guest is up and reachable
+        } else {
+            startInterfaceOrientationWatch()
+        }
+        startTimeZoneSync()       // guest zone follows the Mac's, incl. travel
+        startForegroundWatch()
+    }
 
+    /// nil when the device can't boot; the notice says why and the state is dead.
+    private func bootConfiguration() -> BootConfig? {
+        guard !isDead, !releasing else { return nil }
+        let config = profile == .iPad1 ? iPadBoot() : iPodBoot()
+        if config != nil {
+            logEmulatorBuild()
+            verifyRestoreIfNeeded()   // a bad restore self-heals with a fresh helper
+        }
+        return config
+    }
+
+    /// The iPod's base NAND, and whether a packaged app must unpack it first.
+    /// A raw NAND directory (dev checkout) is used as-is; a packaged app carries
+    /// only the opaque blob, unpacked into Application Support on first boot:
+    /// the bundle is signed and read-only, and the notary would have rejected
+    /// the raw pages inside it.
+    private func iPodNAND() -> (base: String, unpack: (packed: String, dest: String)?) {
+        if FileManager.default.fileExists(atPath: options.nandImage) { return (options.nandImage, nil) }
+        let dest = stateDir.appendingPathComponent(packedImage?.directory ?? "device/\(options.nand)", isDirectory: true).path
+        return (dest, FileManager.default.fileExists(atPath: dest) ? nil : (options.packedNAND, dest))
+    }
+
+    private func iPodBoot() -> BootConfig? {
         // One overlay per base image, so an overlay is never replayed onto a
         // different NAND (which would shadow unrelated blocks).
         let overlay = overlayURL
@@ -230,206 +313,111 @@ final class EmulatorController {
         } catch {
             reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
             state = .dead(exitCode: 1)
-            return
+            return nil
         }
-
-        setBootEnv()
-
+        let nand = iPodNAND().base
         // usbmuxd must be listening before the guest USB core comes up.
         let usbSession = options.appsync
             ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: options.nand, overlay: overlay.path)
             : nil
-
-        // A raw NAND directory (dev checkout) is used as-is; a packaged app
-        // carries only the opaque blob, unpacked into Application Support on
-        // first boot — the bundle is signed and read-only, and the notary
-        // would have rejected the raw pages inside it.
-        let nandBase: String
-        let nandUnpack: (packed: String, dest: String)?
-        if FileManager.default.fileExists(atPath: options.nandImage) {
-            nandBase = options.nandImage
-            nandUnpack = nil
-        } else {
-            let dest = stateDir.appendingPathComponent(packedImage?.directory ?? "device/\(options.nand)",
-                                                       isDirectory: true).path
-            nandBase = dest
-            nandUnpack = FileManager.default.fileExists(atPath: dest)
-                ? nil : (options.packedNAND, dest)
-        }
-
-        var machine = "iPod-Touch,h264-decode=on,scaler-decode=on,mpvd-decode=on,amc-mode=decode,lcd-planes=on"
-        + ",boot-args=\(Self.bootArgs.replacingOccurrences(of: ",", with: ",,"))"
-        + ",boot-args-delay-ms=1500,boot-args-repeat=200,boot-args-interval-ms=250"
-        + ",direct-iboot=\(options.iBoot.replacingOccurrences(of: ",", with: ",,")),direct-llb="
-        + ",bootrom=\(options.bootrom)"
-        + ",nand=\(nandBase)"
-        + ",nor=\(options.nor)"
-        + ",nor-rw=\(writableNOR.path)"
-        + ",nandrw=\(overlay.path)"
-        if let usbSession {
-            machine += ",usb-tcp-addr=\(usbSession.guestAddress),osk=on"
-        }
-
-        if options.network {
-            machine += ",wifi=on"          // brings up the emulated BCM4325
-        }
-
-        do {
-            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"))
-        } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
-
-        var argv = [
-            "LightTouchMac",
-            "-M", machine,
-            "-m", options.memory,
-            "-display", "none",
-            "-no-shutdown",
-            "-audio", "driver=coreaudio,out.buffer-count=16",
-            "-serial", serialCapture?.argument ?? "null",
-        ]
-        if options.network {
-            var network = "user,id=wifi0"
-            if let helper = Bundled.resolve("itwebproxy", fallbacks: ["\(options.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"]) {
-                do {
-                    try webProxy.writeRouting()
-                    network += WebProxyConfiguration.guestForward(helper: helper)
-                    webProxyAvailable = true
-                } catch {
-                    webProxyStatus = .failed
-                    logEvent("proxy routing: \(error.localizedDescription)")
-                }
-            }
-            argv += ["-netdev", network]
-        }
-        argv += restoreArgs(overlay: overlay)      // -incoming, if a snapshot is trusted
-
-        logEmulatorBuild()
-        qemu_ios_ui_attach(nil, nil)
-
-        let thread = Thread {
-            // First boot of a packaged app: inflate the device image before
-            // QEMU opens it. On this thread, not main — it takes a while and
-            // the window already says "Booting…".
-            if let nandUnpack, !Self.unpackNAND(nandUnpack.packed, into: nandUnpack.dest) {
-                DispatchQueue.main.async { self.qemuDidExit(code: 1) }
-                return
-            }
-            var cargs = argv.map { strdup($0) }
-            cargs.append(nil)
-            let rc = qemu_ios_main(Int32(argv.count), &cargs)
-            // qemu_ios_main only returns when the VM stops. Observe it — a
-            // discarded return is why a dead emulator looked alive. self is the
-            // app-lifetime controller and the thread ends right after this, so a
-            // strong capture just bridges the hop to main (weak here only warred
-            // with the outer closure's implicit strong capture).
-            DispatchQueue.main.async { self.qemuDidExit(code: rc) }
-        }
-        thread.name = "qemu-main"
-        thread.qualityOfService = .userInteractive
-        thread.stackSize = 16 << 20
-        thread.start()
-
-        startMediaPreparation()
-        verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
-        startOrientationWatch()   // idle until the guest is up and reachable
-        startTimeZoneSync()       // guest zone follows the Mac's, incl. travel
-        startForegroundWatch()
+        openSerialLog()
+        let netdev = options.network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
+        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: options.iBoot, bootrom: options.bootrom, nand: nand,
+                                     nor: options.nor, writableNOR: writableNOR.path, overlay: overlay.path,
+                                     usbAddress: usbSession?.guestAddress, wifi: options.network, memory: options.memory),
+                               serial: serialCapture?.argument ?? "null",
+                               audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
+                               netdev: netdev, restore: restoreArgs(overlay: overlay))   // -incoming, if a snapshot is trusted
     }
 
-    #if DEBUG
-    /// Screen geometry is Swift constants; log if the loaded dylib disagrees.
-    private func checkScreenGeometry() {
-        guard let info = qemu_ios_device_info(profile.machineName)?.pointee else {
-            logEvent("display: libqemu-arm.dylib does not know machine \(profile.machineName)")
-            return
-        }
-        let reported = CGSize(width: Int(info.screen_width), height: Int(info.screen_height))
-        if reported != profile.screenPixels {
-            logEvent("display: \(profile.machineName) is \(profile.screenPixels) in DeviceProfile but \(reported) in the dylib")
-        }
-    }
-    #endif
-
-    /// iPad 1: kernel-direct boot from a K48KBOOT bundle over the read-only
-    /// golden NAND, with this device's writes in its copy-on-write overlay
-    /// (so Erase is "delete the overlay", as for the iPod). USB goes to the
-    /// same usbmuxd bridge; host keys go to an emulated USB keyboard. Snapshots
-    /// work as for the iPod (RAM in the migration stream, flash in the overlay);
-    /// no media or guest agent yet — see docs/ipad1-in-app.md.
-    private func startIPad1() {
+    /// iPad 1: kernel-direct boot from a K48KBOOT bundle over a read-only NAND,
+    /// with this device's writes in its copy-on-write overlay (so Erase is
+    /// "delete the overlay", as for the iPod). A prepared device boots its own
+    /// base/ (kboot.bin, nand/, its die id and writable NOR); a development one
+    /// the files it was adopted from. USB goes to the device's usbmuxd bridge;
+    /// host keys to an emulated USB keyboard.
+    private func iPadBoot() -> BootConfig? {
         let overlay = overlayURL
+        let kboot: String, nand: String, writableNOR: String?, dieID: String?
         do {
-            let base = try DeviceStateStorage.developmentImageIdentity(
-                at: URL(fileURLWithPath: options.ipad1NAND), key: imageKey)
-            guard try DeviceStateStorage.pinOverlay(overlay, toBase: base) else {
+            let identity: String
+            if instance.base.kind == .prepared {
+                let files = try BootRecipe.preparedFiles(base: instance.paths.base, overlay: overlay,
+                                                         writableNOR: instance.paths.writableNOR)
+                (kboot, nand, writableNOR, dieID) = (files.kboot.path, files.nand.path, files.writableNOR?.path, instance.identity?.dieID)
+                identity = instance.storage.key
+            } else {
+                (kboot, nand, writableNOR, dieID) = (options.ipad1KBoot, options.ipad1NAND, nil, nil)
+                identity = try DeviceStateStorage.developmentImageIdentity(at: URL(fileURLWithPath: nand), key: imageKey)
+            }
+            guard try DeviceStateStorage.pinOverlay(overlay, toBase: identity) else {
                 baseImageMismatch = true
                 reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
                 state = .dead(exitCode: 1)
-                return
+                return nil
             }
         } catch {
             reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
             state = .dead(exitCode: 1)
-            return
+            return nil
         }
         let usbSession = options.appsync
-            ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: options.ipad1NAND, overlay: overlay.path)
+            ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: nand, overlay: overlay.path)
             : nil
-        do {
-            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"))
-        } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
-
-        let escape = { (path: String) in path.replacingOccurrences(of: ",", with: ",,") }
-        var machine = "ipad1,kboot=\(escape(options.ipad1KBoot)),nand=\(escape(options.ipad1NAND))"
-            + ",nand-overlay=\(escape(overlay.path))"
-        // Without a bridge the machine's built-in USB host keeps it charging.
-        if let usbSession { machine += ",usb-tcp-addr=\(usbSession.guestAddress)" }
-        // Wi-Fi is the machine's default: the BCM4329 on a slirp netdev (user,id=wifi0) it creates
-        // itself. Stock 3.2.2 joins the model's open "qemu-ios" network; guest 10.0.2.15, host 10.0.2.2.
-        if !options.network { machine += ",wifi=off" }
-        // No -m: the machine's default is the K48's 256 MiB.
-        var argv = [
-            "LightTouchMac",
-            "-M", machine,
-            "-display", "none",
-            "-no-shutdown",
-            "-serial", serialCapture?.argument ?? "null",
-            // On the always-on EHCI (hsic-enabled in the kboot DT). It becomes
-            // the active keyboard, so qemu_ios_ui_key_mac types into it.
-            "-device", "usb-kbd,bus=usb-bus.0",
-        ]
+        openSerialLog()
         // The web proxy, as on the iPod: itwebproxy on a slirp guestfwd at 10.0.2.100:3128. This
         // explicit wifi0 replaces the machine's own. The golden image's Wi-Fi service carries a PAC that
         // uses the proxy and falls back to DIRECT, so Proxy off is purely host-side (itwebproxy "off").
-        if options.network, let helper = Bundled.resolve("itwebproxy", fallbacks: ["\(options.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"]) {
-            do {
-                try webProxy.writeRouting()
-                argv += ["-netdev", "user,id=wifi0" + WebProxyConfiguration.guestForward(helper: helper)]
-                webProxyAvailable = true
-            } catch {
-                webProxyStatus = .failed
-                logEvent("proxy routing: \(error.localizedDescription)")
-            }
-        }
+        let netdev = options.network ? proxyForward().map { "user,id=wifi0" + $0 } : nil
         // After the overlay pin check above, so a snapshot only ever resumes
         // over the overlay it was saved with.
-        argv += restoreArgs(overlay: overlay)      // -incoming, if a snapshot is trusted
-        logEmulatorBuild()
-        qemu_ios_ui_attach(nil, nil)
-        let thread = Thread {
-            var cargs = argv.map { strdup($0) }
-            cargs.append(nil)
-            let rc = qemu_ios_main(Int32(argv.count), &cargs)
-            DispatchQueue.main.async { self.qemuDidExit(code: rc) }
+        return BootRecipe.iPad(.init(kboot: kboot, nand: nand, overlay: overlay.path, dieID: dieID, writableNOR: writableNOR,
+                                     usbAddress: usbSession?.guestAddress, wifi: options.network),
+                               serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev,
+                               restore: restoreArgs(overlay: overlay))
+    }
+
+    private func openSerialLog() {
+        do {
+            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"))
+        } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
+    }
+
+    /// The guestfwd for itwebproxy, reading this device's routing file; nil
+    /// when the helper is missing or the routing can't be written.
+    private func proxyForward() -> String? {
+        guard let helper = Bundled.resolve("itwebproxy", fallbacks: ["\(options.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"]) else { return nil }
+        do {
+            try webProxy.writeRouting(in: proxyDirectory)
+            webProxyAvailable = true
+            return WebProxyConfiguration.guestForward(helper: helper, directory: proxyDirectory)
+        } catch {
+            webProxyStatus = .failed
+            logEvent("proxy routing: \(error.localizedDescription)")
+            return nil
         }
-        thread.name = "qemu-main"
-        thread.qualityOfService = .userInteractive
-        thread.stackSize = 16 << 20
-        thread.start()
-        verifyRestoreIfNeeded()   // a bad restore self-heals within one relaunch
-        startForegroundWatch()
-        startTimeZoneSync()       // lockdown-tz child process, as on the iPod
-        startInterfaceOrientationWatch()
+    }
+
+    /// Status is read from the helper's shared block: the old per-frame poll,
+    /// now on its own timer so a hidden device (no display link) still flips
+    /// booting -> running, notices storage failures and its power-off.
+    private func startStatusPoll() {
+        statusTimer?.invalidate()
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollStorageFailure() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        statusTimer = timer
+    }
+
+    /// For a restart: stop this device's tasks and usbmuxd, kill its helper if
+    /// it is still running, and wait until it is gone. False if it would not exit.
+    func release() async -> Bool {
+        releasing = true
+        stop()
+        guard let process, process.link.pid > 0 else { return true }
+        if !process.isDead { process.kill() }
+        return await process.waitForExit(timeout: 10)
     }
 
     /// Existing images need the same media engine/configuration as newly
@@ -482,13 +470,13 @@ final class EmulatorController {
                 // must not receive it (that would open Spotlight). Do this
                 // once per cold boot, preserving sleep in restored sessions.
                 guard !isDead, !shuttingDown else { return }
-                if !restoringFromSnapshot, qemu_ios_ui_display_sleeping() {
+                if !restoringFromSnapshot, status?.displaySleeping == true {
                     logEvent("boot: waking the display after device preparation")
                     pressHome()
                     for _ in 0..<20 {
                         try await Task.sleep(for: .milliseconds(100))
                         guard generation == bootGeneration, !isDead, !shuttingDown else { return }
-                        if !qemu_ios_ui_display_sleeping() { break }
+                        if status?.displaySleeping != true { break }
                     }
                 }
                 try Task.checkCancellation()
@@ -534,10 +522,16 @@ final class EmulatorController {
         }
     }
 
+    /// App quit (after the clean shutdowns) and restarts. The helper gets
+    /// SIGTERM: a guest that already powered off quits at once; one that
+    /// didn't gets the helper's own bounded clean shutdown after we are gone.
     func stop() {
         connectionRecoveryTask?.cancel()
-        // The VM remains alive under -no-shutdown until process exit. Unlink
-        // owned FIFO paths now, keeping readers alive until QEMU is finished.
+        statusTimer?.invalidate()
+        statusTimer = nil
+        process?.terminate()
+        // Unlink the owned FIFO paths now, keeping readers alive until the
+        // helper is finished writing.
         serialCapture?.removeEndpoints()
         mediaPreparationTask?.cancel()
         foregroundTask?.cancel()
@@ -604,10 +598,14 @@ final class EmulatorController {
         return true
     }
 
-    /// The QEMU thread returned — the VM is gone for this process (QEMU can't
-    /// re-init). Flip to `.dead`; the window shows a relaunch overlay.
-    private func qemuDidExit(code: Int32) {
+    /// The helper is gone (QEMU returned, it crashed or was killed). Flip to
+    /// `.dead`; the window shows a Restart overlay, and the other devices keep running.
+    private func helperDied(_ reason: String) {
         guard !isDead else { return }
+        deathReason = reason
+        statusTimer?.invalidate()
+        statusTimer = nil
+        audioSink?(.audioEnded(generation: 0, failed: true))
         // A VM that exited on its own ran the overlay PAST any saved snapshot;
         // restoring stale RAM onto an advanced NAND is worse than a cold boot,
         // so drop the snapshot (unless a clean save is in progress).
@@ -619,17 +617,17 @@ final class EmulatorController {
         usbmux.stop()
         serialCapture?.finish()
         serialCapture = nil
-        state = .dead(exitCode: code)
+        state = .dead(exitCode: nil)
     }
 
     // MARK: - Liveness
 
-    /// When the guest last painted a new frame. Advanced by DisplayView on every
-    /// fresh serial; the signal behind `booting → running` and the snapshot
+    /// When the guest last painted a new frame. Advanced by the status poll on
+    /// every new ring serial; the signal behind `booting → running` and the snapshot
     /// health gate — a 100%-CPU wedge stops painting.
     private(set) var lastFrameAdvance = Date.distantPast
 
-    func noteFrameAdvanced() {
+    private func noteFrameAdvanced() {
         lastFrameAdvance = Date()
         if state == .booting, !poweringOn { state = .running }
     }
@@ -641,23 +639,29 @@ final class EmulatorController {
         Date().timeIntervalSince(lastFrameAdvance) < 2.0
     }
 
-    var storageFailed: Bool { qemu_ios_ui_storage_failed() }
+    var storageFailed: Bool { status?.storageFailed ?? false }
+    /// The guest agent, live: 0 absent or not running, 1 alive, 2 stale.
+    var liveAgentStatus: Int { status?.agentStatus ?? 0 }
 
     private var lastAgentStatusCheck = Date.distantPast
-    private var agentStatus: Int32 = 0
+    private var agentStatus = 0
     var agentStatusText: String {
         guard state == .running || state == .paused else { return "Waiting for device" }
         return agentStatus == 1 ? "Connected" : agentStatus == 2 ? "Not responding" : "Unavailable"
     }
 
     func pollStorageFailure() {
+        guard let status else { return }
+        if status.frameSerial != lastFrameSerial {
+            lastFrameSerial = status.frameSerial
+            noteFrameAdvanced()
+        }
         let now = Date()
         if now.timeIntervalSince(lastAgentStatusCheck) >= 1 {
             lastAgentStatusCheck = now
-            let value = qemu_ios_agent_status()
-            if value != agentStatus { agentStatus = value; onStatusChange?() }
+            if status.agentStatus != agentStatus { agentStatus = status.agentStatus; onStatusChange?() }
         }
-        if !poweringOn, qemu_ios_ui_guest_shutdown_confirmed(), !isDead, !isPoweredOff {
+        if !poweringOn, status.shutdownConfirmed, !isDead, !isPoweredOff {
             // Publish terminal state before observable fields: their callbacks
             // must never render a stale running/sleeping subtitle mid-shutdown.
             state = .poweredOff
@@ -668,7 +672,7 @@ final class EmulatorController {
             discardSavedState()
         }
         if state == .running, !preparingMedia, !shuttingDown {
-            isSleeping = qemu_ios_ui_display_sleeping()
+            isSleeping = status.displaySleeping
         } else if isSleeping {
             isSleeping = false
         }
@@ -708,17 +712,12 @@ final class EmulatorController {
         }
     }
 
-    /// Which libqemu-arm.dylib this process actually loaded, and when it was
-    /// built. The dylib lives in a build tree other sessions rebuild under our
-    /// feet; when "did this run have that fix?" comes up, this answers it.
+    /// Which libqemu-arm.dylib this device's helper loaded, and when it was
+    /// built (its hello). The dylib lives in a build tree other sessions rebuild
+    /// under our feet; when "did this run have that fix?" comes up, this answers it.
     var dylibProvenance: String {
-        guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2) /* RTLD_DEFAULT */,
-                              "qemu_ios_main") else { return "dylib: symbol not found" }
-        var info = Dl_info()
-        guard dladdr(sym, &info) != 0, let name = info.dli_fname else { return "dylib: unknown" }
-        let path = String(cString: name)
-        let built = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate]
-        return "dylib: \(path) (built \(built.map(String.init(describing:)) ?? "unknown"))"
+        guard let info = process?.info else { return "dylib: helper not connected" }
+        return "dylib: \(info.dylibPath) (built \(Date(timeIntervalSince1970: info.dylibModified)), build \(info.buildID ?? "unknown"))"
     }
 
     private func logEmulatorBuild() { logEvent("emulator \(dylibProvenance)") }
@@ -731,32 +730,40 @@ final class EmulatorController {
 
     private static let holdInterval: TimeInterval = 0.10
     
-    private func tapButton(_ button: Int32) {
-        qemu_ios_ui_button(button, true)
-        // Release off the main queue: qemu_ios_ui_button is BH-marshalled and
-        // thread-safe, so a stalled main runloop must not be what holds a
-        // hardware button down in the guest.
+    /// The emulator's button numbers (qemu-ios-ui.h).
+    enum Button: Int { case home = 0, power, volumeUp, volumeDown }
+
+    private func tapButton(_ button: Button) {
+        guard let link else { return }
+        link.send(.button(button.rawValue, down: true))
+        // Release off the main queue (send is thread-safe and ordered), so a
+        // stalled main runloop must not be what holds a hardware button down.
         DispatchQueue.global().asyncAfter(deadline: .now() + Self.holdInterval) {
-            qemu_ios_ui_button(button, false)
+            link.send(.button(button.rawValue, down: false))
         }
     }
     
-    func pressHome()       { tapButton(Int32(QEMU_IOS_BUTTON_HOME)) }
-    func pressLock()       { tapButton(Int32(QEMU_IOS_BUTTON_POWER)) }
-    func pressVolumeUp()   { tapButton(Int32(QEMU_IOS_BUTTON_VOLUME_UP)) }
-    func pressVolumeDown() { tapButton(Int32(QEMU_IOS_BUTTON_VOLUME_DOWN)) }
-    func rotateLeft()      { qemu_ios_ui_rotate(false) }
-    func rotateRight()     { qemu_ios_ui_rotate(true) }
+    func pressHome()       { tapButton(.home) }
+    func pressLock()       { tapButton(.power) }
+    func pressVolumeUp()   { tapButton(.volumeUp) }
+    func pressVolumeDown() { tapButton(.volumeDown) }
+    func rotateLeft()      { link?.send(.rotate(clockwise: false)) }
+    func rotateRight()     { link?.send(.rotate(clockwise: true)) }
     private(set) var shakeGeneration: UInt64 = 0
     func shake() {
-        qemu_ios_ui_shake()
+        link?.send(.shake)
         shakeGeneration &+= 1
     }
 
-    private typealias USBConnectionSetter = @convention(c) (Bool) -> Bool
-    private var usbConnectionSetter: USBConnectionSetter? {
-        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "qemu_ios_ui_usb_connection") else { return nil }
-        return unsafeBitCast(symbol, to: USBConnectionSetter.self)
+    /// A control request; `done(true)` when the machine applied it (false on a
+    /// machine without the control, the iPod, or from a helper that's gone).
+    private func control(_ request: LinkRequest, _ done: @escaping (Bool) -> Void = { _ in }) {
+        guard let link else { return done(false) }
+        link.request(request) { reply in
+            MainActor.assumeIsolated {
+                if case .success(.ok(true)) = reply { done(true) } else { done(false) }
+            }
+        }
     }
     // MARK: Battery, charger and compass
     //
@@ -768,18 +775,12 @@ final class EmulatorController {
     func setBattery(level: Int? = nil, charging: Int32? = nil) {
         let level = level ?? batteryLevel ?? 80
         let charging = charging ?? batteryCharging
-        guard qemu_ios_ui_battery(Int32(level), charging) else { return }
-        batteryLevel = level
-        batteryCharging = charging
+        control(.battery(level: level, charging: Int(charging))) { [weak self] applied in
+            guard applied, let self else { return }
+            batteryLevel = level
+            batteryCharging = charging
+        }
     }
-
-    /// Optional entry points: absent from dylibs that predate them, and they
-    /// return false on a machine without the control (the iPod).
-    private func bridgeCall<T>(_ name: String, as type: T.Type) -> T? {
-        dlsym(UnsafeMutableRawPointer(bitPattern: -2), name).map { unsafeBitCast($0, to: type) }
-    }
-    private typealias BoolControl = @convention(c) (Bool) -> Bool
-    private typealias IntControl = @convention(c) (Int32) -> Bool
 
     /// Whether the built-in USB host grants a high-power port's current. The
     /// usbmuxd bridge always does, as a Mac does, so this only matters with
@@ -787,25 +788,30 @@ final class EmulatorController {
     private(set) var highPowerUSB = true
     var canChooseUSBCharger: Bool { usbmux.session == nil && profile.canChooseUSBCharger }
     func setHighPowerUSB(_ on: Bool) {
-        guard bridgeCall("qemu_ios_ui_usb_charger", as: BoolControl.self)?(on) == true else { return }
-        highPowerUSB = on
-        // The host grants current at enumeration: replug so it asks again.
-        guard usbConnectionSetter?(false) == true else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { _ = self.usbConnectionSetter?(true) }
+        control(.usbCharger(on)) { [weak self] applied in
+            guard applied, let self else { return }
+            highPowerUSB = on
+            // The host grants current at enumeration: replug so it asks again.
+            control(.usbConnection(false)) { [weak self] unplugged in
+                guard unplugged else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.control(.usbConnection(true)) }
+            }
+        }
     }
 
     private(set) var compassHeading: Int?
     var hasCompass: Bool { profile.hasCompass }
     func setCompassHeading(_ degrees: Int) {
-        guard bridgeCall("qemu_ios_ui_compass", as: IntControl.self)?(Int32(degrees)) == true else { return }
-        compassHeading = degrees
+        control(.compass(degrees)) { [weak self] applied in if applied { self?.compassHeading = degrees } }
     }
     // Location comes later (a4-iboot's location responder); it will sit here
-    // beside the compass with the same bridgeCall shape.
+    // beside the compass as another control request.
 
     private(set) var usbConnected = true
     private func reconnectUSB() {
-        if !usbConnected, usbConnectionSetter?(true) == true {
+        guard !usbConnected else { return }
+        control(.usbConnection(true)) { [weak self] attached in
+            guard attached, let self else { return }
             usbConnected = true
             deviceReachable = nil
         }
@@ -823,7 +829,7 @@ final class EmulatorController {
     func setTilt(angle: Double, pitch: Double = 0) {
         guard acceptsInput, !isSleeping else { return }
         let roll = -atan2(sin(angle), cos(angle)) * 180 / .pi
-        qemu_ios_ui_attitude(pitch * 180 / .pi, roll, Int32(motionPose.rawValue))
+        link?.send(.attitude(pitch: pitch * 180 / .pi, roll: roll, pose: motionPose.rawValue))
     }
 
     /// The device's orientation as degrees turned clockwise from portrait —
@@ -862,7 +868,12 @@ final class EmulatorController {
     @discardableResult
     private func setAccelerometer(for degrees: Int) -> Bool {
         guard profile.orientationSource == .springBoard, let value = [0: 1, 90: 4, 180: 2, 270: 3][degrees] else { return false }
-        return bridgeCall("qemu_ios_ui_orientation", as: IntControl.self)?(Int32(value)) == true
+        // The machine answers asynchronously now; only an iPad takes this path,
+        // and it always has the control, so a refusal is just logged.
+        control(.orientation(value)) { applied in
+            if !applied { logEvent("rotation: the device refused orientation \(value)") }
+        }
+        return true
     }
 
     /// Quarter-turn our way to `target`, the short way round. Every step goes
@@ -1132,15 +1143,15 @@ final class EmulatorController {
 
     func sendKey(macKeyCode: UInt16, down: Bool) {
         guard !down || (keyboardInputEnabled && acceptsInput && !isSleeping) else { return }
-        qemu_ios_ui_key_mac(Int32(macKeyCode), down)
+        link?.send(.key(macKeyCode: Int(macKeyCode), down: down))
     }
     
     // MARK: - Machine control
 
-    func pause()  { qemu_ios_ui_pause();  if state == .running { state = .paused } }
+    func pause()  { link?.send(.machine(.pause));  if state == .running { state = .paused } }
     func resume() {
         guard !storageFailed else { return }
-        qemu_ios_ui_resume()
+        link?.send(.machine(.resume))
         if state == .paused { state = .running }
     }
     /// The guest cold-boots portrait, so our tracked orientation has to follow
@@ -1191,7 +1202,7 @@ final class EmulatorController {
                 _ = await withSoftDeadline(20) { try? await self.syncFilesystem() }
             }
             guard !self.storageFailed, self.state != .snapshotting else { return }
-            qemu_ios_ui_reset()
+            self.link?.send(.machine(.reset))
             self.restoringFromSnapshot = false
             self.rotationDegrees = 0
             self.setAccelerometer(for: 0)
@@ -1224,21 +1235,22 @@ final class EmulatorController {
         rotationDegrees = 0
         setAccelerometer(for: 0)
         state = .booting
-        qemu_ios_ui_reset()
+        link?.send(.machine(.reset))
         Task { [weak self] in
             guard let self else { return }
             let deadline = ContinuousClock.now + .seconds(5)
             // system_reset is queued. Wait until the PMU reset clears its
-            // shutdown latch before resuming the stopped VM.
-            while qemu_ios_ui_guest_shutdown_confirmed(), ContinuousClock.now < deadline {
+            // shutdown latch (the helper republishes it at 20 Hz) before
+            // resuming the stopped VM.
+            while status?.shutdownConfirmed == true, ContinuousClock.now < deadline {
                 try? await Task.sleep(for: .milliseconds(50))
             }
-            guard !qemu_ios_ui_guest_shutdown_confirmed(), !self.isDead else {
+            guard status?.shutdownConfirmed == false, !self.isDead else {
                 self.poweringOn = false
                 self.state = .poweredOff
                 return
             }
-            qemu_ios_ui_resume()
+            link?.send(.machine(.resume))
             self.poweringOn = false
             self.startMediaPreparation()
             self.startForegroundWatch()
@@ -1295,7 +1307,22 @@ final class EmulatorController {
         }
     }
 
-    func pasteToGuest(_ text: String) { qemu_ios_ui_paste(text) }
+    func pasteToGuest(_ text: String) { link?.send(.paste(text)) }
+
+    /// Guest audio for a recording (ScreenMovieWriter). Its clock is the
+    /// dylib's: monotonic seconds since the capture started.
+    func startAudioCapture() async throws -> GuestAudioCapture {
+        guard let link, !isDead else { throw CaptureError.failed("The device is not ready to record audio.") }
+        let origin = ProcessInfo.processInfo.systemUptime
+        let capture = GuestAudioCapture(clock: { ProcessInfo.processInfo.systemUptime - origin },
+                                        stop: { generation in link.send(.audioStop(generation: generation)) })
+        audioSink = { [weak capture] event in capture?.receive(event) }
+        guard case let .audio(generation) = try await link.request(.audioStart) else {
+            throw CaptureError.failed("The device is not ready to record audio.")
+        }
+        capture.begin(generation: generation)
+        return capture
+    }
 
     // MARK: - Snapshot persistence
     //
@@ -1310,9 +1337,11 @@ final class EmulatorController {
     private var imageKey: String { instance.storage.key }
 
     private func snapshotIdentity() throws -> DeviceStateStorage.SnapshotIdentity {
-        guard let build = qemu_ios_build_id() else { throw CocoaError(.fileReadCorruptFile) }
+        guard let build = process?.info?.buildID else { throw CocoaError(.fileReadCorruptFile) }
         let nand: String
-        if profile == .iPad1 {
+        if instance.base.kind == .prepared {
+            nand = instance.storage.key
+        } else if profile == .iPad1 {
             nand = try DeviceStateStorage.developmentImageIdentity(
                 at: URL(fileURLWithPath: options.ipad1NAND), key: imageKey)
         } else if let packedImage {
@@ -1321,7 +1350,7 @@ final class EmulatorController {
             nand = try DeviceStateStorage.developmentImageIdentity(
                 at: URL(fileURLWithPath: options.nandImage), key: imageKey)
         }
-        return .init(emulatorBuild: String(cString: build), nand: nand)
+        return .init(emulatorBuild: build, nand: nand)
     }
 
     private var snapshotURL: URL { instance.paths.snapshot }
@@ -1368,7 +1397,7 @@ final class EmulatorController {
         }
         // The snapshot holds RAM; the overlay holds flash. They are only a
         // matching pair if nothing wrote to flash after the save. An observed
-        // exit already discards for this reason (qemuDidExit), but a crash or a
+        // exit already discards for this reason (helperDied), but a crash or a
         // SIGKILL — Xcode's stop button, a force quit — never gets there, so a
         // "Save State Now" followed by an hour of play and a kill would restore
         // hour-old RAM onto an hour-newer filesystem. Stale HFS+ journal and
@@ -1408,7 +1437,8 @@ final class EmulatorController {
             logEvent("snapshot: restored state never came alive — quarantining, cold-booting")
             self.quarantineSnapshot()
             self.reportDeviceNotice("The saved state could not be restored. The device will start fresh; installed apps and files are kept. Open Device Logs for details.", for: .restore)
-            self.quitForRelaunch(reason: "restored state never came alive")
+            logEvent("relaunch: restored state never came alive — restarting the device with a cold boot")
+            self.onRestartRequested?()
         }
     }
 
@@ -1427,7 +1457,7 @@ final class EmulatorController {
         // (gles-host-snapshot). Only an iOS-host EAGL build can't, and there
         // the emulator itself refuses with a migration blocker, which lands in
         // the ordinary failed-save path below.
-        if qemu_ios_gles_contexts() > 0 { logEvent("snapshot: saving with live GL state") }
+        if (status?.glesContexts ?? 0) > 0 { logEvent("snapshot: saving with live GL state") }
         Task { [weak self] in
             guard let self else { completion(false); return }
             guard await self.proveAlive() else {
@@ -1436,7 +1466,7 @@ final class EmulatorController {
                 // already durable (fmss_store_page renames per page), so an old
                 // snapshot restored now would put stale RAM — stale HFS journal,
                 // buffer cache, inode state — on top of a NAND that has moved
-                // on. That is corruption, not just a wedge. qemuDidExit already
+                // on. That is corruption, not just a wedge. helperDied already
                 // discards for exactly this reason; the health-gate path must
                 // agree. Quarantine (never delete the overlay) so it stays
                 // diagnosable and the next launch cold-boots.
@@ -1448,13 +1478,16 @@ final class EmulatorController {
             guard self.isRunning else { completion(false); return }
             self.state = .snapshotting
             try? FileManager.default.removeItem(at: self.snapshotTmpURL)
-            qemu_ios_snapshot_save2(self.snapshotTmpURL.path)
+            self.link?.send(.snapshotSave(path: self.snapshotTmpURL.path))
 
+            // QemuIosSnapshotStatus: 0 idle, 1 running, 2 done, 3 failed.
             let deadline = Date().addingTimeInterval(15)
-            while Date() < deadline {
-                var buf = [CChar](repeating: 0, count: 256)
-                let status = qemu_ios_snapshot_status(&buf, 256)
-                if status == QEMU_IOS_SNAPSHOT_DONE {
+            while Date() < deadline, !self.isDead {
+                guard case let .snapshot(status, error)? = try? await self.link?.request(.snapshotStatus, timeout: 2) else {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    continue
+                }
+                if status == 2 {
                     guard !self.storageFailed else {
                         self.resumeAfterFailedSave(); completion(false); return
                     }
@@ -1468,9 +1501,10 @@ final class EmulatorController {
                     }
                     completion(true); return
                 }
-                if status == QEMU_IOS_SNAPSHOT_FAILED {
-                    logEvent("snapshot: save failed: \(String(cString: buf))")
-                    self.snapshotFailureReason = String(cString: buf)
+                if status == 3 {
+                    logEvent("snapshot: save failed: \(error ?? "")")
+                    self.snapshotFailureReason = error ?? "The device's state could not be saved."
+
                     try? FileManager.default.removeItem(at: self.snapshotTmpURL)
                     self.resumeAfterFailedSave(); completion(false); return
                 }
@@ -1496,7 +1530,7 @@ final class EmulatorController {
     /// (Save State Now resumes; the quit path is about to exit).
     private func resumeAfterFailedSave() {
         guard state == .snapshotting else { return }
-        qemu_ios_snapshot_resume()
+        link?.send(.snapshotResume)
         state = .running
     }
 
@@ -1546,7 +1580,13 @@ final class EmulatorController {
     static let preparationShutdownBudget: TimeInterval = 5
     static let haltShutdownBudget: TimeInterval = 30
     static let syncShutdownBudget: TimeInterval = 20
-    static let cleanShutdownBudget: TimeInterval = preparationShutdownBudget + haltShutdownBudget + syncShutdownBudget + 5
+    /// iPad power-offs take 16–25 s on iOS 4.2.1 and once passed 30 s, which left
+    /// the FTL unclosed (a rescan on the next boot). LightTouchDevice's
+    /// DeviceHost.iPadPowerdownBudget is the same for its parent-death path.
+    static let iPadPowerdownBudget: TimeInterval = 45
+    /// The quit backstop; it covers both boards' ladders (iPad: 5 + 45).
+    static let cleanShutdownBudget: TimeInterval = max(preparationShutdownBudget + haltShutdownBudget + syncShutdownBudget,
+                                                       preparationShutdownBudget + iPadPowerdownBudget) + 5
 
     func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
         if isPoweredOff { completion(true); return }
@@ -1562,7 +1602,7 @@ final class EmulatorController {
         connectionRecoveryTask?.cancel()
         orientationTask?.cancel()
         foregroundTask?.cancel()
-        qemu_ios_snapshot_resume()   // a paused vCPU cannot unmount
+        link?.send(.snapshotResume)   // a paused vCPU cannot unmount
         if state == .paused { state = .running }
         shutdownCompletions = [completion]
         let preparation = mediaPreparationTask
@@ -1578,21 +1618,21 @@ final class EmulatorController {
                 } ?? false
                 if !drained { logEvent("quit: device preparation did not finish cancelling in time") }
             }
-            let confirmed = { !self.storageFailed && qemu_ios_ui_guest_shutdown_confirmed() }
+            let confirmed = { !self.storageFailed && self.status?.shutdownConfirmed == true }
             let stopped = { self.storageFailed || self.isDead }
             if profile == .iPad1 {
                 // No guest tools on a stock iPad: the machine turns
                 // system_powerdown into the user's power-off gesture (hold
                 // Lock, slide), and the D1815 power-off write confirms it.
-                qemu_ios_ui_powerdown()
+                self.link?.send(.machine(.powerdown))
                 let clean = await DeviceStateStorage.waitForShutdown(
-                    until: Date().addingTimeInterval(Self.haltShutdownBudget),
+                    until: Date().addingTimeInterval(Self.iPadPowerdownBudget),
                     confirmed: confirmed, stopped: stopped)
                 if clean { logEvent("quit: guest confirmed power-off — volume unmounted") }
                 else if !stopped() { logEvent("quit: guest did not shut down — this session's writes may be lost") }
                 finishCleanShutdown(clean); return
             }
-            if self.canManageApps || qemu_ios_agent_status() == 1 {
+            if self.canManageApps || self.liveAgentStatus == 1 {
                 let haltDeadline = Date().addingTimeInterval(Self.haltShutdownBudget)
                 // During boot, USB can exist before sshd answers. Retry within
                 // one shared deadline instead of spending the whole timeout
@@ -1661,7 +1701,7 @@ final class EmulatorController {
             // exactly the "dead emulator looked alive" failure .dead exists to
             // prevent. It also silently un-paused a deliberately paused guest.
             guard self.state == .snapshotting else { return }
-            qemu_ios_snapshot_resume()
+            self.link?.send(.snapshotResume)
             self.state = .running
         }
     }
@@ -1695,8 +1735,9 @@ final class EmulatorController {
             || FileManager.default.fileExists(atPath: snapshotBadURL.path)
     }
 
-    /// Stop the guest and its native writers, erase this device, then quit.
-    /// No request is left behind for an unrelated future launch.
+    /// Stop the guest and its helper, erase this device, then start it fresh
+    /// (a running device) or leave it ready (a stopped one). The app keeps
+    /// running. No request is left behind for an unrelated future launch.
     func requestFactoryReset() {
         guard !isErasing else { return }
         // Nothing queued can land on an erased device: drop installs first
@@ -1711,16 +1752,16 @@ final class EmulatorController {
                 _ = await withCheckedContinuation { continuation in
                     beginCleanShutdown { continuation.resume(returning: $0) }
                 }
-                // Erasing intentionally discards the guest's data. The native
-                // VM must still release every NAND/NOR writer before removal.
-                qemu_ios_ui_quit()
+                // Erasing intentionally discards the guest's data. The helper
+                // must still release every NAND/NOR writer (exit) before removal.
+                link?.send(.machine(.quit))
                 let deadline = ContinuousClock.now + .seconds(15)
                 while !isDead, ContinuousClock.now < deadline {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
                 guard isDead else {
                     isErasing = false
-                    reportDeviceNotice("Couldn’t stop the device to erase it. Your data has not been erased. Reopen Light Touch and try again.", for: .erase)
+                    reportDeviceNotice("Couldn’t stop the device to erase it. Your data has not been erased. Try again.", for: .erase)
                     return
                 }
             }
@@ -1738,9 +1779,13 @@ final class EmulatorController {
                     }
                 }.value
                 resolveDeviceNotice(for: .erase)
-                logEvent("reset: device erased; closing Light Touch")
                 isErasing = false
-                AppDelegate.requestTermination()
+                if started {
+                    logEvent("reset: device erased; starting it fresh")
+                    onRestartRequested?()
+                } else {
+                    logEvent("reset: device erased")
+                }
             } catch {
                 isErasing = false
                 reportDeviceNotice("The device could not be completely erased: \(error.localizedDescription) Choose Erase All Content and Settings to try again.", for: .erase)
@@ -1758,19 +1803,6 @@ final class EmulatorController {
         try? FileManager.default.removeItem(at: snapshotBadURL.appendingPathExtension("meta"))
         try? FileManager.default.moveItem(at: snapshotURL.appendingPathExtension("meta"),
                                          to: snapshotBadURL.appendingPathExtension("meta"))
-    }
-
-    /// Quit, and leave reopening to the user.
-    ///
-    /// This used to `open -n` a successor. Two instances then existed at once
-    /// whenever our own exit was slow — which a wedged guest guarantees — and
-    /// they fought over one NAND overlay and one usbmuxd pid file. An app that
-    /// spawns copies of itself behind the user's back is the wrong shape for
-    /// this regardless: QEMU cannot re-init in-process, so "relaunch" is only
-    /// ever "quit, then the user reopens".
-    private func quitForRelaunch(reason: String) {
-        logEvent("relaunch: \(reason) — quitting; reopen the app to continue")
-        AppDelegate.requestTermination()
     }
 
     // MARK: - App management
@@ -1809,8 +1841,9 @@ final class EmulatorController {
         // The iPad has no guest shell: in-process lockdown services only (the
         // script fallback needs ssh and would sit at "Installing…" forever).
         return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot,
+                           proxyDirectory: proxyDirectory,
                            bakedGuestTools: !hasGuestTools || options.nand.contains("ultimate"),
-                           guestShell: hasGuestTools)
+                           guestShell: hasGuestTools, agent: link)
     }
     
     /// Cheap in-process check that the USB bridge sees the guest. App-service
@@ -1869,7 +1902,7 @@ final class EmulatorController {
             for _ in 0..<10 {
                 try await Task.sleep(for: .milliseconds(100))
                 guard acceptsInput else { throw AppLaunchError.unavailable }
-                if !qemu_ios_ui_display_sleeping() { break }
+                if status?.displaySleeping != true { break }
             }
         }
         try await tools().launchApp(bundleID)
@@ -1878,7 +1911,7 @@ final class EmulatorController {
     func syncFilesystem() async throws                   { try await tools().syncFilesystem() }
     func haltFilesystem() async throws {
         // Do not require a USB session to reach the independent guest channel.
-        if await DeviceTools.requestIndependentHalt() { return }
+        if await DeviceTools.requestIndependentHalt(agent: link) { return }
         try await tools().haltFilesystem()
     }
     func restartSpringBoard() async throws {
@@ -1971,18 +2004,6 @@ final class EmulatorController {
         return args
     }
 
-    private func setBootEnv() {
-        // The settings 3.1.3 will not boot without, plus the code-signing gate
-        // (values from contrib/run-ipod-touch.sh).
-        // No IT_LCD_BRIGHT override: it pinned the panel at full exposure, so
-        // the guest turning its backlight off (the Lock button's entire visible
-        // effect) never reached the window and Lock read as dead. The harness
-        // keeps the override — its checks count lit pixels.
-        let env = [
-            "IT_TVOUT_READY": "1",
-        ]
-        for (k, v) in env { setenv(k, v, 1) }
-    }
 }
 
 /// Splits a byte stream into whole lines across reads.

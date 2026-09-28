@@ -32,10 +32,17 @@ struct WebProxyConfiguration: Codable, Equatable {
         return formatter
     }
     var dateValue: Date { Self.dateFormatter.date(from: archiveDate) ?? Date() }
-    static var file: URL { Bundled.stateDirectory.appendingPathComponent("web-proxy.conf") }
-    static var preferencesFile: URL { Bundled.stateDirectory.appendingPathComponent("web-proxy.json") }
-    static func load() -> Self {
-        guard let data = try? Data(contentsOf: preferencesFile),
+    /// Where a device's routing (web-proxy.conf), preferences (web-proxy.json)
+    /// and proxy CA (web-proxy.conf.ca.*) live. The device that kept the
+    /// legacy pairing conf keeps the legacy state-directory files too, so the
+    /// CA its guest already trusts is unchanged; every other device has its own.
+    static func directory(for instance: DeviceInstance) -> URL {
+        instance.storage.usbmuxConf == "work/usbmuxd-conf" ? Bundled.stateDirectory : instance.paths.directory
+    }
+    static func file(in directory: URL) -> URL { directory.appendingPathComponent("web-proxy.conf") }
+    static func preferencesFile(in directory: URL) -> URL { directory.appendingPathComponent("web-proxy.json") }
+    static func load(from directory: URL) -> Self {
+        guard let data = try? Data(contentsOf: preferencesFile(in: directory)),
               let value = try? JSONDecoder().decode(Self.self, from: data) else { return Self() }
         return value
     }
@@ -47,18 +54,19 @@ struct WebProxyConfiguration: Codable, Equatable {
             }
         }
     }
-    func writeRouting() throws {
+    func writeRouting(in directory: URL) throws {
         try validate()
         let text = mode == .archive ? "archive\n\(archiveDate)\n" : "\(mode.rawValue)\n"
-        try Data(text.utf8).write(to: Self.file, options: .atomic)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: Self.file(in: directory), options: .atomic)
     }
-    func save() throws {
-        try writeRouting()
-        try JSONEncoder().encode(self).write(to: Self.preferencesFile, options: .atomic)
+    func save(in directory: URL) throws {
+        try writeRouting(in: directory)
+        try JSONEncoder().encode(self).write(to: Self.preferencesFile(in: directory), options: .atomic)
     }
-    static func guestForward(helper: String) -> String {
+    static func guestForward(helper: String, directory: URL) -> String {
         func quote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'" }
-        let command = quote(helper) + " " + quote(file.path)
+        let command = quote(helper) + " " + quote(file(in: directory).path)
         return ",guestfwd=tcp:10.0.2.100:3128-cmd:" + command.replacingOccurrences(of: ",", with: ",,")
     }
 }

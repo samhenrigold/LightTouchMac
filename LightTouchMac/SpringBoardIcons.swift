@@ -201,7 +201,7 @@ struct SpringBoardIcons: Sendable {
                 // libimobiledevice reads this at connect time, and it is what
                 // points it at *our* emulator's usbmuxd rather than a real device
                 // or another instance (they all report the same UDID).
-                setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
+                DeviceGate.point(at: socket)
 
                 var device: OpaquePointer?
                 guard idevice_new(&device, nil) == imd.success, let device else {

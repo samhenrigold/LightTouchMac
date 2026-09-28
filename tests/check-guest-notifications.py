@@ -19,7 +19,6 @@ import Dispatch
 nonisolated enum DeviceError: Error { case timedOut(operation: String), recovering }
 nonisolated enum Timeouts { static let serviceProbe = 0.025 }
 nonisolated func logEvent(_ message: String) { }
-nonisolated func qemu_ios_ui_icon_state_generation() -> UInt64 { 0 }
 
 nonisolated final class Library: @unchecked Sendable {
     static let shared = Library()
@@ -109,7 +108,7 @@ nonisolated enum IMobileDevice {
     @MainActor static func main() async throws {
         let library = Library.shared
         let activity = Activity()
-        let watcher = GuestNotifications(clientSocket: "127.0.0.1:1")
+        let watcher = GuestNotifications(clientSocket: "127.0.0.1:1") { 0 }
         func start() {
             watcher.start(attachAllowed: { await activity.canAttach() }) {
                 Task { @MainActor in activity.changed() }

@@ -74,9 +74,7 @@ int tilt_test_samples(void) { return samples; }
 swift = r'''import Cocoa
 import QuartzCore
 
-let QEMU_IOS_TOUCH_BEGIN: Int32 = 0
-let QEMU_IOS_TOUCH_UPDATE: Int32 = 1
-let QEMU_IOS_TOUCH_END: Int32 = 2
+enum TouchPhase { static let begin: Int32 = 0, update: Int32 = 1, end: Int32 = 2 }
 
 @MainActor class EventSink {
     func mouseDown(with event: NSEvent) {}
@@ -104,6 +102,9 @@ final class ScrollEvent: NSEvent {
         var motionPose = MotionPose.upright, rotationDegrees = 0
         var acceptsInput = true, isSleeping = false
         var keyboardTiltRate = 90.0
+        /// The helper's link: the attitude command reaches the same C model.
+        struct Link { func send(_ c: LinkCommand) { if case let .attitude(p, r, pose) = c { qemu_ios_ui_attitude(p, r, Int32(pose)) } } }
+        var link: Link? = Link()
 ''' + set_tilt + r'''
     }
     final class Window {
@@ -285,7 +286,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-tilt-game-") as directory:
     ], check=True)
     subprocess.run([
         "swiftc", "-parse-as-library", "-module-cache-path", str(work / "module-cache"),
-        "-import-objc-header", str(work / "bridge.h"), str(work / "check.swift"),
+        "-import-objc-header", str(work / "bridge.h"), str(root / "Shared/DeviceLinkProtocol.swift"), str(work / "check.swift"),
         str(work / "bridge.o"), "-o", str(work / "check"),
     ], check=True)
     subprocess.run([str(work / "check")], check=True)

@@ -12,11 +12,10 @@ power_on=s[a:b]
 source=r'''import Foundation
 struct DeviceToolsError: Error {static func failed(_ s:String)->Self{Self()}}
 @MainActor var sleeping=false
-@MainActor func qemu_ios_ui_guest_shutdown_confirmed()->Bool {false}
-@MainActor func qemu_ios_ui_reset(){}
-@MainActor func qemu_ios_ui_resume(){}
 @MainActor var queryHook:(()->Void)?
-@MainActor func qemu_ios_ui_display_sleeping()->Bool {queryHook?();return sleeping}
+/// The helper's status block (read live) and link (commands go nowhere).
+struct Status { var displaySleeping: Bool; var shutdownConfirmed = false }
+struct FakeLink { func send(_ c: LinkCommand) {} }
 @MainActor final class StubTools {
  var updates=0
  func updateMediaComponents() async throws -> Bool {updates+=1;return false}
@@ -31,6 +30,8 @@ struct DeviceToolsError: Error {static func failed(_ s:String)->Self{Self()}}
  var mediaPreparationFailure:String?,mediaPreparationTask:Task<Void,Never>?
  var bootGeneration=0,homes=0,rotationDegrees=0
  var poweringOn=false
+ var status:Status? { queryHook?(); return Status(displaySleeping: sleeping) }
+ var link:FakeLink?=FakeLink()
  var foregroundAppName:String?,deviceReachable:Bool?
  var isPoweredOff:Bool{state == .poweredOff}
  func reconnectUSB(){}
@@ -84,5 +85,5 @@ struct DeviceToolsError: Error {static func failed(_ s:String)->Self{Self()}}
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-wake-') as d:
  p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc', DEVICE_PROFILE,'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc', DEVICE_PROFILE,str(root/'Shared/DeviceLinkProtocol.swift'),'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=10)

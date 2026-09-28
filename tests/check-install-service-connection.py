@@ -41,6 +41,7 @@ nonisolated enum Bundled {
     static let frameworksDirectory: String? = CommandLine.arguments[1]
 }
 nonisolated struct InstproxyError: Equatable { let code: Int32 }
+nonisolated enum DeviceGate { static func point(at socket: String) { setenv("USBMUXD_SOCKET_ADDRESS", socket, 1) } }
 nonisolated enum DeviceError: Error, Equatable {
     case unavailable, notAttached, lockdown(Int32), instproxy(InstproxyError, phase: String?)
 }

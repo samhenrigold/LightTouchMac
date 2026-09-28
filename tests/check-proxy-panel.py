@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Exercise the real proxy panel's choices and transient status layout."""
+"""Exercise the real proxy panel's choices and transient status layout, and the
+per-device proxy files (each device's itwebproxy reads its own routing)."""
 from pathlib import Path
 import subprocess, tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
@@ -7,6 +8,12 @@ root = Path(__file__).resolve().parents[1]
 fixture = r'''import Cocoa
 struct Bundled { static let stateDirectory = URL(fileURLWithPath: NSTemporaryDirectory()) }
 enum DeviceToolsError: Error { case failed(String) }
+struct DeviceInstance {
+ struct Storage { var usbmuxConf: String }
+ struct Paths { var directory: URL }
+ var storage: Storage
+ var paths: Paths
+}
 func descendants(_ view: NSView) -> [NSView] {
  var children = view.subviews
  if let stack = view as? NSStackView {
@@ -17,6 +24,19 @@ func descendants(_ view: NSView) -> [NSView] {
 @main struct Check {
  @MainActor static func main() {
   NSTimeZone.default = TimeZone(identifier: CommandLine.arguments[1])!
+  // The device that kept the legacy pairing conf keeps the legacy files (its guest trusts that CA).
+  let legacy = DeviceInstance(storage: .init(usbmuxConf: "work/usbmuxd-conf"), paths: .init(directory: URL(fileURLWithPath: "/nonexistent")))
+  precondition(WebProxyConfiguration.directory(for: legacy) == Bundled.stateDirectory)
+  let own = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ltm-proxy-\(UUID().uuidString)")
+  defer { try? FileManager.default.removeItem(at: own) }
+  let other = DeviceInstance(storage: .init(usbmuxConf: "Devices/x/usbmuxd-conf"), paths: .init(directory: own))
+  precondition(WebProxyConfiguration.directory(for: other) == own)
+  precondition(WebProxyConfiguration.load(from: own) == WebProxyConfiguration(), "a new device starts with the proxy off")
+  let saved = WebProxyConfiguration(mode: .archive, archiveDate: "20100101")
+  try! saved.save(in: own)
+  precondition(WebProxyConfiguration.load(from: own) == saved)
+  precondition((try? String(contentsOf: WebProxyConfiguration.file(in: own), encoding: .utf8)) == "archive\n20100101\n")
+  precondition(WebProxyConfiguration.guestForward(helper: "/h", directory: own).contains(WebProxyConfiguration.file(in: own).path))
   _ = NSApplication.shared
   for mode in [WebProxyConfiguration.Mode.off, .direct, .archive] {
    let initial = WebProxyConfiguration(mode: mode, archiveDate: "20090909")

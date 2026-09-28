@@ -154,6 +154,10 @@ import Cocoa
         switch event {
         case let .step(index, count, name):
             if preparations[entry.id] != nil { jobs[entry.id] = .preparing(step: index, of: count, name: name) }
+        case let .progress(fraction):
+            if preparations[entry.id] != nil, case let .preparing(step, count, name, _)? = jobs[entry.id] {
+                jobs[entry.id] = .preparing(step: step, of: count, name: name, fraction: fraction)
+            }
         case let .warning(message): logEvent("firmware: \(entry.id): \(message)")
         case let .published(instance):
             preparations[entry.id] = nil

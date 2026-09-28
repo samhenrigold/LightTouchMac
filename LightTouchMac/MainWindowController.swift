@@ -378,26 +378,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func start(_ entry: FirmwareCatalog.Entry) {
         library.select(entry)
-        if let emulator = host.session(for: entry)?.emulator { emulator.powerOn(); return }
-        guard host.canStartAnother else { askToReopen(for: entry); return }
-        host.start(entry)
-    }
-
-    /// One device per launch until each has its own helper (W2): starting a
-    /// second means quitting, and the next launch starts the selection.
-    private func askToReopen(for entry: FirmwareCatalog.Entry) {
-        guard let window else { return }
-        let running = host.sessions.first.map { $0.instance.name } ?? "running device"
-        let alert = NSAlert()
-        alert.messageText = "Light Touch needs to reopen to start \(name(entry))"
-        alert.informativeText = "Light Touch shuts down the \(running) and quits. When you open it again, the \(entry.profile?.displayName ?? "device") starts."
-        alert.addButton(withTitle: "Reopen")
-        alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn, let self else { return }
-            host.lastSelection = entry
-            AppDelegate.requestTermination()
+        if let session = host.session(for: entry) {
+            if session.emulator.isDead { host.restart(session) } else { session.emulator.powerOn() }
+            return
         }
+        host.start(entry)
     }
 
     @objc func toggleDeviceRunning(_ sender: Any?) {
@@ -546,18 +531,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         overlay.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
         overlay.translatesAutoresizingMaskIntoConstraints = false
 
-        // A refused boot says why and offers the remedy; anything else relaunches.
+        // A refused boot says why and offers the remedy; anything else restarts
+        // the device in a fresh helper (the app and other devices keep running).
         let refused = emulator.baseImageMismatch
         let label = NSTextField(wrappingLabelWithString: refused
             ? "This \(emulator.profile.shortName)'s data was made with an older system image. Erase it to start fresh."
-            : "The emulator stopped.")
+            : emulator.deathReason ?? "The emulator stopped.")
         label.font = .systemFont(ofSize: 15, weight: .medium)
         label.textColor = .white
         label.alignment = .center
         label.preferredMaxLayoutWidth = 280
         let button = refused
             ? NSButton(title: "Erase…", target: self, action: #selector(eraseDevice(_:)))
-            : NSButton(title: "Relaunch", target: self, action: #selector(relaunchApp(_:)))
+            : NSButton(title: "Restart", target: self, action: #selector(restartDevice(_:)))
         button.bezelStyle = .rounded
         let stack = NSStackView(views: [label, button])
         stack.orientation = .vertical
@@ -576,18 +562,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         deadOverlay = overlay
     }
 
-    /// QEMU is once-per-process, so recovering means a fresh process. Launch a
-    /// new instance, then quit this dead one.
-    @objc private func relaunchApp(_ sender: Any?) {
-        // Exit BEFORE the successor starts. Launching first and terminating in
-        // the completion handler overlapped two processes on one NAND overlay,
-        // and the new instance's usbmuxd reaper would SIGTERM the old, live
-        // daemon. Same reasoning as EmulatorController.coldRelaunch.
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 1; open -n \"$1\"", "sh", Bundle.main.bundleURL.path]
-        try? task.run()
-        AppDelegate.requestTermination()
+    /// A fresh helper for the dead device (DeviceSessionHost.restart).
+    @objc private func restartDevice(_ sender: Any?) {
+        if let session { host.restart(session) }
     }
     
     /// Search Apps focuses the inspector search field in either mode.
@@ -972,7 +949,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     /// Factory-reset the device — the "nuke everything" button. Wipes the NAND
     /// overlay (all installed apps + settings) and any snapshot, back to the
-    /// base image, then relaunches. The base image is never touched.
+    /// base image; a running device then restarts. The base image is never touched.
     @objc func eraseDevice(_ sender: Any?) { selectedEntry.map { perform(.erase, for: $0) } }
 
     /// For a device that isn't running, a controller that never starts does
@@ -984,7 +961,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.messageText = "Erase all content and settings?"
         alert.informativeText = "This permanently removes all apps, settings, and saved state from this \(emulator.profile.shortName). "
             + (AppInstaller.hasPendingWork ? "Installs in progress are cancelled. " : "")
-            + "Light Touch closes after erasing it. This cannot be undone."
+            + (host.session(for: entry) != nil ? "It restarts after erasing. " : "")
+            + "This cannot be undone."
         alert.addButton(withTitle: "Erase")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -1353,10 +1331,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let canvas = captureMode == 0
         let source = workspace.canvasCapture
         let background = NSImage(named: "gradient")?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        let emulator = workspace.deviceVC.emulator
         recording.start(frame: { [weak screen] in
             if canvas { return try source.frame() }
             return screen?.captureFrame()
-        }, prepare: { [weak screen] in
+        }, audio: { try await emulator.startAudioCapture() }, prepare: { [weak screen] in
             if canvas {
                 screen?.isCapturingCanvas = true
                 try await source.start(); return source.outputSize

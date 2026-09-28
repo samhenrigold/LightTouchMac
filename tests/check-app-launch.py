@@ -16,7 +16,6 @@ code = r'''import Cocoa
 enum DeviceToolsError: LocalizedError { case failed(String); var errorDescription: String? { switch self { case .failed(let text): text } } }
 func logEvent(_ message: String) { }
 @MainActor var displaySleeping = false
-@MainActor func qemu_ios_ui_display_sleeping() -> Bool { displaySleeping }
 @MainActor final class DeviceTools {
  var bakedGuestTools = true
  var guestShell = true
@@ -41,6 +40,7 @@ func logEvent(_ message: String) { }
  let deviceTools = DeviceTools()
  func tools() throws -> DeviceTools { deviceTools }
  func pressHome() { wakes += 1; displaySleeping = false }
+ var status: (displaySleeping: Bool, Void)? { (displaySleeping, ()) }  // the helper's status block
 ''' + method(controller, '    func launchApp(_ bundleID: String) async throws {') + r'''
 }
 struct InstalledApp { let id: String; let name: String }

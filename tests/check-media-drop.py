@@ -12,6 +12,10 @@ started = inspector[a:inspector.index('\n    }', a) + 6].replace('private func',
 code = r'''import Cocoa
 @MainActor final class EmulatorController { var canQueueInstall = true }
 struct CatalogApp: Codable { let id: Int }
+@MainActor final class FirmwareJobs {
+ static let shared = FirmwareJobs(); var imported: [String] = []
+ func importIPSW(_ url: URL, for entry: Int?) { precondition(entry == nil); imported.append(url.lastPathComponent) }
+}
 enum PreparedMedia { static let extensions: Set<String> = ["png", "jpg", "mp3", "m4a", "mp4", "mov", "m4v"] }
 extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.catalog.app") }
 @MainActor final class DropView: NSView {
@@ -90,6 +94,12 @@ extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.ca
   view.onDropMedia = nil
   drag.files(["Photo.png"])
   precondition(view.draggingEntered(drag).isEmpty && !view.performDragOperation(drag))
+  // An IPSW goes to the library (matched by its SHA1), whatever the device is doing.
+  view.emulator!.canQueueInstall = false
+  drag.files(["iPad1,1_3.2.2_7B500_Restore.IPSW", "Notes.txt"])
+  precondition(view.draggingEntered(drag) == .copy && drag.numberOfValidItemsForDrop == 1)
+  precondition(view.performDragOperation(drag) && FirmwareJobs.shared.imported == ["iPad1,1_3.2.2_7B500_Restore.IPSW"])
+  view.emulator!.canQueueInstall = true
   drag.files(["App.ipa"])
   drag.draggingSource = NSTableView()
   precondition(view.draggingEntered(drag).isEmpty && !view.performDragOperation(drag))
@@ -119,7 +129,7 @@ extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.ca
   let queued = InstallJob()
   inspector.installStarted(Notification(name: .init("start"), object: queued))
   precondition(inspector.tableView.numberOfRows == 3 && inspector.tableView.lastVisibleRow == 2)
-  print("PASS: mixed Finder drops queue supported files, recheck readiness, reject missing handlers/internal IPA drags, preserve Store drags, and reveal external transfer progress")
+  print("PASS: mixed Finder drops queue supported files, recheck readiness, reject missing handlers/internal IPA drags, route IPSWs to the library, preserve Store drags, and reveal external transfer progress")
  }
 }
 '''

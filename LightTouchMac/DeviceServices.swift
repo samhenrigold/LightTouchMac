@@ -16,7 +16,10 @@
 //      from the watchdog side; that frees under a live library thread.
 //   2. One process-wide serial gate. setenv(USBMUXD_SOCKET_ADDRESS) is global
 //      and the guest serves ~one lockdown session, so all of this is one at a
-//      time. The gate does NOT bound the leaked threads on its own — what
+//      time — across devices too: with several running, the gate is what keeps
+//      each operation on its own device's usbmuxd (DeviceGate.point(at:)).
+//      Correct, but the devices wait for each other; the phase-4 option is to
+//      run these services inside each device's helper, one process per daemon. The gate does NOT bound the leaked threads on its own — what
 //      releases it is the deadline, not the thread — so they are counted
 //      (AbandonedWork) and the gate refuses new work past the cap.
 //   3. Errors are typed (the C libraries' own return codes), and the retry
@@ -439,7 +442,7 @@ struct DeviceServices: Sendable {
         let imd = IMobileDevice.self
         guard imd.isAvailable, let idevice_new = imd.idevice_new,
               imd.instproxy_install != nil else { throw DeviceError.unavailable }
-        setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
+        DeviceGate.point(at: socket)
         var device: OpaquePointer?
         guard idevice_new(&device, nil) == imd.success, let device else { throw DeviceError.notAttached }
         let client: OpaquePointer
@@ -613,7 +616,7 @@ struct DeviceServices: Sendable {
                     }
                     // Points the whole library at OUR emulator's usbmuxd rather than
                     // a real device or another instance (they share a UDID).
-                    setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
+                    DeviceGate.point(at: socket)
                     var device: OpaquePointer?
                     guard idevice_new(&device, nil) == imd.success, let device else {
                         throw DeviceError.notAttached
@@ -803,6 +806,25 @@ nonisolated final class SyncBox: @unchecked Sendable {
 /// body's awaits) is what enforces it.
 actor DeviceGate {
     static let shared = DeviceGate()
+
+    /// Points libimobiledevice at one device's usbmuxd. libusbmuxd reads
+    /// USBMUXD_SOCKET_ADDRESS on every connect and the variable is
+    /// process-wide, so this is only called inside `serialized`: the gate is
+    /// what keeps two running devices off each other's daemon.
+    /// ponytail: one gate for every device, so a long operation on one delays
+    /// the other; phase 4 can move the services into each device's helper.
+    /// The one way left to reach the wrong daemon is a thread abandoned past
+    /// its deadline that connects again after the switch; that is logged.
+    nonisolated static func point(at socket: String) {
+        let previous: String? = socketLock.withLock { defer { currentSocket = socket }; return currentSocket }
+        let abandoned = AbandonedWork.count
+        if let previous, previous != socket, abandoned > 0 {
+            logEvent("device: usbmuxd switched from \(previous) to \(socket) with \(abandoned) abandoned operation(s) outstanding; a late connect could reach the other device")
+        }
+        setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
+    }
+    private static let socketLock = NSLock()
+    nonisolated(unsafe) private static var currentSocket: String?
     private var busy = false
     private var waiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>)] = []
 

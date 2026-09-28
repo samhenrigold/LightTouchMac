@@ -14,7 +14,7 @@ a = s.index('    override func scrollWheel(')
 b = s.index('    private func guestScrollDrag(', a)
 methods += s[a:b]
 source = r'''import Cocoa
-let QEMU_IOS_TOUCH_UPDATE = 1
+enum TouchPhase { static let begin: Int32 = 0, update: Int32 = 1, end: Int32 = 2 }
 @MainActor class Sink {
  func mouseDragged(with event: NSEvent) {}
  func rotate(with event: NSEvent) {}
@@ -53,7 +53,7 @@ final class Gesture: NSEvent {
  func sendAttitude() { attitudes += 1 }
  func cursorOverPanel(_ event:NSEvent)->Bool { onPanel }
  func guestScrollDrag(_ event:NSEvent) { guestScrolls += 1 }
- func emit(_ event: NSEvent, _ phase: Int32) { precondition(phase == QEMU_IOS_TOUCH_UPDATE); guestUpdates += 1 }
+ func emit(_ event: NSEvent, _ phase: Int32) { precondition(phase == TouchPhase.update); guestUpdates += 1 }
  func endTilt() {
   wheelTiltResetTask?.cancel(); tilting=false;scrollTilting=false;rotatingChassis=false
   scrollTilt=0;scrollPitch=0;yawAngle=0;pitchAngle=0;tiltAngle=0;motionRestAngle=nil

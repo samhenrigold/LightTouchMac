@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreGraphics
 import Darwin
+import Foundation
 
 /// The writer and pixel buffers stay on one actor. The producer awaits each
 /// append; encoding cannot accumulate an unbounded queue of guest frames.
@@ -20,7 +21,8 @@ actor ScreenMovieWriter {
     private var firstFrameSize: CGSize?
     private var changedFrameSize = false
 
-    func start(url: URL, recordGuestAudio: Bool = false, canvasSize: CGSize? = nil, background: CGImage? = nil) throws {
+    /// `audio`: the device's capture (EmulatorController.startAudioCapture), or nil for a silent movie.
+    func start(url: URL, audio: GuestAudioCapture? = nil, canvasSize: CGSize? = nil, background: CGImage? = nil) throws {
         guard self.writer == nil, !finishing else { throw CaptureError.failed("A recording is already active.") }
         self.canvasSize = canvasSize
         self.background = background
@@ -53,7 +55,7 @@ actor ScreenMovieWriter {
         guard writer.canAdd(input) else { throw CaptureError.failed("Video encoding is unavailable.") }
         writer.add(input)
         let audioInput: AVAssetWriterInput?
-        if recordGuestAudio {
+        if audio != nil {
             let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: [
                 AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100,
                 AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 128000
@@ -65,8 +67,7 @@ actor ScreenMovieWriter {
         } else { audioInput = nil }
         guard writer.startWriting() else { throw writer.error ?? CaptureError.failed("Could not start recording.") }
         writer.startSession(atSourceTime: .zero)
-        do { capture = recordGuestAudio ? try GuestAudioCapture() : nil }
-        catch { writer.cancelWriting(); throw error }
+        capture = audio
         self.audioInput = audioInput
         self.writer = writer; self.input = input; self.adaptor = adaptor
         count = 0
@@ -264,9 +265,16 @@ actor ScreenMovieWriter {
         }
         do {
             guard count > 0 else { throw CaptureError.failed("No device frames were recorded.") }
+            // The helper drains what the guest had queued after the stop (<= 1 s),
+            // then says so (.audioEnded).
             let deadline = ContinuousClock.now + .seconds(10)
-            while try await !drainAudio(through: end) {
-                guard ContinuousClock.now < deadline else { throw CaptureError.failed("Audio encoder did not finish in time.") }
+            while true {
+                let drained = try await drainAudio(through: end)
+                if drained, capture?.isFinished ?? true { break }
+                guard ContinuousClock.now < deadline else {
+                    if drained { break }   // the device never ended its audio: keep what arrived
+                    throw CaptureError.failed("Audio encoder did not finish in time.")
+                }
                 try await Task.sleep(for: .milliseconds(10))
             }
             try await appendAudio(Data(), seconds: end, through: end)
@@ -288,38 +296,57 @@ nonisolated enum CaptureError: LocalizedError {
 }
 
 
-private nonisolated struct GuestAudioCapture {
-    private typealias Start = @convention(c) () -> UInt64
-    private typealias Read = @convention(c) (UInt64, UnsafeMutableRawPointer?, Int32, UnsafeMutablePointer<Double>?) -> Int32
-    private typealias Time = @convention(c) (UInt64) -> Double
-    private typealias Stop = @convention(c) (UInt64) -> Void
-    private let token: UInt64
-    private let readFunction: Read
-    private let timeFunction: Time
-    private let stopFunction: Stop
-    init() throws {
-        func symbol<T>(_ name: String, _ type: T.Type) throws -> T {
-            guard let pointer = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) else {
-                throw CaptureError.failed("This emulator build does not support audio recording.")
-            }
-            return unsafeBitCast(pointer, to: type)
-        }
-        let start = try symbol("qemu_ios_audio_capture_start", Start.self)
-        readFunction = try symbol("qemu_ios_audio_capture_read", Read.self)
-        timeFunction = try symbol("qemu_ios_audio_capture_time", Time.self)
-        stopFunction = try symbol("qemu_ios_audio_capture_stop", Stop.self)
-        token = start()
-        guard token != 0 else { throw CaptureError.failed("The device is not ready to record audio.") }
+/// A recording's guest audio, pushed by the device's helper: `.audio` packets
+/// (44.1 kHz stereo S16LE; an empty one marks silence through its time) after
+/// `audioStart`, until `.audioEnded` once the stop has drained. Events arrive
+/// on the main queue; the writer reads under the lock.
+nonisolated final class GuestAudioCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private let clock: @Sendable () -> Double
+    private let stopSource: @Sendable (UInt64) -> Void
+    private var generation: UInt64 = 0
+    private var packets: [(data: Data, seconds: Double)] = []
+    private var ended = false, failed = false, stopped = false
+
+    /// `clock`: seconds since the capture started, the same monotonic clock the
+    /// dylib stamps packets with. `stop`: ask the helper to stop that generation.
+    init(clock: @escaping @Sendable () -> Double, stop: @escaping @Sendable (UInt64) -> Void) {
+        self.clock = clock
+        stopSource = stop
     }
-    var seconds: Double { timeFunction(token) }
-    func stop() { stopFunction(token) }
+
+    /// The helper's capture generation (its audioStart reply).
+    func begin(generation: UInt64) { lock.withLock { self.generation = generation } }
+
+    func receive(_ event: LinkEvent) {
+        lock.withLock {
+            switch event {
+            // Events can land before `begin`: nothing else is capturing then.
+            case let .audio(g, seconds, pcm) where generation == 0 || g == generation:
+                packets.append((pcm, seconds))
+            case let .audioEnded(g, didFail) where generation == 0 || g == 0 || g == generation:
+                ended = true
+                failed = didFail
+            default: break
+            }
+        }
+    }
+
+    var seconds: Double { clock() }
+
+    func stop() {
+        let g: UInt64 = lock.withLock { stopped = true; return generation }
+        if g != 0 { stopSource(g) }
+    }
+
+    /// After stop(): the helper has delivered everything.
+    var isFinished: Bool { lock.withLock { ended && packets.isEmpty } }
+
     func read() throws -> (data: Data, seconds: Double)? {
-        var data = Data(count: 16384)
-        var seconds = -1.0
-        let count = data.withUnsafeMutableBytes { readFunction(token, $0.baseAddress, 16384, &seconds) }
-        guard count >= 0 else { throw CaptureError.failed("Guest audio capture stopped or its buffer overflowed.") }
-        guard count > 0 || seconds >= 0 else { return nil }
-        data.count = Int(count)
-        return (data, seconds)
+        try lock.withLock {
+            if !packets.isEmpty { return packets.removeFirst() }
+            if ended, failed, !stopped { throw CaptureError.failed("Guest audio capture stopped or its buffer overflowed.") }
+            return nil
+        }
     }
 }

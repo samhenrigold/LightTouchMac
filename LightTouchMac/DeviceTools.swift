@@ -48,6 +48,8 @@ enum DeviceToolsError: LocalizedError {
 struct DeviceTools: Sendable {
     let clientSocket: String
     let filesRoot: String
+    /// This device's web-proxy files (WebProxyConfiguration.directory).
+    let proxyDirectory: URL
     /// True when the guest image already carries the GL engine shim and
     /// sblaunch (nand-ultimate). When false, a GL app needs the ssh engine
     /// copy, which only the install script does — so we fall back to it.
@@ -55,6 +57,11 @@ struct DeviceTools: Sendable {
     /// False on a stock image with no guest shell (the iPad): everything goes
     /// through lockdown services, and SSH-only extras are skipped, not failed.
     var guestShell: Bool = true
+    /// The device's helper, for the guest agent (DeviceLink `.agent` requests).
+    var agent: DeviceLink?
+
+    private var proxyFile: String { WebProxyConfiguration.file(in: proxyDirectory).path }
+    private var agentTransport: GuestAgentTransport { GuestAgentTransport(link: agent) }
 
     private var services: DeviceServices { DeviceServices(clientSocket: clientSocket) }
 
@@ -569,7 +576,7 @@ struct DeviceTools: Sendable {
             try await guestRun("cat > \(plistPath).ltm-new && chmod 644 \(plistPath).ltm-new"
                                + " && mv -f \(plistPath).ltm-new \(plistPath)", stdinPath: file.path)
         }
-        if changedAgent || changedJob || !legacyPresent.isEmpty || qemu_ios_agent_status() != 1 {
+        if changedAgent || changedJob || !legacyPresent.isEmpty || agentTransport.status != 1 {
             // A daemon cannot unload its own launch job and return a result.
             // Use the independent USB/SSH path only for this lifecycle step.
             try await guestRun("launchctl unload \(legacy) >/dev/null 2>&1 || :; rm -f \(legacy); "
@@ -642,7 +649,7 @@ struct DeviceTools: Sendable {
 
     /// Nil means this image has no agent; failures must not start a second transport.
     func guestOrientation() async throws -> Int? {
-        try await GuestAgentTransport.shared.orientationIfAvailable()
+        try await agentTransport.orientationIfAvailable()
     }
 
     /// Read-only helper uses SpringBoard's foreground identifier and localized
@@ -666,13 +673,13 @@ struct DeviceTools: Sendable {
         guard let helper = Bundled.resolve("itproxy", fallbacks: [
             "\(filesRoot)/../qemu-ios/contrib/it-proxy/itproxy"
         ]) else { throw DeviceToolsError.toolMissing("itproxy") }
-        let certificate = WebProxyConfiguration.file.path + ".ca.der"
+        let certificate = proxyFile + ".ca.der"
         if enabled {
             guard let host = Bundled.resolve("itwebproxy", fallbacks: [
                 "\(filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
             ]) else { throw DeviceToolsError.toolMissing("itwebproxy") }
             let result = try await run(.path(FilePath(host)),
-                                       arguments: ["--init-ca", WebProxyConfiguration.file.path],
+                                       arguments: ["--init-ca", proxyFile],
                                        output: .discarded, error: .string(limit: 1 << 16))
             guard result.terminationStatus.isSuccess else {
                 logEvent("proxy: certificate preparation failed: \(result.standardError)")
@@ -701,13 +708,13 @@ struct DeviceTools: Sendable {
         // Packaged apps bundle it (package.sh); dev builds find it on the usual PATH directories.
         guard let tool = Bundled.resolve("lockdown-mcinstall", fallbacks: Bundled.binarySearchPaths.map { "\($0)/lockdown-mcinstall" })
         else { throw DeviceToolsError.toolMissing("lockdown-mcinstall") }
-        let prepared = try await run(.path(FilePath(host)), arguments: ["--init-ca", WebProxyConfiguration.file.path],
+        let prepared = try await run(.path(FilePath(host)), arguments: ["--init-ca", proxyFile],
                                      output: .discarded, error: .string(limit: 1 << 16))
         guard prepared.terminationStatus.isSuccess else {
             logEvent("proxy: certificate preparation failed: \(prepared.standardError)")
             throw DeviceToolsError.failed("Could not prepare this device’s HTTP proxy certificate.")
         }
-        let offered = try await run(.path(FilePath(tool)), arguments: [WebProxyConfiguration.file.path + ".ca.der"],
+        let offered = try await run(.path(FilePath(tool)), arguments: [proxyFile + ".ca.der"],
                                     environment: toolEnvironment,
                                     output: .string(limit: 1 << 10), error: .string(limit: 1 << 10))
         guard offered.terminationStatus.isSuccess else {
@@ -758,16 +765,16 @@ struct DeviceTools: Sendable {
         }
     }
 
-    static func reconnectManagementService() async throws -> Bool {
+    static func reconnectManagementService(agent: DeviceLink?) async throws -> Bool {
         // Do not fall back to SSH here: recovery must not queue on the broken
         // management transport. launchd owns and relaunches lockdownd.
-        try await GuestAgentTransport.shared.reconnectManagementIfAvailable()
+        try await GuestAgentTransport(link: agent).reconnectManagementIfAvailable()
     }
 
-    static func requestIndependentHalt() async -> Bool {
+    static func requestIndependentHalt(agent: DeviceLink?) async -> Bool {
         // Submission is not proof of shutdown. The controller still requires
         // the guest PMU power-off confirmation before reporting success.
-        await GuestAgentTransport.shared.requestHaltIfAvailable()
+        await GuestAgentTransport(link: agent).requestHaltIfAvailable()
     }
 
     /// Shut the guest's filesystem down through the kernel: sync, unmount
@@ -861,7 +868,7 @@ struct DeviceTools: Sendable {
     private func guestRun(_ command: String, stdinPath: String? = nil,
                          expecting marker: String? = nil, usingAgent: Bool = true) async throws -> Data {
         if usingAgent, marker == nil,
-           let result = try await GuestAgentTransport.shared.runIfAvailable(command, stdinPath: stdinPath) {
+           let result = try await agentTransport.runIfAvailable(command, stdinPath: stdinPath) {
             return result
         }
         guard let iproxy = Bundled.tool("iproxy")
@@ -984,15 +991,17 @@ struct DeviceTools: Sendable {
 }
 
 
-/// One result dispatcher for the process's embedded emulator. A submitted
-/// command is never retried through SSH: a lost response may follow a mutation.
-private actor GuestAgentTransport {
-    static let shared = GuestAgentTransport()
-    private var waiting: Set<String> = []
-    private var results: [String: (Int, Data)] = [:]
+/// The guest agent of one device, through its helper: the helper owns the
+/// dylib's result queue, routes each result to its request by id and frees it
+/// (LinkRequest.agent). A submitted command is never retried through SSH: a
+/// lost response may follow a mutation.
+private struct GuestAgentTransport: Sendable {
+    let link: DeviceLink?
+    /// 0 absent or not running, 1 alive, 2 stale.
+    var status: Int { link?.status?.agentStatus ?? 0 }
 
     func runIfAvailable(_ command: String, stdinPath: String?) async throws -> Data? {
-        guard qemu_ios_agent_status() == 1,
+        guard status == 1,
               command.utf8.allSatisfy({ $0 >= 32 && $0 <= 126 }),
               command.utf8.count < 4000 else { return nil }
         var body = Data()
@@ -1006,19 +1015,20 @@ private actor GuestAgentTransport {
     }
 
     func reconnectManagementIfAvailable() async throws -> Bool {
-        guard qemu_ios_agent_status() == 1 else { return false }
+        guard status == 1 else { return false }
         _ = try await perform("exec", arguments: "launchctl stop com.apple.mobile.lockdown")
         return true
     }
 
-    func requestHaltIfAvailable() -> Bool {
-        guard qemu_ios_agent_status() == 1 else { return false }
-        let request = "\(UUID().uuidString) halt \n"
-        return request.withCString { qemu_ios_agent_request($0) }
+    /// Submit only (deadline 0): the halt takes the agent down with the guest.
+    func requestHaltIfAvailable() async -> Bool {
+        guard let link, status == 1 else { return false }
+        let reply = try? await link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5)
+        return reply == .ok(true)
     }
 
     func orientationIfAvailable() async throws -> Int? {
-        guard qemu_ios_agent_status() != 0 else { return nil }
+        guard status != 0 else { return nil }
         let data = try await perform("orientation")
         guard let degrees = Int(String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)),
               [0, 90, 180, -90].contains(degrees) else {
@@ -1028,49 +1038,41 @@ private actor GuestAgentTransport {
     }
 
     private func perform(_ operation: String, arguments: String = "", body: Data = Data()) async throws -> Data {
-        guard qemu_ios_agent_status() == 1 else {
+        guard let link, status == 1 else {
             throw DeviceToolsError.failed("The device agent is not ready.")
         }
         try Task.checkCancellation()
         let id = UUID().uuidString
         let request = "\(id) \(operation) \(arguments)\n\(body.base64EncodedString())"
-        guard request.withCString({ qemu_ios_agent_request($0) }) else {
-            throw DeviceToolsError.failed("The device command queue is full or unavailable.")
-        }
-        waiting.insert(id)
-        var completed = false
-        defer {
-            waiting.remove(id)
-            results[id] = nil
-            if !completed { id.withCString { qemu_ios_agent_cancel($0) } }
-        }
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(65))
-        while clock.now < deadline {
-            try Task.checkCancellation()
-            while let pointer = qemu_ios_agent_result() {
-                let wire = String(cString: pointer)
-                qemu_ios_agent_free_result(pointer)
-                let parts = wire.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
-                guard parts.count == 2 else { continue }
-                let header = parts[0].split(separator: " ", maxSplits: 1)
-                guard header.count == 2, let status = Int(header[1]),
-                      let output = Data(base64Encoded: String(parts[1])) else { continue }
-                let resultID = String(header[0])
-                if waiting.contains(resultID) { results[resultID] = (status, output) }
+        let reply: LinkReply
+        do {
+            // The helper answers `.agent(nil)` at the deadline (and cancels the
+            // request); the link's own timeout is only the backstop.
+            reply = try await withTaskCancellationHandler {
+                try await link.request(.agent(request: request, deadline: 65), timeout: 75)
+            } onCancel: {
+                link.send(.agentCancel(id: id))
             }
-            if let (status, output) = results.removeValue(forKey: id) {
-                completed = true
-                guard status == 0 else {
-                    throw DeviceToolsError.failed("The device command failed (\(status)). \(String(decoding: output.prefix(4096), as: UTF8.self))")
-                }
-                return output
-            }
-            guard qemu_ios_ui_ready() else {
-                throw DeviceToolsError.failed("The device stopped before its command completed.")
-            }
-            try await Task.sleep(for: .milliseconds(100))
+        } catch {
+            throw DeviceToolsError.failed("The device stopped before its command completed.")
         }
-        throw DeviceToolsError.failed("The device command timed out; its outcome is unknown.")
+        try Task.checkCancellation()
+        switch reply {
+        case let .agent(wire?):
+            // "<id> <status>\n<base64 output>"
+            let parts = wire.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+            let header = parts.first?.split(separator: " ", maxSplits: 1) ?? []
+            guard parts.count == 2, header.count == 2, header[0] == id, let code = Int(header[1]),
+                  let output = Data(base64Encoded: String(parts[1])) else {
+                throw DeviceToolsError.failed("The device returned an invalid command result.")
+            }
+            guard code == 0 else {
+                throw DeviceToolsError.failed("The device command failed (\(code)). \(String(decoding: output.prefix(4096), as: UTF8.self))")
+            }
+            return output
+        case .agent(nil): throw DeviceToolsError.failed("The device command timed out; its outcome is unknown.")
+        case let .failure(message): throw DeviceToolsError.failed(message)
+        default: throw DeviceToolsError.failed("The device returned an invalid command result.")
+        }
     }
 }

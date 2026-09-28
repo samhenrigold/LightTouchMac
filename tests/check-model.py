@@ -144,23 +144,30 @@ func - (a:CGPoint,b:CGPoint)->CGPoint { CGPoint(x:a.x-b.x,y:a.y-b.y) }
 '''
 display_source = r'''import AppKit
 import RealityKit
-let QEMU_IOS_TOUCH_BEGIN=0, QEMU_IOS_TOUCH_UPDATE=1, QEMU_IOS_TOUCH_END=2
+import IOSurface
 @MainActor var touches: [(Double,Double)] = []
-@MainActor var frameData = [UInt32](repeating: 0xff2080c0, count: 480*480)
 @MainActor var frameWidth: Int32 = 320, frameHeight: Int32 = 480
-@MainActor func qemu_ios_ui_frame(_ p: inout UnsafeRawPointer?, _ w: inout Int32, _ h: inout Int32, _ serial: inout UInt64) -> Bool {
- p = frameData.withUnsafeBufferPointer { UnsafeRawPointer($0.baseAddress!) }; w=frameWidth; h=frameHeight; serial &+= 1; return true
+@MainActor var frameColor: UInt32 = 0xff2080c0
+/// The helper's link: a fresh ring surface per frame, and touch commands.
+@MainActor final class FakeLink {
+ var serial: UInt64 = 0
+ var surfaces: [String: IOSurface] = [:]
+ func frontSurface() -> (surface: IOSurface, serial: UInt64, isNew: Bool)? {
+  serial += 1
+  let key = "\(frameWidth)x\(frameHeight)x\(frameColor)"
+  let surface = surfaces[key] ?? {
+   let s = IOSurface(properties: [.width: Int(frameWidth), .height: Int(frameHeight), .bytesPerElement: 4, .pixelFormat: 0x42475241])!
+   s.lock(options: [], seed: nil)
+   for y in 0..<Int(frameHeight) { for x in 0..<Int(frameWidth) { s.baseAddress.storeBytes(of: frameColor, toByteOffset: y * s.bytesPerRow + x * 4, as: UInt32.self) } }
+   s.unlock(options: [], seed: nil)
+   return s
+  }()
+  surfaces[key] = surface
+  return (surface, serial, true)
+ }
+ func send(_ command: LinkCommand) { if case let .touch(_, _, x, y) = command { touches.append((x, y)) } }
 }
-@MainActor func qemu_ios_ui_copy_frame(_ p: UnsafeMutableRawPointer?, _ capacity: Int, _ w: inout Int32, _ h: inout Int32) -> Bool {
- w=frameWidth; h=frameHeight
- frameData.withUnsafeBytes { p!.copyMemory(from: $0.baseAddress!, byteCount: Int(w*h)*4) }; return true
-}
-@MainActor func qemu_ios_ui_touch(_ slot: Int32,_ phase: Int32,_ x: Double,_ y: Double) { touches.append((x,y)) }
-@MainActor func qemu_ios_ui_touch2(_ phase: Int32,_ x: Double,_ y: Double) {}
-struct QemuIosDeviceInfo { var screen_width: Int32 = 320, screen_height: Int32 = 480 }
-nonisolated func qemu_ios_device_info(_ name: String) -> UnsafePointer<QemuIosDeviceInfo>? {
- let info = UnsafeMutablePointer<QemuIosDeviceInfo>.allocate(capacity: 1); info.initialize(to: .init()); return UnsafePointer(info)
-}
+@MainActor final class FirmwareJobs { static let shared = FirmwareJobs(); func importIPSW(_ url: URL, for entry: Int?) {} }
 struct CatalogApp: Decodable {}
 extension NSPasteboard.PasteboardType { static let ltmCatalogApp=Self("test.catalog") }
 enum PreparedMedia { static let extensions: Set<String> = [] }
@@ -171,7 +178,8 @@ enum PreparedMedia { static let extensions: Set<String> = [] }
  var keyboardInputEnabled=true, keyboardTiltRate=90.0, isSleeping=false, isPoweredOff=false, shuttingDown=false
  var preparingMedia=false
  var shakeGeneration: UInt64=0, homeCount=0, lockCount=0
- func pollStorageFailure() {} ;func noteFrameAdvanced() {};func pressLock() { lockCount += 1 };func powerOn() {}
+ let link: FakeLink? = FakeLink()
+ func pressLock() { lockCount += 1 };func powerOn() {}
  var attitude = (angle: CGFloat.zero, pitch: CGFloat.zero)
  func shake() { shakeGeneration &+= 1 };func setTilt(angle:CGFloat,pitch:CGFloat) { attitude = (angle, pitch) }
  func pressHome() {homeCount += 1};func sendKey(macKeyCode:UInt16,down:Bool) {}
@@ -266,5 +274,5 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
         swift=work/(name+".swift");swift.write_text(source)
         exe=app/"MacOS"/name
         bridge=["-import-objc-header",str(attitude_header)] if name == "model" else []
-        subprocess.run(["swiftc","-module-cache-path",str(work/"modules"),"-default-isolation","MainActor",*bridge,str(sources/"DeviceModelView.swift"),*[str(sources/(x+".swift")) for x in extra],str(swift),"-o",str(exe)],check=True)
+        subprocess.run(["swiftc","-module-cache-path",str(work/"modules"),"-default-isolation","MainActor",*bridge,str(sources/"DeviceModelView.swift"),*[str(sources/(x+".swift")) for x in extra],*([str(root/"Shared/DeviceLinkProtocol.swift")] if extra else []),str(swift),"-o",str(exe)],check=True)
         subprocess.run([str(exe),str(asset),str(work)],check=True,timeout=45)

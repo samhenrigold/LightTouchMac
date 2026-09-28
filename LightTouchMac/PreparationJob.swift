@@ -29,6 +29,8 @@ nonisolated final class PreparationJob: @unchecked Sendable {
 
     enum Event: Sendable, Equatable {
         case step(Int, of: Int, name: String)
+        /// Within the current step, 0...1.
+        case progress(Double)
         case warning(String)
         case published(DeviceInstance)
         case failed(String)
@@ -157,8 +159,8 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         case let .step(index, name)?: onEvent(.step(index, of: lock.withLock { steps }, name: name))
         case let .warning(message)?: onEvent(.warning(message))
         case .done?, .error?: lock.withLock { if outcome == nil { outcome = line } }
-        // ponytail: in-step progress isn't shown; FirmwareJob.preparing has no fraction yet.
-        case .progress?, nil: break
+        case let .progress(fraction)?: onEvent(.progress(fraction))
+        case nil: break
         }
     }
 

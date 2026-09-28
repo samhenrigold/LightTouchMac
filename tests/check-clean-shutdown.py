@@ -17,11 +17,9 @@ a=s.index('    @MainActor\n    static func waitForShutdown');b=s.index('    /// 
 wait=s[a:b]
 source=r'''import Foundation
 @MainActor var powerOff=false
-@MainActor func qemu_ios_ui_guest_shutdown_confirmed()->Bool{powerOff}
-@MainActor func qemu_ios_ui_powerdown(){}
-@MainActor func qemu_ios_snapshot_resume(){}
-@MainActor var agentReady:Int32=0
-@MainActor func qemu_ios_agent_status()->Int32{agentReady}
+@MainActor var agentReady=0
+/// The helper's link: commands go nowhere; status comes from the fixture.
+struct FakeLink: Sendable { func send(_ c: LinkCommand) {} }
 nonisolated func logEvent(_ s:String){}
 enum DeviceStateStorage {
 '''+wait+'}\n'+helpers+r'''
@@ -32,6 +30,9 @@ enum DeviceStateStorage {
  var isPoweredOff:Bool{state == .poweredOff}
  var connectionRecoveryTask:Task<Void,Never>?,orientationTask:Task<Void,Never>?,foregroundTask:Task<Void,Never>?,mediaPreparationTask:Task<Void,Never>?,cleanShutdownTask:Task<Void,Never>?
  var shutdownCompletions:[(Bool)->Void]=[]
+ var link:FakeLink?=FakeLink()
+ var status:(shutdownConfirmed:Bool,Void)?{(powerOff,())}
+ var liveAgentStatus:Int{agentReady}
  var haltAttempts=0,syncAttempts=0,attemptNeeded=2
  func haltFilesystem() async throws {
   haltAttempts+=1
@@ -42,10 +43,11 @@ enum DeviceStateStorage {
 '''+shutdown+r'''}
 @MainActor enum DeviceTools {
  static var available=true
- static func requestIndependentHalt() async -> Bool {available}
+ static func requestIndependentHalt(agent: FakeLink?) async -> Bool {available}
  func haltFilesystem() async throws {}
 }
 @MainActor struct MissingUSB {
+ var link:FakeLink?{nil}
  func tools() throws -> DeviceTools {throw CocoaError(.fileReadUnknown)}
 '''+halt+r'''}
 @main struct Main {
@@ -85,5 +87,5 @@ enum DeviceStateStorage {
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-shutdown-') as d:
  p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc','-parse-as-library','-module-cache-path',d+'/modules',DEVICE_PROFILE,str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc','-parse-as-library','-module-cache-path',d+'/modules',DEVICE_PROFILE,str(root/'Shared/DeviceLinkProtocol.swift'),str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=8)

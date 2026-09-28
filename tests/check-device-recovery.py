@@ -12,20 +12,22 @@ services=(root/'LightTouchMac/DeviceServices.swift').read_text()
 errors=services[services.index('nonisolated enum DeviceError:'):services.index('// MARK: - Timeouts')]
 issue=(root/'LightTouchMac/DeviceConnectionIssue.swift').read_text()
 source=r'''import Foundation
-@MainActor var agentReady:Int32=1
-@MainActor func qemu_ios_agent_status()->Int32{agentReady}
+@MainActor var agentReady=1
+struct FakeLink {}
 nonisolated func logEvent(_ message:String){}
 nonisolated enum AbandonedWork {static let count=0}
 extension Notification.Name {static let ltmAppsChanged=Self("apps")}
 @MainActor enum AppInstaller {static var isUsingDevice=false}
 @MainActor enum DeviceTools {
  static var recoveries=0
- static func reconnectManagementService() async throws -> Bool {recoveries+=1;return true}
+ static func reconnectManagementService(agent: FakeLink?) async throws -> Bool {recoveries+=1;return true}
 }
 @MainActor final class Controller {
  let profile = DeviceProfile.iPodTouch2G
  var isRunning=true,isInstalling=false,hasFileTransfer=false,preparingMedia=false
  var usbConnected=true
+ var link:FakeLink?=FakeLink()
+ var liveAgentStatus:Int{agentReady}
  var onStatusChange:(()->Void)?
  var deviceReachable:Bool? {didSet{if deviceReachable==true {connectionIssue=nil};considerConnectionRecovery()}}
 '''+report+recovery+r'''}

@@ -8,6 +8,7 @@
 // `frameSerial` (seq-cst). The reader stores `held` and re-reads the serial.
 // A stalled heartbeat means the helper is wedged; stalled frames, the guest.
 
+import Accelerate
 import Foundation
 import IOSurface
 import LTMLinkC
@@ -146,7 +147,9 @@ nonisolated final class FrameRingWriter: @unchecked Sendable {
         return true
     }
 
-    /// Copy tightly packed BGRA rows into the surface's (padded) rows.
+    /// Copy tightly packed BGRA rows into the surface's (padded) rows, with the
+    /// alpha byte forced opaque: iBoot and the iPod's framebuffer leave it 0,
+    /// and the app's layer shows the surface as is (a copy ignored it).
     static func copy(_ pixels: UnsafeRawPointer, width: Int, height: Int, into surface: IOSurface) {
         let rowBytes = width * 4
         let dst = surface.baseAddress
@@ -155,6 +158,9 @@ nonisolated final class FrameRingWriter: @unchecked Sendable {
         } else {
             for y in 0..<height { memcpy(dst + y * surface.bytesPerRow, pixels + y * rowBytes, rowBytes) }
         }
+        var buffer = vImage_Buffer(data: dst, height: vImagePixelCount(height), width: vImagePixelCount(width),
+                                   rowBytes: surface.bytesPerRow)
+        _ = vImageOverwriteChannelsWithScalar_ARGB8888(255, &buffer, &buffer, 0x1 /* the 4th byte */, vImage_Flags(kvImageNoFlags))
     }
 }
 

@@ -332,9 +332,9 @@ private final class DeviceRowCell: NSTableCellView {
         case let .downloading(fraction):
             spin(fraction: fraction)
             show("\(Int((fraction * 100).rounded()))%")
-        case let .preparing(step, count, _):
-            spin(fraction: count > 0 ? Double(step) / Double(count) : nil)
-            show("Step \(step) of \(count)")
+        case let .preparing(step, count, name, _):
+            spin(fraction: row.progress)
+            show(count > 0 ? "Step \(step) of \(count)" : name)
         case .ready: break
         case .running: show(symbol: "circle.fill", color: .systemGreen, size: 8)
         case .stopping: spin(fraction: nil)

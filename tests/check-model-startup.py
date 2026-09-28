@@ -80,7 +80,7 @@ real_source = prefix + r'''
 @main struct Check {
  @MainActor static func main() async throws {
   _=NSApplication.shared
-  frameData = [UInt32](repeating:0xff00ff00,count:480*480)
+  frameColor = 0xff00ff00
   let display=DisplayView(frame:NSRect(x:0,y:0,width:500,height:800),profile:.iPodTouch2G)
   let e=EmulatorController();display.emulator=e
   // Loading can precede window attachment. Deliberately cross the old one-
@@ -132,5 +132,5 @@ with tempfile.TemporaryDirectory(prefix='ltm-model-startup-') as tmp:
         if actual_model: sources.append('DeviceModelView')
         subprocess.run(['swiftc','-module-cache-path',str(work/'modules'),'-default-isolation','MainActor',
                         *[str(root/'LightTouchMac'/f'{item}.swift') for item in sources],
-                        str(swift),'-o',str(exe)],check=True)
+                        str(root/'Shared/DeviceLinkProtocol.swift'),str(swift),'-o',str(exe)],check=True)
         subprocess.run([str(exe)],check=True,timeout=30)

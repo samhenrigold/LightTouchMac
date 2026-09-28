@@ -8,6 +8,9 @@ import IOSurface
 final class DeviceHost: @unchecked Sendable {
     /// EmulatorController.haltShutdownBudget / cleanShutdownBudget.
     static let haltBudget: TimeInterval = 30
+    /// EmulatorController.iPadPowerdownBudget: 4.2.1 power-offs take 16–25 s and
+    /// once passed 30 s, leaving the FTL unclosed.
+    static let iPadPowerdownBudget: TimeInterval = 45
     static let cleanShutdownBudget: TimeInterval = 60
 
     let qemu: Qemu
@@ -217,7 +220,7 @@ final class DeviceHost: @unchecked Sendable {
                 if !confirmed(), !stopped() {
                     helperLog("clean shutdown: powerdown")
                     qemu.powerdown()
-                    _ = wait(until: isIPad ? min(deadline, Date().addingTimeInterval(Self.haltBudget)) : deadline)
+                    _ = wait(until: isIPad ? min(deadline, Date().addingTimeInterval(Self.iPadPowerdownBudget)) : deadline)
                 }
             }
             let ok = confirmed()

@@ -54,13 +54,14 @@ final class ScreenRecordingSession {
         Bundled.stateDirectory.appendingPathComponent("Recordings", isDirectory: true)
     }
 
-    func start(frame: @escaping () throws -> CGImage?, prepare: @escaping () async throws -> CGSize? = { nil }, cleanup: @escaping () async -> Void = {}, background: CGImage? = nil, destination: @escaping () throws -> URL) {
+    /// `audio` starts the device's guest audio capture (nil: a silent movie).
+    func start(frame: @escaping () throws -> CGImage?, audio: @escaping () async throws -> GuestAudioCapture? = { nil }, prepare: @escaping () async throws -> CGSize? = { nil }, cleanup: @escaping () async -> Void = {}, background: CGImage? = nil, destination: @escaping () throws -> URL) {
         guard !isActive else { return }
         if case .recovery = phase { return }
-        begin(frame: frame, prepare: prepare, cleanup: cleanup, background: background, destination: destination)
+        begin(frame: frame, audio: audio, prepare: prepare, cleanup: cleanup, background: background, destination: destination)
     }
 
-    private func begin(frame: @escaping () throws -> CGImage?, prepare: @escaping () async throws -> CGSize?, cleanup: @escaping () async -> Void, background: CGImage?, destination: @escaping () throws -> URL) {
+    private func begin(frame: @escaping () throws -> CGImage?, audio: @escaping () async throws -> GuestAudioCapture?, prepare: @escaping () async throws -> CGSize?, cleanup: @escaping () async -> Void, background: CGImage?, destination: @escaping () throws -> URL) {
         failure = nil
         previewImage = nil
         id = UUID()
@@ -79,7 +80,9 @@ final class ScreenRecordingSession {
                 let url = folder.appendingPathComponent("Recording \(UUID().uuidString).mov")
                 output = url
                 let canvasSize = try await prepare()
-                try await writer.start(url: url, recordGuestAudio: true, canvasSize: canvasSize, background: background)
+                let capture = try await audio()
+                do { try await writer.start(url: url, audio: capture, canvasSize: canvasSize, background: background) }
+                catch { capture?.stop(); throw error }
                 writerStarted = true
                 startedAt = CACurrentMediaTime()
                 // A stop during startup still produces a playable first frame.

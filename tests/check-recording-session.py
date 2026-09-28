@@ -9,6 +9,7 @@ nonisolated enum CaptureError: LocalizedError {
  var errorDescription: String? { if case let .failed(message) = self { message } else { nil } }
 }
 @MainActor enum Bundled { static var stateDirectory = URL(fileURLWithPath: CommandLine.arguments[1]) }
+final class GuestAudioCapture: Sendable { func stop() {} }
 @MainActor final class ScreenMovieWriter {
  static var starts = 0
  static var failStartup = false
@@ -16,7 +17,7 @@ nonisolated enum CaptureError: LocalizedError {
  static var delay: Duration = .milliseconds(30)
  var output: URL?
  var frames = 0
- func start(url: URL, recordGuestAudio: Bool, canvasSize: CGSize? = nil, background: CGImage? = nil) async throws {
+ func start(url: URL, audio: GuestAudioCapture?, canvasSize: CGSize? = nil, background: CGImage? = nil) async throws {
   Self.starts += 1
   frames = 0
   try await Task.sleep(for: Self.delay)

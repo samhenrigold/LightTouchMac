@@ -6,7 +6,7 @@ root=Path(__file__).resolve().parents[1]
 s=(root/'LightTouchMac/DisplayView.swift').read_text()
 a=s.index('    private func endKeyboardTouch()');b=s.index('    private func updateKeyboardPointer()',a)
 code=r"""import Cocoa
-let QEMU_IOS_TOUCH_BEGIN=0,QEMU_IOS_TOUCH_UPDATE=1,QEMU_IOS_TOUCH_END=2
+enum TouchPhase { static let begin: Int32 = 0, update: Int32 = 1, end: Int32 = 2 }
 @MainActor final class Check {
  final class Emulator {var keyboardInputEnabled=false}
  let emulator:Emulator?=Emulator()

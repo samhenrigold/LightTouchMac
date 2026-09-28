@@ -9,7 +9,8 @@
 // Icon rearranges are the gap: SpringBoard publishes no notification for the
 // layout, only install/uninstall. Those come from the emulator instead — the
 // layout cannot reach flash without crossing the emulated NAND, which counts
-// the writes and lets us watch a counter. See qemu_ios_ui_icon_state_generation.
+// the writes and lets us watch a counter: the helper's status block carries
+// it (SharedStatus.iconGeneration).
 //
 // None of it replaces the poll outright: a dropped USB session would leave the
 // list silently frozen either way. So the poll stays as a slow backstop and
@@ -34,6 +35,8 @@ final class GuestNotifications {
 
     private var running = false
     private let socket: String
+    /// The device's NAND icon-state write counter, read from its helper.
+    private let iconGeneration: () -> UInt64?
     /// Held so the watcher can actually be stopped. Both of these used to be
     /// bare `Task.detached`s with nothing retaining them, so `Task.isCancelled`
     /// was never true and the loops ran for the life of the process — the
@@ -67,7 +70,10 @@ final class GuestNotifications {
         }
     }
 
-    init(clientSocket: String) { self.socket = clientSocket }
+    init(clientSocket: String, iconGeneration: @escaping () -> UInt64?) {
+        self.socket = clientSocket
+        self.iconGeneration = iconGeneration
+    }
 
     /// The C callback runs on libimobiledevice's own thread. Classify the
     /// notification and hand it off without blocking that reader.
@@ -87,19 +93,20 @@ final class GuestNotifications {
 
         // The home screen is the one change the guest will never announce, so
         // take it from underneath instead: the icon layout can only reach flash
-        // through the emulated NAND, which now counts those writes for us (see
-        // qemu_ios_ui_icon_state_generation). Reading it is an atomic load, so
+        // through the emulated NAND, which now counts those writes for us (the
+        // status block's iconGeneration). Reading it is an atomic load, so
         // a one-second tick costs less than the notification_proxy session
         // below does sitting idle, and still reads as instant next to the
         // 15-second poll it replaces.
+        let iconGeneration = iconGeneration
         iconTick = Task {
-            var seen = qemu_ios_ui_icon_state_generation()
+            var seen = iconGeneration()
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(1)) } catch { break }
                 // One rearrange is several NAND pages, and the plist goes
                 // through the journal as well. Comparing once per tick collapses
                 // the whole burst into a single refresh.
-                let now = qemu_ios_ui_icon_state_generation()
+                let now = iconGeneration()
                 if now != seen {
                     seen = now
                     onChange()
@@ -199,7 +206,7 @@ final class GuestNotifications {
               let start = imd.np_client_start_service,
               let observe = imd.np_observe_notification,
               let setCB = imd.np_set_notify_callback else { return nil }
-        setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
+        DeviceGate.point(at: socket)
 
         var device: OpaquePointer?
         guard idevice_new(&device, nil) == imd.success, let device else { return nil }

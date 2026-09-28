@@ -33,7 +33,15 @@ import Darwin
             try await Task.sleep(for: .milliseconds(50))
         }
         let writer = ScreenMovieWriter()
-        try await writer.start(url: directory.appendingPathComponent("recording.mov"), recordGuestAudio: true)
+        typealias Start = @convention(c) () -> UInt64
+        typealias Read = @convention(c) (UInt64, UnsafeMutableRawPointer?, Int32, UnsafeMutablePointer<Double>?) -> Int32
+        typealias Time = @convention(c) (UInt64) -> Double
+        typealias Stop = @convention(c) (UInt64) -> Void
+        let read = symbol("qemu_ios_audio_capture_read", Read.self), time = symbol("qemu_ios_audio_capture_time", Time.self)
+        let stop = symbol("qemu_ios_audio_capture_stop", Stop.self)
+        let audio = try pumpedGuestAudio(start: symbol("qemu_ios_audio_capture_start", Start.self),
+                                         read: { read($0, $1, $2, $3) }, time: { time($0) }, stop: { stop($0) })
+        try await writer.start(url: directory.appendingPathComponent("recording.mov"), audio: audio)
         try Data().write(to: directory.appendingPathComponent("record-ready"))
         var serial: UInt64 = 0
         var latest: CGImage?

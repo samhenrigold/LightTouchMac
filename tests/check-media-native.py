@@ -197,7 +197,7 @@ else:
 if args.recording:
     recorder = out/'recorder'
     subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
-        str(APP/'LightTouchMac/ScreenMovieWriter.swift'),str(APP/'tests/recording-native.swift'),
+        str(APP/'LightTouchMac/ScreenMovieWriter.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(APP/'tests/guest-audio-pump.swift'),str(APP/'tests/recording-native.swift'),
         '-o',str(recorder)],check=True)
     class Embedded(r.Procs):
         def spawn(self,argv,logpath,env=None):

@@ -27,6 +27,13 @@ int qemu_ios_audio_capture_read(uint64_t token,void *buffer,int capacity,double 
     (tmp/'check.swift').write_text(r'''import AVFoundation
 import CoreGraphics
 @_silgen_name("fixture_time") func fixtureTime(_ seconds: Double)
+@_silgen_name("qemu_ios_audio_capture_start") func captureStart() -> UInt64
+@_silgen_name("qemu_ios_audio_capture_read") func captureRead(_ g: UInt64, _ b: UnsafeMutableRawPointer?, _ c: Int32, _ s: UnsafeMutablePointer<Double>?) -> Int32
+@_silgen_name("qemu_ios_audio_capture_time") func captureTime(_ g: UInt64) -> Double
+@_silgen_name("qemu_ios_audio_capture_stop") func captureStop(_ g: UInt64)
+func fixtureAudio() throws -> GuestAudioCapture {
+ try pumpedGuestAudio(start: { captureStart() }, read: { captureRead($0, $1, $2, $3) }, time: { captureTime($0) }, stop: { captureStop($0) })
+}
 @main struct Check {
  static func main() async throws {
   let context=CGContext(data:nil,width:320,height:480,bitsPerComponent:8,bytesPerRow:1280,
@@ -40,7 +47,7 @@ import CoreGraphics
   let mode=CommandLine.arguments[2]
   let writer=ScreenMovieWriter()
   let output=URL(fileURLWithPath:CommandLine.arguments[1])
-  try await writer.start(url:output,recordGuestAudio:true,canvasSize:mode == "canvas" ? CGSize(width:640,height:400) : nil,background:mode == "canvas" ? landscape : nil)
+  try await writer.start(url:output,audio:try fixtureAudio(),canvasSize:mode == "canvas" ? CGSize(width:640,height:400) : nil,background:mode == "canvas" ? landscape : nil)
   for tick in 0...30 {
    fixtureTime(Double(tick)/10)
    let image = mode == "landscape" || ((mode == "rotated" || mode == "canvas") && tick > 15) ? landscape : portrait
@@ -62,7 +69,7 @@ import CoreGraphics
 ''')
     subprocess.run(['clang','-c',str(tmp/'capture.c'),'-o',str(tmp/'capture.o')],check=True)
     subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
-        str(root/'LightTouchMac/ScreenMovieWriter.swift'),str(tmp/'check.swift'),str(tmp/'capture.o'),
+        str(root/'LightTouchMac/ScreenMovieWriter.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(root/'tests/guest-audio-pump.swift'),str(tmp/'check.swift'),str(tmp/'capture.o'),
         '-Xlinker','-export_dynamic','-o',str(tmp/'check')],check=True)
     centers = {}
     for mode in ('portrait','landscape','rotated','canvas'):
