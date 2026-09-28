@@ -114,14 +114,18 @@ extension String {
         let overlay = dir.appendingPathComponent("overlay")
         let config: BootConfig
         if profile == .iPad1 {
-            // As EmulatorController.iPadBoot: a base with nor.bin (4.x's effaceable storage) boots a private copy.
+            // As EmulatorController.iPadBoot: the lock's boot_strategy picks iboot (iBoot.bin + nor.bin + gid-blobs.bin)
+            // or kboot (kboot.bin); both boot over a private writable NOR copy.
             let base = URL(fileURLWithPath: Self.ipadBase)
+            let strategy = BootRecipe.bootStrategy(base.appendingPathComponent("device.lock.json"))
+            let boot = profile.preparedBoot(strategy: strategy)
             let nor = FileManager.default.fileExists(atPath: base.appendingPathComponent("nor.bin").path) ? dir.appendingPathComponent("nor.bin") : nil
-            let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: nor)
+            let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: nor, boot: boot.boot, also: boot.files)
             let identity = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: Self.ipadBase + "/identity.json"))) as! [String: Any]
             let dieID = (identity["die-id"] as? [String])?.joined(separator: ":")
+            let gidBlobs = strategy == "iboot" ? base.appendingPathComponent("gid-blobs.bin").path : nil
             config = BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: dieID,
-                                           writableNOR: files.writableNOR?.path, usbAddress: mux.guestAddress, wifi: true,
+                                           writableNOR: files.writableNOR?.path, gidBlobs: gidBlobs, usbAddress: mux.guestAddress, wifi: true,
                                            guestPackage: try iPadOffer(base: base),
                                            machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: nil, restore: [])

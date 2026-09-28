@@ -19,10 +19,16 @@ nonisolated enum DeviceProfile: Equatable {
     var shortName: String { self == .iPad1 ? "iPad" : "iPod" }
 
     var boardID: String { self == .iPad1 ? "k48ap" : "n72ap" }
-    /// A prepared base's boot file (firmwarekit's k48 kboot.bin, n72 iBoot.bin, the machine's direct-iboot)
-    /// and the other files its boots need besides nand/.
-    var preparedBootFile: String { self == .iPad1 ? "kboot.bin" : "iBoot.bin" }
-    var preparedFiles: [String] { self == .iPad1 ? [] : ["nor.bin", "gid-blobs.bin"] }
+    /// A prepared base's boot file and the other files its boots need besides nand/, by the lock's boot_strategy.
+    /// The iPad's k48 iboot recipe (default) boots SecureROM->LLB->iBoot->kernel from iBoot.bin + nor.bin +
+    /// gid-blobs.bin; the kboot recipe (and the two older prepared iPads) boots direct-kernel from kboot.bin.
+    /// The iPod's n72 recipe always boots the machine's direct-iBoot from iBoot.bin + nor.bin + gid-blobs.bin.
+    func preparedBoot(strategy: String?) -> (boot: String, files: [String]) {
+        if self == .iPad1 {
+            return strategy == "iboot" ? ("iBoot.bin", ["nor.bin", "gid-blobs.bin"]) : ("kboot.bin", [])
+        }
+        return ("iBoot.bin", ["nor.bin", "gid-blobs.bin"])
+    }
     var productType: String { self == .iPad1 ? "iPad1,1" : "iPod2,1" }
     var marketingName: String { self == .iPad1 ? "iPad" : "iPod touch (2nd generation)" }
 

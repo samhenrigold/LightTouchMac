@@ -228,11 +228,12 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     func publish(lock lockName: String) throws -> DeviceInstance {
         let fm = FileManager.default
         let profile = request.entry.profile ?? .iPad1
-        for name in [profile.preparedBootFile, "nand", "identity.json", lockName] + profile.preparedFiles
+        let lockURL = staging.appendingPathComponent(lockName)
+        let boot = profile.preparedBoot(strategy: BootRecipe.bootStrategy(lockURL))
+        for name in [boot.boot, "nand", "identity.json", lockName] + boot.files
             where !fm.fileExists(atPath: staging.appendingPathComponent(name).path) {
             throw FirmwareError.failed("The preparer’s output has no \(name).")
         }
-        let lockURL = staging.appendingPathComponent(lockName)
         let lockData = try Data(contentsOf: lockURL)
         let identity = Self.identity(identityJSON: try? Data(contentsOf: staging.appendingPathComponent("identity.json")),
                                      lock: lockData, seed: id.uuidString)

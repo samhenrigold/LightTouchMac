@@ -514,11 +514,13 @@ STAGING_DIR exists and is empty when firmwarekit starts; the app creates it.
 **Exit codes:** 0 on done; 1 on error, after emitting an error event; SIGTERM means cancel. On cancel the preparer stops within 2 s and leaves STAGING_DIR for the app to delete.
 
 **On success, STAGING_DIR contains exactly:**
-- `kboot.bin` (or the board's boot files);
-- `nand/`, kept sparse;
-- `nor.bin` if the recipe uses a writable NOR;
+- the board's boot files, by the recipe's boot strategy:
+  - k48 `iboot` (default): `iBoot.bin` (pattern-patched), `nor.bin` (packed, writable), `gid-blobs.bin`;
+  - k48 `kboot` (debugging, `recipe.boot: "kboot"`): `kboot.bin`, and `nor.bin` only for 4.x data protection;
+  - n72: `iBoot.bin`, `nor.bin`, `gid-blobs.bin`;
+- `nand/`, kept sparse (the k48 iboot store carries the IPSW's img3 kernelcache in its system volume, for iBoot's fsboot);
 - `identity.json` (mode 600);
-- `device.lock.json`: the inputs and their hashes, the tool version, the UDID, the activation input/output hashes, and the product version.
+- `device.lock.json`: the inputs and their hashes, the tool version, the UDID, the activation input/output hashes, the product version, and — for k48 — `boot_strategy` (`iboot`/`kboot`), `gid_components`, `iboot_signature_checks`, and `outputs.nand.listing_sha256`.
 
 The app publishes STAGING_DIR by rename.
 
@@ -530,8 +532,8 @@ The app publishes STAGING_DIR by rename.
   - a preparing row with a step count of 0 (import hashing) should show just its name;
   - add a fraction to `FirmwareJob.preparing` for in-step progress.
 - **For W2, how prepared devices boot** (`base.kind == .prepared`):
-  - iPad: `kboot=<base>/kboot.bin`, `nand=<base>/nand`, `nand-overlay=<paths.overlay>`, and die id from `instance.identity.dieID`.
-  - When `storage.writableNOR` is set, clone `base/nor.bin` to that path on first boot (`cp -c`, then `chmod u+w`) and pass it as the writable NOR.
+  - iPad, by the lock's `boot_strategy` (`BootRecipe.bootStrategy`): `iboot` (default) → `iboot=<base>/iBoot.bin,gid-blobs=<base>/gid-blobs.bin,nor-rw=<clone of base/nor.bin>`; `kboot` (absent strategy = the two older records) → `kboot=<base>/kboot.bin`. Both add `nand=<base>/nand`, `nand-overlay=<paths.overlay>` and die id from `instance.identity.dieID`.
+  - Clone `base/nor.bin` to `storage.writableNOR` on first boot (`cp -c`, then `chmod u+w`) and pass it as the writable NOR — always for iboot (iBoot writes NVRAM/effaceable there), and for 4.x kboot data protection.
   - Create the overlay and usbmuxd-conf directories on first boot.
   - Never write inside `base/`, and skip `missingAssets` and the legacy development paths.
 
