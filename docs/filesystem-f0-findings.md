@@ -1,7 +1,7 @@
 # Filesystem / Finder integration: F0 findings
 
 Status: investigation result, 2026-09-28, for [filesystem-finder-integration-plan.md](filesystem-finder-integration-plan.md).
-Nothing is built yet.
+F1 core is built (see "F1 core results" at the end); nothing else is.
 
 ## Headline
 
@@ -82,3 +82,38 @@ FirmwareKit already has most of the host side:
 | U4 | Whether a clone catches the iPad's dirty MAP_SHARED pages | Always msync before cloning |
 | U6 | Whether current Finder handles iOS 3/4 | Plug in a real device |
 | U7 | How the USB host-controller entitlement is granted | Developer portal, or ask Apple |
+
+## F1 core results (2026-09-28)
+
+`firmwarekit mount|export --device DIR [--volume system|data|all] [--out DIR]` and `firmwarekit unmount --out DIR`
+(FirmwareKit `VolumeRebuild`, `VolumeExport`). `--device` takes an app instance (`device.json`) or an imgtools
+device dir (`nand/` or `base/`, plus `overlay/`).
+- **iPod:** the emulator stores every guest write at its generated-layout address, so the rebuild is `ftlmap.predict`
+  with the overlay over the base. It has one volume, `system`, sized by its HFS+ header; the GPT partition is 11 blocks
+  longer, and macOS would look for the alternate header there.
+- **iPad:** a YaFTL walk over base + overlay (the `.dirty` bitmap picks the source). For each LPN, the highest
+  (USN, vpn) wins; MBR partitions 1 and 2 go to `system` and `data`, with only mapped pages written.
+
+**U1 retired, for these cases.** `tests/volume-rebuild-oracle.py` boots a disposable overlay; then
+`FK_U1=OUT swift test --filter guestOracle` compares the rebuild with what the guest reported.
+
+| Device | Guest writes | Stop | Result |
+|---|---|---|---|
+| iPad 7B500, fresh | 107 AFC pushes (1 B–24 MiB) plus deletes, 2 IPAs (Doodle Jump, Bobby Carrot), 3 boots | clean | `fsck_hfs -fn` OK on both volumes; 112/112 AFC-walked files and 128/128 + 340/340 app Payload files identical |
+| iPad 7B500, fresh | the same, plus 1 IPA | SIGKILL 40 s after the writes | both volumes flagged unclean; `fsck_hfs -fy` then mount replays the journal; 112/112 and 128/128 identical |
+| iPad 8C148, fresh | 107 AFC pushes and an overwrite (no AppSync in the manifest, so IPAs are refused) | clean | fsck OK; 114/114 files identical |
+| iPod nand-current | `tests/ipod/regress.py` appinstall + persist (2 boots) | clean | byte-identical to regress's Python compose; fsck OK; the persist marker and 8/8 Harness.app files identical |
+
+**U3: 4.2.1 data is plaintext.** The builder's data volume lacks the content-protection bit (attributes
+`0x80002100`), and the attributes B-tree holds only 4 `cprotect` keys. Every SQLite and plist file sampled is readable:
+`keychain-2.db`, `sms.db`, `AddressBook.sqlitedb`, `notes.sqlite` and `systembag.kb`. A real restored device would
+need the class keys.
+
+**Timings (release build):**
+
+| Device | Mount | Of which, rebuild |
+|---|---|---|
+| iPad (8C148, overlay) | 12 s | 9.8 s |
+| iPod | about 15–30 s | — |
+
+The iPod spends its time opening about 157k page files.

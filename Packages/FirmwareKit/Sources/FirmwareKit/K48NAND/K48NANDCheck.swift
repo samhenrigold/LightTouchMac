@@ -3,21 +3,45 @@
 import Foundation
 
 extension K48NAND {
+    /// A store read the way the IOP serves it: with an overlay (s5l8930_iop.c "nand-overlay"), a page whose
+    /// bit is set in bus<b>-ce<c>.dirty comes from the overlay's .pages file (a hole there = erased), else the base.
     final class StoreReader {
         let geo: Geometry, stride: Int
-        let files: [Data]
-        init(_ dir: URL, geo: Geometry) throws {
+        let files: [Data], overlay: [Data], dirty: [Data]
+        init(_ dir: URL, geo: Geometry, overlay: URL? = nil) throws {
             self.geo = geo
             stride = geo.pageSize + geo.spareBytes
-            files = try (0..<geo.buses).flatMap { b in
-                try (0..<geo.cePerBus).map { c in try Data(contentsOf: dir.appendingPathComponent("bus\(b)-ce\(c).pages"), options: .alwaysMapped) }
+            func each(_ d: URL, _ ext: String) throws -> [Data] {
+                try (0..<geo.buses).flatMap { b in
+                    try (0..<geo.cePerBus).map { c in try Data(contentsOf: d.appendingPathComponent("bus\(b)-ce\(c).\(ext)"), options: .alwaysMapped) }
+                }
             }
+            files = try each(dir, "pages")
+            let o = overlay.flatMap { FileManager.default.fileExists(atPath: $0.appendingPathComponent("bus0-ce0.dirty").path) ? $0 : nil }
+            self.overlay = try o.map { try each($0, "pages") } ?? []
+            dirty = try o.map { try each($0, "dirty") } ?? []
+        }
+
+        /// The file serving (cs, ppage).
+        func file(_ cs: Int, _ ppage: Int) -> Data {
+            let (b, c) = geo.busCE(cs)
+            let i = b * geo.cePerBus + c
+            if !dirty.isEmpty, ppage / 8 < dirty[i].count, dirty[i][dirty[i].startIndex + ppage / 8] >> (ppage % 8) & 1 != 0 { return overlay[i] }
+            return files[i]
+        }
+
+        /// The un-whitened 12-byte meta of (cs, ppage), nil if the page is blank. Reads only the spare.
+        func meta(_ cs: Int, _ ppage: Int) -> [UInt8]? {
+            let f = file(cs, ppage), o = f.startIndex + ppage * stride + geo.pageSize
+            guard o + K48NAND.meta <= f.endIndex else { return nil }
+            let m = [UInt8](f[o..<o + K48NAND.meta])
+            if m.allSatisfy({ $0 == 0 }) || m.allSatisfy({ $0 == 0xFF }) { return nil }
+            return K48NAND.whiten(m, ppage)
         }
 
         /// (data, 12-byte meta, un-whitened unless raw), nil if the page is blank.
         func read(_ cs: Int, _ ppage: Int, raw: Bool = false) -> (data: [UInt8], meta: [UInt8])? {
-            let (b, c) = geo.busCE(cs)
-            let f = files[b * geo.cePerBus + c], o = ppage * stride
+            let f = file(cs, ppage), o = ppage * stride
             guard o + stride <= f.count else { return nil }
             let rec = [UInt8](f[o..<o + stride])
             let sp = rec[geo.pageSize...]
@@ -28,13 +52,19 @@ extension K48NAND {
         func readVPN(_ vpn: Int) -> (data: [UInt8], meta: [UInt8])? { let (cs, p) = geo.vpnToPhys(vpn); return read(cs, p) }
     }
 
-    /// Checks a store; `log` gets every "ok"/"FAIL" line. Returns true when nothing failed.
-    public static func check(store dir: URL, mbr: URL? = nil, system: URL? = nil, log: (String) -> Void = { _ in }) throws -> Bool {
+    /// The known geometry a store's geometry.json describes.
+    static func geometry(store dir: URL) throws -> Geometry {
         guard let g = try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent("geometry.json"))) as? [String: Any],
               let geo = Geometry.known.first(where: {
                   ($0.buses, $0.cePerBus, $0.blocksPerCE, $0.pagesPerBlock, $0.pageSize)
                       == (g["buses"] as? Int, g["ce_per_bus"] as? Int, g["blocks_per_ce"] as? Int, g["pages_per_block"] as? Int, g["page_bytes"] as? Int)
               }) else { throw FirmwareError(.unsupported, "\(dir.path): no known geometry matches geometry.json") }
+        return geo
+    }
+
+    /// Checks a store; `log` gets every "ok"/"FAIL" line. Returns true when nothing failed.
+    public static func check(store dir: URL, mbr: URL? = nil, system: URL? = nil, log: (String) -> Void = { _ in }) throws -> Bool {
+        let geo = try geometry(store: dir)
         let st = try StoreReader(dir, geo: geo)
         var fails: [String] = []
         func ok(_ cond: Bool, _ what: @autoclosure () -> String) {

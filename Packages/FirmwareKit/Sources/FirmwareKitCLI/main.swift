@@ -7,6 +7,15 @@
 // stdout is JSON Lines only; diagnostics go to stderr. Exit 0 after done, 1 after an error event; SIGTERM
 // cancels (children stopped, images under STAGING_DIR detached, exit 143) and leaves STAGING_DIR to the caller.
 // --guest-tools defaults to ../Resources/guest-tools next to this executable (the app bundle's).
+//
+//   firmwarekit mount  --device DIR [--volume system|data|all] [--out DIR]   (a STOPPED device only)
+//   firmwarekit export --device DIR [--volume system|data|all] [--out DIR]
+//   firmwarekit unmount --out DIR
+//
+// mount/export rebuild the device's HFS+ volumes from base + overlay into sparse images in --out (default:
+// a new temp dir) and print one JSON line per volume: {volume, image, clean, repaired, seconds, and for
+// mount device + mountPoint (attached read-only, visible in Finder)}. unmount detaches them and deletes --out.
+// An error prints {"error": ...} and exits 1.
 
 import FirmwareKit
 import Foundation
@@ -17,11 +26,17 @@ let stdoutLock = NSLock()
 }
 
 var args = CommandLine.arguments.dropFirst()
-guard args.popFirst() == "create" else {
+let command = args.popFirst()
+if command == "mount" || command == "export" || command == "unmount" {
+    volumeCommand(command!, Array(args))
+}
+guard command == "create" else {
     FileHandle.standardError.write(Data("""
         firmwarekit \(FirmwareKit.version)
         usage: firmwarekit create --entry ENTRY.json --ipsw IPSW --out DIR [--seed S] [--activation-hook PATH]
                                   [--helper PATH] [--cache DIR] [--guest-tools DIR]
+               firmwarekit mount|export --device DIR [--volume system|data|all] [--out DIR]
+               firmwarekit unmount --out DIR
 
         """.utf8))
     exit(64)
