@@ -18,9 +18,11 @@ final class EmulatorController {
     private let usbmux = USBMux()
     private var started = false
     private var serialCapture: SerialLogCapture?
-    private var cleanShutdownTask: Task<Void, Never>?
+    private var haltTask: Task<Void, Never>?
     private(set) var isErasing = false { didSet { onStatusChange?() } }
-    private var shutdownCompletions: [(Bool) -> Void] = []
+    private var haltCompletions: [(Bool) -> Void] = []
+    /// Stop asked the helper to halt: its exit is Stopped, not a crash.
+    private var halting = false
     private var poweringOn = false
     private(set) var shuttingDown = false { didSet { onStatusChange?() } }
     private(set) var isSleeping = false { didSet { if oldValue != isSleeping { onStatusChange?() } } }
@@ -628,7 +630,7 @@ final class EmulatorController {
     /// `.dead`; the window shows a Restart overlay, and the other devices keep running.
     private func helperDied(_ reason: String) {
         guard !isDead else { return }
-        deathReason = reason
+        if !halting { deathReason = reason }
         statusTimer?.invalidate()
         statusTimer = nil
         audioSink?(.audioEnded(generation: 0, failed: true))
@@ -643,7 +645,7 @@ final class EmulatorController {
         usbmux.stop()
         serialCapture?.finish()
         serialCapture = nil
-        state = .dead(exitCode: nil)
+        state = halting ? .poweredOff : .dead(exitCode: nil)
     }
 
     // MARK: - Liveness
@@ -727,7 +729,7 @@ final class EmulatorController {
     var statusLine: String {
         if isErasing { return "Erasing \(profile.shortName)…" }
         if storageFailed { return "Storage write failed — device stopped; latest changes were not saved" }
-        if shuttingDown, !isPoweredOff { return "Powering off…" }
+        if shuttingDown, !isPoweredOff { return "Stopping…" }
         switch state {
         case .poweredOff: return "Powered Off"
         case .notStarted: return "Starting…"
@@ -1200,7 +1202,7 @@ final class EmulatorController {
         }
         logEvent("guest package: restarting with \(choice) guest tools")
         discardSavedState()   // a restored session would not run the loader
-        beginCleanShutdown { [weak self] _ in self?.onRestartRequested?() }
+        halt { [weak self] _ in self?.onRestartRequested?() }
     }
 
     // MARK: - Keyboard passthrough
@@ -1259,19 +1261,10 @@ final class EmulatorController {
             guard let self else { return }
             await preparation?.value
             if !self.hasGuestTools {
-                // No guest shell to sync through: power off cleanly (the
-                // power-off gesture) so the reset doesn't cut off unwritten
-                // catalog updates.
-                let clean = await withCheckedContinuation { done in
-                    self.beginCleanShutdown { done.resume(returning: $0) }
-                }
-                // Powered off cleanly: Power On is the reset plus the resume
-                // a stopped VM needs (and puts the accelerometer upright).
-                if clean {
-                    self.state = .poweredOff
-                    self.powerOn()
-                    return
-                }
+                // No guest to sync through: a hard halt (storage flushed, the
+                // journal replays), then a fresh helper, as Stop then Start.
+                self.halt { [weak self] _ in self?.onRestartRequested?() }
+                return
             } else if self.canManageApps {
                 _ = await withSoftDeadline(20) { try? await self.syncFilesystem() }
             }
@@ -1288,18 +1281,16 @@ final class EmulatorController {
     /// Retain the QEMU main loop at guest power-off; a reset can cold boot it
     /// again without reinitializing QEMU or opening a second NAND writer.
     func powerOff(completion: @escaping (Bool) -> Void) {
-        guard isRunning else { completion(false); return }
+        guard canStop else { completion(false); return }
         AppInstaller.discardAll()
-        beginCleanShutdown { [weak self] confirmed in
-            guard let self else { completion(false); return }
-            self.pollStorageFailure()
-            if !confirmed, !self.isDead, !self.isPoweredOff { self.startForegroundWatch() }
-            completion(confirmed)
-        }
+        halt(completion: completion)
     }
 
     func powerOn() {
         guard isPoweredOff, !storageFailed, !shuttingDown else { return }
+        // Stopped by a halt: the helper is gone, so start a fresh one. A guest
+        // that powered itself off (-no-shutdown) keeps its helper: reset and resume.
+        if process?.isDead != false { onRestartRequested?(); return }
         reconnectUSB()
         poweringOn = true
         restoringFromSnapshot = false
@@ -1650,112 +1641,51 @@ final class EmulatorController {
         performSnapshot(completion: completion)
     }
 
-    /// Request kernel unmount, then require the final PMU power-off write.
-    /// Preparation cancellation, halt retries and best-effort sync each have
-    /// a budget; no boot-time device query can keep Quit pending forever.
-    static let preparationShutdownBudget: TimeInterval = 5
-    static let haltShutdownBudget: TimeInterval = 30
-    static let syncShutdownBudget: TimeInterval = 20
-    /// iPad power-offs take 16–25 s on iOS 4.2.1 and once passed 30 s, which left
-    /// the FTL unclosed (a rescan on the next boot). LightTouchDevice's
-    /// DeviceHost.iPadPowerdownBudget is the same for its parent-death path.
-    static let iPadPowerdownBudget: TimeInterval = 45
-    /// The quit backstop; it covers both boards' ladders (iPad: 5 + 45).
-    static let cleanShutdownBudget: TimeInterval = max(preparationShutdownBudget + haltShutdownBudget + syncShutdownBudget,
-                                                       preparationShutdownBudget + iPadPowerdownBudget) + 5
+    /// Stop is a hard halt (Sam, 2026-09-28), never a guest shutdown: a booting or
+    /// wedged guest ignores those and left the window on "Powering off…". SIGTERM
+    /// makes the helper pause the VM, which flushes storage, and quit QEMU
+    /// (DeviceHost.halt); a helper still alive after `haltBudget` is killed. The
+    /// guest's filesystems replay their journals on the next boot. The helper's
+    /// exit is Stopped (helperDied). `completion(true)` iff the helper is gone.
+    static let haltBudget: TimeInterval = 10
+    /// The quit backstop: the halt, then the kill.
+    static let stopBudget: TimeInterval = haltBudget + 5
 
-    func beginCleanShutdown(completion: @escaping (Bool) -> Void) {
-        if isPoweredOff { completion(true); return }
-        guard !storageFailed, !isDead, state != .notStarted else { completion(false); return }
-        // Multiple requests join one shutdown; none issue overlapping halt
-        // commands or reset its deadline while the guest is unmounting.
-        if cleanShutdownTask != nil { shutdownCompletions.append(completion); return }
+    /// A live helper whose VM can be stopped, including mid-boot.
+    var canStop: Bool { !isDead && !isPoweredOff && !shuttingDown && !isErasing && state != .notStarted }
+
+    func halt(completion: @escaping (Bool) -> Void) {
+        if isPoweredOff || process?.isDead != false { completion(true); return }
+        // Multiple requests join one halt.
+        if haltTask != nil { haltCompletions.append(completion); return }
         guard state != .snapshotting else {
-            logEvent("quit: a state save is in flight — leaving the guest alone")
+            logEvent("stop: a state save is in flight — leaving the device running")
             completion(false); return
         }
         shuttingDown = true
+        halting = true
         connectionRecoveryTask?.cancel()
         orientationTask?.cancel()
         foregroundTask?.cancel()
-        link?.send(.snapshotResume)   // a paused vCPU cannot unmount
-        if state == .paused { state = .running }
-        shutdownCompletions = [completion]
-        let preparation = mediaPreparationTask
-        preparation?.cancel()
-        cleanShutdownTask = Task { [weak self] in
+        mediaPreparationTask?.cancel()
+        haltCompletions = [completion]
+        let process = process
+        process?.terminate()
+        haltTask = Task { [weak self] in
+            var exited = await process?.waitForExit(timeout: Self.haltBudget) ?? true
+            if !exited {
+                logEvent("stop: the device helper did not exit in \(Int(Self.haltBudget)) s; killing it")
+                process?.kill()
+                exited = await process?.waitForExit(timeout: 5) ?? true
+            }
             guard let self else { return }
-            // Cancellation normally unwinds promptly, including blocked C
-            // queries. Keep an explicit bound for a future uncooperative task.
-            if let preparation {
-                let drained = await withSoftDeadline(Self.preparationShutdownBudget) {
-                    await preparation.value
-                    return true
-                } ?? false
-                if !drained { logEvent("quit: device preparation did not finish cancelling in time") }
-            }
-            let confirmed = { !self.storageFailed && self.status?.shutdownConfirmed == true }
-            let stopped = { self.storageFailed || self.isDead }
-            if profile == .iPad1 {
-                // No guest tools on a stock iPad: the machine turns
-                // system_powerdown into the user's power-off gesture (hold
-                // Lock, slide), and the D1815 power-off write confirms it.
-                self.link?.send(.machine(.powerdown))
-                let clean = await DeviceStateStorage.waitForShutdown(
-                    until: Date().addingTimeInterval(Self.iPadPowerdownBudget),
-                    confirmed: confirmed, stopped: stopped)
-                if clean { logEvent("quit: guest confirmed power-off — volume unmounted") }
-                else if !stopped() { logEvent("quit: guest did not shut down — this session's writes may be lost") }
-                finishCleanShutdown(clean); return
-            }
-            if self.canManageApps || self.liveAgentStatus == 1 {
-                let haltDeadline = Date().addingTimeInterval(Self.haltShutdownBudget)
-                // During boot, USB can exist before the agent answers. Retry within
-                // one shared deadline instead of spending the whole timeout
-                // waiting for a command that never reached the guest.
-                while !confirmed(), !stopped(), Date() < haltDeadline, !Task.isCancelled {
-                    let remaining = haltDeadline.timeIntervalSinceNow
-                    let acknowledged = await withSoftDeadline(min(10, remaining)) {
-                        do { try await self.haltFilesystem(); return true }
-                        catch {
-                            if !Task.isCancelled {
-                                logEvent("quit: halt not acknowledged (\(error.localizedDescription))")
-                            }
-                            return false
-                        }
-                    } ?? false
-                    if acknowledged {
-                        _ = await DeviceStateStorage.waitForShutdown(until: haltDeadline,
-                                                                    confirmed: confirmed, stopped: stopped)
-                        break
-                    }
-                    if !confirmed(), !stopped(), Date() < haltDeadline {
-                        do { try await Task.sleep(for: .milliseconds(500)) } catch { break }
-                    }
-                }
-                if confirmed() {
-                    logEvent("quit: guest confirmed power-off — volume unmounted")
-                    finishCleanShutdown(true); return
-                }
-                if stopped() { finishCleanShutdown(false); return }
-                let synced = await withSoftDeadline(Self.syncShutdownBudget) {
-                    (try? await self.syncFilesystem()) != nil
-                } ?? false
-                if synced { logEvent("quit: guest synced; unmount still unconfirmed") }
-            }
-            if confirmed() { finishCleanShutdown(true); return }
-            if !stopped() { logEvent("quit: guest did not shut down — this session's writes may be lost") }
-            finishCleanShutdown(false)
+            if exited { logEvent("stop: device halted") }
+            haltTask = nil
+            shuttingDown = false
+            let completions = haltCompletions
+            haltCompletions = []
+            for completion in completions { completion(exited) }
         }
-    }
-
-    private func finishCleanShutdown(_ confirmed: Bool) {
-        pollStorageFailure()
-        cleanShutdownTask = nil
-        shuttingDown = false
-        let completions = shutdownCompletions
-        shutdownCompletions = []
-        for completion in completions { completion(confirmed) }
     }
 
     /// Menu ▸ Save State Now: save, then resume the vCPU (the save stops it).
@@ -1826,16 +1756,16 @@ final class EmulatorController {
         Task {
             if !isDead, state != .notStarted {
                 _ = await withCheckedContinuation { continuation in
-                    beginCleanShutdown { continuation.resume(returning: $0) }
+                    halt { continuation.resume(returning: $0) }
                 }
-                // Erasing intentionally discards the guest's data. The helper
-                // must still release every NAND/NOR writer (exit) before removal.
+                // The helper must release every NAND/NOR writer (exit) before removal;
+                // one whose guest powered itself off is still alive.
                 link?.send(.machine(.quit))
                 let deadline = ContinuousClock.now + .seconds(15)
-                while !isDead, ContinuousClock.now < deadline {
+                while process?.isDead == false, ContinuousClock.now < deadline {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
-                guard isDead else {
+                guard process?.isDead != false else {
                     isErasing = false
                     reportDeviceNotice("Couldn’t stop the device to erase it. Your data has not been erased. Try again.", for: .erase)
                     return
@@ -1982,13 +1912,6 @@ final class EmulatorController {
         try await tools().launchApp(bundleID)
     }
     func syncFilesystem() async throws                   { try await tools().syncFilesystem() }
-    /// The agent's halt (reboot2: sync, unmount, halt); the caller waits for
-    /// the PMU's power-off. Needs no USB session.
-    func haltFilesystem() async throws {
-        guard await DeviceTools.requestIndependentHalt(agent: link) else {
-            throw DeviceToolsError.failed("The device agent is not ready.")
-        }
-    }
     func restartSpringBoard() async throws {
         guard isRunning, !isInstalling else { return }
         restartingSpringBoard = true

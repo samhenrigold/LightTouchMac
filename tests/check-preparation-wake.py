@@ -32,6 +32,9 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
  var poweringOn=false
  var status:Status? { queryHook?(); return Status(displaySleeping: sleeping) }
  var link:FakeLink?=FakeLink()
+ struct Helper { let isDead = false }
+ var process:Helper?=Helper()
+ var onRestartRequested:(()->Void)?
  var foregroundAppName:String?,deviceReachable:Bool?
  var isPoweredOff:Bool{state == .poweredOff}
  func reconnectUSB(){}
