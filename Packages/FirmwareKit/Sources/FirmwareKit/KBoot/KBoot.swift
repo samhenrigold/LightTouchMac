@@ -23,7 +23,9 @@ public enum KBoot {
     public static let memSize = dramSize - pramSize - vramSize
     public static let vramPA = physBase + memSize, pramPA = physBase + dramSize - pramSize
     public static let fbWidth = 1024, fbHeight = 768, fbDepth = 32
-    public static let defaultBootArgs = "serial=3 debug=0x8 amfi_allow_any_signature=1 cs_enforcement_disable=1"
+    /// ipad1_kboot.DEFAULT_BOOT_ARGS. enable-hsic=1: 4.x's AppleS5L8930XUSBArbitrator::handleStart publishes the
+    /// USB host nubs for the DT's hsic-enabled only when this boot-arg is 1 (no USB keyboard without it); 3.x ignores it.
+    public static let defaultBootArgs = "serial=3 debug=0x8 amfi_allow_any_signature=1 cs_enforcement_disable=1 enable-hsic=1"
     public static let defaultIBootVersion = "iBoot-817.29"
     public static let rootMatching = "<dict><key>IOProviderClass</key><string>IOMedia</string><key>IOPropertyMatch</key>"
         + "<dict><key>Partition ID</key><integer>1</integer></dict></dict>"

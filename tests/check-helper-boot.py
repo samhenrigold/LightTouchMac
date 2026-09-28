@@ -147,7 +147,7 @@ def ipad_boot(device, ovl, serial, restore=None, shutdown=True):
     ovl.mkdir(parents=True, exist_ok=True)
     machine = f"ipad1,kboot={esc(device / 'kboot.bin')},nand={esc(device / 'nand')},nand-overlay={esc(ovl)}"
     argv = ["LightTouchDevice", "-M", machine, "-display", "none", "-audio", "driver=none", *(["-no-shutdown"] if shutdown else []),
-            "-serial", f"file:{serial}", "-device", "usb-kbd,bus=usb-bus.0"]
+            "-serial", f"file:{serial}", "-device", "usb-kbd,bus=usb-bus.0,max-power=20"]
     if restore:
         argv += ["-incoming", f"file:{restore}"]
     return {"machine": "ipad1", "argv": argv}
