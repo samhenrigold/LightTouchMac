@@ -6,7 +6,8 @@
 //
 //   session-driver CONFIG.json
 //
-// config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase}
+// config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase, guest?}
+// With `guest` it runs the guest-services scenario instead (guest.swift).
 
 import Foundation
 import IOSurface
@@ -14,6 +15,7 @@ import IOSurface
 struct Config: Decodable {
     var helper: String, requirement: String, usbmuxd: String, ipa: String, bundleID: String
     var work: String, files: String, ipodNAND: String, ipadBase: String
+    var guest: GuestConfig?
 }
 
 let t0 = Date()
@@ -34,7 +36,6 @@ nonisolated enum Bundled {
 }
 struct InstalledApp: Sendable { let id, name, version: String }
 struct MediaVideo: Sendable { let id: String; let video: URL }
-struct MediaPhoto: Sendable { let id: String; let image: URL }
 struct MediaSong: Sendable { let id: String; let audio: URL; static let extensions: Set<String> = ["m4a"] }
 
 nonisolated(unsafe) let config = try! JSONDecoder().decode(Config.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1])))
@@ -93,11 +94,14 @@ extension String {
     var mux: Mux!
     var serial: SerialLogCapture?
     var deaths: [String] = []
+    /// An iPod's own files (a device.py device); nil: the shipping image in `files`.
+    struct IPodFiles { var nand, nor, iBoot: String; var gidBlobs: String? }
+    var ipod: IPodFiles?
     init(name: String, profile: DeviceProfile) { self.name = name; self.profile = profile }
     var dir: URL { work.appendingPathComponent(name) }
 
     /// What EmulatorController.start + iPodBoot/iPadBoot do, with test paths and no audio.
-    func boot(generation: Int) throws {
+    func boot(generation: Int, guestPackage: String? = nil) throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         mux = try Mux(name: name)
         serial = try SerialLogCapture(url: dir.appendingPathComponent("serial.log"), temporaryRoot: work)
@@ -111,11 +115,13 @@ extension String {
                                            writableNOR: files.writableNOR?.path, usbAddress: mux.guestAddress, wifi: true),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: nil, restore: [])
         } else {
-            let nor = try DeviceStateStorage.writableNOR(base: URL(fileURLWithPath: Self.files + "/ios3/nor_7E18.bin"), overlay: overlay)
+            let files = ipod ?? IPodFiles(nand: Self.ipodNAND, nor: Self.files + "/ios3/nor_7E18.bin", iBoot: Self.files + "/ios3/iBoot.bin")
+            let nor = try DeviceStateStorage.writableNOR(base: URL(fileURLWithPath: files.nor), overlay: overlay)
             config = BootRecipe.iPod(.init(bootArgs: "amfi_allow_any_signature=1 cs_enforcement_disable=1",
-                                           iBoot: Self.files + "/ios3/iBoot.bin", bootrom: Self.files + "/bootrom_240_4",
-                                           nand: Self.ipodNAND, nor: Self.files + "/ios3/nor_7E18.bin", writableNOR: nor.path,
-                                           overlay: overlay.path, usbAddress: mux.guestAddress, wifi: true),
+                                           iBoot: files.iBoot, bootrom: Self.files + "/bootrom_240_4",
+                                           nand: files.nand, nor: files.nor, writableNOR: nor.path,
+                                           overlay: overlay.path, usbAddress: mux.guestAddress, wifi: true,
+                                           gidBlobs: files.gidBlobs, guestPackage: guestPackage),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: "user,id=wifi0", restore: [])
         }
         let process = DeviceProcess(instance: UUID(), profile: profile, log: dir.appendingPathComponent("native.log"),
@@ -351,6 +357,6 @@ func checkPreparedFiles() throws {
     exit(0)
 }
 
-Task { @MainActor in await run() }
+Task { @MainActor in if let guest = config.guest { await runGuest(guest) } else { await run() } }
 DispatchQueue.main.asyncAfter(deadline: .now() + 560) { fail("driver timed out") }
 CFRunLoopRun()

@@ -20,6 +20,23 @@ DeviceStateStorage.writableNOR, and W1's DeviceLink, and runs:
   base       the prepared iPad base is byte- and mode-identical afterwards
 
     tests/check-sessions.py --ipad-device DIR [--helper PATH] [--dylib PATH] [--ipa PATH] [--work DIR]
+    tests/check-sessions.py --guest --ipod-device DIR --itpack ARMV6.itpack [...]
+
+--guest runs the no-shell guest-services scenario (tests/session-driver/guest.swift) on two
+iPods at once: the shipping image (nand-current) and a fresh device.py 7E18 (--ipod-device),
+each through the app's GuestServices/GuestAgent, DeviceServices, lockdown-tz and GuestPackage:
+
+  offer      the boot's guest-package offer from --itpack, passed as guest-package=
+  agent      capabilities from the agent's ping (a v1 agent falls back to its exec)
+  report     the loader's report and the verdict: the fresh device installs the bundled
+             package and judges it good; the shipping image has no loader (legacy tools)
+  components the legacy image's in-place upgrade over the agent, no SSH (none when packaged)
+  install    an IPA through installation_proxy, then launch it through the agent
+  respring   launchd restarts SpringBoard (a new pid) and it answers again
+  timezone   lockdown SetValue through the lockdown-tz child process
+  media      a photo staged over AFC and committed with itphoto
+  rollback   (fresh) the package judged bad: after a clean halt and a fresh helper the loader reverts
+  halt       the agent's halt, confirmed power-off, helper exit 0; the base is unchanged
 
 --ipad-device is a fresh device from the qemu-ios device tool, e.g.
   python3 ~/Developer/qemu-ios-ipad1/imgtools/device.py create manifests/ipad1-7B500.json OUT \\
@@ -35,7 +52,8 @@ ROOT = Path(__file__).resolve().parents[1]
 HOME = Path.home()
 TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
 APP_SOURCES = ["DeviceServices", "DeviceFiles", "IMobileDevice", "DeviceProfile", "DeviceProfile+Display",
-               "NativeLogging", "StorageLocations", "DeviceStateStorage"]
+               "NativeLogging", "StorageLocations", "DeviceStateStorage", "GuestServices", "GuestPackage",
+               "DeviceInstance", "FirmwareCatalog", "MediaPhoto", "MediaIdentity"]
 
 
 def tree(root):
@@ -49,6 +67,47 @@ def tree(root):
     return out
 
 
+def guest_checks(find, check, events):
+    one = lambda name, device, **m: (find(name, device=device, **m) or [{}])[0]
+    for d in ("shipping", "fresh"):
+        offer = one("offer", d)
+        check(offer.get("serial", -1) > 0 and offer.get("text", "").startswith("ltpkg 1\nbuild 7E18\nserial "),
+              f"{d}: offer serial {offer.get('serial')} composed and passed as guest-package=")
+        check(one("supported", d).get("guestPackage"), f"{d}: the helper's dylib serves guest-package offers")
+        caps = one("capabilities", d)
+        check(caps.get("version", 0) >= 1, f"{d}: agent v{caps.get('version')} ({len(caps.get('ops', []))} ops)")
+        comp = one("components", d)
+        check(comp.get("version") == 2, f"{d}: after the component step the agent is v{comp.get('version')} "
+              f"(changed {comp.get('changed')}, packaged {comp.get('packaged')})")
+        check(one("unlocked", d).get("locked") is False, f"{d}: unlocked")
+        inst = one("installed", d)
+        check(inst.get("has"), f"{d}: IPA installed ({inst.get('seconds', 0):.0f} s)")
+        check(one("launched", d).get("frontmost") == "com.qemuios.harness", f"{d}: launched through the agent: frontmost {one('launched', d).get('frontmost')}")
+        rs = one("respring", d)
+        check(rs.get("after", -1) > 0 and rs.get("after") != rs.get("before"), f"{d}: respring, SpringBoard pid {rs.get('before')} -> {rs.get('after')}")
+        check(one("timezone", d).get("zone") == "Asia/Tokyo", f"{d}: time zone now {one('timezone', d).get('zone')} (lockdown-tz)")
+        media = one("media", d)
+        check(media.get("imported") and media.get("receipt", "").startswith("done\n"), f"{d}: photo imported (itphoto, receipt {media.get('receipt')!r})")
+        for n, halt in enumerate(find("halted", device=d) or [{}]):
+            check(halt.get("submitted") and halt.get("confirmed", -1) >= 0 and halt.get("exited") and halt.get("reason") == "The emulator stopped.",
+                  f"{d}: clean halt {n + 1}, power-off confirmed in {halt.get('confirmed', -1):.1f} s, helper exited")
+    ship = one("verdict", "shipping", label="boot")
+    check(ship.get("serial") == -1 and ship.get("verdict") == "legacy", f"shipping: no report, legacy baked tools ({ship.get('verdict')})")
+    fresh = one("verdict", "fresh", label="boot")
+    # A bundled serial newer than the seed is installed (1) or switched to (2); the seed itself stays (0).
+    check(fresh.get("serial") == one("offer", "fresh").get("bundled") and fresh.get("result") in (0, 1, 2) and fresh.get("verdict", "").startswith("good"),
+          f"fresh: the loader runs the bundled serial {fresh.get('serial')} (result {fresh.get('result')}), judged {fresh.get('verdict')}")
+    check(one("components", "fresh").get("packaged") and one("components", "fresh").get("changed") is False,
+          "fresh: packaged image, the app leaves its components to the loader")
+    if fresh.get("result") == 0:
+        print("  note: the bundled package is the seed; no rollback to test (use an itpack with a newer serial)")
+    else:
+        back = one("verdict", "fresh", label="rollback")
+        check(back.get("result") == 3 and back.get("serial") == 1, f"fresh: after verdict bad the loader reverted to serial {back.get('serial')} (result {back.get('result')})")
+        offers = find("offer", device="fresh")
+        check(len(offers) == 2 and "verdict bad" in offers[-1].get("text", ""), "fresh: the rollback offer carries the bad verdict")
+
+
 def build(args, out):
     source = (ROOT / "LightTouchMac/DeviceSession.swift").read_text()
     section = source[source.index("// MARK: - Helper process"):source.index("// MARK: - Sessions")]
@@ -57,7 +116,8 @@ def build(args, out):
     subprocess.run(["xcrun", "swiftc", "-swift-version", "5", "-default-isolation", "MainActor", "-module-cache-path", out / "modules",
                     "-I", ROOT / "Shared/CLink", out / "ltm_link.o", *sorted((ROOT / "Shared").glob("*.swift")),
                     ROOT / "LightTouchDevice/FrameTools.swift", *[ROOT / f"LightTouchMac/{n}.swift" for n in APP_SOURCES],
-                    out / "DeviceProcess.swift", ROOT / "tests/session-driver/main.swift", "-o", out / "session-driver"],
+                    out / "DeviceProcess.swift", ROOT / "tests/session-driver/main.swift", ROOT / "tests/session-driver/guest.swift",
+                    "-o", out / "session-driver"],
                    check=True, stdout=open(out / "swiftc.log", "w"), stderr=subprocess.STDOUT)
     if args.helper:
         return Path(args.helper)
@@ -72,7 +132,14 @@ def build(args, out):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--ipad-device", type=Path, required=True)
+    ap.add_argument("--ipad-device", type=Path)
+    ap.add_argument("--guest", action="store_true", help="the no-shell guest-services scenario on two iPods")
+    ap.add_argument("--ipod-device", type=Path, help="--guest: a fresh device.py iPod (nand/, nor.bin, iBoot.bin, gid-blobs.bin)")
+    ap.add_argument("--itpack", type=Path, default=HOME / "Developer/qemu-ios-ipad1/build/guest-package/armv6.itpack")
+    ap.add_argument("--guest-tools", type=Path, help="--guest: a flat build-guest-tools.sh guest-tools directory "
+                    "(it_agent, it_typein.dylib, MBXGLEngine, itphoto); default: the qemu-ios checkout's contrib binaries")
+    ap.add_argument("--contrib", type=Path, default=HOME / "Developer/qemu-ios-ipad1/contrib")
+    ap.add_argument("--time-zone", default="Asia/Tokyo")
     ap.add_argument("--helper")
     ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB",
                                                       str(HOME / "Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib")))
@@ -82,14 +149,36 @@ def main():
     ap.add_argument("--bundle-id", default="com.qemuios.harness")
     ap.add_argument("--work", type=Path)
     args = ap.parse_args()
+    if not args.guest and not args.ipad_device:
+        ap.error("--ipad-device is required (or --guest)")
+    if args.guest and not args.ipod_device:
+        ap.error("--guest needs --ipod-device")
     work = args.work or Path(tempfile.mkdtemp(prefix="ltm-sessions-"))
     work.mkdir(parents=True, exist_ok=True)
     print(f"work: {work}", flush=True)
     helper = build(args, work)
-    base_before = tree(args.ipad_device)
+    base_dir = args.ipod_device if args.guest else args.ipad_device
+    base_before = tree(base_dir)
     cfg = {"helper": str(helper), "requirement": TEAM_REQ, "usbmuxd": args.usbmuxd, "ipa": str(args.ipa),
            "bundleID": args.bundle_id, "work": str(work), "files": str(args.files),
-           "ipodNAND": str(args.files / os.readlink(args.files / "nand-current")), "ipadBase": str(args.ipad_device)}
+           "ipodNAND": str(args.files / os.readlink(args.files / "nand-current")), "ipadBase": str(args.ipad_device or "")}
+    if args.guest:
+        tz = work / "lockdown-tz"
+        # The app's Debug build compiles the same source (DeviceTools.developmentHelper).
+        r = subprocess.run(["/bin/sh", "-c", 'PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; cc -O2 -o "$1" "$2" '
+                            '$(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)', "sh", str(tz),
+                            str(ROOT / "scripts/lockdown-tz.c")])
+        if r.returncode:
+            sys.exit("FAIL: building lockdown-tz")
+        dev = args.ipod_device
+        c, g = args.contrib, args.guest_tools
+        tools = {n: str(g / n if g else c / sub / n) for n, sub in (("it_agent", "it-agent"), ("it_typein.dylib", "it-agent"),
+                                                                   ("MBXGLEngine", "it-gles"), ("itphoto", "it-media"))}
+        cfg["guest"] = {"itpack": str(args.itpack), "lockdownTZ": str(tz), "tools": tools, "timeZone": args.time_zone,
+                        "devices": [{"name": "shipping", "nand": cfg["ipodNAND"], "nor": str(args.files / "ios3/nor_7E18.bin"),
+                                     "iBoot": str(args.files / "ios3/iBoot.bin")},
+                                    {"name": "fresh", "nand": str(dev / "nand"), "nor": str(dev / "nor.bin"), "iBoot": str(dev / "iBoot.bin"),
+                                     "gidBlobs": str(dev / "gid-blobs.bin"), "lock": str(dev / "device.lock.json"), "rollback": True}]}
     (work / "config.json").write_text(json.dumps(cfg, indent=1))
     env = dict(os.environ, LTM_QEMU_DYLIB=args.dylib)
     driver = subprocess.Popen([work / "session-driver", work / "config.json"], stdout=open(work / "driver.jsonl", "w"),
@@ -126,6 +215,16 @@ def main():
     def check(ok, what):
         results.append(bool(ok))
         print(f"  {'ok ' if ok else 'FAIL'} {what}", flush=True)
+
+    if args.guest:
+        guest_checks(find, check, events)
+        check(tree(base_dir) == base_before, "the fresh device's base is unchanged (paths, sizes, modes, mtimes)")
+        check(find("done") and driver.returncode == 0, f"driver finished (exit {driver.returncode})")
+        fails = find("fail")
+        if fails:
+            print("  driver: " + fails[0]["why"])
+        print(f"\n{sum(results)}/{len(results)} passed; events {work}/driver.jsonl")
+        sys.exit(0 if all(results) else 1)
 
     prep = (find("preparedFiles") or [{}])[0]
     check(prep.get("kboot") and prep.get("nand") and prep.get("overlay") and prep.get("missingThrows"),
