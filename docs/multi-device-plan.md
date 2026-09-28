@@ -2,8 +2,8 @@
 
 Status: plan of record, 2026-09-28. Branch `multidevice`, based on `ipad1`.
 
-This implements [device-firmware-modularization-plan.md](device-firmware-modularization-plan.md)
-and [device-library-architecture.md](device-library-architecture.md) as a product.
+This implements the 2026-09-27 modularization and device-library proposals (untracked drafts that never
+reached a branch) as a product.
 
 **Decisions (Sam, 2026-09-28):**
 - **One helper process per running device.** QEMU can't re-init in-process.
@@ -437,7 +437,7 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 
 | # | Risk | Cheap retirement | Fallback |
 |---|---|---|---|
-| 1 | Dynamic `NSXPCListener(machServiceName:)` from a hardened, unsandboxed app plus a spawned child; IOSurface over NSXPC | Spike: a signed parent and child, headless. **Done: the listener is refused (EPERM) for a name launchd doesn't know** ([spikes](multi-device-spikes.md#1-rendezvous--iosurface-risk-1-fallback-a)) | **Chosen:** `bootstrap_check_in` rendezvous. A Mach hello carries the token and the `IOSurfaceCreateMachPort` ports and is validated by audit token + `SecCodeCheckValidity` + token. A socketpair on fd 3 carries the Codable messages. |
+| 1 | Dynamic `NSXPCListener(machServiceName:)` from a hardened, unsandboxed app plus a spawned child; IOSurface over NSXPC | Spike: a signed parent and child, headless. **Done: the listener is refused (EPERM) for a name launchd doesn't know** ([spikes](archive/multi-device-spikes.md#1-rendezvous--iosurface-risk-1-fallback-a)) | **Chosen:** `bootstrap_check_in` rendezvous. A Mach hello carries the token and the `IOSurfaceCreateMachPort` ports and is validated by audit token + `SecCodeCheckValidity` + token. A socketpair on fd 3 carries the Codable messages. |
 | 2 | Hardened helper doing GL (CGL), coreaudio, JIT, GL snapshots outside an app | Signed helper boots the iPad GL CA golden headless, then save/restore. **Done: go with the qemu entitlements only.** The helper must never `dispatchMain()` (RCU) | Give the helper the app's entitlements |
 | 3 | IOSurface ring tearing or latency | Display-measurement test + recording diff | Copy to a CGImage as today |
 | 4 | Apple CDN serves the pinned IPSWs over HTTPS with Range | `curl -sIr 0-0` per URL. **Done: go. HTTPS works and the ranged GET returns 206; iPod 3.1.3 has no URL** | ATS exception for appldnld.apple.com (SHA1 guarantees integrity) |
