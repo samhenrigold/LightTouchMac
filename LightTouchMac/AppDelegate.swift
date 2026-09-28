@@ -5,10 +5,11 @@ import Cocoa
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     
     private var windowController: MainWindowController?
-    private var emulator: EmulatorController?
-    /// The one place the board is chosen: LIGHTTOUCH_DEVICE=ipad1, else the iPod.
-    private let profile: DeviceProfile =
-        ProcessInfo.processInfo.environment["LIGHTTOUCH_DEVICE"] == "ipad1" ? .iPad1 : .iPodTouch2G
+    private var host: DeviceSessionHost?
+    /// Every device this launch started; quitting shuts each one down.
+    private var emulators: [EmulatorController] { host?.sessions.map(\.emulator) ?? [] }
+    /// The running device, for settings that apply to it on its next boot.
+    private var emulator: EmulatorController? { windowController?.session?.emulator ?? emulators.first }
     private var helpController: NSWindowController?
     private var awaitingTermination = false
     private var terminationBackstop: Task<Void, Never>?
@@ -107,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSWindow.allowsAutomaticWindowTabbing = false
         NSApp.disableRelaunchOnLogin()
 
-        MainMenuBuilder.install(profile: profile)
+        MainMenuBuilder.install(profile: LaunchOptions.deviceOverride ?? .iPodTouch2G)
         #if DEBUG
         SpringBoardIcons.selfCheck()
         #endif
@@ -126,61 +127,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         do { try NativeLogging.start() }
         catch { logEvent("logging: native output capture unavailable: \(error.localizedDescription)") }
-        var options = LaunchOptions.resolved()
-
-        // Report missing device files up front. Booting without them dies deep
-        // inside the dylib on the QEMU thread with no error the app can show.
-        let missing = options.missingAssets(for: profile)
-        if !missing.isEmpty {
-            let alert = NSAlert()
-            alert.alertStyle = .critical
-            alert.messageText = "Missing device files"
-            alert.informativeText = """
-            LightTouchMac could not find these required files:
-
-            \(missing.joined(separator: "\n"))
-
-            Point --files-root or the LTM_FILES environment variable at a valid \
-            qemu-ios-files directory.
-            """
-            alert.runModal()
-            Self.requestTermination()
-            return
-        }
-
-        NetworkAccessPreference.configure(&options, profile: profile)
-
-        let emulator = EmulatorController(options: options, profile: profile)
-        // Start before showing the window: the inspector checks the usbmux
-        // session in its viewDidLoad, which runs during showWindow.
-        emulator.start()
-
-        let controller = MainWindowController(emulator: emulator)
+        // Missing device files, and the network question, belong to the
+        // device being started (DeviceSessionHost.start), not to the app.
+        let host = DeviceSessionHost(options: LaunchOptions.resolved())
+        host.adoptLegacyDevices()
+        let profile = host.launchSelection?.profile ?? .iPodTouch2G
+        MainMenuBuilder.install(profile: profile)
+        let controller = MainWindowController(host: host, profile: profile)
         controller.showWindow(nil)
-
-        self.emulator = emulator
+        self.host = host
         self.windowController = controller
+        controller.selectLaunchDevice()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         terminationBackstop?.cancel()
-        emulator?.stop()
+        emulators.forEach { $0.stop() }
     }
 
     /// On quit: guard an in-flight install, then shut the guest down so it
     /// unmounts. beginCleanShutdown requires explicit guest confirmation;
     /// native halt without PMU power-off remains a known limitation.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if emulator?.isErasing == true { return .terminateCancel }
+        if emulators.contains(where: \.isErasing) { return .terminateCancel }
         if awaitingTermination { return .terminateLater }
         if windowController?.finishRecordingBeforeQuit() == true { return .terminateCancel }
-        guard let emulator else { return .terminateNow }
+        guard !emulators.isEmpty else { return .terminateNow }
 
         // Queued installs count too. isInstalling is set only around the install
         // that is executing; jobs waiting their turn are parked on the previous
         // job's task, so quitting with three .ipas queued used to take no notice
         // and drop them without a word.
-        if emulator.isInstalling || AppInstaller.hasPendingWork || windowController?.hasFileTransfer == true {
+        if emulators.contains(where: \.isInstalling) || AppInstaller.hasPendingWork || windowController?.hasFileTransfer == true {
             let alert = NSAlert()
             alert.messageText = "Device changes are in progress"
             alert.informativeText = "Quitting cancels changes that haven’t finished."
@@ -188,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             alert.addButton(withTitle: "Cancel")
             alert.buttons.first?.hasDestructiveAction = true
             guard alert.runModal() == .alertFirstButtonReturn else {
-                emulator.cancelFactoryReset()   // this quit was the erase; call it off
+                emulators.forEach { $0.cancelFactoryReset() }   // this quit was the erase; call it off
                 return .terminateCancel
             }
             AppInstaller.cancelPendingWork()
@@ -200,7 +178,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // earlier in the session as well as the one in flight.
         }
 
-        guard !emulator.isDead, !emulator.isPoweredOff else { return .terminateNow }
+        let running = emulators.filter { !$0.isDead && !$0.isPoweredOff }
+        guard !running.isEmpty else { return .terminateNow }
 
         awaitingTermination = true
         let reply = { [weak self] in
@@ -222,22 +201,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             reply()
         }
 
-        // Exactly ONE of these two runs, and that is the whole point.
-        //
-        // Both make the session durable, by opposite means. The snapshot freezes
-        // RAM while flash stays where it is; the powerdown makes the guest
-        // unmount, which pushes RAM's HFS+ catalog INTO flash. Doing the save
-        // and then the powerdown — which is what this used to ask for — leaves
-        // the snapshot describing a filesystem that has since moved on, i.e.
-        // exactly the stale-RAM-over-newer-flash corruption the snapshot code
-        // spends its comments warning about. So: save if resume is on, and fall
-        // back to unmounting only if the save did not happen.
-        if EmulatorController.resumeOnLaunch, !emulator.isInstalling, !AppInstaller.hasPendingWork {
-            emulator.beginQuitSnapshot { saved in
-                if saved { reply() } else { emulator.beginCleanShutdown { _ in reply() } }
+        // Every device shuts down at once; quit waits for the last of them.
+        var remaining = running.count
+        let finished = {
+            remaining -= 1
+            if remaining == 0 { reply() }
+        }
+        for emulator in running {
+            // Exactly ONE of these two runs, and that is the whole point.
+            //
+            // Both make the session durable, by opposite means. The snapshot freezes
+            // RAM while flash stays where it is; the powerdown makes the guest
+            // unmount, which pushes RAM's HFS+ catalog INTO flash. Doing the save
+            // and then the powerdown — which is what this used to ask for — leaves
+            // the snapshot describing a filesystem that has since moved on, i.e.
+            // exactly the stale-RAM-over-newer-flash corruption the snapshot code
+            // spends its comments warning about. So: save if resume is on, and fall
+            // back to unmounting only if the save did not happen.
+            if EmulatorController.resumeOnLaunch, !emulator.isInstalling, !AppInstaller.hasPendingWork {
+                emulator.beginQuitSnapshot { saved in
+                    if saved { finished() } else { emulator.beginCleanShutdown { _ in finished() } }
+                }
+            } else {
+                emulator.beginCleanShutdown { _ in finished() }
             }
-        } else {
-            emulator.beginCleanShutdown { _ in reply() }
         }
         return .terminateLater
     }

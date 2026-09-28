@@ -27,11 +27,24 @@ private extension NSToolbarItem.Identifier {
     static let searchCatalog = NSToolbarItem.Identifier("searchCatalog")
 }
 
-final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
-    
-    private let emulator: EmulatorController
-    private let deviceVC: DeviceViewController
-    private let inspectorVC: AppsInspectorViewController
+final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate, DeviceLibraryDelegate {
+
+    private let host: DeviceSessionHost
+    /// The selected row's session, when it has one. Every device command,
+    /// validation and toolbar item follows it.
+    private(set) var session: DeviceSession?
+    private var selectedEntry: FirmwareCatalog.Entry?
+    private var emulator: EmulatorController? { session?.emulator }
+    private var deviceVC: DeviceViewController? { session?.workspace.deviceVC }
+    private var inspectorVC: AppsInspectorViewController? { session?.workspace.inspectorVC }
+    /// The board the menus, Files window and capture options were made for.
+    private var currentProfile: DeviceProfile
+    private let library: DeviceLibraryViewController
+    private let placeholder = DevicePlaceholderViewController()
+    private let detail = ContainerViewController()
+    private let inspectorContainer = ContainerViewController()
+    private let noInspector = NotRunningViewController()
+    private let sidebarItem: NSSplitViewItem
     private let inspectorItem: NSSplitViewItem
     private let zoomControl = NSSegmentedControl()
     private(set) var zoom: ZoomMode = .fit
@@ -39,7 +52,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var filesWindow: DeviceFilesWindowController?
     private weak var proxySettingsEditor: ProxySettingsView?
     private var filesVC: DeviceFilesViewController? { filesWindow?.browser }
-    private lazy var canvasCapture = CanvasCapture(view: deviceVC.screen, profile: emulator.profile)
     private var screenshotBusy = false
     private var modifierMonitor: Any?
     private var captureKeyMonitor: Any?
@@ -49,10 +61,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let capturePreferences = CapturePreferences.shared
     private var captureOptionsWindow: NSWindowController?
     private var canTakeScreenshot: Bool {
-        (emulator.isRunning || emulator.isPaused) && !emulator.isSleeping && !screenshotBusy
+        guard let emulator else { return false }
+        return (emulator.isRunning || emulator.isPaused) && !emulator.isSleeping && !screenshotBusy
     }
     private var canStartRecording: Bool {
-        emulator.isRunning && !emulator.isSleeping && !screenshotBusy
+        guard let emulator else { return false }
+        return emulator.isRunning && !emulator.isSleeping && !screenshotBusy
     }
     private var canToggleRecording: Bool {
         recording.phase != .saving && (recording.canStop || recording.needsRecovery || canStartRecording)
@@ -62,18 +76,32 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     var hasFileTransfer: Bool { filesVC?.hasTransfer == true }
     func cancelFileTransfer() { filesVC?.cancelTransfer() }
 
-    
-    init(emulator: EmulatorController) {
-        self.emulator = emulator
-        self.deviceVC = DeviceViewController(emulator: emulator)
-        self.inspectorVC = AppsInspectorViewController(emulator: emulator)
-        
+    /// Today's device area, before the sidebar: 720×640 for the iPod and
+    /// 1100×760 for the iPad (device plus inspector).
+    private static let sidebarWidth: CGFloat = 220
+    private static func contentSize(for profile: DeviceProfile) -> NSSize {
+        let device = profile == .iPad1 ? NSSize(width: 1100, height: 760) : NSSize(width: 720, height: 640)
+        return NSSize(width: device.width + sidebarWidth, height: device.height)
+    }
+    /// Cleared once the user resizes; until then switching devices resizes to fit.
+    private var sizedToDevice = true
+
+    init(host: DeviceSessionHost, profile: DeviceProfile) {
+        self.host = host
+        currentProfile = profile
+        library = DeviceLibraryViewController(host: host)
+
         let split = NSSplitViewController()
-        let deviceItem = NSSplitViewItem(viewController: deviceVC)
+        sidebarItem = NSSplitViewItem(sidebarWithViewController: library)
+        sidebarItem.minimumThickness = 180
+        sidebarItem.maximumThickness = 320
+        split.addSplitViewItem(sidebarItem)
+
+        let deviceItem = NSSplitViewItem(viewController: detail)
         deviceItem.minimumThickness = 320
         split.addSplitViewItem(deviceItem)
         
-        inspectorItem = NSSplitViewItem(inspectorWithViewController: inspectorVC)
+        inspectorItem = NSSplitViewItem(inspectorWithViewController: inspectorContainer)
         // The widths the sidebar guidelines ask for: enough for an app name at a
         // readable size, not so much that it competes with the device.
         inspectorItem.minimumThickness = 280
@@ -82,7 +110,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         split.addSplitViewItem(inspectorItem)
         
         let window = NSWindow(contentViewController: split)
-        window.title = emulator.profile.displayName
+        window.title = profile.displayName
         // .fullSizeContentView is what makes the inspector run the FULL HEIGHT
         // of the window rather than starting below the toolbar (WWDC23 "inspectors
         // use the full height of the window when the full size content view mask
@@ -90,16 +118,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // inspector's material still stops at it, which is the giveaway that the
         // pane is sitting under the titlebar instead of behind it.
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window.setContentSize(emulator.profile == .iPad1 ? NSSize(width: 1100, height: 760)
-                                                         : NSSize(width: 720, height: 640))
+        window.setContentSize(Self.contentSize(for: profile))
         window.contentMinSize = NSSize(width: 360, height: 380)
         WindowRestorationPolicy.configure(window)
         window.center()
         super.init(window: window)
-        if let appsMenu = NSApp.mainMenu?.item(withTitle: "Apps")?.submenu {
-            appsMenu.delegate = inspectorVC
-            appsMenu.autoenablesItems = false
+        library.delegate = self
+        placeholder.onAction = { [weak self] action in
+            guard let self, let entry = selectedEntry else { return }
+            perform(action, for: entry)
         }
+        placeholder.onShowLog = { [weak self] in self?.showDeviceLogs(nil) }
+        placeholder.onDropIPSW = { [weak self] url in self?.handOffIPSW(url, for: self?.selectedEntry) }
+        detail.show(placeholder)
+        inspectorContainer.show(noInspector)
         
         window.toolbarStyle = .unified
         let toolbar = NSToolbar(identifier: "main")
@@ -109,6 +141,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         toolbar.autosavesConfiguration = true
         window.toolbar = toolbar
         migrateCaptureToolbar(toolbar)
+        migrateSidebarToolbar(toolbar)
         // Out and in. Momentary, because both are commands rather than states
         // to sit in — which state you are in is the menu's job, where the
         // checkmarks live.
@@ -128,7 +161,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         syncZoomControls()
 
         window.delegate = self
-        emulator.onStatusChange = { [weak self] in self?.refreshForState() }
+        NotificationCenter.default.addObserver(self, selector: #selector(sessionDidChange(_:)),
+                                               name: DeviceSession.didChangeNotification, object: nil)
         installCaptureStatus()
         installFileStatus()
         installCaptureKeyboardShortcuts()
@@ -139,7 +173,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             return event
         }
         NotificationCenter.default.addObserver(self, selector: #selector(refreshRotationModifiers), name: NSApplication.didBecomeActiveNotification, object: nil)
-        deviceVC.screen.onPhysicalSizeUnavailable = { [weak self] in self?.apply(.fit) }
         NotificationCenter.default.addObserver(self, selector: #selector(stopHiddenRecording), name: NSApplication.didHideNotification, object: nil)
         recording.onChange = { [weak self] in self?.refreshRecording() }
         recording.onBeganRecording = { CaptureSound.recordingStarted.play() }
@@ -202,12 +235,218 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         apply(Self.savedZoom())   // restore the zoom the user left it at
     }
 
+    // MARK: - Library and selection
+
+    /// Selects the launch device and starts it, as the single-device app did.
+    func selectLaunchDevice() {
+        guard let entry = host.launchSelection else { return }
+        library.select(entry)
+        if canPerform(.start, for: entry) { start(entry) }
+    }
+
+    func library(_ library: DeviceLibraryViewController, didSelect entry: FirmwareCatalog.Entry?) {
+        if let entry { host.lastSelection = entry }
+        show(entry)
+    }
+
+    func libraryRowsDidChange(_ library: DeviceLibraryViewController) { show(selectedEntry) }
+
+    func library(_ library: DeviceLibraryViewController, perform action: DeviceAction, for entry: FirmwareCatalog.Entry) {
+        perform(action, for: entry)
+    }
+
+    func library(_ library: DeviceLibraryViewController, canPerform action: DeviceAction, for entry: FirmwareCatalog.Entry) -> Bool {
+        canPerform(action, for: entry)
+    }
+
+    func library(_ library: DeviceLibraryViewController, importIPSW url: URL, for entry: FirmwareCatalog.Entry?) {
+        handOffIPSW(url, for: entry)
+    }
+
+    @objc private func sessionDidChange(_ notification: Notification) {
+        guard notification.object as? DeviceSession === session else { return }
+        refreshForState()
+    }
+
+    /// Shows the entry's workspace when it has a session, else its placeholder.
+    private func show(_ entry: FirmwareCatalog.Entry?) {
+        selectedEntry = entry
+        let next = entry.flatMap(host.session(for:))
+        if next !== session {
+            // Recording captures the visible screen; it can't follow a switch.
+            recording.stop()
+            deviceVC?.screen.endLiveText()
+            session = next
+            attachWorkspace()
+        }
+        if let entry, session == nil { placeholder.update(host.row(for: entry), canDownload: FirmwareJobs.shared.canDownload) }
+        if let profile = session?.profile ?? entry?.profile, profile != currentProfile { profileDidChange(to: profile) }
+        window?.title = session?.instance.name
+            ?? entry.map { host.instance(for: $0)?.name ?? $0.profile?.displayName ?? $0.productType } ?? "Light Touch"
+        refreshForState()
+    }
+
+    /// Puts the selected session's cached views in the window, or the placeholder.
+    private func attachWorkspace() {
+        deadOverlay?.removeFromSuperview()
+        deadOverlay = nil
+        guard let workspace = session?.workspace else {
+            detail.show(placeholder)
+            inspectorContainer.show(noInspector)
+            NSApp.mainMenu?.item(withTitle: "Apps")?.submenu?.delegate = nil
+            return
+        }
+        detail.show(workspace.deviceVC)
+        inspectorContainer.show(workspace.inspectorVC)
+        for status in [startupStatus, fileStatus, captureStatus] { workspace.deviceVC.addStatus(status) }
+        workspace.deviceVC.screen.onPhysicalSizeUnavailable = { [weak self] in self?.apply(.fit) }
+        apply(zoom)
+        attachInspectorMenus()
+        if let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .searchCatalog }) as? NSSearchToolbarItem {
+            workspace.inspectorVC.attachSearchField(to: item)
+        }
+        window?.makeFirstResponder(workspace.deviceVC.screen)
+    }
+
+    private func attachInspectorMenus() {
+        if let appsMenu = NSApp.mainMenu?.item(withTitle: "Apps")?.submenu {
+            appsMenu.delegate = inspectorVC
+            appsMenu.autoenablesItems = false
+        }
+    }
+
+    /// Menus, the Files window and the capture options name the board.
+    private func profileDidChange(to profile: DeviceProfile) {
+        currentProfile = profile
+        MainMenuBuilder.install(profile: profile)
+        attachInspectorMenus()
+        if !hasFileTransfer { filesWindow?.close(); filesWindow = nil }
+        if captureOptionsWindow?.window?.isVisible != true { captureOptionsWindow = nil }
+        if let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .files }) {
+            item.label = "\(profile.shortName) Files"
+            item.paletteLabel = item.label
+            item.toolTip = "Show \(profile.shortName) Files (⌘2)"
+        }
+        resize(to: profile)
+    }
+
+    /// Keeps the device area its own size, plus the sidebar, until the user
+    /// sizes the window themselves. Anchored at the top-left, on screen.
+    private func resize(to profile: DeviceProfile) {
+        guard sizedToDevice, let window, !window.styleMask.contains(.fullScreen) else { return }
+        let size = Self.contentSize(for: profile)
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        if let screen = window.screen ?? NSScreen.main { frame = window.constrainFrameRect(frame, to: screen) }
+        window.setFrame(frame, display: true, animate: window.isVisible)
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) { sizedToDevice = false }
+
+    // MARK: - Device commands (sidebar, Device menu, placeholder)
+
+    /// Runtime conditions on top of what the row allows.
+    private func canPerform(_ action: DeviceAction, for entry: FirmwareCatalog.Entry) -> Bool {
+        guard host.row(for: entry).allows(action, canDownload: FirmwareJobs.shared.canDownload) else { return false }
+        let emulator = host.session(for: entry)?.emulator
+        switch action {
+        case .start: return emulator.map { $0.isPoweredOff && !$0.shuttingDown } ?? true
+        case .stop: return emulator?.isRunning == true
+        case .erase: return emulator?.isErasing != true && !hasFileTransfer && !recording.isActive
+        default: return true
+        }
+    }
+
+    private func perform(_ action: DeviceAction, for entry: FirmwareCatalog.Entry) {
+        guard canPerform(action, for: entry) else { return }
+        switch action {
+        case .start: start(entry)
+        case .stop: if let emulator = host.session(for: entry)?.emulator { powerOff(emulator) }
+        case .downloadAndPrepare: FirmwareJobs.shared.downloadAndPrepare(entry)
+        case .importIPSW: chooseIPSW(for: entry)
+        case .cancel: FirmwareJobs.shared.cancel(entry)
+        case .erase: erase(entry)
+        case .showInFinder:
+            if let instance = host.instance(for: entry) { NSWorkspace.shared.activateFileViewerSelecting([instance.paths.directory]) }
+        case .delete: confirmDelete(entry)
+        }
+    }
+
+    private func name(_ entry: FirmwareCatalog.Entry) -> String {
+        "\(entry.profile?.displayName ?? entry.productType) iOS \(entry.version)"
+    }
+
+    private func start(_ entry: FirmwareCatalog.Entry) {
+        library.select(entry)
+        if let emulator = host.session(for: entry)?.emulator { emulator.powerOn(); return }
+        guard host.canStartAnother else { askToReopen(for: entry); return }
+        host.start(entry)
+    }
+
+    /// One device per launch until each has its own helper (W2): starting a
+    /// second means quitting, and the next launch starts the selection.
+    private func askToReopen(for entry: FirmwareCatalog.Entry) {
+        guard let window else { return }
+        let running = host.sessions.first.map { $0.instance.name } ?? "running device"
+        let alert = NSAlert()
+        alert.messageText = "Light Touch needs to reopen to start \(name(entry))"
+        alert.informativeText = "Light Touch shuts down the \(running) and quits. When you open it again, the \(entry.profile?.displayName ?? "device") starts."
+        alert.addButton(withTitle: "Reopen")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            host.lastSelection = entry
+            AppDelegate.requestTermination()
+        }
+    }
+
+    @objc func toggleDeviceRunning(_ sender: Any?) {
+        guard let entry = selectedEntry else { return }
+        perform(host.row(for: entry).state == .running ? .stop : .start, for: entry)
+    }
+    @objc func downloadAndPrepare(_ sender: Any?) { selectedEntry.map { perform(.downloadAndPrepare, for: $0) } }
+    @objc func importIPSW(_ sender: Any?) { selectedEntry.map { perform(.importIPSW, for: $0) } }
+    @objc func cancelFirmwareJob(_ sender: Any?) { selectedEntry.map { perform(.cancel, for: $0) } }
+    @objc func showDeviceInFinder(_ sender: Any?) { selectedEntry.map { perform(.showInFinder, for: $0) } }
+    @objc func deleteDevice(_ sender: Any?) { selectedEntry.map { perform(.delete, for: $0) } }
+
+    private func chooseIPSW(for entry: FirmwareCatalog.Entry) {
+        guard let window else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "ipsw")].compactMap { $0 }
+        panel.message = "Choose the IPSW for \(name(entry))."
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.handOffIPSW(url, for: entry)
+        }
+    }
+
+    private func handOffIPSW(_ url: URL, for entry: FirmwareCatalog.Entry?) {
+        FirmwareJobs.shared.importIPSW(url, for: entry)
+    }
+
+    private func confirmDelete(_ entry: FirmwareCatalog.Entry) {
+        guard let window, let instance = host.instance(for: entry) else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Delete \(name(entry))?"
+        alert.informativeText = "This permanently removes its apps, settings, and saved state. This cannot be undone."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            do { try host.delete(instance) }
+            catch { NSAlert(error: error).beginSheetModal(for: window) }
+        }
+    }
+
     // MARK: - Health / status surfacing
 
     private func refreshForState() {
-        proxySettingsEditor?.updateStatus(emulator.webProxyStatus)
+        proxySettingsEditor?.updateStatus(emulator?.webProxyStatus ?? .waiting)
         if let filesVC {
-            let socket = emulator.canReachDevice ? emulator.usbmuxSession : nil
+            let socket = emulator.flatMap { $0.canReachDevice ? $0.usbmuxSession : nil }
             if filesVC.services?.clientSocket != socket {
                 filesVC.services = socket.map { DeviceServices(clientSocket: $0) }
                 filesVC.reload()
@@ -215,6 +454,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
         updateDeviceNotice()
         updateStartupStatus()
+        refreshLockItem()
+        window?.toolbar?.validateVisibleItems()
+        validateCaptureToolbar()
+        updateDeadOverlay()
+        guard let emulator, let deviceVC else {
+            window?.subtitle = selectedEntry.map { "iOS \($0.version)" } ?? ""
+            return
+        }
         // The window subtitle is where AppKit puts secondary window state, and
         // it styles and truncates itself to match the title. A custom titlebar
         // accessory was carrying this before — more code, its own constraints,
@@ -223,21 +470,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             ? (emulator.foregroundAppName ?? emulator.statusLine) : emulator.statusLine
         if emulator.isPoweredOff || emulator.isDead { deviceVC.screen.endLiveText() }
         deviceVC.screen.updatePowerPresentation()
-        if let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .lock }) {
-            item.label = emulator.isPoweredOff ? "Power On" : emulator.isSleeping ? "Wake" : "Lock"
-            item.image = NSImage(systemSymbolName: emulator.isPoweredOff ? "power" : "lock", accessibilityDescription: item.label)
-            item.toolTip = item.label + " (⌘L)"
-        }
-        window?.toolbar?.validateVisibleItems()
-        validateCaptureToolbar()
-        updateDeadOverlay()
         if emulator.isDead || emulator.isPoweredOff { recording.stop() }
     }
 
+    private func refreshLockItem() {
+        guard let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .lock }) else { return }
+        let poweredOff = emulator?.isPoweredOff ?? false
+        item.label = poweredOff ? "Power On" : emulator?.isSleeping == true ? "Wake" : "Lock"
+        item.image = NSImage(systemSymbolName: poweredOff ? "power" : "lock", accessibilityDescription: item.label)
+        item.toolTip = item.label + " (⌘L)"
+    }
+
     private func updateStartupStatus() {
-        defer { deviceVC.updateStatusVisibility() }
-        let starting = emulator.isErasing || emulator.state == .booting || emulator.preparingMedia
-        guard starting else {
+        defer { deviceVC?.updateStatusVisibility() }
+        guard let emulator, emulator.isErasing || emulator.state == .booting || emulator.preparingMedia else {
             wasStarting = false
             startupTask?.cancel()
             startupTask = nil
@@ -245,10 +491,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             return
         }
         if !wasStarting { startupBegan = Date(); wasStarting = true }
-        if startupStatus.superview == nil {
-            deviceVC.addStatus(startupStatus)
-            startupStatus.onPrimary = { [weak self] in self?.showDeviceLogs(nil) }
-        }
         let elapsed = Int(Date().timeIntervalSince(startupBegan))
         startupStatus.update(title: emulator.isErasing ? "Erasing \(emulator.profile.shortName)…" : emulator.preparationStatus,
                              detail: elapsed >= 90 ? "Check Device Logs." : "\(elapsed)s",
@@ -267,7 +509,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var noticeAccessory: DeviceNoticeViewController?
     private func updateDeviceNotice() {
         guard let window else { return }
-        guard let message = emulator.deviceNotice else {
+        guard let emulator, let message = emulator.deviceNotice else {
             if let accessory = noticeAccessory,
                let index = window.titlebarAccessoryViewControllers.firstIndex(of: accessory) {
                 window.removeTitlebarAccessoryViewController(at: index)
@@ -278,7 +520,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         if noticeAccessory == nil {
             let accessory = DeviceNoticeViewController()
             accessory.onShowLogs = { [weak self] in self?.showDeviceLogs(nil) }
-            accessory.onDismiss = { [weak self] in self?.emulator.dismissDeviceNotice() }
+            accessory.onDismiss = { [weak self] in self?.emulator?.dismissDeviceNotice() }
             accessory.onAction = { [weak self] in self?.eraseDevice(nil) }
             window.addTitlebarAccessoryViewController(accessory)
             noticeAccessory = accessory
@@ -290,7 +532,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// When the emulator dies (QEMU can't re-init), cover the device with an
     /// unmistakable overlay — the frozen last frame otherwise looks live.
     private func updateDeadOverlay() {
-        guard emulator.isDead, !emulator.isErasing else {
+        guard let emulator, let deviceVC, emulator.isDead, !emulator.isErasing else {
             deadOverlay?.removeFromSuperview()
             deadOverlay = nil
             return
@@ -357,7 +599,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 toolbar.insertItem(withItemIdentifier: .searchCatalog, at: min(index + 1, toolbar.items.count))
             }
         }
-        inspectorVC.focusSearch()
+        inspectorVC?.focusSearch()
     }
 
     /// NSTextView handles Find first in Help and logs. In the device window,
@@ -405,13 +647,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             item.menu = MainMenuBuilder.motionMenu(target: self)
             return item
         case .files:
-            return button(id, "\(emulator.profile.shortName) Files", "folder", #selector(toggleFiles(_:)), "Show \(emulator.profile.shortName) Files (⌘2)")
+            return button(id, "\(currentProfile.shortName) Files", "folder", #selector(toggleFiles(_:)), "Show \(currentProfile.shortName) Files (⌘2)")
         case .home:
             return button(id, "Home Screen", "square.grid.3x3.fill", #selector(deviceHome(_:)), "Home Screen (⇧⌘H)")
         case .lock:
             return button(id, "Lock", "lock", #selector(deviceLock(_:)), "Lock (⌘L)")
         case .rotate:
-            let action = RotationControlAction(rotationDegrees: emulator.rotationDegrees, optionPressed: NSEvent.modifierFlags.contains(.option))
+            let action = RotationControlAction(rotationDegrees: emulator?.rotationDegrees ?? 0, optionPressed: NSEvent.modifierFlags.contains(.option))
             return button(id, action.title, action.symbol, #selector(deviceRotate(_:)), action.help)
         case .installApp:
             return button(id, "Install App", "square.and.arrow.down", #selector(installApp(_:)), "Install a decrypted .ipa")
@@ -424,7 +666,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             item.label = "Search Apps"
             item.paletteLabel = "Search Apps"
             item.toolTip = "Search Installed Apps or Store (⌥⌘F)"
-            if flag { inspectorVC.attachSearchField(to: item) }
+            if flag { inspectorVC?.attachSearchField(to: item) }
             return item
         case .zoom:
             let item = NSToolbarItem(itemIdentifier: .zoom)
@@ -440,6 +682,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             // inspector's material stopped at the toolbar instead of running
             // top to bottom, and the toggle floated over the device pane
             // instead of sitting above the inspector (compare Xcode).
+            guard let split = contentSplitViewController else { return nil }
+            return NSTrackingSeparatorToolbarItem(identifier: id,
+                                                  splitView: split.splitView,
+                                                  dividerIndex: 1)
+        case .sidebarTrackingSeparator:
+            // The same, for the divider between the sidebar and the device.
             guard let split = contentSplitViewController else { return nil }
             return NSTrackingSeparatorToolbarItem(identifier: id,
                                                   splitView: split.splitView,
@@ -476,7 +724,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     
     /// Frequent capture actions live beside the device controls, as in WireView.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.home, .lock, .rotate, .zoom, .flexibleSpace,
+        [.toggleSidebar, .sidebarTrackingSeparator, .home, .lock, .rotate, .zoom, .flexibleSpace,
          .openScreenshot, .screenshot, .copyScreen, .recording,
          .inspectorTrackingSeparator, .flexibleSpace, .searchCatalog, .toggleInspector]
     }
@@ -495,7 +743,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.files, .home, .lock, .rotate, .motion, .zoom, .screenshot, .recording, .saveScreenshotAs, .openScreenshot, .captureOptions, .liveText, .copyScreen, .fingerDots, .installApp, .searchCatalog,
-         .space, .flexibleSpace, .inspectorTrackingSeparator, .toggleInspector]
+         .space, .flexibleSpace, .toggleSidebar, .sidebarTrackingSeparator, .inspectorTrackingSeparator, .toggleInspector]
+    }
+
+    /// The sidebar arrived after toolbars were saved; give them its toggle and
+    /// separator once, in front, without disturbing the rest.
+    private func migrateSidebarToolbar(_ toolbar: NSToolbar) {
+        guard !toolbar.items.contains(where: { $0.itemIdentifier == .sidebarTrackingSeparator }) else { return }
+        toolbar.insertItem(withItemIdentifier: .sidebarTrackingSeparator, at: 0)
+        if !toolbar.items.contains(where: { $0.itemIdentifier == .toggleSidebar }) {
+            toolbar.insertItem(withItemIdentifier: .toggleSidebar, at: 0)
+        }
     }
     
     // MARK: - Zoom (single source of truth for the toggle, menu, and view)
@@ -505,6 +763,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func apply(_ mode: ZoomMode) {
+        guard let deviceVC else { return }
         let mode = mode == .physical && deviceVC.screen.physicalScale == nil ? ZoomMode.fit : mode
         zoom = mode
         deviceVC.setZoom(mode)
@@ -542,6 +801,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// Stepping out of Fit starts from whatever size Fit happens to be showing,
     /// so the first press nudges the device rather than jumping it.
     func stepZoom(_ direction: Int) {
+        guard let deviceVC else { return }
         let steps = ZoomMode.steps
         let current = deviceVC.screen.pixelMultiple
         let next = direction > 0
@@ -557,13 +817,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     
     // MARK: - Device menu actions (routed via the responder chain)
     
-    @objc func deviceHome(_ sender: Any?)        { emulator.pressHome() }
+    @objc func deviceHome(_ sender: Any?)        { emulator?.pressHome() }
     @objc func deviceLock(_ sender: Any?) {
+        guard let emulator else { return }
         if emulator.isPoweredOff { emulator.powerOn() } else { emulator.pressLock() }
     }
-    @objc func deviceVolumeUp(_ sender: Any?)    { emulator.pressVolumeUp() }
-    @objc func deviceVolumeDown(_ sender: Any?)  { emulator.pressVolumeDown() }
+    @objc func deviceVolumeUp(_ sender: Any?)    { emulator?.pressVolumeUp() }
+    @objc func deviceVolumeDown(_ sender: Any?)  { emulator?.pressVolumeDown() }
     @objc func deviceRotate(_ sender: Any?) {
+        guard let emulator else { return }
         let action = RotationControlAction(rotationDegrees: emulator.rotationDegrees, optionPressed: NSEvent.modifierFlags.contains(.option))
         emulator.rotate(clockwise: action.clockwise)
     }
@@ -573,7 +835,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func syncRotationControls(optionPressed: Bool) {
-        let action = RotationControlAction(rotationDegrees: emulator.rotationDegrees, optionPressed: optionPressed)
+        let action = RotationControlAction(rotationDegrees: emulator?.rotationDegrees ?? 0, optionPressed: optionPressed)
         if let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .rotate }) {
             item.label = action.title
             item.image = NSImage(systemSymbolName: action.symbol, accessibilityDescription: action.title)
@@ -582,7 +844,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func configureWebProxy(_ sender: Any?) {
-        guard let window else { return }
+        guard let window, let emulator else { return }
         let alert = NSAlert()
         alert.messageText = "Proxy"
         alert.addButton(withTitle: "Apply")
@@ -593,19 +855,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.accessoryView = editor
         alert.beginSheetModal(for: window) { [weak self] response in
             self?.proxySettingsEditor = nil
-            guard response == .alertFirstButtonReturn, let self else { return }
-            do { try self.emulator.configureWebProxy(editor.configuration) }
+            guard response == .alertFirstButtonReturn else { return }
+            do { try emulator.configureWebProxy(editor.configuration) }
             catch { NSAlert(error: error).beginSheetModal(for: window) }
         }
     }
 
-    @objc func toggleKeyboardInput(_ sender: Any?) { emulator.toggleKeyboardInput() }
+    @objc func toggleKeyboardInput(_ sender: Any?) { emulator?.toggleKeyboardInput() }
 
     @objc func toggleFiles(_ sender: Any?) {
         if filesWindow == nil {
-            let files = DeviceFilesWindowController(profile: emulator.profile)
+            let files = DeviceFilesWindowController(profile: currentProfile)
             filesWindow = files
-            files.browser.services = (emulator.canReachDevice ? emulator.usbmuxSession : nil).map { DeviceServices(clientSocket: $0) }
+            files.browser.services = emulator.flatMap { $0.canReachDevice ? $0.usbmuxSession : nil }.map { DeviceServices(clientSocket: $0) }
             files.browser.onActivityChange = { [weak self] in self?.refreshFileStatus() }
             files.browser.reload()
         }
@@ -613,17 +875,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func refreshFileStatus() {
-        emulator.hasFileTransfer = hasFileTransfer
-        guard let filesVC, filesVC.hasTransfer else { fileStatus.isHidden = true; deviceVC.updateStatusVisibility(); return }
+        emulator?.hasFileTransfer = hasFileTransfer
+        guard let filesVC, filesVC.hasTransfer else { fileStatus.isHidden = true; deviceVC?.updateStatusVisibility(); return }
         fileStatus.update(title: filesVC.transferStatus, primary: "Files", secondary: "Cancel")
-        deviceVC.updateStatusVisibility()
+        deviceVC?.updateStatusVisibility()
     }
 
     @objc func focusDeviceScreen(_ sender: Any?) {
         showWindow(sender)
         window?.makeKeyAndOrderFront(sender)
-        deviceVC.screen.endLiveText()
-        window?.makeFirstResponder(deviceVC.screen)
+        deviceVC?.screen.endLiveText()
+        window?.makeFirstResponder(deviceVC?.screen)
     }
 
     @objc func toggleVerboseBoot(_ sender: Any?) {
@@ -637,31 +899,33 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func deviceRotateLeft(_ sender: Any?) {
-        emulator.rotate(clockwise: false)
+        emulator?.rotate(clockwise: false)
     }
 
     @objc func deviceRotateRight(_ sender: Any?) {
-        emulator.rotate(clockwise: true)
+        emulator?.rotate(clockwise: true)
     }
 
     @objc func selectMotionPose(_ sender: NSMenuItem) {
         guard let pose = EmulatorController.MotionPose(rawValue: sender.tag) else { return }
-        emulator.setMotionPose(pose)
-        deviceVC.screen.resetMotion()
+        emulator?.setMotionPose(pose)
+        deviceVC?.screen.resetMotion()
     }
-    @objc func resetMotion(_ sender: Any?) { deviceVC.screen.resetMotion() }
+    @objc func resetMotion(_ sender: Any?) { deviceVC?.screen.resetMotion() }
 
-    @objc func deviceShake(_ sender: Any?)       { emulator.shake() }
-    @objc func setBatteryLevel(_ sender: NSMenuItem)    { emulator.setBattery(level: sender.tag) }
-    @objc func setBatteryCharging(_ sender: NSMenuItem) { emulator.setBattery(charging: Int32(sender.tag)) }
-    @objc func toggleHighPowerUSB(_ sender: Any?)       { emulator.setHighPowerUSB(!emulator.highPowerUSB) }
-    @objc func setCompassHeading(_ sender: NSMenuItem)  { emulator.setCompassHeading(sender.tag) }
+    @objc func deviceShake(_ sender: Any?)       { emulator?.shake() }
+    @objc func setBatteryLevel(_ sender: NSMenuItem)    { emulator?.setBattery(level: sender.tag) }
+    @objc func setBatteryCharging(_ sender: NSMenuItem) { emulator?.setBattery(charging: Int32(sender.tag)) }
+    @objc func toggleHighPowerUSB(_ sender: Any?)       { emulator.map { $0.setHighPowerUSB(!$0.highPowerUSB) } }
+    @objc func setCompassHeading(_ sender: NSMenuItem)  { emulator?.setCompassHeading(sender.tag) }
     @objc func toggleDevicePause(_ sender: Any?) {
+        guard let emulator else { return }
         if emulator.isPaused { emulator.resume() } else if emulator.isRunning { emulator.pause() }
     }
-    @objc func devicePause(_ sender: Any?)       { emulator.pause() }
-    @objc func deviceResume(_ sender: Any?)      { emulator.resume() }
+    @objc func devicePause(_ sender: Any?)       { emulator?.pause() }
+    @objc func deviceResume(_ sender: Any?)      { emulator?.resume() }
     @objc func deviceReset(_ sender: Any?) {
+        guard let emulator else { return }
         // Confirmed, because a restart cuts the guest off mid-write much the way
         // a force quit does, and it sits one row above Erase in the same menu.
         let alert = NSAlert()
@@ -675,22 +939,24 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             if alert.runModal() == .alertFirstButtonReturn { emulator.reset() }
             return
         }
-        alert.beginSheetModal(for: window) { [weak self] response in
+        alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            self?.emulator.reset()
+            emulator.reset()
         }
     }
-    @objc func devicePowerOff(_ sender: Any?) {
-        emulator.powerOff { [weak self] confirmed in
-            if confirmed { self?.emulator.resolveDeviceNotice(for: .powerOff); return }
-            self?.emulator.reportDeviceNotice("The device did not finish powering off. Try Power Off again or restart the device. Open Device Logs for details.", for: .powerOff)
+    @objc func devicePowerOff(_ sender: Any?) { emulator.map(powerOff) }
+
+    private func powerOff(_ emulator: EmulatorController) {
+        emulator.powerOff { [weak emulator] confirmed in
+            if confirmed { emulator?.resolveDeviceNotice(for: .powerOff); return }
+            emulator?.reportDeviceNotice("The device did not finish powering off. Try Power Off again or restart the device. Open Device Logs for details.", for: .powerOff)
         }
     }
 
-    @objc func saveStateNow(_ sender: Any?) { emulator.saveSnapshotNow() }
+    @objc func saveStateNow(_ sender: Any?) { emulator?.saveSnapshotNow() }
 
     @objc func discardSavedState(_ sender: Any?) {
-        guard let window else { return }
+        guard let window, let emulator else { return }
         let alert = NSAlert()
         alert.messageText = "Discard the saved state?"
         alert.informativeText = "This removes the saved memory state. Apps and data stored on the device are kept."
@@ -699,15 +965,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.buttons[0].hasDestructiveAction = true
         alert.buttons[0].keyEquivalent = ""
         alert.buttons[1].keyEquivalent = "\r"
-        alert.beginSheetModal(for: window) { [weak self] response in
-            if response == .alertFirstButtonReturn { self?.emulator.discardSavedStateByUser() }
+        alert.beginSheetModal(for: window) { response in
+            if response == .alertFirstButtonReturn { emulator.discardSavedStateByUser() }
         }
     }
 
     /// Factory-reset the device — the "nuke everything" button. Wipes the NAND
     /// overlay (all installed apps + settings) and any snapshot, back to the
     /// base image, then relaunches. The base image is never touched.
-    @objc func eraseDevice(_ sender: Any?) {
+    @objc func eraseDevice(_ sender: Any?) { selectedEntry.map { perform(.erase, for: $0) } }
+
+    /// For a device that isn't running, a controller that never starts does
+    /// the same erase.
+    private func erase(_ entry: FirmwareCatalog.Entry) {
+        guard let window, let emulator = host.session(for: entry)?.emulator ?? host.stoppedController(for: entry) else { return }
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = "Erase all content and settings?"
@@ -717,34 +988,36 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.addButton(withTitle: "Erase")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
-        alert.beginSheetModal(for: window!) { [weak self] response in
+        alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            self?.emulator.requestFactoryReset()
+            emulator.requestFactoryReset()
         }
     }
     
     @objc func installApp(_ sender: Any?) {
+        guard let window, let emulator else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "ipa")].compactMap { $0 }
         panel.allowsMultipleSelection = true
         panel.message = "Choose one or more decrypted .ipa files to install."
-        panel.beginSheetModal(for: window!) { [weak self] response in
-            guard let self, response == .OK else { return }
+        panel.beginSheetModal(for: window) { [weak window] response in
+            guard response == .OK else { return }
             for url in panel.urls {
-                AppInstaller.start(url, with: self.emulator, presenting: self.window)
+                AppInstaller.start(url, with: emulator, presenting: window)
             }
         }
     }
     
     @objc func syncMedia(_ sender: Any?) {
+        guard let window, let emulator else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = PreparedMedia.extensions.sorted().compactMap { UTType(filenameExtension: $0) }
         panel.allowsMultipleSelection = true
         panel.message = "Choose photos, audio files or videos to add to the \(emulator.profile.shortName)."
-        panel.beginSheetModal(for: window!) { [weak self] response in
-            guard let self, response == .OK else { return }
+        panel.beginSheetModal(for: window) { [weak window] response in
+            guard response == .OK else { return }
             for url in panel.urls {
-                AppInstaller.startMedia(url, with: self.emulator, presenting: self.window)
+                AppInstaller.startMedia(url, with: emulator, presenting: window)
             }
         }
     }
@@ -752,6 +1025,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// Respring — the quick fix for a freshly sideloaded app that crashes on
     /// launch until the device is restarted.
     @objc func restartSpringBoard(_ sender: Any?) {
+        guard let emulator else { return }
         Task {
             do {
                 try await emulator.restartSpringBoard()
@@ -762,6 +1036,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func openDeviceTerminal(_ sender: Any?) {
+        guard let emulator else { return }
         Task {
             do { try await emulator.openTerminal() }
             catch { AppInstaller.presentError(error, in: window) }
@@ -778,8 +1053,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     // MARK: - Edit menu (guest clipboard / screen)
     
     private func captureImage() async throws -> CGImage {
+        guard let workspace = session?.workspace else { throw CaptureError.failed("No screen image is available.") }
+        let deviceVC = workspace.deviceVC
         deviceVC.screen.endLiveText()
-        if captureMode == 0 { return try await canvasCapture.screenshot() }
+        if captureMode == 0 { return try await workspace.canvasCapture.screenshot() }
         guard let image = deviceVC.screen.captureFrame() else { throw CaptureError.failed("No screen image is available.") }
         return image
     }
@@ -791,7 +1068,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// The standard Copy command reaches here only after focused text and
     /// other native responders have had their turn.
     @objc func copy(_ sender: Any?) {
-        guard window?.firstResponder === deviceVC.screen, !deviceVC.screen.isShowingLiveText else { return }
+        guard let screen = deviceVC?.screen, window?.firstResponder === screen, !screen.isShowingLiveText else { return }
         copyScreen(sender)
     }
 
@@ -852,7 +1129,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 if !recording.isActive, action != .open {
                     captureStatus.showCapture(title: action == .copy ? "Screenshot copied" : "Screenshot saved",
                                               image: nsImage, fileURL: savedURL)
-                    deviceVC.updateStatusVisibility()
+                    deviceVC?.updateStatusVisibility()
                 }
             } catch { NSAlert(error: error).beginSheetModal(for: window, completionHandler: nil) }
         }
@@ -885,7 +1162,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc func showCaptureOptions(_ sender: Any?) {
         if captureOptionsWindow == nil {
-            let editor = CaptureOptionsView(preferences: capturePreferences, profile: emulator.profile)
+            let editor = CaptureOptionsView(preferences: capturePreferences, profile: currentProfile)
             editor.onChange = { [weak self] in self?.validateCaptureToolbar() }
             editor.layoutSubtreeIfNeeded()
             let panel = NSWindow(contentRect: NSRect(origin: .zero, size: editor.fittingSize), styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -919,8 +1196,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             guard event.type == .keyDown, event.keyCode == 49,
                   let window, event.window === window, window.isKeyWindow,
                   window.attachedSheet == nil, NSApp.modalWindow == nil,
-                  window.firstResponder === deviceVC.screen,
-                  !deviceVC.screen.isShowingLiveText,
+                  let screen = deviceVC?.screen, window.firstResponder === screen,
+                  !screen.isShowingLiveText,
                   event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
                   capturePreferences.spaceBarAction != .none else { return event }
             guard !event.isARepeat else { return consumedCaptureSpace ? nil : event }
@@ -954,7 +1231,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let seconds = capturePreferences.reminderAfterDuration
         Task { [weak self] in
             guard let self, recording.id == id, recording.canStop, !NSApp.isActive else { return }
-            await CaptureNotifications.shared.scheduleReminder(after: TimeInterval(seconds), recordingID: id, profile: emulator.profile)
+            await CaptureNotifications.shared.scheduleReminder(after: TimeInterval(seconds), recordingID: id, profile: currentProfile)
         }
     }
 
@@ -986,7 +1263,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
     private func installFileStatus() {
         fileStatus.isHidden = true
-        deviceVC.addStatus(fileStatus)
+        startupStatus.isHidden = true
+        startupStatus.onPrimary = { [weak self] in self?.showDeviceLogs(nil) }
         fileStatus.onPrimary = { [weak self] in self?.toggleFiles(nil) }
         fileStatus.onSecondary = { [weak self] in self?.cancelFileTransfer() }
     }
@@ -1007,21 +1285,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func showLiveText(_ sender: Any?) {
-        guard !recording.isActive, deviceVC.screen.isShowingLiveText || canTakeScreenshot else { return }
+        guard let deviceVC, !recording.isActive, deviceVC.screen.isShowingLiveText || canTakeScreenshot else { return }
         deviceVC.screen.toggleLiveText()
         window?.toolbar?.validateVisibleItems()
         validateCaptureToolbar()
     }
 
     @objc func toggleTouchOverlay(_ sender: Any?) {
-        deviceVC.screen.showsTouches.toggle()
+        deviceVC?.screen.showsTouches.toggle()
         window?.toolbar?.validateVisibleItems()
         validateCaptureToolbar()
     }
 
     private func installCaptureStatus() {
         captureStatus.isHidden = true
-        deviceVC.addStatus(captureStatus)
         captureStatus.onPrimary = { [weak self] in self?.saveRecordingAs() }
         captureStatus.onSecondary = { [weak self] in
             guard let self else { return }
@@ -1033,7 +1310,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
         }
-        captureStatus.onDismiss = { [weak self] in self?.recording.dismiss(); self?.captureStatus.isHidden = true; self?.deviceVC.updateStatusVisibility() }
+        captureStatus.onDismiss = { [weak self] in self?.recording.dismiss(); self?.captureStatus.isHidden = true; self?.deviceVC?.updateStatusVisibility() }
     }
 
     private func validateCaptureToolbar() {
@@ -1047,7 +1324,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func refreshRecording() {
-        defer { deviceVC.updateStatusVisibility() }
+        defer { deviceVC?.updateStatusVisibility() }
         if !recording.canStop { CaptureNotifications.shared.cancelReminder() }
         window?.toolbar?.validateVisibleItems()
         validateCaptureToolbar()
@@ -1070,31 +1347,32 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func toggleRecording(_ sender: Any?) {
         if recording.canStop { recording.stop(); return }
         if case .recovery = recording.phase { saveRecordingAs(); return }
-        guard !recording.isActive, canStartRecording else { return }
-        deviceVC.screen.endLiveText()
+        guard !recording.isActive, canStartRecording, let workspace = session?.workspace else { return }
+        let screen = workspace.deviceVC.screen
+        screen.endLiveText()
         let canvas = captureMode == 0
-        let source = canvasCapture
+        let source = workspace.canvasCapture
         let background = NSImage(named: "gradient")?.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        recording.start(frame: { [weak self] in
+        recording.start(frame: { [weak screen] in
             if canvas { return try source.frame() }
-            return self?.deviceVC.screen.captureFrame()
-        }, prepare: { [weak self] in
+            return screen?.captureFrame()
+        }, prepare: { [weak screen] in
             if canvas {
-                self?.deviceVC.screen.isCapturingCanvas = true
+                screen?.isCapturingCanvas = true
                 try await source.start(); return source.outputSize
             }
             return nil
-        }, cleanup: { [weak self] in
+        }, cleanup: { [weak screen] in
             if canvas {
                 await source.stop()
-                self?.deviceVC.screen.isCapturingCanvas = false
+                screen?.isCapturingCanvas = false
             }
         }, background: background,
         destination: { [weak self] in
             guard let self else { throw CaptureError.failed("The capture window was closed.") }
             return try captureDestination("Recording", extension: "mov")
         })
-        window?.makeFirstResponder(deviceVC.screen)
+        window?.makeFirstResponder(screen)
     }
 
     @objc func discardRecording(_ sender: Any?) {
@@ -1153,7 +1431,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc func pasteToGuest(_ sender: Any?) {
         guard let text = NSPasteboard.general.string(forType: .string) else { return }
-        emulator.pasteToGuest(text)
+        emulator?.pasteToGuest(text)
     }
 
     // MARK: - Diagnostics
@@ -1162,23 +1440,32 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// where the last two nights' failures were finally diagnosed; making them
     /// one click to collect means the next report arrives with its evidence.
     private var logWindow: LogWindowController?
+    private var logInstance: UUID?
+    /// The selected device's serial and usbmuxd logs and session file, with
+    /// the app-wide ones.
+    private var diagnosticInstance: DeviceInstance? { session?.instance ?? selectedEntry.flatMap(host.instance(for:)) }
     private var diagnosticLogs: [URL] {
-        ["app.log", "serial.log", "usbmuxd.log", "native.log"].flatMap { name in
-            [Bundled.logsDirectory.appendingPathComponent(name),
-             Bundled.logsDirectory.appendingPathComponent(name + ".1")]
-        }
+        let app = ["app.log", "native.log"].map { Bundled.logsDirectory.appendingPathComponent($0) }
+        let device = ["serial.log", "usbmuxd.log"].compactMap { diagnosticInstance?.paths.logs.appendingPathComponent($0) }
+        return (app + device).flatMap { [$0, $0.appendingPathExtension("1")] }
     }
 
     @objc func showDeviceLogs(_ sender: Any?) {
-        if logWindow == nil { logWindow = LogWindowController(logs: diagnosticLogs) }
+        // A window per device: switching the selection opens that device's logs.
+        if logWindow == nil || logInstance != diagnosticInstance?.id {
+            logWindow?.close()
+            logWindow = LogWindowController(logs: diagnosticLogs)
+            logInstance = diagnosticInstance?.id
+        }
         logWindow?.showWindow(sender)
     }
 
     @objc func exportDiagnostics(_ sender: Any?) {
+        guard let window else { return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "LightTouchMac-diagnostics.zip"
         if let zip = UTType(filenameExtension: "zip") { panel.allowedContentTypes = [zip] }
-        panel.beginSheetModal(for: window!) { [weak self] response in
+        panel.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .OK, let dest = panel.url else { return }
             Task { await self.writeDiagnostics(to: dest) }
         }
@@ -1187,15 +1474,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func writeDiagnostics(to dest: URL) async {
         await AppEventLog.shared.flush()
         NativeLogging.flush()
-        let logs = diagnosticLogs + [Bundled.workDirectory.appendingPathComponent("session.env")]
+        let logs = diagnosticLogs + [diagnosticInstance?.paths.sessionFile].compactMap { $0 }
+        let device = emulator.map { emulator in """
+            \(emulator.dylibProvenance)
+            state: \(emulator.statusLine)
+            files-root: \(emulator.options.filesRoot)
+            nand: \(emulator.options.nand)
+            appsync: \(emulator.options.appsync)   network: \(emulator.options.network)
+            canManageApps: \(emulator.canManageApps)
+            """ } ?? "state: not running"
         let info = """
         LightTouchMac diagnostics
-        \(emulator.dylibProvenance)
-        state: \(emulator.statusLine)
-        files-root: \(emulator.options.filesRoot)
-        nand: \(emulator.options.nand)
-        appsync: \(emulator.options.appsync)   network: \(emulator.options.network)
-        canManageApps: \(emulator.canManageApps)
+        device: \(diagnosticInstance.map { "\($0.name) \($0.firmware) \($0.id)" } ?? "none")
+        \(device)
         """
         do {
             try await DiagnosticsExport.write(to: dest, logs: logs, info: info)
@@ -1287,6 +1578,20 @@ nonisolated enum DiagnosticsExport {
 extension MainWindowController: NSToolbarItemValidation {
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
+        case .captureOptions, .files, .motion, .searchCatalog, .toggleSidebar: return true
+        default: break
+        }
+        guard let emulator, let deviceVC else {
+            (item.view as? NSControl)?.isEnabled = false
+            if item.itemIdentifier == .recording {
+                (item.view as? RecordingToolbarButton)?.update(recording.needsRecovery ? .recovery : .idle, elapsed: recording.elapsed, enabled: canToggleRecording)
+                return canToggleRecording
+            }
+            return false
+        }
+        // Custom views keep their own enabled state; the cases below narrow it.
+        if item.itemIdentifier != .recording { (item.view as? NSControl)?.isEnabled = true }
+        switch item.itemIdentifier {
         // Install is NOT gated on isInstalling: AppInstaller queues jobs behind
         // one another, so choosing a second .ipa mid-install is supported and
         // blocking it was a regression. The terminal is gated, because it opens
@@ -1352,10 +1657,45 @@ extension MainWindowController: NSMenuItemValidation {
         if menuItem.action == #selector(toggleFiles(_:)) {
             return true
         }
+        // The selected row's commands, and the window's own, work without a device.
         switch menuItem.action {
+        case #selector(toggleDeviceRunning(_:)):
+            let running = selectedEntry.map { host.row(for: $0).state == .running } ?? false
+            menuItem.title = running ? "Stop" : "Start"
+            return selectedEntry.map { canPerform(running ? .stop : .start, for: $0) } ?? false
+        case #selector(downloadAndPrepare(_:)): return selectedEntry.map { canPerform(.downloadAndPrepare, for: $0) } ?? false
+        case #selector(importIPSW(_:)): return selectedEntry.map { canPerform(.importIPSW, for: $0) } ?? false
+        case #selector(cancelFirmwareJob(_:)):
+            if let entry = selectedEntry, case .preparing = host.row(for: entry).state { menuItem.title = "Cancel Preparation" }
+            else { menuItem.title = "Cancel Download" }
+            return selectedEntry.map { canPerform(.cancel, for: $0) } ?? false
+        case #selector(showDeviceInFinder(_:)): return selectedEntry.map { canPerform(.showInFinder, for: $0) } ?? false
+        case #selector(deleteDevice(_:)): return selectedEntry.map { canPerform(.delete, for: $0) } ?? false
+        case #selector(eraseDevice(_:)): return selectedEntry.map { canPerform(.erase, for: $0) } ?? false
         case #selector(toggleCaptureScreenOnly(_:)):
             menuItem.state = captureMode == 1 ? .on : .off
             return !recording.isActive && !screenshotBusy
+        case #selector(toggleVerboseBoot(_:)):
+            menuItem.state = EmulatorController.verboseBoot ? .on : .off
+            return true
+        case #selector(toggleKernelConsole(_:)):
+            menuItem.state = EmulatorController.kernelConsole ? .on : .off
+            return true
+        case #selector(discardRecording(_:)):
+            return recording.canStop
+        case #selector(toggleRecording(_:)):
+            menuItem.title = recording.needsRecovery ? "Save Recording As…" : recording.canStop ? "Stop Recording" : "Start Recording"
+            return canToggleRecording
+        case #selector(toggleAppInspector(_:)):
+            menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
+            return true
+        case #selector(showDeviceLogs(_:)), #selector(exportDiagnostics(_:)), #selector(showRecordingRecovery(_:)),
+             #selector(showCaptureOptions(_:)), #selector(focusDeviceScreen(_:)):
+            return true
+        default: break
+        }
+        guard let emulator, let deviceVC else { return false }
+        switch menuItem.action {
         case #selector(selectMotionPose(_:)):
             menuItem.state = menuItem.tag == emulator.motionPose.rawValue ? .on : .off
             return true
@@ -1401,22 +1741,10 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleKeyboardInput(_:)):
             menuItem.state = emulator.keyboardInputEnabled ? .on : .off
             return true
-        case #selector(toggleVerboseBoot(_:)):
-            menuItem.state = EmulatorController.verboseBoot ? .on : .off
-            return true
-        case #selector(toggleKernelConsole(_:)):
-            menuItem.state = EmulatorController.kernelConsole ? .on : .off
-            return true
         case #selector(devicePowerOff(_:)): return emulator.acceptsInput
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState
-        case #selector(eraseDevice(_:)): return !emulator.isErasing && !hasFileTransfer && !recording.isActive
-        case #selector(discardRecording(_:)):
-            return recording.canStop
-        case #selector(toggleRecording(_:)):
-            menuItem.title = recording.needsRecovery ? "Save Recording As…" : recording.canStop ? "Stop Recording" : "Start Recording"
-            return canToggleRecording
         case #selector(toggleTouchOverlay(_:)):
             menuItem.title = deviceVC.screen.showsTouches ? "Hide Finger Dots" : "Show Finger Dots"
             return true
@@ -1442,11 +1770,45 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(zoomToFit(_:)):
             menuItem.state = (zoom == .fit) ? .on : .off
             return true
-        case #selector(toggleAppInspector(_:)):
-            menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
-            return true
         default:
             return true
         }
+    }
+}
+
+// MARK: - Split-view panes
+
+/// A split-view pane whose content changes with the selection. The split
+/// items stay put, so the tracking separators and collapse state do too.
+private final class ContainerViewController: NSViewController {
+    override func loadView() { view = NSView() }
+
+    func show(_ child: NSViewController) {
+        guard children.first !== child else { return }
+        for old in children { old.view.removeFromSuperview(); old.removeFromParent() }
+        addChild(child)
+        child.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(child.view)
+        NSLayoutConstraint.activate([
+            child.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            child.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            child.view.topAnchor.constraint(equalTo: view.topAnchor),
+            child.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+    }
+}
+
+/// The inspector while the selected device isn't running.
+private final class NotRunningViewController: NSViewController {
+    override func loadView() {
+        let label = NSTextField(labelWithString: "Not Running")
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view = NSView()
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+        ])
     }
 }

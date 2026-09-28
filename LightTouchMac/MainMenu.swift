@@ -196,6 +196,15 @@ enum MainMenuBuilder {
         menu.addItem(item("Restart…", #selector(MainWindowController.deviceReset(_:))))
         menu.addItem(item("Power Off", #selector(MainWindowController.devicePowerOff(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
+        // The sidebar selection's library commands, as in its context menu.
+        menu.addItem(.separator())
+        menu.addItem(item("Start", #selector(MainWindowController.toggleDeviceRunning(_:))))
+        menu.addItem(item("Download & Prepare", #selector(MainWindowController.downloadAndPrepare(_:))))
+        menu.addItem(item("Import IPSW…", #selector(MainWindowController.importIPSW(_:))))
+        menu.addItem(item("Cancel Download", #selector(MainWindowController.cancelFirmwareJob(_:))))
+        menu.addItem(.separator())
+        menu.addItem(item("Show in Finder", #selector(MainWindowController.showDeviceInFinder(_:))))
+        menu.addItem(item("Delete Device…", #selector(MainWindowController.deleteDevice(_:))))
         return menu
     }
     

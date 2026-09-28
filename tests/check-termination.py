@@ -44,7 +44,7 @@ source=r'''import AppKit
 }
 @MainActor final class AppDelegate:NSObject,NSApplicationDelegate {
  private var windowController:MainWindowController?
- private var emulator:EmulatorController?=EmulatorController()
+ private var emulators=[EmulatorController()]
  private var awaitingTermination=false
  private var terminationBackstop:Task<Void,Never>?
 '''+request+terminate+r'''
@@ -67,7 +67,7 @@ source=r'''import AppKit
   }
  }
  func applicationWillTerminate(_ notification:Notification){
-  precondition(emulator?.requests==1)
+  precondition(emulators[0].requests==1)
   logEvent("terminated-once")
  }
 }

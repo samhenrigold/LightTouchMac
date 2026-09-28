@@ -46,10 +46,11 @@ source=r'''import Cocoa
  var canStop=false,needsRecovery=false
 }
 @MainActor final class MainWindowController:NSWindowController {
- let emulator=Emulator(),recording=Recording()
+ let emulator:Emulator?=Emulator(),recording=Recording()
  var screenshotBusy=false
 '''+stubs+'\n'+toggle+'\n'+captureAvailability+r'''
  func validateMenuItem(_ menuItem:NSMenuItem)->Bool {
+ guard let emulator else {return false}
  switch menuItem.action {
 '''+validation+r'''
  default:return true
@@ -149,9 +150,9 @@ source=r'''import Cocoa
   let window=NSWindow(contentRect:NSRect(x:0,y:0,width:200,height:100),styleMask:[.titled],backing:.buffered,defer:false)
   let controller=MainWindowController(window:window)
   precondition(controller.canTakeScreenshot && controller.canStartRecording && controller.canToggleRecording)
-  controller.emulator.isRunning=false;controller.emulator.isPaused=true
+  controller.emulator!.isRunning=false;controller.emulator!.isPaused=true
   precondition(controller.canTakeScreenshot && !controller.canStartRecording && !controller.canToggleRecording)
-  controller.emulator.isSleeping=true
+  controller.emulator!.isSleeping=true
   precondition(!controller.canTakeScreenshot && !controller.canToggleRecording)
   controller.recording.canStop=true
   precondition(controller.canToggleRecording,"Stopping must remain available when the guest stops")
@@ -159,8 +160,8 @@ source=r'''import Cocoa
   precondition(!controller.canToggleRecording)
   controller.recording.phase = .idle;controller.recording.canStop=false;controller.recording.needsRecovery=true
   precondition(controller.canToggleRecording,"Recovery must remain available offline")
-  controller.recording.needsRecovery=false;controller.emulator.isSleeping=false
-  controller.emulator.isRunning=true;controller.emulator.isPaused=false;controller.screenshotBusy=true
+  controller.recording.needsRecovery=false;controller.emulator!.isSleeping=false
+  controller.emulator!.isRunning=true;controller.emulator!.isPaused=false;controller.screenshotBusy=true
   precondition(!controller.canTakeScreenshot && !controller.canStartRecording && !controller.canToggleRecording)
   controller.screenshotBusy=false
   let pause=find("Pause",in:device)!
@@ -176,7 +177,7 @@ source=r'''import Cocoa
   let text=NSTextView(frame:window.contentView!.bounds);window.contentView!.addSubview(text)
   window.makeFirstResponder(text)
   precondition(!controller.validateMenuItem(find("Rotate Left",in:device)!))
-  controller.emulator.acceptsInput=false
+  controller.emulator!.acceptsInput=false
   precondition(!controller.validateMenuItem(find("Volume Up",in:device)!))
   print("PASS: command homes, Window order, stable menus, unique/reserved shortcuts, capture availability, pause and input validation")
  }

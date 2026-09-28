@@ -91,7 +91,8 @@ import UniformTypeIdentifiers
 @MainActor final class EmulatorController { let profile = DeviceProfile.iPodTouch2G }
 @MainActor final class CaptureController: NSWindowController {
  let emulator = EmulatorController()
- let deviceVC = DeviceController(), recording = TestRecording()
+ let deviceVC: DeviceController? = DeviceController(), recording = TestRecording()
+ let currentProfile = DeviceProfile.iPodTouch2G
  let capturePreferences: CapturePreferences
  var captureKeyMonitor: Any?, consumedCaptureSpace = false
  var captures: [String] = []
@@ -100,8 +101,8 @@ import UniformTypeIdentifiers
  init(window: NSWindow, preferences: CapturePreferences) {
   capturePreferences = preferences
   super.init(window: window)
-  window.contentView!.addSubview(deviceVC.screen)
-  deviceVC.screen.frame = window.contentView!.bounds
+  window.contentView!.addSubview(deviceVC!.screen)
+  deviceVC!.screen.frame = window.contentView!.bounds
   installCaptureKeyboardShortcuts()
   installCaptureNotifications()
   installSaveFallback()
@@ -127,7 +128,7 @@ import UniformTypeIdentifiers
                           styleMask: [.titled], backing: .buffered, defer: false)
   let controller = CaptureController(window: window, preferences: preferences)
   app.commandWindow = window
-  window.makeFirstResponder(controller.deviceVC.screen)
+  window.makeFirstResponder(controller.deviceVC!.screen)
   func key(_ type: NSEvent.EventType = .keyDown, flags: NSEvent.ModifierFlags = [],
            repeat repeating: Bool = false, code: UInt16 = 49, in target: NSWindow? = nil) -> NSEvent {
    NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: 0,
@@ -162,15 +163,15 @@ import UniformTypeIdentifiers
   precondition(captured(key(.keyUp)))
   precondition(!captured(key()), "typing spaces must not capture")
   precondition(!captured(key(.keyUp)))
-  window.makeFirstResponder(controller.deviceVC.screen)
+  window.makeFirstResponder(controller.deviceVC!.screen)
   precondition(captured(key()))
   // The key-up can be delivered to another app after Cmd-Tab. A later,
   // unrelated modified key press must not inherit stale ownership.
   precondition(!captured(key(flags: .shift)))
   precondition(!captured(key(.keyUp, flags: .shift)))
-  controller.deviceVC.screen.isShowingLiveText = true
+  controller.deviceVC!.screen.isShowingLiveText = true
   precondition(!captured(key()))
-  controller.deviceVC.screen.isShowingLiveText = false
+  controller.deviceVC!.screen.isShowingLiveText = false
   window.key = false
   precondition(!captured(key()))
   window.key = true
@@ -196,11 +197,11 @@ import UniformTypeIdentifiers
   // Avoid replacing the user's pasteboard: native target resolution is enough.
   controller.copy(nil)
   precondition(controller.captures.count == beforeCopy + 1)
-  window.makeFirstResponder(controller.deviceVC.screen)
-  controller.deviceVC.screen.isShowingLiveText = true
+  window.makeFirstResponder(controller.deviceVC!.screen)
+  controller.deviceVC!.screen.isShowingLiveText = true
   controller.copy(nil)
   precondition(controller.captures.count == beforeCopy + 1)
-  controller.deviceVC.screen.isShowingLiveText = false
+  controller.deviceVC!.screen.isShowingLiveText = false
   // Notification buttons are tied to the original take, never a later take.
   let notifications = CaptureNotifications.shared
   let recording = controller.recording

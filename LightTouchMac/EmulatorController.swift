@@ -173,19 +173,16 @@ final class EmulatorController {
     let instance: DeviceInstance
     private let instanceError: (any Error)?
 
-    init(options: LaunchOptions, profile: DeviceProfile) {
+    /// `resolution` is the library record DeviceSessionHost chose for this
+    /// device; a non-nil `instanceError` boots dead and logs it.
+    init(options: LaunchOptions, profile: DeviceProfile, resolution: LegacyAdoption.Resolution,
+         instanceError: (any Error)? = nil) {
         self.options = options
         self.profile = profile
-        do {
-            let resolved = try DeviceLibrary.shared.resolve(options.adoptionInputs, profile: profile)
-            instance = resolved.instance
-            packedImage = resolved.packedImage
-            retainedPackedImage = resolved.retained
-            instanceError = nil
-        } catch {
-            instance = LegacyAdoption.unresolved(options.adoptionInputs, profile: profile, state: Bundled.stateDirectory)
-            instanceError = error
-        }
+        instance = resolution.instance
+        packedImage = resolution.packedImage
+        retainedPackedImage = resolution.retained
+        self.instanceError = instanceError
         usbmux.onUnexpectedExit = { [weak self] in self?.onStatusChange?() }
     }
 
