@@ -259,15 +259,15 @@ final class EmulatorController {
                 if case let .failure(error) = result, let self { logEvent("boot: \(instance.name): \(error)") }
             }
         }
+        startMediaPreparation()
         if hasGuestTools {
-            startMediaPreparation()
             startOrientationWatch()   // idle until the guest is up and reachable
         } else {
             startInterfaceOrientationWatch()
         }
         startTimeZoneSync()       // guest zone follows the Mac's, incl. travel
         startForegroundWatch()
-        startGuestPackageWatch()
+        // The guest-package watch starts in bootConfiguration(), once this boot's offer is composed.
     }
 
     /// nil when the device can't boot; the notice says why and the state is dead.
@@ -277,6 +277,7 @@ final class EmulatorController {
         if config != nil {
             logEmulatorBuild()
             verifyRestoreIfNeeded()   // a bad restore self-heals with a fresh helper
+            startGuestPackageWatch()  // after composeGuestOffer(): a watch with no offer judges nothing
         }
         return config
     }
@@ -443,11 +444,13 @@ final class EmulatorController {
     /// Existing images need the same media engine/configuration as newly
     /// packaged images before apps can use the native compositor.
     /// The iPod machine has the guest agent's channel; a stock iPad has none,
-    /// so its preparation, media import and agent extras are skipped.
+    /// so its component update, media import and agent extras are skipped.
     var hasGuestTools: Bool { profile.hasGuestTools }
 
+    /// The boot's readiness steps, shown as the startup status until the Home
+    /// screen answers: lockdown, (iPod) the agent's component update, SpringBoard.
     private func startMediaPreparation() {
-        guard options.appsync, !shuttingDown, hasGuestTools else { return }
+        guard options.appsync, !shuttingDown else { return }
         mediaPreparationTask?.cancel()
         preparingMedia = true
         preparationStatus = "Starting iOS…"
@@ -469,12 +472,14 @@ final class EmulatorController {
                 }
                 try Task.checkCancellation()
                 guard generation == bootGeneration else { return }
-                preparationStatus = "Preparing your \(profile.shortName)…"
-                logEvent("media: checking guest graphics components")
-                if try await tools().updateMediaComponents() {
-                    logEvent("media: guest graphics components updated")
-                } else {
-                    logEvent("media: guest graphics components already current")
+                if hasGuestTools {
+                    preparationStatus = "Preparing your \(profile.shortName)…"
+                    logEvent("media: checking guest graphics components")
+                    if try await tools().updateMediaComponents() {
+                        logEvent("media: guest graphics components updated")
+                    } else {
+                        logEvent("media: guest graphics components already current")
+                    }
                 }
                 try Task.checkCancellation()
                 guard generation == bootGeneration else { return }
@@ -502,6 +507,10 @@ final class EmulatorController {
                 try Task.checkCancellation()
                 guard generation == bootGeneration, !isDead, !shuttingDown else { return }
                 logEvent("boot: ready for input")
+                // SpringBoard answered over lockdown: a real round trip, so the device is reachable
+                // without waiting for the Apps inspector's poll (the foreground watch, web proxy and
+                // guest-package verdict key off it).
+                deviceReachable = true
                 resolveDeviceNotice(for: .preparation)
             } catch {
                 if !Task.isCancelled, generation == bootGeneration {
