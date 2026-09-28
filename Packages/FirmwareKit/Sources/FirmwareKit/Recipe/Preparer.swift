@@ -223,7 +223,17 @@ public enum Preparer {
                         work: URL, log: (String) -> Void) throws -> (OneShot, String) {
         let argv = ["LightTouchDevice", "-machine", "ipad1,kboot=\(esc(kboot)),\(machine)", "-display", "none", "-audio", "driver=none",
                     "-monitor", "none", "-serial", "file:\(serial.path)"]
-        var config: [String: Any] = ["boot": ["argv": argv, "environment": [String: String](), "machine": "ipad1"],
+        return try oneshot(helper, argv: argv, machine: "ipad1", serial: serial, stop: stop, stopPattern: stopPattern, timeout: timeout,
+                           work: work, log: log)
+    }
+
+    /// One `LightTouchDevice --oneshot` boot of `argv` (which routes -serial to `serial`). `during` runs on its own
+    /// thread once the helper is started (the iPod keybag's gdbstub handoff); if it throws, the helper is stopped
+    /// and the error rethrown.
+    static func oneshot(_ helper: URL, argv: [String], machine: String, serial: URL, stop: String?, stopPattern: String? = nil,
+                        timeout: Double, work: URL, log: (String) -> Void,
+                        during: (@Sendable () throws -> Void)? = nil) throws -> (OneShot, String) {
+        var config: [String: Any] = ["boot": ["argv": argv, "environment": [String: String](), "machine": machine],
                                      "serialLog": serial.path, "timeout": timeout]
         if let stop { config["stopMarker"] = stop }
         if let stopPattern { config["stopPattern"] = stopPattern }
@@ -236,8 +246,18 @@ public enum Preparer {
         p.standardOutput = out
         p.standardError = FileHandle.standardError
         try p.run()
+        final class Failure: @unchecked Sendable { var error: Error? }
+        let failure = Failure(), finished = DispatchSemaphore(value: 0)
+        if let during {
+            Thread.detachNewThread {
+                do { try during() } catch { failure.error = error; p.terminate() }
+                finished.signal()
+            }
+        } else { finished.signal() }
         let lines = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         p.waitUntilExit()
+        finished.wait()
+        if let error = failure.error { throw error }
         let text = (try? String(contentsOf: serial, encoding: .isoLatin1)) ?? ""
         guard let line = lines.split(separator: "\n").last(where: { $0.contains("\"oneshot\"") }),
               let r = try? JSONDecoder().decode(OneShot.self, from: Data(line.utf8)) else {
@@ -274,17 +294,8 @@ public enum Preparer {
     static func keybag(store: URL, nor: URL, ramdisk src: URL, dec: URL, identity: UnitIdentity, dieID: String, helper: URL, tools: URL,
                        work: URL, emit: (PrepareEvent) -> Void, log: (String) -> Void) throws {
         let fm = FileManager.default
-        let rd = work.appendingPathComponent("keybag-ramdisk.dmg"), kboot = work.appendingPathComponent("kboot-restore.bin")
-        try fm.copyItem(at: src, to: rd)
-        try VolumeMount.grow(rd, toBytes: (VolumeMount.size(rd) + (1 << 20) + 4095) / 4096 * 4096)
-        let it = try Data(contentsOf: tools.appendingPathComponent("it_keybag"))
-        try VolumeMount.withMounted(rd, at: work.appendingPathComponent("mnt-keybag")) { m in
-            let dst = m.appendingPathComponent(keybagHelper)
-            try it.write(to: dst)
-            guard chmod(dst.path, 0o755) == 0 else { throw FirmwareError(.internal, "chmod \(dst.path)") }
-        }
-        try? fm.removeItem(at: work.appendingPathComponent("mnt-keybag"))
-        _ = try HFSPlusVolume(rd, writable: true).setOwner([keybagHelper], uid: 0, gid: 0)
+        let rd = try ramdiskWithHelper(src, helper: tools.appendingPathComponent("it_keybag"), work: work)
+        let kboot = work.appendingPathComponent("kboot-restore.bin")
         try KBoot.write(decrypted: dec, to: kboot, identity: identity, ramdisk: rd)
         let norBefore = try Data(contentsOf: nor)
         let pre = work.appendingPathComponent("store.pre")
@@ -306,6 +317,24 @@ public enum Preparer {
         }
         guard try Data(contentsOf: nor) != norBefore else { throw FirmwareError(.oneshotFailed, "keybag boot: effaceable was not written to the NOR") }
         for u in [pre, rd, kboot] { try? fm.removeItem(at: u) }
+    }
+
+    /// ipad1_keybag.ramdisk_with_helper: a private copy of the restore ramdisk, 1 MiB larger, with `helper` as
+    /// root's restored_external (mode 755), which the ramdisk's rc.boot runs first.
+    static func ramdiskWithHelper(_ src: URL, helper: URL, work: URL) throws -> URL {
+        let fm = FileManager.default
+        let rd = work.appendingPathComponent("keybag-ramdisk.dmg")
+        try fm.copyItem(at: src, to: rd)
+        try VolumeMount.grow(rd, toBytes: (VolumeMount.size(rd) + (1 << 20) + 4095) / 4096 * 4096)
+        let it = try Data(contentsOf: helper)
+        try VolumeMount.withMounted(rd, at: work.appendingPathComponent("mnt-keybag")) { m in
+            let dst = m.appendingPathComponent(keybagHelper)
+            try it.write(to: dst)
+            guard chmod(dst.path, 0o755) == 0 else { throw FirmwareError(.internal, "chmod \(dst.path)") }
+        }
+        try? fm.removeItem(at: work.appendingPathComponent("mnt-keybag"))
+        _ = try HFSPlusVolume(rd, writable: true).setOwner([keybagHelper], uid: 0, gid: 0)
+        return rd
     }
 
     // MARK: cancel

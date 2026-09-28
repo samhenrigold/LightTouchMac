@@ -4,12 +4,14 @@
 // STAGING_DIR gets nor.bin, iBoot.bin (3.x+: the machine's direct-iboot), gid-blobs.bin, nand/ (page directory),
 // identity.json (600) and device.lock.json; all but the lock and identity are made read-only (the seal).
 // There is no seal boot: the legacy FTL store needs no clean halt. Scratch goes to STAGING_DIR/work.
+// options.data_protection (4.x) adds the restore-ramdisk keybag one-shot (N72Keybag) through --helper.
 //
 // The recipe: storage "8g" (model MB528; 16g MB531, 32g MB533; region LL/A), system_mib = the volume
-// (7168 MiB = 1835008 blocks), options gles_shim / appsync / web_proxy, gli_dispatch the shim's ABI table
-// (default gli-dispatch-7E18.tsv). --guest-tools holds MBXGLEngine, sblaunch, sbdlicon (optional), it_agent,
-// it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib, armv6.itpack (the guest-package loader and seed
-// package, as ipod2g_device.py bakes them) and that TSV.
+// (7168 MiB = 1835008 blocks), options gles_shim / appsync / web_proxy / data_protection, gli_dispatch
+// optionally pins the shim's ABI table (else every gli-dispatch-<BUILD>.tsv with an MBXGLEngine-<BUILD> is
+// tried, as ipod2g_device.gli_engine does). --guest-tools holds those MBXGLEngine-<BUILD> and TSVs, sblaunch,
+// sbdlicon (optional), it_agent, it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib, armv6.itpack (the
+// guest-package loader and seed package, as ipod2g_device.py bakes them) and it_keybag-armv6 (data protection).
 
 import CryptoKit
 import Foundation
@@ -19,6 +21,7 @@ public enum N72Recipe {
     static let kcPrefix = "/System/Library/Caches/com.apple.kernelcaches/"
     static let armv6Cache = "System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv6"
     static let mbx = "System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"
+    static let itKeybag = "it_keybag-armv6", keybagStep = "Booting the restore ramdisk"
     static let prefs = "private/var/mobile/Library/Preferences"
     static let agentJob = "System/Library/LaunchDaemons/com.qemu.it-agent.plist"
     static let fstabRW = "/dev/disk0s1 / hfs rw 0 1\n"
@@ -49,10 +52,21 @@ public enum N72Recipe {
             throw FirmwareError(.internal, "\(o.out.path) is not an empty directory")
         }
         let blocks = recipe.systemMiB * 256
+        let dataProtection = recipe.options["data_protection"] == true
+        let bootrom = bootromPath(helper: o.helper)
+        if dataProtection {
+            guard let helper = o.helper, fm.isExecutableFile(atPath: helper.path) else {
+                throw FirmwareError(.internal, "the keybag boot needs --helper (LightTouchDevice); got \(o.helper?.path ?? "none")")
+            }
+            guard let bootrom else { throw FirmwareError(.internal, "the keybag boot needs the iPod bootrom (bootrom_240_4) next to the helper") }
+            guard fm.fileExists(atPath: o.guestTools.appendingPathComponent(itKeybag).path) else {
+                throw FirmwareError(.internal, "guest helper \(itKeybag) missing from \(o.guestTools.path)")
+            }
+        }
         let steps = ["Verifying the IPSW", "Decrypting the firmware", "Writing the identity, NOR and boot files",
-                     "Building the system volume", "Writing the NAND", "Writing the lock"]
+                     "Building the system volume", "Writing the NAND"] + (dataProtection ? [keybagStep] : []) + ["Writing the lock"]
         emit(.begin(steps: steps.count, seconds: steps.map { StepPlan.plan($0).seconds }))
-        let progress = StepProgress(work: nil, emit: emit)
+        let progress = StepProgress(work: o.out.appendingPathComponent("work"), emit: emit)
         defer { progress.stop() }
         var index = 0
         func step() { index += 1; progress.next(index: index, name: steps[index - 1]); log("[\(index)/\(steps.count)] \(steps[index - 1])") }
@@ -131,13 +145,12 @@ public enum N72Recipe {
             guard v.totalBlocks == blocks, v.blockSize == 4096 else { throw FirmwareError(.internal, "resize produced \(v.totalBlocks) x \(v.blockSize) B blocks, wanted \(blocks) x 4096") }
         }
         var owners: [(UInt32, String)] = [(0, kcPath)]
-        let tsv = o.guestTools.appendingPathComponent(recipe.gliDispatch ?? "gli-dispatch-7E18.tsv")
         let baked = try VolumeMount.withMounted(volume, at: work.appendingPathComponent("mnt")) { m -> [String: Any] in
             try SystemEdits.put(Data(fstabRW.utf8), m.appendingPathComponent(SystemEdits.fstab))
             let kc = m.appendingPathComponent(kcPath)
             try SystemEdits.mkdirs(kc.deletingLastPathComponent())
             try ipsw.extract(kcMember, to: kc)
-            return try bake(m, options: recipe.options, tools: major >= 3, helpers: o.guestTools, tsv: tsv,
+            return try bake(m, options: recipe.options, tools: major >= 3, helpers: o.guestTools, gliDispatch: recipe.gliDispatch,
                             owners: &owners, log: log)
         }
         for (k, v) in baked where k != "guest_package" { derived[k] = v }
@@ -153,6 +166,15 @@ public enum N72Recipe {
         let (written, meta) = try N72NAND.write(volume: volume, blocks: blocks, epoch: epoch, out: nand)
         log("\(written) filesystem pages, \(meta) metadata pages generated (epoch \(epoch))")
         try fm.removeItem(at: volume)
+
+        if dataProtection, let helper = o.helper, let bootrom {
+            step()   // 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk
+            guard let update = try BuildComponents.load(ipsw)["UpdateRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no Update ramdisk") }
+            let ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
+            _ = try N72Keybag.run(out: o.out, dec: dec, ramdisk: ramdisk, itKeybag: o.guestTools.appendingPathComponent(itKeybag),
+                                  bootrom: bootrom, helper: helper, work: work, log: log)
+            derived["keybag_ramdisk"] = ramdisk
+        }
 
         step()   // read-only outputs (the seal), lock
         let ship = ["nand", "nor.bin", "gid-blobs.bin"] + (major >= 3 ? ["iBoot.bin"] : [])
@@ -176,7 +198,7 @@ public enum N72Recipe {
             "entry": ["id": e.id, "sha256": Preparer.sha256(try JSONEncoder().encode(e)), "content": try JSONSerialization.jsonObject(with: JSONEncoder().encode(e))],
             "build": e.build, "product_version": restore.productVersion, "product_type": e.productType, "board": e.board,
             "storage": recipe.storage,
-            "tool": ["name": "firmwarekit", "version": FirmwareKit.version,
+            "tool": ["name": "firmwarekit", "version": FirmwareKit.version, "helper": o.helper.map { $0.path as Any } ?? NSNull(),
                      "built": ["guest tools": Dictionary(uniqueKeysWithValues: try used.map { ($0, try Preparer.digest(o.guestTools.appendingPathComponent($0), SHA256())) })]],
             "inputs": ["ipsw": ["path": o.ipsw.path, "sha1": got], "decrypted": dec.path, "identity": "identity.json",
                        "activation": activation.map { ["input_sha256": $0.inputSHA256, "output_sha256": $0.outputSHA256] as Any } ?? NSNull(),
@@ -196,6 +218,16 @@ public enum N72Recipe {
         log("\(o.out.path): UDID \(ident.udid ?? "-")")
         progress.finish()
         emit(.done(lock: "device.lock.json"))
+    }
+
+    /// The iPod bootrom the keybag boot's machine loads: LTM_FILES, then the app bundle's Resources/device next to
+    /// the helper (Contents/MacOS), then the development assets.
+    static func bootromPath(helper: URL?) -> URL? {
+        let env = ProcessInfo.processInfo.environment["LTM_FILES"].map { URL(fileURLWithPath: $0) }
+        let bundled = helper?.resolvingSymlinksInPath().deletingLastPathComponent().appendingPathComponent("../Resources/device").standardizedFileURL
+        let dev = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Developer/qemu-ios-files")
+        return [env, bundled, dev].compactMap { $0?.appendingPathComponent("bootrom_240_4") }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     static func firstMatch(_ d: Data, _ r: Regex<Substring>) -> String? {
@@ -235,7 +267,7 @@ public enum N72Recipe {
 
     /// ipod2g_device.bake over the mounted volume `m` (bake-guest-tools.sh, patch-appsync-dylib.sh,
     /// install_web_proxy, activation). Appends the owners to patch; returns the report.
-    static func bake(_ m: URL, options opt: [String: Bool], tools: Bool, helpers: URL, tsv: URL,
+    static func bake(_ m: URL, options opt: [String: Bool], tools: Bool, helpers: URL, gliDispatch: String?,
                      owners: inout [(UInt32, String)], log: (String) -> Void) throws -> [String: Any] {
         let fm = FileManager.default
         let at = { (rel: String) in m.appendingPathComponent(rel) }
@@ -245,28 +277,29 @@ public enum N72Recipe {
             return try Data(contentsOf: u)
         }
         var report: [String: Any] = [:]
+        // ipod2g_device.gli_engine: the MBXGLEngine-<BUILD> whose TSV is this firmware's dispatch table
+        var gli: String?
         let problem: String? = try {
             guard opt["gles_shim"] ?? true else { return "options.gles_shim off" }
             guard fm.fileExists(atPath: at(armv6Cache).path) else { return "no dyld shared cache (2.x)" }
-            guard let have = GLIDispatch.fields(in: try Data(contentsOf: at(armv6Cache), options: .alwaysMapped)) else {
-                return "no (or more than one) __GLIFunctionDispatchRec @encode in the shared cache"
-            }
-            let want = String(decoding: try helper(tsv.lastPathComponent), as: UTF8.self).split(separator: "\n")
-                .filter { $0.first?.isNumber == true }.map { String($0.split(separator: "\t", omittingEmptySubsequences: false)[1]) }
-            guard have != want else { return nil }
-            let at = zip(have, want).enumerated().first { $0.element.0 != $0.element.1 }?.offset ?? min(have.count, want.count)
-            return "dispatch table differs from \(tsv.lastPathComponent) at slot \(at) (\(have.count) vs \(want.count) slots)"
+            let tsvs = try gliDispatch.map { [helpers.appendingPathComponent($0)] } ?? fm.contentsOfDirectory(at: helpers, includingPropertiesForKeys: nil)
+                .filter { $0.lastPathComponent.wholeMatch(of: /gli-dispatch-\w+\.tsv/) != nil && fm.fileExists(atPath: helpers.appendingPathComponent(engine($0)).path) }
+            let (tsv, why) = try GLIDispatch.engine(cache: try Data(contentsOf: at(armv6Cache), options: .alwaysMapped), cachePath: at(armv6Cache).path, tsvs: tsvs)
+            gli = tsv.map { String(engine($0).dropFirst("MBXGLEngine-".count)) }
+            return tsv == nil ? why ?? "no dispatch tables" : nil
         }()
-        report["gles"] = problem.map { "stock engine, software CA: " + $0 } ?? "shim"
+        report["gles"] = gli.map { "shim MBXGLEngine-" + $0 } ?? "stock engine, software CA: " + (problem ?? "")
+        report["gli"] = gli.map { $0 as Any } ?? NSNull()
         report["guest_tools"] = tools ? "installed" : "omitted: current helpers require iOS 3+ dyld"
 
         // bake-guest-tools.sh
-        if problem == nil {
-            let stock = at(mbx + ".stock")
-            if !fm.fileExists(atPath: stock.path) {
+        if let gli {
+            try SystemEdits.mkdirs(at(mbx).deletingLastPathComponent())
+            let stock = at(mbx + ".stock")   // 4.x has no stock file to keep: its MBXGLEngine is in the shared cache
+            if !fm.fileExists(atPath: stock.path), fm.fileExists(atPath: at(mbx).path) {
                 try SystemEdits.put(Data(contentsOf: at(mbx)), stock, mode: try SystemEdits.permissions(at(mbx)) & ~0o022)
             }
-            try SystemEdits.put(helper("MBXGLEngine"), at(mbx), mode: 0o755)
+            try SystemEdits.put(helper("MBXGLEngine-" + gli), at(mbx), mode: 0o755)
         }
         if tools {
             try SystemEdits.mkdirs(at("usr/local/bin"))
@@ -305,6 +338,11 @@ public enum N72Recipe {
             for rel in [agentJob] + (1...3).map({ "private/var/mobile/Media/.lt-guest-tools-v\($0)" }) { try? fm.removeItem(at: at(rel)) }
         }
 
+        if gli != nil {   // ipad1_rootfs.gli_uncache: 4.x caches MBXGLEngine, so dyld must prefer the file
+            let status = try autoreleasepool { try SystemEdits.overrideCachedImage(m, image: mbx, cache: armv6Cache) }
+            report["gles_cache"] = status
+            if status.contains("overridden") { owners.append((0, SystemEdits.dyldOverride)) }
+        }
         if opt["appsync"] == true {   // patch-appsync-dylib.sh
             let line = try AppSyncCachePatch.patchCache(at: at(armv6Cache))
             log(line)
@@ -332,7 +370,6 @@ public enum N72Recipe {
         owners.append((0, SystemEdits.lockdownd))
         // mkpkg.seed: the loader and the seed package; it_boot loads the package's jobs (com.qemu.it-agent), so
         // the baked copies it provides are removed. Owners after it, for only what is left.
-        let gli = problem == nil ? String(tsv.deletingPathExtension().lastPathComponent.dropFirst("gli-dispatch-".count)) : nil
         let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent("armv6.itpack"), gli: gli)
         log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
         report["guest_package"] = record
@@ -341,6 +378,11 @@ public enum N72Recipe {
         log("bake: \(report.filter { $0.key != "activation" && $0.key != "guest_package" })")
         return report
     }
+}
+
+/// gli-dispatch-<BUILD>.tsv -> MBXGLEngine-<BUILD>
+fileprivate func engine(_ tsv: URL) -> String {
+    "MBXGLEngine-" + tsv.deletingPathExtension().lastPathComponent.dropFirst("gli-dispatch-".count)
 }
 
 fileprivate func le32(_ b: [UInt8], _ o: Int) -> UInt32 { UInt32(b[o]) | UInt32(b[o + 1]) << 8 | UInt32(b[o + 2]) << 16 | UInt32(b[o + 3]) << 24 }

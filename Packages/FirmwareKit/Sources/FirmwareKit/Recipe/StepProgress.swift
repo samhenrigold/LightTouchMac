@@ -41,6 +41,11 @@ struct StepPlan: Sendable {
         // n72 (N72Recipe; ~35 s for 7E18)
         "Writing the identity, NOR and boot files": .init(seconds: 2, text: "Writing the NOR and boot files"),
         "Building the system volume": .init(seconds: 20, text: "Building the system volume"),
+        // 4.x data protection (N72Keybag): iBoot, the kernel entry handoff, then the ramdisk's it_keybag
+        "Booting the restore ramdisk": .init(seconds: 40, text: "Booting the restore ramdisk", milestones: [
+            .init(file: "keybag.log", marker: "FTL_Open", at: 10, text: "Booting the restore ramdisk: opening the flash"),
+            .init(file: "keybag.log", marker: "it_keybag:", at: 30, text: "Creating the data-protection keybag"),
+        ]),
     ]
 
     static func plan(_ name: String) -> StepPlan { plans[name] ?? .init(seconds: 10, text: name) }
