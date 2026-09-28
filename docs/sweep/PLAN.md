@@ -26,18 +26,19 @@ that hurt the user may be suppressed.
 | `gl-coverage` (qemu-ios) | rejection counters, magenta fallback under `gles-debug`, produced-vs-rejected list, cheap formats | regress gles + shadow, app-compat counters |
 | `usb-alert` (qemu-ios) | USB alert suppressed by the agent at runtime; package serial 3 | no alert after unlock; auto-lock observed; iPod unaffected |
 
-## Track A: app correctness (start now; ~2 d)
+## Track A: app correctness (done 2026-09-28 on `app-correctness`; to merge)
 
 | Item | Effort | Gate |
 |---|---|---|
-| A1 Activation check once per boot; persistent message; "Prepared without activation" row subtitle | 0.25 | new check-activation-gate (session driver on a hook-less base) |
-| A2 Boot deadline and recovery-mode detection → named error, never "Booting…" forever | 0.5 | check-boot-deadline (missing iBoot.bin; recovery base) |
-| A3 Per-device install queue: jobs carry the instance id, `discard(for:)`, filtered notifications, per-device pause | 0.5 | check-install-queue-scope; check-sessions two-device install |
-| A4 Device files: `chflags uchg` on base after publish (cleared on delete); watcher on Devices/<uuid> + overlay with a persistent notice; Stop skips msync into a dead inode; adopted iPod's Show in Finder → its own dir | 0.5 | check-helper-boot --only meddle |
-| A5 Install checks use the device's iOS version, not "3.1.3" | 0.1 | unit assertions |
-| A6 "Guest tools" status line: Current / Reverted / Built-in / Legacy / Unknown / Not responding / Recovery / Not booted | 0.5 | check-device-health |
-| A7 Per-device defaults (keyboardInputEnabled, autoRotateWithGuest, tiltSnap, modelPresentation) | 0.1 | offline check |
-| A8 usbmuxd idle poll interval (3 ms → longer once idle) | 0.25 | CPU sample with 3 idle devices |
+| A1 Activation check once per boot; persistent message; "Prepared without activation" row subtitle — **done** | 0.25 | check-activation-gate 8/8 (offline slice + session driver on the hook-less 7E18-a) |
+| A2 Boot deadline and recovery-mode detection → named error, never "Booting…" forever — **done** (lockdown is "iOS up"; the helper's uiReady is iBoot's display) | 0.5 | check-boot-deadline 3/3 (offline slices; 8C148-b recovery base, marker in 1.3 s; missing iBoot.bin named before boot) |
+| A3 Per-device install queue: jobs carry the instance id, `discard(for:)`, filtered notifications, per-device pause — **done** | 0.5 | check-install-queue-scope; check-uninstall-queue, check-media-queue; check-sessions two-device install |
+| A4 Device files: `chflags uchg` on base after publish (cleared on delete); watcher on Devices/<uuid> + overlay with a persistent notice; Stop skips msync into a dead inode; adopted iPod's Show in Finder → its own dir — **done** (the watch covers delete/rename/revoke; `.write` only on base: QEMU writes the overlay's own page files) | 0.5 | check-device-files; check-helper-boot --only meddle 6/6 |
+| A5 Install checks use the device's iOS version, not "3.1.3" — **done** (and the slice: armv7 for the iPad) | 0.1 | tests/catalog.swift assertions (runner stale at baseline; verified by a scratch compile) |
+| A6 "Guest tools" status line: Current / Reverted / Built-in / Legacy / Unknown / Not responding / Recovery / Not booted — **done** | 0.5 | check-guest-package (texts and states); the line is `EmulatorController.guestToolsLine` |
+| A7 Per-device defaults (keyboardInputEnabled, autoRotateWithGuest) — **done**; tiltSnap and modelPresentation are CoreAnimation keys, not defaults | 0.1 | check-device-keyboard, check-settings |
+| A8 usbmuxd idle poll interval (3 ms → 50 ms after 1 s idle, back on the first packet) — **done** on the fork's `idle-poll` branch (off `qemu-zlp` 41631a7, not pushed, not pinned) | 0.25 | 3 idle iPods: 6.3% → 0.3% of a core (usbmuxd CPU time over 30 s) |
+| A9 Quit-with-resume snapshot code deleted (S3) — **done**; helper snapshot ops kept | 0.5 | app/helper/firmwarekit build; check-clean-shutdown, check-termination, check-helper-boot restore |
 
 ## Track B: IPA library (after A3; ~2 d)
 
@@ -83,6 +84,6 @@ records → one blob; uninstall on A keeps B), check-uninstall-queue, check-sess
 
 ## Order
 
-1. Track A now (one agent). In-flight branches merge as they land; then the next notarized build for Sam.
+1. Track A done (`app-correctness`, 9 commits); merge it, pin usbmuxd `idle-poll`. In-flight branches merge as they land; then the next notarized build for Sam.
 2. Track B, then E1/E3/E5 (after the iBoot merge), then C1–C3 (after gl-coverage merges).
 3. S1/S2 decided → C4–C6; D1–D8 as a series of small branches; E2, E4, E6 last, when the code stops moving.

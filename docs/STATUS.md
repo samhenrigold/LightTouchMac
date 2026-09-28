@@ -26,6 +26,8 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 | iPad app bugs (09-28) | 4.x keyboard (`enable-hsic`, usb-kbd max-power), guest-package report read on every boot, iPad readiness pipeline (boot progress, ready notice, proxy apply), it_agent on k48 via package serial 2 (foreground app in the title bar), A008 alpha surfaces for CA shadows, Stop = flush + hard halt (helper exits in ~0.04 s) | check-sessions 18/18 on 7B500 and 8C148 with `--ipad-itpack`; check-helper-boot 22/22; KBootTests byte-equal to Python; regress `shadow` check |
 | Storage fixes from the audit | App and device locks, atomic delete/publish, launch sweeps, TM exclusions, disk checks, Settings ▸ Storage | `221ef9a`; check-sessions 17/17, check-helper-boot lease 6/6, offline checks |
 | Silent headless boots | `-audio driver=none` everywhere headless | grep of tests and helper modes |
+| Track A: app correctness (`app-correctness`, 09-28) | A1 activation verified once per boot (persistent issue, notice with Erase, "Prepared without activation" row note); A2 boot deadline (lockdown within the board's budget) and iBoot recovery-mode detection end the session as a named error, helper halted; A3 per-device install queue (`InstallJob.deviceID`, `discard(for:)`, per-device pause/busy, filtered inspectors); A4 published bases `chflags uchg`, a watch on a running device's files with a persistent notice and Stop without a flush, Show in Finder per device; A5 install checks use the device's iOS version and slice; A6 "Guest tools" status line with concrete states; A7 keyboard input and auto-rotation per device (tiltSnap/modelPresentation were animation keys, not defaults); A8 usbmuxd polls 50 ms once idle for 1 s (fork branch `idle-poll`, 3 idle iPods 6.3% → 0.3% of a core; not pinned yet) | `check-activation-gate` 8/8 (7E18-a), `check-boot-deadline` 3/3 (8C148-b, marker in 1.3 s), `check-install-queue-scope`, `check-device-files`, `check-helper-boot --only meddle` 6/6, `check-sessions --ipad-device` (see the merge note), the offline checks listed in PLAN.md |
+| Quit-with-resume snapshots removed (S3) | The unreachable app-side save/restore code is gone; the helper's snapshot ops, the guest-tools restarts and Erase's sweep of stale snapshot files stay | app, helper and firmwarekit build; `check-clean-shutdown`, `check-termination`, `check-preparation-wake`, `tests/device-state-storage.swift`, `check-helper-boot` restore case unchanged |
 
 ## Catalog (LightTouchMac/Resources/firmware-catalog.json)
 
@@ -46,7 +48,7 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 | USB "not supported" alert suppressed through the guest agent (Sam's call: not fidelity; blocks auto-lock) | qemu-ios `usb-alert` | one agent binary per arch, runtime detection, package serial 3 |
 | GL bridge rejection audit | qemu-ios `gl-coverage` | every reject/unimplemented path counted + logged, magenta fallback under `gles-debug`, produced-vs-rejected list from the firmwares' own frameworks, cheap formats implemented |
 | Real-iBoot boot chain in FirmwareKit | `fk-k48-iboot` | app-prepared iPads boot SecureROM→LLB→iBoot→kernel like the Python-built ones |
-| Consolidation sweep | docs/sweep/PLAN.md | surveys done (docs/sweep/*.md); Track A (app correctness: activation check, boot deadline, per-device install queue, device-file protection, guest-tools status line) on `app-correctness`; B–E sequenced in the plan; decisions S1–S6 with Sam |
+| Consolidation sweep | docs/sweep/PLAN.md | surveys done (docs/sweep/*.md); Track A done on `app-correctness` (see the Done table; to merge); B–E sequenced in the plan; decisions S1–S6 with Sam |
 
 Then: a notarized build, verified in-app on every firmware, for Sam to test. That build is the first
 in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e71588`).
@@ -71,6 +73,8 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - `tests/ipod/test_regress.py`: one test's mock lacks `guest_package_status`.
 - Bundled iPod image carries the old GL shim; regenerate at the main merge.
 - Two checks flake under heavy load (one iPad boot hang, one audio correlation); pass on retry.
+- `tests/run-catalog-checks.py` is stale at baseline: `tests/catalog.swift` still calls IPALibrary without `device:` (its CatalogCopy assertions, incl. Track A's, were verified by a scratch compile). `tests/check-device-menus.py` fails at baseline on the App menu's Settings… item.
+- usbmuxd `idle-poll` (fork branch, off `qemu-zlp`): pin it with the next release build (`build-support`/release pin) so the app ships the backoff.
 - Tip fix not yet confirmed on an app-prepared iPad.
 - ~45 worktrees under ~/Developer and /tmp from finished agents; prune the merged ones.
 
