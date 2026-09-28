@@ -16,12 +16,41 @@ nonisolated enum DeviceAction: CaseIterable, Sendable {
 }
 
 /// A download or preparation in flight for a catalog entry (FirmwareJobs).
+/// `remaining` is the estimated seconds left, nil until there is one.
 nonisolated enum FirmwareJob: Equatable, Sendable {
-    case downloading(fraction: Double)
-    /// `step` is 1-based; 0 of 0 is a job with no steps yet (hashing an import).
-    /// `fraction` is the progress within the step.
-    case preparing(step: Int, of: Int, name: String, fraction: Double = 0)
+    case downloading(fraction: Double, remaining: TimeInterval? = nil)
+    case preparing(Preparation)
     case failed(String)
+}
+
+/// Where a preparation stands (the preparer contract's begin, step and progress events).
+nonisolated struct Preparation: Equatable, Sendable {
+    /// 1-based; 0 of 0 is a job with no steps yet (hashing an import).
+    var step = 0, steps = 0
+    var name: String
+    /// Within the step, 0...1.
+    var fraction = 0.0
+    /// The preparer's expected seconds per step; equal steps without them.
+    var seconds: [Double] = []
+    /// The preparer's words for what the step is doing now.
+    var detail: String?
+    var remaining: TimeInterval?
+
+    /// Finished steps plus this one's fraction, weighted by expected seconds; nil with no steps yet.
+    var overall: Double? {
+        guard steps > 0 else { return nil }
+        let weights = seconds.count == steps && seconds.allSatisfy({ $0 > 0 }) ? seconds : Array(repeating: 1, count: steps)
+        let done = weights.prefix(min(max(step - 1, 0), steps)).reduce(0, +)
+        let current = (1...steps).contains(step) ? weights[step - 1] * min(max(fraction, 0), 1) : 0
+        return min(1, (done + current) / weights.reduce(0, +))
+    }
+}
+
+/// Seconds left for a job that went from `start` to `now` (0...1) in `elapsed` seconds; nil until
+/// it has run 5 s and moved 2 %, so the first guesses don't swing.
+nonisolated func estimatedRemaining(elapsed: TimeInterval, from start: Double, to now: Double) -> TimeInterval? {
+    guard elapsed >= 5, now - start >= 0.02 else { return nil }
+    return elapsed * (1 - now) / (now - start)
 }
 
 /// A started device, as the sidebar sees it.
@@ -33,8 +62,8 @@ nonisolated enum SessionPhase: Equatable, Sendable {
 nonisolated enum DeviceRowState: Equatable, Sendable {
     enum Unavailable: Equatable, Sendable { case comingSoon, requiresIPSW }
     case notDownloaded(bytes: Int64?)
-    case downloading(fraction: Double)
-    case preparing(step: Int, of: Int, name: String, fraction: Double = 0)
+    case downloading(fraction: Double, remaining: TimeInterval? = nil)
+    case preparing(Preparation)
     case ready, running, stopping
     case error(String)
     case unavailable(Unavailable)
@@ -70,8 +99,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
         if entry.status == .comingSoon { return .unavailable(.comingSoon) }
         switch job {
-        case let .downloading(fraction)?: return .downloading(fraction: fraction)
-        case let .preparing(step, count, name, fraction)?: return .preparing(step: step, of: count, name: name, fraction: fraction)
+        case let .downloading(fraction, remaining)?: return .downloading(fraction: fraction, remaining: remaining)
+        case let .preparing(preparation)?: return .preparing(preparation)
         case let .failed(reason)?: return .error(reason)
         case nil: break
         }
@@ -89,10 +118,42 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     /// A download's or preparation's overall progress; nil while it has no steps yet.
     var progress: Double? {
         switch state {
-        case let .downloading(fraction): fraction
-        case let .preparing(step, count, _, fraction) where count > 0:
-            min(1, (Double(max(step - 1, 0)) + min(max(fraction, 0), 1)) / Double(count))
+        case let .downloading(fraction, _): fraction
+        case let .preparing(preparation): preparation.overall
         default: nil
+        }
+    }
+
+    /// The sidebar's words beside the ring: "43%", "Step 6 of 7 · 48%".
+    var progressSummary: String? {
+        let percent = progress.map { "\(Int(($0 * 100).rounded(.down)))%" }
+        switch state {
+        case .downloading: return percent
+        case let .preparing(p): return p.steps > 0 ? "Step \(p.step) of \(p.steps)" + (percent.map { " · \($0)" } ?? "") : p.name
+        default: return nil
+        }
+    }
+
+    /// The placeholder's lines under the bar: the step, what it is doing, and percent with time left.
+    var progressLines: [String] {
+        let percent = progress.map { "\(Int(($0 * 100).rounded(.down)))%" }
+        switch state {
+        case let .downloading(_, remaining):
+            return [[percent, remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")]
+        case let .preparing(p) where p.steps > 0:
+            return ["Step \(p.step) of \(p.steps): \(p.name)", p.detail,
+                    [percent, p.remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")].compactMap { $0 }
+        case let .preparing(p): return [p.name]
+        default: return []
+        }
+    }
+
+    static func remainingText(_ seconds: TimeInterval) -> String {
+        switch seconds {
+        case ..<10: "Almost done"
+        case ..<60: "About \(Int((seconds / 10).rounded(.up)) * 10) s remaining"
+        case ..<5400: "About \(Int((seconds / 60).rounded())) min remaining"
+        default: "About \(Int((seconds / 3600).rounded())) h remaining"
         }
     }
 
@@ -142,8 +203,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         switch state {
         case let .notDownloaded(bytes):
             bytes.map { "Not Downloaded, " + ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Not Downloaded"
-        case let .downloading(fraction): "Downloading, \(Int((fraction * 100).rounded()))%"
-        case let .preparing(step, count, name, _): count > 0 ? "Preparing, Step \(step) of \(count)" : "Preparing, \(name)"
+        case .downloading: "Downloading, " + (progressSummary ?? "")
+        case .preparing: "Preparing, " + (progressSummary ?? "")
         case .ready: "Ready"
         case .running: "Running"
         case .stopping: "Stopping"

@@ -38,7 +38,8 @@ struct LZSSTests {
         let x0 = (1024 - 1) / 2, y0 = (768 - 2) / 2
         #expect(segs[1].pa == 0x4F70_0000 + UInt32(y0 * 4096) && segs[1].length == 1024 * 4 * 2)
         let rows = [UInt8](segs[1].data!)
-        #expect(Array(rows[x0 * 4..<x0 * 4 + 4]) == [0xFF, 0xFF, 0xFF, 0xFF])               // row 0 <- logo x 0 (white)
-        #expect(Array(rows[4096 + x0 * 4..<4096 + x0 * 4 + 4]) == [0x00, 0x00, 0x00, 0xFF])  // row 1 <- logo x 1 (clear)
+        // turned a quarter counter-clockwise: the logo's top row becomes its left column, its left end the bottom
+        #expect(Array(rows[x0 * 4..<x0 * 4 + 4]) == [0x00, 0x00, 0x00, 0xFF])               // row 0 <- logo x 1 (clear)
+        #expect(Array(rows[4096 + x0 * 4..<4096 + x0 * 4 + 4]) == [0xFF, 0xFF, 0xFF, 0xFF])  // row 1 <- logo x 0 (white)
     }
 }

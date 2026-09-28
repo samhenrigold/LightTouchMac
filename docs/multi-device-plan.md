@@ -437,13 +437,21 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 
 **stdout is JSON Lines only, one object per line.** Diagnostics go to stderr.
 ```
-{"event":"begin","steps":9}
+{"event":"begin","steps":9,"seconds":[2,5,…]}  // seconds: expected duration per step, optional
 {"event":"step","index":3,"name":"Building the system volume"}   // index is 1-based, 1…steps
-{"event":"progress","fraction":0.42}            // within the current step, optional
+{"event":"progress","fraction":0.42,"detail":"Booting to seal the flash — 42 s"}   // fraction within the current step; detail optional
 {"event":"warning","message":"…"}
 {"event":"done","lock":"device.lock.json"}      // relative to STAGING_DIR
 {"event":"error","code":"key_missing|sha_mismatch|unsupported|hook_failed|oneshot_failed|disk_full|internal","message":"…"}
 ```
+
+**Progress (2026-09-28, prep-ux):** during every step firmwarekit emits a `progress` event about once a second, and a final `fraction` 1.0 just before the next `step` (or `done`).
+- Within a step the fraction never goes down, and it stays below 1 until that final event.
+- `detail` says what the step is doing now and how long it has been running.
+- The verify and lock steps measure the bytes they hash.
+- The seal and keybag boots use the serial-log milestones of their one-shots (FTL open, launchd, it_prefs, it_seal, the check boot), and elapsed time up to the next milestone. Elapsed time never goes past a milestone that hasn't appeared yet.
+- The other steps use elapsed time against their expected seconds.
+- `begin.seconds` gives those expected seconds (`Recipe/StepProgress.swift`), so the app can weight its overall bar. It is 91 s for 7B500 on an M4 Max, and the seal is 72 s of that.
 
 STAGING_DIR exists and is empty when firmwarekit starts; the app creates it.
 

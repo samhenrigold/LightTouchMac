@@ -319,7 +319,7 @@ private final class DeviceRowCell: NSTableCellView {
     func update(_ row: DeviceRow) {
         title.stringValue = row.title
         title.textColor = row.isDimmed ? .disabledControlTextColor : .labelColor
-        toolTip = "\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))"
+        toolTip = (["\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))"] + row.progressLines).joined(separator: "\n")
         experimentalTag.isHidden = !row.isExperimental
 
         detail.isHidden = true
@@ -329,12 +329,9 @@ private final class DeviceRowCell: NSTableCellView {
         switch row.state {
         case let .notDownloaded(bytes):
             show(bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) })
-        case let .downloading(fraction):
-            spin(fraction: fraction)
-            show("\(Int((fraction * 100).rounded()))%")
-        case let .preparing(step, count, name, _):
+        case .downloading, .preparing:
             spin(fraction: row.progress)
-            show(count > 0 ? "Step \(step) of \(count)" : name)
+            show(row.progressSummary)
         case .ready: break
         case .running: show(symbol: "circle.fill", color: .systemGreen, size: 8)
         case .stopping: spin(fraction: nil)

@@ -16,14 +16,15 @@ import Foundation
 
 /// One line of the preparer's stdout.
 public enum PrepareEvent: Equatable, Sendable {
-    case begin(steps: Int), step(index: Int, name: String), progress(Double), warning(String)
+    /// `seconds`: each step's expected duration, for weighting the overall bar (omitted when empty).
+    case begin(steps: Int, seconds: [Double] = []), step(index: Int, name: String), progress(Double, detail: String? = nil), warning(String)
     case done(lock: String), error(code: String, message: String)
 
     public var json: String {
         let o: [String: Any] = switch self {
-        case .begin(let n): ["event": "begin", "steps": n]
+        case .begin(let n, let seconds): ["event": "begin", "steps": n].merging(seconds.isEmpty ? [:] : ["seconds": seconds]) { a, _ in a }
         case .step(let i, let name): ["event": "step", "index": i, "name": name]
-        case .progress(let f): ["event": "progress", "fraction": f]
+        case .progress(let f, let detail): ["event": "progress", "fraction": f].merging(detail.map { ["detail": $0] } ?? [:]) { a, _ in a }
         case .warning(let m): ["event": "warning", "message": m]
         case .done(let lock): ["event": "done", "lock": lock]
         case .error(let code, let m): ["event": "error", "code": code, "message": m]
@@ -48,7 +49,7 @@ public enum Preparer {
     static let halting = "it_seal: halting", ftlOpen = "[FTL:MSG] FTL_Open", rescan = "CXT is not valid"
     static let keybagDone = "it_keybag: effaceable formatted, system keybag created", keybagHelper = "usr/local/bin/restored_external"
 
-    public static func create(_ o: Options, emit: (PrepareEvent) -> Void) throws {
+    public static func create(_ o: Options, emit: @escaping @Sendable (PrepareEvent) -> Void) throws {
         let fm = FileManager.default, e = o.entry
         func log(_ s: String) {
             if s.hasPrefix("warning: ") { emit(.warning(String(s.dropFirst(9)))) }
@@ -79,14 +80,18 @@ public enum Preparer {
         let steps = ["Verifying the IPSW", "Decrypting the firmware", "Writing the identity and boot image",
                      "Building the system and data volumes", "Writing the NAND"]
             + (nor ? ["Creating the data-protection keybag"] : []) + ["Sealing the NAND", "Writing the lock"]
-        emit(.begin(steps: steps.count))
+        emit(.begin(steps: steps.count, seconds: steps.map { StepPlan.plan($0).seconds }))
+        let progress = StepProgress(work: o.out.appendingPathComponent("work"), emit: emit)
+        defer { progress.stop() }
         var index = 0
-        func step() { index += 1; emit(.step(index: index, name: steps[index - 1])); log("[\(index)/\(steps.count)] \(steps[index - 1])") }
+        func step() { index += 1; progress.next(index: index, name: steps[index - 1]); log("[\(index)/\(steps.count)] \(steps[index - 1])") }
         let file = { (n: String) in o.out.appendingPathComponent(n) }
         let work = file("work")
 
         step()   // verify
-        let got = try digest(o.ipsw, Insecure.SHA1())
+        let ipswBytes = ByteCount(total: (try? fm.attributesOfItem(atPath: o.ipsw.path)[.size] as? Int) ?? 0)
+        progress.measure = { ipswBytes.fraction }
+        let got = try digest(o.ipsw, Insecure.SHA1(), count: ipswBytes.add)
         guard got == sha1.lowercased() else { throw FirmwareError(.shaMismatch, "\(o.ipsw.lastPathComponent): sha1 \(got), \(e.id) pins \(sha1)") }
         let ipsw = IPSWArchive(o.ipsw)
         let restore = try RestoreInfo(ipsw)
@@ -151,10 +156,12 @@ public enum Preparer {
         for u in [nand, file("kboot.bin")] + (norURL.map { [$0] } ?? []) { try readOnly(u) }
         let hook = vols.hook, tools = try fm.contentsOfDirectory(atPath: o.guestTools.path).sorted()
         let nandFiles = try fm.contentsOfDirectory(atPath: nand.path).sorted()
+        let nandBytes = ByteCount(total: nandFiles.reduce(0) { $0 + ((try? fm.attributesOfItem(atPath: nand.appendingPathComponent($1).path)[.size] as? Int) ?? 0) })
+        progress.measure = { nandBytes.fraction }
         final class Hashes: @unchecked Sendable { let lock = NSLock(); var sha: [String: String] = [:]; var error: Error? }
         let hashes = Hashes()
         DispatchQueue.concurrentPerform(iterations: nandFiles.count) { i in   // 16.5 GB of sparse files: one core each
-            do { let h = try digest(nand.appendingPathComponent(nandFiles[i]), SHA256()); hashes.lock.withLock { hashes.sha[nandFiles[i]] = h } }
+            do { let h = try digest(nand.appendingPathComponent(nandFiles[i]), SHA256(), count: nandBytes.add); hashes.lock.withLock { hashes.sha[nandFiles[i]] = h } }
             catch { hashes.lock.withLock { hashes.error = error } }
         }
         if let error = hashes.error { throw error }
@@ -185,6 +192,7 @@ public enum Preparer {
         try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             .write(to: file("device.lock.json"))
         log("\(o.out.path): UDID \(ident.udid ?? "-")")
+        progress.finish()
         emit(.done(lock: "device.lock.json"))
     }
 
@@ -337,11 +345,11 @@ public enum Preparer {
 
     // MARK: files
 
-    static func digest<H: HashFunction>(_ url: URL, _ h: H) throws -> String {
+    static func digest<H: HashFunction>(_ url: URL, _ h: H, count: ((Int) -> Void)? = nil) throws -> String {
         var h = h
         let f = try FileHandle(forReadingFrom: url)
         defer { try? f.close() }
-        while let chunk = try f.read(upToCount: 1 << 22), !chunk.isEmpty { h.update(data: chunk) }
+        while let chunk = try f.read(upToCount: 1 << 22), !chunk.isEmpty { h.update(data: chunk); count?(chunk.count) }
         return h.finalize().map { String(format: "%02x", $0) }.joined()
     }
 

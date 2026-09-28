@@ -30,12 +30,14 @@ def emit(**event):
     print(json.dumps(event), flush=True)
 
 
-emit(event="begin", steps=3)
+emit(event="begin", steps=3, seconds=[5, 10, 70])
 emit(event="step", index=1, name="Decrypting")
+emit(event="progress", fraction=0, detail="Decrypting the firmware — 0 s")
 if a.cache:
     os.makedirs(os.path.join(a.cache, entry["source"]["sha1"]), exist_ok=True)
     open(os.path.join(a.cache, entry["source"]["sha1"], "rootfs.dmg"), "w").write("x")
-emit(event="progress", fraction=0.5)
+emit(event="progress", fraction=0.5, detail="Decrypting the firmware — 1 s")
+emit(event="progress", fraction=1, detail="Decrypting the firmware — 2 s")
 if mode == "crash":
     print("fake: crashing", file=sys.stderr)
     sys.exit(3)
@@ -57,6 +59,8 @@ if mode == "slow":
     time.sleep(60)
     sys.exit(4)
 emit(event="step", index=3, name="Sealing")
+for i, f in enumerate([0, 0.25, 0.5, 0.75, 1]):
+    emit(event="progress", fraction=f, detail=f"Booting to seal the flash — {i * 10} s")
 die = ["0x00000123", "0x00000456"]
 ident = {"udid": hashlib.sha1((a.seed or "").encode()).hexdigest(), "die-id": die}
 fd = os.open(os.path.join(out, "identity.json"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

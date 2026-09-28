@@ -74,8 +74,9 @@ public enum BootLogo {
     /// Framebuffer segments that put an iBootIm logo where iBoot puts it: centred on black.
     ///
     /// iBootIm: "iBootIm\0", adler32, "lzss", format tag (only "grey": grey + inverted alpha, composited
-    /// over black), u16 width, height; LZSS data at 0x40. The panel scans out landscape and portrait UI
-    /// arrives turned a quarter clockwise into it, so the logo is turned the same way.
+    /// over black), u16 width, height; LZSS data at 0x40. The panel scans out landscape with portrait UI
+    /// turned a quarter counter-clockwise into it (its top along the panel's left edge; the app turns the
+    /// panel a quarter clockwise to stand it up), so the logo is turned the same way.
     public static func segments(iBootIm blob: Data, framebufferPA fb: UInt32,
                                 width fbW: Int = KBoot.fbWidth, height fbH: Int = KBoot.fbHeight) throws -> [KBoot.Segment] {
         let b = [UInt8](blob)
@@ -93,7 +94,7 @@ public enum BootLogo {
             for lx in 0..<w {
                 let grey = UInt32(px[(ly * w + lx) * 2]), clear = UInt32(px[(ly * w + lx) * 2 + 1])
                 let v = grey * (255 - clear) / 255, pixel = 0xFF00_0000 | v * 0x010101
-                let at = lx * stride + (x0 + h - 1 - ly) * 4
+                let at = (w - 1 - lx) * stride + (x0 + ly) * 4
                 rows[at] = UInt8(pixel & 0xFF); rows[at + 1] = UInt8(pixel >> 8 & 0xFF)
                 rows[at + 2] = UInt8(pixel >> 16 & 0xFF); rows[at + 3] = 0xFF
             }
