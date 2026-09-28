@@ -11,7 +11,7 @@ and [device-library-architecture.md](device-library-architecture.md) as a produc
 - **Keys are bundled with the catalog.**
 
 **Hard rules:**
-- **Activation belongs to Sam.** The app only runs a user-configured hook executable, as a black box, and never ships, writes or describes one.
+- **Activation is automatic.** FirmwareKit activates and re-signs the staged system as a built-in preparation step. There is no activation setting, executable path, or catalog policy.
 - **Firmware and Apple assets never enter a repo.**
 - **Nobody but Sam launches the app.** Verification is headless, e.g. `LightTouchDevice --headless`.
 
@@ -147,7 +147,6 @@ EC stays in the app: every `qemu_ios_*` call becomes a `link.…` call. `NativeL
  "recipe":{"name":"k48","version":1,"storage":"16g","system_mib":1280,"data_size":"partition",
            "options":{"ca_ogl":true,"appsync":false,"web_proxy":true,"usb_net":true,"writable_nor":true,"keybag_oneshot":true},
            "gli_dispatch":"gli-dispatch-8C148.tsv","guest":{"arch":"armv7","gl_engine":"GLEngine-8C148"}},
- "activation_hook":"optional",
  "emulator":{"min_protocol":1}, "estimates":{"prepared_bytes":0,"peak_bytes":0,"seconds":0}}]}
 ```
 
@@ -268,7 +267,7 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 | GLIDispatchCheck | gli_abi_problem, gld_problem | verdict | 80 |
 | SharedCache symbol lookup + AppSync patch | appsync_cachepatch.py | bytes | 220 |
 | MachOSigner (ad-hoc CD + entitlements; replaces ldid, which is AGPL) | ldid calls | bytes vs `ldid -S` | 350 |
-| HookRunner (user hook, black box: exit 0, file changed, re-sign, sha256s in lock) | activation_hook | lock fields | 60 |
+| Built-in activation (recognize, patch, re-sign, sha256s in lock) | Activation | lock fields | 60 |
 | DeviceTree + KBoot (memory map, identity, entry, ramdisk mode, segments) | ipad1_kboot.py | bytes | 500 |
 | Identity synthesis | synth_identity, udid | bytes | 80 |
 | K48 NAND store (whitening, spares, VFL/BBT, BTOC, MBR, fstab, check) | ipad1_nand.py | bytes | 800 |
@@ -425,12 +424,11 @@ The Python bridge is dropped. The app's PreparationJob runs one executable, `fir
 
 ```
 firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
-                   [--seed SEED] [--activation-hook PATH] [--helper PATH_TO_LightTouchDevice]
+                   [--seed SEED] [--helper PATH_TO_LightTouchDevice]
                    [--cache DIR]
 ```
 
 - `ENTRY.json` is one catalog entry, exactly as in `Resources/firmware-catalog.json`, with its keys.
-- `--activation-hook` is a user-chosen executable. It's run as `hook FILE` on the recipe's target, as a black box, then re-signed. The app only stores and passes the path.
 - `--helper` runs the seal and keybag one-shots (`LightTouchDevice --oneshot`).
 - `--cache` holds decrypted components by IPSW sha1. It's recreatable.
 
@@ -441,7 +439,7 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 {"event":"progress","fraction":0.42}            // within the current step, optional
 {"event":"warning","message":"…"}
 {"event":"done","lock":"device.lock.json"}      // relative to STAGING_DIR
-{"event":"error","code":"key_missing|sha_mismatch|unsupported|hook_failed|oneshot_failed|disk_full|internal","message":"…"}
+{"event":"error","code":"key_missing|sha_mismatch|unsupported|activation_failed|oneshot_failed|disk_full|internal","message":"…"}
 ```
 
 STAGING_DIR exists and is empty when firmwarekit starts; the app creates it.
@@ -453,7 +451,7 @@ STAGING_DIR exists and is empty when firmwarekit starts; the app creates it.
 - `nand/`, kept sparse;
 - `nor.bin` if the recipe uses a writable NOR;
 - `identity.json` (mode 600);
-- `device.lock.json`: the inputs and their hashes, the tool version, the UDID, the hook sha256, and the product version.
+- `device.lock.json`: the inputs and their hashes, the tool version, the UDID, the activation input/output hashes, and the product version.
 
 The app publishes STAGING_DIR by rename.
 
@@ -473,4 +471,3 @@ The app publishes STAGING_DIR by rename.
 **FirmwareKit wave A2, 2026-09-28** (`2907d45`, `45fdbdd`, `2dbe750`):
 - **GL dispatch tables are generated at prepare time from the IPSW's shared cache.** They use one shipped base table (`gli-dispatch-7B500.tsv`) for the per-function columns. The catalog's `gli_dispatch` field is unused and can be dropped.
 - **No MachOSigner in FirmwareKit.** Guest helpers are signed once when the app is built (`build-release.py` on the dev Mac), so FirmwareKit never signs at run time.
-- **Hook contract change:** the activation hook must leave its target file validly signed. FirmwareKit checks that a CodeDirectory is present and records the sha256 values, but doesn't re-sign. This replaces the Python pipeline's post-hook `ldid` re-sign. Sam's activation agent owns the hook side of this.

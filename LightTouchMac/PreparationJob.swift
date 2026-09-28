@@ -22,7 +22,6 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         var helper: URL
         /// Decrypted components by IPSW sha1; this IPSW's are deleted after a publish.
         var cache: URL
-        var activationHook: String?
         /// The preparer's stderr.
         var log: URL
     }
@@ -69,7 +68,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         case "key_missing": "This firmware’s keys are missing."
         case "sha_mismatch": "This IPSW doesn’t match the one Light Touch knows."
         case "unsupported": "Not a supported firmware."
-        case "hook_failed": "The activation hook failed."
+        case "activation_failed", "hook_failed": "Couldn’t activate this device."
         case "oneshot_failed": "The device’s first boot didn’t finish."
         case "disk_full": "Not enough disk space to prepare this device."
         default: detail.isEmpty ? "Preparation failed." : "Preparation failed: \(detail)"
@@ -104,7 +103,6 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             process.executableURL = request.preparer
             process.arguments = ["create", "--entry", entryFile.path, "--ipsw", request.ipsw.path, "--out", staging.path,
                                  "--seed", id.uuidString, "--helper", request.helper.path, "--cache", request.cache.path]
-                + (request.activationHook.map { ["--activation-hook", $0] } ?? [])
             let stdout = Pipe()
             process.standardOutput = stdout
             process.standardError = try FileHandle(forWritingTo: request.log)

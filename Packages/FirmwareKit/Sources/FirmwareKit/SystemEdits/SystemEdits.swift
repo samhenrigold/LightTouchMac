@@ -16,8 +16,8 @@
 //
 //   let r = try SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: p1 * 4096, dataBytes: p2 * 4096,
 //                                    options: .init(recipe: entry.recipe!), helpers: guestTools,
-//                                    gliDispatch: entry.recipe?.gliDispatch, activationHook: hook) { print($0) }
-//   r.system, r.data, r.hook
+//                                    gliDispatch: entry.recipe?.gliDispatch) { print($0) }
+//   r.system, r.data, r.activation
 //
 // `helpers` is a flat directory of prebuilt, signed files (the app bundles it; see `Helpers`).
 
@@ -60,7 +60,7 @@ public enum SystemEdits {
 
     public struct Result: Sendable {
         public var system: URL, data: URL
-        public var hook: ActivationHook.Result?
+        public var activation: Activation.Result?
         /// The GLEngine installed (helpers file name), if any.
         public var engine: String?
         public var notes: [String] = []
@@ -101,7 +101,7 @@ public enum SystemEdits {
     /// `rootfs` is the decrypted rootfs DMG (or a bare HFS volume); `systemBytes`/`dataBytes` are partition
     /// 1 and 2 of the MBR in bytes.
     public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
-                                gliDispatch: String? = nil, activationHook: URL? = nil,
+                                gliDispatch: String? = nil,
                                 log: (String) -> Void = { _ in }) throws -> Result {
         let fm = FileManager.default
         let system = work.appendingPathComponent("system.img"), data = work.appendingPathComponent("data.img")
@@ -183,11 +183,9 @@ public enum SystemEdits {
                 dict(d, "EnvironmentVariables")["DYLD_INSERT_LIBRARIES"] = "/" + Helpers.tools[3].path
             }
             try rewritePlist(at(btJob)) { $0["Disabled"] = true }
-            if let hook = activationHook {
-                log("activation hook \(hook.lastPathComponent) on /\(lockdownd)")
-                result.hook = try ActivationHook.run(hook, on: at(lockdownd), displayPath: "/" + lockdownd)
-                rootOwned.append(lockdownd)
-            }
+            log("Activating device")
+            result.activation = try Activation.run(on: at(lockdownd))
+            rootOwned.append(lockdownd)
             rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"] + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
 
             // /private/var skeleton for the data volume

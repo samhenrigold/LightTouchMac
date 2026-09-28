@@ -73,13 +73,12 @@ public struct FirmwareEntry: Codable, Sendable, Equatable {
     public var source: Source
     public var keys: [String: Key]
     public var recipe: Recipe?
-    public var activationHook: String
     public var emulator: Emulator
     public var estimates: Estimates
 
     enum CodingKeys: String, CodingKey {
         case id, board, version, build, status, source, keys, recipe, emulator, estimates
-        case productType = "product_type", statusNote = "status_note", activationHook = "activation_hook"
+        case productType = "product_type", statusNote = "status_note"
     }
 
     public static func load(from url: URL) throws -> FirmwareEntry {

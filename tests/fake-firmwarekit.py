@@ -3,7 +3,7 @@
 (docs/multi-device-plan.md, "Preparer contract") without touching firmware.
 
     fake-firmwarekit.py create --entry ENTRY.json --ipsw IPSW --out STAGING [--seed S]
-                               [--activation-hook PATH] [--helper PATH] [--cache DIR]
+                               [--helper PATH] [--cache DIR]
 
 FAKE_MODE picks the run: ok (default), error, crash, incomplete, slow (waits for SIGTERM
 after step 2, with a read-only nand/ like the real one). FAKE_ARGV, if set, gets argv as JSON.
@@ -19,7 +19,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("cmd", choices=["create"])
 for flag in ("--entry", "--ipsw", "--out"):
     ap.add_argument(flag, required=True)
-for flag in ("--seed", "--activation-hook", "--helper", "--cache"):
+for flag in ("--seed", "--helper", "--cache"):
     ap.add_argument(flag)
 a = ap.parse_args()
 entry = json.load(open(a.entry))
@@ -62,11 +62,9 @@ ident = {"udid": hashlib.sha1((a.seed or "").encode()).hexdigest(), "die-id": di
 fd = os.open(os.path.join(out, "identity.json"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 os.write(fd, json.dumps(ident).encode())
 os.close(fd)
-hook = a.activation_hook
 lock = {"format": 1, "build": entry["build"], "product_version": entry["version"],
         "identity": {"seed": a.seed, "udid": ident["udid"], "die_id": ":".join(die)},
-        "inputs": {"activation_hook": {"path": hook, "sha256": hashlib.sha256(open(hook, "rb").read()).hexdigest()}
-                   if hook else None}}
+        "inputs": {}}
 if mode != "incomplete":
     json.dump(lock, open(os.path.join(out, "device.lock.json"), "w"))
 emit(event="done", lock="device.lock.json")

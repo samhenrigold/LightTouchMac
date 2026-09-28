@@ -13,7 +13,8 @@ let package = Package(
         .executable(name: "firmwarekit", targets: ["FirmwareKitCLI"]),
     ],
     targets: [
-        .target(name: "FirmwareKit"),
+        .target(name: "CActivation", cSettings: [.define("LT_ACTIVATION_LIBRARY")]),
+        .target(name: "FirmwareKit", dependencies: ["CActivation"]),
         .executableTarget(name: "FirmwareKitCLI", dependencies: ["FirmwareKit"]),
         .testTarget(name: "FirmwareKitTests", dependencies: ["FirmwareKit"]),
     ]
