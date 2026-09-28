@@ -18,6 +18,14 @@ GUEST_PAYLOADS = frozenset(('MBXGLEngine', 'sbdlicon', 'ithalt', 'it_agent', 'it
                           'itproxy', 'ittrust', 'itorient'))
 GUEST_COMPONENTS = ('armv6-toolchain', 'it-gles', 'it-instprogress', 'it-halt', 'it-agent',
                     'it-status', 'it-media', 'it-proxy', 'it-orientation')
+# firmwarekit's --guest-tools set (SystemEdits.Helpers + it_keybag), from checkouts with the iPad helpers.
+IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquiet.dylib', 'it_seal', 'it_keybag',
+                                 'libappsync.dylib', 'com.qemu.it-pbd.plist', 'com.qemu.it-ethlink.plist',
+                                 'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'GLEngine-7B500',
+                                 'gli-dispatch-7B500.tsv', 'GLEngine-8C148', 'gli-dispatch-8C148.tsv',
+                                 'GLRendererFloatQEMU'))
+IPAD_GUEST_COMPONENTS = ('ipad1-guest', 'appsync', 'ipad1-gles', 'it-pasteboard', 'it-ethlink', 'it-seal', 'it-prefs',
+                         'it-keybag', 'it-heading', 'it-cctest', 'it-gltest', 'it-msmquiet')
 SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS_Store'}
 NATIVE_RECIPES = frozenset(('scripts/build-package-native.sh', 'scripts/build-static-deps.sh',
                            'scripts/dependency-sources.py', 'build-support/dependencies.json',
@@ -122,15 +130,23 @@ def verify_hashes(root, expected, description):
             raise ValueError(f'{description} differs from its build record: {path}')
 
 
+def has_ipad_guest(qemu):
+    return (qemu / 'contrib/ipad1-guest/build.sh').is_file()
+
+
 def guest_source_hashes(qemu):
     selected = {}
-    for component in GUEST_COMPONENTS:
+    ipad = IPAD_GUEST_COMPONENTS if has_ipad_guest(qemu) else ()
+    for component in (*GUEST_COMPONENTS, *ipad):
         directory = qemu / 'contrib' / component
         require(directory, f'guest source component {component}', directory=True)
         for path in directory.iterdir():
-            if (path.is_file() and path.name != 'gles_stubs.h'
+            if (path.is_file() and path.name not in ('gles_stubs.h', 'gli_fwd.h')
                     and path.suffix in ('.c', '.h', '.sh', '.py', '.xml', '.plist', '.entitlements', '.txt')):
                 selected[str(path.relative_to(qemu))] = digest(path)
+    if ipad:
+        for path in (qemu / 'docs/ipad1').glob('gli-dispatch-*.tsv'):
+            selected[str(path.relative_to(qemu))] = digest(path)
     return selected
 
 
@@ -147,6 +163,15 @@ def validate_guest(args, guest):
     if {path.name for path in guest.iterdir()} != GUEST_PAYLOADS:
         raise ValueError('Guest tools directory must contain exactly the 12 required payloads')
     verify_hashes(guest, expected, 'Guest payload')
+    ipad = guest.parent / 'ipad-guest-tools'
+    if has_ipad_guest(args.qemu_source):
+        expected = hashes(record.get('ipad_outputs'), 'iPad guest payload')
+        require(ipad, 'iPad guest tools directory', directory=True)
+        if set(expected) != IPAD_GUEST_PAYLOADS or {path.name for path in ipad.iterdir()} != IPAD_GUEST_PAYLOADS:
+            raise ValueError(f'iPad guest tools must be exactly: {", ".join(sorted(IPAD_GUEST_PAYLOADS))}')
+        verify_hashes(ipad, expected, 'iPad guest payload')
+    elif ipad.exists():
+        raise ValueError('iPad guest tools built from a checkout without contrib/ipad1-guest')
     if hashes(record.get('source_inputs'), 'guest source') != guest_source_hashes(args.qemu_source):
         raise ValueError('Guest source inputs have changed; rebuild guest tools')
     return record
@@ -277,12 +302,15 @@ def parse(argv=None):
     parser.add_argument('--native-deps', type=Path, help='Staged: native root whose prefix, static deps and usbmuxd are reused '
                         '(e.g. a previous release output\'s native/)')
     parser.add_argument('--qemu-build', type=Path, help='Staged: private QEMU build directory (default <qemu-source>/build-release-native)')
+    parser.add_argument('--verify-ipsw', type=Path,
+                        default=Path.home() / 'Downloads/ipad1-ios32-feasibility/iPad1,1_3.2.2_7B500_Restore.ipsw',
+                        help=f'Staged verify: the {PREPARE_ENTRY} IPSW the bundled firmwarekit prepares')
     parser.add_argument('--plan', action='store_true', help='Validate inputs and print selected paths without building or writing')
     args = parser.parse_args(argv)
     if args.output.expanduser().is_symlink():
         parser.error(f'Output must not be a symlink: {args.output}')
     for name in ('output', 'qemu_source', 'usbmuxd_source', 'assets', 'sdk', 'native_build', 'static_deps', 'guest_tools',
-                 'source_packages', 'native_deps', 'qemu_build'):
+                 'source_packages', 'native_deps', 'qemu_build', 'verify_ipsw'):
         value = getattr(args, name)
         if value is not None:
             setattr(args, name, value.expanduser().resolve())
@@ -425,6 +453,52 @@ def notarize(args, env, log, state, app):
     (args.output / 'notarize.zip').unlink(missing_ok=True)
 
 
+PREPARE_ENTRY = 'k48ap-7B500'
+
+
+def check_prepare(args, log, state, app):
+    """Run the bundled firmwarekit as the app does: bundled --guest-tools default, bundled helper."""
+    stamp = tree_stamp(app)
+    if state.get('verify', {}).get('prepare') == stamp:
+        return print(f'verify: in-bundle prepare of {PREPARE_ENTRY} current')
+    require(args.verify_ipsw, f'{PREPARE_ENTRY} IPSW for the in-bundle prepare check (--verify-ipsw)')
+    catalog = json.loads((app / 'Contents/Resources/firmware-catalog.json').read_text())
+    entry = next(e for e in catalog['entries'] if e['id'] == PREPARE_ENTRY)
+    work = args.output / 'prepare-check'
+
+    def clean():
+        if work.exists():
+            subprocess.run(['chmod', '-R', 'u+w', work], check=True)
+            shutil.rmtree(work)
+    clean()
+    (work / 'out').mkdir(parents=True)
+    try:
+        (work / 'entry.json').write_text(json.dumps(entry))
+        command = [app / 'Contents/MacOS/firmwarekit', 'create', '--entry', work / 'entry.json', '--ipsw', args.verify_ipsw,
+                   '--out', work / 'out', '--cache', work / 'cache', '--helper', app / 'Contents/MacOS/LightTouchDevice']
+        print('+ ' + shlex.join(map(str, command)), flush=True)
+        clean_env = {k: v for k, v in os.environ.items() if not k.startswith('LTM_')}
+        with log.open('ab') as output:
+            result = subprocess.run(list(map(str, command)), stdout=subprocess.PIPE, stderr=output,
+                                    env=clean_env, timeout=480)
+        events = [json.loads(line) for line in result.stdout.decode().splitlines() if line.strip()]
+        with log.open('a') as output:
+            output.write(''.join(json.dumps(e) + '\n' for e in events))
+        for e in events:
+            if e['event'] in ('step', 'warning', 'error', 'done'):
+                print('  firmwarekit: ' + json.dumps(e), flush=True)
+        if result.returncode or not events or events[-1]['event'] != 'done':
+            raise RuntimeError(f'In-bundle prepare of {PREPARE_ENTRY} failed ({result.returncode}); see {log}')
+        lock = json.loads((work / 'out' / events[-1]['lock']).read_text())
+        bundled = str((app / 'Contents/Resources/guest-tools').resolve())
+        if bundled not in json.dumps(lock):
+            raise RuntimeError(f'Prepare did not use the bundled guest tools {bundled}')
+    finally:
+        clean()
+    state.setdefault('verify', {})['prepare'] = stamp
+    save_state(args, state)
+
+
 def save_state(args, state):
     (args.output / 'stages.json').write_text(json.dumps(state, indent=2) + '\n')
 
@@ -550,7 +624,7 @@ def staged(args, env, log):
         app = args.output / product.name
         require(build / 'libqemu-arm.dylib', 'QEMU library built by --stage dylib')
         validate_guest(args, guest)
-        inputs = tree_stamp(product, build / 'libqemu-arm.dylib', guest, firmwarekit, SCRIPTS / 'package.sh',
+        inputs = tree_stamp(product, build / 'libqemu-arm.dylib', guest, guest.parent / 'ipad-guest-tools', firmwarekit, SCRIPTS / 'package.sh',
                             args.assets / args.nand) + args.sign_id
         if app.is_dir() and state.get('package', {}).get('inputs') == inputs:
             print('package: current')
@@ -585,8 +659,7 @@ def staged(args, env, log):
         if now != state['package']['sources']:
             raise RuntimeError('Source files changed since --stage package; rerun from package')
         require(app / 'Contents/Resources/firmware-catalog.json', 'bundled firmware catalog')
-        if state['package']['firmwarekit']:
-            require(app / 'Contents/MacOS/firmwarekit', 'bundled firmwarekit')
+        require(app / 'Contents/MacOS/firmwarekit', 'bundled firmwarekit')
         run([sys.executable, SCRIPTS / 'test-package.py', app], env, log)
         run(['codesign', '--verify', '--deep', '--strict', app], env, log)
         if args.notary_profile:
@@ -596,6 +669,7 @@ def staged(args, env, log):
                 output.write(assessment.stderr)
             if assessment.returncode or 'Notarized Developer ID' not in assessment.stderr:
                 raise RuntimeError(f'spctl rejected the app: {assessment.stderr.strip()}')
+        check_prepare(args, log, state, app)
         entries = inventory(app)
         (args.output / 'bundle-inventory.json').write_text(json.dumps(entries, indent=2) + '\n')
         archive = args.output / 'LightTouchMac.zip'

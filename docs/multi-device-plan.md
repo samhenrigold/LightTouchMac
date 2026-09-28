@@ -317,12 +317,12 @@ What each stage does:
 - **native:** usbmuxd.
 - **qemu:** configure once, then ninja.
 - **dylib:** `make-dylib-macos.sh`.
-- **guest:** the armv6 helpers.
+- **guest:** the armv6 helpers, and (from a checkout with `contrib/ipad1-guest`) the iPad helpers firmwarekit reads, built by `contrib/ipad1-guest`, `contrib/appsync` and `contrib/ipad1-gles` `build.sh` from a source copy into `guest/ipad-guest-tools` (ldid-signed; `IPAD_SDK` picks the 3.2 SDK). package.sh ships them flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without them. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed.
 - **app:** xcodebuild Release (it embeds `LightTouchDevice` and `firmware-catalog.json`). This stage also runs `swift build -c release` for `Packages/FirmwareKit`. If that builds, package.sh ships it as `Contents/MacOS/firmwarekit` (hardened runtime, no entitlements); if not, the app ships without it.
 - **package:** a fresh copy of the product, `build-inputs.json` and package.sh. Notarization is not done here.
 - **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
 - **staple.**
-- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
+- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then the bundled `firmwarekit create` prepares k48ap-7B500 (`--verify-ipsw`, default the 3.2.2 IPSW in `~/Downloads/ipad1-ios32-feasibility/`) with its default `--guest-tools` and the bundled `LightTouchDevice` into `prepare-check/`, must end with `done`, and the output is deleted. Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
 
 After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source-revisions.json` and the release notes are made by hand, and nothing here publishes.
 
