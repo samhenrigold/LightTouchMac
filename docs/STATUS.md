@@ -4,13 +4,15 @@ The one place that says what is done, what is running and what is left. Updated 
 `multidevice` (this repo) or `ipad1` (qemu-ios). Every "done" line names how it was checked. Answer
 status questions from this file, after checking it against the commits it cites.
 
-Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b5428`.
+Last update: 2026-09-28, `iboot-ship` (real iBoot chain shipped in the app), qemu-ios ipad1 `3772248bb2`.
 
 ## Done
 
 | Area | State | Checked by |
 |---|---|---|
-| iPad 1 emulation (A4, real iBoot chain, NAND, GL, touch, USB) | Boots iOS 3.2, 3.2.2, 4.2.1 to the home screen with GPU drawing; 49-app compatibility pass. **Gap closed 09-28 (`fk-k48-iboot`):** FirmwareKit's k48 recipe now defaults to the `iboot` strategy (SecureROM→LLB→iBoot→kernel), producing `iBoot.bin`, `nor.bin` and `gid-blobs.bin` byte-equal to the Python pipeline (`K48IBootTests`, 7B500 + 8C148); app-prepared iPads boot the real chain from the lock's `boot_strategy`, with `boot: kboot` kept for debugging and the two existing kboot records still booting. | `Packages/FirmwareKit swift test` (61/61 incl. `K48IBootTests`); iboot boot to userland verified (serial: iBoot banner + fsboot kernelcache load); kboot boot still reaches userland |
+| iPad 1 emulation (A4, real iBoot chain, NAND, GL, touch, USB) | Boots iOS 3.2, 3.2.2, 4.2.1 to the home screen with GPU drawing; 49-app compatibility pass. FirmwareKit's k48 recipe defaults to the `iboot` strategy (SecureROM→LLB→iBoot→kernel), producing `iBoot.bin`, `nor.bin` and `gid-blobs.bin` byte-equal to the Python pipeline; app-prepared iPads boot the real chain from the lock's `boot_strategy`, `boot: kboot` kept for debugging. | `K48IBootTests` (7B500 + 8C148 vs Python); the "real iBoot in the app" line below |
+| Real iBoot in the app (09-28, `iboot-ship`) | The app ships its own `iBoot32Patcher` (`Contents/MacOS`, built by both native paths from the pinned LukeZGD fork `1ff9bd1`, GPL-3.0, in `build-support/dependencies.json`; license shipped), and FirmwareKit takes the bundled copy first. The bundled `firmwarekit create` (bundled helper, guest tools, patcher) prepares 7B500 and 8C148; the bundle boots them through the real chain, shuts down cleanly and boots again; the app-prepared 7B500 passes qemu-ios `restore-smoke.py`; a kboot-prepared record (a clone of the Python-made 8C148 one, `qemu-ios-files/ipad1/offline-activation-8C148/device`) still boots through the app's `kboot=` path (lit, lockdown, AFC; its IPA install fails with ApplicationVerificationFailed because that record predates AppSync, not because of the boot). The app's chain starts at the patched iBoot (`iboot=`): the serial log shows the NOR image table, the iBoot-817.29 / iBoot-931.71.16 banner and `Loading kernel cache`, no kboot; the SecureROM→DFU→recovery path is restore-smoke's. | `K48IBootTests.patcherMatchesReference` (bundled build vs the Legacy-iOS-Kit binary, byte-equal on 7B500/8C148/7B367); `swift test` 63/63; `check-sessions.py --single --board ipad` through the bundle: app-prepared 7B500 11/11 twice, app-prepared 8C148 11/11, kboot clone 8/11 (install, see left); `tests/ipad1/restore-smoke.py` on the app-prepared 7B500: PASS; `test-release.py` 21/21, `test-package.py` on the Developer-ID build, `test-signing.py` |
+| Reproducible stores (09-28, `iboot-ship`) | The host mount no longer leaves run-to-run noise in the volumes (dates, macOS date-added, volume identifier, journal, B-tree slack: `HFSPlusVolume.normalize`, `VolumeMount.withMounted`). The lock's `outputs.nand.built_listing_sha256` (store as built, before the seal/keybag boots) is the golden-lock oracle; `listing_sha256` of a sealed k48 store still differs by design (the guest's first-boot writes). iPod 7E18: both hashes equal across runs. | `SystemEditsTests.volumesAreReproducible` (7B500, 8C148: volumes and store byte-equal twice); two bundled `create`s of 7B500 with equal `built_listing_sha256`, `iboot`, `nor`, `gid_blobs`; two `create`s of n72ap-7E18 with equal `listing_sha256` |
 | iPad Wi-Fi | Works, on by default, stock driver (BCM4329 model); location answered by the proxy | qemu-ios `docs/ipad1/wifi.md`, `location.md`; soak on 2026-09-27 |
 | iPad hardware keyboard | USB keyboard through the CCK path; Bluetooth dropped 2026-09-26 | `docs/ipad1/usb-keyboard.md` |
 | iPad restore over emulated USB | Stock idevicerestore: SecureROM → DFU → recovery → restore | `tests/ipad1/restore-smoke.py` (2026-09-28) |
@@ -45,7 +47,6 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 
 | USB "not supported" alert suppressed through the guest agent (Sam's call: not fidelity; blocks auto-lock) | qemu-ios `usb-alert` | one agent binary per arch, runtime detection, package serial 3 |
 | GL bridge rejection audit | qemu-ios `gl-coverage` | every reject/unimplemented path counted + logged, magenta fallback under `gles-debug`, produced-vs-rejected list from the firmwares' own frameworks, cheap formats implemented |
-| Real-iBoot boot chain in FirmwareKit | `fk-k48-iboot` | app-prepared iPads boot SecureROM→LLB→iBoot→kernel like the Python-built ones |
 | Consolidation sweep | docs/sweep/PLAN.md | surveys done (docs/sweep/*.md); Track A (app correctness: activation check, boot deadline, per-device install queue, device-file protection, guest-tools status line) on `app-correctness`; B–E sequenced in the plan; decisions S1–S6 with Sam |
 
 Then: a notarized build, verified in-app on every firmware, for Sam to test. That build is the first
@@ -66,7 +67,8 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - Finder native device recognition: deferred, needs Apple's USB host-controller entitlement (don't raise unless Sam does).
 
 ### Debts
-- Real iBoot chain for app-prepared iPads: **done** on `fk-k48-iboot` (see Done table). Remaining: the iboot strategy's NAND store isn't yet byte-equal to Python's end-to-end (HFS timestamps/volume UUID, the pre-existing store non-determinism), so the NAND comparison is by structure/boot, not by hash; the full in-bundle `firmwarekit create` (needs a signed k48 guest-tools dir) was not run this session — the byte-equal artifacts + a real iBoot boot were verified instead.
+- Adding iBoot32Patcher to the native recipes invalidated every earlier native root: `--native-deps` must now point at one built with it (`LightTouchMac-iboot-ship/.build/native-iboot-ship`, one-step `build-package-native.sh` on 09-28), until the next one-step build.
+- `test-package.py <app>` needs a Developer-ID-signed build (it checks the helper's `runtime` flags); an ad-hoc package fails that check by design.
 - Survey reports live in docs/sweep/.
 - `tests/ipod/test_regress.py`: one test's mock lacks `guest_package_status`.
 - Bundled iPod image carries the old GL shim; regenerate at the main merge.
