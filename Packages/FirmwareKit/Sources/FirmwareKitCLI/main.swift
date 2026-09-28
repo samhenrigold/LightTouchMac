@@ -4,8 +4,9 @@
 //                      [--seed SEED] [--helper PATH_TO_LightTouchDevice]
 //                      [--cache DIR] [--guest-tools DIR]
 //
-// stdout is JSON Lines only; diagnostics go to stderr. Exit 0 after done, 1 after an error event; SIGTERM
-// cancels (children stopped, images under STAGING_DIR detached, exit 143) and leaves STAGING_DIR to the caller.
+// stdout is JSON Lines only; diagnostics go to stderr. Exit 0 after done, 1 after an error event; SIGTERM,
+// or the parent (the app) exiting, cancels (children stopped, images under STAGING_DIR detached, exit 143)
+// and leaves STAGING_DIR to the caller. A closed stdout never kills it (SIGPIPE is ignored).
 // --guest-tools defaults to ../Resources/guest-tools next to this executable (the app bundle's).
 //
 //   firmwarekit mount  --device DIR [--volume system|data|all] [--out DIR]   (a STOPPED device only)
@@ -20,9 +21,11 @@
 import FirmwareKit
 import Foundation
 
+signal(SIGPIPE, SIG_IGN)
 let stdoutLock = NSLock()
 @Sendable func emit(_ e: PrepareEvent) {
-    stdoutLock.withLock { FileHandle.standardOutput.write(Data((e.json + "\n").utf8)) }
+    // Throwing write: a reader that went away is EPIPE, not an exception.
+    stdoutLock.withLock { try? FileHandle.standardOutput.write(contentsOf: Data((e.json + "\n").utf8)) }
 }
 
 var args = CommandLine.arguments.dropFirst()
@@ -53,18 +56,25 @@ guard let entryPath = flags["--entry"], let ipsw = flags["--ipsw"], let out = fl
 let url = { (p: String) in URL(fileURLWithPath: (p as NSString).expandingTildeInPath).standardizedFileURL }
 let staging = url(out)
 
+func cancelAndExit(_ why: String) -> Never {
+    FileHandle.standardError.write(Data("firmwarekit: cancelled (\(why))\n".utf8))
+    stdoutLock.lock()   // held until exit: a step failing because its child was stopped emits nothing
+    Preparer.cancel(staging: staging)
+    exit(143)
+}
 let signalSources = [SIGTERM, SIGINT].map { sig in
     signal(sig, SIG_IGN)
     let s = DispatchSource.makeSignalSource(signal: sig, queue: .main)
-    s.setEventHandler {
-        FileHandle.standardError.write(Data("firmwarekit: cancelled\n".utf8))
-        stdoutLock.lock()   // held until exit: a step failing because its child was stopped emits nothing
-        Preparer.cancel(staging: staging)
-        exit(143)
-    }
+    s.setEventHandler { cancelAndExit(sig == SIGTERM ? "SIGTERM" : "SIGINT") }
     s.resume()
     return s
 }
+// The app quit or crashed without cancelling: nobody will publish this staging.
+let parent = getppid()
+let parentWatch = DispatchSource.makeProcessSource(identifier: parent, eventMask: .exit, queue: .main)
+parentWatch.setEventHandler { cancelAndExit("parent \(parent) exited") }
+parentWatch.resume()
+if parent == 1 || getppid() != parent { cancelAndExit("no parent") }
 
 @Sendable func fail(_ error: Error) -> Never {
     FileHandle.standardError.write(Data("firmwarekit: \(error)\n".utf8))
@@ -83,4 +93,4 @@ do {
 Thread.detachNewThread { [options] in
     do { try Preparer.create(options, emit: emit); exit(0) } catch { fail(error) }
 }
-withExtendedLifetime(signalSources) { dispatchMain() }
+withExtendedLifetime((signalSources, parentWatch)) { dispatchMain() }

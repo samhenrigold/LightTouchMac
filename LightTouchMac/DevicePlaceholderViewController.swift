@@ -96,8 +96,8 @@ final class DevicePlaceholderViewController: NSViewController {
         reason.isHidden = true
         showLog.isHidden = true
         switch row.state {
-        case .notDownloaded:
-            status.stringValue = "Not Downloaded"
+        case .notDownloaded, .downloaded:
+            status.stringValue = row.state == .downloaded ? "Downloaded" : "Not Downloaded"
             if !canDownload, let why = FirmwareJobs.shared.unavailableReason { reason.stringValue = why; reason.isHidden = false }
         case .downloading:
             status.stringValue = "Downloading…"

@@ -183,6 +183,64 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 - UserDefaults `deviceNotice` and `motionPose` gain a `.<uuid>` suffix; the legacy value is read for the adopted iPod.
 - Test: `tests/check-legacy-adoption.py`, with a fixture copy of a 1.0-release state tree. The overlay inode and paths must be unchanged.
 
+### Storage policy (2026-09-28, `storage-fixes`)
+
+**Layout.** State is the only writable root; everything a device owns is under `State/Devices/<uuid>/`:
+
+```
+State/.app-lock                                  flock: one Light Touch per library
+State/Devices/<uuid>/device.json                 the record; its directory is the device
+                     base/                       read-only prepared output (kept in backups)
+                     overlay/, nor.bin           user data (kept in backups)
+                     snapshot{,.meta,.tmp,.bad}  saved RAM (excluded from backups)
+                     usbmuxd-conf/               pairing: 0700, plists 0600
+                     IPAs/<bundle-id>.ipa        retained copies of apps installed on this device
+                     work/                       lease, usbmuxd.pid, session.env (excluded from backups)
+State/Devices/.deleting-<uuid>/                  a delete in progress; finished by the launch sweep
+State/Preparing/<job>/, <job>.publish/           staging (excluded from backups); never a device
+State/IPSW/<sha1>.ipsw                           imports (excluded from backups)
+State/Recordings/                                takes in progress (excluded while recording)
+State/device/<nand>-<digest>, nandrw-<key>, …    the adopted iPod's legacy names, in place
+Caches/<bundle>/IPSW/<sha1>.ipsw(.resume)        downloads; Caches/<bundle>/Decrypted/<sha1>
+Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
+```
+
+**Rules.**
+- *One writer per device.* The app holds `State/.app-lock` from startup (a second copy says "Light Touch is
+  already running with this library" and quits). Each helper holds `Devices/<uuid>/work/lease` before it
+  answers hello and refuses otherwise, which also covers a helper still flushing after its app died. The
+  adopted iPod's lease is under its own `Devices/<uuid>/work` too. Only the lock holder runs launch sweeps, and
+  usbmuxd is only reaped as an orphan (ppid 1).
+- *One device per catalog entry.* An IPSW for an entry that has a device (a drop, an import, a download) is
+  refused, not prepared again.
+- *Publish is one rename.* The preparer's output becomes `Preparing/<id>.publish/{base, device.json}`, which is
+  renamed to `Devices/<id>`. Nothing half-made ever appears in `Devices/`.
+- *Removal stays in bounds.* Erase and Delete only remove paths strictly inside the state root that are not the
+  root, `Devices/`, or inside another record's directory (`DeviceStateStorage.checkRemovable`). Delete renames
+  `Devices/<uuid>` to `.deleting-<uuid>`, then removes it with read-only directories made writable; it also
+  removes the device's logs and its `deviceNotice.<uuid>`/`motionPose.<uuid>` defaults. Erasing the packaged
+  iPod repoints `active-<nand>.json`, then removes every `device/<nand>*` base (a torn `.partial` included)
+  that no pointer and no other record names.
+- *Scratch always goes.* Each prepare ends (published, failed or cancelled) by deleting `Decrypted/<sha1>` and
+  `<sha1>.tmp`. Quit cancels every preparation; firmwarekit and the one-shot helper also watch their parent
+  and cancel on its exit (images detached). The launch sweep detaches images left under `Preparing/`, then
+  empties it, and removes stale `*.partial` downloads, `.*.importing` copies, `.deleting-*` directories,
+  logs of devices that no longer exist, and the pre-library `Logs/serial.log*`/`usbmuxd.log*`.
+- *IPSWs.* A cached or imported IPSW that fails the preparer's SHA check is deleted. Cancelling a download or
+  Remove IPSW deletes its `.resume` too; only a failed download keeps resume data.
+- *Disk space.* Downloading needs the IPSW's bytes plus the entry's prepare peak plus the peaks of every
+  download and preparation under way; preparing needs its peak plus the others'. An import from another volume
+  checks the copy's size first, and the packaged iPod checks before unpacking. Below 2 GB free, booting and
+  starting a recording show a notice but go ahead. Every message gives the amounts needed and available.
+- *Backups.* Recreatable or in-flight data is excluded (above); bases and overlays stay in backups until
+  prepared bases are proven reproducible from the IPSW.
+- *Recordings.* A take that can't be played after launch recovery is deleted, and the log says so.
+- *Settings > Storage* shows each device's allocated base, data (overlay + NOR) and snapshot sizes, the
+  downloaded and imported IPSWs, the decrypt cache and logs, with Remove IPSW, Clear Caches and Delete Device.
+- Tests: `tests/check-firmware-jobs.py` (removal guard, Delete with a read-only base, atomic publish, decrypt
+  cache, SHA mismatch, sweeps), `tests/device-state-storage.swift` (erase GC), `tests/check-helper-boot.py
+  --only lease` (two helpers on one device's lease).
+
 ## C. UI (AppKit)
 
 **Sidebar:** `NSSplitViewItem(sidebarWithViewController: DeviceLibraryViewController)` goes in front of the existing items. It is an `NSOutlineView` with `.sourceList` style and `autosaveExpandedItems`.
@@ -226,7 +284,7 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 
 **Download:**
 - Background `URLSession`, so downloads survive quit.
-- Resume data goes to `<sha1>.resume`.
+- Resume data from a failure goes to `<sha1>.resume`.
 - A streamed SHA1 (`Insecure.SHA1`) plus a size check, then a rename to `IPSW/<sha1>.ipsw`. On a mismatch the file is deleted and the error is "download corrupted".
 - Dedupe is by sha1 across Caches and State/IPSW.
 
@@ -240,7 +298,7 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 - The IPSW is cloned into State/IPSW.
 
 **Cancel:**
-- A download keeps its resume data.
+- A download is discarded with its resume data (only a failed download keeps it).
 - A prepare gets SIGTERM, and `Preparing/<job>` is removed.
 - A published device is never touched.
 

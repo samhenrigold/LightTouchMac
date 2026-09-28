@@ -85,15 +85,40 @@ nonisolated struct IPSWStore: Sendable {
         return destination
     }
 
-    /// Free space for `required` bytes on the volume holding `url` (or its nearest existing parent).
-    static func checkSpace(_ required: Int64, at url: URL) throws {
+    /// `url` or its nearest existing parent, for volume questions.
+    private static func existing(_ url: URL) -> URL {
         var probe = url
         while !FileManager.default.fileExists(atPath: probe.path), probe.pathComponents.count > 1 {
             probe.deleteLastPathComponent()
         }
-        let available = try probe.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return probe
+    }
+
+    static func availableSpace(at url: URL) throws -> Int64 {
+        try existing(url).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
             .volumeAvailableCapacityForImportantUsage ?? 0
-        try checkSpace(required, available: available)
+    }
+
+    /// Free space for `required` bytes on the volume holding `url` (or its nearest existing parent).
+    static func checkSpace(_ required: Int64, at url: URL) throws {
+        try checkSpace(required, available: availableSpace(at: url))
+    }
+
+    /// Below this, booting and recording go ahead with a warning.
+    static let lowSpaceThreshold: Int64 = 2_000_000_000
+
+    /// The warning for booting or recording with little room left, else nil.
+    static func lowSpaceWarning(at url: URL) -> String? {
+        guard let available = try? availableSpace(at: url), available < lowSpaceThreshold else { return nil }
+        let format = { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
+        return "Your Mac is almost out of disk space: \(format(available)) is available, and Light Touch needs at least \(format(lowSpaceThreshold)) to save changes reliably."
+    }
+
+    static func sameVolume(_ a: URL, _ b: URL) -> Bool {
+        let key = URLResourceKey.volumeIdentifierKey
+        guard let x = try? existing(a).resourceValues(forKeys: [key]).volumeIdentifier as? NSObject,
+              let y = try? existing(b).resourceValues(forKeys: [key]).volumeIdentifier as? NSObject else { return false }
+        return x.isEqual(y)
     }
 
     static func checkSpace(_ required: Int64, available: Int64) throws {
@@ -141,6 +166,11 @@ nonisolated struct IPSWStore: Sendable {
         let entry = try Self.match(sha1: sha1, restore: Self.restoreInfo(url), in: catalog)
         if let existing = existing(sha1) { return (entry, existing) }
         try StorageLocations.privateDirectory(imports)
+        StorageLocations.excludeFromBackup(imports)
+        // Another volume means a full copy, not a clone.
+        if !Self.sameVolume(url, imports) {
+            try Self.checkSpace((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0, at: imports)
+        }
         let destination = imported(sha1)
         let temporary = imports.appendingPathComponent(".\(sha1).importing")
         try? FileManager.default.removeItem(at: temporary)
@@ -151,17 +181,23 @@ nonisolated struct IPSWStore: Sendable {
 
     // MARK: - Removal
 
-    /// Removes a tree even where a preparer made it read-only (the NAND is chmod a-w).
-    static func removeTree(_ url: URL) {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path), (try? fm.removeItem(at: url)) == nil else { return }
-        var directories = [url]
-        if let walk = fm.enumerator(at: url, includingPropertiesForKeys: [.isDirectoryKey]) {
-            for case let item as URL in walk where (try? item.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                directories.append(item)
-            }
+    /// Remove IPSW: the download, its .partial and .resume, and the import.
+    func remove(_ sha1: String) throws {
+        for url in [download(sha1), partial(sha1), resumeData(sha1), imported(sha1)]
+        where FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
         }
-        for directory in directories { chmod(directory.path, 0o700) }
-        try? fm.removeItem(at: url)
+    }
+
+    /// Launch, under the app lock: a .partial outlives only a crash (it's
+    /// renamed within one delegate call), and so does an .importing copy.
+    func sweep() {
+        let fm = FileManager.default
+        for name in (try? fm.contentsOfDirectory(atPath: downloads.path)) ?? [] where name.hasSuffix(".partial") {
+            try? fm.removeItem(at: downloads.appendingPathComponent(name))
+        }
+        for name in (try? fm.contentsOfDirectory(atPath: imports.path)) ?? [] where name.hasPrefix(".") && name.hasSuffix(".importing") {
+            try? fm.removeItem(at: imports.appendingPathComponent(name))
+        }
     }
 }

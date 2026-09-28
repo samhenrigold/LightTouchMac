@@ -21,8 +21,10 @@ extension Notification.Name {
  static let shared = AppMetadataCache(); var forgotten: [String] = []
  func forget(_ id: String) { forgotten.append(id) }
 }
-@MainActor enum IPALibrary { static var forgotten: [String] = []; static func forget(_ id: String) { forgotten.append(id) } }
+struct DeviceInstance {}
+@MainActor enum IPALibrary { static var forgotten: [String] = []; static func forget(_ id: String, device: DeviceInstance) { forgotten.append(id) } }
 @MainActor final class EmulatorController {
+ let instance = DeviceInstance()
  var deviceReachable: Bool? = true
  func reportConnectionFailure(_ error: Error, operation: String) { deviceReachable = false }
  var started: [String] = []

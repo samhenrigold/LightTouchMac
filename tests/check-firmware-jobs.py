@@ -6,13 +6,15 @@
                                               # PreparationJob against tests/fake-firmwarekit.py
     tests/check-firmware-jobs.py --download   # also: the iPad 3.2 IPSW from Apple's CDN (479 MB)
                                               # through a background URLSession, cancelled (resume
-                                              # data kept), resumed at its offset, the process then
+                                              # data deleted), started again, the process then
                                               # killed -9 mid-way and a new one finishing the same
                                               # task; SHA1 checked. And the local copy in
                                               # ~/Downloads as an already-downloaded dedupe hit.
 
-Compiles IPSWStore, FirmwareDownloads, PreparationJob, DeviceInstance, FirmwareCatalog,
-DeviceProfile and StorageLocations with a stub Bundled. Every path is a temp dir; nothing
+Compiles IPSWStore, FirmwareDownloads, PreparationJob, DeviceInstance, DeviceStateStorage,
+FirmwareCatalog, DeviceProfile and StorageLocations with a stub Bundled. Also: the removal
+guard (Erase/Delete stay inside the device's own storage), Delete Device through
+Devices/.deleting-<uuid> with a read-only base, the atomic publish, and the launch sweeps. Every path is a temp dir; nothing
 reads or writes the real Application Support or Caches. Everything is deleted at the end.
 """
 from pathlib import Path
@@ -23,7 +25,7 @@ APP = ROOT / 'LightTouchMac'
 FAKE = ROOT / 'tests/fake-firmwarekit.py'
 LOCAL_IPSW = Path.home() / 'Downloads/ipad1-ios32-feasibility/iPad1,1_3.2_7B367_Restore.ipsw'
 SOURCES = ['IPSWStore.swift', 'FirmwareDownloads.swift', 'PreparationJob.swift', 'DeviceInstance.swift',
-           'FirmwareCatalog.swift', 'DeviceProfile.swift', 'StorageLocations.swift']
+           'FirmwareCatalog.swift', 'DeviceProfile.swift', 'StorageLocations.swift', 'DeviceStateStorage.swift']
 
 STUBS = r'''
 import Foundation
@@ -239,8 +241,18 @@ case "unit":
 
     // Failures: an error event, a crash, output without a lock. Nothing left, nothing published.
     let before = Set(devices())
+    let sha1 = iPad32.source.sha1!
+    try StorageLocations.privateDirectory(cache.appendingPathComponent("\(sha1).tmp"))
     run = prepare(iPad32, state: state, cache: cache, mode: "error")
     expect(run.events.last == .failed("This firmware’s keys are missing."), "\(run.events)")
+    expect(!fm.fileExists(atPath: cache.appendingPathComponent(sha1).path) && !fm.fileExists(atPath: cache.appendingPathComponent("\(sha1).tmp").path),
+           "the decrypt cache and its .tmp go after a failure too")
+    // An IPSW failing its SHA in the preparer is deleted.
+    let ipsw = tmp.appendingPathComponent("fake.ipsw")
+    try Data("ipsw".utf8).write(to: ipsw)
+    run = prepare(iPad32, state: state, cache: cache, mode: "sha")
+    expect(run.events.last == .failed("This IPSW doesn’t match the one Light Touch knows.") && !fm.fileExists(atPath: ipsw.path),
+           "a sha_mismatch deletes the IPSW: \(run.events)")
     run = prepare(iPad32, state: state, cache: cache, mode: "crash")
     expect(run.events.last == .failed("The preparer stopped unexpectedly (exit 3)."), "\(run.events)")
     run = prepare(iPad32, state: state, cache: cache, mode: "incomplete")
@@ -256,6 +268,75 @@ case "unit":
            && (try Data(contentsOf: DeviceInstance.directory(device.id, state: state).appendingPathComponent("device.json"))) == publishedRecord,
            "the published device is untouched by later failures and cancels")
 
+    // Publish is one rename: when it can't happen (Devices/ is a file here),
+    // nothing appears in Devices/ and nothing is left in Preparing/.
+    let blocked = tmp.appendingPathComponent("BlockedState")
+    try StorageLocations.privateDirectory(blocked)
+    try Data().write(to: blocked.appendingPathComponent("Devices"))
+    run = prepare(iPad32, state: blocked, cache: cache, mode: "ok")
+    expect(run.events.last.map { if case .failed = $0 { true } else { false } } == true, "\(run.events)")
+    expect(((try? fm.contentsOfDirectory(atPath: PreparationJob.preparing(blocked).path)) ?? []).isEmpty, "a failed publish leaves no .publish")
+
+    // Removal guard: Erase and Delete stay strictly inside the state root, off
+    // the root itself, Devices/ and every other record's directory.
+    let otherDevice = DeviceInstance.directory(device4.id, state: state)
+    let mine = DeviceInstance.directory(device.id, state: state)
+    let outside = tmp.appendingPathComponent("outside")
+    try Data("keep".utf8).write(to: outside)
+    try fm.createSymbolicLink(at: mine.appendingPathComponent("escape"), withDestinationURL: outside)
+    for (path, why) in [(state, "the state root"), (state.appendingPathComponent("Devices"), "Devices/"),
+                        (otherDevice, "another record"), (otherDevice.appendingPathComponent("overlay"), "inside another record"),
+                        (outside, "outside the state root"), (state.appendingPathComponent("Devices/../../outside"), "a .. escape"),
+                        (mine.appendingPathComponent("escape"), "a symlink out")] {
+        do { try DeviceStateStorage.checkRemovable(path, state: state, owner: device.id); expect(false, "\(why) was removable") } catch {}
+    }
+    try DeviceStateStorage.checkRemovable(mine.appendingPathComponent("overlay"), state: state, owner: device.id)
+    try DeviceStateStorage.checkRemovable(state.appendingPathComponent("nandrw-legacy"), state: state, owner: device.id)
+    do {
+        try DeviceStateStorage.erase(overlay: otherDevice, snapshots: [mine.appendingPathComponent("snapshot")],
+                                     legacyMarker: state.appendingPathComponent(".reset"), state: state, owner: device.id)
+        expect(false, "erase reached another record")
+    } catch {}
+    expect(fm.fileExists(atPath: otherDevice.appendingPathComponent("device.json").path) && fm.fileExists(atPath: outside.path), "nothing was removed")
+    try fm.removeItem(at: mine.appendingPathComponent("escape"))
+
+    // Delete Device: Devices/<uuid> -> .deleting-<uuid>, then removed with its read-only base.
+    let nandDir = mine.appendingPathComponent("base/nand")
+    expect(!fm.isWritableFile(atPath: nandDir.path), "the published base/nand is read-only")
+    try DeviceStateStorage.removeDevice(device.id, state: state)
+    expect(!fm.fileExists(atPath: mine.path) && !devices().contains { $0.hasPrefix(".deleting-") }, "deleted whole: \(devices())")
+    expect(!DeviceInstance.all(state: state).contains(device) && DeviceInstance.all(state: state).contains(device4), "the other devices stay")
+    // A delete interrupted after its rename: never listed, finished by the launch sweep.
+    let tornID = UUID()
+    let torn = state.appendingPathComponent("Devices/.deleting-\(tornID.uuidString)")
+    try fm.createDirectory(at: torn.appendingPathComponent("base/nand"), withIntermediateDirectories: true)
+    let ghost = String(decoding: try DeviceInstance.encoder.encode(device4), as: UTF8.self)
+        .replacingOccurrences(of: device4.id.uuidString, with: tornID.uuidString)
+    try Data(ghost.utf8).write(to: torn.appendingPathComponent("device.json"))
+    chmod(torn.appendingPathComponent("base/nand").path, 0o555)
+    expect(!DeviceInstance.all(state: state).contains { $0.id == tornID }, "a .deleting- directory is no device, even with a valid record")
+    DeviceStateStorage.sweepDeleting(state: state)
+    expect(!fm.fileExists(atPath: torn.path), "the sweep finishes the delete")
+
+    // Launch sweeps: Preparing/ (read-only leftovers included), .partial downloads, .importing copies.
+    let stale = preparing.appendingPathComponent("\(UUID().uuidString)/nand")
+    try fm.createDirectory(at: stale, withIntermediateDirectories: true)
+    try fm.createDirectory(at: preparing.appendingPathComponent("\(UUID().uuidString).publish/base"), withIntermediateDirectories: true)
+    chmod(stale.path, 0o555)
+    PreparationJob.sweep(state: state)
+    expect(leftovers().isEmpty, "the Preparing sweep leaves nothing: \(leftovers())")
+    let swept = IPSWStore(downloads: tmp.appendingPathComponent("C3/IPSW"), imports: tmp.appendingPathComponent("S3/IPSW"))
+    for url in [swept.partial("a"), swept.download("b"), swept.resumeData("b"),
+                swept.imports.appendingPathComponent(".c.importing"), swept.imported("d")] {
+        try StorageLocations.privateDirectory(url.deletingLastPathComponent())
+        try Data("x".utf8).write(to: url)
+    }
+    swept.sweep()
+    expect(!fm.fileExists(atPath: swept.partial("a").path) && !fm.fileExists(atPath: swept.imports.appendingPathComponent(".c.importing").path)
+           && swept.existing("b") != nil && swept.existing("d") != nil, "the download sweep")
+    try swept.remove("b")
+    expect(swept.existing("b") == nil && !fm.fileExists(atPath: swept.resumeData("b").path), "Remove IPSW takes its .resume too")
+
     // A preparer that can't start.
     let missing = PreparationJob(.init(entry: iPad32, ipsw: bigURL, state: state, preparer: URL(fileURLWithPath: "/nonexistent/firmwarekit"),
                                        helper: bigURL, cache: cache, log: tmp.appendingPathComponent("logs/x.log"))) { event in
@@ -263,7 +344,8 @@ case "unit":
     }
     missing.start()
     expect(leftovers().isEmpty, "a preparer that can't start leaves nothing")
-    print("PASS: sha1 streaming, install checks, dedupe, disk space, import matching, JSON Lines, publish, failures, cancel")
+    print("PASS: sha1 streaming, install checks, dedupe, disk space, import matching, JSON Lines, publish, failures, cancel, "
+          + "decrypt cache, sha mismatch, atomic publish, removal guard, Delete Device, launch sweeps")
 
 case "dedupe":
     // The local copy of the iPad 3.2 IPSW, cloned into a temp cache, is an already-downloaded hit.
@@ -291,7 +373,7 @@ case "download":
             if phase == "cancel", fraction > 0.08 { downloads.cancel(sha1: sha1) }
         case let .resumed(offset): print("resumed at \(offset)"); fflush(stdout)
         case .cancelled:
-            print("cancelled; resume data \(fm.fileExists(atPath: store.resumeData(sha1).path) ? "saved" : "MISSING")"); fflush(stdout)
+            print("cancelled; resume data \(fm.fileExists(atPath: store.resumeData(sha1).path) ? "KEPT" : "deleted")"); fflush(stdout)
             finished.signal()
         case let .finished(url): print("finished \(url.lastPathComponent)"); fflush(stdout); finished.signal()
         case let .failed(error): print("failed \(error.localizedDescription)"); fflush(stdout); exit(1)
@@ -350,11 +432,11 @@ def main():
             subprocess.run([str(check), 'dedupe', catalog, str(dd), str(LOCAL_IPSW)], check=True, env=env)
         ident = 'gold.samhenri.LightTouchMac.ipsw.test-' + uuid.uuid4().hex[:8]
         run = lambda phase: [str(check), 'download', catalog, str(work), ident, phase]
-        # 1. start, cancel at ~8%: resume data saved.
+        # 1. start, cancel at ~8%: the download and its resume data are discarded.
         out = subprocess.run(run('cancel'), check=True, env=env, capture_output=True, text=True, timeout=300).stdout
         print(out, end='')
-        assert 'resume data saved' in out, out
-        # 2. resume from the data (at its offset), then SIGKILL the process mid-way.
+        assert 'resume data deleted' in out, out
+        # 2. start again (from zero), then SIGKILL the process mid-way.
         p = subprocess.Popen(run('resume-then-wait'), env=env, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True)
         resumed, fraction = None, 0.0
         try:
@@ -369,15 +451,15 @@ def main():
         finally:
             p.send_signal(signal.SIGKILL)
             p.wait()
-        assert resumed and resumed > 0, 'the second start did not resume at an offset'
-        print(f'killed -9 at {fraction:.0%} (resumed at byte {resumed})')
+        assert not resumed, 'a cancelled download resumed'
+        print(f'killed -9 at {fraction:.0%}')
         # 3. a new process, same session identifier: the task goes on and finishes; sha1 checked.
         r = subprocess.run(run('finish'), env=env, capture_output=True, text=True, timeout=560)
         out = r.stdout
         print(out, end='')
         assert r.returncode == 0 and 'PASS' in out, 'relaunch did not finish the download'
         first = next((float(l.split()[1]) for l in out.splitlines() if l.startswith('progress ')), None)
-        print(f'PASS: download cancelled with resume data, resumed at byte {resumed}, killed -9, finished by a relaunch'
+        print(f'PASS: download cancelled and discarded, started again, killed -9, finished by a relaunch'
               + (f' (first progress after relaunch {first:.0%})' if first is not None else ''))
     finally:
         subprocess.run(['chmod', '-R', 'u+w', str(tmp)])

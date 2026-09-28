@@ -17,12 +17,99 @@ nonisolated enum DeviceStateStorage {
     }
 
     /// Only call after the native VM has exited and released its files.
-    static func erase(overlay: URL, snapshots: [URL], legacyMarker: URL) throws {
+    /// `owner` is the device being erased; every path must pass checkRemovable.
+    static func erase(overlay: URL, snapshots: [URL], legacyMarker: URL, state: URL, owner: UUID?) throws {
         let fm = FileManager.default
         let paths = snapshots.flatMap { [$0, $0.appendingPathExtension("meta")] }
             + [overlay, legacyMarker]
+        for path in paths { try checkRemovable(path, state: state, owner: owner) }
         for path in paths where fm.fileExists(atPath: path.path) {
             try fm.removeItem(at: path)
+        }
+    }
+
+    // MARK: - Removal
+
+    /// A path with symlinks resolved as far as it exists (the rest appended
+    /// as written), so `..` and links can't point a removal elsewhere.
+    static func canonicalPath(_ url: URL) -> String {
+        var head = url.standardizedFileURL
+        var tail: [String] = []
+        while !FileManager.default.fileExists(atPath: head.path), head.pathComponents.count > 1 {
+            tail.insert(head.lastPathComponent, at: 0)
+            head.deleteLastPathComponent()
+        }
+        let resolved = realpath(head.path, nil).map { pointer in
+            defer { free(pointer) }
+            return String(cString: pointer)
+        } ?? head.path
+        return tail.reduce(URL(fileURLWithPath: resolved)) { $0.appendingPathComponent($1) }.path
+    }
+
+    /// The record directories under Devices/ (a UUID name with a device.json), but `owner`'s.
+    private static func otherRecordDirectories(state: URL, owner: UUID?) -> [String] {
+        let devices = state.appendingPathComponent("Devices", isDirectory: true)
+        return ((try? FileManager.default.contentsOfDirectory(atPath: devices.path)) ?? []).filter { name in
+            UUID(uuidString: name) != nil && UUID(uuidString: name) != owner
+                && FileManager.default.fileExists(atPath: devices.appendingPathComponent("\(name)/device.json").path)
+        }.map { canonicalPath(devices.appendingPathComponent($0)) }
+    }
+
+    /// Erase and Delete only remove paths strictly inside the state root that
+    /// are neither the root, Devices/, nor inside another record's directory.
+    /// A damaged or hand-edited record can't reach anything else.
+    static func checkRemovable(_ url: URL, state: URL, owner: UUID?) throws {
+        let root = canonicalPath(state), path = canonicalPath(url)
+        let devices = root + "/Devices"
+        let others = otherRecordDirectories(state: state, owner: owner)
+        guard path.hasPrefix(root + "/"), path != devices,
+              !others.contains(where: { path == $0 || path.hasPrefix($0 + "/") }) else {
+            throw CocoaError(.fileWriteNoPermission, userInfo: [NSLocalizedDescriptionKey:
+                "Light Touch didn’t remove \(url.path): it isn’t this device’s storage."])
+        }
+    }
+
+    /// Removes a tree even where a preparer made it read-only (the NAND is
+    /// chmod a-w): on a refusal every directory in it is made writable, then
+    /// the removal is tried once more and its error thrown.
+    static func removeTree(_ url: URL) throws {
+        let fm = FileManager.default
+        guard (try? fm.attributesOfItem(atPath: url.path)) != nil else { return }
+        if (try? fm.removeItem(at: url)) != nil { return }
+        var directories = [url]
+        if let walk = fm.enumerator(at: url, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
+            for case let item as URL in walk {
+                let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                if values?.isDirectory == true, values?.isSymbolicLink != true { directories.append(item) }
+            }
+        }
+        for directory in directories { chmod(directory.path, 0o700) }
+        try fm.removeItem(at: url)
+    }
+
+    /// Delete Device: Devices/<uuid> is renamed to Devices/.deleting-<uuid>
+    /// first, so a crash mid-removal never leaves a half device that loads
+    /// (DeviceInstance.all skips the name); the launch sweep finishes it.
+    static func removeDevice(_ id: UUID, state: URL) throws {
+        let devices = state.appendingPathComponent("Devices", isDirectory: true)
+        let directory = devices.appendingPathComponent(id.uuidString, isDirectory: true)
+        let doomed = devices.appendingPathComponent(".deleting-\(id.uuidString)", isDirectory: true)
+        try checkRemovable(directory, state: state, owner: id)
+        if FileManager.default.fileExists(atPath: directory.path) {
+            try removeTree(doomed)
+            guard rename(directory.path, doomed.path) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+        }
+        try removeTree(doomed)
+    }
+
+    /// Launch (under the app lock): finish deletes a crash interrupted.
+    static func sweepDeleting(state: URL) {
+        let devices = state.appendingPathComponent("Devices", isDirectory: true)
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: devices.path)) ?? []
+        where name.hasPrefix(".deleting-") {
+            try? removeTree(devices.appendingPathComponent(name))
         }
     }
 
@@ -119,6 +206,11 @@ nonisolated enum DeviceStateStorage {
     static func promoteSnapshot(from temporary: URL, to saved: URL,
                                 identity: SnapshotIdentity) throws {
         let attributes = try snapshotAttributes(temporary)
+        // Saved RAM is recreatable (a cold boot): keep it out of backups.
+        var excluded = URLResourceValues()
+        excluded.isExcludedFromBackup = true
+        var file = temporary
+        try? file.setResourceValues(excluded)
         let metadata = SnapshotMetadata(version: 1, identity: identity,
                                         fileNumber: attributes.number, size: attributes.size)
         let stagedMetadata = temporary.appendingPathExtension("meta")
@@ -225,15 +317,46 @@ nonisolated enum DeviceStateStorage {
     /// Explicit erase adopts the current bundled base only after removing any
     /// user overlay previously associated with it. Startup never consumes an
     /// erase marker or silently switches an existing device to a new base.
-    static func adoptBundledImageAfterErase(state: URL, nand: String, manifest: URL) throws {
+    /// `owner` is the erased device: its record follows the pointer on its
+    /// next resolve, so the base it names now doesn't keep that base alive.
+    static func adoptBundledImageAfterErase(state: URL, nand: String, manifest: URL, owner: UUID?) throws {
         let latest = try bundledImage(nand: nand, manifest: manifest)
         let snapshot = state.appendingPathComponent("snapshot-\(latest.key)")
         try erase(overlay: state.appendingPathComponent("nandrw-\(latest.key)"),
                   snapshots: [snapshot, snapshot.appendingPathExtension("tmp"), snapshot.appendingPathExtension("bad")],
-                  legacyMarker: state.appendingPathComponent(".reset-\(latest.key)"))
+                  legacyMarker: state.appendingPathComponent(".reset-\(latest.key)"), state: state, owner: owner)
         let pointer = state.appendingPathComponent("device/active-\(nand).json")
         try FileManager.default.createDirectory(at: pointer.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(latest).write(to: pointer, options: .atomic)
+        try removeUnreferencedBases(state: state, nand: nand, except: owner)
+    }
+
+    /// device/<nand>* (older bases, a torn .partial unpack) that neither an
+    /// active-*.json pointer nor a record other than `except` names.
+    static func removeUnreferencedBases(state: URL, nand: String, except: UUID?) throws {
+        let fm = FileManager.default
+        let device = state.appendingPathComponent("device", isDirectory: true)
+        let names = (try? fm.contentsOfDirectory(atPath: device.path)) ?? []
+        var referenced = Set<String>()
+        for name in names where name.hasPrefix("active-") && name.hasSuffix(".json") {
+            guard let data = try? Data(contentsOf: device.appendingPathComponent(name)),
+                  let image = try? JSONDecoder().decode(PackedImage.self, from: data) else {
+                return   // an unreadable pointer: keep every base rather than guess
+            }
+            referenced.insert(image.directory)
+        }
+        let devices = state.appendingPathComponent("Devices", isDirectory: true)
+        for name in (try? fm.contentsOfDirectory(atPath: devices.path)) ?? [] where UUID(uuidString: name) != nil && UUID(uuidString: name) != except {
+            guard let data = try? Data(contentsOf: devices.appendingPathComponent("\(name)/device.json")) else { continue }
+            guard let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let path = (record["base"] as? [String: Any])?["path"] as? String else { return }
+            referenced.insert(path.hasPrefix(state.path + "/") ? String(path.dropFirst(state.path.count + 1)) : path)
+        }
+        for name in names where (name == nand || name.hasPrefix(nand + "-") || name.hasPrefix(nand + ".")) && !referenced.contains("device/\(name)") {
+            let base = device.appendingPathComponent(name)
+            try checkRemovable(base, state: state, owner: except)
+            try removeTree(base)
+        }
     }
 
 }

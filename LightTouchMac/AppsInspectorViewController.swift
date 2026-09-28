@@ -338,7 +338,7 @@ enum AppInstaller {
             // library keeps the bytes, which is what makes the installed row
             // draggable out of the app as a file.
             await AppMetadataCache.shared.learn(from: ipa)
-            if let id = job.bundleID { await IPALibrary.adopt(ipa, for: id) }
+            if let id = job.bundleID { await IPALibrary.adopt(ipa, for: id, device: emulator.instance) }
             if output.contains("newer than the device's") {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
@@ -387,7 +387,7 @@ enum AppInstaller {
                     willRemove(app)
                     try await emulator.uninstall(app.id)
                     AppMetadataCache.shared.forget(app.id)
-                    IPALibrary.forget(app.id)
+                    IPALibrary.forget(app.id, device: emulator.instance)
                     didRemove(app)
                 }
             } catch is CancellationError {
@@ -1745,7 +1745,7 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         // draggable straight into the Finder.
         let item = NSPasteboardItem()
         item.setString(app.id, forType: .string)
-        if let file = IPALibrary.url(for: app.id) {
+        if let file = IPALibrary.url(for: app.id, device: emulator.instance) {
             item.setString(file.absoluteString, forType: .fileURL)
         }
         return item

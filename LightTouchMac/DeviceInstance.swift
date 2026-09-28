@@ -136,6 +136,10 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
         var snapshotBad: URL { snapshot.appendingPathExtension("bad") }
         var usbmuxPID: URL { work.appendingPathComponent("usbmuxd.pid") }
         var sessionFile: URL { work.appendingPathComponent("session.env") }
+        /// The helper's flock while it runs this device (LightTouchDevice --lease).
+        var lease: URL { work.appendingPathComponent("lease") }
+        /// Retained .ipa copies of the apps installed on this device (IPALibrary).
+        var ipas: URL { directory.appendingPathComponent("IPAs", isDirectory: true) }
     }
 
     /// `logs` is the app's log root (Bundled.logsDirectory).

@@ -119,8 +119,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         catch {
             let alert = NSAlert()
             alert.alertStyle = .critical
-            alert.messageText = "Couldn’t open device storage"
-            alert.informativeText = error.localizedDescription
+            if (error as? CocoaError)?.code == .fileLocking {
+                alert.messageText = Bundled.appLockMessage
+                alert.informativeText = "Quit the other copy of Light Touch first. This one will quit."
+            } else {
+                alert.messageText = "Couldn’t open device storage"
+                alert.informativeText = error.localizedDescription
+            }
             alert.runModal()
             Self.requestTermination()
             return
@@ -131,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // device being started (DeviceSessionHost.start), not to the app.
         let host = DeviceSessionHost(options: LaunchOptions.resolved())
         host.adoptLegacyDevices()
+        Self.sweepStorage()
         let profile = host.launchSelection?.profile ?? .iPodTouch2G
         MainMenuBuilder.install(profile: profile)
         let controller = MainWindowController(host: host, profile: profile)
@@ -140,8 +146,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         controller.selectLaunchDevice()
     }
 
+    /// Launch, with the library's lock held: finish what a crash or an older
+    /// build left. FirmwareJobs' own init sweeps Preparing/ and the IPSW stores.
+    private static func sweepStorage() {
+        let state = Bundled.stateDirectory, logs = Bundled.logsDirectory
+        let records = DeviceInstance.all(state: state)
+        _ = FirmwareJobs.shared
+        DeviceStateStorage.sweepDeleting(state: state)
+        IPALibrary.migrateShared(state: state, devices: records)
+        for record in records { USBMux.secure(DeviceInstance.url(record.storage.usbmuxConf, state: state)) }
+        // Logs of devices that no longer exist, and the single-device logs
+        // from before per-device ones (Logs/serial.log*, usbmuxd.log*).
+        let fm = FileManager.default
+        let deviceLogs = logs.appendingPathComponent("Devices", isDirectory: true)
+        let ids = Set(records.map(\.id.uuidString))
+        for name in (try? fm.contentsOfDirectory(atPath: deviceLogs.path)) ?? [] where UUID(uuidString: name) != nil && !ids.contains(name) {
+            try? DeviceStateStorage.removeTree(deviceLogs.appendingPathComponent(name))
+        }
+        for name in (try? fm.contentsOfDirectory(atPath: logs.path)) ?? []
+        where ["serial.log", "serial.log.1", "usbmuxd.log", "usbmuxd.log.1"].contains(name) {
+            try? fm.removeItem(at: logs.appendingPathComponent(name))
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         terminationBackstop?.cancel()
+        // A quit (or a crash, through firmwarekit's parent watch) cancels
+        // every preparation; the next launch's sweep removes its staging.
+        if host != nil { FirmwareJobs.shared.cancelAll() }
         emulators.forEach { $0.stop() }
     }
 

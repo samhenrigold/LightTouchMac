@@ -72,7 +72,7 @@ nonisolated enum StorageLocations {
         guard rename(legacy.path, destination.path) == 0 else { throw posixError() }
     }
 
-    private struct DaemonIdentity: Equatable {
+    struct DaemonIdentity: Equatable {
         let parent: UInt32
         let uid: UInt32
         let started: UInt64
@@ -80,7 +80,7 @@ nonisolated enum StorageLocations {
         let path: String
     }
 
-    private static func daemonIdentity(_ pid: pid_t) -> DaemonIdentity? {
+    static func daemonIdentity(_ pid: pid_t) -> DaemonIdentity? {
         var info = proc_bsdinfo()
         guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info,
                            Int32(MemoryLayout<proc_bsdinfo>.size)) == MemoryLayout<proc_bsdinfo>.size,
@@ -199,6 +199,15 @@ nonisolated enum StorageLocations {
             if retained.count == 1, fm.fileExists(atPath: targets[1].path) { try fm.removeItem(at: targets[1]) }
             for source in sources { try fm.removeItem(at: source) }
         }
+    }
+
+    /// Time Machine skips it (an xattr, so it survives renames). For
+    /// recreatable or in-flight data only: overlays and bases stay backed up.
+    static func excludeFromBackup(_ url: URL, _ excluded: Bool = true) {
+        var url = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = excluded
+        try? url.setResourceValues(values)
     }
 
     static func posixError() -> POSIXError { POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }

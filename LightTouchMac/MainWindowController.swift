@@ -60,6 +60,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var copiedScreenshot = false
     private let capturePreferences = CapturePreferences.shared
     private var captureOptionsWindow: NSWindowController?
+    private var storageWindow: NSWindowController?
     private var canTakeScreenshot: Bool {
         guard let emulator else { return false }
         return (emulator.isRunning || emulator.isPaused) && !emulator.isSleeping && !screenshotBusy
@@ -376,7 +377,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .cancel: FirmwareJobs.shared.cancel(entry)
         case .erase: erase(entry)
         case .showInFinder:
-            if let instance = host.instance(for: entry) { NSWorkspace.shared.activateFileViewerSelecting([instance.paths.directory]) }
+            // An adopted device lives under its legacy names in the state root, not in Devices/<uuid>.
+            if let instance = host.instance(for: entry) {
+                NSWorkspace.shared.activateFileViewerSelecting([instance.legacy != nil ? Bundled.stateDirectory : instance.paths.directory])
+            }
         case .delete: confirmDelete(entry)
         }
     }
@@ -1144,6 +1148,30 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         return await panel.beginSheetModal(for: window) == .OK ? panel.url : nil
     }
 
+    /// Settings… (Storage): sizes per device and store, Remove IPSW, Clear Caches, Delete Device.
+    @objc func showStorageSettings(_ sender: Any?) {
+        if storageWindow == nil {
+            let pane = StorageSettingsView(catalog: host.catalog,
+                                           delete: { [weak self] entry in self?.perform(.delete, for: entry) },
+                                           canDelete: { [weak self] entry in self?.canPerform(.delete, for: entry) ?? false })
+            pane.layoutSubtreeIfNeeded()
+            let panel = NSWindow(contentRect: NSRect(origin: .zero, size: pane.fittingSize), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            panel.title = "Storage"
+            WindowRestorationPolicy.configure(panel)
+            panel.contentView = pane
+            pane.onResize = { [weak panel, weak pane] in
+                guard let panel, let pane else { return }
+                panel.setContentSize(pane.fittingSize)
+            }
+            panel.isReleasedWhenClosed = false
+            panel.center()
+            storageWindow = NSWindowController(window: panel)
+        }
+        (storageWindow?.window?.contentView as? StorageSettingsView)?.reload()
+        storageWindow?.showWindow(sender)
+        storageWindow?.window?.makeKeyAndOrderFront(sender)
+    }
+
     @objc func showCaptureOptions(_ sender: Any?) {
         if captureOptionsWindow == nil {
             let editor = CaptureOptionsView(preferences: capturePreferences, profile: currentProfile)
@@ -1236,6 +1264,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                     }
                 }
+                for url in report.deleted { logEvent("recording recovery: deleted \(url.lastPathComponent): it can't be played") }
                 if !report.remaining.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(report.remaining) }
             } catch { logEvent("recording recovery: \(error.localizedDescription)") }
         }
@@ -1338,6 +1367,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let source = workspace.canvasCapture
         let background = NSImage(named: "gradient")?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         let emulator = workspace.deviceVC.emulator
+        emulator.warnIfLowOnSpace()
         recording.start(frame: { [weak screen] in
             if canvas { return try source.frame() }
             return screen?.captureFrame()

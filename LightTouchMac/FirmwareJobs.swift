@@ -28,10 +28,12 @@ import Cocoa
     init(catalog: FirmwareCatalog = .bundled, store: IPSWStore = .shared) {
         self.catalog = catalog
         self.store = store
-        // Staging a previous launch left behind is never a device.
-        let preparing = PreparationJob.preparing(Bundled.stateDirectory)
-        for name in (try? FileManager.default.contentsOfDirectory(atPath: preparing.path)) ?? [] {
-            IPSWStore.removeTree(preparing.appendingPathComponent(name))
+        // Staging a previous launch left behind is never a device; nor is a
+        // torn download or import. Only the app holding the library's lock
+        // may sweep: another copy's jobs could be live.
+        if (try? Bundled.requireStorage()) != nil {
+            PreparationJob.sweep(state: Bundled.stateDirectory)
+            store.sweep()
         }
         let bytes = Dictionary(catalog.entries.compactMap { e in e.source.sha1.map { ($0, e.source.bytes ?? 0) } },
                                uniquingKeysWith: { a, _ in a })
@@ -81,11 +83,12 @@ import Cocoa
 
     func downloadAndPrepare(_ entry: FirmwareCatalog.Entry) {
         guard jobs[entry.id].map({ if case .failed = $0 { true } else { false } }) ?? true,
-              let sha1 = entry.source.sha1 else { return }
+              let sha1 = entry.source.sha1, !refuseExisting(entry) else { return }
         if let ipsw = store.existing(sha1) { return prepare(entry, ipsw: ipsw) }
         guard let url = entry.source.url else { return fail(entry, FirmwareError.unsupported) }
         do {
-            try IPSWStore.checkSpace(entry.source.bytes ?? 0, at: store.downloads)
+            // The IPSW, then its preparation, beside every job already under way.
+            try IPSWStore.checkSpace((entry.source.bytes ?? 0) + entry.estimates.peakBytes + inFlightPeakBytes, at: store.downloads)
             starts[entry.id] = nil
             jobs[entry.id] = .downloading(fraction: 0)
             try downloads.start(sha1: sha1, url: url)
@@ -95,6 +98,7 @@ import Cocoa
     /// Hashes, matches in the catalog and clones into State/IPSW, then
     /// prepares. `entry` is the row it was dropped on or imported for, if any.
     func importIPSW(_ url: URL, for entry: FirmwareCatalog.Entry?) {
+        if let entry, refuseExisting(entry) { return }
         if let entry { jobs[entry.id] = .preparing(.init(name: "Checking the IPSW")) }
         let catalog = catalog, store = store
         Task.detached {
@@ -116,6 +120,31 @@ import Cocoa
         }
     }
 
+    /// App quit: every preparer gets SIGTERM (its own cancel path detaches
+    /// its images); the next launch's sweep removes what's left.
+    func cancelAll() {
+        for job in preparations.values { job.cancel() }
+    }
+
+    /// Peak disk use of the downloads and preparations under way.
+    private var inFlightPeakBytes: Int64 {
+        jobs.compactMap { id, job -> Int64? in
+            switch job {
+            case .downloading, .preparing: catalog.entry(id: id)?.estimates.peakBytes
+            case .failed: nil
+            }
+        }.reduce(0, +)
+    }
+
+    /// One device per entry: an IPSW for an entry that has one (a drop, an
+    /// import, a download) is refused rather than prepared again.
+    private func refuseExisting(_ entry: FirmwareCatalog.Entry) -> Bool {
+        guard !DeviceLibrary.shared.instances(firmware: entry.id).isEmpty else { return false }
+        logEvent("firmware: \(entry.id) already has a device; not preparing another")
+        NSApp.presentError(FirmwareError.failed("\(entry.profile?.displayName ?? entry.productType) iOS \(entry.version) already has a device."))
+        return true
+    }
+
     func cancel(_ entry: FirmwareCatalog.Entry) {
         if let job = preparations[entry.id] { job.cancel() }
         else if case .downloading? = jobs[entry.id], let sha1 = entry.source.sha1 { downloads.cancel(sha1: sha1) }
@@ -134,14 +163,18 @@ import Cocoa
             logEvent("firmware: downloaded \(entry.id)")
             prepare(entry, ipsw: ipsw)
         case let .failed(error): fail(entry, error)
-        case .cancelled: logEvent("firmware: download of \(entry.id) cancelled; resume data kept")
+        case .cancelled: logEvent("firmware: download of \(entry.id) cancelled and discarded")
         }
     }
 
     private func prepare(_ entry: FirmwareCatalog.Entry, ipsw: URL) {
         guard preparations[entry.id] == nil else { return }
+        if refuseExisting(entry) { jobs[entry.id] = nil; return }
         guard let preparer = Self.preparer else { return fail(entry, FirmwareError.failed(unavailableReason ?? "")) }
-        do { try IPSWStore.checkSpace(entry.estimates.peakBytes, at: Bundled.stateDirectory) }
+        let others = jobs.filter { $0.key != entry.id }.compactMap { id, job -> Int64? in
+            if case .preparing = job { return catalog.entry(id: id)?.estimates.peakBytes } else { return nil }
+        }.reduce(0, +)
+        do { try IPSWStore.checkSpace(entry.estimates.peakBytes + others, at: Bundled.stateDirectory) }
         catch { return fail(entry, error) }
         let request = PreparationJob.Request(
             entry: entry, ipsw: ipsw, state: Bundled.stateDirectory, preparer: preparer, helper: Self.helper,

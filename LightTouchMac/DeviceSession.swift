@@ -62,6 +62,8 @@ nonisolated enum SessionPhase: Equatable, Sendable {
 nonisolated enum DeviceRowState: Equatable, Sendable {
     enum Unavailable: Equatable, Sendable { case comingSoon, requiresIPSW }
     case notDownloaded(bytes: Int64?)
+    /// Its IPSW is in a store (downloaded or imported), not yet prepared.
+    case downloaded
     case downloading(fraction: Double, remaining: TimeInterval? = nil)
     case preparing(Preparation)
     case ready, running, stopping
@@ -77,19 +79,20 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     let hasSession: Bool
     let state: DeviceRowState
 
+    /// `downloaded`: IPSWStore has this entry's IPSW.
     init(entry: FirmwareCatalog.Entry, instanceID: UUID?, session: SessionPhase?,
-         job: FirmwareJob?, failure: String?) {
+         job: FirmwareJob?, failure: String?, downloaded: Bool = false) {
         self.entry = entry
         self.instanceID = instanceID
         hasSession = session != nil
         state = Self.state(entry: entry, startable: instanceID != nil || entry.source.kind == .bundled,
-                           session: session, job: job, failure: failure)
+                           session: session, job: job, failure: failure, downloaded: downloaded)
     }
 
     /// A session outranks everything; then the catalog's own verdict, a job
     /// in flight, the last start failure, and finally whether a device exists.
     private static func state(entry: FirmwareCatalog.Entry, startable: Bool, session: SessionPhase?,
-                              job: FirmwareJob?, failure: String?) -> DeviceRowState {
+                              job: FirmwareJob?, failure: String?, downloaded: Bool) -> DeviceRowState {
         switch session {
         case .running?: return .running
         case .stopping?: return .stopping
@@ -106,6 +109,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
         if let failure { return .error(failure) }
         if startable { return .ready }
+        if downloaded { return .downloaded }
         return entry.status == .userIPSW ? .unavailable(.requiresIPSW) : .notDownloaded(bytes: entry.source.bytes)
     }
 
@@ -179,7 +183,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     var primaryAction: DeviceAction? {
         switch state {
         case .ready: .start
-        case .notDownloaded: .downloadAndPrepare
+        case .notDownloaded, .downloaded: .downloadAndPrepare
         case .downloading, .preparing: .cancel
         case .error: isStartable ? .start : entry.status == .userIPSW ? .importIPSW : .downloadAndPrepare
         case .unavailable(.requiresIPSW): .importIPSW
@@ -191,7 +195,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         if isError { return "Try Again" }
         return switch primaryAction {
         case .start: "Start"
-        case .downloadAndPrepare: "Download & Prepare"
+        case .downloadAndPrepare: state == .downloaded ? "Prepare" : "Download & Prepare"
         case .importIPSW: "Import IPSW…"
         case .cancel: "Cancel"
         default: nil
@@ -203,6 +207,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         switch state {
         case let .notDownloaded(bytes):
             bytes.map { "Not Downloaded, " + ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Not Downloaded"
+        case .downloaded: "Downloaded"
         case .downloading: "Downloading, " + (progressSummary ?? "")
         case .preparing: "Preparing, " + (progressSummary ?? "")
         case .ready: "Ready"
@@ -243,7 +248,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     private var helperPID: pid_t = 0
 
     /// `helper` and `requirement` default to the bundled helper and the app's Team (tests pass their own).
-    init(instance: UUID, profile: DeviceProfile, log url: URL, helper: URL? = nil, requirement: String? = nil) {
+    /// `lease` is the device's work/lease: the helper refuses to run beside another holder.
+    init(instance: UUID, profile: DeviceProfile, log url: URL, lease: URL? = nil, helper: URL? = nil, requirement: String? = nil) {
         self.profile = profile
         do { log = try ProcessLogCapture(url: url) }
         catch {
@@ -254,6 +260,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         if let helper { configuration.helper = helper }
         configuration.machine = profile.machineName
         configuration.requirement = requirement
+        if let lease { configuration.arguments = ["--lease", lease.path] }
         link = DeviceLink(configuration: configuration)
         link.onEvent = { [weak self] event in MainActor.assumeIsolated { self?.received(event) } }
         link.onTerminated = { [weak self] termination in MainActor.assumeIsolated { self?.terminated(termination) } }
@@ -555,7 +562,8 @@ nonisolated enum BootRecipe {
 
     func row(for entry: FirmwareCatalog.Entry) -> DeviceRow {
         DeviceRow(entry: entry, instanceID: instance(for: entry)?.id, session: session(for: entry)?.phase,
-                  job: FirmwareJobs.shared.jobs[entry.id], failure: failures[entry.id])
+                  job: FirmwareJobs.shared.jobs[entry.id], failure: failures[entry.id],
+                  downloaded: entry.source.sha1.map { IPSWStore.shared.existing($0) != nil } ?? false)
     }
 
     // MARK: Launch
@@ -696,7 +704,10 @@ nonisolated enum BootRecipe {
         let paths = instance.paths
         try DeviceStateStorage.erase(overlay: paths.overlay,
                                      snapshots: [paths.snapshot, paths.snapshotTmp, paths.snapshotBad],
-                                     legacyMarker: paths.resetMarker)
+                                     legacyMarker: paths.resetMarker, state: library.state, owner: instance.id)
         try library.remove(id: instance.id)
+        // Its logs and per-device settings go with it.
+        try? DeviceStateStorage.removeTree(paths.logs)
+        for name in LegacyAdoption.perDeviceDefaults { UserDefaults.standard.removeObject(forKey: instance.defaultsKey(name)) }
     }
 }

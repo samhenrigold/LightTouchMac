@@ -3,8 +3,8 @@
 // A background URLSession, so a download goes on while the app is quit: the
 // next launch makes the session again under the same identifier and its
 // delegate picks the task back up. Tasks are named by the IPSW's sha1. A
-// cancel or a failure keeps the resume data in <sha1>.resume and the next
-// start resumes from it. A finished file is size- and SHA1-checked before it
+// failure keeps the resume data in <sha1>.resume and the next start resumes
+// from it; a cancel discards the download, its .resume included. A finished file is size- and SHA1-checked before it
 // becomes <sha1>.ipsw.
 
 import Foundation
@@ -16,7 +16,7 @@ nonisolated final class FirmwareDownloads: NSObject, URLSessionDownloadDelegate,
         case resumed(offset: Int64)
         case finished(URL)
         case failed(FirmwareError)
-        /// Cancelled; the resume data is saved.
+        /// Cancelled; nothing of the download is kept.
         case cancelled
     }
 
@@ -65,18 +65,13 @@ nonisolated final class FirmwareDownloads: NSObject, URLSessionDownloadDelegate,
         task.resume()
     }
 
-    /// Stops the download and keeps its resume data; `.cancelled` follows.
+    /// Stops the download and deletes its resume data; `.cancelled` follows.
     func cancel(sha1: String) {
         lock.withLock { _ = cancelling.insert(sha1) }
         session.getAllTasks { [self] tasks in
-            let matching = tasks.compactMap { $0 as? URLSessionDownloadTask }.filter { $0.taskDescription == sha1 }
-            if matching.isEmpty { onEvent(sha1, .cancelled) }
-            for task in matching {
-                task.cancel { [self] data in
-                    if let data { saveResumeData(data, sha1: sha1) }
-                    onEvent(sha1, .cancelled)
-                }
-            }
+            for task in tasks where task.taskDescription == sha1 { task.cancel() }
+            try? FileManager.default.removeItem(at: store.resumeData(sha1))
+            onEvent(sha1, .cancelled)
         }
     }
 
@@ -124,10 +119,10 @@ nonisolated final class FirmwareDownloads: NSObject, URLSessionDownloadDelegate,
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
         guard let error, let sha1 = task.taskDescription else { return }
         let nsError = error as NSError
-        if let data = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data { saveResumeData(data, sha1: sha1) }
-        // A cancel reports through its own completion.
+        // A cancel reports through its own completion and keeps nothing.
         if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled,
            lock.withLock({ cancelling.contains(sha1) }) { return }
+        if let data = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data { saveResumeData(data, sha1: sha1) }
         onEvent(sha1, .failed(.failed("The download stopped: \(error.localizedDescription)")))
     }
 }

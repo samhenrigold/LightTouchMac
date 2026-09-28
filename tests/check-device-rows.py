@@ -48,6 +48,11 @@ import Foundation
         precondition(allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"])
         precondition(r.stateDescription.hasPrefix("Not Downloaded, ") && r.stateDescription.contains("MB"))
 
+        // Its IPSW already in a store: Downloaded, and the button prepares.
+        r = DeviceRow(entry: iPad, instanceID: nil, session: nil, job: nil, failure: nil, downloaded: true)
+        precondition(r.state == .downloaded && r.primaryTitle == "Prepare" && r.stateDescription == "Downloaded")
+        precondition(allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"])
+
         // Adopted or prepared: ready, with the record's commands.
         r = row(iPad, instance: id)
         precondition(r.state == .ready && allowed(r) == ["start", "erase", "showInFinder", "delete"], "\(allowed(r))")

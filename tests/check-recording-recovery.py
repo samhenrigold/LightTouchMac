@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch recovery validates real MOVs, preserves failed sources, and skips current takes."""
+"""Launch recovery validates real MOVs, preserves failed saves, deletes unplayable takes, and skips current takes."""
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[1]
@@ -53,23 +53,24 @@ import AVFoundation
   }
   precondition(Set(requested) == Set(["valid.mov", "collision.mov", "blocked.mov"]))
   precondition(report.saved == [recovered.appendingPathComponent("valid.mov")], "saved=\(report.saved) remaining=\(report.remaining)")
-  precondition(Set(report.remaining.map(\.lastPathComponent)) == Set([collision, blocked, corrupt].map(\.lastPathComponent)))
+  precondition(Set(report.remaining.map(\.lastPathComponent)) == Set([collision, blocked].map(\.lastPathComponent)))
+  precondition(report.deleted.map(\.lastPathComponent) == [corrupt.lastPathComponent] && !FileManager.default.fileExists(atPath: corrupt.path))
   precondition(!FileManager.default.fileExists(atPath: valid.path))
-  for retained in [collision, blocked, corrupt, current, untouched, nested] {
+  for retained in [collision, blocked, current, untouched, nested] {
    precondition(FileManager.default.fileExists(atPath: retained.path), "Recovery discarded a source")
   }
   precondition(try! Data(contentsOf: existing) == Data("existing capture".utf8))
   let saved = AVURLAsset(url: report.saved[0])
   precondition(try await saved.load(.isPlayable))
   // A second pass can recover a previously blocked destination without
-  // overwriting the collision, touching the current take, or losing corruption.
+  // overwriting the collision or touching the current take.
   let retry = try await ScreenRecordingSession.recoverRecordings(createdBefore: launchDate) { source in
    recovered.appendingPathComponent("retry-" + source.lastPathComponent)
   }
   precondition(Set(retry.saved.map(\.lastPathComponent)) == Set(["retry-blocked.mov", "retry-collision.mov"]))
-  precondition(retry.remaining.map(\.lastPathComponent) == [corrupt.lastPathComponent])
+  precondition(retry.remaining.isEmpty && retry.deleted.isEmpty)
   precondition(FileManager.default.fileExists(atPath: current.path))
-  print("PASS: playable launch recovery, atomic collision protection, destination retry, incomplete-source retention and active-file cutoff")
+  print("PASS: playable launch recovery, atomic collision protection, destination retry, unplayable-take deletion and active-file cutoff")
  }
 }
 '''.replace('precondition(try await saved.load(.isPlayable))', 'let playable = try await saved.load(.isPlayable); precondition(playable)')

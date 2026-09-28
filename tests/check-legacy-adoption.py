@@ -103,7 +103,7 @@ nonisolated final class Counter: @unchecked Sendable { var value = 0 }
                                       "pose": defaults.object(forKey: r.instance.defaultsKey("motionPose")) ?? NSNull()]
             print(String(decoding: try JSONSerialization.data(withJSONObject: out, options: .sortedKeys), as: UTF8.self))
         case "erase":
-            try DeviceStateStorage.adoptBundledImageAfterErase(state: state, nand: a[3], manifest: URL(fileURLWithPath: a[4]))
+            try DeviceStateStorage.adoptBundledImageAfterErase(state: state, nand: a[3], manifest: URL(fileURLWithPath: a[4]), owner: nil)
         case "library":
             let library = DeviceLibrary(state: state)
             let posted = Counter()

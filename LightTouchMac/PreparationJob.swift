@@ -5,9 +5,10 @@
 //
 // The job id is also the new device's id and its identity seed. Staging and
 // the published device are on one volume, so the publish is a rename and the
-// sparse NAND stays sparse. Nothing outside Preparing/<id> is written until
-// the preparer says done; a record written last is what makes it a device,
-// so a failure never leaves a half device and never touches a published one.
+// sparse NAND stays sparse. Nothing outside Preparing/ is written until the
+// preparer says done; the whole device is assembled in Preparing/<id>.publish
+// and appears in Devices/ with one rename, so a failure never leaves a half
+// device and never touches a published one.
 
 import CryptoKit
 import Foundation
@@ -20,7 +21,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         var state: URL
         var preparer: URL
         var helper: URL
-        /// Decrypted components by IPSW sha1; this IPSW's are deleted after a publish.
+        /// Decrypted components by IPSW sha1; this IPSW's are deleted when the job ends, however it ends.
         var cache: URL
         /// The preparer's stderr.
         var log: URL
@@ -90,6 +91,8 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     private var cancelled = false
 
     var staging: URL { Self.preparing(request.state).appendingPathComponent(id.uuidString, isDirectory: true) }
+    /// Where the device is assembled before its one rename into Devices/.
+    var publishing: URL { Self.preparing(request.state).appendingPathComponent("\(id.uuidString).publish", isDirectory: true) }
     private var entryFile: URL { Self.preparing(request.state).appendingPathComponent("\(id.uuidString).entry.json") }
     static func preparing(_ state: URL) -> URL { state.appendingPathComponent("Preparing", isDirectory: true) }
 
@@ -102,6 +105,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     func start() {
         do {
             try StorageLocations.privateDirectory(staging)
+            StorageLocations.excludeFromBackup(Self.preparing(request.state))
             try JSONEncoder().encode(request.entry).write(to: entryFile)
             try StorageLocations.privateDirectory(request.log.deletingLastPathComponent())
             FileManager.default.createFile(atPath: request.log.path, contents: nil)
@@ -149,7 +153,10 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         case let .done(lockName)? where status == 0:
             do { finish(.published(try publish(lock: lockName))) }
             catch { finish(.failed("Couldn’t save the prepared device: \(error.localizedDescription)")) }
-        case let .error(code, detail)?: finish(.failed(Self.message(code: code, detail: detail)))
+        case let .error(code, detail)?:
+            // A cached or imported IPSW that fails its SHA is never used again.
+            if code == "sha_mismatch" { try? FileManager.default.removeItem(at: request.ipsw) }
+            finish(.failed(Self.message(code: code, detail: detail)))
         default: finish(.failed("The preparer stopped unexpectedly (exit \(status))."))
         }
     }
@@ -168,16 +175,56 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     }
 
     private func finish(_ event: Event) {
-        if case .published = event {} else { IPSWStore.removeTree(staging) }
+        if case .published = event {} else { try? DeviceStateStorage.removeTree(staging) }
         try? FileManager.default.removeItem(at: entryFile)
+        let sha1 = request.entry.source.sha1 ?? "-"
+        for name in [sha1, "\(sha1).tmp"] { try? DeviceStateStorage.removeTree(request.cache.appendingPathComponent(name)) }
         onEvent(event)
+    }
+
+    /// Launch, under the app lock: nothing in Preparing/ is a device. Disk
+    /// images a killed preparer left attached there are detached first, or
+    /// their files couldn't go.
+    static func sweep(state: URL) {
+        let preparing = preparing(state)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: preparing.path)) ?? []
+        guard !names.isEmpty else { return }
+        detachImages(under: preparing)
+        for name in names { try? DeviceStateStorage.removeTree(preparing.appendingPathComponent(name)) }
+    }
+
+    /// `hdiutil detach -force` for every attached image whose file is under `root`.
+    static func detachImages(under root: URL) {
+        func run(_ arguments: [String]) -> Data? {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+            process.arguments = arguments
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            guard (try? process.run()) != nil else { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return process.terminationStatus == 0 ? data : nil
+        }
+        let prefix = DeviceStateStorage.canonicalPath(root) + "/"
+        guard let data = run(["info", "-plist"]),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return }
+        for image in info["images"] as? [[String: Any]] ?? [] {
+            guard let path = image["image-path"] as? String,
+                  DeviceStateStorage.canonicalPath(URL(fileURLWithPath: path)).hasPrefix(prefix),
+                  let device = (image["system-entities"] as? [[String: Any]])?.compactMap({ $0["dev-entry"] as? String })
+                      .min(by: { $0.count < $1.count }) else { continue }
+            logEvent("firmware: detaching \(device), left attached from \(path)")
+            _ = run(["detach", device, "-force"])
+        }
     }
 
     // MARK: - Publish
 
-    /// Renames the staging directory to Devices/<id>/base and writes the
-    /// record. Until the record exists nothing is a device, so any failure
-    /// removes Devices/<id> whole.
+    /// Assembles Preparing/<id>.publish/{base, device.json} (the staging
+    /// directory renamed to base) and renames it to Devices/<id> in one step.
+    /// Any failure before that rename leaves Devices/ untouched.
     func publish(lock lockName: String) throws -> DeviceInstance {
         let fm = FileManager.default
         let profile = request.entry.profile ?? .iPad1
@@ -201,14 +248,16 @@ nonisolated final class PreparationJob: @unchecked Sendable {
                            snapshot: "\(relative)/snapshot", resetMarker: nil, usbmuxConf: "\(relative)/usbmuxd-conf"),
             identity: identity, provenance: .init(lock: "\(relative)/base/\(lockName)", sha256: Self.sha256(lockData)))
         do {
-            try StorageLocations.privateDirectory(directory)
-            try fm.moveItem(at: staging, to: directory.appendingPathComponent("base", isDirectory: true))
-            try instance.write(state: request.state)
+            try StorageLocations.privateDirectory(publishing)
+            try fm.moveItem(at: staging, to: publishing.appendingPathComponent("base", isDirectory: true))
+            try DeviceInstance.encoder.encode(instance)
+                .write(to: publishing.appendingPathComponent(DeviceInstance.recordName), options: .atomic)
+            try StorageLocations.privateDirectory(directory.deletingLastPathComponent())
+            guard rename(publishing.path, directory.path) == 0 else { throw StorageLocations.posixError() }
         } catch {
-            IPSWStore.removeTree(directory)
+            try? DeviceStateStorage.removeTree(publishing)
             throw error
         }
-        IPSWStore.removeTree(request.cache.appendingPathComponent(entry.source.sha1 ?? "-", isDirectory: true))
         return instance
     }
 
