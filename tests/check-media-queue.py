@@ -20,12 +20,13 @@ pause = block('    private static func pauseIfNeeded(', '    @MainActor\n    sta
 code = r'''import Cocoa
 enum DeviceError: Error { case timedOut; var shouldPauseInstallQueue: Bool { true } }
 struct Failure: LocalizedError { var errorDescription: String? { "Unreadable photo" } }
+enum DeviceProfile { case iPodTouch2G }
 @MainActor struct PreparedMedia {
  static var failed = Set<String>()
  static var delayed = Set<String>()
  static var preparation: [String: CheckedContinuation<Void, Error>] = [:]
  let directory: URL, title: String, destination: String
- static func prepare(_ source: URL) async throws -> PreparedMedia {
+ static func prepare(_ source: URL, profile: DeviceProfile) async throws -> PreparedMedia {
   let name = source.deletingPathExtension().lastPathComponent
   if delayed.contains(name) { try await withCheckedThrowingContinuation { preparation[name] = $0 } }
   try Task.checkCancellation()
@@ -36,6 +37,7 @@ struct Failure: LocalizedError { var errorDescription: String? { "Unreadable pho
  }
 }
 @MainActor final class EmulatorController {
+ let profile = DeviceProfile.iPodTouch2G
  var deviceReachable: Bool? = true
  func reportConnectionFailure(_ error: Error, operation: String) { deviceReachable = false }
  var started: [String] = [], committed: [String] = []

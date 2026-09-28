@@ -16,7 +16,7 @@ struct LaunchOptions { var network = true }
    defaults.set(saved,forKey:NetworkAccessPreference.key)
    var options=LaunchOptions(network:!CommandLine.arguments.contains("--no-network"))
    let initial=options.network
-   NetworkAccessPreference.configure(&options)
+   NetworkAccessPreference.configure(&options, profile: .iPodTouch2G)
    precondition(options.network == (explicit ? initial : saved))
    precondition(defaults.bool(forKey:NetworkAccessPreference.key)==saved)
   }

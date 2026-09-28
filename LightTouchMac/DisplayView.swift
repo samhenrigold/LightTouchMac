@@ -19,23 +19,23 @@ enum ZoomMode: Equatable {
 
 final class DisplayView: NSView {
 
-    /// The device this process runs; one per process, fixed at launch.
-    private static let profile = DeviceProfile.current
+    /// The device this view shows, fixed at init.
+    private let profile: DeviceProfile
     /// The panel at rest — iPod touch 2G: 320×480 at 163 ppi (3.5" panel).
     /// The live frame buffer swaps its sides on rotation.
-    private static let nativeScreenPixels = profile.uprightScreenPixels
+    private let nativeScreenPixels: CGSize
 
     /// The shell art: its full pixel size, the screen cutout rect within
     /// it (top-left origin, matching this view's isFlipped space), and the
     /// home button circle — all in the shell image's own native (portrait,
     /// unrotated) pixel space.
-    private static let shellPixels = profile.shellPixels
-    private static let screenCutout = profile.screenCutout
-    private static let homeButtonDiameter = profile.homeButtonDiameter
-    private static let homeButtonBottomInset = profile.homeButtonBottomInset
+    private let shellPixels: CGSize
+    private let screenCutout: CGRect
+    private let homeButtonDiameter: CGFloat
+    private let homeButtonBottomInset: CGFloat
 
     /// Whatever the guest is actually sending right now — swaps on rotation.
-    private var framePixels = nativeScreenPixels
+    private var framePixels: CGSize
     /// nil until the first layout, so the initial appearance never "rotates in".
     private var lastRotation: Int?
 
@@ -160,19 +160,26 @@ final class DisplayView: NSView {
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
     private var pinching = false
 
-    override init(frame: NSRect) {
+    init(frame: NSRect, profile: DeviceProfile) {
+        self.profile = profile
+        nativeScreenPixels = profile.uprightScreenPixels
+        framePixels = nativeScreenPixels
+        shellPixels = profile.shellPixels
+        screenCutout = profile.screenCutout
+        homeButtonDiameter = profile.homeButtonDiameter
+        homeButtonBottomInset = profile.homeButtonBottomInset
         super.init(frame: frame)
         wantsLayer = true
         layer?.masksToBounds = true
 
-        shellLayer.contents = NSImage(named: Self.profile.shellImageName)?
+        shellLayer.contents = NSImage(named: profile.shellImageName)?
             .cgImage(forProposedRect: nil, context: nil, hints: nil)
         shellLayer.contentsGravity = .resize
         // The shell stays at its native pixel size forever; layout() scales and
         // rotates it with a single transform. The content layer lives INSIDE it
         // at the cutout, so scale and rotation can never drift apart — they are
         // one matrix.
-        shellLayer.bounds = CGRect(origin: .zero, size: Self.shellPixels)
+        shellLayer.bounds = CGRect(origin: .zero, size: shellPixels)
         // Enough of a shadow to lift the device off the gradient, not enough to
         // notice as an effect. The radius is in the shell's own native pixels,
         // so the transform scales it with the device and the shadow stays
@@ -212,14 +219,14 @@ final class DisplayView: NSView {
         // shows a powered-on device screen during boot, before the first frame.
         contentLayer.contentsGravity = .resize
         contentLayer.backgroundColor = NSColor.black.cgColor
-        contentLayer.position = CGPoint(x: Self.screenCutout.midX, y: Self.screenCutout.midY)
+        contentLayer.position = CGPoint(x: screenCutout.midX, y: screenCutout.midY)
         shellLayer.addSublayer(contentLayer)
 
         homeButton.target = self
         homeButton.action = #selector(homeTapped)
         addSubview(homeButton)
         // macOS 14 keeps the photo shell; RealityKit texture rotation requires 15.
-        if #available(macOS 15, *), Self.profile.hasDeviceModel,
+        if #available(macOS 15, *), profile.hasDeviceModel,
            let url = Bundle.main.url(forResource: "N72", withExtension: "usdz") {
             // Give RealityKit one second to present the device itself. Slower
             // startup shows a temporary photo while the live model keeps
@@ -260,7 +267,7 @@ final class DisplayView: NSView {
         ])
 
         registerForDraggedTypes([.fileURL, .ltmCatalogApp])
-        setAccessibilityLabel("\(Self.profile.displayName) screen")
+        setAccessibilityLabel("\(profile.displayName) screen")
         setAccessibilityRole(.image)
         setAccessibilityHelp("Disable Keyboard Input in the Device menu to move a pointer with arrow keys. Hold Space to touch, or Shift-arrow to drag. Home is also available in the Device menu.")
     }
@@ -351,8 +358,8 @@ final class DisplayView: NSView {
         let center = window.convertPoint(toScreen: convert(CGPoint(x: bounds.midX, y: bounds.midY), to: nil))
         let screen = NSScreen.screens.first { $0.frame.contains(center) } ?? window.screen
         return screen.flatMap { DisplayMeasurements.pointsPerMillimeter($0) }.map {
-            let height = Self.profile.physicalHeightMillimeters * $0
-            return modelView?.physicalScale(heightInPoints: height) ?? height / Self.shellPixels.height
+            let height = profile.physicalHeightMillimeters * $0
+            return modelView?.physicalScale(heightInPoints: height) ?? height / shellPixels.height
         }
     }
     @objc private func screenChanged() {
@@ -386,16 +393,16 @@ final class DisplayView: NSView {
 
         // A panel fixed to the shell (the iPad's) never swaps sides; the
         // iPod's pre-rotated surface does.
-        let cutoutSize = Self.profile.panelRotation != 0
-            ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
+        let cutoutSize = profile.panelRotation != 0
+            ? CGSize(width: screenCutout.height, height: screenCutout.width)
             : isLandscape
-            ? CGSize(width: Self.screenCutout.height, height: Self.screenCutout.width)
-            : Self.screenCutout.size
+            ? CGSize(width: screenCutout.height, height: screenCutout.width)
+            : screenCutout.size
         // The shell's own on-screen bounding box once rotated — this, not just
         // the content, is what needs to fit inside the pane with margin.
         let shellOnScreenPixels = isLandscape
-            ? CGSize(width: Self.shellPixels.height, height: Self.shellPixels.width)
-            : Self.shellPixels
+            ? CGSize(width: shellPixels.height, height: shellPixels.width)
+            : shellPixels
 
         let scale: CGFloat
         switch zoom {
@@ -413,7 +420,7 @@ final class DisplayView: NSView {
         // the point — only the device is inset.
         let usable = deviceLayoutRect
         let viewCenter = CGPoint(x: usable.midX, y: usable.midY)
-        let shellCenter = CGPoint(x: Self.shellPixels.width / 2, y: Self.shellPixels.height / 2)
+        let shellCenter = CGPoint(x: shellPixels.width / 2, y: shellPixels.height / 2)
         let rest = Self.layerAngle(rotation)
         let angle = (motionRestAngle ?? rest) + tiltAngle
 
@@ -425,14 +432,14 @@ final class DisplayView: NSView {
         // (AppKit's geometry flip inverts a layer transform's handedness too),
         // so `rest` feeds both unconverted. At rest+tilt the button is mid-drag
         // and invisible anyway, so only `rest` is projected.
-        let buttonCenterNative = CGPoint(x: Self.shellPixels.width / 2,
-                                         y: Self.shellPixels.height - Self.homeButtonBottomInset
-                                            - Self.homeButtonDiameter / 2)
+        let buttonCenterNative = CGPoint(x: shellPixels.width / 2,
+                                         y: shellPixels.height - homeButtonBottomInset
+                                            - homeButtonDiameter / 2)
         let native = CGVector(dx: buttonCenterNative.x - shellCenter.x,
                               dy: buttonCenterNative.y - shellCenter.y)
         let buttonOffset = CGVector(dx: native.dx * cos(rest) - native.dy * sin(rest),
                                     dy: native.dx * sin(rest) + native.dy * cos(rest))
-        let buttonDiameter = (Self.homeButtonDiameter * scale).rounded()
+        let buttonDiameter = (homeButtonDiameter * scale).rounded()
         let buttonRect = CGRect(
             x: (viewCenter.x + buttonOffset.dx * scale - buttonDiameter / 2).rounded(),
             y: (viewCenter.y + buttonOffset.dy * scale - buttonDiameter / 2).rounded(),
@@ -456,10 +463,10 @@ final class DisplayView: NSView {
         contentLayer.bounds = CGRect(origin: .zero, size: cutoutSize)
         // Counter only the guest's quarter-turn, never the temporary tilt.
         // A layout during a gesture must not leave the panel crooked after release.
-        if Self.profile.panelRotation != 0 {
+        if profile.panelRotation != 0 {
             // The iPad's guest turns its own UI inside a panel that turns with
             // the shell: only the fixed panel-to-upright quarter-turn applies.
-            contentLayer.transform = CATransform3DRotate(CATransform3DIdentity, Self.profile.panelRotation, 0, 0, 1)
+            contentLayer.transform = CATransform3DRotate(CATransform3DIdentity, profile.panelRotation, 0, 0, 1)
         } else {
             contentLayer.transform = CATransform3DMakeRotation(-rest, 0, 0, 1)
         }
@@ -498,7 +505,7 @@ final class DisplayView: NSView {
 
     /// Scale is independent of a framebuffer arriving before or after rotation.
     var pixelMultiple: CGFloat {
-        appliedScale * Self.screenCutout.width / Self.nativeScreenPixels.width
+        appliedScale * screenCutout.width / nativeScreenPixels.width
             * (window?.backingScaleFactor ?? 2)
     }
 
@@ -506,7 +513,7 @@ final class DisplayView: NSView {
 
     private func shellScale(guestPixelsPerDisplayPixel multiple: Int) -> CGFloat {
         CGFloat(multiple) / (window?.backingScaleFactor ?? 2)
-            * Self.nativeScreenPixels.width / Self.screenCutout.width
+            * nativeScreenPixels.width / screenCutout.width
     }
 
     /// The largest uniform scale that fits `nativeSize` in the pane inset on
@@ -700,9 +707,9 @@ final class DisplayView: NSView {
     func captureFrame(includeTouches: Bool = true) -> CGImage? {
         if let liveTextView { return liveTextView.capturedImage }
         guard let image = capturePanelFrame(includeTouches: includeTouches) else { return nil }
-        guard Self.profile.panelRotation != 0 else { return image }
+        guard profile.panelRotation != 0 else { return image }
         // Match the window: panel-to-upright plus the device's own quarter-turn.
-        let turns = ((Int((Self.profile.panelRotation * 2 / .pi).rounded()) + (emulator?.rotationDegrees ?? 0) / 90) % 4 + 4) % 4
+        let turns = ((Int((profile.panelRotation * 2 / .pi).rounded()) + (emulator?.rotationDegrees ?? 0) / 90) % 4 + 4) % 4
         return Self.rotated(image, clockwiseQuarterTurns: turns) ?? image
     }
 
@@ -724,7 +731,7 @@ final class DisplayView: NSView {
     }
 
     private func capturePanelFrame(includeTouches: Bool) -> CGImage? {
-        let side = Int(max(Self.profile.screenPixels.width, Self.profile.screenPixels.height))
+        let side = Int(max(profile.screenPixels.width, profile.screenPixels.height))
         var data = Data(count: side * side * 4)
         var width: Int32 = 0, height: Int32 = 0
         let copied = data.withUnsafeMutableBytes {
@@ -1154,7 +1161,7 @@ final class DisplayView: NSView {
         guard modelPresentationFinished, let rootLayer = layer else { return false }
         let p = convert(event.locationInWindow, from: nil)
         let sp = shellLayer.convert(p, from: rootLayer)
-        return shellLayer.bounds.contains(sp) && !Self.screenCutout.contains(sp)
+        return shellLayer.bounds.contains(sp) && !screenCutout.contains(sp)
     }
 
     /// The same transform layout() computes, at an arbitrary angle, applied

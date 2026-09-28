@@ -16,7 +16,7 @@ import Cocoa
 @MainActor
 enum MainMenuBuilder {
 
-    static func install() {
+    static func install(profile: DeviceProfile) {
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Light Touch"
         let main = NSMenu(title: "Main Menu")
@@ -25,13 +25,13 @@ enum MainMenuBuilder {
         main.autoenablesItems = false
         
         main.addItem(submenu(appMenu(appName), title: appName))
-        main.addItem(submenu(fileMenu(), title: "File"))
-        main.addItem(submenu(editMenu(), title: "Edit"))
+        main.addItem(submenu(fileMenu(profile), title: "File"))
+        main.addItem(submenu(editMenu(profile), title: "Edit"))
         main.addItem(submenu(viewMenu(), title: "View"))
-        main.addItem(submenu(deviceMenu(), title: "Device"))
+        main.addItem(submenu(deviceMenu(profile), title: "Device"))
         main.addItem(submenu(NSMenu(title: "Apps"), title: "Apps"))
         main.addItem(submenu(captureMenu(), title: "Capture"))
-        main.addItem(submenu(windowMenu(), title: "Window"))
+        main.addItem(submenu(windowMenu(profile), title: "Window"))
         main.addItem(submenu(helpMenu(appName), title: "Help"))
         
         NSApp.mainMenu = main
@@ -72,11 +72,11 @@ enum MainMenuBuilder {
         return menu
     }
 
-    private static func fileMenu() -> NSMenu {
+    private static func fileMenu(_ profile: DeviceProfile) -> NSMenu {
         // Transfers belong to the active Files window, through its responder
         // chain. Opening that window belongs to Window; captures to Capture.
         let menu = NSMenu(title: "File")
-        menu.addItem(item("Copy to \(DeviceProfile.current.shortName)…", #selector(DeviceFilesViewController.importFile)))
+        menu.addItem(item("Copy to \(profile.shortName)…", #selector(DeviceFilesViewController.importFile)))
         menu.addItem(item("Save to Mac…", #selector(DeviceFilesViewController.exportFile)))
         menu.addItem(item("Cancel Transfer", #selector(DeviceFilesViewController.cancelTransfer)))
         menu.addItem(.separator())
@@ -86,7 +86,7 @@ enum MainMenuBuilder {
         return menu
     }
     
-    private static func editMenu() -> NSMenu {
+    private static func editMenu(_ profile: DeviceProfile) -> NSMenu {
         // Preserve native editing in search, Help, logs, and file panels.
         // Device-specific editing never takes over the standard Copy/Paste keys.
         let menu = NSMenu(title: "Edit")
@@ -105,7 +105,7 @@ enum MainMenuBuilder {
         menu.addItem(item("Search Apps", #selector(MainWindowController.findCatalog(_:)), "f", [.option, .command]))
         menu.addItem(.separator())
         menu.addItem(item("Select Text on Screen", #selector(MainWindowController.showLiveText(_:))))
-        menu.addItem(item("Paste Text to \(DeviceProfile.current.shortName)", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
+        menu.addItem(item("Paste Text to \(profile.shortName)", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
         return menu
     }
 
@@ -139,7 +139,7 @@ enum MainMenuBuilder {
         return menu
     }
     
-    private static func deviceMenu() -> NSMenu {
+    private static func deviceMenu(_ profile: DeviceProfile) -> NSMenu {
         // Nil targets route through the active window's responder chain.
         // Leave Command-arrow keys to macOS and text navigation.
         let menu = NSMenu(title: "Device")
@@ -155,7 +155,7 @@ enum MainMenuBuilder {
         orientation.addItem(item("Rotate Automatically", #selector(AppDelegate.toggleAutomaticRotation(_:))))
         orientation.addItem(.separator())
         appendMotionPoseItems(to: orientation)
-        if DeviceProfile.current == .iPad1 {
+        if profile.hasCompass {
             orientation.addItem(.separator())
             let compass = NSMenu(title: "Compass Heading")
             for (degrees, title) in [(0, "North"), (90, "East"), (180, "South"), (270, "West")] {
@@ -185,7 +185,7 @@ enum MainMenuBuilder {
         for (mode, title) in ["Charge Automatically", "Charging", "Not Charging"].enumerated() {
             battery.addItem(item(title, #selector(MainWindowController.setBatteryCharging(_:)), tag: mode))
         }
-        if DeviceProfile.current == .iPad1 {
+        if profile.canChooseUSBCharger {
             battery.addItem(.separator())
             battery.addItem(item("High-Power USB Port", #selector(MainWindowController.toggleHighPowerUSB(_:))))
         }
@@ -199,13 +199,13 @@ enum MainMenuBuilder {
         return menu
     }
     
-    private static func windowMenu() -> NSMenu {
+    private static func windowMenu(_ profile: DeviceProfile) -> NSMenu {
         let menu = NSMenu(title: "Window")
         menu.addItem(item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"))
         menu.addItem(item("Zoom", #selector(NSWindow.performZoom(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Show Device", #selector(AppDelegate.showDeviceWindow(_:)), "1"))
-        menu.addItem(item("Show \(DeviceProfile.current.shortName) Files", #selector(AppDelegate.showFilesWindow(_:)), "2"))
+        menu.addItem(item("Show \(profile.shortName) Files", #selector(AppDelegate.showFilesWindow(_:)), "2"))
         menu.addItem(.separator())
         menu.addItem(item("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         return menu

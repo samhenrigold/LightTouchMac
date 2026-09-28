@@ -111,9 +111,9 @@ struct CapturePreferences {
 
 enum CaptureSpaceBarAction: Int, CaseIterable {
     case none = 0, copyScreenshot = 2, saveScreenshot = 3, saveScreenshotAs = 4, toggleRecording = 5
-    var title: String {
+    func title(for profile: DeviceProfile) -> String {
         switch self {
-        case .none: "Send to \(DeviceProfile.current.shortName)"
+        case .none: "Send to \(profile.shortName)"
         case .copyScreenshot: "Copy Screenshot"
         case .saveScreenshot: "Save Screenshot"
         case .saveScreenshotAs: "Save Screenshot As…"

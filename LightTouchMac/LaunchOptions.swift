@@ -76,9 +76,9 @@ struct LaunchOptions: ParsableArguments {
     /// Required assets that don't exist, so the app can report them up front
     /// instead of failing inside the dylib on the QEMU thread with no UI — a
     /// missing NAND used to be an invisible hang.
-    func missingAssets() -> [String] {
+    func missingAssets(for profile: DeviceProfile) -> [String] {
         let fm = FileManager.default
-        if DeviceProfile.current == .iPad1 {
+        if profile == .iPad1 {
             return [filesRoot, ipad1KBoot, ipad1NAND].filter { !fm.fileExists(atPath: $0) }
         }
         var missing = [filesRoot, bootrom, iBoot, nor].filter { !fm.fileExists(atPath: $0) }

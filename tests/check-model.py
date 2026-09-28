@@ -179,7 +179,7 @@ enum PreparedMedia { static let extensions: Set<String> = [] }
 @main struct Check {
  @MainActor static func main() async throws {
   _=NSApplication.shared
-  let e=EmulatorController(), display=DisplayView(frame:NSRect(x:0,y:0,width:800,height:800))
+  let e=EmulatorController(), display=DisplayView(frame:NSRect(x:0,y:0,width:800,height:800),profile:.iPodTouch2G)
   display.emulator=e
   let window=NSWindow(contentRect:display.frame,styleMask:[.titled,.resizable],backing:.buffered,defer:false)
   window.contentView=display;window.makeKeyAndOrderFront(nil)

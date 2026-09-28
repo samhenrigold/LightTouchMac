@@ -50,7 +50,7 @@ final class CaptureNotifications: NSObject, UNUserNotificationCenterDelegate {
         } catch { return false }
     }
 
-    func scheduleReminder(after seconds: TimeInterval, recordingID: UUID) async {
+    func scheduleReminder(after seconds: TimeInterval, recordingID: UUID, profile: DeviceProfile) async {
         cancelReminder()
         guard seconds > 0, !NSApp.isActive else { return }
         let revision = reminderRevision
@@ -58,7 +58,7 @@ final class CaptureNotifications: NSObject, UNUserNotificationCenterDelegate {
         guard revision == reminderRevision, !NSApp.isActive, Self.canPresent(settings) else { return }
         let identifier = "recording-reminder-\(UUID().uuidString)"
         reminderIdentifier = identifier
-        let request = UNNotificationRequest(identifier: identifier, content: Self.reminderContent(recordingID: recordingID),
+        let request = UNNotificationRequest(identifier: identifier, content: Self.reminderContent(recordingID: recordingID, profile: profile),
                                             trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, seconds), repeats: false))
         do {
             try await center.add(request)
@@ -94,9 +94,9 @@ final class CaptureNotifications: NSObject, UNUserNotificationCenterDelegate {
         return content
     }
 
-    static func reminderContent(recordingID: UUID) -> UNNotificationContent {
+    static func reminderContent(recordingID: UUID, profile: DeviceProfile) -> UNNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = "\(DeviceProfile.current.shortName) is still recording"
+        content.title = "\(profile.shortName) is still recording"
         content.categoryIdentifier = reminderCategory
         content.userInfo = ["recordingID": recordingID.uuidString]
         return content

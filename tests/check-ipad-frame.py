@@ -10,6 +10,7 @@ from PIL import Image
 
 root = Path(__file__).resolve().parents[1]
 src = (root / 'LightTouchMac/DeviceProfile+Display.swift').read_text()
+src = src[src.index('var shellPixels'):]   # past screenPixels, which has an iPad CGSize too
 frame = Image.open(root / 'LightTouchMac/Assets.xcassets/ipad-frame.imageset/ipad-frame.png').convert('RGBA')
 
 shell = tuple(map(int, re.search(r'case \.iPad1: CGSize\(width: (\d+), height: (\d+)\)', src).groups()))

@@ -21,6 +21,7 @@ import Foundation
 /// hops off the main actor.
 struct SpringBoardIcons: Sendable {
     let clientSocket: String
+    let profile: DeviceProfile
 
     /// Bundle IDs in home-screen order: dock first, then each page, reading
     /// the way the icons are laid out. Throws rather than returning [] so the
@@ -49,7 +50,7 @@ struct SpringBoardIcons: Sendable {
             guard let from = ids.firstIndex(of: bundleID) else {
                 throw DeviceToolsError.failed(
                     "SpringBoard doesn't know about this app yet. "
-                    + "Restart the \(DeviceProfile.current.shortName), then try reordering it.")
+                    + "Restart the \(profile.shortName), then try reordering it.")
             }
             ids.remove(at: from)
             let to = other.flatMap { ids.firstIndex(of: $0) } ?? ids.count

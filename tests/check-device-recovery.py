@@ -23,6 +23,7 @@ extension Notification.Name {static let ltmAppsChanged=Self("apps")}
  static func reconnectManagementService() async throws -> Bool {recoveries+=1;return true}
 }
 @MainActor final class Controller {
+ let profile = DeviceProfile.iPodTouch2G
  var isRunning=true,isInstalling=false,hasFileTransfer=false,preparingMedia=false
  var usbConnected=true
  var onStatusChange:(()->Void)?

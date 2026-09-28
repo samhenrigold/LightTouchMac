@@ -59,7 +59,7 @@ source=r'''import Cocoa
 @main struct Check {
  @MainActor static func main() {
   _ = NSApplication.shared
-  MainMenuBuilder.install()
+  MainMenuBuilder.install(profile: .iPodTouch2G)
   let root=NSApp.mainMenu!
   let app=root.items[0].submenu!
   precondition(app.item(withTitle:"Settings…") == nil)

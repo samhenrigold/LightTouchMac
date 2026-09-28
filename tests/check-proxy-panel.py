@@ -20,7 +20,7 @@ func descendants(_ view: NSView) -> [NSView] {
   _ = NSApplication.shared
   for mode in [WebProxyConfiguration.Mode.off, .direct, .archive] {
    let initial = WebProxyConfiguration(mode: mode, archiveDate: "20090909")
-   let panel = ProxySettingsView(configuration: initial, status: .ready)
+   let panel = ProxySettingsView(configuration: initial, status: .ready, profile: .iPodTouch2G)
    let alert = NSAlert()
    alert.messageText = "Proxy"
    alert.addButton(withTitle: "Apply")
@@ -47,7 +47,7 @@ func descendants(_ view: NSView) -> [NSView] {
     panel.layoutSubtreeIfNeeded()
     let visible = descendants(panel).filter { !$0.isHiddenOrHasHiddenAncestor }
     let labels = visible.compactMap { ($0 as? NSTextField)?.stringValue }
-    if let message = status.message { precondition(labels.contains(message), labels.description) }
+    if let message = status.message(for: .iPodTouch2G) { precondition(labels.contains(message), labels.description) }
     else { precondition(!labels.contains(where: { $0.contains("proxy…") || $0.contains("Try again") })) }
     precondition(panel.frame.height >= readyHeight)
     precondition(panel.frame.width == 300)

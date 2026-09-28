@@ -12,7 +12,8 @@ final class DeviceFilesViewController: NSViewController, NSBrowserDelegate, NSMe
     private let browser = NSBrowser()
     private let status = NSTextField(wrappingLabelWithString: "")
     private let progress = NSProgressIndicator()
-    private let upload = NSButton(title: "Copy to \(DeviceProfile.current.shortName)…", target: nil, action: nil)
+    private let profile: DeviceProfile
+    private let upload: NSButton
     private let download = NSButton(title: "Save to Mac…", target: nil, action: nil)
     private let refresh = NSButton(title: "Refresh", target: nil, action: nil)
     private let cancel = NSButton(title: "Cancel", target: nil, action: nil)
@@ -24,6 +25,13 @@ final class DeviceFilesViewController: NSViewController, NSBrowserDelegate, NSMe
     private var transferID = UUID()
     private var idleStatusWidth: NSLayoutConstraint!
     private var activeStatusWidth: NSLayoutConstraint!
+
+    init(profile: DeviceProfile) {
+        self.profile = profile
+        upload = NSButton(title: "Copy to \(profile.shortName)…", target: nil, action: nil)
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("not used") }
 
     override func loadView() {
         let box = FilesBackground()
@@ -148,7 +156,7 @@ final class DeviceFilesViewController: NSViewController, NSBrowserDelegate, NSMe
         directories.removeAll()
         browser.loadColumnZero()
         updateControls()
-        guard let services else { status.stringValue = "The \(DeviceProfile.current.shortName) is disconnected."; onActivityChange?(); return }
+        guard let services else { status.stringValue = "The \(profile.shortName) is disconnected."; onActivityChange?(); return }
         let generation = revision
         tasks.append(Task { [weak self] in
             do {

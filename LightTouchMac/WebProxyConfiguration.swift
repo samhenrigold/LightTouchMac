@@ -3,9 +3,9 @@ import Foundation
 enum WebProxyStatus: Equatable {
     case waiting, applying, ready, failed
 
-    var message: String? {
+    func message(for profile: DeviceProfile) -> String? {
         switch self {
-        case .waiting: "Waiting for \(DeviceProfile.current.shortName)…"
+        case .waiting: "Waiting for \(profile.shortName)…"
         case .applying: "Updating proxy…"
         case .ready: nil
         case .failed: "Couldn’t update the proxy. Try again."

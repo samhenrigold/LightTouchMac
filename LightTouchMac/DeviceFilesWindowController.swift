@@ -2,11 +2,12 @@ import Cocoa
 
 /// The browser and transfer task survive closing this independently owned window.
 final class DeviceFilesWindowController: NSWindowController {
-    let browser = DeviceFilesViewController()
-    init() {
+    let browser: DeviceFilesViewController
+    init(profile: DeviceProfile) {
+        browser = DeviceFilesViewController(profile: profile)
         let window = NSWindow(contentViewController: browser)
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
-        window.title = "\(DeviceProfile.current.shortName) Files"
+        window.title = "\(profile.shortName) Files"
         window.setContentSize(NSSize(width: 660, height: 440))
         window.contentMinSize = NSSize(width: 360, height: 280)
         window.isReleasedWhenClosed = false

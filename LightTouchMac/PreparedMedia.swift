@@ -31,12 +31,12 @@ enum PreparedMedia: Sendable {
         }
     }
 
-    nonisolated static func prepare(_ source: URL) async throws -> PreparedMedia {
+    nonisolated static func prepare(_ source: URL, profile: DeviceProfile) async throws -> PreparedMedia {
         if MediaSong.extensions.contains(source.pathExtension.lowercased()) {
             return .song(try await MediaSong.prepare(source))
         }
         if MediaVideo.extensions.contains(source.pathExtension.lowercased()) {
-            return .video(try await MediaVideo.prepare(source))
+            return .video(try await MediaVideo.prepare(source, profile: profile))
         }
         return .photo(try await MediaPhoto.prepare(source))
     }

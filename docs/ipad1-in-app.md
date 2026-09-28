@@ -37,8 +37,9 @@ Without the variable the app is the iPod, unchanged. `LTM_FILES` moves the files
 
 ## What the app does for the iPad
 
-- `DeviceProfile.current` picks the machine, display name, window size and
-  shell art. Panel geometry (1024x768) comes from `qemu_ios_device_info()`.
+- The `DeviceProfile` the app picks at startup (held by `EmulatorController`)
+  sets the machine, display name, window size and shell art. Panel geometry
+  (1024x768) is a constant; Debug builds log if `qemu_ios_device_info()` disagrees.
 - Machine: `ipad1,kboot=…,nand=<golden>,nand-overlay=State/nandrw-ipad1-golden-pristine-<hash>,usb-tcp-addr=<bridge>`
   plus `-device usb-kbd,bus=usb-bus.0`. The overlay is keyed like the iPod's,
   so Erase All Content and Settings deletes it and the next boot is factory.

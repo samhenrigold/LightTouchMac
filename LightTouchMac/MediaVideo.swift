@@ -11,7 +11,7 @@ struct MediaVideo: Sendable {
 
     nonisolated static let extensions: Set<String> = ["mp4", "m4v", "mov"]
 
-    nonisolated static func prepare(_ source: URL, cacheDirectory: URL? = nil) async throws -> MediaVideo {
+    nonisolated static func prepare(_ source: URL, cacheDirectory: URL? = nil, profile: DeviceProfile) async throws -> MediaVideo {
         let worker = Task.detached {
             try Task.checkCancellation()
             guard extensions.contains(source.pathExtension.lowercased()) else {
@@ -74,7 +74,7 @@ struct MediaVideo: Sendable {
             if FileManager.default.fileExists(atPath: cached.path) {
                 do {
                     try FileManager.default.copyItem(at: cached, to: output)
-                    _ = try await validatedDuration(of: output, expected: duration)
+                    _ = try await validatedDuration(of: output, expected: duration, profile: profile)
                     reused = true
                 } catch {
                     try Task.checkCancellation()
@@ -83,14 +83,14 @@ struct MediaVideo: Sendable {
                 }
             }
             if !reused {
-                let export = await MediaVideoExport(source: snapshot, destination: output)
+                let export = await MediaVideoExport(source: snapshot, destination: output, profile: profile)
                 try await withTaskCancellationHandler {
                     try await export.run()
                 } onCancel: {
                     Task { await export.cancel() }
                 }
                 try Task.checkCancellation()
-                _ = try await validatedDuration(of: output, expected: duration)
+                _ = try await validatedDuration(of: output, expected: duration, profile: profile)
                 try MediaIdentity.normalizeGeneratedMovie(output)
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: output.path)
                 // H.264 encoding can vary by a byte between identical runs.
@@ -107,7 +107,7 @@ struct MediaVideo: Sendable {
                 }
             }
             try Task.checkCancellation()
-            let exportedDuration = try await validatedDuration(of: output, expected: duration)
+            let exportedDuration = try await validatedDuration(of: output, expected: duration, profile: profile)
             let metadata = directory.appendingPathComponent("metadata.plist")
             let properties: [String: Any] = [
                 "filename": output.lastPathComponent,
@@ -133,7 +133,7 @@ struct MediaVideo: Sendable {
         } onCancel: { worker.cancel() }
     }
 
-    nonisolated private static func validatedDuration(of file: URL, expected duration: Double) async throws -> Double {
+    nonisolated private static func validatedDuration(of file: URL, expected duration: Double, profile: DeviceProfile) async throws -> Double {
         let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         let asset = AVURLAsset(url: file)
         let exportedDuration = try await asset.load(.duration).seconds
@@ -146,7 +146,7 @@ struct MediaVideo: Sendable {
         }
         guard exportedDuration.isFinite, abs(exportedDuration - duration) < 0.2,
               try await asset.loadTracks(withMediaType: .video).count == 1 else {
-            throw DeviceToolsError.failed("The whole video couldn’t be converted for the \(DeviceProfile.current.shortName). Try a shorter video.")
+            throw DeviceToolsError.failed("The whole video couldn’t be converted for the \(profile.shortName). Try a shorter video.")
         }
         return exportedDuration
     }
@@ -158,16 +158,19 @@ struct MediaVideo: Sendable {
 private final class MediaVideoExport {
     private let source: URL
     private let destination: URL
+    private let profile: DeviceProfile
     private var session: AVAssetExportSession?
 
-    init(source: URL, destination: URL) { self.source = source; self.destination = destination }
+    init(source: URL, destination: URL, profile: DeviceProfile) {
+        self.source = source; self.destination = destination; self.profile = profile
+    }
 
     func run() async throws {
         try Task.checkCancellation()
         // Apple's device preset produces the H.264/AAC profile, dimensions
         // and frame rate supported by the original iPod hardware.
         guard let session = AVAssetExportSession(asset: AVURLAsset(url: source), presetName: AVAssetExportPresetAppleM4ViPod) else {
-            throw DeviceToolsError.failed("This video couldn’t be converted for the \(DeviceProfile.current.shortName).")
+            throw DeviceToolsError.failed("This video couldn’t be converted for the \(profile.shortName).")
         }
         self.session = session
         defer { self.session = nil }
@@ -181,7 +184,7 @@ private final class MediaVideoExport {
             await session.export()
             try Task.checkCancellation()
             guard session.status == .completed else {
-                throw session.error ?? DeviceToolsError.failed("This video couldn’t be converted for the \(DeviceProfile.current.shortName).")
+                throw session.error ?? DeviceToolsError.failed("This video couldn’t be converted for the \(profile.shortName).")
             }
         }
     }

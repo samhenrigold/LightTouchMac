@@ -38,7 +38,7 @@ final class Sink: NSResponder {
   NSApp.run()
  }
  @MainActor static func runChecks() async throws {
-  let controller=DeviceFilesWindowController()
+  let controller=DeviceFilesWindowController(profile:.iPodTouch2G)
   let vc=controller.browser;vc.services=DeviceServices()
   let window=controller.window!
   (NSApp as! FilesApplication).commandWindow=window

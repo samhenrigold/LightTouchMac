@@ -16,7 +16,7 @@ nonisolated enum CaptureError: LocalizedError {case failed(String);var errorDesc
   canvas.wantsLayer=true;canvas.layer!.backgroundColor=NSColor.green.cgColor
   content.addSubview(canvas);window.makeKeyAndOrderFront(nil)
   try await Task.sleep(for:.milliseconds(300))
-  let capture=CanvasCapture(view:canvas)
+  let capture=CanvasCapture(view:canvas,profile:.iPodTouch2G)
   func check(_ image:CGImage, width:Int,height:Int) throws {
    precondition(image.width==width && image.height==height)
    let bitmap=NSBitmapImageRep(cgImage:image)

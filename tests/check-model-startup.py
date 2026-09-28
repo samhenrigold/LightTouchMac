@@ -43,7 +43,7 @@ stub_source = prefix + r'''
   for scenario in ["fast", "slow asset", "slow frame"] {
    DeviceModelView.loadingDelay = scenario == "slow asset" ? .milliseconds(1400):.zero
    DeviceModelView.preparationDelay = scenario == "slow frame" ? .milliseconds(1400):.milliseconds(50)
-   let display=DisplayView(frame:NSRect(x:0,y:0,width:500,height:800))
+   let display=DisplayView(frame:NSRect(x:0,y:0,width:500,height:800),profile:.iPodTouch2G)
    let e=EmulatorController();display.emulator=e
    let window=NSWindow(contentRect:display.frame,styleMask:[.titled],backing:.buffered,defer:false)
    window.contentView=display;window.orderFront(nil)
@@ -64,7 +64,7 @@ stub_source = prefix + r'''
   }
   DeviceModelView.loadingDelay = .zero
   DeviceModelView.preparationDelay = .seconds(5)
-  var closingDisplay:DisplayView? = DisplayView(frame:NSRect(x:0,y:0,width:500,height:800))
+  var closingDisplay:DisplayView? = DisplayView(frame:NSRect(x:0,y:0,width:500,height:800),profile:.iPodTouch2G)
   weak let releasedDisplay = closingDisplay
   let closingWindow=NSWindow(contentRect:closingDisplay!.frame,styleMask:[.titled],backing:.buffered,defer:false)
   closingWindow.contentView=closingDisplay;closingWindow.orderFront(nil)
@@ -81,7 +81,7 @@ real_source = prefix + r'''
  @MainActor static func main() async throws {
   _=NSApplication.shared
   frameData = [UInt32](repeating:0xff00ff00,count:480*480)
-  let display=DisplayView(frame:NSRect(x:0,y:0,width:500,height:800))
+  let display=DisplayView(frame:NSRect(x:0,y:0,width:500,height:800),profile:.iPodTouch2G)
   let e=EmulatorController();display.emulator=e
   // Loading can precede window attachment. Deliberately cross the old one-
   // second cutoff, then require production RealityKit to become visible.

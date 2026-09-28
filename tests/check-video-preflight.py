@@ -17,7 +17,7 @@ enum DeviceToolsError: LocalizedError {
   let source = URL(fileURLWithPath: CommandLine.arguments[1])
   let work = URL(fileURLWithPath: CommandLine.arguments[2])
   let original = try Data(contentsOf: source)
-  let first = try await MediaVideo.prepare(source, cacheDirectory: work.appendingPathComponent("cache"))
+  let first = try await MediaVideo.prepare(source, cacheDirectory: work.appendingPathComponent("cache"), profile: .iPodTouch2G)
   defer { try? FileManager.default.removeItem(at: first.directory) }
   precondition(first.title == source.deletingPathExtension().lastPathComponent)
   precondition(first.video.lastPathComponent == "video.m4v" && UUID(uuidString: first.id) != nil)
@@ -30,7 +30,7 @@ enum DeviceToolsError: LocalizedError {
   precondition(duration > 5900 && duration < 6100)
   try FileManager.default.copyItem(at: first.video, to: work.appendingPathComponent("prepared.m4v"))
   try await Task.sleep(for: .milliseconds(1100))
-  let second = try await MediaVideo.prepare(source, cacheDirectory: work.appendingPathComponent("cache"))
+  let second = try await MediaVideo.prepare(source, cacheDirectory: work.appendingPathComponent("cache"), profile: .iPodTouch2G)
   defer { try? FileManager.default.removeItem(at: second.directory) }
   precondition(first.id == second.id && first.directory != second.directory, "repeated exports must reconcile to one guest library item")
   let unchanged = try Data(contentsOf: source)
@@ -42,26 +42,26 @@ enum DeviceToolsError: LocalizedError {
   precondition(directoryMode.intValue == 0o700 && fileMode.intValue == 0o600)
   // Two simultaneous drops must adopt the same atomic cache winner.
   let simultaneous = work.appendingPathComponent("simultaneous-cache")
-  async let a = MediaVideo.prepare(source, cacheDirectory: simultaneous)
-  async let b = MediaVideo.prepare(source, cacheDirectory: simultaneous)
+  async let a = MediaVideo.prepare(source, cacheDirectory: simultaneous, profile: .iPodTouch2G)
+  async let b = MediaVideo.prepare(source, cacheDirectory: simultaneous, profile: .iPodTouch2G)
   let (left, right) = try await (a, b)
   defer { try? FileManager.default.removeItem(at: left.directory); try? FileManager.default.removeItem(at: right.directory) }
   precondition(left.id == right.id)
   // A damaged disposable cache entry can never poison future imports.
   try Data("invalid cache".utf8).write(to: cached)
-  let repaired = try await MediaVideo.prepare(source, cacheDirectory: cache)
+  let repaired = try await MediaVideo.prepare(source, cacheDirectory: cache, profile: .iPodTouch2G)
   defer { try? FileManager.default.removeItem(at: repaired.directory) }
   let repairedSize = try FileManager.default.attributesOfItem(atPath: repaired.video.path)[.size] as! NSNumber
   precondition(repairedSize.intValue > 0)
   for name in ["empty.mp4", "broken.mov", "audio.mov", "folder.mp4", "unknown.avi"] {
-   do { _ = try await MediaVideo.prepare(work.appendingPathComponent(name), cacheDirectory: work.appendingPathComponent("cache")); preconditionFailure("accepted \(name)") }
+   do { _ = try await MediaVideo.prepare(work.appendingPathComponent(name), cacheDirectory: work.appendingPathComponent("cache"), profile: .iPodTouch2G); preconditionFailure("accepted \(name)") }
    catch { }
   }
-  let cancelled = Task { try await MediaVideo.prepare(source, cacheDirectory: work.appendingPathComponent("cache")) }
+  let cancelled = Task { try await MediaVideo.prepare(source, cacheDirectory: work.appendingPathComponent("cache"), profile: .iPodTouch2G) }
   cancelled.cancel()
   do { _ = try await cancelled.value; preconditionFailure("cancelled export succeeded") }
   catch is CancellationError { }
-  let duringExport = Task { try await MediaVideo.prepare(source, cacheDirectory: work.appendingPathComponent("cancel-cache")) }
+  let duringExport = Task { try await MediaVideo.prepare(source, cacheDirectory: work.appendingPathComponent("cancel-cache"), profile: .iPodTouch2G) }
   try await Task.sleep(for: .milliseconds(10))
   duringExport.cancel()
   do { _ = try await duringExport.value; preconditionFailure("cancelled active export succeeded") }

@@ -1,14 +1,16 @@
-// Screen geometry (from the dylib's qemu_ios_device_info()) and device art.
+// Screen geometry and device art.
 
 import CoreGraphics
 
 nonisolated extension DeviceProfile {
-    /// Framebuffer pixels as the panel scans them out.
+    /// Framebuffer pixels as the panel scans them out. Constants, so geometry
+    /// doesn't need the dylib; a Debug EmulatorController logs if the loaded
+    /// dylib's qemu_ios_device_info() disagrees.
     var screenPixels: CGSize {
-        guard let info = qemu_ios_device_info(machineName)?.pointee else {
-            fatalError("libqemu-arm.dylib does not know machine \(machineName)")
+        switch self {
+        case .iPodTouch2G: CGSize(width: 320, height: 480)
+        case .iPad1: CGSize(width: 1024, height: 768)
         }
-        return CGSize(width: Int(info.screen_width), height: Int(info.screen_height))
     }
 
     /// Quarter-turn from the scanned-out panel to the upright (portrait, home

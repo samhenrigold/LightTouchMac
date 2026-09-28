@@ -20,7 +20,7 @@ final class CaptureOptionsView: NSView {
     var onChange: (() -> Void)?
     var onResize: (() -> Void)?
 
-    init(preferences: CapturePreferences = .shared,
+    init(preferences: CapturePreferences = .shared, profile: DeviceProfile,
          authorizeNotifications: @escaping () async -> Bool = { await CaptureNotifications.shared.requestAuthorization() }) {
         self.preferences = preferences
         self.authorizeNotifications = authorizeNotifications
@@ -40,7 +40,7 @@ final class CaptureOptionsView: NSView {
         reminder.action = #selector(reminderChanged(_:))
         reminder.setAccessibilityLabel("Recording reminder")
         for choice in CaptureSpaceBarAction.allCases {
-            spaceBar.addItem(withTitle: choice.title)
+            spaceBar.addItem(withTitle: choice.title(for: profile))
             spaceBar.lastItem?.tag = choice.rawValue
         }
         for duration in CaptureReminderDuration.allCases {

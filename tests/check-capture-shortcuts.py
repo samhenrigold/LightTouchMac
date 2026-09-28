@@ -64,7 +64,7 @@ import UniformTypeIdentifiers
  enum RecordingAction { case stopAndSave, stopAndDelete }
  var onRecordingAction: ((UUID, RecordingAction) -> Void)?
  var reminders: [(TimeInterval, UUID)] = [], cancellations = 0
- func scheduleReminder(after delay: TimeInterval, recordingID: UUID) async {
+ func scheduleReminder(after delay: TimeInterval, recordingID: UUID, profile: DeviceProfile) async {
   reminders.append((delay, recordingID))
  }
  func cancelReminder() { cancellations += 1 }
@@ -88,7 +88,9 @@ import UniformTypeIdentifiers
   Self.last = self; return Self.response
  }
 }
+@MainActor final class EmulatorController { let profile = DeviceProfile.iPodTouch2G }
 @MainActor final class CaptureController: NSWindowController {
+ let emulator = EmulatorController()
  let deviceVC = DeviceController(), recording = TestRecording()
  let capturePreferences: CapturePreferences
  var captureKeyMonitor: Any?, consumedCaptureSpace = false

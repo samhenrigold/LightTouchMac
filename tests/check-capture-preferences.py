@@ -53,7 +53,7 @@ func descendants(_ view: NSView) -> [NSView] {
   precondition(preferences.spaceBarAction == .none && preferences.reminderAfterDuration == 0)
   var prompts = 0
   var permission = false
-  let view = CaptureOptionsView(preferences: preferences, authorizeNotifications: { prompts += 1; return permission })
+  let view = CaptureOptionsView(preferences: preferences, profile: .iPodTouch2G, authorizeNotifications: { prompts += 1; return permission })
   let alert = NSAlert()
   alert.messageText = "Capture Options"
   alert.addButton(withTitle: "Done")
@@ -101,7 +101,7 @@ func descendants(_ view: NSView) -> [NSView] {
   precondition(restored.copyOnCapture && !restored.openFinderAfterCapture && !restored.soundEffectsEnabled)
   precondition(restored.spaceBarAction == .saveScreenshot)
   let id = UUID()
-  let notification = CaptureNotifications.reminderContent(recordingID: id)
+  let notification = CaptureNotifications.reminderContent(recordingID: id, profile: .iPodTouch2G)
   precondition(notification.userInfo["recordingID"] as? String == id.uuidString)
   let content = CaptureNotifications.recoveryContent(filename: "Recovered.mov", bookmark: Data([1,2,3]))
   precondition(content.body == "Recovered.mov" && content.userInfo["recordingBookmark"] as? Data == Data([1,2,3]))

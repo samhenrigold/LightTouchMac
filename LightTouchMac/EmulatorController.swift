@@ -11,6 +11,7 @@ import Cocoa
 final class EmulatorController {
 
     let options: LaunchOptions
+    let profile: DeviceProfile
     private let usbmux = USBMux()
     private var started = false
     private var serialCapture: SerialLogCapture?
@@ -26,7 +27,7 @@ final class EmulatorController {
     private var proxyRevision = 0
     private(set) var webProxyAvailable = false
     func configureWebProxy(_ value: WebProxyConfiguration) throws {
-        guard webProxyAvailable else { throw DeviceToolsError.failed("The proxy is unavailable. Turn on the \(DeviceProfile.current.shortName) and connect it to the internet.") }
+        guard webProxyAvailable else { throw DeviceToolsError.failed("The proxy is unavailable. Turn on the \(profile.shortName) and connect it to the internet.") }
         try value.save()
         webProxy = value
         proxyRevision += 1
@@ -116,7 +117,7 @@ final class EmulatorController {
     private(set) var connectionIssue: DeviceConnectionIssue?
 
     func reportConnectionFailure(_ error: Error, operation: String) {
-        guard let issue = DeviceConnectionIssue(error: error, operation: operation) else { return }
+        guard let issue = DeviceConnectionIssue(error: error, operation: operation, profile: profile) else { return }
         if connectionIssue != issue {
             logEvent("device connection: \(issue.detail); USB=\(usbConnected), agent=\(qemu_ios_agent_status()), blocked requests=\(AbandonedWork.count)")
         }
@@ -168,8 +169,9 @@ final class EmulatorController {
 
     private var didSweepStaging = false
 
-    init(options: LaunchOptions) {
+    init(options: LaunchOptions, profile: DeviceProfile) {
         self.options = options
+        self.profile = profile
         usbmux.onUnexpectedExit = { [weak self] in self?.onStatusChange?() }
     }
 
@@ -188,7 +190,10 @@ final class EmulatorController {
         }
         started = true
         state = .booting
-        if DeviceProfile.current == .iPad1 { startIPad1(); return }
+        #if DEBUG
+        checkScreenGeometry()
+        #endif
+        if profile == .iPad1 { startIPad1(); return }
 
         if !FileManager.default.fileExists(atPath: options.nandImage),
            FileManager.default.fileExists(atPath: options.packedNAND + ".sha256") {
@@ -331,6 +336,20 @@ final class EmulatorController {
         startForegroundWatch()
     }
 
+    #if DEBUG
+    /// Screen geometry is Swift constants; log if the loaded dylib disagrees.
+    private func checkScreenGeometry() {
+        guard let info = qemu_ios_device_info(profile.machineName)?.pointee else {
+            logEvent("display: libqemu-arm.dylib does not know machine \(profile.machineName)")
+            return
+        }
+        let reported = CGSize(width: Int(info.screen_width), height: Int(info.screen_height))
+        if reported != profile.screenPixels {
+            logEvent("display: \(profile.machineName) is \(profile.screenPixels) in DeviceProfile but \(reported) in the dylib")
+        }
+    }
+    #endif
+
     /// iPad 1: kernel-direct boot from a K48KBOOT bundle over the read-only
     /// golden NAND, with this device's writes in its copy-on-write overlay
     /// (so Erase is "delete the overlay", as for the iPod). USB goes to the
@@ -344,7 +363,7 @@ final class EmulatorController {
                 at: URL(fileURLWithPath: options.ipad1NAND), key: imageKey)
             guard try DeviceStateStorage.pinOverlay(overlay, toBase: base) else {
                 baseImageMismatch = true
-                reportDeviceNotice("This \(DeviceProfile.current.shortName)'s data was made with an older system image.", for: .erase)
+                reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
                 state = .dead(exitCode: 1)
                 return
             }
@@ -417,7 +436,7 @@ final class EmulatorController {
     /// packaged images before apps can use the native compositor.
     /// The iPod images carry guest tools (SSH, agent); a stock iPad has none,
     /// so their preparation, media import and SSH extras are skipped.
-    var hasGuestTools: Bool { DeviceProfile.current != .iPad1 }
+    var hasGuestTools: Bool { profile.hasGuestTools }
 
     private func startMediaPreparation() {
         guard options.appsync, !shuttingDown, hasGuestTools else { return }
@@ -442,7 +461,7 @@ final class EmulatorController {
                 }
                 try Task.checkCancellation()
                 guard generation == bootGeneration else { return }
-                preparationStatus = "Preparing your \(DeviceProfile.current.shortName)…"
+                preparationStatus = "Preparing your \(profile.shortName)…"
                 logEvent("media: checking guest graphics components")
                 if try await tools().updateMediaComponents() {
                     logEvent("media: guest graphics components updated")
@@ -669,7 +688,7 @@ final class EmulatorController {
 
     /// One line for the window's status area.
     var statusLine: String {
-        if isErasing { return "Erasing \(DeviceProfile.current.shortName)…" }
+        if isErasing { return "Erasing \(profile.shortName)…" }
         if storageFailed { return "Storage write failed — device stopped; latest changes were not saved" }
         if shuttingDown, !isPoweredOff { return "Powering off…" }
         switch state {
@@ -766,7 +785,7 @@ final class EmulatorController {
     /// usbmuxd bridge always does, as a Mac does, so this only matters with
     /// app management off (--no-appsync).
     private(set) var highPowerUSB = true
-    var canChooseUSBCharger: Bool { usbmux.session == nil && DeviceProfile.current == .iPad1 }
+    var canChooseUSBCharger: Bool { usbmux.session == nil && profile.canChooseUSBCharger }
     func setHighPowerUSB(_ on: Bool) {
         guard bridgeCall("qemu_ios_ui_usb_charger", as: BoolControl.self)?(on) == true else { return }
         highPowerUSB = on
@@ -776,7 +795,7 @@ final class EmulatorController {
     }
 
     private(set) var compassHeading: Int?
-    var hasCompass: Bool { DeviceProfile.current == .iPad1 }
+    var hasCompass: Bool { profile.hasCompass }
     func setCompassHeading(_ degrees: Int) {
         guard bridgeCall("qemu_ios_ui_compass", as: IntControl.self)?(Int32(degrees)) == true else { return }
         compassHeading = degrees
@@ -842,7 +861,7 @@ final class EmulatorController {
     /// Home on the left (4), then upside down (2), then Home right (3).
     @discardableResult
     private func setAccelerometer(for degrees: Int) -> Bool {
-        guard !hasGuestTools, let value = [0: 1, 90: 4, 180: 2, 270: 3][degrees] else { return false }
+        guard profile.orientationSource == .springBoard, let value = [0: 1, 90: 4, 180: 2, 270: 3][degrees] else { return false }
         return bridgeCall("qemu_ios_ui_orientation", as: IntControl.self)?(Int32(value)) == true
     }
 
@@ -1321,7 +1340,7 @@ final class EmulatorController {
     /// on A restored onto B. That is the stale-RAM-over-different-flash
     /// corruption this file's own comments spend paragraphs avoiding.
     private var imageKey: String {
-        if DeviceProfile.current == .iPad1 {
+        if profile == .iPad1 {
             var hash: UInt64 = 5381
             for byte in options.ipad1NAND.utf8 { hash = hash &* 33 &+ UInt64(byte) }
             return "ipad1-\((options.ipad1NAND as NSString).lastPathComponent)-\(String(hash, radix: 36))"
@@ -1341,7 +1360,7 @@ final class EmulatorController {
     private func snapshotIdentity() throws -> DeviceStateStorage.SnapshotIdentity {
         guard let build = qemu_ios_build_id() else { throw CocoaError(.fileReadCorruptFile) }
         let nand: String
-        if DeviceProfile.current == .iPad1 {
+        if profile == .iPad1 {
             nand = try DeviceStateStorage.developmentImageIdentity(
                 at: URL(fileURLWithPath: options.ipad1NAND), key: imageKey)
         } else if let packedImage {
@@ -1609,7 +1628,7 @@ final class EmulatorController {
             }
             let confirmed = { !self.storageFailed && qemu_ios_ui_guest_shutdown_confirmed() }
             let stopped = { self.storageFailed || self.isDead }
-            if DeviceProfile.current == .iPad1 {
+            if profile == .iPad1 {
                 // No guest tools on a stock iPad: the machine turns
                 // system_powerdown into the user's power-off gesture (hold
                 // Lock, slide), and the D1815 power-off write confirms it.
@@ -1966,7 +1985,7 @@ final class EmulatorController {
         guard let session = usbmux.session else {
             throw DeviceToolsError.failed("The device is not reachable over USB yet.")
         }
-        return SpringBoardIcons(clientSocket: session.clientSocket)
+        return SpringBoardIcons(clientSocket: session.clientSocket, profile: profile)
     }
 
     func homeScreenOrder() async throws -> [String] { try await springBoard().order() }

@@ -26,6 +26,7 @@ nonisolated func logEvent(_ s:String){}
 enum DeviceStateStorage {
 '''+wait+'}\n'+helpers+r'''
 @MainActor final class Controller {
+ let profile = DeviceProfile.iPodTouch2G
  enum State{case notStarted,booting,running,paused,snapshotting,poweredOff}
  var state=State.booting,isDead=false,storageFailed=false,shuttingDown=false,canManageApps=true
  var isPoweredOff:Bool{state == .poweredOff}

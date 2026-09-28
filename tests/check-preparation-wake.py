@@ -22,6 +22,7 @@ struct DeviceToolsError: Error {static func failed(_ s:String)->Self{Self()}}
  func updateMediaComponents() async throws -> Bool {updates+=1;return false}
 }
 @MainActor final class Controller {
+ let profile = DeviceProfile.iPodTouch2G
  struct Options{var appsync=true};enum State{case running,booting,poweredOff};enum Notice{case preparation}
  var options=Options(),state=State.running
  var hasGuestTools=true

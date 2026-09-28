@@ -17,14 +17,14 @@ struct InstalledApp: Identifiable, Sendable {
     let version: String
 }
 
-enum AppLaunchError: LocalizedError {
+enum AppLaunchError: Error {
     case locked, unavailable, failed
 
-    var errorDescription: String? {
+    func message(for profile: DeviceProfile) -> String {
         switch self {
-        case .locked: "Unlock the \(DeviceProfile.current.shortName), then try again."
-        case .unavailable: "Wait for the \(DeviceProfile.current.shortName) to finish starting, then try again."
-        case .failed: "Try opening the app on the \(DeviceProfile.current.shortName)."
+        case .locked: "Unlock the \(profile.shortName), then try again."
+        case .unavailable: "Wait for the \(profile.shortName) to finish starting, then try again."
+        case .failed: "Try opening the app on the \(profile.shortName)."
         }
     }
 }
@@ -662,7 +662,7 @@ struct DeviceTools: Sendable {
     }
 
     func configureWebProxy(enabled: Bool) async throws {
-        if DeviceProfile.current == .iPad1 { return try await configureIPadWebProxy(enabled: enabled) }
+        if !guestShell { return try await configureIPadWebProxy(enabled: enabled) }
         guard let helper = Bundled.resolve("itproxy", fallbacks: [
             "\(filesRoot)/../qemu-ios/contrib/it-proxy/itproxy"
         ]) else { throw DeviceToolsError.toolMissing("itproxy") }

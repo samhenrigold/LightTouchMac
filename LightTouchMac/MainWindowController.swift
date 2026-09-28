@@ -39,7 +39,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var filesWindow: DeviceFilesWindowController?
     private weak var proxySettingsEditor: ProxySettingsView?
     private var filesVC: DeviceFilesViewController? { filesWindow?.browser }
-    private lazy var canvasCapture = CanvasCapture(view: deviceVC.screen)
+    private lazy var canvasCapture = CanvasCapture(view: deviceVC.screen, profile: emulator.profile)
     private var screenshotBusy = false
     private var modifierMonitor: Any?
     private var captureKeyMonitor: Any?
@@ -82,7 +82,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         split.addSplitViewItem(inspectorItem)
         
         let window = NSWindow(contentViewController: split)
-        window.title = DeviceProfile.current.displayName
+        window.title = emulator.profile.displayName
         // .fullSizeContentView is what makes the inspector run the FULL HEIGHT
         // of the window rather than starting below the toolbar (WWDC23 "inspectors
         // use the full height of the window when the full size content view mask
@@ -90,8 +90,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // inspector's material still stops at it, which is the giveaway that the
         // pane is sitting under the titlebar instead of behind it.
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window.setContentSize(DeviceProfile.current == .iPad1 ? NSSize(width: 1100, height: 760)
-                                                              : NSSize(width: 720, height: 640))
+        window.setContentSize(emulator.profile == .iPad1 ? NSSize(width: 1100, height: 760)
+                                                         : NSSize(width: 720, height: 640))
         window.contentMinSize = NSSize(width: 360, height: 380)
         WindowRestorationPolicy.configure(window)
         window.center()
@@ -250,7 +250,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             startupStatus.onPrimary = { [weak self] in self?.showDeviceLogs(nil) }
         }
         let elapsed = Int(Date().timeIntervalSince(startupBegan))
-        startupStatus.update(title: emulator.isErasing ? "Erasing \(DeviceProfile.current.shortName)…" : emulator.preparationStatus,
+        startupStatus.update(title: emulator.isErasing ? "Erasing \(emulator.profile.shortName)…" : emulator.preparationStatus,
                              detail: elapsed >= 90 ? "Check Device Logs." : "\(elapsed)s",
                              busy: true, primary: elapsed >= 90 ? "Device Logs" : nil)
         if startupTask == nil {
@@ -307,7 +307,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // A refused boot says why and offers the remedy; anything else relaunches.
         let refused = emulator.baseImageMismatch
         let label = NSTextField(wrappingLabelWithString: refused
-            ? "This \(DeviceProfile.current.shortName)'s data was made with an older system image. Erase it to start fresh."
+            ? "This \(emulator.profile.shortName)'s data was made with an older system image. Erase it to start fresh."
             : "The emulator stopped.")
         label.font = .systemFont(ofSize: 15, weight: .medium)
         label.textColor = .white
@@ -405,7 +405,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             item.menu = MainMenuBuilder.motionMenu(target: self)
             return item
         case .files:
-            return button(id, "\(DeviceProfile.current.shortName) Files", "folder", #selector(toggleFiles(_:)), "Show \(DeviceProfile.current.shortName) Files (⌘2)")
+            return button(id, "\(emulator.profile.shortName) Files", "folder", #selector(toggleFiles(_:)), "Show \(emulator.profile.shortName) Files (⌘2)")
         case .home:
             return button(id, "Home Screen", "square.grid.3x3.fill", #selector(deviceHome(_:)), "Home Screen (⇧⌘H)")
         case .lock:
@@ -587,7 +587,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.messageText = "Proxy"
         alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
-        let editor = ProxySettingsView(configuration: emulator.webProxy, status: emulator.webProxyStatus)
+        let editor = ProxySettingsView(configuration: emulator.webProxy, status: emulator.webProxyStatus, profile: emulator.profile)
         proxySettingsEditor = editor
         editor.onResize = { [weak alert] in alert?.layout() }
         alert.accessoryView = editor
@@ -603,7 +603,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc func toggleFiles(_ sender: Any?) {
         if filesWindow == nil {
-            let files = DeviceFilesWindowController()
+            let files = DeviceFilesWindowController(profile: emulator.profile)
             filesWindow = files
             files.browser.services = (emulator.canReachDevice ? emulator.usbmuxSession : nil).map { DeviceServices(clientSocket: $0) }
             files.browser.onActivityChange = { [weak self] in self?.refreshFileStatus() }
@@ -711,7 +711,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = "Erase all content and settings?"
-        alert.informativeText = "This permanently removes all apps, settings, and saved state from this \(DeviceProfile.current.shortName). "
+        alert.informativeText = "This permanently removes all apps, settings, and saved state from this \(emulator.profile.shortName). "
             + (AppInstaller.hasPendingWork ? "Installs in progress are cancelled. " : "")
             + "Light Touch closes after erasing it. This cannot be undone."
         alert.addButton(withTitle: "Erase")
@@ -740,7 +740,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let panel = NSOpenPanel()
         panel.allowedContentTypes = PreparedMedia.extensions.sorted().compactMap { UTType(filenameExtension: $0) }
         panel.allowsMultipleSelection = true
-        panel.message = "Choose photos, audio files or videos to add to the \(DeviceProfile.current.shortName)."
+        panel.message = "Choose photos, audio files or videos to add to the \(emulator.profile.shortName)."
         panel.beginSheetModal(for: window!) { [weak self] response in
             guard let self, response == .OK else { return }
             for url in panel.urls {
@@ -885,7 +885,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc func showCaptureOptions(_ sender: Any?) {
         if captureOptionsWindow == nil {
-            let editor = CaptureOptionsView(preferences: capturePreferences)
+            let editor = CaptureOptionsView(preferences: capturePreferences, profile: emulator.profile)
             editor.onChange = { [weak self] in self?.validateCaptureToolbar() }
             editor.layoutSubtreeIfNeeded()
             let panel = NSWindow(contentRect: NSRect(origin: .zero, size: editor.fittingSize), styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -954,7 +954,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let seconds = capturePreferences.reminderAfterDuration
         Task { [weak self] in
             guard let self, recording.id == id, recording.canStop, !NSApp.isActive else { return }
-            await CaptureNotifications.shared.scheduleReminder(after: TimeInterval(seconds), recordingID: id)
+            await CaptureNotifications.shared.scheduleReminder(after: TimeInterval(seconds), recordingID: id, profile: emulator.profile)
         }
     }
 

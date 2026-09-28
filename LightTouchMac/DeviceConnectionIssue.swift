@@ -8,7 +8,7 @@ nonisolated struct DeviceConnectionIssue: Equatable, Sendable {
     let blocksCommands: Bool
     let reconnectManagement: Bool
 
-    init?(error: Error, operation: String) {
+    init?(error: Error, operation: String, profile: DeviceProfile) {
         guard !(error is CancellationError) else { return nil }
         detail = "\(operation): \(error.localizedDescription)"
         switch error {
@@ -21,13 +21,13 @@ nonisolated struct DeviceConnectionIssue: Equatable, Sendable {
             blocksCommands = true
             reconnectManagement = false
         case DeviceError.lockdown(-17), DeviceError.lockdown(-35):
-            summary = "Unlock the \(DeviceProfile.current.shortName) to connect"
+            summary = "Unlock the \(profile.shortName) to connect"
             blocksCommands = true
             reconnectManagement = false
         case DeviceError.lockdown(-4), DeviceError.lockdown(-18), DeviceError.lockdown(-19),
              DeviceError.lockdown(-20), DeviceError.lockdown(-21), DeviceError.lockdown(-29),
              DeviceError.lockdown(-30), DeviceError.lockdown(-31):
-            summary = "Couldn’t pair with the \(DeviceProfile.current.shortName)"
+            summary = "Couldn’t pair with the \(profile.shortName)"
             blocksCommands = true
             reconnectManagement = false
         case DeviceError.lockdown(-26), DeviceError.lockdown(-27):
@@ -35,7 +35,7 @@ nonisolated struct DeviceConnectionIssue: Equatable, Sendable {
             blocksCommands = true
             reconnectManagement = false
         case DeviceError.lockdown(-32), DeviceError.lockdown(-33):
-            summary = "\(DeviceProfile.current.shortName) activation unavailable"
+            summary = "\(profile.shortName) activation unavailable"
             blocksCommands = true
             reconnectManagement = false
         case DeviceError.notAttached:

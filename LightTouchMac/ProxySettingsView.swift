@@ -12,7 +12,10 @@ final class ProxySettingsView: NSView {
     private let stack = NSStackView()
     var onResize: (() -> Void)?
 
-    init(configuration: WebProxyConfiguration, status: WebProxyStatus) {
+    private let profile: DeviceProfile
+
+    init(configuration: WebProxyConfiguration, status: WebProxyStatus, profile: DeviceProfile) {
+        self.profile = profile
         super.init(frame: .zero)
         enabled.state = configuration.mode == .off ? .off : .on
         enabled.target = self
@@ -85,9 +88,9 @@ final class ProxySettingsView: NSView {
     }
 
     func updateStatus(_ status: WebProxyStatus) {
-        statusLabel.stringValue = status.message ?? ""
+        statusLabel.stringValue = status.message(for: profile) ?? ""
         statusLabel.textColor = status == .failed ? .labelColor : .secondaryLabelColor
-        statusRow.isHidden = status.message == nil
+        statusRow.isHidden = status.message(for: profile) == nil
         progress.isHidden = !status.isWorking
         if status.isWorking { progress.startAnimation(nil) }
         else { progress.stopAnimation(nil) }

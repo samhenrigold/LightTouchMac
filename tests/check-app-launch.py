@@ -35,6 +35,7 @@ func logEvent(_ message: String) { }
 ''' + method(tools, '    func launchApp(_ bundleID: String) async throws {') + r'''
 }
 @MainActor final class EmulatorController {
+ let profile = DeviceProfile.iPodTouch2G
  var acceptsInput = true, isSleeping = false
  var wakes = 0
  let deviceTools = DeviceTools()

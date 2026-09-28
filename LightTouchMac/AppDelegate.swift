@@ -6,6 +6,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     
     private var windowController: MainWindowController?
     private var emulator: EmulatorController?
+    /// The one place the board is chosen: LIGHTTOUCH_DEVICE=ipad1, else the iPod.
+    private let profile: DeviceProfile =
+        ProcessInfo.processInfo.environment["LIGHTTOUCH_DEVICE"] == "ipad1" ? .iPad1 : .iPodTouch2G
     private var helpController: NSWindowController?
     private var awaitingTermination = false
     private var terminationBackstop: Task<Void, Never>?
@@ -104,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSWindow.allowsAutomaticWindowTabbing = false
         NSApp.disableRelaunchOnLogin()
 
-        MainMenuBuilder.install()
+        MainMenuBuilder.install(profile: profile)
         #if DEBUG
         SpringBoardIcons.selfCheck()
         #endif
@@ -127,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         // Report missing device files up front. Booting without them dies deep
         // inside the dylib on the QEMU thread with no error the app can show.
-        let missing = options.missingAssets()
+        let missing = options.missingAssets(for: profile)
         if !missing.isEmpty {
             let alert = NSAlert()
             alert.alertStyle = .critical
@@ -145,9 +148,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return
         }
 
-        NetworkAccessPreference.configure(&options)
+        NetworkAccessPreference.configure(&options, profile: profile)
 
-        let emulator = EmulatorController(options: options)
+        let emulator = EmulatorController(options: options, profile: profile)
         // Start before showing the window: the inspector checks the usbmux
         // session in its viewDidLoad, which runs during showWindow.
         emulator.start()
