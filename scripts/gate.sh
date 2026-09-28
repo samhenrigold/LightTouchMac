@@ -98,7 +98,15 @@ suite() {   # NAME CMD...
 if [ "$TIER" = --full ]; then
     ipad=(); [ -d "$LTM_IPAD_DEVICE" ] && ipad=(--ipad-device "$LTM_IPAD_DEVICE")
     if [ -f "$LTM_QEMU_DYLIB" ]; then
-        suite "tests/check-helper-boot.py" python3 tests/check-helper-boot.py "${ipad[@]}" --dylib "$LTM_QEMU_DYLIB"
+        # check-helper-boot's own iPad recipe is the direct-kernel bring-up (kboot.bin + nand/); a device that
+        # boots through its iBoot (iBoot.bin, nor.bin) has no kboot.bin, so its iPad cases run only for a kboot
+        # device and are otherwise skipped by the check itself (check-sessions boots the iBoot device below).
+        if [ -f "$LTM_IPAD_DEVICE/kboot.bin" ]; then
+            suite "tests/check-helper-boot.py" python3 tests/check-helper-boot.py "${ipad[@]}" --dylib "$LTM_QEMU_DYLIB"
+        else
+            suite "tests/check-helper-boot.py" python3 tests/check-helper-boot.py --dylib "$LTM_QEMU_DYLIB"
+            skip "tests/check-helper-boot.py iPad cases" "$LTM_IPAD_DEVICE has no kboot.bin: the check's iPad recipe is the kboot bring-up, not the device's iBoot"
+        fi
         if [ ${#ipad[@]} -gt 0 ]; then
             suite "tests/check-sessions.py --ipad-device" python3 tests/check-sessions.py "${ipad[@]}" --dylib "$LTM_QEMU_DYLIB"
         else

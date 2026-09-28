@@ -123,7 +123,9 @@ enum K48Oracle {
             }
             let ta = try tree(a), tb = try tree(b)
             #expect(ta == tb, "\(Set(ta.map { "\($0) \($1)" }).symmetricDifference(tb.map { "\($0) \($1)" }).sorted().prefix(10))")
-            #expect(ta["usr/local/lighttouch/state"] != nil && ta[SystemEdits.daemons + "/com.qemu.it-pbd.plist"] == nil)
+            // The seed leaves the baked it-pbd job alone since package serial 2 folded the pasteboard into it_agent
+            // (qemu-ios ipad1 136cc59843); the tree comparison above already holds both seeds to the same jobs.
+            #expect(ta["usr/local/lighttouch/state"] != nil)
         }
     }
 
