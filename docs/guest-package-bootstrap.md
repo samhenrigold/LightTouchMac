@@ -144,3 +144,40 @@ The shim is bound to the firmware's dispatch table and must be present before Sp
 - the 2.x link constraints, and CommonCrypto availability there;
 - any guest process can read the offer or spoof a REPORT, which affects UI status only;
 - about 5 MB of system-volume space.
+
+## P5, the app (2026-09-28)
+
+- **The itpacks ship in the flat `Resources/guest-tools`** (build-guest-tools.sh builds them with qemu-ios
+  `contrib/guest-package/build.sh` into the iPad set), not `Resources/guest/`: firmwarekit seeds from the
+  same directory. Development builds read `LTM_GUEST_PACKAGE` or a qemu-ios checkout's `build/guest-package`.
+- **Each boot composes `Devices/<uuid>/work/guest-offer/`** (`GuestPackage.compose`, byte-identical to
+  mkpkg.py `offer`; tests/check-guest-package.py uses it as the oracle) and passes `guest-package=`. The
+  family is the itpack's for the device's board and build; stubs, other builds and a guest-package
+  protocol outside the manifest's `requires.host` get no offer. With a device.lock.json, hooks are dropped
+  as the seed did: another GL table than `guest_package.gli`, or a target missing from `guest_package.hooks`.
+  The property is passed only when the helper's dylib exports the report (status slot
+  `guestPackageSupported`), since an older dylib rejects it.
+- **The helper publishes the report** (`qemu_ios_guest_package_report`, `qemu_ios_gles_protocol`, both
+  optional dlsyms) as status slots `guestPackageReported, guestPackage, guestPackageState, glesProtocol,
+  glesSerial`; layoutVersion 2. The `guest-package-status` text (prev/good/tries/seed) isn't read: the seed
+  comes from the lock.
+- **device.json `guest {seed, active, lastGood, bad[], builtIn}`.** `active` is every report's serial.
+  Verdicts (`GuestPackage.verdict`): healthy for 10 s with a report is `good` (the iPod: uiReady and the
+  agent alive; the iPad: uiReady and lockdown, because the dylib exports no pasteboard-agent status); no
+  healthy session within 300 s is `bad`, except for the seed and the last good serial. No report after
+  30 s of health is **legacy baked tools**. A restored snapshot never re-runs the loader, so it judges
+  nothing; it shows "out of date" when `active` is older than the bundled serial.
+- **UI:** the status line says "Guest tools out of date — restart to update" (older than the bundled
+  serial, a failed install, or a GL wire outside the host's range), "Previous guest tools" (the loader
+  reverted or refused) or "Built-in guest tools". Device ▸ Restart with Previous / Built-in / Latest
+  Guest Tools records the choice (`bad` += the running serial; `builtIn` = the bundled serial, offered
+  as `serial 0` until a newer bundle; or clear both), discards the snapshot, powers off cleanly and starts
+  a fresh helper. Not a guest reset: after `system_reset` a fresh 7E18 once stayed on the Apple logo.
+- **The app no longer touches packaged components.** `updateMediaComponents` (GuestServices) returns at
+  once when a report arrived or the agent's own job runs it from `/usr/local/lighttouch/`; on a legacy
+  image it upgrades the agent at the path its job names. Media helpers run from `current/bin` when packaged.
+  The `.lt-guest-tools-v2` marker was never read by this branch; its stand-in (`nand` contains
+  "ultimate") went with the script installer in P2.
+- **Verified headless** (tests/check-sessions.py --guest): on a fresh no-shell 7E18 (seed 1, P4) the
+  loader installed the bundled serial 2 (R_INSTALLED), judged good; after `verdict bad 2` and a fresh
+  helper it reverted to 1 (R_REVERTED_BAD). The shipping image (no loader) reports nothing: legacy.

@@ -317,7 +317,7 @@ What each stage does:
 - **native:** usbmuxd.
 - **qemu:** configure once, then ninja.
 - **dylib:** `make-dylib-macos.sh`.
-- **guest:** the armv6 helpers, and (from a checkout with `contrib/ipad1-guest`) the iPad helpers firmwarekit reads, built by `contrib/ipad1-guest`, `contrib/appsync` and `contrib/ipad1-gles` `build.sh` from a source copy into `guest/ipad-guest-tools` (ldid-signed; `IPAD_SDK` picks the 3.2 SDK). package.sh ships them flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without them. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed.
+- **guest:** the armv6 helpers, and (from a checkout with `contrib/ipad1-guest`) the iPad helpers firmwarekit reads, built by `contrib/ipad1-guest`, `contrib/appsync` and `contrib/ipad1-gles` `build.sh` from a source copy into `guest/ipad-guest-tools` (ldid-signed; `IPAD_SDK` picks the 3.2 SDK). package.sh ships them flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without them. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed. The guest packages (`armv6.itpack`, `armv7.itpack`, qemu-ios `contrib/guest-package/build.sh`) join that directory; the app composes each boot's offer from them (guest-package-bootstrap.md, P5).
 - **app:** xcodebuild Release (it embeds `LightTouchDevice` and `firmware-catalog.json`). This stage also runs `swift build -c release` for `Packages/FirmwareKit`. If that builds, package.sh ships it as `Contents/MacOS/firmwarekit` (hardened runtime, no entitlements); if not, the app ships without it.
 - **package:** a fresh copy of the product, `build-inputs.json` and package.sh. Notarization is not done here.
 - **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
@@ -490,3 +490,15 @@ The app publishes STAGING_DIR by rename.
 - **iPad power-off confirmation: 45 s** in both the app's quit path and the helper's parent-death path (4.2.1 took 16–25 s and once passed 30 s, leaving the FTL unclosed). `cleanShutdownBudget` stays 60 s and covers 5 + 45.
 - **For W1**: `DeviceLink` keeps the reaped pid, so `terminate()`/`kill()` after death could signal a reused pid; DeviceProcess guards it, but the link should zero its pid on reap.
 - **A kill -9 right after an install can lose it** (no guest sync): expected, as in powerdown-fixed; the iPad has no guest shell to sync through.
+
+**Guest services without SSH (qemu-ios guest-services-plan P2), 2026-09-28** (`7f73aad`):
+- Every guest command is an agent op (`GuestServices.swift`): spawn with no shell, put/get/chown/unlink,
+  sync, launch/frontmost/lockstatus, orientation, dlicon, halt. Capabilities come from the v2 ping; a v1
+  agent (images with freeze's shell) gets the missing ops through its `exec`, and its image is upgraded to
+  the bundled v2 agent by `updateMediaComponents` (no SSH).
+- The SSH transport, the script installer, itorient-over-SSH and Open Terminal are gone; package.sh no
+  longer ships it-ssh-terminal.sh, sbdlicon, ithalt, itstatus, itproxy, ittrust or itorient. The web
+  proxy on both boards is the image's PAC plus the MCInstall profile. A legacy image without a baked PAC
+  keeps whatever proxy settings itproxy last wrote.
+- The helper's SIGTERM path no longer resumes a VM whose guest already powered off (a quit after Power
+  Off or after the app's halt aborted QEMU: "invalid runstate transition: 'shutdown' -> 'running'").
