@@ -180,7 +180,9 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     /// removes Devices/<id> whole.
     func publish(lock lockName: String) throws -> DeviceInstance {
         let fm = FileManager.default
-        for name in ["kboot.bin", "nand", "identity.json", lockName] where !fm.fileExists(atPath: staging.appendingPathComponent(name).path) {
+        let profile = request.entry.profile ?? .iPad1
+        for name in [profile.preparedBootFile, "nand", "identity.json", lockName] + profile.preparedFiles
+            where !fm.fileExists(atPath: staging.appendingPathComponent(name).path) {
             throw FirmwareError.failed("The preparer’s output has no \(name).")
         }
         let lockURL = staging.appendingPathComponent(lockName)

@@ -20,7 +20,7 @@ import Foundation
         let catalog = try FirmwareCatalog.load(from: URL(fileURLWithPath: CommandLine.arguments[1]))
         func entry(_ id: String) -> FirmwareCatalog.Entry { catalog.entry(id: id)! }
         let iPod = entry("n72ap-7E18"), iPad = entry("k48ap-7B500"), iPad32 = entry("k48ap-7B367")
-        let iPad4 = entry("k48ap-8C148"), iPod4 = entry("n72ap-8C148")
+        let iPad4 = entry("k48ap-8C148"), iPod4 = entry("n72ap-8C148"), iPod2 = entry("n72ap-5F138")
         let id = UUID()
         func row(_ e: FirmwareCatalog.Entry, instance: UUID? = nil, session: SessionPhase? = nil,
                  job: FirmwareJob? = nil, failure: String? = nil) -> DeviceRow {
@@ -105,10 +105,10 @@ import Foundation
         precondition(r.primaryTitle == "Try Again" && r.allows(.start, canDownload: false))
 
         // Unavailable entries are dimmed and offer nothing but their reason.
-        r = row(iPod4)
+        r = row(iPod2)
         precondition(r.state == .unavailable(.comingSoon) && r.isDimmed && r.primaryAction == nil)
         precondition(allowed(r, canDownload: true).isEmpty && r.stateDescription == "Coming Soon")
-        precondition(row(iPod4, job: .downloading(fraction: 0.5)).state == .unavailable(.comingSoon))
+        precondition(row(iPod2, job: .downloading(fraction: 0.5)).state == .unavailable(.comingSoon))
         var beta = iPad
         beta.status = .userIPSW
         beta.source.url = nil
@@ -121,6 +121,9 @@ import Foundation
         // Experimental carries a tag and a note.
         r = row(iPad4)
         precondition(r.isExperimental && iPad4.statusNote != nil)
+        // iPod 4.2.1 downloads and prepares like the iPads.
+        r = row(iPod4)
+        precondition(r.isExperimental && iPod4.statusNote != nil && r.primaryAction == .downloadAndPrepare)
         print("PASS: row states, accessories, primary buttons and commands for every catalog status")
     }
 }

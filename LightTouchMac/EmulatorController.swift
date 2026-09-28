@@ -312,7 +312,7 @@ final class EmulatorController {
             if instance.base.kind == .prepared {
                 let base = instance.paths.base
                 let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: instance.paths.writableNOR,
-                                                         boot: "iBoot.bin", also: ["nor.bin", "gid-blobs.bin"])
+                                                         boot: profile.preparedBootFile, also: profile.preparedFiles)
                 guard let rw = files.writableNOR else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
                 guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
                     baseImageMismatch = true
@@ -361,7 +361,8 @@ final class EmulatorController {
             let identity: String
             if instance.base.kind == .prepared {
                 let files = try BootRecipe.preparedFiles(base: instance.paths.base, overlay: overlay,
-                                                         writableNOR: instance.paths.writableNOR)
+                                                         writableNOR: instance.paths.writableNOR, boot: profile.preparedBootFile,
+                                                         also: profile.preparedFiles)
                 (kboot, nand, writableNOR, dieID) = (files.boot.path, files.nand.path, files.writableNOR?.path, instance.identity?.dieID)
                 machineOptions = BootRecipe.lockMachine(instance.paths.base.appendingPathComponent("device.lock.json"))
                 identity = instance.storage.key

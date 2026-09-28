@@ -231,6 +231,12 @@ case "unit":
     expect(device4.storage.writableNOR == "Devices/\(device4.id.uuidString)/nor.bin"
            && fm.fileExists(atPath: DeviceInstance.directory(device4.id, state: state).appendingPathComponent("base/nor.bin").path), "nor.bin")
 
+    // An iPod base has iBoot.bin, nor.bin and gid-blobs.bin instead of kboot.bin.
+    run = prepare(catalog.entry(id: "n72ap-8C148")!, state: state, cache: cache, mode: "ok")
+    guard case let .published(pod)? = run.events.last else { expect(false, "n72ap-8C148: \(run.events)"); exit(1) }
+    expect(pod.board == "n72ap" && pod.storage.writableNOR == "Devices/\(pod.id.uuidString)/nor.bin"
+           && !fm.fileExists(atPath: DeviceInstance.directory(pod.id, state: state).appendingPathComponent("base/kboot.bin").path), "iPod publish")
+
     // Failures: an error event, a crash, output without a lock. Nothing left, nothing published.
     let before = Set(devices())
     run = prepare(iPad32, state: state, cache: cache, mode: "error")

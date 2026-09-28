@@ -49,7 +49,11 @@ os.makedirs(os.path.join(out, "nand"), exist_ok=True)
 with open(os.path.join(out, "nand", "store"), "wb") as f:   # 1 GiB apparent, a few KiB allocated
     f.write(b"NAND")
     f.truncate(1 << 30)
-open(os.path.join(out, "kboot.bin"), "wb").write(b"KBOOT")
+if entry["board"] == "n72ap":   # N72Recipe: the direct iBoot, NOR and KBAG table, no kboot.bin
+    for name in ("iBoot.bin", "nor.bin", "gid-blobs.bin"):
+        open(os.path.join(out, name), "wb").write(name.encode())
+else:
+    open(os.path.join(out, "kboot.bin"), "wb").write(b"KBOOT")
 if (entry.get("recipe") or {}).get("options", {}).get("writable_nor"):
     open(os.path.join(out, "nor.bin"), "wb").write(b"\xff" * 4096)
 os.chmod(os.path.join(out, "nand", "store"), 0o444)

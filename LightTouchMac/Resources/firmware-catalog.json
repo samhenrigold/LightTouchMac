@@ -38,7 +38,8 @@
   "product_type": "iPod2,1",
   "version": "4.2.1",
   "build": "8C148",
-  "status": "coming_soon",
+  "status": "experimental",
+  "status_note": "iOS 4.2.1 on iPod touch is experimental.",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/061-9855.20101122.Lrft6/iPod2,1_4.2.1_8C148_Restore.ipsw", "sha1": "b9efddc7bb4350c237a8d3846af61bbfc8a2f647", "bytes": 363553480},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "75155f29cafe8dfdfdcf6fbf107664c1", "key": "6788b9096c321f1f3563f546e1809676"},
@@ -60,8 +61,9 @@
    "rootfs": {"file": "038-0014-002.dmg", "key": "519ec112b4af0a65eab6ea65b222c5b7f605ce52ad9195640e3309de58dd54ab0a0c9607"},
    "UpdateRamDisk": {"file": "038-0050-002.dmg", "iv": "d67c8ecae9d5278eb61766370fc37c29", "key": "822296fc0d914b5665c6934be21b763e"}
   },
+  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
-  "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
+  "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
  {
   "id": "n72ap-5F138",

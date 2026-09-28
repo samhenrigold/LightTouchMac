@@ -7,7 +7,8 @@
 //   session-driver CONFIG.json
 //
 // config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase, guest?}
-// With `guest` it runs the guest-services scenario instead (guest.swift).
+// With `guest` it runs the guest-services scenario instead (guest.swift); with `single`, one prepared
+// device (single.swift). `frameworks` is where libimobiledevice is loaded from (default Homebrew's).
 
 import Foundation
 import IOSurface
@@ -16,6 +17,8 @@ struct Config: Decodable {
     var helper: String, requirement: String, usbmuxd: String, ipa: String, bundleID: String
     var work: String, files: String, ipodNAND: String, ipadBase: String
     var guest: GuestConfig?
+    var single: SingleConfig?
+    var frameworks: String?
 }
 
 let t0 = Date()
@@ -31,7 +34,7 @@ func fail(_ why: String) -> Never { emit("fail", ["why": why]); exit(1) }
 
 // App stubs the compiled sources reference.
 nonisolated enum Bundled {
-    static var frameworksDirectory: String? { "/opt/homebrew/lib" }
+    static var frameworksDirectory: String? { config.frameworks ?? "/opt/homebrew/lib" }
     static var logsDirectory: URL { URL(fileURLWithPath: config.work) }
 }
 struct InstalledApp: Sendable { let id, name, version: String }
@@ -361,6 +364,8 @@ func checkPreparedFiles() throws {
     exit(0)
 }
 
-Task { @MainActor in if let guest = config.guest { await runGuest(guest) } else { await run() } }
+Task { @MainActor in
+    if let guest = config.guest { await runGuest(guest) } else if let single = config.single { await runSingle(single) } else { await run() }
+}
 DispatchQueue.main.asyncAfter(deadline: .now() + 560) { fail("driver timed out") }
 CFRunLoopRun()

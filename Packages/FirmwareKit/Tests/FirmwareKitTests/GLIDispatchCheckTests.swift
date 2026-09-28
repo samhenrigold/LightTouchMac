@@ -6,6 +6,8 @@ struct GLIDispatchCheckTests {
     static let docs = Fixtures.qemu.appendingPathComponent("docs/ipad1")
     static let base = docs.appendingPathComponent("gli-dispatch-7B500.tsv")
     static let gles = Fixtures.qemu.appendingPathComponent("contrib/ipad1-gles")
+    static let ipodDocs = Fixtures.qemu.appendingPathComponent("docs/ipod")
+    static let wire = ipodDocs.appendingPathComponent("gli-dispatch-7E18.tsv")
     static var tsvs: [URL] {
         ((try? FileManager.default.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.lastPathComponent.wholeMatch(of: /gli-dispatch-\w+\.tsv/) != nil }
@@ -59,7 +61,7 @@ struct GLIDispatchCheckTests {
 
         // generated TSV: identical to glitsv.py's
         let t0 = Date()
-        let table = try GLIDispatch.generate(sharedCache: cache, build: label, base: try .init(contentsOf: Self.base))
+        let table = try GLIDispatch.generate(sharedCache: cache, build: label, base: try .init(contentsOf: Self.base), wire: try .init(contentsOf: Self.wire))
         let swiftTime = Date().timeIntervalSince(t0)
         let out = dir.appendingPathComponent("py.tsv")
         let t1 = Date()
@@ -74,5 +76,27 @@ struct GLIDispatchCheckTests {
             let shipped = try GLIDispatch.Table(contentsOf: Self.base)
             #expect(GLIDispatch.compatibility(table, shim: shipped) == .compatible && table.exports == shipped.exports)
         }
+    }
+
+    /// The iPod's armv6 tables (glitsv.py's trampoline forms: ldr pc as a call or tail call, blxne, ip base, the
+    /// 3.1.3 slot fallback): generated from each firmware's cache, equal to glitsv.py and to docs/ipod's table.
+    @Test(arguments: [("7E18", "iOS 3.1.3 (7E18)", "7E18"), ("8C148-ipod", "iOS 4.2.1 (8C148)", "8C148")])
+    func ipodMatchesPython(fixture: String, label: String, build: String) throws {
+        guard Fixtures.hasRootfs(fixture), Fixtures.hasPython, Fixtures.exists(Self.wire) else { return }
+        let dir = try Fixtures.tempDir("gli-ipod")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = try Fixtures.cache(fixture, to: dir)
+        let cache = try DyldSharedCache(contentsOf: path)
+        let table = try GLIDispatch.generate(sharedCache: cache, build: label, base: try .init(contentsOf: Self.base), wire: try .init(contentsOf: Self.wire))
+        let out = dir.appendingPathComponent("py.tsv")
+        let g = try Fixtures.run(["python3", Self.gles.appendingPathComponent("glitsv.py").path, path.path, label, out.path])
+        #expect(g.status == 0, "\(g.err)")
+        #expect(table.tsv == (try String(contentsOf: out, encoding: .utf8)))
+        #expect(table.tsv == (try String(contentsOf: Self.ipodDocs.appendingPathComponent("gli-dispatch-\(build).tsv"), encoding: .utf8)))
+        #expect(try GLIDispatch.verify(cache, tsv: table) == nil)
+        let tsvs = try FileManager.default.contentsOfDirectory(at: Self.ipodDocs, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.wholeMatch(of: /gli-dispatch-\w+\.tsv/) != nil }
+        #expect(try GLIDispatch.engine(cache: cache.data, cachePath: path.path, tsvs: tsvs).tsv?.lastPathComponent == "gli-dispatch-\(build).tsv")
+        print("\(fixture): \(table.rows.count) slots, \(table.exports.count) exports")
     }
 }

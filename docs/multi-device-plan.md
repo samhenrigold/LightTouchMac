@@ -299,7 +299,7 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 It needs these trees and SDKs:
 - `~/Developer/qemu-ios-ipad1` (the `ipad1` branch) as `--qemu-ios`, with a private `--qemu-build` dir inside it. The default is `build-release-native`; the 09-28 build reused `build-w1-native`. Never use `build/`.
 - A native root to reuse as `--native-deps`, e.g. `~/Developer/LightTouchMac/.build/releases/release-20260926/native`. Its prefix and static deps take longer than 10 minutes to build, so a fresh one comes from a one-step build.
-- `~/Developer/usbmuxd-qemu/usbmuxd` (branch `qemu-backend`). The native stage rebuilds usbmuxd from it over the reused prefix, and fails unless libslirp (the iPad's USB Ethernet) was found.
+- `~/Developer/usbmuxd-qemu/usbmuxd` as `--usbmuxd-source`. The native stage rebuilds usbmuxd over the reused prefix from `USBMUXD_COMMIT` (41631a7, branch `qemu-zlp`) through a temporary worktree, records it as `usbmuxd_commit`, and fails unless libslirp (the iPad's USB Ethernet) was found. The emulator and usbmuxd ship together: from qemu-ios `ipad1` abb1a1b817 the emulator invents no USB ZLPs, so usbmuxd must send them.
 - `--sdk ~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk` and `ldid` for the guest tools. Also the assets in `~/Developer/qemu-ios-files`: the iPod `nand-current` still ships as `nand.itnand`.
 - Xcode, and the Developer ID identity plus the `ltm-notary` profile.
 
@@ -321,7 +321,7 @@ What each stage does:
 - **package:** a fresh copy of the product, `build-inputs.json` and package.sh. Notarization is not done here.
 - **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
 - **staple.**
-- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then the bundled `firmwarekit create` prepares k48ap-7B500 (`--verify-ipsw`, default the 3.2.2 IPSW in `~/Downloads/ipad1-ios32-feasibility/`) with its default `--guest-tools` and the bundled `LightTouchDevice` into `prepare-check/`, must end with `done`, and the output is deleted. Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
+- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then, for each of k48ap-7B500 (`--verify-ipsw`), k48ap-8C148, n72ap-7E18 and n72ap-8C148 (`VERIFY_ENTRIES`: the IPSWs in `~/Downloads` and `~/Developer/ipod2g-re/OldSDK`), the bundled `firmwarekit create` prepares it with its default `--guest-tools` and the bundled `LightTouchDevice` into `prepare-check/` (it must end with `done`), and `tests/check-sessions.py --single` boots the result through the bundle's helper, dylib, usbmuxd, Frameworks and bootrom: lit, lockdown over its own usbmuxd, AFC round trips of 16384/16385/65536/1048583 bytes (no restore), an IPA install, a clean shutdown. The output is deleted; the frames stay in `verify-frames/<entry>/`. One entry per run, so rerun `--stage verify` until every entry is current. Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
 
 After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source-revisions.json` and the release notes are made by hand, and nothing here publishes.
 
@@ -514,3 +514,8 @@ The app publishes STAGING_DIR by rename.
 - **iPod 3.1.3 is a `user_ipsw` entry** (pinned `5f4f5c01…`, the IPSW docs/ipod/from-ipsw.md names; no URL) with recipe n72 (8g, system_mib 7168, gles_shim/appsync/web_proxy, gli-dispatch-7E18.tsv). The shipping image is unchanged: LegacyAdoption still adopts it at first launch, so the row is Ready with it; with no record the row offers Import IPSW….
 - **The seal's check boot matches `FTL_Open\s*\[OK\]` over the log with its newlines removed** (the helper's `--oneshot` `stopPattern`), as ipad1_seal.py now does.
 - **`build-guest-tools.sh` stages the n72 inputs** into the firmwarekit directory: MBXGLEngine, sblaunch, sbdlicon, it_agent, it_typein.dylib, com.qemu.it-agent.plist and gli-dispatch-7E18.tsv (libappsync.dylib is the fat one already there).
+
+**iPod 4.2.1, 2026-09-28** (ipod4-app, qemu-ios abb1a1b817):
+- **n72ap-8C148 is experimental.** N72Recipe's `options.data_protection` runs the restore-ramdisk keybag one-shot (N72Keybag, qemu-ios ipod2g_keybag.py) through `LightTouchDevice --oneshot`: firmwarekit stages the ramdisk at the kernel entry over the helper's gdbstub (`-gdb tcp:127.0.0.1:PORT -S`). So an iPod 4.x prepare needs `--helper`, the bootrom (the bundle's `Resources/device`, `LTM_FILES`, or `~/Developer/qemu-ios-files`) and `it_keybag-armv6` in the guest tools.
+- **The MBX shim is per dispatch layout** (`MBXGLEngine-<BUILD>` next to `gli-dispatch-<BUILD>.tsv`, both built and staged by `build-guest-tools.sh`); N72Recipe installs the one whose table is the firmware's, and on 4.x (the engine is in the shared cache) creates dyld's `enable-dylibs-to-override-cache`.
+- **A prepared base's files are per board** (`DeviceProfile.preparedBootFile`/`preparedFiles`): publish failed every iPod prepare while it required `kboot.bin`.

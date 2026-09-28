@@ -84,7 +84,7 @@ done
 if [ "$IPAD" = 1 ]; then
     mkdir -p "$ROOT/src/docs/ipad1" "$ROOT/src/docs/ipod"
     cp -p "$QEMU"/docs/ipad1/gli-dispatch-*.tsv "$ROOT/src/docs/ipad1/"
-    cp -p "$QEMU/docs/ipod/gli-dispatch-7E18.tsv" "$ROOT/src/docs/ipod/"
+    cp -p "$QEMU"/docs/ipod/gli-dispatch-*.tsv "$ROOT/src/docs/ipod/"
 fi
 
 # Keep the package recipe here: the component build.sh files also build probes
@@ -96,8 +96,23 @@ build_component() (
     case "$1" in
         it-gles)
             python3 "$HERE/genstubs.py" "$HERE/gles_stubs.h"
-            cc6 "$HERE/mbxshim.c" "$HERE/mbxshim.o"
-            link6 -bundle "$HERE/MBXGLEngine" "$HERE/mbxshim.o"
+            if [ -f "$HERE/../ipad1-gles/gligen.py" ]; then
+                # One engine per iPod dispatch layout (contrib/it-gles/build.sh): MBXGLEngine-<BUILD> from
+                # docs/ipod/gli-dispatch-<BUILD>.tsv; MBXGLEngine is the 7E18 one, for older consumers.
+                for tsv in "$ROOT"/src/docs/ipod/gli-dispatch-*.tsv; do
+                    b="${tsv##*gli-dispatch-}"; b="${b%.tsv}"
+                    python3 "$HERE/../ipad1-gles/gligen.py" --tsv "$tsv" --check
+                    python3 "$HERE/../ipad1-gles/gligen.py" --tsv "$tsv" "$HERE/gli_fwd.h" >/dev/null
+                    cc6 "$HERE/mbxshim.c" "$HERE/mbxshim.o"
+                    link6 -bundle "$HERE/MBXGLEngine-$b" "$HERE/mbxshim.o"
+                    "$LDID" -S "$HERE/MBXGLEngine-$b"   # 4.x runs only signed code
+                    rm -f "$HERE/mbxshim.o" "$HERE/gli_fwd.h"
+                done
+                cp -p "$HERE/MBXGLEngine-7E18" "$HERE/MBXGLEngine"
+            else
+                cc6 "$HERE/mbxshim.c" "$HERE/mbxshim.o"
+                link6 -bundle "$HERE/MBXGLEngine" "$HERE/mbxshim.o"
+            fi
             # firmwarekit's n72 recipe bakes sblaunch (SpringBoard launch helper) into new iPods.
             cc6 "$HERE/sblaunch.c" "$HERE/sblaunch.o"
             link6 -execute "$HERE/sblaunch" "$HERE/sblaunch.o"
@@ -182,7 +197,8 @@ if [ "$IPAD" = 1 ]; then
     echo "building guest tools: iPad"
     if ! (IPAD_SDK="$IPAD_SDK_DIR" IPOD_SDK="$ARMV6_SDK" bash "$C/ipad1-guest/build.sh" "$ROOT/ipad-build" &&
           IPAD_SDK="$IPAD_SDK_DIR" IPOD_SDK="$ARMV6_SDK" bash "$C/appsync/build.sh" "$ROOT/ipad-build" &&
-          IPAD_SDK="$IPAD_SDK_DIR" bash "$C/ipad1-gles/build.sh") >"$ROOT/logs/ipad.log" 2>&1; then
+          IPAD_SDK="$IPAD_SDK_DIR" bash "$C/ipad1-gles/build.sh" &&
+          ARMV6_SDK="$ARMV6_SDK" LDID="$LDID" bash "$C/it-keybag/build-ipod.sh") >"$ROOT/logs/ipad.log" 2>&1; then
         cat "$ROOT/logs/ipad.log" >&2
         fail "iPad guest tools failed; build inputs and logs retained in $ROOT"
     fi
@@ -244,7 +260,17 @@ if [ "$IPAD" = 1 ]; then
              it-agent/it_typein.dylib it-agent/com.qemu.it-agent.plist; do
         ipad_payload "$C/$p"
     done
-    ipad_payload "$ROOT/src/docs/ipod/gli-dispatch-7E18.tsv"
+    # One MBXGLEngine-<BUILD> per iPod dispatch table, and the table; a name the iPad set already
+    # has (8C148: the same 841-slot layout) must be the same file.
+    for tsv in "$ROOT"/src/docs/ipod/gli-dispatch-*.tsv; do
+        b="${tsv##*gli-dispatch-}"; b="${b%.tsv}"
+        have="$ROOT/ipad-guest-tools.incomplete/${tsv##*/}"
+        if [ -e "$have" ]; then cmp -s "$have" "$tsv" || fail "iPod and iPad ${tsv##*/} differ"; else ipad_payload "$tsv"; fi
+        ipad_payload "$C/it-gles/MBXGLEngine-$b"
+    done
+    # The iPod's armv6 it_keybag (4.x data protection: disk0s1, /private/var).
+    [ -s "$ROOT/src/build/ipod-guest/it_keybag" ] || fail "build did not produce the armv6 it_keybag"
+    cp -p "$ROOT/src/build/ipod-guest/it_keybag" "$ROOT/ipad-guest-tools.incomplete/it_keybag-armv6"
     chmod 0644 "$ROOT"/ipad-guest-tools.incomplete/*.plist "$ROOT"/ipad-guest-tools.incomplete/*.tsv
 fi
 python3 - "$ROOT" <<'PY'

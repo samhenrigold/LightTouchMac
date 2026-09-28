@@ -19,6 +19,10 @@ nonisolated enum DeviceProfile: Equatable {
     var shortName: String { self == .iPad1 ? "iPad" : "iPod" }
 
     var boardID: String { self == .iPad1 ? "k48ap" : "n72ap" }
+    /// A prepared base's boot file (firmwarekit's k48 kboot.bin, n72 iBoot.bin, the machine's direct-iboot)
+    /// and the other files its boots need besides nand/.
+    var preparedBootFile: String { self == .iPad1 ? "kboot.bin" : "iBoot.bin" }
+    var preparedFiles: [String] { self == .iPad1 ? [] : ["nor.bin", "gid-blobs.bin"] }
     var productType: String { self == .iPad1 ? "iPad1,1" : "iPod2,1" }
     var marketingName: String { self == .iPad1 ? "iPad" : "iPod touch (2nd generation)" }
 

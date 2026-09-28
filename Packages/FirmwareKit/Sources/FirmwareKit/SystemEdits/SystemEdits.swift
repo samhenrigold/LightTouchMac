@@ -258,15 +258,7 @@ public enum SystemEdits {
         guard fm.fileExists(atPath: src.path) else { throw FirmwareError(.internal, "\(src.path) missing") }
         var overridden = false
         if cached {   // 4.x: dyld's own switch lets the file on disk win over the cached image
-            let dyld = try Data(contentsOf: m.appendingPathComponent("usr/lib/dyld"))
-            guard dyld.range(of: Data(("/" + dyldOverride + "\0").utf8)) != nil else {
-                throw FirmwareError(.unsupported, "GLEngine is in the shared cache and this dyld has no enable-dylibs-to-override-cache switch")
-            }
-            let dir = m.appendingPathComponent(dyldOverride).deletingLastPathComponent().path
-            var st = stat()
-            guard stat(dir, &st) == 0, chmod(dir, st.st_mode & 0o7777 | 0o200) == 0 else { throw FirmwareError(.internal, "chmod \(dir)") }
-            try put(Data(), m.appendingPathComponent(dyldOverride))
-            chmod(dir, st.st_mode & 0o7777)
+            try setOverrideSwitch(m, image: glEngine)
             overridden = true
         }
         log("GLI engine \(engine)\(gld ? " + gld plugin" : ""); \(overridden ? "cached GLEngine overridden by the file" : "no cached GLEngine")")
@@ -277,6 +269,28 @@ public enum SystemEdits {
             try put(Data(contentsOf: plugin), m.appendingPathComponent(gldPath), mode: try permissions(plugin))
         }
         return (engine, gld, overridden)
+    }
+
+    /// ipad1_rootfs.gli_uncache: when `image` is in the volume's shared cache `cache`, create dyld's
+    /// enable-dylibs-to-override-cache switch so the file installed over it loads. Returns the status line.
+    static func overrideCachedImage(_ m: URL, image: String, cache: String) throws -> String {
+        let name = (image as NSString).lastPathComponent
+        guard try DyldSharedCache(contentsOf: m.appendingPathComponent(cache)).image("/" + image) != nil else { return "no cached \(name)" }
+        try setOverrideSwitch(m, image: image)
+        return "cached \(name) overridden by the file (enable-dylibs-to-override-cache)"
+    }
+
+    /// Fails closed if this dyld has no such switch.
+    static func setOverrideSwitch(_ m: URL, image: String) throws {
+        let dyld = try Data(contentsOf: m.appendingPathComponent("usr/lib/dyld"))
+        guard dyld.range(of: Data(("/" + dyldOverride + "\0").utf8)) != nil else {
+            throw FirmwareError(.unsupported, "\((image as NSString).lastPathComponent) is in the shared cache and this dyld has no enable-dylibs-to-override-cache switch: the GL shim cannot load")
+        }
+        let dir = m.appendingPathComponent(dyldOverride).deletingLastPathComponent().path
+        var st = stat()
+        guard stat(dir, &st) == 0, chmod(dir, st.st_mode & 0o7777 | 0o200) == 0 else { throw FirmwareError(.internal, "chmod \(dir)") }
+        try put(Data(), m.appendingPathComponent(dyldOverride))
+        chmod(dir, st.st_mode & 0o7777)
     }
 
     // MARK: plist edits (ipad1_rootfs.springboard_env, dyld_insert, usb_net_*, wifi_proxy_prefs)
