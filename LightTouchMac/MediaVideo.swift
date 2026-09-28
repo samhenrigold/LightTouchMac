@@ -97,11 +97,16 @@ struct MediaVideo: Sendable {
                 // Reuse the completed conversion so Retry after an uncertain
                 // guest reply reconciles one library entry, not a second movie.
                 // Publish atomically; simultaneous imports adopt the winner.
+                // FileManager.moveItem checks for the destination and then
+                // renames, so two racing exports both "win" and the second
+                // silently replaces the first. RENAME_EXCL fails in the kernel.
                 let publishing = cache.appendingPathComponent(".\(UUID().uuidString).m4v")
                 defer { try? FileManager.default.removeItem(at: publishing) }
                 try FileManager.default.copyItem(at: output, to: publishing)
-                do { try FileManager.default.moveItem(at: publishing, to: cached) }
-                catch CocoaError.fileWriteFileExists {
+                if renamex_np(publishing.path, cached.path, UInt32(RENAME_EXCL)) != 0 {
+                    guard errno == EEXIST else {
+                        throw DeviceToolsError.failed("Could not save the converted video (\(String(cString: strerror(errno)))).")
+                    }
                     try FileManager.default.removeItem(at: output)
                     try FileManager.default.copyItem(at: cached, to: output)
                 }
