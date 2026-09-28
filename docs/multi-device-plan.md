@@ -318,3 +318,14 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 | 9 | Our ad-hoc signer accepted by iOS 3/4 amfid | Byte-diff vs `ldid -S` | Hook returns a signed file |
 | 10 | iPod-from-IPSW uses Legacy-iOS-Kit tarballs | License review | Own guest helpers, like the iPad |
 | 11 | Unknown disk-space estimates | `du` peaks during Python runs (7B500, 8C148) | 2× IPSW + prepared |
+
+## Corrections from implementation
+
+**W3, 2026-09-28** (`b63d910`, `a731de4`):
+- `device.json` has four more fields: `format`, `storage.key` (the image identity; it pins the overlay), `storage.resetMarker`, and `legacy {filesRoot, nand, pointer?}`, used to match development launches and the active pointer.
+- **Runtime files are per instance, including for adopted devices.** That covers the usbmuxd pid, `session.env` and logs, now under `Devices/<uuid>/work/` and `~/Library/Logs/<bundle>/Devices/<uuid>/`. Only durable state (overlay, snapshot, base, conf) stays at its legacy path.
+- **Pairing conf:** the first adopted device keeps `work/usbmuxd-conf`. Later devices get a copy in `Devices/<uuid>/usbmuxd-conf`, so two daemons never share one.
+- **The packaged iPod's key is not frozen.** Erase moves it to the newly bundled base, and the active pointer stays authoritative for it.
+- **The iPod 3.1.3 IPSW isn't on api.ipsw.me**, so a future from-IPSW entry needs another source.
+- **Still open for W4:** Export Diagnostics and the log window still read the global `serial.log`, `usbmuxd.log` and `session.env`.
+- **Still open for W2/W4:** EC still resolves its own instance in `init(options:profile:)`. It should receive one chosen from the library.
