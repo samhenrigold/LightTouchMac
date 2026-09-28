@@ -114,6 +114,7 @@ final class DevicePlaceholderViewController: NSViewController {
             reason.isHidden = false
             showLog.isHidden = false
         case .unavailable(.comingSoon): status.stringValue = "Coming Soon"
+        case .unavailable(.untested): status.stringValue = "Untested"
         case .unavailable(.requiresIPSW): status.stringValue = "Requires an IPSW"
         }
 

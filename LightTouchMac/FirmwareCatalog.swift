@@ -9,7 +9,8 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
     var entries: [Entry]
 
     struct Entry: Codable, Sendable, Identifiable, Equatable {
-        enum Status: String, Codable, Sendable { case available, experimental, comingSoon = "coming_soon", userIPSW = "user_ipsw" }
+        /// `untested`: enumerated from Apple's list with public keys, never run through the pipeline (docs/matrix.md).
+        enum Status: String, Codable, Sendable { case available, experimental, comingSoon = "coming_soon", userIPSW = "user_ipsw", untested }
 
         struct Source: Codable, Sendable, Equatable {
             enum Kind: String, Codable, Sendable { case ipsw, bundled }

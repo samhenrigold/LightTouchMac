@@ -26,7 +26,7 @@ for e in catalog['entries']:
         assert field in e, (e['id'], field)
     assert e['id'] == f"{e['board']}-{e['build']}", e['id']
     assert e['board'] in ('n72ap', 'k48ap') and e['product_type'] in ('iPod2,1', 'iPad1,1')
-    assert e['status'] in ('available', 'experimental', 'coming_soon', 'user_ipsw')
+    assert e['status'] in ('available', 'experimental', 'coming_soon', 'user_ipsw', 'untested')
     assert 'activation_hook' not in e
     src = e['source']
     if src['kind'] == 'bundled':
@@ -34,7 +34,8 @@ for e in catalog['entries']:
     else:
         assert src['kind'] == 'ipsw' and len(src['sha1']) == 40 and hexre.match(src['sha1']) and src['bytes'] > 0
         assert e['status'] == 'user_ipsw' or src['url'].startswith('https://')
-    for name in ('iBoot', 'kernelcache', 'DeviceTree', 'UpdateRamDisk', 'rootfs'):
+    # The Update ramdisk key is public for most builds, not all (docs/matrix.md); the preparer tolerates its absence.
+    for name in ('iBoot', 'kernelcache', 'DeviceTree', 'rootfs'):
         assert name in e['keys'], (e['id'], name)
     for name, k in e['keys'].items():
         assert k['file'] and hexre.match(k['key']) and len(k['key']) in (32, 64, 72), (e['id'], name)
@@ -45,8 +46,11 @@ for e in catalog['entries']:
             assert field in r, (e['id'], field)
     assert e['emulator']['min_protocol'] >= 1
 status = {e['id']: e['status'] for e in catalog['entries']}
-assert status == {'n72ap-7E18': 'user_ipsw', 'k48ap-7B500': 'available', 'k48ap-7B367': 'available',
-                  'k48ap-8C148': 'experimental', 'n72ap-8C148': 'experimental', 'n72ap-5F138': 'coming_soon'}, status
+known = {'n72ap-7E18': 'user_ipsw', 'k48ap-7B500': 'available', 'k48ap-7B367': 'available',
+         'k48ap-8C148': 'experimental', 'n72ap-8C148': 'experimental', 'n72ap-5F138': 'coming_soon'}
+assert {k: status[k] for k in known} == known, status
+# Every other entry is the matrix's (docs/matrix.md): untested until tests/matrix.py says otherwise, or user_ipsw.
+assert all(v in ('untested', 'user_ipsw') for k, v in status.items() if k not in known), status
 sha = {e['id']: e['source'].get('sha1') for e in catalog['entries']}
 assert sha['n72ap-7E18'] == '5f4f5c01eda2f811f73167e7d1f82dbeed82367b'   # docs/ipod/from-ipsw.md's IPSW
 assert sha['k48ap-7B367'] == '172e8297af74b91971a802e6ad137c891f553099'

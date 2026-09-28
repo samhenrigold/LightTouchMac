@@ -26,6 +26,8 @@ struct Config: Decodable {
     /// A base that never starts iOS (deadline.swift).
     var deadline: DeadlineConfig?
     var frameworks: String?
+    /// The driver's own deadline in seconds (default 560; tests/matrix.py's second boot needs more).
+    var timeout: Double?
 }
 
 let t0 = Date()
@@ -168,11 +170,16 @@ extension String {
     /// EmulatorController.composeGuestOffer for a prepared iPad: the bundled itpack, the base's lock record.
     func iPadOffer(base: URL) throws -> String? {
         guard let itpack = config.ipadItpack else { return nil }
+        return try offer(base: base, board: "k48ap", itpack: itpack)
+    }
+
+    /// EmulatorController.composeGuestOffer for any prepared base: the itpack, the base's lock record.
+    func offer(base: URL, board: String, itpack: String) throws -> String? {
         let lockURL = base.appendingPathComponent("device.lock.json")
         let lock = try JSONSerialization.jsonObject(with: Data(contentsOf: lockURL)) as? [String: Any]
         let dir = dir.appendingPathComponent("work/guest-offer")
         try FileManager.default.createDirectory(at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let offer = try GuestPackage.compose(itpack: URL(fileURLWithPath: itpack), board: "k48ap", build: lock?["build"] as? String ?? "",
+        let offer = try GuestPackage.compose(itpack: URL(fileURLWithPath: itpack), board: board, build: lock?["build"] as? String ?? "",
                                              lock: GuestPackage.lockRecord(lockURL), guest: nil, into: dir)
         emit("offer", ["device": name, "serial": offer?.serial ?? -1, "seed": GuestPackage.lockRecord(lockURL)?.seed ?? -1])
         return offer == nil ? nil : dir.path
@@ -211,8 +218,11 @@ extension String {
     }
 
     /// lockdown's ProductType through this device's socket, under the gate.
-    func productType() async -> String? {
-        try? await services.run(Timeouts.query, "product type") { imd, device in
+    func productType() async -> String? { await lockdownValue("ProductType") }
+
+    /// One lockdown value (a string) through this device's socket, under the gate.
+    func lockdownValue(_ key: String) async -> String? {
+        try? await services.run(Timeouts.query, key) { imd, device in
             guard let newClient = imd.lockdownd_client_new_with_handshake, let getValue = imd.lockdownd_get_value,
                   let plistFree = imd.plist_free else { throw DeviceError.unavailable }
             var client: OpaquePointer?
@@ -220,7 +230,7 @@ extension String {
             guard rc == imd.success, let client else { throw DeviceError.lockdown(rc) }
             defer { _ = imd.lockdownd_client_free?(client) }
             var value: OpaquePointer?
-            let vr = "ProductType".withCString { getValue(client, nil, $0, &value) }
+            let vr = key.withCString { getValue(client, nil, $0, &value) }
             guard vr == imd.success, let value else { throw DeviceError.lockdown(vr) }
             defer { plistFree(value) }
             return IMobileDevice.decode(value) as? String
@@ -409,5 +419,5 @@ Task { @MainActor in
     else if let activation = config.activation { await runActivation(activation) }
     else if let deadline = config.deadline { await runDeadline(deadline) } else { await run() }
 }
-DispatchQueue.main.asyncAfter(deadline: .now() + 560) { fail("driver timed out") }
+DispatchQueue.main.asyncAfter(deadline: .now() + (config.timeout ?? 560)) { fail("driver timed out") }
 CFRunLoopRun()
