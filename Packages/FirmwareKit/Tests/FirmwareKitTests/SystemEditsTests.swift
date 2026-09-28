@@ -86,17 +86,20 @@ enum K48Oracle {
             #expect { try ActivationHook.run(edit, on: target, displayPath: "/t") } throws: {
                 ($0 as? HookFailure)?.message == "activation hook left /t unsigned"
             }
+            let py = dir.appendingPathComponent("hook.py")   // never handed to python3: hooks run directly
+            try Data("open(__import__('sys').argv[1], 'ab').write(b'x')\n".utf8).write(to: py)
+            #expect { try ActivationHook.run(py, on: target) } throws: { ($0 as? HookFailure)?.message.contains("not an executable file") == true }
             #expect(try Data(contentsOf: target) == Data("not a mach-o".utf8))
         }
     }
 
     /// Level 2: the Swift-built system and data volumes against ipad1_rootfs.py build + bake --seal
     /// --activation-hook on the same rootfs.dmg: every path with owner, mode, flags, size, content sha256 and
-    /// symlink target; plists written by either side compared parsed. Expected difference: lockdownd, which
+    /// symlink target; plists written by either side compared parsed. Skipped unless the hook is executable. Expected difference: lockdownd, which
     /// the oracle re-signs with ldid after the hook and FirmwareKit does not.
     @Test(arguments: HFSOracle.ipads) func volumesMatchPython(_ fw: Oracle.Firmware) throws {
         guard K48Oracle.available, let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg),
-              let hook = K48Oracle.hooks[fw.entryID], Oracle.exists(hook) else { return }
+              let hook = K48Oracle.hooks[fw.entryID], FileManager.default.isExecutableFile(atPath: hook.path) else { return }
         try Oracle.withTemp { dir in
             let entry = try Oracle.entry(fw.entryID), recipe = try #require(entry.recipe)
             let parts = try JSONSerialization.jsonObject(with: HFSOracle.python("""

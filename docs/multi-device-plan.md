@@ -393,13 +393,14 @@ The Python bridge is dropped. The app's PreparationJob runs one executable, `fir
 ```
 firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
                    [--seed SEED] [--activation-hook PATH] [--helper PATH_TO_LightTouchDevice]
-                   [--cache DIR]
+                   [--cache DIR] [--guest-tools DIR]
 ```
 
 - `ENTRY.json` is one catalog entry, exactly as in `Resources/firmware-catalog.json`, with its keys.
-- `--activation-hook` is a user-chosen executable. It's run as `hook FILE` on the recipe's target, as a black box, then re-signed. The app only stores and passes the path.
+- `--activation-hook` is a user-chosen executable. It's run directly as `hook FILE` on the recipe's target, as a black box; a file that isn't executable fails with `hook_failed`. The hook must leave the file signed (see wave A2 below). The app only stores and passes the path.
 - `--helper` runs the seal and keybag one-shots (`LightTouchDevice --oneshot`).
 - `--cache` holds decrypted components by IPSW sha1. It's recreatable.
+- `--guest-tools` is a flat directory of the prebuilt, signed guest helpers (tools, launchd jobs, GLEngine-*, gli-dispatch-*.tsv, the gld plugin, libappsync.dylib, it_keybag), by file name. It defaults to `../Resources/guest-tools` next to the executable, the app bundle's copy.
 
 **stdout is JSON Lines only, one object per line.** Diagnostics go to stderr.
 ```

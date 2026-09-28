@@ -6,7 +6,7 @@
 //   let r = try ActivationHook.run(hook, on: file)     // file is replaced in place on success
 //   r.hookSHA256, r.inputSHA256, r.outputSHA256
 //
-// A hook that is not executable but ends in .py is run with python3, as the oracle does.
+// The hook is always run directly; a file that is not executable is refused (hook_failed).
 
 import CryptoKit
 import Foundation
@@ -36,14 +36,10 @@ public enum ActivationHook {
         let before = try Data(contentsOf: file)
         try before.write(to: work)
 
+        guard fm.isExecutableFile(atPath: hook.path) else { throw HookFailure("activation hook \(hook.path) is not an executable file") }
         let p = Process()
-        if !fm.isExecutableFile(atPath: hook.path) && hook.pathExtension == "py" {
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            p.arguments = ["python3", hook.path, work.path]
-        } else {
-            p.executableURL = hook
-            p.arguments = [work.path]
-        }
+        p.executableURL = hook
+        p.arguments = [work.path]
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = FileHandle.standardError   // stdout is the preparer's JSON Lines channel
         do { try p.run() } catch { throw HookFailure("activation hook \(hook.path) did not start: \(error.localizedDescription)") }
