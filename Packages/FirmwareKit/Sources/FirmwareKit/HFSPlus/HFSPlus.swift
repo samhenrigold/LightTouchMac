@@ -37,6 +37,8 @@ public final class HFSPlusVolume {
         public let uid: UInt32, gid: UInt32, adminFlags: UInt8, ownerFlags: UInt8, mode: UInt16, special: UInt32
         public let fileType: UInt32, creator: UInt32
         public let data: Fork?, resource: Fork?
+        /// create, content-modified, attribute-modified, accessed, backup: seconds since 1904-01-01.
+        public let dates: [UInt32]
         /// B-tree node number and the byte offset of the record body (past the key) within that node.
         public let node: Int, bodyOffset: Int
         public var isSymlink: Bool { kind == .file && mode & 0o170000 == 0o120000 }
@@ -276,6 +278,7 @@ public final class HFSPlusVolume {
                     mode: be16(buf, body + 42), special: be32(buf, body + 44),
                     fileType: body + 56 <= end ? be32(buf, body + 48) : 0, creator: body + 56 <= end ? be32(buf, body + 52) : 0,
                     data: file ? Fork(buf, body + 88) : nil, resource: file ? Fork(buf, body + 168) : nil,
+                    dates: (0..<5).map { be32(buf, body + 12 + 4 * $0) },
                     node: node, bodyOffset: body))
             }
         }
@@ -394,6 +397,113 @@ public final class HFSPlusVolume {
         }
         catalogCache = nil
         return changed
+    }
+
+    // MARK: determinism (what a mount leaves behind: dates, a fresh volume's identifier, the journal)
+
+    /// The newest create/modify/attribute/access date in the catalog: on a pristine IPSW volume, its newest file.
+    public func newestDate() throws -> UInt32 {
+        try catalog().reduce(0) { max($0, $1.dates.prefix(4).max() ?? 0) }
+    }
+
+    /// Makes an edited volume the same for the same edits. Every catalog date (create, content-modified,
+    /// attribute-modified, accessed) later than `after` becomes `to`, and macOS's "date added" in those records'
+    /// extended Finder info (a Unix time; iOS leaves it 0) is cleared; the volume headers' create/modify/backup/
+    /// checked dates likewise (newfs_hfs dates a volume "now"); with `uuid`, the 8-byte Finder-info volume
+    /// identifier (newfs_hfs draws a random one); and the unused bytes of every B-tree node are zeroed (records
+    /// macOS made and the unmount deleted, .fseventsd's random names, stay there otherwise). Returns the number of
+    /// catalog records dated. Apple's own dates stay: they are older than `after`.
+    @discardableResult
+    public func normalize(after: UInt32, to: UInt32, uuid: [UInt8]? = nil) throws -> Int {
+        guard writable else { throw FirmwareError(.internal, "\(url.lastPathComponent) is open read-only") }
+        let t = try btree(catalogFork, fileID: Self.catalogID)
+        var changed = 0
+        for r in try catalog() where r.dates.prefix(4).contains(where: { $0 > after }) {
+            var patch = [UInt8](repeating: 0, count: 16)
+            for (i, d) in r.dates.prefix(4).enumerated() { put32(&patch, 4 * i, d > after ? to : d) }
+            let body = r.node * t.nodeSize + r.bodyOffset
+            try write(catalogFork, fileID: Self.catalogID, offset: body + 12, bytes: patch)
+            try write(catalogFork, fileID: Self.catalogID, offset: body + 68, bytes: [0, 0, 0, 0])   // finderInfo.date_added
+            changed += 1
+        }
+        catalogCache = nil
+        for at in headerOffsets() {
+            var vh = [UInt8](repeating: 0, count: 512)
+            guard pread(fd, &vh, 512, off_t(at)) == 512 else { throw FirmwareError(.internal, "read volume header at \(at) of \(url.lastPathComponent)") }
+            for o in stride(from: 16, through: 28, by: 4) where be32(vh, o) > after { put32(&vh, o, to) }
+            if let uuid, uuid.count == 8 { vh.replaceSubrange(104..<112, with: uuid) }
+            guard pwrite(fd, vh, 512, off_t(at)) == 512 else { throw FirmwareError(.internal, "write volume header at \(at) of \(url.lastPathComponent)") }
+        }
+        try zeroBTreeSlack()
+        return changed
+    }
+
+    /// Zeroes each B-tree node's unused bytes (between its last record and its offset table) in the catalog,
+    /// extents and attributes trees. A node: fLink, bLink, kind, height, numRecords (14 bytes), records, free
+    /// space, then the offsets of the records and of the free space, from the node's end.
+    func zeroBTreeSlack() throws {
+        for (fork, id) in [(catalogFork, Self.catalogID), (extentsFork, Self.extentsID), (attributesFork, Self.attributesID)] where fork.logicalSize > 0 {
+            let t = try btree(fork, fileID: id)
+            for node in 0..<(Int(fork.logicalSize) / t.nodeSize) {
+                let buf = try read(fork, fileID: id, offset: node * t.nodeSize, count: t.nodeSize)
+                let records = Int(be16(buf, 10)), table = t.nodeSize - 2 * (records + 1)
+                guard records > 0, table > 14 else { continue }
+                let free = Int(be16(buf, table))
+                guard free >= 14, free < table, buf[free..<table].contains(where: { $0 != 0 }) else { continue }
+                try write(fork, fileID: id, offset: node * t.nodeSize + free, bytes: [UInt8](repeating: 0, count: table - free))
+            }
+        }
+    }
+
+    /// The volume header and its alternate(s): at 1024, at the volume's end - 1024 and, once VolumeMount.grow has
+    /// padded the file, at the file's end - 1024; whichever carry the signature.
+    func headerOffsets() -> [Int] {
+        var st = stat()
+        let size = fstat(fd, &st) == 0 ? Int(st.st_size) : 0
+        return Set([1024, totalBlocks * blockSize - 1024, size - 1024]).sorted().filter { at in
+            var sig = [UInt8](repeating: 0, count: 2)
+            return at >= 1024 && pread(fd, &sig, 2, off_t(at)) == 2 && sig[0] == 0x48 && (sig[1] == 0x2B || sig[1] == 0x58)
+        }
+    }
+
+    /// The journal's byte offset and size in the volume when the volume is journaled and the journal lives in it;
+    /// `needsInit` while the kernel has yet to write its header (newfs_hfs leaves a volume so).
+    public func journal() throws -> (offset: Int, size: Int, needsInit: Bool)? {
+        var vh = [UInt8](repeating: 0, count: 512)
+        guard pread(fd, &vh, 512, 1024) == 512, be32(vh, 4) & (1 << 13) != 0, be32(vh, 12) != 0 else { return nil }   // kHFSVolumeJournaledBit, journalInfoBlock
+        var jib = [UInt8](repeating: 0, count: 52)   // flags, device_signature[8], offset, size
+        guard pread(fd, &jib, 52, off_t(Int(be32(vh, 12)) * blockSize)) == 52, be32(jib, 0) & 3 == 1 else { return nil }   // in the volume
+        let offset = Int(be64(jib, 36)), size = Int(be64(jib, 44))
+        return size > 0 ? (offset, size, be32(jib, 0) & 4 != 0) : nil
+    }
+
+    /// The journal info block and the journal (offset, bytes) while the journal is still to be initialized or is
+    /// empty (start == end: nothing to replay); nil otherwise. VolumeMount puts them back after a mount: the mount
+    /// initializes the journal, fills it with transactions and moves its header, and a clean unmount leaves it
+    /// empty again, so the bytes as they were are as good and the same every time.
+    public func journalSnapshot() throws -> [(offset: Int, bytes: Data)]? {
+        var vh = [UInt8](repeating: 0, count: 512)
+        guard let j = try journal(), pread(fd, &vh, 512, 1024) == 512 else { return nil }
+        if !j.needsInit {
+            var hdr = [UInt8](repeating: 0, count: 32)   // magic, endian, start, end, ...
+            guard pread(fd, &hdr, 32, off_t(j.offset)) == 32, hdr[8..<16] == hdr[16..<24] else { return nil }
+        }
+        return try [(Int(be32(vh, 12)) * blockSize, blockSize), (j.offset, j.size)].map { at, n in
+            var bytes = Data(count: n)
+            guard bytes.withUnsafeMutableBytes({ pread(fd, $0.baseAddress, n, off_t(at)) }) == n else {
+                throw FirmwareError(.internal, "read the journal of \(url.lastPathComponent)")
+            }
+            return (at, bytes)
+        }
+    }
+
+    public func restore(_ pieces: [(offset: Int, bytes: Data)]) throws {
+        guard writable else { throw FirmwareError(.internal, "\(url.lastPathComponent) is open read-only") }
+        for p in pieces {
+            guard p.bytes.withUnsafeBytes({ pwrite(fd, $0.baseAddress, p.bytes.count, off_t(p.offset)) }) == p.bytes.count else {
+                throw FirmwareError(.internal, "write \(url.lastPathComponent) at \(p.offset)")
+            }
+        }
     }
 }
 

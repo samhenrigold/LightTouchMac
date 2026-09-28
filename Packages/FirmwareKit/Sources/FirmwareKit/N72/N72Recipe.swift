@@ -141,10 +141,12 @@ public enum N72Recipe {
         let volume = work.appendingPathComponent("volume.img")
         try UDIF.extractRootfs(dmg: dec.appendingPathComponent("rootfs.dmg"), to: volume)
         try VolumeMount.grow(volume, toBytes: blocks * 4096)
+        let newest: UInt32   // the IPSW's newest file: everything the recipe writes gets dated as of it
         do {
             let v = try HFSPlusVolume(volume)
             log("\(v.signature) blocksize=\(v.blockSize) total=\(v.totalBlocks) free=\(v.freeBlocks) files=\(v.fileCount) dirs=\(v.folderCount)")
             guard v.totalBlocks == blocks, v.blockSize == 4096 else { throw FirmwareError(.internal, "resize produced \(v.totalBlocks) x \(v.blockSize) B blocks, wanted \(blocks) x 4096") }
+            newest = try v.newestDate()
         }
         var owners: [(UInt32, String)] = [(0, kcPath)]
         let baked = try VolumeMount.withMounted(volume, at: work.appendingPathComponent("mnt")) { m -> [String: Any] in
@@ -162,12 +164,17 @@ public enum N72Recipe {
             let n = try hfs.setOwner(owners.filter { $0.0 == uid }.map(\.1), uid: uid, gid: uid)
             log("\(uid):\(uid) patched \(n) catalog record(s)")
         }
+        log("\(try hfs.normalize(after: newest, to: newest)) catalog records dated as of the IPSW's newest file")
 
         step()   // the page directory
         let nand = file("nand")
         let (written, meta) = try N72NAND.write(volume: volume, blocks: blocks, epoch: epoch, out: nand)
         log("\(written) filesystem pages, \(meta) metadata pages generated (epoch \(epoch))")
         try fm.removeItem(at: volume)
+        let pageNames = { try (0..<4).flatMap { cs in try fm.contentsOfDirectory(atPath: nand.appendingPathComponent("cs\(cs)").path).map { "cs\(cs)/\($0)" } }.sorted() }
+        // The pages as written, before a keybag boot folds the guest's keybag in: the same for the same inputs.
+        let built = try Preparer.nandListing(nand, files: try pageNames()).sha256
+        log("pages as written: listing sha256 \(built)")
 
         if dataProtection, let helper = o.helper, let bootrom {
             step()   // 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk
@@ -181,16 +188,8 @@ public enum N72Recipe {
         step()   // read-only outputs (the seal), lock
         let ship = ["nand", "nor.bin", "gid-blobs.bin"] + (major >= 3 ? ["iBoot.bin"] : [])
         for n in ship { try Preparer.readOnly(file(n)) }
-        let pages = try (0..<4).flatMap { cs in try fm.contentsOfDirectory(atPath: nand.appendingPathComponent("cs\(cs)").path).map { "cs\(cs)/\($0)" } }.sorted()
-        final class Hashes: @unchecked Sendable { let lock = NSLock(); var sha: [String: String] = [:]; var error: Error? }
-        let hashes = Hashes()
-        DispatchQueue.concurrentPerform(iterations: pages.count) { i in
-            do { let h = try Preparer.digest(nand.appendingPathComponent(pages[i]), SHA256()); hashes.lock.withLock { hashes.sha[pages[i]] = h } }
-            catch { hashes.lock.withLock { hashes.error = error } }
-        }
-        if let error = hashes.error { throw error }
-        var listing = SHA256()
-        for p in pages { listing.update(data: Data("\(p) \(hashes.sha[p]!)\n".utf8)) }
+        let pages = try pageNames()
+        let listingSHA = try Preparer.nandListing(nand, files: pages).sha256
         let activation = baked["activation"] as? Activation.Result
         derived["activation"] = nil
         let used = try fm.contentsOfDirectory(atPath: o.guestTools.path).sorted()
@@ -207,7 +206,7 @@ public enum N72Recipe {
                        "rootfs": "rootfs.dmg", "kernelcache": kcMember, "iboot": "iBoot.bin", "all_flash": prefix,
                        "guest_tools": o.guestTools.path, "lockdown": NSNull()],
             "identity": ["seed": seed, "udid": ident.udid ?? "", "sha256": try Preparer.digest(file("identity.json"), SHA256())],
-            "outputs": ["nand": ["path": "nand", "pages": pages.count, "listing_sha256": listing.finalize().map { String(format: "%02x", $0) }.joined()],
+            "outputs": ["nand": ["path": "nand", "pages": pages.count, "listing_sha256": listingSHA, "built_listing_sha256": built],
                         "nor": try sha("nor.bin"), "iboot": major >= 3 ? try sha("iBoot.bin") as Any : NSNull(), "gid_blobs": try sha("gid-blobs.bin")],
             "derived": derived, "guest_package": guestPackage?.object ?? NSNull(),
             // machine options the device must boot with (ipod2g_device.py): every device built here uses the
