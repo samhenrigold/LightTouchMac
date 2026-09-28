@@ -10,7 +10,9 @@ drop = display[display.index('    override func draggingEntered('):display.index
 a = inspector.index('    @objc private func installStarted(')
 started = inspector[a:inspector.index('\n    }', a) + 6].replace('private func', 'func')
 code = r'''import Cocoa
-@MainActor final class EmulatorController { var canQueueInstall = true }
+nonisolated let device = UUID()
+struct DeviceInstance { let id = device }
+@MainActor final class EmulatorController { var canQueueInstall = true; let instance = DeviceInstance() }
 struct CatalogApp: Codable { let id: Int }
 @MainActor final class FirmwareJobs {
  static let shared = FirmwareJobs(); var imported: [String] = []
@@ -48,7 +50,7 @@ extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.ca
   precondition(draggingPasteboard.writeObjects(names.map { URL(fileURLWithPath: "/tmp/" + $0) as NSURL }))
  }
 }
-@MainActor final class InstallJob { var catalogIpaID: Int? }
+@MainActor final class InstallJob { var catalogIpaID: Int?; let deviceID = device }
 @MainActor final class TransferTable: NSTableView {
  var lastVisibleRow: Int?
  override func scrollRowToVisible(_ row: Int) {
@@ -60,6 +62,7 @@ extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.ca
 @MainActor final class Inspector: NSViewController, NSTableViewDataSource {
  enum PaneMode { case store, installed }
  var mode = PaneMode.store
+ let emulator = EmulatorController()
  var pending: [InstallJob] = []
  let tableView = TransferTable()
  override func loadView() { view = NSView(); view.addSubview(tableView); tableView.dataSource = self }
