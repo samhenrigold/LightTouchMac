@@ -12,6 +12,14 @@
  * sequence in a child process runs clean every time. Whatever the library
  * does there, its blast radius now ends at this process's exit.
  *
+ * Also sets TimeIntervalSince1970 to the Mac's clock, as iTunes did on every
+ * connect. Besides syncing the clock, this is what clears lockdownd's
+ * BrickState on an iPod: on iOS 2.x lockdownd enables it at first boot, and
+ * activation clears it only on devices that report themselves as an iPhone.
+ * Until a paired host sets the time or iTunesHasConnected, SpringBoard stays
+ * on Connect to iTunes. The time is best effort: a failure is logged, but the
+ * exit status follows the zone.
+ *
  * Reads before writing, so a matching zone costs no set. Prints the zone in
  * effect; exits 0 only when it matches the request. Finds the device via
  * USBMUXD_SOCKET_ADDRESS, like every other bundled tool.
@@ -19,9 +27,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 #include <plist/plist.h>
+
+/* Match the type the device reports (uint on old lockdownd, real on newer),
+ * like idevicedate. */
+static void set_time(lockdownd_client_t cli)
+{
+    plist_t v = NULL;
+    time_t now = time(NULL);
+    plist_t node = plist_new_uint((uint64_t)now);
+    if (lockdownd_get_value(cli, NULL, "TimeIntervalSince1970", &v) == LOCKDOWN_E_SUCCESS && v) {
+        if (plist_get_node_type(v) == PLIST_REAL) {
+            plist_free(node);
+            node = plist_new_real((double)now);
+        }
+        plist_free(v);
+    }
+    lockdownd_error_t e = lockdownd_set_value(cli, NULL, "TimeIntervalSince1970", node);
+    if (e != LOCKDOWN_E_SUCCESS)
+        fprintf(stderr, "set time failed: %d\n", e);
+}
 
 static char *current_zone(lockdownd_client_t cli)
 {
@@ -51,6 +79,8 @@ int main(int argc, char **argv)
         idevice_free(dev);
         return 1;
     }
+
+    set_time(cli);
 
     char *zone = current_zone(cli);
     if (!zone || strcmp(zone, argv[1]) != 0) {
