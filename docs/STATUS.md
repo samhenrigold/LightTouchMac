@@ -49,6 +49,10 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 
 | GL bridge rejection audit | qemu-ios `gl-coverage` | every reject/unimplemented path counted + logged, magenta fallback under `gles-debug`, produced-vs-rejected list from the firmwares' own frameworks, cheap formats implemented |
 | Real-iBoot boot chain in FirmwareKit | `fk-k48-iboot` | app-prepared iPads boot SecureROM→LLB→iBoot→kernel like the Python-built ones |
+| iPod touch 1G, milestone 0 | qemu-ios `ipod-1g` | devos50's S5L8900 machine on our tree with shared models + properties; boot 3A101a from his public images (docs/sweep/ipod-1g.md) |
+| Firmware matrix | `matrix` | every iPad 3.x/4.x/5.x and iPod 2.x–4.x build enumerated with keys; tests/matrix.py runner; results in docs/matrix-results.md |
+| Fidelity ledger + iOS 5 spike | `fidelity-ledger`, qemu-ios `ios5-spike` | R/H/P/S per component; predicted vs actual iOS 5 confrontations |
+| Shared IPA library | `ipa-library` | download once, install on any device |
 | Consolidation sweep | docs/sweep/PLAN.md | surveys done (docs/sweep/*.md); Track A done on `app-correctness` (see the Done table; to merge); B–E sequenced in the plan; decisions S1–S6 with Sam |
 
 Then: a notarized build, verified in-app on every firmware, for Sam to test. That build is the first
