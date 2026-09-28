@@ -388,12 +388,16 @@ nonisolated enum BootRecipe {
     }
 
     struct IPad {
+        /// The boot image: kboot.bin (direct-kernel) or, when `gidBlobs` is set, iBoot.bin (real iBoot chain).
         var kboot: String
         var nand: String
         var overlay: String
         /// "0xWORD2:0xWORD3" (identity.json); the machine uses zeros without it.
         var dieID: String?
         var writableNOR: String?
+        /// Set for the iboot strategy: the base's gid-blobs.bin (the emulated AES has no GID key). Its presence
+        /// picks `iboot=` over `kboot=`.
+        var gidBlobs: String? = nil
         var usbAddress: String?
         var wifi: Bool
         var guestPackage: String? = nil
@@ -406,6 +410,14 @@ nonisolated enum BootRecipe {
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let machine = object["machine"] as? [String: Any] else { return [:] }
         return machine.mapValues { "\($0)" }
+    }
+
+    /// A prepared base's boot_strategy ("iboot"/"kboot"); nil for a missing lock or field (the two older prepared
+    /// iPads are kboot and carry no boot_strategy).
+    static func bootStrategy(_ lock: URL) -> String? {
+        guard let data = try? Data(contentsOf: lock),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return object["boot_strategy"] as? String
     }
 
     static func options(_ machine: [String: String]) -> String {
@@ -436,9 +448,18 @@ nonisolated enum BootRecipe {
     /// Wi-Fi is the machine's default (a BCM4329 on its own slirp wifi0); an
     /// explicit `netdev` replaces it. No -m: the machine's default is the K48's 256 MiB.
     static func iPad(_ d: IPad, serial: String, audio: [String], netdev: String?, restore: [String]) -> BootConfig {
-        var machine = "ipad1,kboot=\(escape(d.kboot)),nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
+        // iboot strategy: enter the pattern-patched iBoot with the catalog keys and boot the kernel from NAND, off a
+        // private writable NOR (no base nor=, as ipad1_boot's writable path). kboot: the direct-kernel bundle.
+        var machine: String
+        if let gid = d.gidBlobs {
+            machine = "ipad1,iboot=\(escape(d.kboot)),gid-blobs=\(escape(gid))"
+            if let nor = d.writableNOR { machine += ",nor-rw=\(escape(nor))" }
+            machine += ",nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
+        } else {
+            machine = "ipad1,kboot=\(escape(d.kboot)),nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
+            if let nor = d.writableNOR { machine += ",nor-rw=\(escape(nor))" }
+        }
         if let dieID = d.dieID { machine += ",die-id=\(escape(dieID))" }
-        if let nor = d.writableNOR { machine += ",nor-rw=\(escape(nor))" }
         // Without a bridge the machine's built-in USB host keeps it charging.
         if let usb = d.usbAddress { machine += ",usb-tcp-addr=\(usb)" }
         if !d.wifi { machine += ",wifi=off" }

@@ -319,8 +319,9 @@ final class EmulatorController {
         do {
             if instance.base.kind == .prepared {
                 let base = instance.paths.base
+                let boot = profile.preparedBoot(strategy: BootRecipe.bootStrategy(base.appendingPathComponent("device.lock.json")))
                 let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: instance.paths.writableNOR,
-                                                         boot: profile.preparedBootFile, also: profile.preparedFiles)
+                                                         boot: boot.boot, also: boot.files)
                 guard let rw = files.writableNOR else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
                 guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
                     baseImageMismatch = true
@@ -365,14 +366,20 @@ final class EmulatorController {
         let overlay = overlayURL
         let kboot: String, nand: String, writableNOR: String?, dieID: String?
         var machineOptions: [String: String] = [:]
+        var gidBlobs: String?
         do {
             let identity: String
             if instance.base.kind == .prepared {
+                // The lock's boot_strategy picks the boot files: iboot (default) = iBoot.bin + nor.bin + gid-blobs.bin,
+                // kboot (the two older prepared iPads) = kboot.bin. Both boot over a private writable NOR clone.
+                let lock = instance.paths.base.appendingPathComponent("device.lock.json")
+                let strategy = BootRecipe.bootStrategy(lock)
+                let boot = profile.preparedBoot(strategy: strategy)
                 let files = try BootRecipe.preparedFiles(base: instance.paths.base, overlay: overlay,
-                                                         writableNOR: instance.paths.writableNOR, boot: profile.preparedBootFile,
-                                                         also: profile.preparedFiles)
+                                                         writableNOR: instance.paths.writableNOR, boot: boot.boot, also: boot.files)
                 (kboot, nand, writableNOR, dieID) = (files.boot.path, files.nand.path, files.writableNOR?.path, instance.identity?.dieID)
-                machineOptions = BootRecipe.lockMachine(instance.paths.base.appendingPathComponent("device.lock.json"))
+                gidBlobs = strategy == "iboot" ? instance.paths.base.appendingPathComponent("gid-blobs.bin").path : nil
+                machineOptions = BootRecipe.lockMachine(lock)
                 identity = instance.storage.key
             } else {
                 (kboot, nand, writableNOR, dieID) = (options.ipad1KBoot, options.ipad1NAND, nil, nil)
@@ -400,7 +407,7 @@ final class EmulatorController {
         // After the overlay pin check above, so a snapshot only ever resumes
         // over the overlay it was saved with.
         return BootRecipe.iPad(.init(kboot: kboot, nand: nand, overlay: overlay.path, dieID: dieID, writableNOR: writableNOR,
-                                     usbAddress: usbSession?.guestAddress, wifi: options.network,
+                                     gidBlobs: gidBlobs, usbAddress: usbSession?.guestAddress, wifi: options.network,
                                      guestPackage: composeGuestOffer(), machineOptions: machineOptions),
                                serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev,
                                restore: restoreArgs(overlay: overlay))

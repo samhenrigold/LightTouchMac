@@ -106,8 +106,12 @@ public enum SystemEdits {
     /// The k48 system + data volumes into `work` (system.img, data.img; scratch next to them).
     /// `rootfs` is the decrypted rootfs DMG (or a bare HFS volume); `systemBytes`/`dataBytes` are partition
     /// 1 and 2 of the MBR in bytes.
+    /// The path the K48 iBoot loads the kernel from (fsboot); the raw IPSW img3 kernelcache is installed there
+    /// for the real-iBoot chain (ipad1_rootfs.build --kernelcache). kboot omits it (the kernel is in the bundle).
+    public static let kernelcachePath = "System/Library/Caches/com.apple.kernelcaches/kernelcache"
+
     public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
-                                gliDispatch: String? = nil,
+                                gliDispatch: String? = nil, kernelcache: Data? = nil,
                                 log: (String) -> Void = { _ in }) throws -> Result {
         let fm = FileManager.default
         let system = work.appendingPathComponent("system.img"), data = work.appendingPathComponent("data.img")
@@ -150,6 +154,10 @@ public enum SystemEdits {
         var rootOwned: [String] = []
         try VolumeMount.withMounted(system, at: work.appendingPathComponent("mnt-system")) { m in
             let at = { (rel: String) in m.appendingPathComponent(rel) }
+            if let kernelcache {   // real-iBoot fsboot: the raw IPSW img3 kernelcache in the system volume
+                try mkdirs(at(kernelcachePath).deletingLastPathComponent())
+                try put(kernelcache, at(kernelcachePath), mode: 0o644)
+            }
             try put(Data(fstabRW.utf8), at(fstab))
             if o.webProxy {
                 try mkdirs(at(pacPath).deletingLastPathComponent())

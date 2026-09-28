@@ -10,7 +10,7 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 
 | Area | State | Checked by |
 |---|---|---|
-| iPad 1 emulation (A4, real iBoot chain, NAND, GL, touch, USB) | Boots iOS 3.2, 3.2.2, 4.2.1 to the home screen with GPU drawing; 49-app compatibility pass. **Gap found 09-28:** only the Python pipeline ships real iBoot; the app's FirmwareKit still prepares iPads for direct-kernel boot (kboot), so app-prepared iPads don't run the real boot chain (`Preparer.swift:125`). Port in progress, branch `fk-k48-iboot` | `tests/ipad1/fresh-device.sh` on 7B500, 7B367, 8C148; `tests/ipad1/regress.py` 7/7 (2026-09-28) |
+| iPad 1 emulation (A4, real iBoot chain, NAND, GL, touch, USB) | Boots iOS 3.2, 3.2.2, 4.2.1 to the home screen with GPU drawing; 49-app compatibility pass. **Gap closed 09-28 (`fk-k48-iboot`):** FirmwareKit's k48 recipe now defaults to the `iboot` strategy (SecureROM→LLB→iBoot→kernel), producing `iBoot.bin`, `nor.bin` and `gid-blobs.bin` byte-equal to the Python pipeline (`K48IBootTests`, 7B500 + 8C148); app-prepared iPads boot the real chain from the lock's `boot_strategy`, with `boot: kboot` kept for debugging and the two existing kboot records still booting. | `Packages/FirmwareKit swift test` (61/61 incl. `K48IBootTests`); iboot boot to userland verified (serial: iBoot banner + fsboot kernelcache load); kboot boot still reaches userland |
 | iPad Wi-Fi | Works, on by default, stock driver (BCM4329 model); location answered by the proxy | qemu-ios `docs/ipad1/wifi.md`, `location.md`; soak on 2026-09-27 |
 | iPad hardware keyboard | USB keyboard through the CCK path; Bluetooth dropped 2026-09-26 | `docs/ipad1/usb-keyboard.md` |
 | iPad restore over emulated USB | Stock idevicerestore: SecureROM → DFU → recovery → restore | `tests/ipad1/restore-smoke.py` (2026-09-28) |
@@ -66,7 +66,7 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - Finder native device recognition: deferred, needs Apple's USB host-controller entitlement (don't raise unless Sam does).
 
 ### Debts
-- App-prepared iPads boot via kboot, not real iBoot (FirmwareKit gap; see Done table). Swift KBoot also lacks `enable-hsic=1` (the 4.2.1 keyboard bug, on `ipad4-app-bugs`).
+- Real iBoot chain for app-prepared iPads: **done** on `fk-k48-iboot` (see Done table). Remaining: the iboot strategy's NAND store isn't yet byte-equal to Python's end-to-end (HFS timestamps/volume UUID, the pre-existing store non-determinism), so the NAND comparison is by structure/boot, not by hash; the full in-bundle `firmwarekit create` (needs a signed k48 guest-tools dir) was not run this session — the byte-equal artifacts + a real iBoot boot were verified instead.
 - Survey reports live in docs/sweep/.
 - `tests/ipod/test_regress.py`: one test's mock lacks `guest_package_status`.
 - Bundled iPod image carries the old GL shim; regenerate at the main merge.
