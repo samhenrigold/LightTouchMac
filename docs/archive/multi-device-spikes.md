@@ -1,7 +1,7 @@
 # Multi-device phase 0: spike results
 
 2026-09-28, branch `multidevice`. Spikes for Risks 1, 2, 4, 6 and 11 of
-[multi-device-plan.md](multi-device-plan.md). All of them ran headless from command-line targets. The
+[multi-device-plan.md](../multi-device-plan.md). All of them ran headless from command-line targets. The
 app was never launched.
 
 | Risk | Verdict |

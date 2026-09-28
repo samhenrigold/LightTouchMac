@@ -1,6 +1,6 @@
 # Filesystem / Finder integration: F0 findings
 
-Status: investigation result, 2026-09-28, for [filesystem-finder-integration-plan.md](filesystem-finder-integration-plan.md).
+Status: investigation result, 2026-09-28, for `filesystem-finder-integration-plan.md` (an uncommitted 2026-09-27 proposal for root-filesystem access and Finder integration; on no branch).
 F1 core is built (see "F1 core results" at the end); nothing else is.
 
 ## Headline

@@ -1,3 +1,5 @@
+> Archived 2026-09-28: written 2026-09-11 for the Python-pipeline, bundled-firmware build. The current layout and repo contract are in [../../README.md](../../README.md).
+
 # Source, inputs and generated files
 
 LightTouchMac owns the product build. Run `scripts/build-release.py` here to
@@ -53,7 +55,7 @@ Keep them until their separate owners and recovery requirements are resolved.
 Keep each active device's original base and overlay together. An old NAND
 directory or snapshot is not safe to remove merely because a newer one exists.
 The app's storage ownership and cleanup rules are described in
-[storage-layout.md](storage-layout.md).
+[storage-layout.md](../storage-layout.md).
 
 User-supplied IPSW/boot ROM setup is a later change. This pipeline continues to
 produce one app containing the selected existing firmware. Public release

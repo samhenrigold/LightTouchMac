@@ -29,7 +29,7 @@ do {
 /// rcu_init constructor registered that thread as an RCU reader, so
 /// call_rcu_thread then walks a freed TLS record (random heap corruption in
 /// qemu_init: SIGSEGVs, "unknown migration protocol: (null)", restores that
-/// never paint; docs/multi-device-spikes.md, section 2). Keep it in a run loop.
+/// never paint; docs/archive/multi-device-spikes.md, section 2). Keep it in a run loop.
 func parkMainThread() -> Never {
     while true { CFRunLoopRun() }
 }

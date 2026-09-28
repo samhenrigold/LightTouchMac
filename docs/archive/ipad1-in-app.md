@@ -1,3 +1,5 @@
+> Archived 2026-09-28: notes from the `ipad1` app branch (`LIGHTTOUCH_DEVICE`, golden-pristine, kboot bundles). Overtaken by the multi-device app: see [../multi-device-plan.md](../multi-device-plan.md), "Corrections from implementation", and [../STATUS.md](../STATUS.md).
+
 # Running the iPad 1 in Light Touch
 
 Status: 2026-09-27. The iPad boots to SpringBoard in the app's bridge, unlocks,
