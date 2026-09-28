@@ -154,6 +154,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         DeviceStateStorage.sweepDeleting(state: state)
         IPALibrary.migrateShared(state: state, devices: records)
         for record in records { USBMux.secure(DeviceInstance.url(record.storage.usbmuxConf, state: state)) }
+        // Bases published by earlier builds become immutable too.
+        for record in records where record.base.kind == .prepared {
+            DeviceStateStorage.lockBase(DeviceInstance.url(record.base.path, state: state))
+        }
         // Logs of devices that no longer exist, and the single-device logs
         // from before per-device ones (Logs/serial.log*, usbmuxd.log*).
         let fm = FileManager.default

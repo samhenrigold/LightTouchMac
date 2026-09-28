@@ -377,9 +377,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .cancel: FirmwareJobs.shared.cancel(entry)
         case .erase: erase(entry)
         case .showInFinder:
-            // An adopted device lives under its legacy names in the state root, not in Devices/<uuid>.
+            // Every device has its Devices/<uuid> (an adopted one keeps its record, work and IPAs there).
             if let instance = host.instance(for: entry) {
-                NSWorkspace.shared.activateFileViewerSelecting([instance.legacy != nil ? Bundled.stateDirectory : instance.paths.directory])
+                NSWorkspace.shared.activateFileViewerSelecting([instance.paths.directory])
             }
         case .delete: confirmDelete(entry)
         }

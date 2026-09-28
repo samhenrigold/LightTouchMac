@@ -10,7 +10,7 @@ source = r'''import Foundation
 nonisolated func logEvent(_ s: String) {}
 /// DeviceProcess's surface: SIGTERM exits it (or not, when hung); SIGKILL always does.
 @MainActor final class FakeProcess {
- var hung = false, terms = 0, kills = 0, isDead = false
+ var hung = false, terms = 0, kills = 0, quits = 0, isDead = false
  func terminate() { terms += 1; if !hung { Task { try? await Task.sleep(for: .milliseconds(30)); self.isDead = true } } }
  func kill() { kills += 1; isDead = true }
  func waitForExit(timeout: TimeInterval) async -> Bool {
@@ -26,6 +26,9 @@ nonisolated func logEvent(_ s: String) {}
  var connectionRecoveryTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, mediaPreparationTask: Task<Void, Never>?, haltTask: Task<Void, Never>?, bootWatchTask: Task<Void, Never>?
  var haltCompletions: [(Bool) -> Void] = []
  var process: FakeProcess? = FakeProcess()
+ var filesMeddled = false
+ @MainActor struct FakeLink { let process: FakeProcess?; func send(_ c: LinkCommand) { if case .machine(.quit) = c { process?.quits += 1; process?.terminate() } } }
+ var link: FakeLink? { FakeLink(process: process) }
 ''' + halt + r'''}
 @main struct Main {
  @MainActor static func main() async throws {
@@ -52,11 +55,15 @@ nonisolated func logEvent(_ s: String) {}
   let gone = Controller(); gone.process!.isDead = true
   var goneResult: Bool?; gone.halt { goneResult = $0 }
   precondition(goneResult == true && gone.process!.terms == 0)
-  print("PASS: Stop mid-boot halts at once, joined requests, a hung helper is killed, a save is left alone")
+  // Files changed under the device: quit QEMU outright, no SIGTERM (no pause, no flush into dead inodes).
+  let meddled = Controller(); meddled.filesMeddled = true
+  let quitResult = await withCheckedContinuation { done in meddled.halt { done.resume(returning: $0) } }
+  precondition(quitResult && meddled.process!.quits == 1 && meddled.process!.terms == 1 && meddled.process!.kills == 0)
+  print("PASS: Stop mid-boot halts at once, joined requests, a hung helper is killed, a save is left alone, meddled files skip the flush")
  }
 }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-halt-') as d:
     p = Path(d) / 'check.swift'; p.write_text(source)
-    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(p), '-o', d + '/check'], check=True)
+    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'Shared/DeviceLinkProtocol.swift'), str(p), '-o', d + '/check'], check=True)
     subprocess.run([d + '/check'], check=True, timeout=8)

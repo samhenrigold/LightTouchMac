@@ -43,7 +43,7 @@ final class EmulatorController {
         webProxyStatus = .waiting
         onStatusChange?()
     }
-    enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff, lowSpace, activation }
+    enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff, lowSpace, activation, files }
     private(set) lazy var deviceNotice = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["message"] as? String
     private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
@@ -112,7 +112,10 @@ final class EmulatorController {
     var deviceReachable: Bool? {
         didSet {
             if deviceReachable == true, connectionIssue?.persistent != true { connectionIssue = nil }
-            if deviceReachable == true, reachableSince == nil { reachableSince = Date() }
+            if deviceReachable == true, reachableSince == nil {
+                reachableSince = Date()
+                startFileWatch()   // iOS is up: every file the helper depends on exists now
+            }
             if oldValue != deviceReachable { onStatusChange?() }
             considerConnectionRecovery()
             checkActivationIfNeeded()
@@ -234,6 +237,7 @@ final class EmulatorController {
         }
         started = true
         state = .booting
+        resolveDeviceNotice(for: .files)   // a fresh helper opens the files as they are now
         if let instanceError {
             logEvent("nand: could not resolve device image: \(instanceError.localizedDescription)")
             state = .dead(exitCode: 1)
@@ -423,6 +427,31 @@ final class EmulatorController {
                 }
             }
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
+    }
+
+    // MARK: - Files under a running device
+
+    private var fileWatch: DeviceFileWatch?
+    /// Something deleted, renamed or replaced the device's files while its helper
+    /// had them open: the guest runs on dead inodes until Stop, which then quits
+    /// without flushing into them.
+    private(set) var filesMeddled = false
+
+    private func startFileWatch() {
+        guard fileWatch == nil, !filesMeddled else { return }
+        let paths = instance.paths
+        fileWatch = DeviceFileWatch(directories: [paths.directory, paths.overlay],
+                                    base: instance.base.kind == .prepared ? paths.base : nil) { [weak self] path in
+            Task { @MainActor in self?.filesChanged(path) }
+        }
+    }
+
+    private func filesChanged(_ path: String) {
+        guard !filesMeddled, !isDead, !isPoweredOff else { return }
+        filesMeddled = true
+        fileWatch = nil
+        logEvent("files: \(path) changed under the running device; Stop will quit without a flush")
+        reportDeviceNotice(DeviceFileWatch.notice(shortName: profile.shortName), for: .files)
     }
 
     // MARK: - Boot deadline
@@ -640,6 +669,7 @@ final class EmulatorController {
         statusTimer?.invalidate()
         statusTimer = nil
         process?.terminate()
+        fileWatch = nil
         // Unlink the owned FIFO paths now, keeping readers alive until the
         // helper is finished writing.
         serialCapture?.removeEndpoints()
@@ -723,6 +753,7 @@ final class EmulatorController {
         guard !isDead else { return }
         if !halting, deathReason == nil { deathReason = reason }   // an aborted boot keeps its own reason
         bootWatchTask?.cancel()
+        fileWatch = nil
         statusTimer?.invalidate()
         statusTimer = nil
         audioSink?(.audioEnded(generation: 0, failed: true))
@@ -1797,7 +1828,14 @@ final class EmulatorController {
         mediaPreparationTask?.cancel()
         haltCompletions = [completion]
         let process = process
-        process?.terminate()
+        if filesMeddled {
+            // The overlay or NOR the helper has open is gone from disk: a flush would
+            // write into dead inodes, so quit QEMU outright (no pause first).
+            logEvent("stop: files were changed under the device; quitting without a flush")
+            link?.send(.machine(.quit))
+        } else {
+            process?.terminate()
+        }
         haltTask = Task { [weak self] in
             var exited = await process?.waitForExit(timeout: Self.haltBudget) ?? true
             if !exited {

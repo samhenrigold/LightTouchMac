@@ -7,6 +7,7 @@
 //                 [--lease PATH] [--expect-failure TEXT]   (exit 0 if the start fails with TEXT)
 //
 // scenario: {"dylib": "...", "machine": "ipad1", "boot": BootConfig, "steps": ["boot", "lit 0.2 300", ...]}
+// "watch DIR" starts the app's DeviceFileWatch on DIR (and its children): "meddled" events follow any change.
 
 import Foundation
 import IOSurface
@@ -55,6 +56,7 @@ var noticed: [String: Double] = [:]
 let noticeLock = NSLock()
 func notice(_ what: String) { noticeLock.withLock { noticed[what] = Date().timeIntervalSince1970 } }
 var audioBytes = 0
+var watches: [DeviceFileWatch] = []
 
 link.onEvent = { event in
     switch event {
@@ -187,6 +189,12 @@ Thread.detachNewThread {
             link.send(.snapshotResume)
         case "status":
             emit("status", statusFields())
+        case "watch":
+            let watch = DeviceFileWatch(directories: [URL(fileURLWithPath: p[1])], base: nil) { path in
+                emit("meddled", ["path": path, "notice": DeviceFileWatch.notice(shortName: "iPod")])
+            }
+            watches.append(watch)
+            emit("watching", ["count": watch.count])
         case "quit":
             link.send(.machine(.quit))
         case "expectExit":

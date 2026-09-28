@@ -58,21 +58,37 @@ nonisolated enum DeviceStateStorage {
     }
 
     /// Removes a tree even where a preparer made it read-only (the NAND is
-    /// chmod a-w): on a refusal every directory in it is made writable, then
-    /// the removal is tried once more and its error thrown.
+    /// chmod a-w) or lockBase made it immutable: on a refusal every directory
+    /// in it is unlocked and made writable, then the removal is tried once
+    /// more and its error thrown.
     static func removeTree(_ url: URL) throws {
         let fm = FileManager.default
         guard (try? fm.attributesOfItem(atPath: url.path)) != nil else { return }
         if (try? fm.removeItem(at: url)) != nil { return }
+        for directory in directories(under: url) {
+            chflags(directory.path, 0)
+            chmod(directory.path, 0o700)
+        }
+        try fm.removeItem(at: url)
+    }
+
+    /// `url` and every directory below it (symlinks not followed).
+    private static func directories(under url: URL) -> [URL] {
         var directories = [url]
-        if let walk = fm.enumerator(at: url, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
+        if let walk = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
             for case let item as URL in walk {
                 let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 if values?.isDirectory == true, values?.isSymbolicLink != true { directories.append(item) }
             }
         }
-        for directory in directories { chmod(directory.path, 0o700) }
-        try fm.removeItem(at: url)
+        return directories
+    }
+
+    /// A published base is immutable (chflags uchg on it and every directory
+    /// in it): the Finder refuses to delete, rename or add to it with a system
+    /// dialog, and nothing here writes into it. Idempotent; removeTree undoes it.
+    static func lockBase(_ base: URL) {
+        for directory in directories(under: base) { chflags(directory.path, UInt32(UF_IMMUTABLE)) }
     }
 
     /// Delete Device: Devices/<uuid> is renamed to Devices/.deleting-<uuid>
