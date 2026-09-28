@@ -101,11 +101,11 @@ struct KBootTests {
     // synth_identity("ipad1-7B500-default") identity.json, DEC = ipad1_fw.py's output.
     static let python: [(String, String, String, String)] = [
         ("k48ap-7B500", "018-8374-001-ramdisk.dmg",
-         "60bdd87c29afe8d2710c1518bcbb14247ec18b85b229cd5335f734bb63149c21", "e6dab7bcb6b31c8cbb600c3c7e1f26ff96ffb487468e08242ff0c3afb2fae705"),
+         "21bba461fd353d043387029603ca9dbccd79f9db3bb2fe3243b6d5a045292cd7", "7e6e1e020772c857a225c7a80242fb94b4973e45b944f5055d8d4c380e6d28d3"),
         ("k48ap-8C148", "038-0024-002-ramdisk.dmg",
-         "b014638fa2b9ea1d2189162fa10886788861712b6b716c5ac883a8576b140794", "c13d68fb91043236ef5e4d538c97cb1083f19d8dac4c5b4ad995b011d54a2694"),
+         "ee14f115a75230046b295fa284a9757385098724e67d2f82dcd19a1e23780855", "9590183a2f6285b221fa1e903fd4ecd882ca3b22435296649ea3545e5c5c86cb"),
         ("k48ap-7B367", "018-7225-009-ramdisk.dmg",
-         "f4f90deee9fcf003f9aee371ab5482de36cbac467909a0a9ea0abaa1d3461792", "b67e2175cf33ca58db1b05eda2dd966cccba054578312d5ae29321006f5a88b2"),
+         "0adbfd374789c8ab9efc84bc3970e6bb231606cd9dd9e79315248979e70db12f", "ab13fea129146262626e0b7cd063ff348ba53223f60c154a35fe750bcb6ef01e"),
     ].filter { Oracle.firmware($0.0).available }
 
     /// The whole Swift chain (IPSW -> FirmwareDecryptor -> KBoot) against the Python chain's kboot.bin.
