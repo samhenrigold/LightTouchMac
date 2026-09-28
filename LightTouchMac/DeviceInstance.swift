@@ -57,6 +57,30 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
         var pointer: String?
     }
 
+    /// device.json `guest`: the guest package serials this device has run.
+    struct Guest: Codable, Equatable, Sendable {
+        /// Baked at prepare time (device.lock.json), when known.
+        var seed: Int64?
+        /// The last serial it_boot reported current.
+        var active: Int64?
+        /// The last serial a healthy session ran; offered as `verdict good`.
+        var lastGood: Int64?
+        /// Serials judged bad; offered as `verdict bad`, never installed again.
+        var bad: [Int64] = []
+        /// Offer the built-in package (serial 0) while the bundled serial is this.
+        var builtIn: Int64?
+
+        init() {}
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            seed = try c.decodeIfPresent(Int64.self, forKey: .seed)
+            active = try c.decodeIfPresent(Int64.self, forKey: .active)
+            lastGood = try c.decodeIfPresent(Int64.self, forKey: .lastGood)
+            bad = try c.decodeIfPresent([Int64].self, forKey: .bad) ?? []
+            builtIn = try c.decodeIfPresent(Int64.self, forKey: .builtIn)
+        }
+    }
+
     var format = 1
     let id: UUID
     var name: String
@@ -70,6 +94,8 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
     var provenance: Provenance?
     var lastEmulatorBuild: String?
     var legacy: Legacy?
+    /// Guest-package serials and verdicts (GuestPackage).
+    var guest: Guest?
 
     var profile: DeviceProfile? { DeviceProfile(boardID: board) }
 

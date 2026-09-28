@@ -313,6 +313,8 @@ nonisolated enum BootRecipe {
         var memory = "128M"
         /// A device.py/prepared device's KBAG table (the emulated AES has no GID key).
         var gidBlobs: String? = nil
+        /// This boot's guest-package offer directory (GuestPackage).
+        var guestPackage: String? = nil
     }
 
     struct IPad {
@@ -324,6 +326,7 @@ nonisolated enum BootRecipe {
         var writableNOR: String?
         var usbAddress: String?
         var wifi: Bool
+        var guestPackage: String? = nil
     }
 
     /// `audio`: the app's CoreAudio arguments, or `-audio driver=none` in tests.
@@ -338,6 +341,7 @@ nonisolated enum BootRecipe {
         if let usb = d.usbAddress { machine += ",usb-tcp-addr=\(usb),osk=on" }
         if d.wifi { machine += ",wifi=on" }          // brings up the emulated BCM4325
         if let blobs = d.gidBlobs { machine += ",gid-blobs=\(escape(blobs))" }
+        if let offer = d.guestPackage { machine += ",guest-package=\(escape(offer))" }
         let argv = ["LightTouchMac", "-M", machine, "-m", d.memory, "-display", "none", "-no-shutdown"]
             + audio + ["-serial", serial] + (netdev.map { ["-netdev", $0] } ?? []) + restore
         // The settings 3.1.3 will not boot without (contrib/run-ipod-touch.sh). No
@@ -354,6 +358,7 @@ nonisolated enum BootRecipe {
         // Without a bridge the machine's built-in USB host keeps it charging.
         if let usb = d.usbAddress { machine += ",usb-tcp-addr=\(usb)" }
         if !d.wifi { machine += ",wifi=off" }
+        if let offer = d.guestPackage { machine += ",guest-package=\(escape(offer))" }
         // usb-kbd on the always-on EHCI becomes the active keyboard for key_mac.
         let argv = ["LightTouchMac", "-M", machine, "-display", "none", "-no-shutdown"] + audio
             + ["-serial", serial, "-device", "usb-kbd,bus=usb-bus.0"] + (netdev.map { ["-netdev", $0] } ?? []) + restore

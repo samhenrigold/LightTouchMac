@@ -39,6 +39,7 @@ final class DeviceHost: @unchecked Sendable {
         self.qemu = qemu
         self.status = status
         ring = FrameRingWriter(status: status)
+        status[.guestPackageSupported] = qemu.guestPackageReport != nil ? 1 : 0
     }
 
     var booted: Bool { stateLock.withLock { bootConfig != nil } }
@@ -88,6 +89,17 @@ final class DeviceHost: @unchecked Sendable {
         status[.agentStatus] = UInt64(max(0, qemu.agentStatus()))
         status[.glesContexts] = UInt64(max(0, qemu.glesContexts()))
         status[.iconGeneration] = qemu.iconGeneration()
+        var serial: Int64 = 0, result: Int32 = 0
+        if let report = qemu.guestPackageReport, report(&serial, &result) {
+            status[.guestPackage] = UInt64(bitPattern: serial)
+            status[.guestPackageState] = UInt64(bitPattern: Int64(result))
+            status[.guestPackageReported] = 1
+        } else {
+            status[.guestPackageReported] = 0
+        }
+        var glSerial: Int64 = 0
+        status[.glesProtocol] = UInt64(bitPattern: Int64(qemu.glesProtocol?(&glSerial) ?? 0))
+        status[.glesSerial] = UInt64(bitPattern: glSerial)
     }
 
     // MARK: Boot

@@ -99,6 +99,9 @@ final class Qemu: @unchecked Sendable {
     lazy var agentFreeResult = sym("qemu_ios_agent_free_result", (@convention(c) (UnsafeMutablePointer<CChar>?) -> Void).self)
     lazy var agentStatus = sym("qemu_ios_agent_status", IntFn.self)
     lazy var glesContexts = sym("qemu_ios_gles_contexts", IntFn.self)
+    /// Optional: dylibs before the guest-package hypercalls lack them.
+    lazy var guestPackageReport = optionalSym("qemu_ios_guest_package_report", (@convention(c) (UnsafeMutablePointer<Int64>?, UnsafeMutablePointer<Int32>?) -> Bool).self)
+    lazy var glesProtocol = optionalSym("qemu_ios_gles_protocol", (@convention(c) (UnsafeMutablePointer<Int64>?) -> Int32).self)
     lazy var buildID = optionalSym("qemu_ios_build_id", (@convention(c) () -> UnsafePointer<CChar>?).self)
     lazy var audioStart = sym("qemu_ios_audio_capture_start", (@convention(c) () -> UInt64).self)
     lazy var audioRead = sym("qemu_ios_audio_capture_read", (@convention(c) (UInt64, UnsafeMutableRawPointer?, Int32, UnsafeMutablePointer<Double>?) -> Int32).self)

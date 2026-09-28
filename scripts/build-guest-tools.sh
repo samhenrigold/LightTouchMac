@@ -5,7 +5,10 @@
 # The flat output directory is NEW-WORK-DIRECTORY/guest-tools.
 # When the checkout has the iPad helpers (contrib/ipad1-guest), they are built
 # too, into NEW-WORK-DIRECTORY/ipad-guest-tools: the flat directory firmwarekit
-# reads (SystemEdits.Helpers). IPAD_SDK selects the iPhoneOS3.2.sdk.
+# reads (SystemEdits.Helpers). IPAD_SDK selects the iPhoneOS3.2.sdk. The guest
+# packages (contrib/guest-package/build.sh: armv6.itpack, armv7.itpack) join
+# that directory: the preparers seed from them and the app composes each boot's
+# offer from them (docs/guest-package-bootstrap.md).
 set -euo pipefail
 
 fail() { echo "build-guest-tools: $*" >&2; exit 1; }
@@ -40,7 +43,8 @@ for component in "${COMPONENTS[@]}"; do
 done
 # The iPad helpers, built by their own contrib recipes (as the FirmwareKit tests use them).
 IPAD_RECIPES=(ipad1-guest appsync ipad1-gles)
-IPAD_SOURCES=(it-pasteboard it-ethlink it-seal it-prefs it-keybag it-heading it-cctest it-gltest it-msmquiet)
+IPAD_SOURCES=(it-pasteboard it-ethlink it-seal it-prefs it-keybag it-heading it-cctest it-gltest it-msmquiet
+              it-boot guest-package)
 IPAD=0
 IPAD_SDK_DIR=""
 if [ -f "$QEMU/contrib/ipad1-guest/build.sh" ]; then
@@ -176,6 +180,13 @@ if [ "$IPAD" = 1 ]; then
         cat "$ROOT/logs/ipad.log" >&2
         fail "iPad guest tools failed; build inputs and logs retained in $ROOT"
     fi
+    # The guest packages build from the checkout into this work directory (their
+    # recipe copies its own sources); nothing is written into the checkout.
+    echo "building guest packages"
+    if ! ARMV6_SDK="$ARMV6_SDK" IPAD_SDK="$IPAD_SDK_DIR" LDID="$LDID" bash "$QEMU/contrib/guest-package/build.sh" "$ROOT/guest-package" >"$ROOT/logs/guest-package.log" 2>&1; then
+        cat "$ROOT/logs/guest-package.log" >&2
+        fail "guest packages failed; logs retained in $ROOT"
+    fi
 fi
 
 # Publish only the app's payload set, after every build has succeeded.
@@ -220,6 +231,8 @@ if [ "$IPAD" = 1 ]; then
         ipad_payload "$C/ipad1-gles/GLEngine-$b"
     done
     ipad_payload "$C/ipad1-gles/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU"
+    ipad_payload "$ROOT/guest-package/armv6.itpack"
+    ipad_payload "$ROOT/guest-package/armv7.itpack"
     chmod 0644 "$ROOT"/ipad-guest-tools.incomplete/*.plist "$ROOT"/ipad-guest-tools.incomplete/*.tsv
 fi
 python3 - "$ROOT" <<'PY'

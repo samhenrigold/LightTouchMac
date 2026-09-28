@@ -211,6 +211,10 @@ func expectFailure(_ what: String, _ body: () async throws -> Void) async {
   // A packaged image is the loader's.
   let before = link.ops.count
   check(try await packaged.updateComponents(parts) == false && link.ops.count == before)
+  // ... and so is one whose agent job points into the package, before any report.
+  let packagedJob = try PropertyListSerialization.data(fromPropertyList: ["Label": "com.qemu.it-agent", "ProgramArguments": ["/usr/local/lighttouch/current/bin/it_agent"]], format: .xml, options: 0)
+  link.files[GuestServices.agentJob] = packagedJob; link.files[GuestServices.engine] = Data("package hook".utf8)
+  check(try await legacy.updateComponents(parts) == false && link.files[GuestServices.engine] == Data("package hook".utf8))
   precondition(GuestServices.agentVersion(Data("..it_agent v12\n".utf8)) == 12 && GuestServices.agentVersion(Data()) == 0)
 
   // Halt: submitted with deadline 0; absent and stale agents.

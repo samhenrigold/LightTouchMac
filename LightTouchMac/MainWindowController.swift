@@ -1000,6 +1000,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
+    @objc func restartWithPreviousGuestTools(_ sender: Any?) { emulator?.restart(with: .previous) }
+    @objc func restartWithBuiltInGuestTools(_ sender: Any?) { emulator?.restart(with: .builtIn) }
+    @objc func restartWithLatestGuestTools(_ sender: Any?) { emulator?.restart(with: .latest) }
+
     /// Respring — the quick fix for a freshly sideloaded app that crashes on
     /// launch until the device is restarted.
     @objc func restartSpringBoard(_ sender: Any?) {
@@ -1450,6 +1454,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let device = emulator.map { emulator in """
             \(emulator.dylibProvenance)
             state: \(emulator.statusLine)
+            guest tools: \(emulator.guestToolsStatus) (offer \(emulator.guestOffer.map { "\($0)" } ?? "none"))
             files-root: \(emulator.options.filesRoot)
             nand: \(emulator.options.nand)
             appsync: \(emulator.options.appsync)   network: \(emulator.options.network)
@@ -1715,6 +1720,15 @@ extension MainWindowController: NSMenuItemValidation {
             return true
         case #selector(devicePowerOff(_:)): return emulator.acceptsInput
         case #selector(deviceReset(_:)):  return !emulator.isDead
+        case #selector(restartWithPreviousGuestTools(_:)):
+            menuItem.isHidden = emulator.guestOffer == nil
+            return emulator.canRestart(with: .previous)
+        case #selector(restartWithBuiltInGuestTools(_:)):
+            menuItem.isHidden = emulator.guestOffer == nil
+            return emulator.canRestart(with: .builtIn)
+        case #selector(restartWithLatestGuestTools(_:)):
+            menuItem.isHidden = !emulator.canRestart(with: .latest)
+            return emulator.canRestart(with: .latest)
         case #selector(saveStateNow(_:)): return emulator.isRunning
         case #selector(discardSavedState(_:)): return emulator.hasSavedState
         case #selector(toggleTouchOverlay(_:)):

@@ -258,7 +258,9 @@ func describe(_ s: SharedStatus) -> [String: Any] {
     ["heartbeat": s.heartbeat, "frameSerial": s.frameSerial, "width": s.width, "height": s.height,
      "uiReady": s.uiReady, "storageFailed": s.storageFailed, "shutdownConfirmed": s.shutdownConfirmed,
      "displaySleeping": s.displaySleeping, "agentStatus": s.agentStatus, "glesContexts": s.glesContexts,
-     "iconGeneration": s.iconGeneration, "qemuState": s.qemuState.rawValue, "exitCode": s.exitCode]
+     "iconGeneration": s.iconGeneration, "qemuState": s.qemuState.rawValue, "exitCode": s.exitCode,
+     "guestPackage": s.guestPackage.map { ["serial": $0.serial, "result": $0.result] } ?? NSNull(),
+     "glesProtocol": s.glesProtocol, "glesSerial": s.glesSerial]
 }
 
 // MARK: - One-shot (seal / keybag boots)

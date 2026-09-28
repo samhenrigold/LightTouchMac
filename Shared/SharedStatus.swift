@@ -19,7 +19,11 @@ nonisolated enum StatusSlot: Int, CaseIterable {
          uiReady, storageFailed, shutdownConfirmed, displaySleeping, agentStatus,
          glesContexts, iconGeneration,
          qemuState,                         // QemuState
-         exitCode, publishTicks, helperPID
+         exitCode, publishTicks, helperPID,
+         // layout 2: it_boot's QC_PKG_REPORT and the GL shim's QC_GLES_HELLO
+         guestPackageReported, guestPackage, guestPackageState,   // serial, it_boot R_* (Int64 bit patterns)
+         glesProtocol, glesSerial,
+         guestPackageSupported              // the dylib has the guest-package= property (set before boot)
 }
 
 nonisolated enum QemuState: UInt64, Sendable {
@@ -44,11 +48,25 @@ nonisolated struct SharedStatus: Sendable, Equatable {
     var qemuState: QemuState
     var exitCode: Int32
     var helperPID: Int32
+    /// it_boot's last report since the guest reset: the serial now current and
+    /// its result (R_*: 0 unchanged, 1 installed, 2 switched, 3/4 reverted,
+    /// 5 refused; negative: an install failed). Nil: no loader, or no offer yet.
+    var guestPackage: GuestPackageReport?
+    /// QC_GLES_HELLO's wire protocol and package serial; 0 when no hello came.
+    var glesProtocol: Int32 = 0
+    var glesSerial: Int64 = 0
+    /// The loaded dylib serves guest-package offers (older ones reject the property).
+    var guestPackageSupported = false
+}
+
+nonisolated struct GuestPackageReport: Sendable, Equatable {
+    var serial: Int64
+    var result: Int32
 }
 
 nonisolated struct StatusBlock: @unchecked Sendable {
     static let magic: UInt64 = 0x4C544D5354415432   // "LTMSTAT2"
-    static let layoutVersion: UInt64 = 1
+    static let layoutVersion: UInt64 = 2
     static let bytes = 4096
 
     let surface: IOSurface
@@ -91,7 +109,13 @@ nonisolated struct StatusBlock: @unchecked Sendable {
                      iconGeneration: self[.iconGeneration],
                      qemuState: QemuState(rawValue: self[.qemuState]) ?? .notStarted,
                      exitCode: Int32(truncatingIfNeeded: Int64(bitPattern: self[.exitCode])),
-                     helperPID: Int32(truncatingIfNeeded: self[.helperPID]))
+                     helperPID: Int32(truncatingIfNeeded: self[.helperPID]),
+                     guestPackage: self[.guestPackageReported] == 0 ? nil
+                        : GuestPackageReport(serial: Int64(bitPattern: self[.guestPackage]),
+                                             result: Int32(truncatingIfNeeded: Int64(bitPattern: self[.guestPackageState]))),
+                     glesProtocol: Int32(truncatingIfNeeded: Int64(bitPattern: self[.glesProtocol])),
+                     glesSerial: Int64(bitPattern: self[.glesSerial]),
+                     guestPackageSupported: self[.guestPackageSupported] != 0)
     }
 }
 

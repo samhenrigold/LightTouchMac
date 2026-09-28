@@ -272,6 +272,7 @@ final class EmulatorController {
         }
         startTimeZoneSync()       // guest zone follows the Mac's, incl. travel
         startForegroundWatch()
+        startGuestPackageWatch()
     }
 
     /// nil when the device can't boot; the notice says why and the state is dead.
@@ -324,7 +325,8 @@ final class EmulatorController {
         let netdev = options.network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
         return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: options.iBoot, bootrom: options.bootrom, nand: nand,
                                      nor: options.nor, writableNOR: writableNOR.path, overlay: overlay.path,
-                                     usbAddress: usbSession?.guestAddress, wifi: options.network, memory: options.memory),
+                                     usbAddress: usbSession?.guestAddress, wifi: options.network, memory: options.memory,
+                                     guestPackage: composeGuestOffer()),
                                serial: serialCapture?.argument ?? "null",
                                audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
                                netdev: netdev, restore: restoreArgs(overlay: overlay))   // -incoming, if a snapshot is trusted
@@ -372,7 +374,8 @@ final class EmulatorController {
         // After the overlay pin check above, so a snapshot only ever resumes
         // over the overlay it was saved with.
         return BootRecipe.iPad(.init(kboot: kboot, nand: nand, overlay: overlay.path, dieID: dieID, writableNOR: writableNOR,
-                                     usbAddress: usbSession?.guestAddress, wifi: options.network),
+                                     usbAddress: usbSession?.guestAddress, wifi: options.network,
+                                     guestPackage: composeGuestOffer()),
                                serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev,
                                restore: restoreArgs(overlay: overlay))
     }
@@ -535,6 +538,7 @@ final class EmulatorController {
         serialCapture?.removeEndpoints()
         mediaPreparationTask?.cancel()
         foregroundTask?.cancel()
+        guestPackageTask?.cancel()
         orientationTask?.cancel()
         orientationTask = nil
         usbmux.stop()
@@ -707,6 +711,7 @@ final class EmulatorController {
             if isSleeping { return "Sleeping" }
             if restartingSpringBoard { return "Restarting SpringBoard…" }
             if let mediaPreparationFailure { return "Media update failed — \(mediaPreparationFailure)" }
+            if guestToolsStatus != .legacy, let text = guestToolsStatus.text { return "Running — \(text)" }
             if retainedPackedImage { return "Running — existing image retained; erase device to upgrade" }
             return canManageApps ? "Running" : "Running — USB unavailable"
         case .paused:     return "Paused"
@@ -1030,6 +1035,148 @@ final class EmulatorController {
         }
     }
 
+    // MARK: - Guest package (docs/guest-package-bootstrap.md)
+
+    /// What this boot offered the guest's loader; nil: no offer.
+    private(set) var guestOffer: GuestPackage.Offer?
+    private(set) var guestToolsStatus: GuestPackage.Status = .unknown {
+        didSet { if oldValue != guestToolsStatus { onStatusChange?() } }
+    }
+    private var guestPackageTask: Task<Void, Never>?
+    private var guestOfferDirectory: URL { instance.paths.work.appendingPathComponent("guest-offer", isDirectory: true) }
+    private var recordURL: URL {
+        DeviceInstance.directory(instance.id, state: stateDir).appendingPathComponent(DeviceInstance.recordName)
+    }
+    /// The preparer's device.lock.json record, for a prepared base.
+    private var lockRecord: GuestPackage.LockRecord? {
+        instance.base.kind == .prepared ? GuestPackage.lockRecord(instance.paths.base.appendingPathComponent("device.lock.json")) : nil
+    }
+    private var guestRecord: DeviceInstance.Guest? { (try? DeviceInstance.read(recordURL))?.guest }
+
+    /// device.json `guest`, read fresh and written back (never the whole cached record).
+    private func updateGuestRecord(_ change: (inout DeviceInstance.Guest) -> Void) {
+        guard var record = try? DeviceInstance.read(recordURL) else { return }
+        var guest = record.guest ?? DeviceInstance.Guest()
+        if guest.seed == nil { guest.seed = lockRecord?.seed }
+        change(&guest)
+        guard guest != record.guest else { return }
+        record.guest = guest
+        do {
+            try record.write(state: stateDir)
+            DeviceLibrary.shared.reload()
+        } catch { logEvent("guest package: could not record \(guest): \(error.localizedDescription)") }
+    }
+
+    /// Compose this boot's offer from the bundled itpack; the machine's
+    /// guest-package= directory, or nil (no property: an older dylib, no
+    /// itpack, or nothing for this build) and the device keeps what it runs.
+    private func composeGuestOffer() -> String? {
+        guestOffer = nil
+        guard status?.guestPackageSupported == true, let arch = GuestPackage.arch(board: instance.board),
+              let pack = GuestPackage.bundledPack(arch: arch, filesRoot: options.filesRoot) else {
+            try? FileManager.default.removeItem(at: guestOfferDirectory)
+            return nil
+        }
+        let build = instance.firmware.split(separator: "-").last.map(String.init) ?? ""
+        do {
+            try FileManager.default.createDirectory(at: instance.paths.work, withIntermediateDirectories: true)
+            guestOffer = try GuestPackage.compose(itpack: pack, board: instance.board, build: build,
+                                                  lock: lockRecord, guest: guestRecord, into: guestOfferDirectory)
+        } catch {
+            logEvent("guest package: no offer: \(error.localizedDescription)")
+        }
+        if let guestOffer { logEvent("guest package: offering \(guestOffer.serial == 0 ? "the built-in package" : "serial \(guestOffer.serial) (\(guestOffer.version))")") }
+        return guestOffer == nil ? nil : guestOfferDirectory.path
+    }
+
+    /// Judge this boot: a report and a healthy session (UI up, the agent or
+    /// lockdown answering) is `good`; a new package with no healthy session
+    /// within the budget is `bad`. No report once healthy: legacy baked tools.
+    private func startGuestPackageWatch() {
+        guestPackageTask?.cancel()
+        guestToolsStatus = .unknown
+        guard let offer = guestOffer else { return }
+        let generation = bootGeneration
+        let restored = restoringFromSnapshot
+        guestPackageTask = Task { [weak self] in
+            let started = ContinuousClock.now
+            var healthySince: ContinuousClock.Instant?
+            var seen: GuestPackageReport?
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, generation == self.bootGeneration, !self.isDead, !self.shuttingDown,
+                      let status = self.status else { return }
+                let report = status.guestPackage
+                if let report, report != seen {
+                    seen = report
+                    logEvent("guest package: loader reports serial \(report.serial), result \(report.result)")
+                    self.updateGuestRecord { $0.active = report.serial }
+                }
+                self.guestToolsStatus = GuestPackage.status(report: report, offer: offer, record: self.guestRecord,
+                                                            glesProtocol: status.glesProtocol)
+                // The iPod: the agent answers its channel. The iPad has no agent;
+                // lockdown answering stands in for its pasteboard agent (the
+                // dylib exports no pasteboard-agent status).
+                let healthy = self.state == .running && status.uiReady
+                    && (self.hasGuestTools ? status.agentStatus == 1 : self.deviceReachable == true)
+                if healthy { healthySince = healthySince ?? .now } else { healthySince = nil }
+                let steady = healthySince.map { ContinuousClock.now - $0 } ?? .zero
+                switch GuestPackage.verdict(report: report, healthyFor: steady, elapsed: ContinuousClock.now - started,
+                                            record: self.guestRecord, restored: restored) {
+                case nil: continue
+                case .good(let serial)?:
+                    self.updateGuestRecord { $0.lastGood = serial; $0.bad.removeAll { $0 == serial } }
+                    logEvent("guest package: serial \(serial) judged good")
+                case .bad(let serial)?:
+                    self.updateGuestRecord { if !$0.bad.contains(serial) { $0.bad.append(serial) } }
+                    logEvent("guest package: serial \(serial) judged bad (no healthy session in \(GuestPackage.badAfter))")
+                case .legacy?:
+                    self.guestToolsStatus = .legacy
+                    logEvent("guest package: no report; legacy baked guest tools")
+                case .undecided?: break
+                }
+                return
+            }
+        }
+    }
+
+
+    enum GuestToolsChoice { case previous, builtIn, latest }
+
+    /// Device ▸ Restart with … Guest Tools: record the choice, power off
+    /// cleanly, and start a fresh helper, whose boot composes the next offer
+    /// from the record (its loader runs at boot). A cold boot, not a guest
+    /// reset: after system_reset a fresh 7E18 once stayed on the Apple logo.
+    func canRestart(with choice: GuestToolsChoice) -> Bool {
+        guard isRunning, guestOffer != nil, status?.guestPackage != nil else { return false }
+        switch choice {
+        case .previous: return true
+        case .builtIn: return guestOffer?.serial != 0
+        case .latest: return guestOffer?.serial == 0 || guestRecord?.bad.contains(guestOffer?.bundled ?? -1) == true
+        }
+    }
+
+    func restart(with choice: GuestToolsChoice) {
+        guard let offer = guestOffer else { return }
+        let active = status?.guestPackage?.serial
+        updateGuestRecord { guest in
+            switch choice {
+            case .previous:
+                if let active, active != guest.seed, !guest.bad.contains(active) { guest.bad.append(active) }
+                if guest.lastGood == active { guest.lastGood = nil }
+                guest.builtIn = nil
+            case .builtIn:
+                guest.builtIn = offer.bundled
+            case .latest:
+                guest.builtIn = nil
+                guest.bad.removeAll { $0 == offer.bundled }
+            }
+        }
+        logEvent("guest package: restarting with \(choice) guest tools")
+        discardSavedState()   // a restored session would not run the loader
+        beginCleanShutdown { [weak self] _ in self?.onRestartRequested?() }
+    }
+
     // MARK: - Keyboard passthrough
     
     /// Forward a host key by its macOS virtual keycode; the shim maps it to a
@@ -1109,6 +1256,7 @@ final class EmulatorController {
             self.setAccelerometer(for: 0)
             self.state = .booting
             self.startMediaPreparation()
+            self.startGuestPackageWatch()
         }
     }
     /// Retain the QEMU main loop at guest power-off; a reset can cold boot it
@@ -1155,6 +1303,7 @@ final class EmulatorController {
             self.poweringOn = false
             self.startMediaPreparation()
             self.startForegroundWatch()
+            self.startGuestPackageWatch()
         }
     }
 
@@ -1734,7 +1883,8 @@ final class EmulatorController {
             throw DeviceToolsError.failed("The device is not reachable over USB yet.")
         }
         return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot,
-                           proxyDirectory: proxyDirectory, agent: link, agentCache: agentCache)
+                           proxyDirectory: proxyDirectory, agent: link, agentCache: agentCache,
+                           packaged: status?.guestPackage != nil)
     }
     
     /// Cheap in-process check that the USB bridge sees the guest. App-service

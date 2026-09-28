@@ -194,6 +194,10 @@ enum MainMenuBuilder {
         menu.addItem(item("Pause", #selector(MainWindowController.toggleDevicePause(_:))))
         // Keep restart and erase together at the bottom, away from routine input.
         menu.addItem(item("Restart…", #selector(MainWindowController.deviceReset(_:))))
+        // Guest-package recovery (GuestPackage); enabled only when a loader reported.
+        menu.addItem(item("Restart with Previous Guest Tools", #selector(MainWindowController.restartWithPreviousGuestTools(_:))))
+        menu.addItem(item("Restart with Built-in Guest Tools", #selector(MainWindowController.restartWithBuiltInGuestTools(_:))))
+        menu.addItem(item("Restart with Latest Guest Tools", #selector(MainWindowController.restartWithLatestGuestTools(_:))))
         menu.addItem(item("Power Off", #selector(MainWindowController.devicePowerOff(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
         // The sidebar selection's library commands, as in its context menu.

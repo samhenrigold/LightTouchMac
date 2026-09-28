@@ -352,8 +352,12 @@ nonisolated struct GuestServices: Sendable {
         let agentPath = (guest[Self.agentJob].flatMap {
             try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any]
         }?["ProgramArguments"] as? [String])?.first
+        // The loader's package runs this agent (its job points into current/):
+        // the package owns the agent, the GL engine and typein hooks, even
+        // before this boot's report has arrived.
+        if agentPath?.hasPrefix("/usr/local/lighttouch/") == true { return false }
         var changedAgent = false
-        if let agentPath, agentPath.hasPrefix("/"), !agentPath.hasPrefix("/usr/local/lighttouch/") {
+        if let agentPath, agentPath.hasPrefix("/") {
             let running = try await agent.get(agentPath)
             let version = try await agent.capabilities().version
             // Never replace an agent with an older one (a development build can
