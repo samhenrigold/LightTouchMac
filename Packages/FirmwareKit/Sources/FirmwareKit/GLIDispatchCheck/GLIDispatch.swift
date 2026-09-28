@@ -66,7 +66,8 @@ public enum GLIDispatch {
     }
 
     /// {slot: export name without the underscore}: each `_gl*` export of OpenGLES loads its target with one
-    /// `ldr rX, [rY, #off]` that a `blx/bx rX` then calls; slot = (off - 0x10) / 4 (glitsv.exports).
+    /// `ldr rX, [rY, #off]` that a `blx/bx rX` then calls (or loads it straight into pc); slot = (off - 0x10) / 4
+    /// (glitsv.exports, over a 160-byte window).
     public static func exports(_ cache: DyldSharedCache, slots: Int, warn: (String) -> Void = { _ in }) throws -> [Int: String] {
         guard let img = cache.image(openGLES) else { throw FirmwareError(.unsupported, "no OpenGLES image in the cache") }
         var out: [Int: String] = [:]
@@ -78,7 +79,7 @@ public enum GLIDispatch {
         try cache.data.withUnsafeBytes { b in
             for s in syms {
                 guard let fo = cache.fileOffset(of: UInt64(s.value)) else { throw FirmwareError(.internal, "\(s.name) not mapped") }
-                let code = UnsafeRawBufferPointer(rebasing: b[fo..<min(fo + 96, b.count)])
+                let code = UnsafeRawBufferPointer(rebasing: b[fo..<min(fo + 160, b.count)])
                 let offs = callLoads(code, thumb: s.desc & 8 != 0)
                     .filter { $0 != gcOffset && $0 != tsdOffset && $0 >= tableOffset && $0 < tableOffset + 4 * slots }
                 if offs.count == 1 {
@@ -91,16 +92,26 @@ public enum GLIDispatch {
         return out
     }
 
-    /// The immediate offsets of the loads a register call goes through, up to the first `pop {..., pc}`.
-    /// A decoder for exactly what glitsv.py matches in capstone's text: `ldr* rT, [rN, #0xOFF]` with rN in
-    /// r0-r8 and OFF > 9 (capstone prints smaller immediates in decimal), then an unconditional `blx/bx rT`.
+    /// The immediate offsets of the loads a register call goes through, as glitsv.py reads capstone's text:
+    /// `ldr* rT, [rN, #0xOFF]` with rN in r0-r8 or ip and OFF > 9 (capstone prints smaller immediates in
+    /// decimal); a `bl*/bx*` (conditional too: 4.x glIs* use blxne) through rT; a load straight into pc (armv6
+    /// 3.x: `mov lr, pc; ldr pc, [ip, #off]` is a call, a bare unconditional `ldr pc` a tail call that ends the
+    /// trampoline). Only an unconditional `pop {..., pc}` or `bx` ends it otherwise (armv6 returns early with
+    /// popeq / bxeq lr and then tail-calls with bx rT).
     /// ponytail: only the load/branch/pop/IT forms trampolines use are decoded; any other instruction is
     /// just skipped by its length. Enough for the 3.x/4.x OpenGLES caches (checked against glitsv.py).
     static func callLoads(_ c: UnsafeRawBufferPointer, thumb: Bool) -> Set<Int> {
         var loads: [Int: Int] = [:], offs = Set<Int>()
-        func load(_ rt: Int, _ rn: Int, _ imm: Int) { if rn <= 8 && imm > 9 { loads[rt] = imm } }
+        /// false when the load ends the scan (a tail call through pc)
+        func load(_ rt: Int, _ rn: Int, _ imm: Int, plainLdr: Bool, afterMovLrPc: Bool) -> Bool {
+            guard rn <= 8 || rn == 12, imm > 9 else { return true }
+            loads[rt] = imm
+            guard rt == 15 else { return true }
+            offs.insert(imm)
+            return !plainLdr || afterMovLrPc
+        }
         func call(_ rm: Int) { if let o = loads[rm] { offs.insert(o) } }
-        var pos = 0
+        var pos = 0, movLrPc = false
         if thumb {
             var itLeft = 0, itConditional = false
             while pos + 2 <= c.count {
@@ -109,16 +120,19 @@ public enum GLIDispatch {
                 if wide && pos + 4 > c.count { break }
                 let conditional = itLeft > 0 && itConditional
                 if itLeft > 0 { itLeft -= 1 }
+                let prev = movLrPc
+                movLrPc = false
                 if !wide {
                     pos += 2
                     switch h1 {
-                    case _ where h1 & 0xF800 == 0x6800: load(h1 & 7, (h1 >> 3) & 7, ((h1 >> 6) & 0x1F) * 4)   // ldr
-                    case _ where h1 & 0xF800 == 0x7800: load(h1 & 7, (h1 >> 3) & 7, (h1 >> 6) & 0x1F)         // ldrb
-                    case _ where h1 & 0xF800 == 0x8800: load(h1 & 7, (h1 >> 3) & 7, ((h1 >> 6) & 0x1F) * 2)   // ldrh
-                    case _ where h1 & 0xFF07 == 0x4780 || h1 & 0xFF07 == 0x4700:                              // blx/bx rm
-                        if !conditional { call((h1 >> 3) & 0xF) }
-                    case _ where h1 & 0xFF00 == 0xBD00: return offs                                          // pop {..., pc}
-                    case _ where h1 & 0xFF00 == 0xBF00 && h1 & 0xF != 0:                                     // it
+                    case _ where h1 & 0xF800 == 0x6800: _ = load(h1 & 7, (h1 >> 3) & 7, ((h1 >> 6) & 0x1F) * 4, plainLdr: false, afterMovLrPc: prev)   // ldr
+                    case _ where h1 & 0xF800 == 0x7800: _ = load(h1 & 7, (h1 >> 3) & 7, (h1 >> 6) & 0x1F, plainLdr: false, afterMovLrPc: prev)       // ldrb
+                    case _ where h1 & 0xF800 == 0x8800: _ = load(h1 & 7, (h1 >> 3) & 7, ((h1 >> 6) & 0x1F) * 2, plainLdr: false, afterMovLrPc: prev) // ldrh
+                    case _ where h1 & 0xFF07 == 0x4780: call((h1 >> 3) & 0xF)                                                  // blx rm
+                    case _ where h1 & 0xFF07 == 0x4700: call((h1 >> 3) & 0xF); if !conditional { return offs }                 // bx rm
+                    case _ where h1 & 0xFF00 == 0xBD00: if !conditional { return offs }                                        // pop {..., pc}
+                    case 0x46FE: movLrPc = !conditional                                                                        // mov lr, pc
+                    case _ where h1 & 0xFF00 == 0xBF00 && h1 & 0xF != 0:                                                       // it
                         itLeft = 4 - (h1 & 0xF).trailingZeroBitCount
                         itConditional = (h1 >> 4) & 0xF != 0xE
                     default: break
@@ -129,27 +143,32 @@ public enum GLIDispatch {
                 pos += 4
                 let rn = h1 & 0xF, rt = h2 >> 12
                 switch h1 & 0xFFF0 {
-                case 0xF8D0: load(rt, rn, h2 & 0xFFF)                                                        // ldr.w
-                case 0xF890, 0xF8B0, 0xF990, 0xF9B0: if rt != 15 { load(rt, rn, h2 & 0xFFF) }                // ldrb/h, ldrsb/h.w
-                case 0xF850, 0xF810, 0xF830, 0xF910, 0xF930:                                                 // T4: [rn, #+imm8]{!}, ldrt
-                    if h2 & 0x0800 != 0 && h2 & 0x0600 == 0x0600 && !(rt == 15 && h1 & 0xFFF0 != 0xF850) { load(rt, rn, h2 & 0xFF) }
-                    if h1 == 0xF85D && h2 == 0xFB04 { return offs }                                          // ldr pc, [sp], #4
-                default:
-                    if h1 == 0xE8BD && h2 & 0x8000 != 0 { return offs }                                      // pop.w {..., pc}
+                case 0xF8D0: _ = load(rt, rn, h2 & 0xFFF, plainLdr: false, afterMovLrPc: prev)                               // ldr.w
+                case 0xF890, 0xF8B0, 0xF990, 0xF9B0: if rt != 15 { _ = load(rt, rn, h2 & 0xFFF, plainLdr: false, afterMovLrPc: prev) }   // ldrb/h, ldrsb/h.w
+                case 0xF850, 0xF810, 0xF830, 0xF910, 0xF930:                                                                   // T4: [rn, #+imm8]{!}, ldrt
+                    if h2 & 0x0800 != 0 && h2 & 0x0600 == 0x0600 && !(rt == 15 && h1 & 0xFFF0 != 0xF850),
+                       !load(rt, rn, h2 & 0xFF, plainLdr: h1 & 0xFFF0 == 0xF850 && h2 & 0x0100 != 0 && !conditional, afterMovLrPc: prev) { return offs }
+                default: break   // pop.w and ldr pc, [sp], #4 are not a plain `pop` in capstone's text: glitsv.py scans on
                 }
             }
         } else {
             while pos + 4 <= c.count {
                 let w = Int(c.u32le(pos))
                 pos += 4
-                let cond = w >> 28
+                let cond = w >> 28, always = cond == 0xE
+                let prev = movLrPc
+                movLrPc = w == 0xE1A0E00F                                                                                      // mov lr, pc
                 if cond == 0xF { continue }
-                if w & 0x0E500000 == 0x04100000 || w & 0x0E500000 == 0x04500000 {                           // ldr/ldrb imm12
-                    if w & 0x01800000 == 0x01800000 { load((w >> 12) & 0xF, (w >> 16) & 0xF, w & 0xFFF) }    // P=1, U=1
-                    if w & 0x0FFFFFFF == 0x049DF004 { return offs }                                          // pop {pc}
-                } else if w & 0x0FFFFFD0 == 0x012FFF10 {                                                     // bx/blx rm
-                    if cond == 0xE { call(w & 0xF) }
-                } else if w & 0x0FFF0000 == 0x08BD0000 && w & 0x8000 != 0 {                                  // pop {..., pc}
+                if w & 0x0E500000 == 0x04100000 || w & 0x0E500000 == 0x04500000 {                                             // ldr/ldrb imm12
+                    if w & 0x01800000 == 0x01800000,                                                                           // P=1, U=1
+                       !load((w >> 12) & 0xF, (w >> 16) & 0xF, w & 0xFFF, plainLdr: always && w & 0x00400000 == 0, afterMovLrPc: prev) { return offs }
+                    if w == 0xE49DF004 { return offs }                                                                         // pop {pc}
+                } else if w & 0x0FFFFFF0 == 0x012FFF30 {                                                                       // blx rm
+                    call(w & 0xF)
+                } else if w & 0x0FFFFFF0 == 0x012FFF10 {                                                                       // bx rm
+                    call(w & 0xF)
+                    if always { return offs }
+                } else if always && w & 0x0FFF0000 == 0x08BD0000 && w & 0x8000 != 0 {                                         // pop {..., pc}
                     return offs
                 }
             }
@@ -157,20 +176,24 @@ public enum GLIDispatch {
         return offs
     }
 
-    /// glitsv.derive: the firmware's table, with the per-function facts carried from `base` by field name.
+    /// glitsv.derive: the firmware's table, with the per-function facts carried from `base` by field name. A field
+    /// the base lacks takes its 3.1.3 slot from `wire` (docs/ipod/gli-dispatch-7E18.tsv: 3.1.3's own layout, whose
+    /// slots are the wire numbers the host decodes), else none.
     public static func generate(sharedCache cache: DyldSharedCache, build: String, base: Table, baseName: String = "gli-dispatch-7B500.tsv",
-                                warn: (String) -> Void = { _ in }) throws -> Table {
+                                wire: Table, warn: (String) -> Void = { _ in }) throws -> Table {
         guard let fl = fields(in: cache.data) else { throw FirmwareError(.unsupported, "no __GLIFunctionDispatchRec @encode in the shared cache") }
         let ex = try exports(cache, slots: fl.count, warn: warn)
         var by: [String: [String]] = [:]
         for r in base.rows where r.count > 3 { by[r[3]] = r }
+        var wireSlot: [String: String] = [:]
+        for r in wire.rows where r.count > 3 { wireSlot[r[3]] = r[0] }
         var rows: [[String]] = []
         for (slot, field) in fl.enumerated() {
             let b = by[field]
             let derived = "gl" + field.split(separator: "_", omittingEmptySubsequences: false)
                 .map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined() + "*"
             let name = ex[slot] ?? (b?[4] ?? derived)
-            let (es1, es2, w313, proto) = b.map { ($0[5], $0[6], $0[8], $0.count > 9 ? $0[9] : "") } ?? ("", "", "-", "")
+            let (es1, es2, w313, proto) = b.map { ($0[5], $0[6], $0[8], $0.count > 9 ? $0[9] : "") } ?? ("", "", wireSlot[field] ?? "-", "")
             rows.append([String(slot), String(format: "0x%03x", 4 * slot), String(format: "0x%03x", 4 * slot + tableOffset), field, name,
                          es1, es2, ex[slot] != nil ? "Y" : "", w313, proto])
         }
