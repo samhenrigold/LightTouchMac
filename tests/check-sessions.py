@@ -21,6 +21,12 @@ DeviceStateStorage.writableNOR, and W1's DeviceLink, and runs:
 
     tests/check-sessions.py --ipad-device DIR [--helper PATH] [--dylib PATH] [--ipa PATH] [--work DIR]
     tests/check-sessions.py --guest --ipod-device DIR --itpack ARMV6.itpack [...]
+    tests/check-sessions.py --single DIR --board ipod|ipad [--frameworks DIR] [...]
+
+--single boots one prepared base (firmwarekit create output) as the app does: lit, lockdown over its own
+usbmuxd, AFC upload + download round trips of 16384, 16385, 65536 and 1048583 bytes (no restore), an IPA
+install, and a clean shutdown; screenshots lock/home/installed in --work/<board>/. build-release.py's verify
+runs it with the bundle's helper, dylib, usbmuxd, Frameworks and Resources/device.
 
 --guest runs the no-shell guest-services scenario (tests/session-driver/guest.swift) on two
 iPods at once: the shipping image (nand-current) and a fresh device.py 7E18 (--ipod-device),
@@ -117,6 +123,7 @@ def build(args, out):
                     "-I", ROOT / "Shared/CLink", out / "ltm_link.o", *sorted((ROOT / "Shared").glob("*.swift")),
                     ROOT / "LightTouchDevice/FrameTools.swift", *[ROOT / f"LightTouchMac/{n}.swift" for n in APP_SOURCES],
                     out / "DeviceProcess.swift", ROOT / "tests/session-driver/main.swift", ROOT / "tests/session-driver/guest.swift",
+                    ROOT / "tests/session-driver/single.swift",
                     "-o", out / "session-driver"],
                    check=True, stdout=open(out / "swiftc.log", "w"), stderr=subprocess.STDOUT)
     if args.helper:
@@ -148,20 +155,31 @@ def main():
     ap.add_argument("--ipa", type=Path, default=HOME / "Developer/qemu-ios-ipad1/contrib/it-harness/build/Harness.ipa")
     ap.add_argument("--bundle-id", default="com.qemuios.harness")
     ap.add_argument("--work", type=Path)
+    ap.add_argument("--single", type=Path, help="one prepared base (firmwarekit create output)")
+    ap.add_argument("--board", choices=("ipod", "ipad"), help="--single: the base's board")
+    ap.add_argument("--frameworks", help="where libimobiledevice is loaded from (default Homebrew's)")
     args = ap.parse_args()
-    if not args.guest and not args.ipad_device:
-        ap.error("--ipad-device is required (or --guest)")
+    if args.single and not args.board:
+        ap.error("--single needs --board")
+    if not args.guest and not args.ipad_device and not args.single:
+        ap.error("--ipad-device is required (or --guest, --single)")
     if args.guest and not args.ipod_device:
         ap.error("--guest needs --ipod-device")
     work = args.work or Path(tempfile.mkdtemp(prefix="ltm-sessions-"))
     work.mkdir(parents=True, exist_ok=True)
     print(f"work: {work}", flush=True)
     helper = build(args, work)
-    base_dir = args.ipod_device if args.guest else args.ipad_device
+    base_dir = args.single or (args.ipod_device if args.guest else args.ipad_device)
     base_before = tree(base_dir)
+    nand_current = args.files / "nand-current"
     cfg = {"helper": str(helper), "requirement": TEAM_REQ, "usbmuxd": args.usbmuxd, "ipa": str(args.ipa),
            "bundleID": args.bundle_id, "work": str(work), "files": str(args.files),
-           "ipodNAND": str(args.files / os.readlink(args.files / "nand-current")), "ipadBase": str(args.ipad_device or "")}
+           "ipodNAND": str(args.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
+           "ipadBase": str(args.single if args.board == "ipad" else args.ipad_device or "")}
+    if args.frameworks:
+        cfg["frameworks"] = args.frameworks
+    if args.single:
+        cfg["single"] = {"board": args.board, "base": str(args.single)}
     if args.guest:
         tz = work / "lockdown-tz"
         # The app's Debug build compiles the same source (DeviceTools.developmentHelper).
@@ -216,6 +234,30 @@ def main():
         results.append(bool(ok))
         print(f"  {'ok ' if ok else 'FAIL'} {what}", flush=True)
 
+    if args.single:
+        d = args.board
+        lit = (find("lit", device=d) or [{}])[0]
+        check(lit, f"{d}: lit in {lit.get('seconds', -1):.1f} s")
+        usb = (find("usb", device=d) or [{}])[0]
+        check(usb.get("productType") == ("iPad1,1" if d == "ipad" else "iPod2,1"), f"{d}: lockdown over its usbmuxd: {usb.get('productType')}")
+        for a in find("afc", device=d):
+            check(a.get("same") and a.get("listed") == a["bytes"], f"{d}: AFC round trip of {a['bytes']} bytes"
+                  + (f" ({a.get('seconds', 0):.1f} s)" if a.get("same") else f": {a.get('error', 'content differs')}"))
+        check(len(find("afc", device=d)) >= 4, f"{d}: AFC checks ran")
+        inst = (find("installed", device=d) or [{}])[0]
+        check(inst.get("has"), f"{d}: IPA installed ({inst.get('seconds', 0):.0f} s, attempt {inst.get('attempt')})")
+        q = (find("quit", device=d) or [{}])[0]
+        check(q.get("confirmed", -1) >= 0 and q.get("exited") and q.get("reason") == "The emulator stopped.",
+              f"{d}: clean shutdown, power-off confirmed in {q.get('confirmed', -1):.1f} s, helper exited")
+        check(tree(base_dir) == base_before, f"{d}: the prepared base is unchanged")
+        check(find("done") and driver.returncode == 0, f"driver finished (exit {driver.returncode})")
+        fails = find("fail")
+        if fails:
+            print("  driver: " + fails[0]["why"])
+        for e in find("screenshot"):
+            print(f"   {e['path']}  ({e['width']}x{e['height']}, brightness {e['brightness']:.2f})")
+        print(f"\n{sum(results)}/{len(results)} passed; events {work}/driver.jsonl")
+        sys.exit(0 if all(results) else 1)
     if args.guest:
         guest_checks(find, check, events)
         check(tree(base_dir) == base_before, "the fresh device's base is unchanged (paths, sizes, modes, mtimes)")

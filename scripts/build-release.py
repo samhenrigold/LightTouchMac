@@ -10,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'scripts'
@@ -26,7 +27,8 @@ IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquie
                                  'GLRendererFloatQEMU', 'armv6.itpack', 'armv7.itpack',
                                  # the n72 recipe's (N72Recipe)
                                  'MBXGLEngine', 'sblaunch', 'sbdlicon', 'it_agent', 'it_typein.dylib',
-                                 'com.qemu.it-agent.plist', 'gli-dispatch-7E18.tsv'))
+                                 'com.qemu.it-agent.plist', 'gli-dispatch-7E18.tsv', 'MBXGLEngine-7E18',
+                                 'MBXGLEngine-8C148', 'it_keybag-armv6'))
 IPAD_GUEST_COMPONENTS = ('ipad1-guest', 'appsync', 'ipad1-gles', 'it-pasteboard', 'it-ethlink', 'it-seal', 'it-prefs',
                          'it-keybag', 'it-heading', 'it-cctest', 'it-gltest', 'it-msmquiet', 'it-boot', 'guest-package')
 SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS_Store'}
@@ -37,6 +39,10 @@ NATIVE_RECIPES = frozenset(('scripts/build-package-native.sh', 'scripts/build-st
 FFMPEG_PATCHES = ('h264-chunk-er.patch', 'h264-cavlc-pcm-offset.patch')
 # Resumable pipeline (--stage); each step fits a 10-minute tool limit and skips when current.
 STAGES = ('native', 'qemu', 'dylib', 'guest', 'app', 'package', 'notarize', 'staple', 'verify')
+# The emulator and usbmuxd ship together. The staged native stage builds usbmuxd from this commit of
+# --usbmuxd-source (branch qemu-zlp: the host sends the real ZLP after a max-packet-multiple write, and
+# wMaxPacketSize is 512), through a temporary worktree; qemu-ios ipad1 abb1a1b817 and later invent no ZLPs.
+USBMUXD_COMMIT = '41631a7a604f0f99b52fe670689f8c9a1bad0c50'
 
 
 def digest(path):
@@ -148,7 +154,7 @@ def guest_source_hashes(qemu):
                     and path.suffix in ('.c', '.h', '.sh', '.py', '.xml', '.plist', '.entitlements', '.txt')):
                 selected[str(path.relative_to(qemu))] = digest(path)
     if ipad:
-        for path in [*(qemu / 'docs/ipad1').glob('gli-dispatch-*.tsv'), qemu / 'docs/ipod/gli-dispatch-7E18.tsv']:
+        for path in [*(qemu / 'docs/ipad1').glob('gli-dispatch-*.tsv'), *(qemu / 'docs/ipod').glob('gli-dispatch-*.tsv')]:
             selected[str(path.relative_to(qemu))] = digest(path)
     return selected
 
@@ -215,9 +221,13 @@ def validate_native(args, root, deps_only=False):
     verify_hashes(ROOT, hashes([{'path': name, 'sha256': checksum}
                                for name, checksum in native['recipes'].items()], 'native recipe'), 'Native recipe')
     previous = native.get('usbmuxd', {})
-    current = tracked_usbmuxd(args.usbmuxd_source)
-    if any(previous.get(name) != value for name, value in current.items()):
-        raise ValueError('usbmuxd source has changed since the native build; rebuild native dependencies')
+    if native.get('usbmuxd_commit'):   # staged: a pinned commit, not the checkout's working tree
+        if native['usbmuxd_commit'] != USBMUXD_COMMIT or previous.get('commit') != USBMUXD_COMMIT or previous.get('modified'):
+            raise ValueError(f'Native build has usbmuxd {previous.get("commit")}, not {USBMUXD_COMMIT}; rebuild native')
+    else:
+        current = tracked_usbmuxd(args.usbmuxd_source)
+        if any(previous.get(name) != value for name, value in current.items()):
+            raise ValueError('usbmuxd source has changed since the native build; rebuild native dependencies')
     static_inputs = hashes(native.get('static_inputs'), 'static input')
     if {str(path.relative_to(static)) for path in static.rglob('*') if path.is_file()} != set(static_inputs):
         raise ValueError('Static prefix file inventory differs from its native build record')
@@ -307,7 +317,7 @@ def parse(argv=None):
     parser.add_argument('--qemu-build', type=Path, help='Staged: private QEMU build directory (default <qemu-source>/build-release-native)')
     parser.add_argument('--verify-ipsw', type=Path,
                         default=Path.home() / 'Downloads/ipad1-ios32-feasibility/iPad1,1_3.2.2_7B500_Restore.ipsw',
-                        help=f'Staged verify: the {PREPARE_ENTRY} IPSW the bundled firmwarekit prepares')
+                        help=f'Staged verify: the {PREPARE_ENTRY} IPSW the bundled firmwarekit prepares (VERIFY_ENTRIES has the others)')
     parser.add_argument('--plan', action='store_true', help='Validate inputs and print selected paths without building or writing')
     args = parser.parse_args(argv)
     if args.output.expanduser().is_symlink():
@@ -408,8 +418,13 @@ def write_build_record(args, sources, native_root, qemu_build, guest):
 
 
 def sources_now(args):
-    return {'app': source_identity(ROOT), 'qemu': source_identity(args.qemu_source),
-            'usbmuxd': source_identity(args.usbmuxd_source)}
+    usbmuxd = source_identity(args.usbmuxd_source)
+    if args.stage:   # the pinned commit the native stage built, not the checkout's working tree
+        staged = json.loads((args.output / 'native/usbmuxd-source.json').read_text())
+        usbmuxd = {'revision': staged['commit'], 'dirty': staged['modified'], 'files': len(staged['files']),
+                   'source_sha256': hashlib.sha256(json.dumps(staged['files'], sort_keys=True).encode()).hexdigest(),
+                   'submodules': {}}
+    return {'app': source_identity(ROOT), 'qemu': source_identity(args.qemu_source), 'usbmuxd': usbmuxd}
 
 
 def tree_stamp(*paths):
@@ -457,33 +472,55 @@ def notarize(args, env, log, state, app):
 
 
 PREPARE_ENTRY = 'k48ap-7B500'
+# verify: each entry is prepared by the bundled firmwarekit, then booted headless through the bundled helper,
+# dylib and usbmuxd (tests/check-sessions.py --single): lit, lockdown, AFC round trips past 16 KiB, an IPA
+# install, a clean shutdown. One entry per run; rerun --stage verify until every entry is current.
+VERIFY_ENTRIES = {
+    'k48ap-7B500': ('ipad', None),   # --verify-ipsw
+    'k48ap-8C148': ('ipad', Path.home() / 'Downloads/ipad1-ios32-feasibility/iPad1,1_4.2.1_8C148_Restore.ipsw'),
+    'n72ap-7E18': ('ipod', Path.home() / 'Developer/ipod2g-re/OldSDK/iPod2,1_3.1.3_7E18_Restore.ipsw'),
+    'n72ap-8C148': ('ipod', Path.home() / 'Downloads/ios4/iPod2,1_4.2.1_8C148_Restore.ipsw'),
+}
 
 
 def check_prepare(args, log, state, app):
-    """Run the bundled firmwarekit as the app does: bundled --guest-tools default, bundled helper."""
+    """Run the bundled firmwarekit as the app does (bundled --guest-tools default, bundled helper), then boot
+    what it made through the bundle. Frames and events stay in verify-frames/<entry>/."""
     stamp = tree_stamp(app)
-    if state.get('verify', {}).get('prepare') == stamp:
-        return print(f'verify: in-bundle prepare of {PREPARE_ENTRY} current')
-    require(args.verify_ipsw, f'{PREPARE_ENTRY} IPSW for the in-bundle prepare check (--verify-ipsw)')
+    done = state.setdefault('verify', {}).setdefault('devices', {})
+    pending = [e for e in VERIFY_ENTRIES if done.get(e, {}).get('app') != stamp]
+    for entry_id in VERIFY_ENTRIES:
+        if entry_id not in pending:
+            print(f'verify: {entry_id} current ({done[entry_id]["summary"]})')
+    if not pending:
+        return
+    entry_id = pending[0]
+    board, ipsw = VERIFY_ENTRIES[entry_id]
+    ipsw = ipsw or args.verify_ipsw
+    require(ipsw, f'{entry_id} IPSW for the in-bundle prepare check')
     catalog = json.loads((app / 'Contents/Resources/firmware-catalog.json').read_text())
-    entry = next(e for e in catalog['entries'] if e['id'] == PREPARE_ENTRY)
-    work = args.output / 'prepare-check'
+    entry = next(e for e in catalog['entries'] if e['id'] == entry_id)
+    work, frames = args.output / 'prepare-check', args.output / 'verify-frames' / entry_id
 
     def clean():
         if work.exists():
             subprocess.run(['chmod', '-R', 'u+w', work], check=True)
             shutil.rmtree(work)
     clean()
+    shutil.rmtree(frames, ignore_errors=True)
     (work / 'out').mkdir(parents=True)
+    frames.mkdir(parents=True)
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith('LTM_')}
     try:
         (work / 'entry.json').write_text(json.dumps(entry))
-        command = [app / 'Contents/MacOS/firmwarekit', 'create', '--entry', work / 'entry.json', '--ipsw', args.verify_ipsw,
+        command = [app / 'Contents/MacOS/firmwarekit', 'create', '--entry', work / 'entry.json', '--ipsw', ipsw,
                    '--out', work / 'out', '--cache', work / 'cache', '--helper', app / 'Contents/MacOS/LightTouchDevice']
         print('+ ' + shlex.join(map(str, command)), flush=True)
-        clean_env = {k: v for k, v in os.environ.items() if not k.startswith('LTM_')}
+        started = time.monotonic()
         with log.open('ab') as output:
             result = subprocess.run(list(map(str, command)), stdout=subprocess.PIPE, stderr=output,
                                     env=clean_env, timeout=480)
+        seconds = time.monotonic() - started
         events = [json.loads(line) for line in result.stdout.decode().splitlines() if line.strip()]
         with log.open('a') as output:
             output.write(''.join(json.dumps(e) + '\n' for e in events))
@@ -491,15 +528,31 @@ def check_prepare(args, log, state, app):
             if e['event'] in ('step', 'warning', 'error', 'done'):
                 print('  firmwarekit: ' + json.dumps(e), flush=True)
         if result.returncode or not events or events[-1]['event'] != 'done':
-            raise RuntimeError(f'In-bundle prepare of {PREPARE_ENTRY} failed ({result.returncode}); see {log}')
+            raise RuntimeError(f'In-bundle prepare of {entry_id} failed ({result.returncode}); see {log}')
         lock = json.loads((work / 'out' / events[-1]['lock']).read_text())
         bundled = str((app / 'Contents/Resources/guest-tools').resolve())
         if bundled not in json.dumps(lock):
             raise RuntimeError(f'Prepare did not use the bundled guest tools {bundled}')
+        prepared = int(subprocess.check_output(['du', '-sk', work / 'out'], text=True).split()[0]) * 1024
+        boot = [sys.executable, ROOT / 'tests/check-sessions.py', '--single', work / 'out', '--board', board,
+                '--helper', app / 'Contents/MacOS/LightTouchDevice', '--dylib', app / 'Contents/Frameworks/libqemu-arm.dylib',
+                '--usbmuxd', app / 'Contents/MacOS/usbmuxd', '--frameworks', app / 'Contents/Frameworks',
+                '--files', app / 'Contents/Resources/device', '--work', frames]
+        print('+ ' + shlex.join(map(str, boot)), flush=True)
+        checked = subprocess.run(list(map(str, boot)), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                 env=clean_env, timeout=590)
+        (frames / 'check.log').write_text(checked.stdout)
+        print(checked.stdout, flush=True)
+        if checked.returncode:
+            raise RuntimeError(f'In-bundle boot of {entry_id} failed; see {frames}/check.log')
     finally:
         clean()
-    state.setdefault('verify', {})['prepare'] = stamp
+    passed = next((l for l in checked.stdout.splitlines() if ' passed; events ' in l), '').split(';')[0]
+    done[entry_id] = {'app': stamp, 'summary': f'prepared in {seconds:.0f} s ({prepared} bytes), boot {passed}',
+                      'prepare_seconds': round(seconds), 'prepared_bytes': prepared, 'frames': str(frames)}
     save_state(args, state)
+    if len(pending) > 1:
+        raise RuntimeError(f'verify: {entry_id} passed; rerun --stage verify for {", ".join(pending[1:])}')
 
 
 def save_state(args, state):
@@ -508,9 +561,8 @@ def save_state(args, state):
 
 def native_stage(args, env, log, deps, root, static):
     """Reuse deps' prefix and static deps (they need over 10 minutes to build); rebuild usbmuxd
-    from the current fork, as build-package-native.sh does, whenever its source changed."""
+    from USBMUXD_COMMIT of the fork (a temporary worktree), as build-package-native.sh does."""
     record = read_record(deps / 'native-build.json')
-    current = tracked_usbmuxd(args.usbmuxd_source)
     if (root / 'native-build.json').is_file():
         try:
             validate_native(args, root, deps_only=True)
@@ -521,10 +573,16 @@ def native_stage(args, env, log, deps, root, static):
     (root / 'build').mkdir(parents=True)
     (root / 'prefix').symlink_to(deps / 'prefix')
     usb = root / 'build/usbmuxd'
-    run([sys.executable, SCRIPTS / 'dependency-sources.py', 'stage-git', '--source', args.usbmuxd_source,
-         '--destination', usb, '--record', root / 'usbmuxd-source.json'], env, log)
-    (usb / '.tarball-version').write_text(subprocess.check_output(
-        ['git', '-C', args.usbmuxd_source, 'describe', '--tags', '--always', '--dirty'], text=True))
+    tree, git = args.output / 'usbmuxd-worktree', ['git', '-C', args.usbmuxd_source]
+    subprocess.run([*git, 'worktree', 'remove', '--force', tree], capture_output=True)
+    run([*git, 'worktree', 'add', '--detach', tree, USBMUXD_COMMIT], env, log)
+    try:
+        run([sys.executable, SCRIPTS / 'dependency-sources.py', 'stage-git', '--source', tree,
+             '--destination', usb, '--record', root / 'usbmuxd-source.json'], env, log)
+        (usb / '.tarball-version').write_text(subprocess.check_output(
+            ['git', '-C', tree, 'describe', '--tags', '--always', '--dirty'], text=True))
+    finally:
+        run([*git, 'worktree', 'remove', '--force', tree], env, log)
     flags = '-O2 -mmacosx-version-min=14.0'
     build_env = {key: value for key, value in env.items()
                  if key not in ('CPATH', 'C_INCLUDE_PATH', 'CPLUS_INCLUDE_PATH', 'LIBRARY_PATH')}
@@ -539,12 +597,12 @@ def native_stage(args, env, log, deps, root, static):
         raise RuntimeError('usbmuxd configured without libslirp; the iPad USB Ethernet bridge would be missing')
     run([sys.executable, SCRIPTS / 'check-macho.py', '--no-weak-imports', usb / 'src/usbmuxd'], env, log)
     record.update(usbmuxd=json.loads((root / 'usbmuxd-source.json').read_text()), usbmuxd_source=str(args.usbmuxd_source),
+                  usbmuxd_commit=USBMUXD_COMMIT,
                   usbmuxd_binary=str(usb / 'src/usbmuxd'), deps_prefix=str(root / 'prefix'),
                   qemu_source=str(args.qemu_source), qemu_build=str(args.qemu_build),
                   reused_native_deps=str(deps), usbmuxd_rebuilt_by='build-release.py --stage native')
     (root / 'native-build.json').write_text(json.dumps(record, indent=2) + '\n')
     validate_native(args, root, deps_only=True)
-    assert current == tracked_usbmuxd(args.usbmuxd_source), 'usbmuxd source changed during the build'
 
 
 def staged(args, env, log):
