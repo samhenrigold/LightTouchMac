@@ -307,17 +307,17 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 
 | # | Risk | Cheap retirement | Fallback |
 |---|---|---|---|
-| 1 | Dynamic `NSXPCListener(machServiceName:)` from a hardened, unsandboxed app plus a spawned child; IOSurface over NSXPC | Spike: a signed parent and child, headless | `bootstrap_check_in` rendezvous with raw Mach ports (`IOSurfaceCreateMachPort`) plus a socketpair |
-| 2 | Hardened helper doing GL (CGL), coreaudio, JIT, GL snapshots outside an app | Signed helper boots the iPad GL CA golden headless, then save/restore | Give the helper the app's entitlements |
+| 1 | Dynamic `NSXPCListener(machServiceName:)` from a hardened, unsandboxed app plus a spawned child; IOSurface over NSXPC | Spike: a signed parent and child, headless. **Done: the listener is refused (EPERM) for a name launchd doesn't know** ([spikes](multi-device-spikes.md#1-rendezvous--iosurface-risk-1-fallback-a)) | **Chosen:** `bootstrap_check_in` rendezvous. A Mach hello carries the token and the `IOSurfaceCreateMachPort` ports and is validated by audit token + `SecCodeCheckValidity` + token. A socketpair on fd 3 carries the Codable messages. |
+| 2 | Hardened helper doing GL (CGL), coreaudio, JIT, GL snapshots outside an app | Signed helper boots the iPad GL CA golden headless, then save/restore. **Done: go with the qemu entitlements only.** The helper must never `dispatchMain()` (RCU) | Give the helper the app's entitlements |
 | 3 | IOSurface ring tearing or latency | Display-measurement test + recording diff | Copy to a CGImage as today |
-| 4 | Apple CDN serves the pinned IPSWs over HTTPS with Range | `curl -sIr 0-0` per URL | ATS exception for appldnld.apple.com (SHA1 guarantees integrity) |
+| 4 | Apple CDN serves the pinned IPSWs over HTTPS with Range | `curl -sIr 0-0` per URL. **Done: go. HTTPS works and the ranged GET returns 206; iPod 3.1.3 has no URL** | ATS exception for appldnld.apple.com (SHA1 guarantees integrity) |
 | 5 | In-app hdiutil/diskutil rw mounts (TCC, Spotlight) | Run a bake from a signed binary once | Mount inside the preparer; do the Swift HFS+ writer earlier |
-| 6 | Two QEMUs at once (usbmuxd ×2, shared web-proxy conf) | Two headless helpers + two usbmuxd, IPA into each | Per-device proxy config; pause in background |
+| 6 | Two QEMUs at once (usbmuxd ×2, shared web-proxy conf) | Two headless helpers + two usbmuxd, IPA into each. **Done: go** (lit, and `ideviceinfo` answers each; IPA not tried). `USBMUXD_SOCKET_ADDRESS` is process-global | Per-device proxy config; pause in background |
 | 7 | Adoption misses a key variant | Fixture test over every EC key branch | Adoption never moves anything; keep the old dirs |
 | 8 | Oracle non-determinism | Run Python twice and diff | — |
 | 9 | Our ad-hoc signer accepted by iOS 3/4 amfid | Byte-diff vs `ldid -S` | Hook returns a signed file |
 | 10 | iPod-from-IPSW uses Legacy-iOS-Kit tarballs | License review | Own guest helpers, like the iPad |
-| 11 | Unknown disk-space estimates | `du` peaks during Python runs (7B500, 8C148) | 2× IPSW + prepared |
+| 11 | Unknown disk-space estimates | `du` peaks during Python runs (7B500, 8C148). **Done: peak = IPSW + 2.8 GiB, prepared 1.4 GiB (a sparse 16.5 GiB NAND), ~85 s** | **Chosen:** `peak_bytes` = IPSW + 3 GiB ("2× IPSW + prepared" is too low). Copies must be sparse-aware. |
 
 ## Corrections from implementation
 
