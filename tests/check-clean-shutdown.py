@@ -1,92 +1,62 @@
 #!/usr/bin/env python3
-"""Execute production shutdown control flow with a slow boot and uncooperative preparation."""
+"""Execute the production Stop (EmulatorController.halt) against fake helpers: a hard halt, never a guest shutdown."""
 from pathlib import Path
-import subprocess,tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
-root=Path(__file__).resolve().parents[1]
-s=(root/'LightTouchMac/EmulatorController.swift').read_text()
-a=s.index('    static let preparationShutdownBudget:');b=s.index('    /// Menu ▸ Save State Now',a)
-shutdown=s[a:b].replace('preparationShutdownBudget: TimeInterval = 5','preparationShutdownBudget: TimeInterval = 0.02').replace('haltShutdownBudget: TimeInterval = 30','haltShutdownBudget: TimeInterval = 0.7').replace('syncShutdownBudget: TimeInterval = 20','syncShutdownBudget: TimeInterval = 0.02')
-a=s.index('    func haltFilesystem() async throws {');b=s.index('    func restartSpringBoard()',a)
-halt=s[a:b]
-services=(root/'LightTouchMac/DeviceServices.swift').read_text()
-a=services.index('func withSoftDeadline<T: Sendable>');b=services.index('// MARK: - Install watchdog box',a)
-helpers=services[a:b]
-s=(root/'LightTouchMac/DeviceStateStorage.swift').read_text()
-a=s.index('    @MainActor\n    static func waitForShutdown');b=s.index('    /// Publish',a)
-wait=s[a:b]
-source=r'''import Foundation
-@MainActor var powerOff=false
-@MainActor var agentReady=0
-/// The helper's link: commands go nowhere; status comes from the fixture.
-struct FakeLink: Sendable { func send(_ c: LinkCommand) {} }
-nonisolated func logEvent(_ s:String){}
-enum DeviceToolsError: Error { case failed(String) }
-enum DeviceStateStorage {
-'''+wait+'}\n'+helpers+r'''
-@MainActor final class Controller {
- let profile = DeviceProfile.iPodTouch2G
- enum State{case notStarted,booting,running,paused,snapshotting,poweredOff}
- var state=State.booting,isDead=false,storageFailed=false,shuttingDown=false,canManageApps=true
- var isPoweredOff:Bool{state == .poweredOff}
- var connectionRecoveryTask:Task<Void,Never>?,orientationTask:Task<Void,Never>?,foregroundTask:Task<Void,Never>?,mediaPreparationTask:Task<Void,Never>?,cleanShutdownTask:Task<Void,Never>?
- var shutdownCompletions:[(Bool)->Void]=[]
- var link:FakeLink?=FakeLink()
- var status:(shutdownConfirmed:Bool,Void)?{(powerOff,())}
- var liveAgentStatus:Int{agentReady}
- var haltAttempts=0,syncAttempts=0,attemptNeeded=2
- func haltFilesystem() async throws {
-  haltAttempts+=1
-  if haltAttempts>=attemptNeeded{powerOff=true}else{throw CocoaError(.fileReadUnknown)}
+import subprocess, tempfile
+root = Path(__file__).resolve().parents[1]
+s = (root / 'LightTouchMac/EmulatorController.swift').read_text()
+a = s.index('    static let haltBudget:'); b = s.index('    /// Menu ▸ Save State Now', a)
+halt = s[a:b].replace('haltBudget: TimeInterval = 10', 'haltBudget: TimeInterval = 0.3')
+source = r'''import Foundation
+nonisolated func logEvent(_ s: String) {}
+/// DeviceProcess's surface: SIGTERM exits it (or not, when hung); SIGKILL always does.
+@MainActor final class FakeProcess {
+ var hung = false, terms = 0, kills = 0, isDead = false
+ func terminate() { terms += 1; if !hung { Task { try? await Task.sleep(for: .milliseconds(30)); self.isDead = true } } }
+ func kill() { kills += 1; isDead = true }
+ func waitForExit(timeout: TimeInterval) async -> Bool {
+  let deadline = Date().addingTimeInterval(timeout)
+  while !isDead, Date() < deadline { try? await Task.sleep(for: .milliseconds(10)) }
+  return isDead
  }
- func syncFilesystem() async throws{syncAttempts+=1}
- func pollStorageFailure(){if powerOff {state = .poweredOff}}
-'''+shutdown+r'''}
-@MainActor enum DeviceTools {
- static var available=true
- static func requestIndependentHalt(agent: FakeLink?) async -> Bool {available}
- func haltFilesystem() async throws {}
 }
-@MainActor struct MissingUSB {
- var link:FakeLink?{nil}
- func tools() throws -> DeviceTools {throw CocoaError(.fileReadUnknown)}
-'''+halt+r'''}
+@MainActor final class Controller {
+ enum State { case notStarted, booting, running, paused, snapshotting, poweredOff }
+ var state = State.booting, isDead = false, isErasing = false, shuttingDown = false, halting = false
+ var isPoweredOff: Bool { state == .poweredOff }
+ var connectionRecoveryTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, mediaPreparationTask: Task<Void, Never>?, haltTask: Task<Void, Never>?
+ var haltCompletions: [(Bool) -> Void] = []
+ var process: FakeProcess? = FakeProcess()
+''' + halt + r'''}
 @main struct Main {
  @MainActor static func main() async throws {
-  let c=Controller(),held=ResumeOnce<Void>()
-  c.mediaPreparationTask=Task {try? await withCheckedThrowingContinuation{held.attach($0)}}
-  let completed=ResumeOnce<Void>()
-  var callbacks:[Bool]=[]
-  func record(_ result:Bool){callbacks.append(result);if callbacks.count==2{completed.resume(.success(()))}}
-  let started=ContinuousClock.now
-  c.beginCleanShutdown(completion:record)
-  c.beginCleanShutdown(completion:record)
-  precondition(c.shuttingDown && c.state == .booting)
-  try await withCheckedThrowingContinuation{completed.attach($0)}
-  precondition(callbacks==[true,true] && c.haltAttempts==2 && c.syncAttempts==0)
-  precondition(c.isPoweredOff && !c.shuttingDown)
-  precondition(started.duration(to:.now) < .seconds(2),"preparation held quit indefinitely")
-  held.resume(.success(()));await c.mediaPreparationTask?.value
-  powerOff=false
-  let failed=Controller();failed.attemptNeeded=100
-  let result=await withCheckedContinuation{continuation in failed.beginCleanShutdown{continuation.resume(returning:$0)}}
-  precondition(!result && failed.syncAttempts==1 && !failed.shuttingDown)
-  let save=Controller();save.state = .snapshotting
-  var saveResult:Bool?
-  save.beginCleanShutdown{saveResult=$0}
-  precondition(saveResult==false && !save.shuttingDown && save.haltAttempts==0)
-  powerOff=false;agentReady=1
-  let noUSB=Controller();noUSB.canManageApps=false;noUSB.attemptNeeded=1
-  let independent=await withCheckedContinuation{continuation in noUSB.beginCleanShutdown{continuation.resume(returning:$0)}}
-  precondition(independent && noUSB.haltAttempts==1)
-  try await MissingUSB().haltFilesystem()
-  DeviceTools.available=false
-  do {try await MissingUSB().haltFilesystem();preconditionFailure("a halt without an agent must fail (no SSH fallback)")} catch {}
-  print("PASS: independent halt without USB, bounded preparation cancellation, boot-time halt retry, joined completions, sync fallback, snapshot guard")
+  // Mid-boot (never lit, no guest services): Stop still halts, and requests join.
+  let c = Controller(); c.mediaPreparationTask = Task { try? await Task.sleep(for: .seconds(60)) }
+  precondition(c.canStop)
+  var results: [Bool] = []
+  let started = Date()
+  await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+   c.halt { results.append($0); if results.count == 2 { done.resume() } }
+   c.halt { results.append($0); if results.count == 2 { done.resume() } }
+   precondition(c.shuttingDown && !c.canStop && c.mediaPreparationTask!.isCancelled)
+  }
+  precondition(results == [true, true] && c.process!.terms == 1 && c.process!.kills == 0 && !c.shuttingDown)
+  precondition(Date().timeIntervalSince(started) < 1, "a halt waited on the guest")
+  // A helper that ignores SIGTERM is killed after the budget.
+  let hung = Controller(); hung.process!.hung = true
+  let killed = await withCheckedContinuation { done in hung.halt { done.resume(returning: $0) } }
+  precondition(killed && hung.process!.kills == 1)
+  // A save in flight is left alone; a gone helper or a powered-off guest is already stopped.
+  let saving = Controller(); saving.state = .snapshotting
+  var saved: Bool?; saving.halt { saved = $0 }
+  precondition(saved == false && saving.process!.terms == 0 && !saving.shuttingDown)
+  let gone = Controller(); gone.process!.isDead = true
+  var goneResult: Bool?; gone.halt { goneResult = $0 }
+  precondition(goneResult == true && gone.process!.terms == 0)
+  print("PASS: Stop mid-boot halts at once, joined requests, a hung helper is killed, a save is left alone")
  }
 }
 '''
-with tempfile.TemporaryDirectory(prefix='ltm-shutdown-') as d:
- p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc','-parse-as-library','-module-cache-path',d+'/modules',DEVICE_PROFILE,str(root/'Shared/DeviceLinkProtocol.swift'),str(p),'-o',d+'/check'],check=True)
- subprocess.run([d+'/check'],check=True,timeout=8)
+with tempfile.TemporaryDirectory(prefix='ltm-halt-') as d:
+    p = Path(d) / 'check.swift'; p.write_text(source)
+    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(p), '-o', d + '/check'], check=True)
+    subprocess.run([d + '/check'], check=True, timeout=8)

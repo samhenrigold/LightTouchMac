@@ -140,23 +140,6 @@ struct Check {
             preconditionFailure("rename failure accepted")
         } catch {}
         precondition(tryData(tmp) == "valid")
-        // A completed request, timeout, or generic VM stop must never stand in
-        // for the PMU's actual guest power-off confirmation.
-        let deadline = Date()
-        for (confirmed, stopped, expected) in [(true, false, true), (true, true, true),
-                                               (false, false, false), (false, true, false)] {
-            let result = await DeviceStateStorage.waitForShutdown(until: deadline,
-                                                                 confirmed: { confirmed }, stopped: { stopped })
-            precondition(result == expected)
-        }
-        var poweredOff = false
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(20))
-            poweredOff = true
-        }
-        let completed = await DeviceStateStorage.waitForShutdown(until: Date().addingTimeInterval(1),
-                                                                 confirmed: { poweredOff }, stopped: { false })
-        precondition(completed)
         let eraseRoot = root.appendingPathComponent("erase-device")
         let eraseOverlay = eraseRoot.appendingPathComponent("nandrw")
         let eraseSnapshot = eraseRoot.appendingPathComponent("snapshot")

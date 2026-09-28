@@ -6,9 +6,10 @@
 //
 //   session-driver CONFIG.json
 //
-// config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase, guest?}
+// config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase, ipadItpack?, guest?, single?}
 // With `guest` it runs the guest-services scenario instead (guest.swift); with `single`, one prepared
 // device (single.swift). `frameworks` is where libimobiledevice is loaded from (default Homebrew's).
+// `ipadItpack` boots the iPad with the app's composed offer and checks the loader and the agent.
 
 import Foundation
 import IOSurface
@@ -16,6 +17,8 @@ import IOSurface
 struct Config: Decodable {
     var helper: String, requirement: String, usbmuxd: String, ipa: String, bundleID: String
     var work: String, files: String, ipodNAND: String, ipadBase: String
+    /// The app's armv7.itpack: the iPad boots with the offer EmulatorController composes from it.
+    var ipadItpack: String?
     var guest: GuestConfig?
     var single: SingleConfig?
     var frameworks: String?
@@ -119,6 +122,7 @@ extension String {
             let dieID = (identity["die-id"] as? [String])?.joined(separator: ":")
             config = BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: dieID,
                                            writableNOR: files.writableNOR?.path, usbAddress: mux.guestAddress, wifi: true,
+                                           guestPackage: try iPadOffer(base: base),
                                            machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: nil, restore: [])
         } else {
@@ -150,6 +154,19 @@ extension String {
             }
         }
     }
+    /// EmulatorController.composeGuestOffer for a prepared iPad: the bundled itpack, the base's lock record.
+    func iPadOffer(base: URL) throws -> String? {
+        guard let itpack = config.ipadItpack else { return nil }
+        let lockURL = base.appendingPathComponent("device.lock.json")
+        let lock = try JSONSerialization.jsonObject(with: Data(contentsOf: lockURL)) as? [String: Any]
+        let dir = dir.appendingPathComponent("work/guest-offer")
+        try FileManager.default.createDirectory(at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let offer = try GuestPackage.compose(itpack: URL(fileURLWithPath: itpack), board: "k48ap", build: lock?["build"] as? String ?? "",
+                                             lock: GuestPackage.lockRecord(lockURL), guest: nil, into: dir)
+        emit("offer", ["device": name, "serial": offer?.serial ?? -1, "seed": GuestPackage.lockRecord(lockURL)?.seed ?? -1])
+        return offer == nil ? nil : dir.path
+    }
+
     static var helper: String { config.helper }
     static var requirement: String { config.requirement }
     static var files: String { config.files }
@@ -246,6 +263,28 @@ extension String {
     fail("\(d.name): install failed: \(lastError)")
 }
 
+/// With an offer: the loader's report, then the agent through the app's GuestServices (the window
+/// title's foreground app, the sidebar's launch) and the lock state.
+@MainActor func iPadGuest(_ d: Device) async {
+    let start = Date()
+    while d.process.status?.guestPackage == nil, Date().timeIntervalSince(start) < 60 { try? await Task.sleep(for: .seconds(1)) }
+    let report = d.process.status?.guestPackage
+    emit("ipadReport", ["serial": report?.serial ?? -1, "result": report?.result ?? -99])
+    let agent = GuestAgent(link: d.process.link, cache: GuestAgentCache())
+    let alive = await agent.waitAlive(seconds: 60)
+    let guest = GuestServices(agent: agent, packaged: report != nil)
+    let home = try? await guest.foregroundAppName()
+    let locked = try? await agent.isLocked()
+    var launched: String?
+    do { try await guest.launch("com.apple.mobilesafari") } catch { emit("ipadLaunchError", ["error": "\(error)"]) }
+    for _ in 0..<20 where launched != "Safari" {
+        try? await Task.sleep(for: .seconds(1))
+        launched = try? await guest.foregroundAppName()
+    }
+    d.screenshot("ipad-launched")
+    emit("ipadAgent", ["alive": alive, "home": home ?? "", "locked": locked.map { $0 ? 1 : 0 } ?? -1, "launched": launched ?? ""])
+}
+
 // MARK: - Prepared first-boot files, on a fake base
 
 func checkPreparedFiles() throws {
@@ -311,6 +350,7 @@ func checkPreparedFiles() throws {
     async let i2: Void = install(ipad)
     _ = await (i1, i2)
     ipod.screenshot("ipod-installed"); ipad.screenshot("ipad-installed")
+    if config.ipadItpack != nil { await iPadGuest(ipad) }
 
     // kill -9 the iPad's helper: it dies, the iPod doesn't notice.
     let killedPID = ipad.process.link.pid
@@ -340,22 +380,11 @@ func checkPreparedFiles() throws {
     let apps = (try? await ipad.services.installedApps())?.map(\.id) ?? []
     emit("restartedApps", ["device": "ipad", "has": apps.contains(config.bundleID)])
 
-    // Clean quit of both, in parallel: the first rung of EmulatorController's
-    // clean shutdown for each board, then stop() (SIGTERM).
+    // Stop both at once, as EmulatorController.halt does: SIGTERM, and the helper
+    // pauses (storage flushed) and quits QEMU without asking the guest.
     let quit = Date()
-    ipad.process.link.send(.machine(.powerdown))
-    let halt = try? await ipod.process.link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5)
-    emit("halt", ["device": "ipod", "reply": "\(String(describing: halt))"])
-    var confirmed: [String: Double] = [:]
-    while confirmed.count < 2, Date().timeIntervalSince(quit) < 50 {
-        for d in [ipod, ipad] where confirmed[d.name] == nil && d.process.status?.shutdownConfirmed == true {
-            confirmed[d.name] = Date().timeIntervalSince(quit)
-        }
-        try? await Task.sleep(for: .milliseconds(100))
-    }
-    emit("confirmed", ["ipod": confirmed["ipod"] ?? -1, "ipad": confirmed["ipad"] ?? -1])
     ipod.process.terminate(); ipad.process.terminate()
-    let exited0 = await ipod.process.waitForExit(timeout: 30), exited1 = await ipad.process.waitForExit(timeout: 30)
+    let exited0 = await ipod.process.waitForExit(timeout: 10), exited1 = await ipad.process.waitForExit(timeout: 10)
     emit("quit", ["ipodExited": exited0, "ipadExited": exited1, "seconds": Date().timeIntervalSince(quit),
                   "ipodReason": ipod.process.deathReason ?? "", "ipadReason": ipad.process.deathReason ?? ""])
     ipod.mux.stop(); ipad.mux.stop()

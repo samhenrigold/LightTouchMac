@@ -4,18 +4,6 @@ import CryptoKit
 
 /// Disk operations shared by the controller and the device-free regression check.
 nonisolated enum DeviceStateStorage {
-    /// An SSH disconnect or a stopped VM alone does not establish an unmount.
-    @MainActor
-    static func waitForShutdown(until deadline: Date, confirmed: () -> Bool,
-                                stopped: () -> Bool) async -> Bool {
-        while !Task.isCancelled {
-            if confirmed() { return true }
-            if stopped() || Date() >= deadline { return false }
-            try? await Task.sleep(for: .milliseconds(200))
-        }
-        return false
-    }
-
     /// Only call after the native VM has exited and released its files.
     /// `owner` is the device being erased; every path must pass checkRemovable.
     static func erase(overlay: URL, snapshots: [URL], legacyMarker: URL, state: URL, owner: UUID?) throws {

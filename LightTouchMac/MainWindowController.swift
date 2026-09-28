@@ -361,7 +361,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let emulator = host.session(for: entry)?.emulator
         switch action {
         case .start: return emulator.map { $0.isDead || ($0.isPoweredOff && !$0.shuttingDown) } ?? true
-        case .stop: return emulator?.isRunning == true
+        case .stop: return emulator?.canStop == true
         case .erase: return emulator?.isErasing != true && !hasFileTransfer && !recording.isActive
         default: return true
         }
@@ -939,7 +939,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func powerOff(_ emulator: EmulatorController) {
         emulator.powerOff { [weak emulator] confirmed in
             if confirmed { emulator?.resolveDeviceNotice(for: .powerOff); return }
-            emulator?.reportDeviceNotice("The device did not finish powering off. Try Power Off again or restart the device. Open Device Logs for details.", for: .powerOff)
+            emulator?.reportDeviceNotice("The device didn’t stop. Quit Light Touch to stop it. Open Device Logs for details.", for: .powerOff)
         }
     }
 
@@ -1757,7 +1757,7 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleKeyboardInput(_:)):
             menuItem.state = emulator.keyboardInputEnabled ? .on : .off
             return true
-        case #selector(devicePowerOff(_:)): return emulator.acceptsInput
+        case #selector(devicePowerOff(_:)): return emulator.canStop
         case #selector(deviceReset(_:)):  return !emulator.isDead
         case #selector(restartWithPreviousGuestTools(_:)):
             menuItem.isHidden = emulator.guestOffer == nil

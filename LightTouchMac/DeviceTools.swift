@@ -398,12 +398,6 @@ struct DeviceTools: Sendable {
         return true
     }
 
-    static func requestIndependentHalt(agent: DeviceLink?) async -> Bool {
-        // Submission is not proof of shutdown. The controller still requires
-        // the guest PMU power-off confirmation before reporting success.
-        await GuestAgent(link: agent, cache: GuestAgentCache()).requestHalt()
-    }
-
     /// The one id both phases share for a given app, so a placeholder raised
     /// at download start is the SAME icon the install phase adopts and
     /// cancels — never two. (Two ids was tried: the download's icon and the
