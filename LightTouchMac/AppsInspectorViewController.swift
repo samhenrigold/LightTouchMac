@@ -894,6 +894,8 @@ final class AppsInspectorViewController: NSViewController {
         updateButtons()
     }
 
+    private var poweringDown: Bool { emulator.shuttingDown || emulator.isPoweredOff || emulator.isErasing }
+
     /// One attempt to read the installed list.
     ///
     /// A failed read leaves the previous list on screen. It used to replace it
@@ -901,7 +903,11 @@ final class AppsInspectorViewController: NSViewController {
     /// a sidebar that was perfectly correct a second earlier, and read as the
     /// list having lost its contents for no reason.
     private func loadOnce() async {
-        guard emulator.canManageApps else { return }
+        // Not while powering off. Power Off and Erase post .ltmAppsChanged
+        // (discardAll) as they start, and the guest halt goes over the agent,
+        // not the gate, so this read raced installd going down: "Install
+        // service error (browse): code -8" (APIInternalError) at Power Off.
+        guard emulator.canManageApps, !poweringDown else { return }
         // Nothing talks to the device while an install runs (see `installing`);
         // the finish notification reloads the list anyway.
         guard !readsSuppressed else { return }
@@ -953,7 +959,10 @@ final class AppsInspectorViewController: NSViewController {
             // Closing the inspector or ending a poll is not a failed device.
             return
         } catch {
-            emulator.reportConnectionFailure(error, operation: "Refreshing apps")
+            // A read already in flight when Power Off began is not a device fault.
+            if !poweringDown {
+                emulator.reportConnectionFailure(error, operation: "Refreshing apps")
+            }
             // Prune here too. This path never touched `pending`, so a row whose
             // install failed because the device went away stayed on screen —
             // and the failing list read is exactly when that happens.
