@@ -35,7 +35,7 @@ SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS
 NATIVE_RECIPES = frozenset(('scripts/build-package-native.sh', 'scripts/build-static-deps.sh',
                            'scripts/dependency-sources.py', 'build-support/dependencies.json',
                            'build-support/patches/glib-pipe2-availability.patch',
-                           'scripts/test-glib-compat.py', 'scripts/check-macho.py'))
+                           'scripts/test-glib-compat.py', 'scripts/check-macho.py', 'scripts/build-iboot32patcher.sh'))
 FFMPEG_PATCHES = ('h264-chunk-er.patch', 'h264-cavlc-pcm-offset.patch')
 # Resumable pipeline (--stage); each step fits a 10-minute tool limit and skips when current.
 STAGES = ('native', 'qemu', 'dylib', 'guest', 'app', 'package', 'notarize', 'staple', 'verify')
@@ -43,6 +43,10 @@ STAGES = ('native', 'qemu', 'dylib', 'guest', 'app', 'package', 'notarize', 'sta
 # --usbmuxd-source (branch qemu-zlp: the host sends the real ZLP after a max-packet-multiple write, and
 # wMaxPacketSize is 512), through a temporary worktree; qemu-ios ipad1 abb1a1b817 and later invent no ZLPs.
 USBMUXD_COMMIT = '41631a7a604f0f99b52fe670689f8c9a1bad0c50'
+# iBoot32Patcher (firmwarekit's k48 real-iBoot recipe runs it) is pinned by commit, archive sha256 and license
+# in build-support/dependencies.json ("tools" group; LukeZGD's fork, GPL-3.0). Both native paths build it with
+# scripts/build-iboot32patcher.sh into build/iBoot32Patcher, and package.sh ships it in Contents/MacOS.
+PATCHER = 'build/iBoot32Patcher/iBoot32Patcher'
 
 
 def digest(path):
@@ -244,7 +248,8 @@ def validate_native(args, root, deps_only=False):
     for path, label in (*qemu_outputs,
                         (root / 'prefix/lib/libimobiledevice-1.0.dylib', 'native device library'),
                         (root / 'prefix/lib/libplist-2.0.dylib', 'native plist library'),
-                        (root / 'build/usbmuxd/src/usbmuxd', 'native usbmuxd')):
+                        (root / 'build/usbmuxd/src/usbmuxd', 'native usbmuxd'),
+                        (root / PATCHER, 'native iBoot32Patcher')):
         require(path, label)
     return native
 
@@ -407,6 +412,7 @@ def write_build_record(args, sources, native_root, qemu_build, guest):
             'prefix': inventory(native_root / 'prefix'),
             'qemu_library_sha256': digest(qemu_build / 'libqemu-arm.dylib'),
             'usbmuxd_sha256': digest(native_root / 'build/usbmuxd/src/usbmuxd'),
+            'iboot32patcher': json.loads((native_root / PATCHER).with_name('build.json').read_text()),
         },
         'swift_packages': json.loads((ROOT / 'LightTouchMac.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved').read_text()),
         'xcode': subprocess.check_output(['xcodebuild', '-version'], text=True).strip(),
@@ -596,8 +602,13 @@ def native_stage(args, env, log, deps, root, static):
     if 'HAVE_LIBSLIRP 1' not in (usb / 'config.h').read_text():
         raise RuntimeError('usbmuxd configured without libslirp; the iPad USB Ethernet bridge would be missing')
     run([sys.executable, SCRIPTS / 'check-macho.py', '--no-weak-imports', usb / 'src/usbmuxd'], env, log)
+    # iBoot32Patcher from the manifest's pinned archive (deps' src/ is a cache when it is a one-step root).
+    caches = [c for cache in (deps / 'src',) if cache.is_dir() for c in ('--cache', cache)]
+    run([sys.executable, SCRIPTS / 'dependency-sources.py', 'fetch', '--group', 'tools', '--destination', root / 'src', *caches], env, log)
+    run(['bash', SCRIPTS / 'build-iboot32patcher.sh', root / 'src', (root / PATCHER).parent], env, log)
     record.update(usbmuxd=json.loads((root / 'usbmuxd-source.json').read_text()), usbmuxd_source=str(args.usbmuxd_source),
                   usbmuxd_commit=USBMUXD_COMMIT,
+                  iboot32patcher=json.loads((root / PATCHER).with_name('build.json').read_text()),
                   usbmuxd_binary=str(usb / 'src/usbmuxd'), deps_prefix=str(root / 'prefix'),
                   qemu_source=str(args.qemu_source), qemu_build=str(args.qemu_build),
                   reused_native_deps=str(deps), usbmuxd_rebuilt_by='build-release.py --stage native')
@@ -616,7 +627,8 @@ def staged(args, env, log):
     guest = args.output / 'guest/guest-tools'
     firmwarekit = args.output / 'firmwarekit/release/firmwarekit'
     env.update(QEMU_BUILD_DIR=str(build), LTM_DEPS_PREFIX=str(prefix), LTM_STATIC_DEPS=str(static),
-               USBMUXD_BIN=str(native_root / 'build/usbmuxd/src/usbmuxd'), LTM_GUEST_TOOLS_DIR=str(guest),
+               USBMUXD_BIN=str(native_root / 'build/usbmuxd/src/usbmuxd'), IBOOT32PATCHER_BIN=str(native_root / PATCHER),
+               LTM_GUEST_TOOLS_DIR=str(guest),
                PKG_CONFIG_LIBDIR=str(prefix / 'lib/pkgconfig'), PKG_CONFIG_PATH='')
     products = args.output / 'DerivedData/Build/Products/Release'
     app = Path(state.get('package', {}).get('app', ''))
@@ -784,7 +796,8 @@ def main(argv=None):
     native = validate_native(args, native_root)
     static = Path(native['static_deps']).resolve()
     env.update(QEMU_BUILD_DIR=str(native_root / 'qemu-build'), LTM_DEPS_PREFIX=str(native_root / 'prefix'),
-               LTM_STATIC_DEPS=str(static), USBMUXD_BIN=str(native_root / 'build/usbmuxd/src/usbmuxd'))
+               LTM_STATIC_DEPS=str(static), USBMUXD_BIN=str(native_root / 'build/usbmuxd/src/usbmuxd'),
+               IBOOT32PATCHER_BIN=str(native_root / PATCHER))
     guest = args.guest_tools or args.output / 'guest/guest-tools'
     if not args.guest_tools:
         run(['bash', SCRIPTS / 'build-guest-tools.sh', guest.parent], env, log)

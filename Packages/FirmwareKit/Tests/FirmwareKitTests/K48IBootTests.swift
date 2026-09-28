@@ -7,14 +7,33 @@ import Testing
 /// only writes the per-boot effaceable/NVRAM region, so the freshly built NOR is identical on both sides.
 /// Skipped unless the IPSW, iBoot32Patcher and Python are present.
 struct K48IBootTests {
+    /// The Legacy-iOS-Kit build the port was checked against.
+    static let reference = Fixtures.home.appendingPathComponent("Downloads/Legacy-iOS-Kit_complete_v25.09.01/bin/macos/iBoot32Patcher")
     /// iBoot32Patcher: FIRMWAREKIT_IBOOT_PATCHER / IBOOT32PATCHER, else the Legacy-iOS-Kit binary.
     static let patcher: URL? = {
         let env = ProcessInfo.processInfo.environment
-        let candidates: [String?] = [env["FIRMWAREKIT_IBOOT_PATCHER"], env["IBOOT32PATCHER"],
-                          Fixtures.home.appendingPathComponent("Downloads/Legacy-iOS-Kit_complete_v25.09.01/bin/macos/iBoot32Patcher").path]
+        let candidates: [String?] = [env["FIRMWAREKIT_IBOOT_PATCHER"], env["IBOOT32PATCHER"], reference.path]
         for p in candidates.compactMap({ $0 }) where FileManager.default.isExecutableFile(atPath: p) { return URL(fileURLWithPath: p) }
         return nil
     }()
+
+    /// The patcher we build (scripts/build-iboot32patcher.sh from the pinned archive: FIRMWAREKIT_IBOOT_PATCHER, e.g.
+    /// a native root's build/iBoot32Patcher/iBoot32Patcher or the app's Contents/MacOS copy) patches every k48 iBoot
+    /// to the same bytes as the Legacy-iOS-Kit binary. Skipped unless both are present and distinct.
+    @Test(arguments: ["k48ap-7B500", "k48ap-8C148", "k48ap-7B367"]) func patcherMatchesReference(id: String) throws {
+        let fw = Oracle.firmware(id), fm = FileManager.default
+        guard fw.available, let mine = ProcessInfo.processInfo.environment["FIRMWAREKIT_IBOOT_PATCHER"].map({ URL(fileURLWithPath: $0) }),
+              fm.isExecutableFile(atPath: mine.path), fm.isExecutableFile(atPath: Self.reference.path),
+              mine.resolvingSymlinksInPath() != Self.reference.resolvingSymlinksInPath() else { return }
+        try Oracle.withTemp { dir in
+            let dec = dir.appendingPathComponent("dec")
+            _ = try FirmwareDecryptor.decrypt(ipsw: fw.ipsw, entry: try Oracle.entry(id), into: dec, rootfs: false)
+            let iboot = try Data(contentsOf: dec.appendingPathComponent("iBoot.bin"))
+            let ours = try K48IBoot.patchIBoot(iboot, patcher: mine, bootArgs: KBoot.defaultBootArgs, log: { _ in })
+            let theirs = try K48IBoot.patchIBoot(iboot, patcher: Self.reference, bootArgs: KBoot.defaultBootArgs, log: { _ in })
+            #expect(ours == theirs, "\(id): \(mine.path) and the Legacy-iOS-Kit patcher differ")
+        }
+    }
 
     @Test(arguments: ["k48ap-7B500", "k48ap-8C148"]) func iBootChainMatchesPython(id: String) throws {
         let fw = Oracle.firmware(id)
