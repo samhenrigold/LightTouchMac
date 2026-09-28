@@ -13,7 +13,8 @@
 import Foundation
 
 public struct FirmwareError: Error, CustomStringConvertible, Sendable {
-    public enum Code: String, Sendable { case keyMissing = "key_missing", shaMismatch = "sha_mismatch", unsupported, `internal` }
+    public enum Code: String, Sendable { case keyMissing = "key_missing", shaMismatch = "sha_mismatch", unsupported, hookFailed = "hook_failed",
+                                           oneshotFailed = "oneshot_failed", diskFull = "disk_full", `internal` }
     public var code: Code
     public var message: String
     public init(_ code: Code, _ message: String) { self.code = code; self.message = message }
