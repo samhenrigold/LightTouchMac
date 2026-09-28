@@ -10,7 +10,7 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 
 | Area | State | Checked by |
 |---|---|---|
-| iPad 1 emulation (A4, real iBoot chain, NAND, GL, touch, USB) | Boots iOS 3.2, 3.2.2, 4.2.1 to the home screen with GPU drawing; 49-app compatibility pass | `tests/ipad1/fresh-device.sh` on 7B500, 7B367, 8C148; `tests/ipad1/regress.py` 7/7 (2026-09-28) |
+| iPad 1 emulation (A4, real iBoot chain, NAND, GL, touch, USB) | Boots iOS 3.2, 3.2.2, 4.2.1 to the home screen with GPU drawing; 49-app compatibility pass. **Gap found 09-28:** only the Python pipeline ships real iBoot; the app's FirmwareKit still prepares iPads for direct-kernel boot (kboot), so app-prepared iPads don't run the real boot chain (`Preparer.swift:125`). Port in progress, branch `fk-k48-iboot` | `tests/ipad1/fresh-device.sh` on 7B500, 7B367, 8C148; `tests/ipad1/regress.py` 7/7 (2026-09-28) |
 | iPad Wi-Fi | Works, on by default, stock driver (BCM4329 model); location answered by the proxy | qemu-ios `docs/ipad1/wifi.md`, `location.md`; soak on 2026-09-27 |
 | iPad hardware keyboard | USB keyboard through the CCK path; Bluetooth dropped 2026-09-26 | `docs/ipad1/usb-keyboard.md` |
 | iPad restore over emulated USB | Stock idevicerestore: SecureROM → DFU → recovery → restore | `tests/ipad1/restore-smoke.py` (2026-09-28) |
@@ -63,6 +63,8 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - Finder native device recognition: deferred, needs Apple's USB host-controller entitlement (don't raise unless Sam does).
 
 ### Debts
+- App-prepared iPads boot via kboot, not real iBoot (FirmwareKit gap; see Done table). Swift KBoot also lacks `enable-hsic=1` (the 4.2.1 keyboard bug, on `ipad4-app-bugs`).
+- Survey reports live in docs/sweep/.
 - `tests/ipod/test_regress.py`: one test's mock lacks `guest_package_status`.
 - Bundled iPod image carries the old GL shim; regenerate at the main merge.
 - Two checks flake under heavy load (one iPad boot hang, one audio correlation); pass on retry.
