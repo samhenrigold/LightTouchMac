@@ -5,8 +5,9 @@
 //   system.img  the IPSW rootfs, grown to partition 1; rw fstab; SpringBoard env (GL CoreAnimation or
 //               CA_ENABLE_OGL=0) + stdio on /dev/console; [appsync] libappsync.dylib injected into installd +
 //               the shared-cache MISValidateSignature patch; [ca_ogl] the GLI shim as GLEngine (+ the gld plugin
-//               and dyld's override switch on 4.x); [web_proxy] the PAC; the guest helpers + their jobs;
-//               storage_mounter loads it_msmquiet; BTServer Disabled; [hook] lockdownd through the hook.
+//               and dyld's override switch on 4.x); [web_proxy] the PAC; the guest helpers; storage_mounter loads
+//               it_msmquiet; BTServer Disabled; [hook] lockdownd through the hook; the guest-package loader and
+//               seed package from armv7.itpack (GuestPackage.seed), whose jobs it_boot loads.
 //   data.img    fresh journaled HFSX "Data" (sparse) seeded with the system volume's /private/var skeleton
 //               (+ [usb_net] the en1 DHCP service, [web_proxy] the en0 AirPort service with the PAC), owners
 //               from the source catalog, else root / mobile by rule.
@@ -47,8 +48,11 @@ public enum SystemEdits {
             ("it_prefs", "usr/local/bin/it_prefs", 0o755), ("it_msmquiet.dylib", "usr/local/lib/it_msmquiet.dylib", 0o755)]
         public static let seal = ("it_seal", "usr/local/bin/it_seal", mode_t(0o755))
         public static let glTest = ("it_gltest", "usr/local/bin/it_gltest", mode_t(0o755))
-        /// launchd job file names; installed in System/Library/LaunchDaemons, mode 0644.
-        public static let jobs = ["com.qemu.it-pbd.plist", "com.qemu.it-ethlink.plist", "com.qemu.it-prefs.plist"]
+        /// launchd job file names baked into System/Library/LaunchDaemons (mode 0644). The helpers' own jobs
+        /// (it-pbd, it-ethlink, it-prefs) are the seed package's, loaded by it_boot.
+        public static let jobs: [String] = []
+        /// The guest packages and the loader (qemu-ios contrib/guest-package/build.sh).
+        public static let itpack = "armv7.itpack"
         public static let sealJob = "com.qemu.it-seal.plist", glTestJob = "com.qemu.it-gltest.plist"
         /// The fat armv6+armv7 AppSync dylib.
         public static let appsync = "libappsync.dylib"
@@ -63,6 +67,8 @@ public enum SystemEdits {
         public var hook: ActivationHook.Result?
         /// The GLEngine installed (helpers file name), if any.
         public var engine: String?
+        /// The seed package baked (GuestPackage.seed's record: the lock's guest_package).
+        public var guestPackage: GuestPackage.Record?
         public var notes: [String] = []
     }
 
@@ -122,6 +128,7 @@ public enum SystemEdits {
             }
         }
         for j in jobs { _ = try helper(j) }
+        let itpack = try helper(Helpers.itpack)
         if o.appsync, let why = MachOSignature.appSyncProblem(try Data(contentsOf: try helper(Helpers.appsync))) {
             throw FirmwareError(.internal, "\(helpers.path)/\(Helpers.appsync): \(why)")
         }
@@ -188,6 +195,11 @@ public enum SystemEdits {
                 result.hook = try ActivationHook.run(hook, on: at(lockdownd), displayPath: "/" + lockdownd)
                 rootOwned.append(lockdownd)
             }
+            let gli = result.engine.map { String($0.dropFirst("GLEngine-".count)) }
+            let (seeded, record) = try GuestPackage.seed(volume: m, itpack: itpack, gli: gli)
+            log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
+            result.guestPackage = record
+            rootOwned += seeded
             rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"] + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
 
             // /private/var skeleton for the data volume

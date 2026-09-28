@@ -5,9 +5,12 @@ import Testing
 /// The oracle's inputs: the Python cache's rootfs.dmg, the qemu-ios helper build outputs (contrib/*/build.sh),
 /// the dispatch TSVs and the user's activation hooks. Everything is read in place; outputs go to temp dirs.
 enum K48Oracle {
-    static let qemu = Oracle.path("Developer/qemu-ios-ipad1")
-    static let hooks = ["k48ap-7B500": Oracle.path("Developer/qemu-ios-files/ipad1/offline-activation/patch_lockdownd.py"),
-                        "k48ap-8C148": Oracle.path("Developer/qemu-ios-files/ipad1/offline-activation-8C148/patch_lockdownd.py")]
+    static let qemu = Oracle.qemuIOS
+    /// FIRMWAREKIT_ACTIVATION_HOOK (an executable) overrides both.
+    static let hooks = ProcessInfo.processInfo.environment["FIRMWAREKIT_ACTIVATION_HOOK"].map { h in
+        Dictionary(uniqueKeysWithValues: ["k48ap-7B500", "k48ap-8C148"].map { ($0, URL(fileURLWithPath: h)) })
+    } ?? ["k48ap-7B500": Oracle.path("Developer/qemu-ios-files/ipad1/offline-activation/patch_lockdownd.py"),
+          "k48ap-8C148": Oracle.path("Developer/qemu-ios-files/ipad1/offline-activation-8C148/patch_lockdownd.py")]
 
     /// helpers-dir name -> qemu-ios file.
     static var sources: [String: URL] {
@@ -24,6 +27,7 @@ enum K48Oracle {
             m["gli-dispatch-\(b).tsv"] = qemu.appendingPathComponent("docs/ipad1/gli-dispatch-\(b).tsv")
         }
         m["GLRendererFloatQEMU"] = contrib.appendingPathComponent("ipad1-gles/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU")
+        m[SystemEdits.Helpers.itpack] = qemu.appendingPathComponent("build/guest-package/armv7.itpack")
         return m
     }
 
@@ -74,6 +78,55 @@ enum K48Oracle {
         #expect((ifs["Interfaces"] as! [NSDictionary]).map { $0["BSD Name"] as! String } == ["en0", "en1", "en2"])
     }
 
+    /// GuestPackage.seed against mkpkg.seed on a plain directory with the real armv7.itpack: the same tree
+    /// (paths, modes, bytes, symlinks) and the same record, for a shim image and a no-shim one.
+    @Test(arguments: [("7B500", "7B500" as String?), ("8C148", nil)]) func seedMatchesPython(_ build: String, _ gli: String?) throws {
+        let itpack = K48Oracle.qemu.appendingPathComponent("build/guest-package/armv7.itpack")
+        guard Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py")) else { return }
+        try Oracle.withTemp { dir in
+            func volume(_ name: String) throws -> URL {
+                let v = dir.appendingPathComponent(name), sv = v.appendingPathComponent(GuestPackage.systemVersion)
+                for rel in [SystemEdits.glEngine, SystemEdits.gldPath, "usr/local/lib/it_msmquiet.dylib"] {
+                    try SystemEdits.mkdirs(v.appendingPathComponent(rel).deletingLastPathComponent())
+                    try SystemEdits.put(Data("stock".utf8), v.appendingPathComponent(rel), mode: 0o755)
+                }
+                try SystemEdits.mkdirs(v.appendingPathComponent(SystemEdits.daemons))
+                try SystemEdits.put(Data("job".utf8), v.appendingPathComponent(SystemEdits.daemons + "/com.qemu.it-pbd.plist"))
+                try SystemEdits.mkdirs(sv.deletingLastPathComponent())
+                try (["ProductBuildVersion": build] as NSDictionary).write(to: sv)
+                return v
+            }
+            let a = try volume("swift"), b = try volume("python")
+            let (written, record) = try GuestPackage.seed(volume: a, itpack: itpack, gli: gli)
+            let out = dir.appendingPathComponent("py.json")
+            try K48Oracle.sh(["python3", "-c", """
+                import json, sys; sys.path.insert(0, sys.argv[1]); import mkpkg
+                made, rec = mkpkg.seed(sys.argv[2], sys.argv[3], sys.argv[4] or None)
+                json.dump({"written": made, "record": rec}, open(sys.argv[5], "w"))
+                """, K48Oracle.qemu.appendingPathComponent("contrib/guest-package").path, b.path, itpack.path, gli ?? "", out.path],
+                             cwd: dir)
+            let py = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as! NSDictionary
+            #expect(written == py["written"] as? [String])
+            #expect(NSDictionary(dictionary: record.object) == py["record"] as? NSDictionary)
+            #expect(record.gli == gli && record.hooks.contains("/" + SystemEdits.glEngine) == (gli != nil))
+            func tree(_ v: URL) throws -> [String: String] {
+                var t: [String: String] = [:]
+                try SystemEdits.walk(v) { rel in
+                    let p = v.appendingPathComponent(rel).path
+                    var st = stat()
+                    lstat(p, &st)
+                    let link = try? FileManager.default.destinationOfSymbolicLink(atPath: p)
+                    let body = st.st_mode & S_IFMT == S_IFREG ? Oracle.sha256(try Data(contentsOf: URL(fileURLWithPath: p))) : ""
+                    t[rel] = "\(String(st.st_mode, radix: 8)) \(link ?? body)"
+                }
+                return t
+            }
+            let ta = try tree(a), tb = try tree(b)
+            #expect(ta == tb, "\(Set(ta.map { "\($0) \($1)" }).symmetricDifference(tb.map { "\($0) \($1)" }).sorted().prefix(10))")
+            #expect(ta["usr/local/lighttouch/state"] != nil && ta[SystemEdits.daemons + "/com.qemu.it-pbd.plist"] == nil)
+        }
+    }
+
     @Test func hookChecks() throws {
         try Oracle.withTemp { dir in
             let target = dir.appendingPathComponent("t")
@@ -117,7 +170,8 @@ enum K48Oracle {
                                   "--stash", "none", "--data-size", "partition"] + (recipe.options["appsync"] == true ? ["--appsync"] : []),
                                  cwd: K48Oracle.qemu)
                 try K48Oracle.sh(["python3", tool, "bake", py.appendingPathComponent("pristine").path, "--tools",
-                                  K48Oracle.qemu.appendingPathComponent("build/ipad1-guest").path, "--seal", "--activation-hook", hook.path],
+                                  K48Oracle.qemu.appendingPathComponent("build/ipad1-guest").path, "--guest-package",
+                                  K48Oracle.sources[SystemEdits.Helpers.itpack]!.path, "--seal", "--activation-hook", hook.path],
                                  cwd: K48Oracle.qemu)
             }
             let swift = dir.appendingPathComponent("swift")
@@ -129,6 +183,12 @@ enum K48Oracle {
                                          activationHook: hook) { print("  \($0)") }
             }
             #expect(r.hook?.hookSHA256 == Oracle.sha256(try Data(contentsOf: hook)))
+            // the seed record, as the Python bake wrote it for the lock (the itpack path differs: a symlink here)
+            let pyRecord = try JSONSerialization.jsonObject(with: Data(contentsOf: py.appendingPathComponent("pristine/guest-package.json"))) as! NSDictionary
+            var record = try #require(r.guestPackage?.object)
+            record["itpack"] = pyRecord["itpack"]
+            #expect(NSDictionary(dictionary: record) == pyRecord)
+            #expect(r.guestPackage?.gli != nil && r.guestPackage?.gli == r.engine.map { String($0.dropFirst("GLEngine-".count)) })
 
             // lockdownd: re-signed by the oracle only; .journal: each volume's own journal
             for (vol, expected) in [("system.img", ["usr/libexec/lockdownd"]), ("data.img", [".journal"])] {
@@ -161,6 +221,17 @@ enum K48Oracle {
             let order = (prefs.value(forKeyPath: "Sets.\(SystemEdits.netSet).Network.Global.IPv4.ServiceOrder") as? [String]) ?? []
             #expect(order.prefix(2) == [SystemEdits.wifiService, SystemEdits.usbEthService][...])
             #expect(try dv.record(at: "preferences/SystemConfiguration/NetworkInterfaces.plist").uid == 0)
+            // the seed is there: loader, current -> pkgs/<serial>, its offer record, a hook and its .baked copy, no baked helper job
+            let sv = try HFSPlusVolume(swift.appendingPathComponent("system.img")), seed = try #require(r.guestPackage)
+            let tree = Dictionary(uniqueKeysWithValues: try sv.listing(under: "usr/local").map { ($0.path, $0) })
+            #expect(tree["usr/local/bin/it_boot"]?.mode == 0o100755 && tree["usr/local/bin/it_boot"]?.uid == 0)
+            #expect(tree["usr/local/lighttouch/current"]?.link == "pkgs/\(seed.seed)")
+            #expect(tree["usr/local/lighttouch/pkgs/\(seed.seed)/offer"]?.uid == 0)
+            #expect(seed.hooks.contains("/" + SystemEdits.glEngine))
+            let engine = try sv.listing(under: SystemEdits.glEngine).first, baked = try sv.listing(under: SystemEdits.glEngine + ".baked").first
+            #expect(engine?.sha256 != nil && engine?.sha256 == baked?.sha256 && baked?.uid == 0)
+            #expect(try sv.listing(under: SystemEdits.daemons + "/com.qemu.it-pbd.plist").isEmpty)
+            #expect(try sv.listing(under: SystemEdits.daemons + "/com.qemu.it-boot.plist").first?.uid == 0)
             // the hook's output is lockdownd as installed (unsigned-by-us: its original signature is kept)
             let lockd = try HFSPlusVolume(swift.appendingPathComponent("system.img")).listing(under: "usr/libexec/lockdownd")
             #expect(lockd.first?.sha256 == r.hook?.outputSHA256 && lockd.first?.mode == 0o100755 && lockd.first?.uid == 0)

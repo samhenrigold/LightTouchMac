@@ -2,9 +2,9 @@ import Foundation
 import Testing
 @testable import FirmwareKit
 
-/// Oracle plumbing for the HFS+ tests: the Python in ~/Developer/qemu-ios-ipad1/imgtools, run on temp copies.
+/// Oracle plumbing for the HFS+ tests: the Python in Oracle.qemuIOS/imgtools, run on temp copies.
 enum HFSOracle {
-    static let imgtools = Oracle.path("Developer/qemu-ios-ipad1/imgtools")
+    static let imgtools = Oracle.qemuIOS.appendingPathComponent("imgtools")
     static var available: Bool { Oracle.exists(imgtools.appendingPathComponent("build_nand.py")) }
 
     /// python3 -c SCRIPT ARGS..., with imgtools importable; stdout.
