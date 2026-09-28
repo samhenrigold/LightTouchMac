@@ -61,7 +61,7 @@ HOME = Path.home()
 TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
 APP_SOURCES = ["DeviceServices", "DeviceFiles", "IMobileDevice", "DeviceProfile", "DeviceProfile+Display",
                "NativeLogging", "StorageLocations", "DeviceStateStorage", "GuestServices", "GuestPackage",
-               "DeviceInstance", "FirmwareCatalog", "MediaPhoto", "MediaIdentity"]
+               "DeviceInstance", "FirmwareCatalog", "MediaPhoto", "MediaIdentity", "DeviceConnectionIssue"]
 
 
 def tree(root):
@@ -125,7 +125,7 @@ def build(args, out):
                     "-I", ROOT / "Shared/CLink", out / "ltm_link.o", *sorted((ROOT / "Shared").glob("*.swift")),
                     ROOT / "LightTouchDevice/FrameTools.swift", *[ROOT / f"LightTouchMac/{n}.swift" for n in APP_SOURCES],
                     out / "DeviceProcess.swift", ROOT / "tests/session-driver/main.swift", ROOT / "tests/session-driver/guest.swift",
-                    ROOT / "tests/session-driver/single.swift",
+                    ROOT / "tests/session-driver/single.swift", ROOT / "tests/session-driver/activation.swift",
                     "-o", out / "session-driver"],
                    check=True, stdout=open(out / "swiftc.log", "w"), stderr=subprocess.STDOUT)
     if args.helper:

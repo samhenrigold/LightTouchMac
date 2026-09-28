@@ -60,14 +60,38 @@ nonisolated final class LogPipeReader: @unchecked Sendable {
     private let log: RotatingLog
     // Accessed only on queue, including EOF and explicit teardown.
     private var stopped = false
+    /// Phrases to report the first time they pass through (LogWatch), on the reader's queue.
+    private var watch: LogWatch?
 
-    init(descriptor: Int32, log: RotatingLog, cleanup: (@Sendable () -> Void)? = nil) throws {
+    /// Bytes in, `onMatch(phrase)` once per phrase, across chunk boundaries.
+    nonisolated final class LogWatch {
+        private var pending: [Data]
+        private var tail = Data()
+        private let onMatch: @Sendable (String) -> Void
+        init(phrases: [String], onMatch: @escaping @Sendable (String) -> Void) {
+            pending = phrases.map { Data($0.utf8) }
+            self.onMatch = onMatch
+        }
+        func scan(_ chunk: Data) {
+            guard !pending.isEmpty else { return }
+            let window = tail + chunk
+            for phrase in pending where window.range(of: phrase) != nil {
+                pending.removeAll { $0 == phrase }
+                onMatch(String(decoding: phrase, as: UTF8.self))
+            }
+            let keep = pending.map(\.count).max() ?? 0
+            tail = keep > 1 ? window.suffix(keep - 1) : Data()
+        }
+    }
+
+    init(descriptor: Int32, log: RotatingLog, watch: LogWatch? = nil, cleanup: (@Sendable () -> Void)? = nil) throws {
         let flags = fcntl(descriptor, F_GETFL)
         guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
             throw StorageLocations.posixError()
         }
         self.descriptor = descriptor
         self.log = log
+        self.watch = watch
         self.queue = DispatchQueue(label: "LightTouch.log.\(log.url.lastPathComponent)", qos: .utility)
         source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
         source.setEventHandler { [weak self] in self?.readChunk() }
@@ -85,8 +109,11 @@ nonisolated final class LogPipeReader: @unchecked Sendable {
         guard !stopped else { return }
         var bytes = [UInt8](repeating: 0, count: 32_768)
         let count = read(descriptor, &bytes, bytes.count)
-        if count > 0 { log.append(Data(bytes.prefix(count))) }
-        else if count == 0 || (errno != EAGAIN && errno != EINTR) {
+        if count > 0 {
+            let chunk = Data(bytes.prefix(count))
+            log.append(chunk)
+            watch?.scan(chunk)
+        } else if count == 0 || (errno != EAGAIN && errno != EINTR) {
             stopped = true
             source.cancel()
         }
@@ -100,7 +127,9 @@ nonisolated final class LogPipeReader: @unchecked Sendable {
             for _ in 0..<32 {
                 let count = read(descriptor, &bytes, bytes.count)
                 guard count > 0 else { break }
-                log.append(Data(bytes.prefix(count)))
+                let chunk = Data(bytes.prefix(count))
+                log.append(chunk)
+                watch?.scan(chunk)
             }
         }
     }
@@ -149,7 +178,10 @@ nonisolated final class SerialLogCapture: Sendable {
     private let directory: URL
     private let reader: LogPipeReader
 
-    init(url: URL, temporaryRoot: URL = FileManager.default.temporaryDirectory) throws {
+    /// `watch`: phrases reported the first time the guest prints them (iBoot's
+    /// "Entering recovery mode"), from the reader's queue.
+    init(url: URL, temporaryRoot: URL = FileManager.default.temporaryDirectory,
+         watch: [String] = [], onMatch: @escaping @Sendable (String) -> Void = { _ in }) throws {
         let directory = temporaryRoot.appendingPathComponent("LightTouch-serial-\(UUID().uuidString)", isDirectory: true)
         self.directory = directory
         try StorageLocations.privateDirectory(directory)
@@ -161,7 +193,8 @@ nonisolated final class SerialLogCapture: Sendable {
             }
             descriptor = open(path + ".out", O_RDWR | O_NONBLOCK | O_CLOEXEC)
             guard descriptor >= 0 else { throw StorageLocations.posixError() }
-            reader = try LogPipeReader(descriptor: descriptor, log: RotatingLog(url: url)) {
+            reader = try LogPipeReader(descriptor: descriptor, log: RotatingLog(url: url),
+                                       watch: watch.isEmpty ? nil : .init(phrases: watch, onMatch: onMatch)) {
                 try? FileManager.default.removeItem(at: directory)
             }
             argument = "pipe:" + path

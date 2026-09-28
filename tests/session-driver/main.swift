@@ -6,7 +6,7 @@
 //
 //   session-driver CONFIG.json
 //
-// config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase, ipadItpack?, guest?, single?}
+// config: {helper, requirement, usbmuxd, ipa, bundleID, work, files, ipodNAND, ipadBase, ipadItpack?, guest?, single?, activation?}
 // With `guest` it runs the guest-services scenario instead (guest.swift); with `single`, one prepared
 // device (single.swift). `frameworks` is where libimobiledevice is loaded from (default Homebrew's).
 // `ipadItpack` boots the iPad with the app's composed offer and checks the loader and the agent.
@@ -21,6 +21,8 @@ struct Config: Decodable {
     var ipadItpack: String?
     var guest: GuestConfig?
     var single: SingleConfig?
+    /// One base's activation question (activation.swift).
+    var activation: ActivationConfig?
     var frameworks: String?
 }
 
@@ -394,7 +396,8 @@ func checkPreparedFiles() throws {
 }
 
 Task { @MainActor in
-    if let guest = config.guest { await runGuest(guest) } else if let single = config.single { await runSingle(single) } else { await run() }
+    if let guest = config.guest { await runGuest(guest) } else if let single = config.single { await runSingle(single) }
+    else if let activation = config.activation { await runActivation(activation) } else { await run() }
 }
 DispatchQueue.main.asyncAfter(deadline: .now() + 560) { fail("driver timed out") }
 CFRunLoopRun()

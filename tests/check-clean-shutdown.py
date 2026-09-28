@@ -23,7 +23,7 @@ nonisolated func logEvent(_ s: String) {}
  enum State { case notStarted, booting, running, paused, snapshotting, poweredOff }
  var state = State.booting, isDead = false, isErasing = false, shuttingDown = false, halting = false
  var isPoweredOff: Bool { state == .poweredOff }
- var connectionRecoveryTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, mediaPreparationTask: Task<Void, Never>?, haltTask: Task<Void, Never>?
+ var connectionRecoveryTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, mediaPreparationTask: Task<Void, Never>?, haltTask: Task<Void, Never>?, bootWatchTask: Task<Void, Never>?
  var haltCompletions: [(Bool) -> Void] = []
  var process: FakeProcess? = FakeProcess()
 ''' + halt + r'''}

@@ -747,8 +747,9 @@ final class AppsInspectorViewController: NSViewController {
                 // After that this is only a BACKSTOP: notification_proxy pushes
                 // install/uninstall the moment they happen, so the poll exists
                 // for what the guest never publishes (icon reordering) and for
-                // a dropped session, neither of which needs a 3 s cadence.
-                try? await Task.sleep(for: .seconds(self.haveLoaded ? 15 : 1))
+                // a dropped session, neither of which needs a 3 s cadence. An
+                // unactivated guest refuses every service: nothing to press for.
+                try? await Task.sleep(for: .seconds(self.haveLoaded || self.emulator.connectionIssue?.persistent == true ? 15 : 1))
             }
         }
     }

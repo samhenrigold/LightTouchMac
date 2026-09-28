@@ -40,6 +40,7 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
  func reconnectUSB(){}
  func startForegroundWatch(){}
  func startGuestPackageWatch(){}
+ func startBootWatch(){}
  var preparationStatus=""
  let stub=StubTools()
  var onReady:(()->Void)?

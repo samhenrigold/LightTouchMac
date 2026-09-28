@@ -156,6 +156,17 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
                      logs: logs.appendingPathComponent("Devices/\(id.uuidString)", isDirectory: true))
     }
 
+    /// The preparer records what activated the volume in device.lock.json
+    /// `inputs.activation`; a base made without that step has null or nothing
+    /// there (a device.py base: `activation_hook: null`). False for an
+    /// unreadable lock: nothing to claim.
+    static func lockLacksActivation(_ lock: URL) -> Bool {
+        guard let data = try? Data(contentsOf: lock),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let inputs = json["inputs"] as? [String: Any] else { return false }
+        return !(inputs["activation"] is [String: Any])
+    }
+
     // MARK: - UserDefaults
 
     /// Per-device UserDefaults key, e.g. "deviceNotice.<uuid>". Adoption

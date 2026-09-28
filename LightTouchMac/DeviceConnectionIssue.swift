@@ -7,9 +7,37 @@ nonisolated struct DeviceConnectionIssue: Equatable, Sendable {
     let detail: String
     let blocksCommands: Bool
     let reconnectManagement: Bool
+    /// Stays for the rest of the boot: a reachable device does not clear it
+    /// and a later transient failure does not replace it.
+    var persistent = false
+
+    /// The guest is not activated (lockdown's ActivationState, or every
+    /// service refused with -34 SERVICE_PROHIBITED): nothing to retry.
+    static func unactivated(profile: DeviceProfile, detail: String) -> DeviceConnectionIssue {
+        DeviceConnectionIssue(summary: "This \(profile.shortName) isn’t activated. Choose Erase All Content and Settings, then prepare it again.",
+                              detail: detail, blocksCommands: true, reconnectManagement: false, persistent: true)
+    }
+
+    /// nil for "Activated"/"FactoryActivated" (and for an unknown state: nothing to say).
+    static func activation(state: String?, profile: DeviceProfile) -> DeviceConnectionIssue? {
+        guard let state, state != "Activated", state != "FactoryActivated" else { return nil }
+        return unactivated(profile: profile, detail: "ActivationState: \(state)")
+    }
+
+    private init(summary: String, detail: String, blocksCommands: Bool, reconnectManagement: Bool, persistent: Bool) {
+        self.summary = summary
+        self.detail = detail
+        self.blocksCommands = blocksCommands
+        self.reconnectManagement = reconnectManagement
+        self.persistent = persistent
+    }
 
     init?(error: Error, operation: String, profile: DeviceProfile) {
         guard !(error is CancellationError) else { return nil }
+        if case DeviceError.lockdown(-34) = error {   // SERVICE_PROHIBITED: an unactivated guest
+            self = .unactivated(profile: profile, detail: "\(operation): \(error.localizedDescription)")
+            return
+        }
         detail = "\(operation): \(error.localizedDescription)"
         switch error {
         case DeviceError.instproxy(.opInProgress, _):

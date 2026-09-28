@@ -78,12 +78,15 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     let instanceID: UUID?
     let hasSession: Bool
     let state: DeviceRowState
+    /// The device's lock records no activation (DeviceInstance.lockLacksActivation).
+    let preparedWithoutActivation: Bool
 
     /// `downloaded`: IPSWStore has this entry's IPSW.
     init(entry: FirmwareCatalog.Entry, instanceID: UUID?, session: SessionPhase?,
-         job: FirmwareJob?, failure: String?, downloaded: Bool = false) {
+         job: FirmwareJob?, failure: String?, downloaded: Bool = false, preparedWithoutActivation: Bool = false) {
         self.entry = entry
         self.instanceID = instanceID
+        self.preparedWithoutActivation = preparedWithoutActivation
         hasSession = session != nil
         state = Self.state(entry: entry, startable: instanceID != nil || entry.source.kind == .bundled,
                            session: session, job: job, failure: failure, downloaded: downloaded)
@@ -201,6 +204,9 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         default: nil
         }
     }
+
+    /// The row's note under the state, when there is one.
+    var note: String? { preparedWithoutActivation && instanceID != nil ? "Prepared without activation" : nil }
 
     /// The accessory's words: what VoiceOver reads after the version.
     var stateDescription: String {
@@ -562,9 +568,21 @@ nonisolated enum BootRecipe {
     }
 
     func row(for entry: FirmwareCatalog.Entry) -> DeviceRow {
-        DeviceRow(entry: entry, instanceID: instance(for: entry)?.id, session: session(for: entry)?.phase,
-                  job: FirmwareJobs.shared.jobs[entry.id], failure: failures[entry.id],
-                  downloaded: entry.source.sha1.map { IPSWStore.shared.existing($0) != nil } ?? false)
+        let instance = instance(for: entry)
+        return DeviceRow(entry: entry, instanceID: instance?.id, session: session(for: entry)?.phase,
+                         job: FirmwareJobs.shared.jobs[entry.id], failure: failures[entry.id],
+                         downloaded: entry.source.sha1.map { IPSWStore.shared.existing($0) != nil } ?? false,
+                         preparedWithoutActivation: instance.map(lacksActivation) ?? false)
+    }
+
+    /// Read once per device: the lock doesn't change while the app runs.
+    private var activationless: [UUID: Bool] = [:]
+    private func lacksActivation(_ instance: DeviceInstance) -> Bool {
+        if let known = activationless[instance.id] { return known }
+        let lacks = instance.base.kind == .prepared
+            && DeviceInstance.lockLacksActivation(instance.paths.base.appendingPathComponent("device.lock.json"))
+        activationless[instance.id] = lacks
+        return lacks
     }
 
     // MARK: Launch

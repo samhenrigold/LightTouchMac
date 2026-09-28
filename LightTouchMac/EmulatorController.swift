@@ -43,7 +43,7 @@ final class EmulatorController {
         webProxyStatus = .waiting
         onStatusChange?()
     }
-    enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff, lowSpace }
+    enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff, lowSpace, activation }
     private(set) lazy var deviceNotice = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["message"] as? String
     private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
@@ -58,8 +58,10 @@ final class EmulatorController {
         onStatusChange?()
     }
     /// The notice's remedy is Erase All Content and Settings (a refused
-    /// overlay, an unfinished or failed erase).
-    var deviceNoticeOffersErase: Bool { noticeOperation == NoticeOperation.erase.rawValue && !storageFailed }
+    /// overlay, an unfinished or failed erase, an unactivated guest).
+    var deviceNoticeOffersErase: Bool {
+        [NoticeOperation.erase.rawValue, NoticeOperation.activation.rawValue].contains(noticeOperation) && !storageFailed
+    }
     /// Boot refused: the overlay belongs to a different base image.
     private(set) var baseImageMismatch = false
 
@@ -109,9 +111,10 @@ final class EmulatorController {
     /// Set by the inspector's poll: nil = never checked, true/false = last read.
     var deviceReachable: Bool? {
         didSet {
-            if deviceReachable == true { connectionIssue = nil }
+            if deviceReachable == true, connectionIssue?.persistent != true { connectionIssue = nil }
             if oldValue != deviceReachable { onStatusChange?() }
             considerConnectionRecovery()
+            checkActivationIfNeeded()
             // Clean abandoned uploads when the guest first answers. The sweep
             // excludes this process’s session-tagged uploads even if it runs late.
             if deviceReachable == true, !didSweepStaging {
@@ -127,6 +130,8 @@ final class EmulatorController {
 
     func reportConnectionFailure(_ error: Error, operation: String) {
         guard let issue = DeviceConnectionIssue(error: error, operation: operation, profile: profile) else { return }
+        // An unactivated guest stays that way for the boot; a transient failure doesn't replace the message.
+        if connectionIssue?.persistent == true, !issue.persistent { return }
         if connectionIssue != issue {
             logEvent("device connection: \(issue.detail); USB=\(usbConnected), agent=\(liveAgentStatus), blocked requests=\(AbandonedWork.count)")
         }
@@ -285,6 +290,7 @@ final class EmulatorController {
             logEmulatorBuild()
             verifyRestoreIfNeeded()   // a bad restore self-heals with a fresh helper
             startGuestPackageWatch()  // after composeGuestOffer(): a watch with no offer judges nothing
+            startBootWatch()
         }
         return config
     }
@@ -336,8 +342,7 @@ final class EmulatorController {
                 nand = iPodNAND().base
             }
         } catch {
-            reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
-            state = .dead(exitCode: 1)
+            failBoot(error)
             return nil
         }
         // usbmuxd must be listening before the guest USB core comes up.
@@ -385,8 +390,7 @@ final class EmulatorController {
                 return nil
             }
         } catch {
-            reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
-            state = .dead(exitCode: 1)
+            failBoot(error)
             return nil
         }
         let usbSession = options.appsync
@@ -408,8 +412,65 @@ final class EmulatorController {
 
     private func openSerialLog() {
         do {
-            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"))
+            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"),
+                                                 watch: [Self.recoveryMarker]) { [weak self] _ in
+                Task { @MainActor in self?.abortBoot(Self.recoveryReason(self?.profile ?? .iPodTouch2G)) }
+            }
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
+    }
+
+    // MARK: - Boot deadline
+
+    /// iBoot's last words before it waits for a restore.
+    static let recoveryMarker = "Entering recovery mode"
+    static func recoveryReason(_ profile: DeviceProfile) -> String {
+        "The \(profile.shortName) entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
+    }
+    static func deadlineReason(_ profile: DeviceProfile) -> String {
+        "The \(profile.shortName) didn’t start within \(Int(profile.bootBudget)) seconds. Open Device Logs for details."
+    }
+    /// A boot file the base lacks (BootRecipe.preparedFiles), else the storage error as it is.
+    static func bootFilesReason(_ error: Error, profile: DeviceProfile) -> String {
+        if let cocoa = error as? CocoaError, cocoa.code == .fileNoSuchFile, let path = cocoa.userInfo[NSFilePathErrorKey] as? String {
+            return "This \(profile.shortName)’s system files are incomplete: \(URL(fileURLWithPath: path).lastPathComponent) is missing. Delete it and prepare it again."
+        }
+        return "Could not prepare device storage: \(error.localizedDescription)"
+    }
+
+    /// The boot can't be built: dead with a named reason (the row and the overlay show it).
+    private func failBoot(_ error: Error) {
+        let reason = Self.bootFilesReason(error, profile: profile)
+        deathReason = reason
+        reportDeviceNotice(reason, for: .storage)
+        state = .dead(exitCode: 1)
+    }
+
+    private var bootWatchTask: Task<Void, Never>?
+
+    /// Never "Booting…" forever: no uiReady within the board's budget ends the
+    /// boot as a named error, with the helper halted. Per boot (also after
+    /// Power On and Restart).
+    private func startBootWatch() {
+        bootWatchTask?.cancel()
+        let generation = bootGeneration
+        bootWatchTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(self?.profile.bootBudget ?? 0))
+            guard let self, !Task.isCancelled, generation == bootGeneration, status?.uiReady != true else { return }
+            abortBoot(Self.deadlineReason(profile))
+        }
+    }
+
+    /// The guest will not come up (recovery mode, or out of time): halt the
+    /// helper and become `.dead` with `reason`; the row offers Start again.
+    private func abortBoot(_ reason: String) {
+        guard !isDead, !isPoweredOff, !shuttingDown, !halting, let process, !process.isDead else { return }
+        logEvent("boot: \(reason)")
+        deathReason = reason
+        bootWatchTask?.cancel()
+        process.terminate()
+        Task {
+            if await !process.waitForExit(timeout: Self.haltBudget) { process.kill() }
+        }
     }
 
     /// The guestfwd for itwebproxy, reading this device's routing file; nil
@@ -570,6 +631,7 @@ final class EmulatorController {
         // Unlink the owned FIFO paths now, keeping readers alive until the
         // helper is finished writing.
         serialCapture?.removeEndpoints()
+        bootWatchTask?.cancel()
         mediaPreparationTask?.cancel()
         foregroundTask?.cancel()
         guestPackageTask?.cancel()
@@ -647,7 +709,8 @@ final class EmulatorController {
     /// `.dead`; the window shows a Restart overlay, and the other devices keep running.
     private func helperDied(_ reason: String) {
         guard !isDead else { return }
-        if !halting { deathReason = reason }
+        if !halting, deathReason == nil { deathReason = reason }   // an aborted boot keeps its own reason
+        bootWatchTask?.cancel()
         statusTimer?.invalidate()
         statusTimer = nil
         audioSink?(.audioEnded(generation: 0, failed: true))
@@ -752,6 +815,7 @@ final class EmulatorController {
         case .notStarted: return "Starting…"
         case .booting:    return "Booting…"
         case .running:
+            if let issue = connectionIssue, issue.persistent { return issue.summary }
             if preparingMedia { return preparationStatus }
             if isSleeping { return "Sleeping" }
             if restartingSpringBoard { return "Restarting SpringBoard…" }
@@ -1293,6 +1357,7 @@ final class EmulatorController {
             self.state = .booting
             self.startMediaPreparation()
             self.startGuestPackageWatch()
+            self.startBootWatch()
         }
     }
     /// Retain the QEMU main loop at guest power-off; a reset can cold boot it
@@ -1338,6 +1403,7 @@ final class EmulatorController {
             self.startMediaPreparation()
             self.startForegroundWatch()
             self.startGuestPackageWatch()
+            self.startBootWatch()
         }
     }
 
@@ -1682,6 +1748,7 @@ final class EmulatorController {
         shuttingDown = true
         halting = true
         connectionRecoveryTask?.cancel()
+        bootWatchTask?.cancel()
         orientationTask?.cancel()
         foregroundTask?.cancel()
         mediaPreparationTask?.cancel()
@@ -1809,6 +1876,7 @@ final class EmulatorController {
                     }
                 }.value
                 resolveDeviceNotice(for: .erase)
+                resolveDeviceNotice(for: .activation)
                 isErasing = false
                 if started {
                     logEvent("reset: device erased; starting it fresh")
@@ -1915,6 +1983,35 @@ final class EmulatorController {
     func activationState() async -> String? {
         guard let socket = usbmux.session?.clientSocket else { return nil }
         return await DeviceServices(clientSocket: socket).activationState()
+    }
+
+    // MARK: - Activation (verified once per boot; activating is the preparer's job)
+
+    private var activationCheckedGeneration: Int?
+
+    /// On the first lockdown answer of a boot, ask ActivationState once. Anything
+    /// but Activated is a persistent issue: commands stay blocked, nothing
+    /// retries, the notice offers Erase. An activated guest clears an old notice.
+    private func checkActivationIfNeeded() {
+        guard deviceReachable == true, activationCheckedGeneration != bootGeneration else { return }
+        activationCheckedGeneration = bootGeneration
+        let generation = bootGeneration
+        Task { [weak self] in
+            guard let self else { return }
+            let state = await activationState()
+            guard generation == bootGeneration else { return }
+            guard let state else { activationCheckedGeneration = nil; return }   // couldn't ask: again on the next answer
+            logEvent("activation: lockdown reports \(state)")
+            guard let issue = DeviceConnectionIssue.activation(state: state, profile: profile) else {
+                resolveDeviceNotice(for: .activation)
+                return
+            }
+            connectionIssue = issue
+            deviceReachable = false
+            mediaPreparationTask?.cancel()
+            preparingMedia = false
+            reportDeviceNotice(issue.summary, for: .activation)
+        }
     }
     func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
     func launchApp(_ bundleID: String) async throws {
