@@ -87,7 +87,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     var isDimmed: Bool { if case .unavailable = state { true } else { false } }
     var isError: Bool { if case .error = state { true } else { false } }
 
-    /// `canDownload` is FirmwareJobs.canDownload: false until W5/W6 land.
+    /// `canDownload` is FirmwareJobs.canDownload: whether the preparer is present.
     func allows(_ action: DeviceAction, canDownload: Bool) -> Bool {
         let working = switch state { case .downloading, .preparing, .stopping: true; default: false }
         switch action {
@@ -144,36 +144,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     }
 }
 
-// MARK: - Firmware jobs (W5/W6)
-
-/// Downloads and preparations per catalog entry. W5 (FirmwareDownloads) and
-/// W6 (PreparationJob) fill this in; until they land nothing starts, so every
-/// row stays at not downloaded and the UI for the other states is exercised
-/// only by setting `jobs` directly.
-@MainActor final class FirmwareJobs {
-    static let shared = FirmwareJobs()
-    /// Posted on the main actor after `jobs` changes.
-    static let didChangeNotification = Notification.Name("FirmwareJobsDidChange")
-
-    var jobs: [String: FirmwareJob] = [:] {
-        didSet { NotificationCenter.default.post(name: Self.didChangeNotification, object: self) }
-    }
-
-    /// W5/W6: true once a download and preparation can run.
-    var canDownload: Bool { false }
-
-    func downloadAndPrepare(_ entry: FirmwareCatalog.Entry) {
-        logEvent("firmware: download and prepare \(entry.id) is not available yet")
-    }
-
-    /// W5: hash, look up in the catalog and clone into State/IPSW. `entry` is
-    /// the row it was dropped on or imported for, if any.
-    func importIPSW(_ url: URL, for entry: FirmwareCatalog.Entry?) {
-        logEvent("firmware: import \(url.lastPathComponent) for \(entry?.id ?? "any entry") is not available yet")
-    }
-
-    func cancel(_ entry: FirmwareCatalog.Entry) { jobs[entry.id] = nil }
-}
+// MARK: - Firmware jobs: FirmwareJobs.swift
 
 // MARK: - Sessions
 

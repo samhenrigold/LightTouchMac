@@ -126,7 +126,7 @@
   "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true}, "gli_dispatch": "gli-dispatch-7B500.tsv"},
   "activation_hook": "optional",
   "emulator": {"min_protocol": 1},
-  "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
+  "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3700227067, "seconds": 90}
  },
  {
   "id": "k48ap-7B367",
@@ -160,7 +160,7 @@
   "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true}},
   "activation_hook": "optional",
   "emulator": {"min_protocol": 1},
-  "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
+  "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3700184797, "seconds": 90}
  },
  {
   "id": "k48ap-8C148",
@@ -194,6 +194,6 @@
   "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": false, "web_proxy": true, "usb_net": true, "writable_nor": true}, "gli_dispatch": "gli-dispatch-8C148.tsv"},
   "activation_hook": "optional",
   "emulator": {"min_protocol": 1},
-  "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
+  "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  }
 ]}
