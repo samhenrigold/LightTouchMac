@@ -8,7 +8,7 @@ a = source.index('    private struct RowAppearance:')
 b = source.index('    /// Capture only values', a)
 appearance = source[a:b]
 a = source.index('    private func reloadTablePreservingSelection()')
-b = source.index('\n    @objc private func appsChanged()', a)
+b = source.index('\n    @objc private func appsChanged(', a)
 reload = source[a:b]
 code = r'''import Cocoa
 @MainActor final class Fixture: NSObject, NSTableViewDataSource, NSTableViewDelegate {

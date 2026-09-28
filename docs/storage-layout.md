@@ -26,7 +26,8 @@ directory. See migration behavior below.
 | `State/device/<nand>-<digest>`; legacy `State/device/<nand>` | Extracted, immutable NAND base | Retained while a device depends on it. An existing device keeps its original base after an app update. |
 | `State/nandrw-<image-key>` | Writable NAND pages and private `nor.bin` | Durable user device data. Erase removes the selected overlay before the next boot. Ordinary shutdown and failed snapshots do not delete it. |
 | `State/snapshot-<image-key>`, `.meta`, `.tmp`, `.bad` | Saved RAM, identity metadata, staging, and quarantine | At most one saved and one quarantined snapshot per key. Explicit discard removes these and their metadata, not the overlay. Resume is currently disabled in the controller. Old image generations are not automatically collected. |
-| `State/Devices/<uuid>/IPAs/<bundle-id>.ipa` (was `State/IPAs`, migrated at launch) | A retained copy of an installed archive, used to drag installed apps out as files | Adopted after successful install via a temporary sibling and atomic rename. Removed after successful uninstall through the app. These copies serve a feature and are not disposable download scratch. |
+| `State/Library/IPAs/<sha256>.ipa`, `index.json` | Every installed archive once, named by content; the index carries bundle id, name, version, min OS, size, md5 and the Legacy Store copy | Written by install (hashed once) and by the launch sweep of device copies. A blob outlives the device copies; Settings ▸ Storage ▸ Remove Unused deletes the ones no device references. Legacy Store reuses a blob whose md5 matches the catalog copy instead of downloading. |
+| `State/Devices/<uuid>/IPAs/<bundle-id>.ipa` (was `State/IPAs`, migrated at launch) | This device's installed archives, APFS clones of Library blobs, used to drag installed apps out as files and to install on another device | Published via a temporary sibling and atomic rename. Removed after successful uninstall through the app (the blob stays). These copies serve a feature and are not disposable download scratch. |
 | `~/Library/Caches/gold.samhenri.LightTouchMac/AppMetadata` | Installed-app display names, icons, and `index.json` | Disposable metadata. An isolated run uses `State/Caches/AppMetadata`. Missing metadata falls back to the device-reported name; installs populate the cache again. |
 | `State/AppCache` | Legacy metadata location | Moved atomically to the new cache when no destination exists. See migration exceptions below. |
 | `State/work/usbmuxd-conf` | System configuration and device pairing records | Durable daemon state, copied from bundled seed once. Keep across launches; never include in a generic scratch-directory deletion. |
@@ -140,12 +141,10 @@ download size through user-supplied firmware is a separate effort.
    in the system temporary directory. Preserve recoverable recordings in an
    app-managed recovery location, then offer reveal/retry/discard; do not sweep
    these files as if they were failed disposable work.
-4. **Clarify library ownership for multiple device images.** Overlays are keyed
-   per image, while `IPAs/<bundle-id>.ipa` and metadata are app-wide. Installing
-   another version replaces that preserved archive; uninstalling from one image
-   deletes the shared copy. Before exposing multiple independent devices,
-   namespace references per device or retain content-addressed archives with
-   references. Do not delete shared IPAs during device-reset cleanup.
+4. **Library ownership for multiple devices** — done (Track B): archives are
+   content-addressed under `State/Library/IPAs` with a clone per device;
+   uninstall drops the device's clone, and the app-wide name and icon only
+   when no device keeps the app.
 5. **External install wrapper scratch.** The external/non-baked
    `qemu-ios-files/apps/install-app.sh` creates work or fallback temporary space
    even when it immediately hands off to the actual installer. It should resolve

@@ -4,7 +4,7 @@ The one place that says what is done, what is running and what is left. Updated 
 `multidevice` (this repo) or `ipad1` (qemu-ios). Every "done" line names how it was checked. Answer
 status questions from this file, after checking it against the commits it cites.
 
-Last update: 2026-09-28, `iboot-ship` (real iBoot chain shipped in the app), qemu-ios ipad1 `3772248bb2`.
+Last update: 2026-09-28, `ipa-library` merged (IPA library; iBoot shipped; Track A), qemu-ios ipad1 `082b45e77d`.
 
 ## Done
 
@@ -32,6 +32,7 @@ Last update: 2026-09-28, `iboot-ship` (real iBoot chain shipped in the app), qem
 | Silent headless boots | `-audio driver=none` everywhere headless | grep of tests and helper modes |
 | Track A: app correctness (`app-correctness`, 09-28) | A1 activation verified once per boot (persistent issue, notice with Erase, "Prepared without activation" row note); A2 boot deadline (lockdown within the board's budget) and iBoot recovery-mode detection end the session as a named error, helper halted; A3 per-device install queue (`InstallJob.deviceID`, `discard(for:)`, per-device pause/busy, filtered inspectors); A4 published bases `chflags uchg`, a watch on a running device's files with a persistent notice and Stop without a flush, Show in Finder per device; A5 install checks use the device's iOS version and slice; A6 "Guest tools" status line with concrete states; A7 keyboard input and auto-rotation per device (tiltSnap/modelPresentation were animation keys, not defaults); A8 usbmuxd polls 50 ms once idle for 1 s (fork branch `idle-poll`, 3 idle iPods 6.3% → 0.3% of a core; not pinned yet) | `check-activation-gate` 8/8 (7E18-a), `check-boot-deadline` 3/3 (8C148-b, marker in 1.3 s), `check-install-queue-scope`, `check-device-files`, `check-helper-boot --only meddle` 6/6, `check-sessions --ipad-device` (see the merge note), the offline checks listed in PLAN.md |
 | Quit-with-resume snapshots removed (S3) | The unreachable app-side save/restore code is gone; the helper's snapshot ops, the guest-tools restarts and Erase's sweep of stale snapshot files stay | app, helper and firmwarekit build; `check-clean-shutdown`, `check-termination`, `check-preparation-wake`, `tests/device-state-storage.swift`, `check-helper-boot` restore case unchanged |
+| Track B: IPA library (`ipa-library`, 09-28) | Content-addressed store `State/Library/IPAs/<sha256>.ipa` + `index.json` (bundle id, name, version, min OS, size, md5, catalog copy); `IPALibrary.adopt` hashes once and clones the blob into `Devices/<uuid>/IPAs/<bundle-id>.ipa` (drag-out and `forget` unchanged); uninstall drops the device copy only, and the app-wide icon only when no device keeps the app; Legacy Store downloads reuse the blob whose md5 the catalog copy names (no transfer; a copy the library lacks still downloads and verifies); "Install on ▸ <running device>" in the installed row's menu and `.ipa` drops on running sidebar rows, both through the per-device `AppInstaller.start`; launch sweep stores existing device copies once (and still moves a pre-per-device `State/IPAs` into every device); Settings ▸ Storage "Library" line with Remove Unused | `tests/check-ipa-library.py` (two records → one blob, two clones, one entry; uninstall on A keeps B's copy and icon; Remove Unused spares referenced blobs; Store dedupe against a local fixture with its IPA route disabled; sweep idempotent); `check-uninstall-queue` (icon kept while another device has the app), `check-install-queue-scope`, `check-media-queue`, `check-storage-lifecycle`; app builds; `scripts/gate.sh --quick`; `check-sessions --ipad-device` 16/16 (iPod + iPad, install into each) |
 
 ## Catalog (LightTouchMac/Resources/firmware-catalog.json)
 
@@ -53,8 +54,7 @@ Last update: 2026-09-28, `iboot-ship` (real iBoot chain shipped in the app), qem
 | iPod touch 1G, milestone 0 | qemu-ios `ipod-1g` | devos50's S5L8900 machine on our tree with shared models + properties; boot 3A101a from his public images (docs/sweep/ipod-1g.md) |
 | Firmware matrix | `matrix` | every iPad 3.x/4.x/5.x and iPod 2.x–4.x build enumerated with keys; tests/matrix.py runner; results in docs/matrix-results.md |
 | Fidelity ledger + iOS 5 spike | `fidelity-ledger`, qemu-ios `ios5-spike` | R/H/P/S per component; predicted vs actual iOS 5 confrontations |
-| Shared IPA library | `ipa-library` | download once, install on any device |
-| Consolidation sweep | docs/sweep/PLAN.md | surveys done (docs/sweep/*.md); Track A done on `app-correctness` (see the Done table; to merge); B–E sequenced in the plan; decisions S1–S6 with Sam |
+| Consolidation sweep | docs/sweep/PLAN.md | surveys done (docs/sweep/*.md); Tracks A and B merged; C–E sequenced in the plan; S1–S3 decided |
 
 Then: a notarized build, verified in-app on every firmware, for Sam to test. That build is the first
 in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e71588`).
@@ -84,7 +84,7 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - `tests/ipod/test_regress.py`: one test's mock lacks `guest_package_status`.
 - Bundled iPod image carries the old GL shim; regenerate at the main merge.
 - Two checks flake under heavy load (one iPad boot hang, one audio correlation); pass on retry.
-- `tests/run-catalog-checks.py` is stale at baseline: `tests/catalog.swift` still calls IPALibrary without `device:` (its CatalogCopy assertions, incl. Track A's, were verified by a scratch compile). `tests/check-device-menus.py` fails at baseline on the App menu's Settings… item.
+- `tests/check-device-menus.py` fails at baseline on the App menu's Settings… item. (`run-catalog-checks.py` is back: its IPALibrary assertions moved to `check-ipa-library.py`.)
 - usbmuxd `idle-poll` (fork branch, off `qemu-zlp`): pin it with the next release build (`build-support`/release pin) so the app ships the backoff.
 - Tip fix not yet confirmed on an app-prepared iPad.
 - ~45 worktrees under ~/Developer and /tmp from finished agents; prune the merged ones.

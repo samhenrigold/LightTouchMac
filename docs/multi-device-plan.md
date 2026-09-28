@@ -194,8 +194,9 @@ State/Devices/<uuid>/device.json                 the record; its directory is th
                      overlay/, nor.bin           user data (kept in backups)
                      snapshot{,.meta,.tmp,.bad}  saved RAM (excluded from backups)
                      usbmuxd-conf/               pairing: 0700, plists 0600
-                     IPAs/<bundle-id>.ipa        retained copies of apps installed on this device
+                     IPAs/<bundle-id>.ipa        the apps installed on this device: APFS clones of Library blobs
                      work/                       lease, usbmuxd.pid, session.env (excluded from backups)
+State/Library/IPAs/<sha256>.ipa, index.json      every installed archive once (IPALibrary); Store dedupe, "Install on ▸"
 State/Devices/.deleting-<uuid>/                  a delete in progress; finished by the launch sweep
 State/Preparing/<job>/, <job>.publish/           staging (excluded from backups); never a device
 State/IPSW/<sha1>.ipsw                           imports (excluded from backups)
