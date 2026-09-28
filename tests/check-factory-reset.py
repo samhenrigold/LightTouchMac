@@ -25,7 +25,7 @@ nonisolated func logEvent(_ s:String){}
  enum Notice {case erase,activation}
  struct Instance { let id=UUID() }
  let instance=Instance()
- var isErasing=false,isInstalling=false,isDead=false,skipNextQuitSnapshot=false
+ var isErasing=false,isInstalling=false,isDead=false
  var state=State.running
  var started=true
  var link:FakeLink?=FakeLink()

@@ -180,8 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         emulators.forEach { $0.stop() }
     }
 
-    /// On quit: guard an in-flight install, then save the RAM state (resume on)
-    /// or halt each device (EmulatorController.halt: storage flushed, no guest shutdown).
+    /// On quit: guard an in-flight install, then halt each device
+    /// (EmulatorController.halt: storage flushed, no guest shutdown).
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if emulators.contains(where: \.isErasing) { return .terminateCancel }
         if awaitingTermination { return .terminateLater }
@@ -228,7 +228,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         }
         let backstop = EmulatorController.stopBudget
-            + (EmulatorController.resumeOnLaunch ? EmulatorController.quitSnapshotBudget : 0)
         terminationBackstop = Task {
             do { try await Task.sleep(for: .seconds(backstop)) } catch { return }
             logEvent("quit: shutdown did not finish in time — quitting anyway")
@@ -241,19 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             remaining -= 1
             if remaining == 0 { reply() }
         }
-        for emulator in running {
-            // Save the RAM state if resume is on (the VM stays paused and its storage
-            // is flushed; the helper halts when the app exits), else halt now. Never
-            // a guest shutdown after the save: flash moving past the snapshot is the
-            // stale-RAM-over-newer-flash corruption the snapshot code warns about.
-            if EmulatorController.resumeOnLaunch, !emulator.isInstalling, !AppInstaller.hasPendingWork {
-                emulator.beginQuitSnapshot { saved in
-                    if saved { finished() } else { emulator.halt { _ in finished() } }
-                }
-            } else {
-                emulator.halt { _ in finished() }
-            }
-        }
+        for emulator in running { emulator.halt { _ in finished() } }
         return .terminateLater
     }
 

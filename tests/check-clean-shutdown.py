@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[1]
 s = (root / 'LightTouchMac/EmulatorController.swift').read_text()
-a = s.index('    static let haltBudget:'); b = s.index('    /// Menu ▸ Save State Now', a)
+a = s.index('    static let haltBudget:'); b = s.index('    /// Stop the guest and its helper, erase this device', a)
 halt = s[a:b].replace('haltBudget: TimeInterval = 10', 'haltBudget: TimeInterval = 0.3')
 source = r'''import Foundation
 nonisolated func logEvent(_ s: String) {}
@@ -20,7 +20,7 @@ nonisolated func logEvent(_ s: String) {}
  }
 }
 @MainActor final class Controller {
- enum State { case notStarted, booting, running, paused, snapshotting, poweredOff }
+ enum State { case notStarted, booting, running, paused, poweredOff }
  var state = State.booting, isDead = false, isErasing = false, shuttingDown = false, halting = false
  var isPoweredOff: Bool { state == .poweredOff }
  var connectionRecoveryTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, mediaPreparationTask: Task<Void, Never>?, haltTask: Task<Void, Never>?, bootWatchTask: Task<Void, Never>?
@@ -48,10 +48,7 @@ nonisolated func logEvent(_ s: String) {}
   let hung = Controller(); hung.process!.hung = true
   let killed = await withCheckedContinuation { done in hung.halt { done.resume(returning: $0) } }
   precondition(killed && hung.process!.kills == 1)
-  // A save in flight is left alone; a gone helper or a powered-off guest is already stopped.
-  let saving = Controller(); saving.state = .snapshotting
-  var saved: Bool?; saving.halt { saved = $0 }
-  precondition(saved == false && saving.process!.terms == 0 && !saving.shuttingDown)
+  // A gone helper or a powered-off guest is already stopped.
   let gone = Controller(); gone.process!.isDead = true
   var goneResult: Bool?; gone.halt { goneResult = $0 }
   precondition(goneResult == true && gone.process!.terms == 0)
@@ -59,7 +56,7 @@ nonisolated func logEvent(_ s: String) {}
   let meddled = Controller(); meddled.filesMeddled = true
   let quitResult = await withCheckedContinuation { done in meddled.halt { done.resume(returning: $0) } }
   precondition(quitResult && meddled.process!.quits == 1 && meddled.process!.terms == 1 && meddled.process!.kills == 0)
-  print("PASS: Stop mid-boot halts at once, joined requests, a hung helper is killed, a save is left alone, meddled files skip the flush")
+  print("PASS: Stop mid-boot halts at once, joined requests, a hung helper is killed, meddled files skip the flush")
  }
 }
 '''

@@ -51,7 +51,7 @@ struct Status { var uiReady = true }
 struct Mux { var session: Int? = 1; func stop() {} }
 struct Serial { func finish() {} }
 @MainActor final class Controller {
- enum State: Equatable { case notStarted, booting, running, poweredOff, snapshotting; case dead(exitCode: Int32?) }
+ enum State: Equatable { case notStarted, booting, running, poweredOff; case dead(exitCode: Int32?) }
  enum NoticeOperation { case storage }
  static let haltBudget: TimeInterval = 0.2
  let profile: DeviceProfile
@@ -67,10 +67,10 @@ struct Serial { func finish() {} }
  var notices: [String] = []
  func reportDeviceNotice(_ text: String, for operation: NoticeOperation) { notices.append(text) }
  var usbmux = Mux()
+ var fileWatch: Int?
  var statusTimer: Timer?, mediaPreparationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?
  var audioSink: ((Int) -> Void)?
  var serialCapture: Serial? = Serial()
- func discardSavedState() {}
  init(_ profile: DeviceProfile) {
   self.profile = profile
   process!.onDeath = { [weak self] reason in self?.helperDied(reason) }

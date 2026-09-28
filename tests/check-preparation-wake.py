@@ -26,10 +26,11 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
  var options=Options(),state=State.running
  var hasGuestTools=true
  func setAccelerometer(for degrees:Int){}
- var isSleeping=false,preparingMedia=false,isDead=false,storageFailed=false,shuttingDown=false,restoringFromSnapshot=false
+ var isSleeping=false,preparingMedia=false,isDead=false,storageFailed=false,shuttingDown=false
  var mediaPreparationFailure:String?,mediaPreparationTask:Task<Void,Never>?
  var bootGeneration=0,homes=0,rotationDegrees=0
  var poweringOn=false
+ var reachableSince:Date?,ethlinkUp=false
  var status:Status? { queryHook?(); return Status(displaySleeping: sleeping) }
  var link:FakeLink?=FakeLink()
  struct Helper { let isDead = false }
@@ -68,10 +69,8 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
   precondition(pending.preparingMedia && pending.preparationStatus == "Waiting for the Home screen…")
   pending.springBoardReady=true;await pending.mediaPreparationTask?.value
   precondition(!pending.preparingMedia)
-  sleeping=true;let restored=Controller();restored.restoringFromSnapshot=true
-  restored.startMediaPreparation();await restored.mediaPreparationTask?.value;precondition(restored.homes==0)
-  sleeping=true;let cold=Controller();cold.restoringFromSnapshot=true;cold.state = .poweredOff
-  cold.powerOn();precondition(!cold.restoringFromSnapshot && cold.bootGeneration==1)
+  sleeping=true;let cold=Controller();cold.state = .poweredOff
+  cold.powerOn();precondition(cold.bootGeneration==1)
   cold.state = .running
   let deadline=ContinuousClock.now + .seconds(2)
   while cold.mediaPreparationTask==nil,ContinuousClock.now<deadline {await Task.yield()}
@@ -84,7 +83,7 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
   precondition(cancelled.homes==0 && !cancelled.preparingMedia)
   let quitting=Controller();quitting.onReady={quitting.shuttingDown=true}
   quitting.startMediaPreparation();await quitting.mediaPreparationTask?.value;precondition(quitting.homes==0)
-  print("PASS: one cold-boot wake only for backlight-off, restored/awake/cancelled/new-boot/shutdown sessions unchanged")
+  print("PASS: one boot wake only for backlight-off; awake/cancelled/new-boot/shutdown sessions unchanged")
  }
 }
 '''

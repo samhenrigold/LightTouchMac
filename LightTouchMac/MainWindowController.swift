@@ -943,26 +943,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
-    @objc func saveStateNow(_ sender: Any?) { emulator?.saveSnapshotNow() }
-
-    @objc func discardSavedState(_ sender: Any?) {
-        guard let window, let emulator else { return }
-        let alert = NSAlert()
-        alert.messageText = "Discard the saved state?"
-        alert.informativeText = "This removes the saved memory state. Apps and data stored on the device are kept."
-        alert.addButton(withTitle: "Discard")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons[0].hasDestructiveAction = true
-        alert.buttons[0].keyEquivalent = ""
-        alert.buttons[1].keyEquivalent = "\r"
-        alert.beginSheetModal(for: window) { response in
-            if response == .alertFirstButtonReturn { emulator.discardSavedStateByUser() }
-        }
-    }
-
     /// Factory-reset the device — the "nuke everything" button. Wipes the NAND
-    /// overlay (all installed apps + settings) and any snapshot, back to the
-    /// base image; a running device then restarts. The base image is never touched.
+    /// overlay (all installed apps + settings), back to the base image; a
+    /// running device then restarts. The base image is never touched.
     @objc func eraseDevice(_ sender: Any?) { selectedEntry.map { perform(.erase, for: $0) } }
 
     /// For a device that isn't running, a controller that never starts does
@@ -1768,8 +1751,6 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(restartWithLatestGuestTools(_:)):
             menuItem.isHidden = !emulator.canRestart(with: .latest)
             return emulator.canRestart(with: .latest)
-        case #selector(saveStateNow(_:)): return emulator.isRunning
-        case #selector(discardSavedState(_:)): return emulator.hasSavedState
         case #selector(toggleTouchOverlay(_:)):
             menuItem.title = deviceVC.screen.showsTouches ? "Hide Finger Dots" : "Show Finger Dots"
             return true
