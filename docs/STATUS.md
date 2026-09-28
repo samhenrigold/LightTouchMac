@@ -43,6 +43,9 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 | Work | Branch | Covers |
 |---|---|---|
 
+| USB "not supported" alert suppressed through the guest agent (Sam's call: not fidelity; blocks auto-lock) | qemu-ios `usb-alert` | one agent binary per arch, runtime detection, package serial 3 |
+| GL bridge rejection audit | qemu-ios `gl-coverage` | every reject/unimplemented path counted + logged, magenta fallback under `gles-debug`, produced-vs-rejected list from the firmwares' own frameworks, cheap formats implemented |
+| Real-iBoot boot chain in FirmwareKit | `fk-k48-iboot` | app-prepared iPads boot SecureROM→LLB→iBoot→kernel like the Python-built ones |
 | Consolidation sweep, survey phase (read-only) | — | five surveys: emulator models and per-address logic; guest tools + Python/Swift pipeline; app layering, legacy paths, singletons; repo organization, docs, branches; app QA (multi-device, file meddling, IPAs across devices, guest-service and activation verification) |
 
 Then: a notarized build, verified in-app on every firmware, for Sam to test. That build is the first
