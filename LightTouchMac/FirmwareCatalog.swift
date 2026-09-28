@@ -72,13 +72,12 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var keys: [String: Key]
         var recipe: Recipe?
         /// "none" or "optional": whether a user-configured hook may run.
-        var activationHook: String
         var emulator: Emulator
         var estimates: Estimates
 
         enum CodingKeys: String, CodingKey {
             case id, board, version, build, status, source, keys, recipe, emulator, estimates
-            case productType = "product_type", statusNote = "status_note", activationHook = "activation_hook"
+            case productType = "product_type", statusNote = "status_note"
         }
 
         var profile: DeviceProfile? { DeviceProfile(boardID: board) }

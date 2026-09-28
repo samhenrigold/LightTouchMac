@@ -56,7 +56,7 @@ func allocatedKiB(_ url: URL) -> Int {
 }
 
 /// Runs a PreparationJob to its last event.
-func prepare(_ entry: FirmwareCatalog.Entry, state: URL, cache: URL, mode: String, hook: String? = nil,
+func prepare(_ entry: FirmwareCatalog.Entry, state: URL, cache: URL, mode: String,
              cancelAfterStep: Int? = nil) -> (events: [PreparationJob.Event], job: PreparationJob) {
     setenv("FAKE_MODE", mode, 1)
     setenv("FAKE_ARGV", tmp.appendingPathComponent("argv.json").path, 1)
@@ -66,7 +66,7 @@ func prepare(_ entry: FirmwareCatalog.Entry, state: URL, cache: URL, mode: Strin
     var job: PreparationJob!
     job = PreparationJob(.init(entry: entry, ipsw: tmp.appendingPathComponent("fake.ipsw"), state: state,
                                preparer: URL(fileURLWithPath: args[4]), helper: URL(fileURLWithPath: "/nonexistent/LightTouchDevice"),
-                               cache: cache, activationHook: hook, log: tmp.appendingPathComponent("logs/\(entry.id).log"))) { event in
+                               cache: cache, log: tmp.appendingPathComponent("logs/\(entry.id).log"))) { event in
         box.withLock { events.append(event) }
         switch event {
         case let .step(index, _, _) where index == cancelAfterStep: job.cancel()
@@ -172,7 +172,7 @@ case "unit":
            == .progress(0.5, detail: "Booting to seal the flash — 42 s"), "progress with detail")
     expect(L(#"{"event":"warning","message":"slow disk"}"#) == .warning("slow disk"), "warning")
     expect(L(#"{"event":"done","lock":"device.lock.json"}"#) == .done(lock: "device.lock.json"), "done")
-    expect(L(#"{"event":"error","code":"hook_failed","message":"exit 2"}"#) == .error(code: "hook_failed", message: "exit 2"), "error")
+    expect(L(#"{"event":"error","code":"activation_failed","message":"exit 2"}"#) == .error(code: "activation_failed", message: "exit 2"), "error")
     for junk in ["", "not json", #"{"event":"step"}"#, #"{"event":"begin","steps":"x"}"#, #"{"event":"new"}"#, "[1]"] {
         expect(L(junk) == nil, "ignored: \(junk)")
     }
@@ -186,13 +186,11 @@ case "unit":
     // PreparationJob against the fake preparer: publish, errors, cancel.
     let state = tmp.appendingPathComponent("PState"), cache = tmp.appendingPathComponent("PCache/Decrypted")
     try StorageLocations.privateDirectory(state)
-    let hook = tmp.appendingPathComponent("my-hook")
-    try Data("#!/bin/sh\n".utf8).write(to: hook)
     let preparing = PreparationJob.preparing(state)
     func leftovers() -> [String] { (try? fm.contentsOfDirectory(atPath: preparing.path)) ?? [] }
     func devices() -> [String] { (try? fm.contentsOfDirectory(atPath: state.appendingPathComponent("Devices").path)) ?? [] }
 
-    var run = prepare(iPad32, state: state, cache: cache, mode: "ok", hook: hook.path)
+    var run = prepare(iPad32, state: state, cache: cache, mode: "ok")
     guard case let .published(device)? = run.events.last else { expect(false, "not published: \(run.events)"); exit(1) }
     expect(run.events.contains(.step(1, of: 3, name: "Decrypting")) && run.events.contains(.step(3, of: 3, name: "Sealing")), "\(run.events)")
     // Progress: begin's seconds first, then per step a monotonic fraction with a detail, ending at 1.
@@ -209,13 +207,11 @@ case "unit":
     expect(sealing == [0, 0.25, 0.5, 0.75, 1], "sealing progress \(sealing)")
     let argv = try JSONSerialization.jsonObject(with: Data(contentsOf: tmp.appendingPathComponent("argv.json"))) as! [String]
     func flag(_ name: String) -> String? { argv.firstIndex(of: name).map { argv[$0 + 1] } }
-    expect(flag("--activation-hook") == hook.path && flag("--helper") == "/nonexistent/LightTouchDevice"
+    expect(!argv.contains("--activation-hook") && flag("--helper") == "/nonexistent/LightTouchDevice"
            && flag("--cache") == cache.path && flag("--seed") == device.id.uuidString && flag("--out") != nil, "argv \(argv)")
     let base = DeviceInstance.directory(device.id, state: state).appendingPathComponent("base")
     let lockData = try Data(contentsOf: base.appendingPathComponent("device.lock.json"))
     let lockJSON = try JSONSerialization.jsonObject(with: lockData) as! [String: Any]
-    let hookLock = (lockJSON["inputs"] as! [String: Any])["activation_hook"] as! [String: Any]
-    expect(hookLock["sha256"] as? String == hex(SHA256.hash(data: try Data(contentsOf: hook))), "the hook's sha256 is in the lock")
     expect(DeviceInstance.all(state: state) == [device], "the record is on disk")
     expect(device.base == .init(kind: .prepared, path: "Devices/\(device.id.uuidString)/base") && device.firmware == iPad32.id
            && device.board == "k48ap" && device.storage.writableNOR == nil, "\(device)")
@@ -256,7 +252,7 @@ case "unit":
 
     // A preparer that can't start.
     let missing = PreparationJob(.init(entry: iPad32, ipsw: bigURL, state: state, preparer: URL(fileURLWithPath: "/nonexistent/firmwarekit"),
-                                       helper: bigURL, cache: cache, activationHook: nil, log: tmp.appendingPathComponent("logs/x.log"))) { event in
+                                       helper: bigURL, cache: cache, log: tmp.appendingPathComponent("logs/x.log"))) { event in
         if case .failed(let message) = event { print("  missing preparer: \(message)") } else { expect(false, "\(event)") }
     }
     missing.start()

@@ -44,9 +44,6 @@ public enum N72Recipe {
         guard (try? fm.contentsOfDirectory(atPath: o.out.path))?.isEmpty == true else {
             throw FirmwareError(.internal, "\(o.out.path) is not an empty directory")
         }
-        if let hook = o.activationHook, !fm.isExecutableFile(atPath: hook.path) {
-            throw FirmwareError(.hookFailed, "activation hook \(hook.path) is not an executable file")
-        }
         let blocks = recipe.systemMiB * 256
         let steps = ["Verifying the IPSW", "Decrypting the firmware", "Writing the identity, NOR and boot files",
                      "Building the system volume", "Writing the NAND", "Writing the lock"]
@@ -133,7 +130,7 @@ public enum N72Recipe {
             try SystemEdits.mkdirs(kc.deletingLastPathComponent())
             try ipsw.extract(kcMember, to: kc)
             return try bake(m, options: recipe.options, tools: major >= 3, helpers: o.guestTools, tsv: tsv,
-                            hook: o.activationHook, owners: &owners, log: log)
+                            owners: &owners, log: log)
         }
         for (k, v) in baked { derived[k] = v }
         let hfs = try HFSPlusVolume(volume, writable: true)
@@ -161,8 +158,8 @@ public enum N72Recipe {
         if let error = hashes.error { throw error }
         var listing = SHA256()
         for p in pages { listing.update(data: Data("\(p) \(hashes.sha[p]!)\n".utf8)) }
-        let hook = baked["hook"] as? ActivationHook.Result
-        derived["hook"] = nil
+        let activation = baked["activation"] as? Activation.Result
+        derived["activation"] = nil
         let used = try fm.contentsOfDirectory(atPath: o.guestTools.path).sorted()
         func sha(_ n: String) throws -> [String: String] { ["path": n, "sha256": try Preparer.digest(file(n), SHA256())] }
         let lock: [String: Any] = [
@@ -173,14 +170,15 @@ public enum N72Recipe {
             "tool": ["name": "firmwarekit", "version": FirmwareKit.version,
                      "built": ["guest tools": Dictionary(uniqueKeysWithValues: try used.map { ($0, try Preparer.digest(o.guestTools.appendingPathComponent($0), SHA256())) })]],
             "inputs": ["ipsw": ["path": o.ipsw.path, "sha1": got], "decrypted": dec.path, "identity": "identity.json",
-                       "activation_hook": hook.map { r -> Any in ["path": o.activationHook!.path, "sha256": r.hookSHA256,
-                                                     "input_sha256": r.inputSHA256, "output_sha256": r.outputSHA256] } ?? NSNull(),
+                       "activation": activation.map { ["input_sha256": $0.inputSHA256, "output_sha256": $0.outputSHA256] as Any } ?? NSNull(),
                        "rootfs": "rootfs.dmg", "kernelcache": kcMember, "iboot": "iBoot.bin", "all_flash": prefix,
                        "guest_tools": o.guestTools.path, "lockdown": NSNull()],
             "identity": ["seed": seed, "udid": ident.udid ?? "", "sha256": try Preparer.digest(file("identity.json"), SHA256())],
             "outputs": ["nand": ["path": "nand", "pages": pages.count, "listing_sha256": listing.finalize().map { String(format: "%02x", $0) }.joined()],
                         "nor": try sha("nor.bin"), "iboot": major >= 3 ? try sha("iBoot.bin") as Any : NSNull(), "gid_blobs": try sha("gid-blobs.bin")],
             "derived": derived,
+            // machine options the device must boot with (ipod2g_device.py; none without data protection)
+            "machine": [String: String](),
         ]
         try fm.removeItem(at: work)
         try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
@@ -225,8 +223,8 @@ public enum N72Recipe {
     }
 
     /// ipod2g_device.bake over the mounted volume `m` (bake-guest-tools.sh, patch-appsync-dylib.sh,
-    /// install_web_proxy, the activation hook). Appends the owners to patch; returns the report.
-    static func bake(_ m: URL, options opt: [String: Bool], tools: Bool, helpers: URL, tsv: URL, hook: URL?,
+    /// install_web_proxy, activation). Appends the owners to patch; returns the report.
+    static func bake(_ m: URL, options opt: [String: Bool], tools: Bool, helpers: URL, tsv: URL,
                      owners: inout [(UInt32, String)], log: (String) -> Void) throws -> [String: Any] {
         let fm = FileManager.default
         let at = { (rel: String) in m.appendingPathComponent(rel) }
@@ -319,13 +317,10 @@ public enum N72Recipe {
             owners += [(0, SystemEdits.pacPath), (0, sc + "/preferences.plist")]
             report["web_proxy"] = "PAC /\(SystemEdits.pacPath) on the en0 Wi-Fi service"
         }
-        if let hook {
-            log("activation hook \(hook.lastPathComponent) on /\(SystemEdits.lockdownd)")
-            report["hook"] = try ActivationHook.run(hook, on: at(SystemEdits.lockdownd), displayPath: "/" + SystemEdits.lockdownd)
-            owners.append((0, SystemEdits.lockdownd))
-            report["activation"] = "activation hook applied (the hook leaves lockdownd signed)"
-        }
-        log("bake: \(report.filter { $0.key != "hook" })")
+        log("Activating device")
+        report["activation"] = try Activation.run(on: at(SystemEdits.lockdownd))
+        owners.append((0, SystemEdits.lockdownd))
+        log("bake: \(report.filter { $0.key != "activation" })")
         return report
     }
 }

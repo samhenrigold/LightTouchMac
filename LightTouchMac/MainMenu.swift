@@ -206,8 +206,6 @@ enum MainMenuBuilder {
         menu.addItem(item("Download & Prepare", #selector(MainWindowController.downloadAndPrepare(_:))))
         menu.addItem(item("Import IPSW…", #selector(MainWindowController.importIPSW(_:))))
         menu.addItem(item("Cancel Download", #selector(MainWindowController.cancelFirmwareJob(_:))))
-        // NSApplication.editActivationHook(_:), FirmwareJobs.swift.
-        menu.addItem(item("Activation Hook…", Selector(("editActivationHook:"))))
         menu.addItem(.separator())
         menu.addItem(item("Show in Finder", #selector(MainWindowController.showDeviceInFinder(_:))))
         menu.addItem(item("Delete Device…", #selector(MainWindowController.deleteDevice(_:))))

@@ -20,7 +20,7 @@ import Testing
             (.progress(0.5, detail: "Booting to seal the flash — 42 s"), ["event": "progress", "fraction": 0.5, "detail": "Booting to seal the flash — 42 s"]),
             (.warning("w"), ["event": "warning", "message": "w"]),
             (.done(lock: "device.lock.json"), ["event": "done", "lock": "device.lock.json"]),
-            (.error(code: "hook_failed", message: "m"), ["event": "error", "code": "hook_failed", "message": "m"]),
+            (.error(code: "activation_failed", message: "m"), ["event": "error", "code": "activation_failed", "message": "m"]),
         ]
         for (e, want) in cases {
             #expect(!e.json.contains("\n"))
@@ -89,8 +89,8 @@ import Testing
 
     @Test func errorCodes() {
         func code(_ e: Error) -> String? { if case .error(let c, _) = Preparer.errorEvent(e) { return c }; return nil }
-        #expect(code(FirmwareError(.hookFailed, "x")) == "hook_failed")
-        #expect(code(HookFailure("x")) == "hook_failed")
+        #expect(code(FirmwareError(.activationFailed, "x")) == "activation_failed")
+        #expect(code(ActivationFailure("x")) == "activation_failed")
         #expect(code(FirmwareError(.oneshotFailed, "x")) == "oneshot_failed")
         #expect(code(FirmwareError(.internal, "write: No space left on device")) == "disk_full")
         #expect(code(NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))) == "disk_full")
@@ -158,13 +158,12 @@ import Testing
             #expect(r.lines[1]["index"] as? Int == 1 && r.lines.first?["seconds"] is [Double])
             #expect(r.lines.last?["code"] as? String == "sha_mismatch")
 
-            let hook = dir.appendingPathComponent("hook.py")   // not executable: refused before anything runs
-            try Data("print()".utf8).write(to: hook)
+            // activation is built in: the old hook flag is an unknown argument
             try FileManager.default.removeItem(at: r.staging)
-            let h = try Self.create(dir, ipsw: ipsw, extra: ["--activation-hook", hook.path])
+            let h = try Self.create(dir, ipsw: ipsw, extra: ["--activation-hook", "/bin/true"])
             #expect(h.status == 1)
             #expect(h.lines.map { $0["event"] as? String } == ["error"])
-            #expect(h.lines.last?["code"] as? String == "hook_failed")
+            #expect(h.lines.last?["code"] as? String == "internal")
         }
     }
 

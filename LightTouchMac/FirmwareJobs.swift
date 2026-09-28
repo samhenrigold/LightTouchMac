@@ -146,7 +146,6 @@ import Cocoa
         let request = PreparationJob.Request(
             entry: entry, ipsw: ipsw, state: Bundled.stateDirectory, preparer: preparer, helper: Self.helper,
             cache: IPSWStore.cachesDirectory.appendingPathComponent("Decrypted", isDirectory: true),
-            activationHook: entry.activationHook == "optional" ? ActivationHook.path : nil,
             log: Bundled.logsDirectory.appendingPathComponent("Preparing/\(entry.id).log"))
         let job = PreparationJob(request) { event in
             Task { @MainActor [weak self] in self?.preparation(entry, event) }
@@ -196,38 +195,5 @@ import Cocoa
     private func fail(_ entry: FirmwareCatalog.Entry, _ error: any Error) {
         logEvent("firmware: \(entry.id): \(error.localizedDescription)")
         jobs[entry.id] = .failed(error.localizedDescription)
-    }
-}
-
-// MARK: - Activation hook
-
-/// The user's own activation hook: a path they choose, passed to the preparer
-/// as `--activation-hook PATH` and nothing else. The app never ships, writes
-/// or runs one itself.
-enum ActivationHook {
-    private static let key = "activationHookPath"
-
-    static var path: String? {
-        get { UserDefaults.standard.string(forKey: key).flatMap { $0.isEmpty ? nil : $0 } }
-        set { UserDefaults.standard.set(newValue, forKey: key) }
-    }
-}
-
-extension NSApplication {
-    /// Device menu ▸ Activation Hook…: a plain path field.
-    @objc func editActivationHook(_ sender: Any?) {
-        let alert = NSAlert()
-        alert.messageText = "Activation Hook"
-        alert.informativeText = "An executable of your own that preparation runs on new devices. Leave empty for none."
-        let field = NSTextField(string: ActivationHook.path ?? "")
-        field.placeholderString = "/path/to/hook"
-        field.frame = NSRect(x: 0, y: 0, width: 360, height: 22)
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let path = (field.stringValue.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
-        ActivationHook.path = path.isEmpty ? nil : path
     }
 }

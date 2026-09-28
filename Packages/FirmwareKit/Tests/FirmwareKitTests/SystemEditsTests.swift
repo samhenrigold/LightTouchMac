@@ -127,29 +127,19 @@ enum K48Oracle {
         }
     }
 
-    @Test func hookChecks() throws {
+    @Test func activationRejectsInvalidInputWithoutChangingIt() throws {
         try Oracle.withTemp { dir in
             let target = dir.appendingPathComponent("t")
-            try Data("not a mach-o".utf8).write(to: target)
-            let same = dir.appendingPathComponent("same.sh"), edit = dir.appendingPathComponent("edit.sh")
-            try Data("#!/bin/sh\nexit 0\n".utf8).write(to: same)
-            try Data("#!/bin/sh\necho x >> \"$1\"\n".utf8).write(to: edit)
-            chmod(same.path, 0o755); chmod(edit.path, 0o755)
-            #expect { try ActivationHook.run(same, on: target) } throws: { ($0 as? HookFailure)?.message.contains("unchanged") == true }
-            #expect { try ActivationHook.run(edit, on: target, displayPath: "/t") } throws: {
-                ($0 as? HookFailure)?.message == "activation hook left /t unsigned"
-            }
-            let py = dir.appendingPathComponent("hook.py")   // never handed to python3: hooks run directly
-            try Data("open(__import__('sys').argv[1], 'ab').write(b'x')\n".utf8).write(to: py)
-            #expect { try ActivationHook.run(py, on: target) } throws: { ($0 as? HookFailure)?.message.contains("not an executable file") == true }
-            #expect(try Data(contentsOf: target) == Data("not a mach-o".utf8))
+            let original = Data("not a mach-o".utf8)
+            try original.write(to: target)
+            #expect(throws: ActivationFailure.self) { try Activation.run(on: target) }
+            #expect(try Data(contentsOf: target) == original)
         }
     }
 
     /// Level 2: the Swift-built system and data volumes against ipad1_rootfs.py build + bake --seal
     /// --activation-hook on the same rootfs.dmg: every path with owner, mode, flags, size, content sha256 and
-    /// symlink target; plists written by either side compared parsed. Skipped unless the hook is executable. Expected difference: lockdownd, which
-    /// the oracle re-signs with ldid after the hook and FirmwareKit does not.
+    /// symlink target; plists written by either side compared parsed. Expected difference: lockdownd, whose ad-hoc signature representation differs between signers.
     @Test(arguments: HFSOracle.ipads) func volumesMatchPython(_ fw: Oracle.Firmware) throws {
         guard K48Oracle.available, let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg),
               let hook = K48Oracle.hooks[fw.entryID], FileManager.default.isExecutableFile(atPath: hook.path) else { return }
@@ -179,10 +169,9 @@ enum K48Oracle {
             let helpers = try K48Oracle.helpers(in: dir)
             let r = try Oracle.time("SystemEdits.buildK48 \(fw.entryID)") {
                 try SystemEdits.buildK48(rootfs: dmg, work: swift, systemBytes: parts[0] * 4096, dataBytes: Int64(parts[1]) * 4096,
-                                         options: .init(recipe: recipe), helpers: helpers, gliDispatch: recipe.gliDispatch,
-                                         activationHook: hook) { print("  \($0)") }
+                                         options: .init(recipe: recipe), helpers: helpers, gliDispatch: recipe.gliDispatch) { print("  \($0)") }
             }
-            #expect(r.hook?.hookSHA256 == Oracle.sha256(try Data(contentsOf: hook)))
+            #expect(r.activation != nil)
             // the seed record, as the Python bake wrote it for the lock (the itpack path differs: a symlink here)
             let pyRecord = try JSONSerialization.jsonObject(with: Data(contentsOf: py.appendingPathComponent("pristine/guest-package.json"))) as! NSDictionary
             var record = try #require(r.guestPackage?.object)
@@ -190,7 +179,7 @@ enum K48Oracle {
             #expect(NSDictionary(dictionary: record) == pyRecord)
             #expect(r.guestPackage?.gli != nil && r.guestPackage?.gli == r.engine.map { String($0.dropFirst("GLEngine-".count)) })
 
-            // lockdownd: re-signed by the oracle only; .journal: each volume's own journal
+            // lockdownd: different ad-hoc signature representation; .journal: each volume's own journal
             for (vol, expected) in [("system.img", ["usr/libexec/lockdownd"]), ("data.img", [".journal"])] {
                 let a = try HFSPlusVolume(swift.appendingPathComponent(vol)), b = try HFSPlusVolume(py.appendingPathComponent("pristine/" + vol))
                 #expect(try VolumeMount.size(a.url) == VolumeMount.size(b.url))
@@ -232,9 +221,9 @@ enum K48Oracle {
             #expect(engine?.sha256 != nil && engine?.sha256 == baked?.sha256 && baked?.uid == 0)
             #expect(try sv.listing(under: SystemEdits.daemons + "/com.qemu.it-pbd.plist").isEmpty)
             #expect(try sv.listing(under: SystemEdits.daemons + "/com.qemu.it-boot.plist").first?.uid == 0)
-            // the hook's output is lockdownd as installed (unsigned-by-us: its original signature is kept)
+            // the activation's output is lockdownd as installed (re-signed ad hoc, entitlements kept)
             let lockd = try HFSPlusVolume(swift.appendingPathComponent("system.img")).listing(under: "usr/libexec/lockdownd")
-            #expect(lockd.first?.sha256 == r.hook?.outputSHA256 && lockd.first?.mode == 0o100755 && lockd.first?.uid == 0)
+            #expect(lockd.first?.sha256 == r.activation?.outputSHA256 && lockd.first?.mode == 0o100755 && lockd.first?.uid == 0)
         }
     }
 }

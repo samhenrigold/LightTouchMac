@@ -22,12 +22,12 @@ assert len(ids) == len(set(ids)), 'duplicate catalog ids'
 hexre = re.compile(r'^[0-9a-f]+$')
 for e in catalog['entries']:
     for field in ('id', 'board', 'product_type', 'version', 'build', 'status', 'source', 'keys',
-                  'activation_hook', 'emulator', 'estimates'):
+                  'emulator', 'estimates'):
         assert field in e, (e['id'], field)
     assert e['id'] == f"{e['board']}-{e['build']}", e['id']
     assert e['board'] in ('n72ap', 'k48ap') and e['product_type'] in ('iPod2,1', 'iPad1,1')
     assert e['status'] in ('available', 'experimental', 'coming_soon', 'user_ipsw')
-    assert e['activation_hook'] in ('none', 'optional')
+    assert 'activation_hook' not in e
     src = e['source']
     if src['kind'] == 'bundled':
         assert src['resource'] == 'device/nand.itnand'

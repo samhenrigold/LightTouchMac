@@ -1,7 +1,7 @@
 // firmwarekit: the preparer (docs/multi-device-plan.md, "Preparer contract").
 //
 //   firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
-//                      [--seed SEED] [--activation-hook PATH] [--helper PATH_TO_LightTouchDevice]
+//                      [--seed SEED] [--helper PATH_TO_LightTouchDevice]
 //                      [--cache DIR] [--guest-tools DIR]
 //
 // stdout is JSON Lines only; diagnostics go to stderr. Exit 0 after done, 1 after an error event; SIGTERM
@@ -33,7 +33,7 @@ if command == "mount" || command == "export" || command == "unmount" {
 guard command == "create" else {
     FileHandle.standardError.write(Data("""
         firmwarekit \(FirmwareKit.version)
-        usage: firmwarekit create --entry ENTRY.json --ipsw IPSW --out DIR [--seed S] [--activation-hook PATH]
+        usage: firmwarekit create --entry ENTRY.json --ipsw IPSW --out DIR [--seed S]
                                   [--helper PATH] [--cache DIR] [--guest-tools DIR]
                firmwarekit mount|export --device DIR [--volume system|data|all] [--out DIR]
                firmwarekit unmount --out DIR
@@ -42,7 +42,7 @@ guard command == "create" else {
     exit(64)
 }
 var flags: [String: String] = [:]
-let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--activation-hook", "--helper", "--cache", "--guest-tools"]
+let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools"]
 while let a = args.popFirst() {
     guard known.contains(a), let v = args.popFirst() else { emit(.error(code: "internal", message: "bad argument \(a)")); exit(1) }
     flags[a] = v
@@ -76,7 +76,7 @@ do {
     let bundled = Bundle.main.executableURL!.resolvingSymlinksInPath().deletingLastPathComponent()
         .appendingPathComponent("../Resources/guest-tools").standardizedFileURL
     options = .init(entry: try FirmwareEntry.load(from: url(entryPath)), ipsw: url(ipsw), out: staging, seed: flags["--seed"],
-                    activationHook: flags["--activation-hook"].map(url), helper: flags["--helper"].map(url),
+                    helper: flags["--helper"].map(url),
                     guestTools: flags["--guest-tools"].map(url) ?? bundled, cache: flags["--cache"].map(url))
 } catch { fail(error) }
 

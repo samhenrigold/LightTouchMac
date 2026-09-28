@@ -36,12 +36,12 @@ public enum PrepareEvent: Equatable, Sendable {
 public enum Preparer {
     public struct Options: Sendable {
         public var entry: FirmwareEntry, ipsw: URL, out: URL
-        public var seed: String?, activationHook: URL?, helper: URL?, cache: URL?
+        public var seed: String?, helper: URL?, cache: URL?
         /// The flat guest-helpers directory SystemEdits reads (+ it_keybag).
         public var guestTools: URL
-        public init(entry: FirmwareEntry, ipsw: URL, out: URL, seed: String? = nil, activationHook: URL? = nil, helper: URL?,
+        public init(entry: FirmwareEntry, ipsw: URL, out: URL, seed: String? = nil, helper: URL?,
                     guestTools: URL, cache: URL? = nil) {
-            self.entry = entry; self.ipsw = ipsw; self.out = out; self.seed = seed; self.activationHook = activationHook
+            self.entry = entry; self.ipsw = ipsw; self.out = out; self.seed = seed
             self.helper = helper; self.guestTools = guestTools; self.cache = cache
         }
     }
@@ -65,9 +65,6 @@ public enum Preparer {
         }
         guard (try? fm.contentsOfDirectory(atPath: o.out.path))?.isEmpty == true else {
             throw FirmwareError(.internal, "\(o.out.path) is not an empty directory")
-        }
-        if let hook = o.activationHook, !fm.isExecutableFile(atPath: hook.path) {
-            throw FirmwareError(.hookFailed, "activation hook \(hook.path) is not an executable file")
         }
         guard let helper = o.helper, fm.isExecutableFile(atPath: helper.path) else {
             throw FirmwareError(.internal, "the seal boots need --helper (LightTouchDevice); got \(o.helper?.path ?? "none")")
@@ -122,14 +119,13 @@ public enum Preparer {
         try KBoot.write(decrypted: dec, to: file("kboot.bin"), identity: ident)
         let dieID = (ident.dieID ?? []).joined(separator: ":")
 
-        step()   // MBR, system + data volumes (+ hook)
+        step()   // MBR, system + data volumes (+ activation)
         let mbr = work.appendingPathComponent("mbr.bin")
         try K48NAND.makeMBR(geometry: .k48_16g, systemMiB: recipe.systemMiB).write(to: mbr)
         let parts = K48NAND.partitions(mbr: [UInt8](try Data(contentsOf: mbr)))
         let vols = try SystemEdits.buildK48(rootfs: decFile("rootfs.dmg"), work: work, systemBytes: parts[0].count * 4096,
                                             dataBytes: Int64(parts[1].count) * 4096, options: .init(recipe: recipe),
-                                            helpers: o.guestTools, gliDispatch: recipe.gliDispatch,
-                                            activationHook: o.activationHook, log: log)
+                                            helpers: o.guestTools, gliDispatch: recipe.gliDispatch, log: log)
         for n in vols.notes { emit(.warning(n)) }
 
         step()   // NAND store
@@ -154,7 +150,7 @@ public enum Preparer {
 
         step()   // read-only outputs, lock
         for u in [nand, file("kboot.bin")] + (norURL.map { [$0] } ?? []) { try readOnly(u) }
-        let hook = vols.hook, tools = try fm.contentsOfDirectory(atPath: o.guestTools.path).sorted()
+        let tools = try fm.contentsOfDirectory(atPath: o.guestTools.path).sorted()
         let nandFiles = try fm.contentsOfDirectory(atPath: nand.path).sorted()
         let nandBytes = ByteCount(total: nandFiles.reduce(0) { $0 + ((try? fm.attributesOfItem(atPath: nand.appendingPathComponent($1).path)[.size] as? Int) ?? 0) })
         progress.measure = { nandBytes.fraction }
@@ -177,8 +173,7 @@ public enum Preparer {
                      "built": ["guest tools": Dictionary(uniqueKeysWithValues: try tools.map { ($0, try digest(o.guestTools.appendingPathComponent($0), SHA256())) }),
                                "GLEngine": opt(vols.engine)]],
             "inputs": ["ipsw": ["path": o.ipsw.path, "sha1": got], "decrypted": dec.path, "identity": "identity.json",
-                       "activation_hook": opt(hook.map { ["path": o.activationHook!.path, "sha256": $0.hookSHA256,
-                                                          "input_sha256": $0.inputSHA256, "output_sha256": $0.outputSHA256] }),
+                       "activation": opt(vols.activation.map { ["input_sha256": $0.inputSHA256, "output_sha256": $0.outputSHA256] }),
                        "rootfs": "rootfs.dmg", "kernelcache": "kernelcache.mach", "devicetree": "DeviceTree.bin",
                        "restore_ramdisk": opt(ramdisk), "mbr": ["sha256": try digest(mbr, SHA256())],
                        "guest_tools": o.guestTools.path, "lockdown": null, "stash": null],
@@ -202,7 +197,7 @@ public enum Preparer {
         case let f as FirmwareError:
             return .error(code: f.message.contains(String(cString: strerror(ENOSPC))) ? FirmwareError.Code.diskFull.rawValue : f.code.rawValue,
                           message: f.message)
-        case let h as HookFailure: return .error(code: FirmwareError.Code.hookFailed.rawValue, message: h.message)
+        case let a as ActivationFailure: return .error(code: a.code, message: a.message)
         default:
             let ns = error as NSError
             let full = (ns.domain == NSPOSIXErrorDomain && ns.code == Int(ENOSPC)) || (ns.domain == NSCocoaErrorDomain && ns.code == NSFileWriteOutOfSpaceError)

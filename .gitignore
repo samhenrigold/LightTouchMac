@@ -6,3 +6,5 @@ dist/
 build-package/
 __pycache__/
 *.pyc
+
+tools/activation/build/
