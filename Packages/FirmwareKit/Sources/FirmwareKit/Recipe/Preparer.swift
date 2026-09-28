@@ -178,7 +178,7 @@ public enum Preparer {
             "outputs": ["kboot": ["path": "kboot.bin", "sha256": try digest(file("kboot.bin"), SHA256())],
                         "nand": ["path": "nand", "files": hashes.sha],
                         "nor": opt(try norURL.map { ["path": "nor.bin", "sha256": try digest($0, SHA256())] })],
-            "gl_test": false,
+            "gl_test": false, "guest_package": opt(vols.guestPackage?.object),
         ]
         try fm.removeItem(at: work)
         try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])

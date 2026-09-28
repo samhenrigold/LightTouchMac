@@ -12,6 +12,9 @@ enum Oracle {
     static let home = FileManager.default.homeDirectoryForCurrentUser
     static func path(_ p: String) -> URL { home.appendingPathComponent(p) }
     static func exists(_ u: URL) -> Bool { FileManager.default.fileExists(atPath: u.path) }
+    /// The qemu-ios checkout whose imgtools and guest builds are the oracle (FIRMWAREKIT_QEMU_IOS overrides).
+    static let qemuIOS = ProcessInfo.processInfo.environment["FIRMWAREKIT_QEMU_IOS"].map { URL(fileURLWithPath: $0) }
+        ?? path("Developer/qemu-ios-ipad1")
 
     /// The app's catalog, in this repo.
     static let catalog = URL(fileURLWithPath: #filePath)
