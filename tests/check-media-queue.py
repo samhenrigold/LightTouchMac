@@ -36,15 +36,17 @@ enum DeviceProfile { case iPodTouch2G }
   return PreparedMedia(directory: directory, title: name, destination: source.pathExtension == "mp3" ? "Music" : "Photos")
  }
 }
+struct DeviceInstance { let id = UUID() }
 @MainActor final class EmulatorController {
  let profile = DeviceProfile.iPodTouch2G
+ let instance = DeviceInstance()
  var deviceReachable: Bool? = true
  func reportConnectionFailure(_ error: Error, operation: String) { deviceReachable = false }
  var started: [String] = [], committed: [String] = []
  var uploads: [String: CheckedContinuation<Void, Error>] = [:]
  func importMedia(_ media: PreparedMedia, progress: @escaping @Sendable (Double) -> Void,
                   willCommit: () -> Void) async throws {
-  precondition(AppInstaller.isUsingDevice && uploads.isEmpty, "guest mutations overlapped")
+  precondition(AppInstaller.isUsingDevice(instance.id) && uploads.isEmpty, "guest mutations overlapped")
   started.append(media.title)
   progress(0.25)
   try await withCheckedThrowingContinuation { uploads[media.title] = $0 }
@@ -58,8 +60,12 @@ enum DeviceProfile { case iPodTouch2G }
  }
 }
 ''' + job + '\n@MainActor enum AppInstaller {\n' + state + media + finish + pause + r'''
- static func occupyDevice() async throws { try await readyQueue.acquire() }
- static func releaseDevice() { readyQueue.release() }
+ static var device = UUID()
+ static func occupyDevice() async throws { try await queue(for: device).acquire() }
+ static func releaseDevice() { queue(for: device).release() }
+ static var isUsingDevice: Bool { isUsingDevice(device) }
+ static var isPaused: Bool { isPaused(device) }
+ static func resume() { resume(device) }
 }
 @MainActor final class JobObservations {
  var starts: [InstallJob] = [], updates: [String] = []
@@ -84,6 +90,7 @@ enum DeviceProfile { case iPodTouch2G }
   }
   defer { NotificationCenter.default.removeObserver(start); NotificationCenter.default.removeObserver(progress) }
   let emulator = EmulatorController()
+  AppInstaller.device = emulator.instance.id
   func add(_ filename: String) -> InstallJob {
    AppInstaller.startMedia(URL(fileURLWithPath: "/tmp/" + filename), with: emulator, presenting: nil)
   }

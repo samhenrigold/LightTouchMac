@@ -973,7 +973,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.alertStyle = .critical
         alert.messageText = "Erase all content and settings?"
         alert.informativeText = "This permanently removes all apps, settings, and saved state from this \(emulator.profile.shortName). "
-            + (AppInstaller.hasPendingWork ? "Installs in progress are cancelled. " : "")
+            + (AppInstaller.hasPendingWork(for: emulator.instance.id) ? "Installs in progress are cancelled. " : "")
             + (host.session(for: entry) != nil ? "It restarts after erasing. " : "")
             + "This cannot be undone."
         alert.addButton(withTitle: "Erase")
@@ -1751,7 +1751,7 @@ extension MainWindowController: NSMenuItemValidation {
             return emulator.acceptsInput
         case #selector(toggleDevicePause(_:)):
             menuItem.title = emulator.isPaused ? "Resume" : "Pause"
-            return (emulator.isRunning || emulator.isPaused) && !emulator.isInstalling && !AppInstaller.hasPendingWork
+            return (emulator.isRunning || emulator.isPaused) && !emulator.isInstalling && !AppInstaller.hasPendingWork(for: emulator.instance.id)
         case #selector(configureWebProxy(_:)):
             return emulator.webProxyAvailable
         case #selector(toggleKeyboardInput(_:)):

@@ -10,11 +10,12 @@ def method(signature):
 fixture=r'''import Cocoa
 struct CatalogApp {var name:String; var bundleID:String?="test";var ipaID=1;var version:String?="1.0";var subtitle="Example Developer · 5 MB"}
 final class InstallJob {
+ let deviceID=UUID()
  var failed=false,dismissed=false,isCancellable=true
  var catalogIpaID:Int?=1;var bundleID:String?="test";var status="Downloading…";var retry:(()->Void)?
  func cancel(){}
 }
-enum AppInstaller {static var isPaused=false}
+enum AppInstaller {static var isPaused=false; static func isPaused(_ id:UUID)->Bool {isPaused}}
 final class Fixture:NSObject {
  enum State:Equatable {case installable,installed,unavailable,downloading(Double?),installing}
  var state=State.installable
@@ -22,7 +23,8 @@ final class Fixture:NSObject {
  var uninstalling=Set<String>(),removingApp:String?
 
  struct App {var id:String};var apps=[App(id:"test")]
- struct Emulator {var canReachDevice=true};var emulator=Emulator();var busyWithDevice=false
+ struct Instance {let id=UUID()}
+ struct Emulator {var canReachDevice=true;let instance=Instance()};var emulator=Emulator();var busyWithDevice=false
  func catalogState(of app:CatalogApp)->State {state}
  func catalogIcon(_ app:CatalogApp)->NSImage? {nil}
  func catalogJob(for app:CatalogApp)->InstallJob? {pending.first}

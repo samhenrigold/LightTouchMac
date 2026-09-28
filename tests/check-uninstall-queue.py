@@ -6,12 +6,12 @@ root = Path(__file__).resolve().parents[1]
 source = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
 def block(start, end):
     return source[source.index(start):source.index(end, source.index(start))]
-state = block('    static var hasPendingWork:', '    static func resume()')
+state = block('    static var hasPendingWork:', '    static func resume(_ device')
 remove = block('    static func remove(_ apps:', '    @MainActor\n    static func presentError(')
 code = r'''import Foundation
 final class NSWindow {}
 struct InstalledApp { let id: String }
-final class InstallJob { var isCancellable = true; var downloadProgress: Double?; var status = "Waiting"; var task: Task<Void, Never>?; var dismissed = false; func cancel() {} }
+final class InstallJob { let deviceID = UUID(); var isCancellable = true; var downloadProgress: Double?; var status = "Waiting"; var task: Task<Void, Never>?; var dismissed = false; func cancel() {} }
 enum DeviceError: Error { case timedOut; var shouldPauseInstallQueue: Bool { true } }
 extension Notification.Name {
  static let ltmAppsChanged = Notification.Name("changed")
@@ -21,7 +21,7 @@ extension Notification.Name {
  static let shared = AppMetadataCache(); var forgotten: [String] = []
  func forget(_ id: String) { forgotten.append(id) }
 }
-struct DeviceInstance {}
+struct DeviceInstance { let id = UUID() }
 @MainActor enum IPALibrary { static var forgotten: [String] = []; static func forget(_ id: String, device: DeviceInstance) { forgotten.append(id) } }
 @MainActor final class EmulatorController {
  let instance = DeviceInstance()
@@ -42,10 +42,13 @@ struct DeviceInstance {}
 ''' + state + remove + r'''
  static var errors = 0
  static func presentError(_ error: Error, in window: NSWindow?) { errors += 1 }
- static func takeDevice() async throws { try await readyQueue.acquire() }
- static func releaseDevice() { readyQueue.release() }
- static func pauseDevice() { readyQueue.pause() }
- static func resumeDevice() { readyQueue.resume() }
+ static var device = UUID()
+ static func takeDevice() async throws { try await queue(for: device).acquire() }
+ static func releaseDevice() { queue(for: device).release() }
+ static func pauseDevice() { queue(for: device).pause() }
+ static func resumeDevice() { queue(for: device).resume() }
+ static var isUsingDevice: Bool { isUsingDevice(device) }
+ static var isPaused: Bool { isPaused(device) }
 }
 @main struct Check {
  @MainActor static func main() async throws {
@@ -57,6 +60,7 @@ struct DeviceInstance {}
    }
   }
   let emulator = EmulatorController()
+  AppInstaller.device = emulator.instance.id
   var started: [String] = [], removed: [String] = [], finished = 0
   func remove(_ ids: [String]) {
    AppInstaller.remove(ids.map { InstalledApp(id: $0) }, with: emulator, presenting: nil) {

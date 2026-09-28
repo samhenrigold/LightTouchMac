@@ -22,8 +22,9 @@ struct InstalledApp { let id:String }
 struct CatalogApp { let bundleID:String; let name:String; var appURL:URL?=URL(string:"https://example.com") }
 final class InstallJob { var isFinished=false,isCancelled=false,isCancellable=true,failed=false }
 enum CatalogRowState { case installable, unavailable }
-@MainActor enum AppInstaller { static var isPaused=false }
-@MainActor final class Emulator { var canQueueInstall=true,canReachDevice=true }
+@MainActor enum AppInstaller { static var isPaused=false; static func isPaused(_ id:UUID)->Bool {isPaused} }
+struct Instance { let id=UUID() }
+@MainActor final class Emulator { var canQueueInstall=true,canReachDevice=true; let instance=Instance() }
 @MainActor final class MainWindowController:NSObject {
  @objc func installApp(_ sender:Any?) {}
  @objc func syncMedia(_ sender:Any?) {}

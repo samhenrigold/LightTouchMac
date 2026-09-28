@@ -154,7 +154,7 @@ final class EmulatorController {
               connectionIssue?.reconnectManagement == true else { return }
         connectionFailures += 1
         guard connectionFailures >= 2, connectionRecoveryTask == nil,
-              !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice, liveAgentStatus == 1,
+              !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice(instance.id), liveAgentStatus == 1,
               Date().timeIntervalSince(lastConnectionRecovery) >= 60 else { return }
         lastConnectionRecovery = Date()
         connectionFailures = 0
@@ -163,12 +163,12 @@ final class EmulatorController {
             guard let self else { return }
             defer { connectionRecoveryTask = nil; isReconnecting = false }
             do {
-                guard isRunning, !preparingMedia, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice else { return }
+                guard isRunning, !preparingMedia, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice(instance.id) else { return }
                 if try await DeviceTools.reconnectManagementService(agent: link, cache: agentCache) {
                     logEvent("device: restarted unresponsive management service; reconnecting")
                     try await Task.sleep(for: .seconds(2))
                     guard isRunning else { return }
-                    NotificationCenter.default.post(name: .ltmAppsChanged, object: nil)
+                    NotificationCenter.default.post(name: .ltmAppsChanged, object: instance.id)
                 }
             } catch {
                 if !Task.isCancelled { logEvent("device: connection recovery failed: \(error.localizedDescription)") }
@@ -1299,7 +1299,7 @@ final class EmulatorController {
     /// again without reinitializing QEMU or opening a second NAND writer.
     func powerOff(completion: @escaping (Bool) -> Void) {
         guard canStop else { completion(false); return }
-        AppInstaller.discardAll()
+        AppInstaller.discard(for: instance.id)
         halt(completion: completion)
     }
 
@@ -1348,7 +1348,7 @@ final class EmulatorController {
             var appliedProxyRevision: Int?
             while !Task.isCancelled {
                 guard let self else { return }
-                if self.canReachDevice, !self.isSleeping, !self.isInstalling, !AppInstaller.hasPendingWork {
+                if self.canReachDevice, !self.isSleeping, !self.isInstalling, !AppInstaller.hasPendingWork(for: self.instance.id) {
                     if self.webProxyAvailable && appliedProxyRevision != self.proxyRevision {
                         let revision = self.proxyRevision
                         if self.webProxyStatus == .waiting {
@@ -1765,7 +1765,7 @@ final class EmulatorController {
         guard !isErasing else { return }
         // Nothing queued can land on an erased device: drop installs first
         // rather than refusing the erase (or leaving Retry rows behind).
-        AppInstaller.discardAll()
+        AppInstaller.discard(for: instance.id)
         isErasing = true
         skipNextQuitSnapshot = true
         foregroundTask?.cancel()
@@ -1855,7 +1855,7 @@ final class EmulatorController {
     /// Adding to the ready queue opens no guest session. A probe suppressed by
     /// our own install must not disable File → Install App or drag-and-drop.
     var canQueueInstall: Bool {
-        usbConnected && canManageApps && isRunning && (deviceReachable == true || AppInstaller.isUsingDevice || isInstalling)
+        usbConnected && canManageApps && isRunning && (deviceReachable == true || AppInstaller.isUsingDevice(instance.id) || isInstalling)
     }
     /// The usbmuxd socket to talk to this device on, for the long-lived
     /// notification_proxy watcher (which owns its own session, not a gated one).
