@@ -4,8 +4,6 @@ Light Touch always activates devices during FirmwareKit system preparation. The 
 
 The command-line wrapper here is only for developer diagnostics and sanitizer tests. It uses the same C source, but does not sign its output.
 
-## Light Touch integration
-
 ## Build and use
 
 ```sh
@@ -30,7 +28,8 @@ The diagnostic CLI does not sign. FirmwareKit preserves entitlements and re-sign
   the guarded control flow. Supports ARM and Thumb, direct strings and constant CFStrings, narrow and
   wide branches, and both forward and backward layouts. It enables the firmware's existing local
   activation path. Register allocation and addresses need not match a particular build.
-- **Legacy no-record initializer (experimental):** for the inspected 1.x/2.x implementations, recognizes
+- **iPod 2.x no-record initializer:** recognizes the null-record guard and diagnostic, the state initializer, and its shared state store. Sets the local state to Activated and clears the brick flag. Runs automatically. A fresh 5F138 device reports Activated over paired USB; its home screen is not yet validated.
+- **Legacy no-record initializer (experimental):** for the inspected 1.x implementation, recognizes
   the `determine_activation_state` context, the no-record initializer, zeroed temporary references,
   state storage and its control flow. Redirects the state load to the firmware's existing `Activated`
   CFString and clears the associated brick boolean. It does not rewrite shared string objects or disable
@@ -46,7 +45,7 @@ use its addresses, hashes, product names, or build numbers as a patch lookup tab
 | Device / version | Build | Evidence |
 |---|---|---|
 | iPod touch 1 / 1.1.5 | 4B1 | Experimental legacy pattern; exact-byte and refusal checks only |
-| iPod touch 2 / 2.1.1 | 5F138 | Experimental legacy pattern; exact-byte and refusal checks only |
+| iPod touch 2 / 2.1.1 | 5F138 | Fresh device reports **Activated** over paired USB; status-bar-only UI, home screen not validated |
 | iPod touch 2 / 3.0 | 7A341 | Native probe/apply and exact-byte/repeat checks |
 | iPod touch 2 / 3.1.1 | 7C145 | Same |
 | iPod touch 2 / 3.1.2 | 7D11 | Same |
@@ -80,7 +79,7 @@ Preserved local evidence and the working iPod image live at:
 `/Users/shg/Developer/qemu-ios-files/activation-native/`.
 The two iPad experiments remain in `ipad1/offline-activation/` and `ipad1/offline-activation-8C148/`.
 
-Next useful checks are early 1.x/2.x guest activation once those platforms boot, and iOS 5/6 UI + pairing
+Next useful checks are 1.x guest activation, the 2.1.1 home screen, and iOS 5/6 UI + pairing
 validation when their emulation is ready. New builds should first pass `--probe`, then a fresh offline
 boot and persistence test. Add a recognition strategy when behavior differs; do not loosen a matcher
 merely to make an unsupported binary pass.

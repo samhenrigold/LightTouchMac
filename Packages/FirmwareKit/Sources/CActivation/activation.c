@@ -36,7 +36,7 @@ typedef struct {
     unsigned width;
     const char *isa;
     uint8_t replacement[16];
-    bool legacy;
+    bool legacy, shared_no_record;
 } Match;
 #ifdef LT_ACTIVATION_LIBRARY
 #include <setjmp.h>
@@ -328,8 +328,8 @@ static bool nearby_function(const Image *m, uint32_t va) {
     }
     return false;
 }
-/* Older firmware has no development shortcut. The opt-in legacy strategy
- * changes only the no-record state's initializer and its brick boolean.
+/* Older firmware has no development shortcut. Change only the no-record
+ * state initializer and its brick boolean (1.x remains experimental).
  * It leaves record verification and all ownership/cleanup code intact.
  */
 static bool legacy_initializer(const Image *m, size_t o, uint32_t va, Match *out) {
@@ -337,56 +337,51 @@ static bool legacy_initializer(const Image *m, size_t o, uint32_t va, Match *out
     if (!arm_literal(m, va, ins, &value) || !cfstring(m, value, "Unactivated") ||
         !nearby_function(m, va))
         return false;
-    unsigned state = (ins >> 12) & 15, flag = 0, slot1, slot2, slot3, zero;
+    unsigned state = (ins >> 12) & 15, flag = 0, slot1, slot2, slot3;
     if (state >= 13 || !text_address(m, va, 24))
         return false;
     uint32_t a = u32(m->bytes + o + 4), b = u32(m->bytes + o + 8), c = u32(m->bytes + o + 12),
              e = u32(m->bytes + o + 16), jump = u32(m->bytes + o + 20);
     unsigned change = 0;
-    if ((c & 0xfff00fff) == 0xe2800001) { /* NULL record, flag was zero: ADD flag,flag,#1 */
-        flag = (c >> 12) & 15;
-        if (flag >= 13 || ((c >> 16) & 15) != flag || state == flag || va < m->text_va + 8)
+    uint32_t dest;
+    bool shared = false;
+    if ((c & 0xfff00fff) != 0xe2800001) return false;
+    flag = (c >> 12) & 15;
+    if (flag >= 13 || ((c >> 16) & 15) != flag || state == flag || va < m->text_va + 8)
+        return false;
+    if (!stack_store(a, flag, &slot1) || !stack_store(b, flag, &slot2)) return false;
+    if ((e & 0xff000000) == 0xea000000) {
+        shared = true;
+        /* 2.x iPod: the no-record block jumps to a shared state store. The old
+         * matcher patched the later factory-cache fallback, which never ran. */
+        if (va < m->text_va + 36) return false;
+        uint32_t cmp = u32(m->bytes + o - 36), guard = u32(m->bytes + o - 32);
+        uint32_t fn, msg;
+        if (cmp != (0xe3500000 | (flag << 16)) || (guard & 0xff000000) != 0x1a000000 ||
+            !arm_literal(m, va - 28, u32(m->bytes + o - 28), &fn) ||
+            !cstring(m, fn, "determine_activation_state") ||
+            !arm_literal(m, va - 24, u32(m->bytes + o - 24), &msg) ||
+            !cstring(m, msg, "There is no activation record?") ||
+            (u32(m->bytes + o - 20) & 0xff000000) != 0xeb000000 ||
+            (u32(m->bytes + o - 12) & 0xff000000) != 0xeb000000 ||
+            u32(m->bytes + o - 8) != 0xe3500000 ||
+            (u32(m->bytes + o - 4) & 0xff000000) != 0x1a000000)
             return false;
+        dest = va + 24 + (uint32_t)((int32_t)(e << 8) >> 6);
+        uint32_t store;
+        if (!text_address(m, dest, 4) || !word(m, dest, &store) || !stack_store(store, state, &slot3))
+            return false;
+    } else {
         uint32_t cmp = u32(m->bytes + o - 8), guard = u32(m->bytes + o - 4);
         if (cmp != (0xe3500000 | (flag << 16)) || (guard & 0xff000000) != 0x1a000000 ||
-            va + 4 + (uint32_t)((int32_t)(guard << 8) >> 6) != va + 24)
+            va + 4 + (uint32_t)((int32_t)(guard << 8) >> 6) != va + 24 ||
+            !stack_store(e, state, &slot3) || (jump & 0xff000000) != 0xea000000)
             return false;
-        if (!stack_store(a, flag, &slot1) || !stack_store(b, flag, &slot2) ||
-            !stack_store(e, state, &slot3))
-            return false;
-        change = 12;
-    } else if ((a & 0xffff0fff) == 0xe3a00001) { /* iPod no-record/default-cache fallback */
-        flag = (a >> 12) & 15;
-        if (flag >= 13 || state == flag || va < m->text_va + 8)
-            return false;
-        uint32_t load = u32(m->bytes + o - 4), guard = u32(m->bytes + o - 8);
-        if ((load & 0xffff0000) != 0xe59d0000 || (guard & 0xff000000) != 0x1a000000)
-            return false;
-        zero = (load >> 12) & 15;
-        if (zero >= 13 || zero == flag || zero == state)
-            return false;
-        if (!stack_store(b, zero, &slot1) || !stack_store(c, zero, &slot2) ||
-            !stack_store(e, state, &slot3))
-            return false;
-        uint32_t dest = va + (uint32_t)((int32_t)(guard << 8) >> 6);
-        /* The preceding nonzero branch selects the genuine factory-state block. */
-        bool factory = false;
-        for (unsigned k = 0; k < 24; k += 4) {
-            uint32_t op, v;
-            if (text_address(m, dest + k, 4) && word(m, dest + k, &op) &&
-                arm_literal(m, dest + k, op, &v) && cfstring(m, v, "FactoryActivated"))
-                factory = true;
-        }
-        if (!factory)
-            return false;
-        change = 4;
-    } else
-        return false;
-    if (slot1 == slot2 || slot1 == slot3 || slot2 == slot3 || (jump & 0xff000000) != 0xea000000)
-        return false;
-    uint32_t dest = va + 28 + (uint32_t)((int32_t)(jump << 8) >> 6);
-    if (!text_address(m, dest, 4) || dest <= va + 24 || !bounded_target(va, dest))
-        return false;
+        dest = va + 28 + (uint32_t)((int32_t)(jump << 8) >> 6);
+    }
+    change = 12;
+    if (slot1 == slot2 || slot1 == slot3 || slot2 == slot3 ||
+        !text_address(m, dest, 4) || dest <= va + 24 || !bounded_target(va, dest)) return false;
     /* Reuse a nearby literal that already points to the firmware's Activated
      * CFString. Do not overwrite a shared constant or synthesize an object. */
     uint32_t literal = 0;
@@ -403,7 +398,7 @@ static bool legacy_initializer(const Image *m, size_t o, uint32_t va, Match *out
     if (best == UINT64_MAX)
         return false;
     *out = (Match){
-        .off = o, .va = va, .target = dest, .width = change + 4, .isa = "arm", .legacy = true};
+        .off = o, .va = va, .target = dest, .width = change + 4, .isa = "arm", .legacy = !shared, .shared_no_record = shared};
     memcpy(out->replacement, m->bytes + o, out->width);
     long long delta = (long long)literal - (va + 8);
     encode32(out->replacement,
@@ -614,7 +609,8 @@ int main(int argc, char **argv) {
            "address\":%" PRIu32 ",\"size\":%u,\"old\":\"%s\",\"new\":\"%s\"}\n",
            probe ? "probe" : "apply",
            match.legacy ? "legacy-no-record-initializer-experimental"
-                        : "development-activation-shortcut",
+                        : match.shared_no_record ? "ipod-no-record-initializer"
+                                                 : "development-activation-shortcut",
            match.isa, match.off, match.va, match.width, old, replacement);
     free(m.bytes);
     return 0;
