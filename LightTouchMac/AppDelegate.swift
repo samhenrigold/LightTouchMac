@@ -35,16 +35,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func showDeviceWindow(_ sender: Any?) { windowController?.focusDeviceScreen(sender) }
     @objc func showFilesWindow(_ sender: Any?) { windowController?.toggleFiles(sender) }
 
-    @objc func toggleAutomaticRotation(_ sender: Any?) {
-        UserDefaults.standard.set(!EmulatorController.autoRotateEnabled, forKey: EmulatorController.autoRotateDefaultsKey)
-    }
+    @objc func toggleAutomaticRotation(_ sender: Any?) { emulator?.toggleAutoRotate() }
     @objc func toggleInternetAccess(_ sender: Any?) {
         let current = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.options.network ?? true
         UserDefaults.standard.set(!current, forKey: NetworkAccessPreference.key)
     }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(toggleAutomaticRotation(_:)) {
-            item.state = EmulatorController.autoRotateEnabled ? .on : .off
+            item.state = emulator?.autoRotateEnabled ?? true ? .on : .off
+            return emulator != nil
         } else if item.action == #selector(toggleInternetAccess(_:)) {
             let desired = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.options.network ?? true
             item.state = desired ? .on : .off

@@ -10,6 +10,9 @@ source=r"""import Foundation
  let defaults=UserDefaults(suiteName:"ltm-keyboard-check-"+UUID().uuidString)!
  var acceptsInput=true,isSleeping=false
  var onStatusChange:(()->Void)?
+ struct Instance { func defaultsKey(_ name:String)->String { name+".device" } }
+ let instance=Instance()
+ func perDeviceSetting(_ name:String)->Bool { defaults.object(forKey:instance.defaultsKey(name)) as? Bool ?? defaults.object(forKey:name) as? Bool ?? true }
  final class FakeLink { var commands:[LinkCommand]=[]; func send(_ c:LinkCommand){commands.append(c)} }
  let fake=FakeLink()
  var link:FakeLink? {fake}

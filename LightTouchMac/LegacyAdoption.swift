@@ -43,7 +43,7 @@ nonisolated enum LegacyAdoption {
     }
 
     /// UserDefaults names that became per-device ("deviceNotice.<uuid>").
-    static let perDeviceDefaults = ["deviceNotice", "motionPose"]
+    static let perDeviceDefaults = ["deviceNotice", "motionPose", "keyboardInputEnabled", "autoRotateWithGuest"]
 
     // MARK: - Keys (moved verbatim from EmulatorController)
 

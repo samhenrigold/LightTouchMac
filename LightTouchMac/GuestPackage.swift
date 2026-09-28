@@ -237,7 +237,7 @@ nonisolated enum GuestPackage {
 
     // MARK: - State
 
-    /// What the UI says about a device's guest tools.
+    /// What the UI says about a device's guest tools: the "Guest tools" status line.
     enum Status: Equatable, Sendable {
         /// No offer (no itpack, an older dylib) or no report yet.
         case unknown
@@ -246,19 +246,30 @@ nonisolated enum GuestPackage {
         case current(serial: Int64)
         /// The built-in (seed) package, on request.
         case builtIn(serial: Int64)
-        /// The loader went back to an earlier package (a bad verdict, or it was never judged).
-        case reverted(serial: Int64)
+        /// The loader went back to an earlier package: `why` is its report code.
+        case reverted(serial: Int64, why: ReportCode)
         /// Older than the bundled package, or a GL protocol the host doesn't serve.
         case outOfDate
+        /// The agent went stale for over a minute, or the iPad's it_ethlink never came up.
+        case notResponding
+        /// iBoot entered recovery mode.
+        case recovery
+        /// lockdown hasn't answered yet.
+        case notBooted
 
-        var text: String? {
+        var text: String {
             switch self {
-            case .unknown: nil
-            case .legacy: "Legacy baked guest tools"
-            case .current: nil
-            case .builtIn: "Built-in guest tools"
-            case .reverted: "Previous guest tools"
-            case .outOfDate: "Guest tools out of date — restart to update"
+            case .unknown: "Unknown (no report in 30 s)"
+            case .legacy: "Legacy — erase and prepare again to receive updates"
+            case let .current(serial): "Current (serial \(serial))"
+            case let .builtIn(serial): "Built-in (serial \(serial))"
+            case let .reverted(serial, why):
+                "Reverted to serial \(serial) — " + (why == .revertedBad ? "the newer package was judged bad"
+                                                        : why == .revertedTries ? "the newer package kept failing" : "the offer was refused")
+            case .outOfDate: "Out of date — restart to update"
+            case .notResponding: "Not responding"
+            case .recovery: "Recovery"
+            case .notBooted: "Not booted"
             }
         }
     }
@@ -275,7 +286,7 @@ nonisolated enum GuestPackage {
         }
         if !glesProtocols.contains(Int(glesProtocol)) { return .outOfDate }
         switch ReportCode(rawValue: report.result) {
-        case .revertedBad, .revertedTries, .refused: return .reverted(serial: report.serial)
+        case let code? where [.revertedBad, .revertedTries, .refused].contains(code): return .reverted(serial: report.serial, why: code)
         default: break
         }
         if offer.serial == 0 { return .builtIn(serial: report.serial) }

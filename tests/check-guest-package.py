@@ -131,15 +131,19 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   check(GuestPackage.status(report: .init(serial: 7, result: 0), offer: o, record: nil, glesProtocol: 0) == S.current(serial: 7))
   check(GuestPackage.status(report: .init(serial: 5, result: -2), offer: o, record: nil, glesProtocol: 0) == S.outOfDate)
   check(GuestPackage.status(report: .init(serial: 7, result: 0), offer: o, record: nil, glesProtocol: 3) == S.outOfDate, "GL wire out of range")
-  check(GuestPackage.status(report: .init(serial: 5, result: 3), offer: o, record: nil, glesProtocol: 0) == S.reverted(serial: 5))
-  check(GuestPackage.status(report: .init(serial: 5, result: 5), offer: o, record: nil, glesProtocol: 0) == S.reverted(serial: 5))
+  check(GuestPackage.status(report: .init(serial: 5, result: 3), offer: o, record: nil, glesProtocol: 0) == S.reverted(serial: 5, why: .revertedBad))
+  check(GuestPackage.status(report: .init(serial: 5, result: 5), offer: o, record: nil, glesProtocol: 0) == S.reverted(serial: 5, why: .refused))
   check(GuestPackage.status(report: .init(serial: 1, result: 2), offer: GuestPackage.Offer(bundled: 7, version: "", serial: 0, glHook: false),
                                    record: nil, glesProtocol: 0) == S.builtIn(serial: 1))
   var restored = DeviceInstance.Guest(); restored.active = 5
   check(GuestPackage.status(report: nil, offer: o, record: restored, glesProtocol: 0) == S.outOfDate, "a restored session on older tools")
   restored.bad = [7]
   check(GuestPackage.status(report: nil, offer: o, record: restored, glesProtocol: 0) == S.unknown)
-  check(S.outOfDate.text == "Guest tools out of date — restart to update" && S.legacy.text == "Legacy baked guest tools")
+  check(S.outOfDate.text == "Out of date — restart to update" && S.legacy.text == "Legacy — erase and prepare again to receive updates")
+  check(S.current(serial: 3).text == "Current (serial 3)" && S.builtIn(serial: 1).text == "Built-in (serial 1)")
+  check(S.reverted(serial: 1, why: .revertedBad).text == "Reverted to serial 1 — the newer package was judged bad")
+  check(S.reverted(serial: 1, why: .revertedTries).text.hasSuffix("kept failing") && S.reverted(serial: 1, why: .refused).text.hasSuffix("was refused"))
+  check(S.unknown.text == "Unknown (no report in 30 s)" && S.notResponding.text == "Not responding" && S.recovery.text == "Recovery" && S.notBooted.text == "Not booted")
   // Verdicts.
   typealias V = GuestPackage.Verdict
   let r7 = GuestPackageReport(serial: 7, result: 1)

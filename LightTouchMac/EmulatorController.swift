@@ -112,6 +112,7 @@ final class EmulatorController {
     var deviceReachable: Bool? {
         didSet {
             if deviceReachable == true, connectionIssue?.persistent != true { connectionIssue = nil }
+            if deviceReachable == true, reachableSince == nil { reachableSince = Date() }
             if oldValue != deviceReachable { onStatusChange?() }
             considerConnectionRecovery()
             checkActivationIfNeeded()
@@ -413,8 +414,13 @@ final class EmulatorController {
     private func openSerialLog() {
         do {
             serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"),
-                                                 watch: [Self.recoveryMarker]) { [weak self] _ in
-                Task { @MainActor in self?.abortBoot(Self.recoveryReason(self?.profile ?? .iPodTouch2G)) }
+                                                 watch: [Self.recoveryMarker, Self.ethlinkMarker]) { [weak self] phrase in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if phrase == Self.ethlinkMarker { self.ethlinkUp = true; self.onStatusChange?(); return }
+                    self.inRecovery = true
+                    self.abortBoot(Self.recoveryReason(self.profile))
+                }
             }
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
     }
@@ -423,6 +429,8 @@ final class EmulatorController {
 
     /// iBoot's last words before it waits for a restore.
     static let recoveryMarker = "Entering recovery mode"
+    /// it_ethlink (the iPad's guest package) bringing the USB Ethernet link up.
+    static let ethlinkMarker = "it_ethlink: LinkStatus 0 -> 1"
     static func recoveryReason(_ profile: DeviceProfile) -> String {
         "The \(profile.shortName) entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
     }
@@ -779,6 +787,7 @@ final class EmulatorController {
                 agentStatus = status.agentStatus
                 onStatusChange?()
             }
+            if status.agentStatus == 2 { agentStaleSince = agentStaleSince ?? now } else { agentStaleSince = nil }
         }
         if !poweringOn, status.shutdownConfirmed, !isDead, !isPoweredOff {
             // Publish terminal state before observable fields: their callbacks
@@ -824,14 +833,35 @@ final class EmulatorController {
             if isSleeping { return "Sleeping" }
             if restartingSpringBoard { return "Restarting SpringBoard…" }
             if let mediaPreparationFailure { return "Media update failed — \(mediaPreparationFailure)" }
-            if guestToolsStatus != .legacy, let text = guestToolsStatus.text { return "Running — \(text)" }
             if retainedPackedImage { return "Running — existing image retained; erase device to upgrade" }
-            return canManageApps ? "Running" : "Running — USB unavailable"
+            guard canManageApps else { return "Running — USB unavailable" }
+            return "Running — " + guestToolsLine
         case .paused:     return "Paused"
         case .snapshotting: return "Saving state…"
         case .dead:       return "Emulator stopped"
         }
     }
+
+    /// The "Guest tools" line: the loader's report as the package watch judged it
+    /// (GuestPackage.status), overridden by what the boot and the agent show now.
+    var guestToolsLine: String { "Guest tools: " + guestToolsState.text }
+    var guestToolsState: GuestPackage.Status {
+        if inRecovery { return .recovery }
+        if !bootFinished { return .notBooted }
+        let stale = agentStaleSince.map { Date().timeIntervalSince($0) > 60 } ?? false
+        let reachable = reachableSince.map { Date().timeIntervalSince($0) > 60 } ?? false
+        // The iPad has no agent: it_ethlink's serial line is its sign of life once a package with jobs runs.
+        let ethlinkMissing = !hasGuestTools && guestOffer?.serial ?? 0 > 0 && (status?.guestPackage?.serial ?? 0) > 0 && !ethlinkUp && reachable
+        if hasGuestTools ? stale : ethlinkMissing { return .notResponding }
+        return guestToolsStatus
+    }
+    /// Set by the status poll: when the agent last went stale (2), nil while it answers.
+    private var agentStaleSince: Date?
+    /// When lockdown first answered this boot.
+    private var reachableSince: Date?
+    /// it_ethlink reported LinkStatus 0 -> 1 on serial (the iPad's guest package).
+    private(set) var ethlinkUp = false
+    private var inRecovery = false
 
     /// Which libqemu-arm.dylib this device's helper loaded, and when it was
     /// built (its hello). The dylib lives in a build tree other sessions rebuild
@@ -1036,12 +1066,20 @@ final class EmulatorController {
     // loses their manual angle when the front app actually changes what it wants,
     // which is the moment they asked us to follow.
 
-    /// Off switch, for anyone who would rather the device never move on its own:
-    /// `defaults write <bundle-id> autoRotateWithGuest -bool NO`. On by default —
-    /// it is only ever driven by an explicit change on the guest's side.
+    /// Off switch, for anyone who would rather the device never move on its own.
+    /// Per device (`autoRotateWithGuest.<uuid>`), seeded from the app-wide value
+    /// of earlier builds; on by default — it is only ever driven by an explicit
+    /// change on the guest's side.
     static let autoRotateDefaultsKey = "autoRotateWithGuest"
-    static var autoRotateEnabled: Bool {
-        UserDefaults.standard.object(forKey: autoRotateDefaultsKey) as? Bool ?? true
+    var autoRotateEnabled: Bool { perDeviceSetting(Self.autoRotateDefaultsKey) }
+    func toggleAutoRotate() {
+        UserDefaults.standard.set(!autoRotateEnabled, forKey: instance.defaultsKey(Self.autoRotateDefaultsKey))
+        onStatusChange?()
+    }
+    /// A per-device on/off setting, falling back to the app-wide key it replaced, then on.
+    private func perDeviceSetting(_ name: String) -> Bool {
+        let defaults = UserDefaults.standard
+        return defaults.object(forKey: instance.defaultsKey(name)) as? Bool ?? defaults.object(forKey: name) as? Bool ?? true
     }
 
     /// The last value SpringBoard reported, in SpringBoard's degrees (0, 90,
@@ -1084,7 +1122,7 @@ final class EmulatorController {
         }
         // First reading seeds only: see lastGuestOrientation.
         guard let previous = lastGuestOrientation, previous != degrees else { return }
-        guard Self.autoRotateEnabled, state == .running else { return }
+        guard autoRotateEnabled, state == .running else { return }
         rotate(toward: target)
     }
 
@@ -1105,7 +1143,7 @@ final class EmulatorController {
                 guard self.state == .running, self.canManageApps, !self.isSleeping, !self.isInstalling,
                       let reading = try? await self.springBoard().interfaceOrientation(),
                       let target = Self.iPadDegrees(forInterface: reading) else { continue }
-                if last == nil || (last != reading && Self.autoRotateEnabled), target != self.rotationDegrees {
+                if last == nil || (last != reading && self.autoRotateEnabled), target != self.rotationDegrees {
                     self.rotate(toward: target)
                 }
                 last = reading
@@ -1293,12 +1331,11 @@ final class EmulatorController {
     // MARK: - Keyboard passthrough
     
     /// Forward a host key by its macOS virtual keycode; the shim maps it to a
-    /// QKeyCode exactly as ui/cocoa.m does.
-    var keyboardInputEnabled: Bool {
-        UserDefaults.standard.object(forKey: "keyboardInputEnabled") as? Bool ?? true
-    }
+    /// QKeyCode exactly as ui/cocoa.m does. Per device (`keyboardInputEnabled.<uuid>`),
+    /// seeded from the app-wide value of earlier builds.
+    var keyboardInputEnabled: Bool { perDeviceSetting("keyboardInputEnabled") }
     func toggleKeyboardInput() {
-        UserDefaults.standard.set(!keyboardInputEnabled, forKey: "keyboardInputEnabled")
+        UserDefaults.standard.set(!keyboardInputEnabled, forKey: instance.defaultsKey("keyboardInputEnabled"))
         onStatusChange?()
     }
 
@@ -1384,6 +1421,8 @@ final class EmulatorController {
         foregroundAppName = nil
         isSleeping = false
         deviceReachable = nil
+        reachableSince = nil
+        ethlinkUp = false
         rotationDegrees = 0
         setAccelerometer(for: 0)
         state = .booting
