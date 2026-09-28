@@ -62,6 +62,7 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 | C4 One Recipe with board plug-ins (verify/decrypt/identity/lock/keybag/bake shared) | 2 | swift test; lock diff empty on all entries |
 | C5 Retire Python: port real-iBoot (done in C0) and `--gl-test`; golden-lock oracle; delete ~4,500 lines; `research/` keeps the probes | 4 | fresh-device on all 6 entries via firmwarekit; one-time cross-check against the last Python locks |
 | C6 Bundled iPod as a prepared device (S2); delete LegacyAdoption, LaunchOptions, the legacy branches | 2.5 | check-firmware-jobs publish; check-sessions --single ipod; legacy-tree → prompt check |
+| C8 Disk images without `hdiutil` (deprecated in macOS 27, replaced by `diskutil image`): one `DiskImage` abstraction in FirmwareKit (attach/detach/convert/resize) with a `diskutil image` backend when present and `hdiutil` otherwise, tested on both; then move the prepare-time volume edits to the native HFSPlus module (it already does catalog, owners, normalize, journal) so preparation never mounts; mounting stays only for the user-facing Mount/Export feature | 2 + 3 | swift test; both backends on macOS 26/27; fresh-device on all entries |
 | C7 iPod 2.1.1 in the app (N72 recipe 2.x path, keys, catalog) | 1 | in-bundle prepare + boot |
 
 ## Track D: emulator consolidation (after gl-coverage and usb-alert merge; ~10 d)
