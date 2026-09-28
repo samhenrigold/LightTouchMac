@@ -18,7 +18,7 @@ Apps uses concise selection-based Open, Uninstall, Install, and Choose Version c
 | Menu | Responsibility | Main shortcuts |
 | --- | --- | --- |
 | File | Files-window transfers, refresh, close | Close ⌘W |
-| Edit | Native editing, Find, device text selection and paste | Find ⌘F; Search Apps ⌥⌘F; Paste Text to iPod ⌃⌘V |
+| Edit | Native editing, Find, device text selection and paste | Find ⌘F; Search Apps ⌥⌘F; Paste Text to iPod/iPad ⌃⌘V |
 | View | Zoom, inspector, finger dots, hidden files, toolbar | Physical Size ⌘0; Fit ⌘9; Zoom ⌘+/−; Inspector ⌥⌘I; Toolbar ⌥⌘T |
 | Device | Physical input, orientation, network, device state | Home ⇧⌘H; Lock ⌘L; Rotate ⌘[/]; Volume ⌥⌘↑/↓ |
 | Apps | Install/import and actions on the selected app | Install ⇧⌘I |
@@ -50,4 +50,4 @@ The toolbar-only pass was built with Xcode MCP and inspected in the running Debu
 
 The September 20 pass also checks that confirmed removals wait behind installs, remain represented while waiting, and keep Quit aware of pending work. Unchanged sidebar polls retain native row controls, so another app's progress does not replace the button being clicked. Open wakes a sleeping iPod; a locked iPod gets a short unlock instruction rather than raw command output.
 
-The remaining Diner Dash visual check is tracked in [UX-emulator-followups.md](UX-emulator-followups.md). Google Search's legacy-browser rejection and proxy-panel verification are tracked in [Proxy-compatibility.md](Proxy-compatibility.md).
+The remaining Diner Dash visual check is tracked in [UX-emulator-followups.md](archive/UX-emulator-followups.md). Google Search's legacy-browser rejection and proxy-panel verification are tracked in [Proxy-compatibility.md](archive/Proxy-compatibility.md).

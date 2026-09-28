@@ -1,8 +1,10 @@
 # Guest-package bootstrap
 
-Status: design, 2026-09-28. Not built yet. This is the "guest package bootstrap contract" called for in
-[device-firmware-modularization-plan.md](device-firmware-modularization-plan.md) (M2) and
-[multi-device-plan.md](multi-device-plan.md).
+Status: built, 2026-09-28 (STATUS.md "Guest-package bootstrap": loader, versioned packages and rollback in the
+emulator, the preparer and the app; `tests/check-sessions.py --guest`). Sections 1–7 are the design; the app
+side as built is in "P5, the app" at the end. This is the "guest package bootstrap contract" that
+`device-firmware-modularization-plan.md` (an uncommitted 2026-09-27 proposal, on no branch) called for in its M2,
+next to [multi-device-plan.md](multi-device-plan.md).
 
 **Goal:** upgrade our guest helpers without re-preparing the device, detect stale guest tools, and roll
 back a bad package.

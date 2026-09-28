@@ -2,7 +2,7 @@
 
 Reference binary: Xcode 27 Release Candidate’s `DeviceKit.framework`. Inspected its Swift metadata with `swift-section` and its implementation through Hopper MCP. Addresses below are unslid offsets in this binary, not runtime dependencies. Light Touch uses public SwiftUI/AppKit APIs; it does not load DeviceKit.
 
-**Superseded control layout:** the later September 20 request removes the floating action bar and adopts WireView's capture actions in the native toolbar. The findings below document the earlier Device Hub comparison. Only transient saved-capture feedback retains this banner design; current commands and shortcuts are in [Command organization](Command-organization.md).
+**Superseded control layout:** the later September 20 request removes the floating action bar and adopts WireView's capture actions in the native toolbar. The findings below document the earlier Device Hub comparison. Only transient saved-capture feedback retains this banner design; current commands and shortcuts are in [Command organization](../Command-organization.md).
 
 ## Recovered implementation
 

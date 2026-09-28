@@ -1,7 +1,7 @@
 // How a spawned LightTouchDevice hands its IOSurfaces to the app.
 //
 // A dynamic NSXPCListener(machServiceName:) is refused for a name launchd does
-// not know (docs/multi-device-spikes.md, section 1), so the app checks in
+// not know (docs/archive/multi-device-spikes.md, section 1), so the app checks in
 // "<bundle id>.devices.<app pid>" with bootstrap_check_in and the helper sends
 // one Mach message per ring: its one-time token and the IOSurfaceCreateMachPort
 // ports of [status block, ring0, ring1, ring2] (status only before the first

@@ -1,4 +1,4 @@
-// Guest services without a shell (qemu-ios docs/ipod/guest-services-plan.md, P2).
+// Guest services without a shell (qemu-ios docs/archive/guest-services-plan.md, P2).
 //
 // Everything the app asks of a running iPod goes through the guest agent's
 // typed v2 ops (contrib/it-agent/README.md): spawn with no shell, put/get,

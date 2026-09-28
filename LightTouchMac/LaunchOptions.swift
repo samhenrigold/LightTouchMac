@@ -69,7 +69,7 @@ struct LaunchOptions: ParsableArguments {
     var packedNAND: String { "\(filesRoot)/nand.itnand" }
 
     /// iPad 1 (LIGHTTOUCH_DEVICE=ipad1): a kernel-direct boot bundle and a NAND
-    /// page store, both produced by qemu-ios/imgtools. See docs/ipad1-in-app.md.
+    /// page store, both produced by qemu-ios/imgtools. See docs/archive/ipad1-in-app.md.
     var ipad1KBoot: String { "\(filesRoot)/ipad1/7B500/k48-kboot.bin" }
     var ipad1NAND: String  { "\(filesRoot)/ipad1/userland/golden-appsync" }
 
