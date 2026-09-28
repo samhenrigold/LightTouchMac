@@ -108,11 +108,15 @@ extension String {
         let overlay = dir.appendingPathComponent("overlay")
         let config: BootConfig
         if profile == .iPad1 {
-            let files = try BootRecipe.preparedFiles(base: URL(fileURLWithPath: Self.ipadBase), overlay: overlay, writableNOR: nil)
+            // As EmulatorController.iPadBoot: a base with nor.bin (4.x's effaceable storage) boots a private copy.
+            let base = URL(fileURLWithPath: Self.ipadBase)
+            let nor = FileManager.default.fileExists(atPath: base.appendingPathComponent("nor.bin").path) ? dir.appendingPathComponent("nor.bin") : nil
+            let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: nor)
             let identity = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: Self.ipadBase + "/identity.json"))) as! [String: Any]
             let dieID = (identity["die-id"] as? [String])?.joined(separator: ":")
             config = BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: dieID,
-                                           writableNOR: files.writableNOR?.path, usbAddress: mux.guestAddress, wifi: true),
+                                           writableNOR: files.writableNOR?.path, usbAddress: mux.guestAddress, wifi: true,
+                                           machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: nil, restore: [])
         } else {
             let files = ipod ?? IPodFiles(nand: Self.ipodNAND, nor: Self.files + "/ios3/nor_7E18.bin", iBoot: Self.files + "/ios3/iBoot.bin")

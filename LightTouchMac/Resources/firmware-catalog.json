@@ -187,7 +187,7 @@
    "rootfs": {"file": "038-0018-002.dmg", "key": "6380bc27ef713750c21759ce770cb6540a8e31fca4c78820fd7be3a02030365a59257582"},
    "UpdateRamDisk": {"file": "038-0024-002.dmg", "iv": "509e699fcfbc5317fa5eb3e79fc5a932", "key": "9cee1bb0bf019db324eb266f426b80fbcfba614464932c6b416ed039fbde73dd"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": false, "web_proxy": true, "usb_net": true, "writable_nor": true}, "gli_dispatch": "gli-dispatch-8C148.tsv"},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}, "gli_dispatch": "gli-dispatch-8C148.tsv"},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  }
