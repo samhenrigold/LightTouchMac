@@ -329,3 +329,42 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 - **The iPod 3.1.3 IPSW isn't on api.ipsw.me**, so a future from-IPSW entry needs another source.
 - **Still open for W4:** Export Diagnostics and the log window still read the global `serial.log`, `usbmuxd.log` and `session.env`.
 - **Still open for W2/W4:** EC still resolves its own instance in `init(options:profile:)`. It should receive one chosen from the library.
+
+## Preparer contract (Sam, 2026-09-28: no Python bridge; the app runs the Swift preparer only)
+
+The Python bridge is dropped. The app's PreparationJob runs one executable, `firmwarekit`:
+- In Release, it's `Contents/MacOS/firmwarekit`.
+- In Debug it can be overridden by `LTM_FIRMWAREKIT=/path`, e.g. `swift run` output from `Packages/FirmwareKit`.
+- The Python imgtools in qemu-ios stay only as the test oracle for FirmwareKit.
+
+```
+firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
+                   [--seed SEED] [--activation-hook PATH] [--helper PATH_TO_LightTouchDevice]
+                   [--cache DIR]
+```
+
+- `ENTRY.json` is one catalog entry, exactly as in `Resources/firmware-catalog.json`, with its keys.
+- `--activation-hook` is a user-chosen executable. It's run as `hook FILE` on the recipe's target, as a black box, then re-signed. The app only stores and passes the path.
+- `--helper` runs the seal and keybag one-shots (`LightTouchDevice --oneshot`).
+- `--cache` holds decrypted components by IPSW sha1. It's recreatable.
+
+**stdout is JSON Lines only, one object per line.** Diagnostics go to stderr.
+```
+{"event":"begin","steps":9}
+{"event":"step","index":3,"name":"Building the system volume"}
+{"event":"progress","fraction":0.42}            // within the current step, optional
+{"event":"warning","message":"…"}
+{"event":"done","lock":"device.lock.json"}      // relative to STAGING_DIR
+{"event":"error","code":"key_missing|sha_mismatch|unsupported|hook_failed|oneshot_failed|disk_full|internal","message":"…"}
+```
+
+**Exit codes:** 0 on done; 1 on error, after emitting an error event; SIGTERM means cancel. On cancel the preparer stops within 2 s and leaves STAGING_DIR for the app to delete.
+
+**On success, STAGING_DIR contains exactly:**
+- `kboot.bin` (or the board's boot files);
+- `nand/`, kept sparse;
+- `nor.bin` if the recipe uses a writable NOR;
+- `identity.json` (mode 600);
+- `device.lock.json`: the inputs and their hashes, the tool version, the UDID, the hook sha256, and the product version.
+
+The app publishes STAGING_DIR by rename.
