@@ -204,6 +204,22 @@ copy_guest it-agent/it_agent
 copy_guest it-agent/it_typein.dylib
 copy_guest it-media/itmedia
 copy_guest it-media/itphoto
+# The iPad guest helpers firmwarekit installs at prepare time (its --guest-tools
+# default, ../Resources/guest-tools): one flat directory, ldid-signed for the
+# guest, sealed as resources by the app's signature. firmwarekit without them
+# fails every iPad preparation, so they are required whenever it ships.
+IPAD_GUEST="${LTM_IPAD_GUEST_TOOLS_DIR:-${GUEST:+$GUEST/../ipad-guest-tools}}"
+GUEST_TOOLS_DST="$APP/Contents/Resources/guest-tools"
+rm -rf "$GUEST_TOOLS_DST"
+if [ -n "$IPAD_GUEST" ] && [ -d "$IPAD_GUEST" ]; then
+    echo "embedding iPad guest helpers…"
+    mkdir -p "$GUEST_TOOLS_DST"
+    cp -p "$IPAD_GUEST"/* "$GUEST_TOOLS_DST/"
+    [ -s "$GUEST_TOOLS_DST/it_pbd" ] || { echo "incomplete iPad guest tools: $IPAD_GUEST" >&2; exit 1; }
+elif [ ${#FIRMWAREKIT[@]} -gt 0 ]; then
+    echo "firmwarekit needs the iPad guest helpers: set LTM_IPAD_GUEST_TOOLS_DIR (build-guest-tools.sh output)" >&2
+    exit 1
+fi
 # Build directly from source; the old launcher app is no longer a dependency.
 cc -O2 -Wall -mmacosx-version-min="$MINOS" \
     "$QEMU/contrib/macos-app/ipod-helper.c" -lz -o "$WORK/ipod-helper"
