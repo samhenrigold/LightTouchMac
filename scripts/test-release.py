@@ -102,6 +102,19 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(release.main(self.argv + ['--plan']), 0)
         self.assertFalse(self.args.output.exists())
 
+    def test_staged_build_resumes_in_existing_output_and_reuses_deps_only(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            release.parse(self.argv + ['--stage', 'native'])  # needs --native-deps
+        self.native_fixture()
+        self.args.output.mkdir()
+        args = release.parse(self.argv + ['--stage', 'qemu', '--native-deps', str(self.native)])
+        release.validate_output(args)
+        self.assertEqual(args.qemu_build, self.qemu / 'build-release-native')
+        (self.native / 'qemu-build/libqemu-arm.dylib').unlink()
+        release.validate_native(args, self.native, deps_only=True)
+        with self.assertRaisesRegex(ValueError, 'QEMU library'):
+            release.validate_native(args, self.native)
+
     def test_missing_firmware_is_rejected(self):
         (self.assets / 'ios3/iBoot.bin').unlink()
         with self.assertRaisesRegex(ValueError, 'bundled firmware input'):
