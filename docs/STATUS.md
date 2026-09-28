@@ -43,6 +43,8 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 |---|---|---|
 | iPad app bugs, 3.2.2 and 4.2.1 | `ipad4-app-bugs` | boot progress, running app in the title bar, proxy, popover shadow blur, 4.2.1 keyboard, Stop as a hard halt |
 
+| Consolidation sweep, survey phase (read-only) | — | five surveys: emulator models and per-address logic; guest tools + Python/Swift pipeline; app layering, legacy paths, singletons; repo organization, docs, branches; app QA (multi-device, file meddling, IPAs across devices, guest-service and activation verification) |
+
 Then: a notarized build, verified in-app on every firmware, for Sam to test. That build is the first
 in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e71588`).
 
