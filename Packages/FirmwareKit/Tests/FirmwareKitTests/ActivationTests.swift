@@ -14,7 +14,7 @@ struct ActivationTests {
             .appendingPathComponent("Developer/qemu-ios-files/activation-native/corpus-stock")
         guard FileManager.default.fileExists(atPath: corpus.path) else { return }
         let names = try FileManager.default.contentsOfDirectory(atPath: corpus.path)
-        for name in names where name.hasSuffix(".lockdownd") && !name.contains("5F138") && !name.contains("4B1") {
+        for name in names where name.hasSuffix(".lockdownd") && !name.contains("4B1") {
             try Oracle.withTemp { dir in
                 let target = dir.appendingPathComponent("lockdownd")
                 try FileManager.default.copyItem(at: corpus.appendingPathComponent(name), to: target)

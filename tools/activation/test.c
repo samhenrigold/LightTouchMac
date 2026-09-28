@@ -149,16 +149,24 @@ static void oldfixture(uint8_t *d, bool second) {
         put32(d + 0x210, 0xe58d2004);
         put32(d + 0x214, 0xea00004d);
     } else {
-        put32(d + 0x1f8, 0x1a000040);
-        put32(d + 0x1fc, 0xe59d2000);
-        put32(d + 0x200, 0xe59f3088);
-        put32(d + 0x204, 0xe3a06001);
-        put32(d + 0x208, 0xe58d2010);
-        put32(d + 0x20c, 0xe58d2014);
-        put32(d + 0x210, 0xe58d3004);
-        put32(d + 0x214, 0xea00004d);
-        put32(d + 0x304, 0xe59f2084);
-        put32(d + 0x390, 0x16e0);
+        strcpy((char *)d + 0x740, "There is no activation record?");
+        put32(d + 0x298, 0x1740);
+        put32(d + 0x1dc, 0xe3560000); // NULL record
+        put32(d + 0x1e0, 0x1a000040);
+        put32(d + 0x1e4, 0xe51f004c); // function name at 0x1a0
+        put32(d + 0x1e8, 0xe59f10a8); // no-record diagnostic
+        put32(d + 0x1ec, 0xeb000040);
+        put32(d + 0x1f0, 0xe1a00008);
+        put32(d + 0x1f4, 0xeb000040);
+        put32(d + 0x1f8, 0xe3500000);
+        put32(d + 0x1fc, 0x1a000020);
+        put32(d + 0x200, 0xe59f2088);
+        put32(d + 0x204, 0xe58d6010);
+        put32(d + 0x208, 0xe58d6014);
+        put32(d + 0x20c, 0xe2866001);
+        put32(d + 0x210, 0xea00003a); // shared store at 0x300
+        put32(d + 0x300, 0xe58d2004);
+
     }
 }
 int main(void) {
@@ -214,13 +222,27 @@ int main(void) {
         save(p, d, sizeof(d));
         assert(!run(p, true));
         same(p, d, sizeof(d));
-        assert(run(p, false));
-        same(p, d, sizeof(d));
-        assert(!runx(p, false, true));
-        put32(d + 0x200, kind ? 0xe59f308c : 0xe59f208c);
-        put32(d + (kind ? 0x204 : 0x20c), kind ? 0xe3a06000 : 0xe3a04000);
+        if (!kind) {
+            assert(run(p, false));
+            same(p, d, sizeof(d));
+            assert(!runx(p, false, true));
+        } else {
+            assert(!run(p, false));
+        }
+        put32(d + 0x200, 0xe59f208c);
+        put32(d + 0x20c, kind ? 0xe3a06000 : 0xe3a04000);
         same(p, d, sizeof(d));
         assert(runx(p, false, true));
+        same(p, d, sizeof(d));
+    }
+    // The shared-store strategy must prove the no-record guard, diagnostic, and store.
+    for (int kind = 0; kind < 3; kind++) {
+        oldfixture(d, true);
+        if (kind == 0) put32(d + 0x1dc, 0xe3550000);
+        if (kind == 1) d[0x740] = 'X';
+        if (kind == 2) put32(d + 0x300, 0xe58d3004);
+        save(p, d, sizeof(d));
+        assert(run(p, false));
         same(p, d, sizeof(d));
     }
     fixture(d, 0);

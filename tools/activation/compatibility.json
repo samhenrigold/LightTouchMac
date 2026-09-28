@@ -27,18 +27,18 @@
       "version": "2.1.1",
       "build": "5F138",
       "input_sha256": "c4acbeba934585bc38e8f7cbd285ee29f4f2e55f847b8cac943a7bcc1753d2fb",
-      "patched_unsigned_sha256": "b842f7a8a9f4b10d7a53aca4c9de1d7485d5b099e0064fcf5c3d974d9ec16ad4",
+      "patched_unsigned_sha256": "1557902e1bae197052d8c36b281eb620b827de234b07da9237307b53310de979",
       "recognition": {
         "mode": "probe",
-        "strategy": "legacy-no-record-initializer-experimental",
+        "strategy": "ipod-no-record-initializer",
         "isa": "arm",
-        "file_offset": 41568,
-        "virtual_address": 45664,
-        "size": 8,
-        "old": "ec389fe50160a0e3",
-        "new": "08399fe50060a0e3"
+        "file_offset": 41512,
+        "virtual_address": 45608,
+        "size": 16,
+        "old": "24299fe510608de514608de5016086e2",
+        "new": "40299fe510608de514608de50060a0e3"
       },
-      "validation": "experimental-static-only",
+      "validation": "fresh-device-paired-lockdown-Activated; status-bar-only UI; home not validated",
       "prior_ui_validation": false
     },
     {
