@@ -103,6 +103,15 @@ APP_BIN="$APP/Contents/MacOS/$APP_EXECUTABLE"
 DEVICE_HELPER="$APP/Contents/MacOS/LightTouchDevice"
 [ -f "$DEVICE_HELPER" ] || { echo "missing $DEVICE_HELPER; build the LightTouchMac scheme (it embeds the helper)" >&2; exit 1; }
 python3 "$CHECK" --minos "$MINOS" "$DEVICE_HELPER"   # Swift binaries weak-import their FORCE_LOAD markers
+# The firmware preparer (Packages/FirmwareKit's CLI), when built: hardened
+# runtime only, no entitlements. Signed with the other Contents/MacOS tools.
+FIRMWAREKIT=()
+if [ -n "${LTM_FIRMWAREKIT:-}" ]; then
+    python3 "$CHECK" --minos "$MINOS" "$LTM_FIRMWAREKIT"
+    cp -f "$LTM_FIRMWAREKIT" "$APP/Contents/MacOS/firmwarekit"
+    chmod u+rwx "$APP/Contents/MacOS/firmwarekit"
+    FIRMWAREKIT=("$APP/Contents/MacOS/firmwarekit")
+fi
 
 # ---------------------------------------------------------- tools the app runs
 #
@@ -267,7 +276,7 @@ if [ -n "${LTM_BUILD_RECORD:-}" ]; then
 fi
 
 # Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
-for f in "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
+for f in "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
     while IFS= read -r path; do
         case "$path" in /*) install_name_tool -delete_rpath "$path" "$f" ;; esac
     done < <(python3 "$CHECK" --rpaths "$f")
@@ -277,7 +286,7 @@ done
 # Guest ARMv6 helpers are resources, not executable on macOS.
 echo "sealing…"
 python3 "$CHECK" --minos "$MINOS" --bundle "$APP" \
-    "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"
+    "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}
 
 # Ad-hoc signatures have no Team ID, so hardened library validation cannot
 # establish shared identity between a helper and its bundled dylibs. Use plain
@@ -293,7 +302,7 @@ sign_nested_code() {
 # QEMU entitlements: JIT, unsigned executable memory, no library validation),
 # then the app with entitlements.
 echo "signing (id: $SIGN_ID)…"
-for f in "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}"; do
+for f in "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
     [ -L "$f" ] && continue
     # Scripts are not signable and do not need to be; the app's signature covers
     # them as resources.
