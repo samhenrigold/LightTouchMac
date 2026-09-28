@@ -58,7 +58,7 @@ import Foundation
         precondition(r.state == .ready && allowed(r) == ["start", "erase", "showInFinder"], "powered off starts again: \(allowed(r))")
         r = row(iPod, instance: id, session: .dead("The emulator stopped."))
         precondition(r.state == .error("The emulator stopped.") && r.stateDescription == "Error")
-        precondition(!r.allows(.start, canDownload: false), "a dead in-process session can't start again")
+        precondition(r.allows(.start, canDownload: false), "a dead session's Start restarts it")
 
         // Jobs: downloading and preparing, with progress and Cancel.
         r = row(iPad32, job: .downloading(fraction: 0.425))

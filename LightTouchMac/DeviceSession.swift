@@ -100,7 +100,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     func allows(_ action: DeviceAction, canDownload: Bool) -> Bool {
         let working = switch state { case .downloading, .preparing, .stopping: true; default: false }
         switch action {
-        case .start: return isStartable && (state == .ready || (isError && !hasSession))
+        // A dead session's Start is a restart (DeviceSessionHost.restart).
+        case .start: return isStartable && (state == .ready || isError)
         case .stop: return state == .running
         case .downloadAndPrepare:
             return canDownload && !isStartable && entry.source.kind == .ipsw && !working && !isDimmed
@@ -177,6 +178,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     var status: SharedStatus? { link.status }
     private var qemuExitCode: Int32?
     private var startFailure: String?
+    /// The spawned helper's pid, for the log: the link zeroes its own on reap.
+    private var helperPID: pid_t = 0
 
     /// `helper` and `requirement` default to the bundled helper and the app's Team (tests pass their own).
     init(instance: UUID, profile: DeviceProfile, log url: URL, helper: URL? = nil, requirement: String? = nil) {
@@ -203,6 +206,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         link.start { [weak self] result in
             MainActor.assumeIsolated { self?.started(result, configure, completion) }
         }
+        helperPID = link.pid   // the spawn is synchronous
     }
 
     private func started(_ result: Result<HelperInfo, DeviceLinkError>, _ configure: (HelperInfo) -> BootConfig?,
@@ -229,7 +233,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     }
 
     /// SIGTERM: the helper runs its own clean shutdown (bounded) and exits.
-    /// Never after its death: the link keeps the reaped pid, which may be reused.
+    /// Never after its death (the link also zeroes its pid on reap).
     func terminate() { if !isDead { link.terminate() } }
     func kill() { if !isDead { link.kill() } }
 
@@ -279,7 +283,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
             case .unknown: reason = "The device helper stopped."
             }
         }
-        logEvent("device helper \(link.pid): \(termination) — \(reason)")
+        logEvent("device helper \(helperPID): \(termination) — \(reason)")
         died(reason)
     }
 

@@ -350,7 +350,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         guard host.row(for: entry).allows(action, canDownload: FirmwareJobs.shared.canDownload) else { return false }
         let emulator = host.session(for: entry)?.emulator
         switch action {
-        case .start: return emulator.map { $0.isPoweredOff && !$0.shuttingDown } ?? true
+        case .start: return emulator.map { $0.isDead || ($0.isPoweredOff && !$0.shuttingDown) } ?? true
         case .stop: return emulator?.isRunning == true
         case .erase: return emulator?.isErasing != true && !hasFileTransfer && !recording.isActive
         default: return true
