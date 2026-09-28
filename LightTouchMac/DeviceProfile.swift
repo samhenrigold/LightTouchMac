@@ -29,7 +29,7 @@ nonisolated enum DeviceProfile: Equatable {
     var canChooseUSBCharger: Bool { self == .iPad1 }
 
     enum OrientationSource {
-        /// The guest's itorient helper reports it; the host steps the
+        /// The guest agent's orientation op reports it; the host steps the
         /// accelerometer a quarter-turn at a time (ipod_touch_kbd_rotate).
         case guestHelper
         /// SpringBoard's getInterfaceOrientation over lockdown reports it; the

@@ -215,9 +215,9 @@ final class USBMux {
         session = nil
     }
     
-    // MARK: - session.env (consumed by it-ssh-terminal.sh; installs are in-process)
+    // MARK: - session.env (for developer scripts and Export Diagnostics)
 
-    /// Where the SSH-terminal script reads the mux socket from
+    /// Where scripts read this device's mux socket from
     /// (DeviceInstance.Paths.sessionFile), set by start().
     private(set) var sessionFile: String?
 
@@ -226,7 +226,7 @@ final class USBMux {
         // Values are quoted: the overlay lives under "Application Support", whose
         // space would otherwise break `. session.env` in the shell scripts.
         let contents = """
-        # written by LightTouchMac; read by it-ssh-terminal.sh
+        # written by LightTouchMac for developer scripts
         SOCK="\(session.clientSocket)"
         QEMU_ADDR="\(session.guestAddress)"
         NAND="\(filesRoot)/\(nand)"
@@ -237,7 +237,7 @@ final class USBMux {
             try contents.write(toFile: sessionFile, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: sessionFile)
         } catch {
-            // Not fatal — only the Terminal feature reads this — but no longer
+            // Not fatal — only scripts and diagnostics read this — but no longer
             // silent: a write failure here used to be invisible.
             logEvent("usbmux: could not write session.env: \(error.localizedDescription)")
         }
