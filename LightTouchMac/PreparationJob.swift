@@ -28,9 +28,11 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     }
 
     enum Event: Sendable, Equatable {
+        /// The preparer's expected seconds per step (empty if it gave none), before the first step.
+        case begin(seconds: [Double])
         case step(Int, of: Int, name: String)
-        /// Within the current step, 0...1.
-        case progress(Double)
+        /// Within the current step, 0...1, and what the step is doing.
+        case progress(Double, detail: String?)
         case warning(String)
         case published(DeviceInstance)
         case failed(String)
@@ -39,9 +41,9 @@ nonisolated final class PreparationJob: @unchecked Sendable {
 
     /// One line of the preparer's stdout.
     enum Line: Equatable {
-        case begin(steps: Int)
+        case begin(steps: Int, seconds: [Double] = [])
         case step(index: Int, name: String)
-        case progress(Double)
+        case progress(Double, detail: String? = nil)
         case warning(String)
         case done(lock: String)
         case error(code: String, message: String)
@@ -52,11 +54,12 @@ nonisolated final class PreparationJob: @unchecked Sendable {
                   let event = object["event"] as? String else { return nil }
             let int = { (key: String) in (object[key] as? NSNumber)?.intValue }
             switch event {
-            case "begin": guard let steps = int("steps") else { return nil }; self = .begin(steps: steps)
+            case "begin": guard let steps = int("steps") else { return nil }
+                self = .begin(steps: steps, seconds: (object["seconds"] as? [NSNumber])?.map(\.doubleValue) ?? [])
             case "step": guard let index = int("index") else { return nil }
                 self = .step(index: index, name: object["name"] as? String ?? "")
             case "progress": guard let fraction = (object["fraction"] as? NSNumber)?.doubleValue else { return nil }
-                self = .progress(fraction)
+                self = .progress(fraction, detail: object["detail"] as? String)
             case "warning": self = .warning(object["message"] as? String ?? "")
             case "done": self = .done(lock: object["lock"] as? String ?? "device.lock.json")
             case "error": self = .error(code: object["code"] as? String ?? "internal", message: object["message"] as? String ?? "")
@@ -155,11 +158,13 @@ nonisolated final class PreparationJob: @unchecked Sendable {
 
     private func receive(_ line: Line?) {
         switch line {
-        case let .begin(count)?: lock.withLock { steps = count }
+        case let .begin(count, seconds)?:
+            lock.withLock { steps = count }
+            onEvent(.begin(seconds: seconds))
         case let .step(index, name)?: onEvent(.step(index, of: lock.withLock { steps }, name: name))
         case let .warning(message)?: onEvent(.warning(message))
         case .done?, .error?: lock.withLock { if outcome == nil { outcome = line } }
-        case let .progress(fraction)?: onEvent(.progress(fraction))
+        case let .progress(fraction, detail)?: onEvent(.progress(fraction, detail: detail))
         case nil: break
         }
     }

@@ -11,6 +11,8 @@ import Cocoa
     static let shared = FirmwareJobs()
     /// Posted on the main actor after `jobs` changes.
     static let didChangeNotification = Notification.Name("FirmwareJobsDidChange")
+    /// Posted on the main actor when a preparation becomes a device; `object` is its catalog entry id.
+    static let didPublishNotification = Notification.Name("FirmwareJobsDidPublish")
 
     var jobs: [String: FirmwareJob] = [:] {
         didSet { NotificationCenter.default.post(name: Self.didChangeNotification, object: self) }
@@ -20,6 +22,8 @@ import Cocoa
     private let store: IPSWStore
     private var downloads: FirmwareDownloads!
     private var preparations: [String: PreparationJob] = [:]
+    /// When each job's current phase started and how far along it was, for time remaining.
+    private var starts: [String: (date: Date, fraction: Double)] = [:]
 
     init(catalog: FirmwareCatalog = .bundled, store: IPSWStore = .shared) {
         self.catalog = catalog
@@ -38,7 +42,9 @@ import Cocoa
         downloads.active { sha1s in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                for sha1 in sha1s { if let entry = entry(sha1: sha1), jobs[entry.id] == nil { jobs[entry.id] = .downloading(fraction: 0) } }
+                for sha1 in sha1s {
+                    if let entry = entry(sha1: sha1), jobs[entry.id] == nil { starts[entry.id] = nil; jobs[entry.id] = .downloading(fraction: 0) }
+                }
             }
         }
     }
@@ -80,6 +86,7 @@ import Cocoa
         guard let url = entry.source.url else { return fail(entry, FirmwareError.unsupported) }
         do {
             try IPSWStore.checkSpace(entry.source.bytes ?? 0, at: store.downloads)
+            starts[entry.id] = nil
             jobs[entry.id] = .downloading(fraction: 0)
             try downloads.start(sha1: sha1, url: url)
         } catch { fail(entry, error) }
@@ -88,7 +95,7 @@ import Cocoa
     /// Hashes, matches in the catalog and clones into State/IPSW, then
     /// prepares. `entry` is the row it was dropped on or imported for, if any.
     func importIPSW(_ url: URL, for entry: FirmwareCatalog.Entry?) {
-        if let entry { jobs[entry.id] = .preparing(step: 0, of: 0, name: "Checking the IPSW") }
+        if let entry { jobs[entry.id] = .preparing(.init(name: "Checking the IPSW")) }
         let catalog = catalog, store = store
         Task.detached {
             let result = Result { try store.importIPSW(url, catalog: catalog) }
@@ -121,7 +128,7 @@ import Cocoa
         guard let entry = entry(sha1: sha1) else { return }
         switch event {
         case let .progress(fraction):
-            if case .downloading? = jobs[entry.id] { jobs[entry.id] = .downloading(fraction: fraction) }
+            if case .downloading? = jobs[entry.id] { jobs[entry.id] = .downloading(fraction: fraction, remaining: remaining(entry, fraction)) }
         case .resumed: break
         case let .finished(ipsw):
             logEvent("firmware: downloaded \(entry.id)")
@@ -145,25 +152,38 @@ import Cocoa
             Task { @MainActor [weak self] in self?.preparation(entry, event) }
         }
         preparations[entry.id] = job
-        jobs[entry.id] = .preparing(step: 0, of: 0, name: "Starting")
+        starts[entry.id] = (Date(), 0)
+        jobs[entry.id] = .preparing(.init(name: "Starting"))
         logEvent("firmware: preparing \(entry.id) as \(job.id.uuidString)")
         job.start()
     }
 
+    /// Seconds left from this phase's start (the first report of a resumed download) to `fraction` now.
+    private func remaining(_ entry: FirmwareCatalog.Entry, _ fraction: Double) -> TimeInterval? {
+        guard let start = starts[entry.id] else { starts[entry.id] = (Date(), fraction); return nil }
+        return estimatedRemaining(elapsed: Date().timeIntervalSince(start.date), from: start.fraction, to: fraction)
+    }
+
     private func preparation(_ entry: FirmwareCatalog.Entry, _ event: PreparationJob.Event) {
+        func update(_ change: (inout Preparation) -> Void) {
+            guard preparations[entry.id] != nil, case var .preparing(p)? = jobs[entry.id] else { return }
+            change(&p)
+            p.remaining = p.overall.flatMap { remaining(entry, $0) }
+            jobs[entry.id] = .preparing(p)
+        }
         switch event {
+        case let .begin(seconds): update { $0.seconds = seconds }
         case let .step(index, count, name):
-            if preparations[entry.id] != nil { jobs[entry.id] = .preparing(step: index, of: count, name: name) }
-        case let .progress(fraction):
-            if preparations[entry.id] != nil, case let .preparing(step, count, name, _)? = jobs[entry.id] {
-                jobs[entry.id] = .preparing(step: step, of: count, name: name, fraction: fraction)
-            }
+            update { $0.step = index; $0.steps = count; $0.name = name; $0.fraction = 0; $0.detail = nil }
+        case let .progress(fraction, detail):
+            update { $0.fraction = fraction; $0.detail = detail ?? $0.detail }
         case let .warning(message): logEvent("firmware: \(entry.id): \(message)")
         case let .published(instance):
             preparations[entry.id] = nil
             jobs[entry.id] = nil
             logEvent("firmware: \(entry.id) is device \(instance.id.uuidString)")
             DeviceLibrary.shared.reload()
+            NotificationCenter.default.post(name: Self.didPublishNotification, object: entry.id)
         case let .failed(message):
             preparations[entry.id] = nil
             fail(entry, FirmwareError.failed(message))

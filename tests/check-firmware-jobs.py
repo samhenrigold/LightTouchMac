@@ -165,8 +165,11 @@ case "unit":
     // The preparer's JSON Lines.
     typealias L = PreparationJob.Line
     expect(L(#"{"event":"begin","steps":9}"#) == .begin(steps: 9), "begin")
+    expect(L(#"{"event":"begin","steps":2,"seconds":[1.5,70]}"#) == .begin(steps: 2, seconds: [1.5, 70]), "begin with seconds")
     expect(L(#"{"event":"step","index":3,"name":"Building the system volume"}"#) == .step(index: 3, name: "Building the system volume"), "step")
     expect(L(#"{"event":"progress","fraction":0.42}"#) == .progress(0.42), "progress")
+    expect(L(#"{"event":"progress","fraction":0.5,"detail":"Booting to seal the flash — 42 s"}"#)
+           == .progress(0.5, detail: "Booting to seal the flash — 42 s"), "progress with detail")
     expect(L(#"{"event":"warning","message":"slow disk"}"#) == .warning("slow disk"), "warning")
     expect(L(#"{"event":"done","lock":"device.lock.json"}"#) == .done(lock: "device.lock.json"), "done")
     expect(L(#"{"event":"error","code":"hook_failed","message":"exit 2"}"#) == .error(code: "hook_failed", message: "exit 2"), "error")
@@ -192,6 +195,18 @@ case "unit":
     var run = prepare(iPad32, state: state, cache: cache, mode: "ok", hook: hook.path)
     guard case let .published(device)? = run.events.last else { expect(false, "not published: \(run.events)"); exit(1) }
     expect(run.events.contains(.step(1, of: 3, name: "Decrypting")) && run.events.contains(.step(3, of: 3, name: "Sealing")), "\(run.events)")
+    // Progress: begin's seconds first, then per step a monotonic fraction with a detail, ending at 1.
+    expect(run.events.first == .begin(seconds: [5, 10, 70]), "begin first: \(run.events)")
+    var sealing: [Double] = []
+    var inSeal = false
+    for event in run.events {
+        if case let .step(index, _, _) = event { inSeal = index == 3 }
+        if inSeal, case let .progress(fraction, detail) = event {
+            expect(detail?.hasPrefix("Booting to seal the flash — ") == true, "detail \(String(describing: detail))")
+            sealing.append(fraction)
+        }
+    }
+    expect(sealing == [0, 0.25, 0.5, 0.75, 1], "sealing progress \(sealing)")
     let argv = try JSONSerialization.jsonObject(with: Data(contentsOf: tmp.appendingPathComponent("argv.json"))) as! [String]
     func flag(_ name: String) -> String? { argv.firstIndex(of: name).map { argv[$0 + 1] } }
     expect(flag("--activation-hook") == hook.path && flag("--helper") == "/nonexistent/LightTouchDevice"

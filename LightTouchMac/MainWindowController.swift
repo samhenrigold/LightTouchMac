@@ -163,6 +163,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.delegate = self
         NotificationCenter.default.addObserver(self, selector: #selector(sessionDidChange(_:)),
                                                name: DeviceSession.didChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(preparationDidPublish(_:)),
+                                               name: FirmwareJobs.didPublishNotification, object: nil)
         installCaptureStatus()
         installFileStatus()
         installCaptureKeyboardShortcuts()
@@ -240,6 +242,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     /// Selects the launch device and starts it, as the single-device app did.
     func selectLaunchDevice() {
         guard let entry = host.launchSelection else { return }
+        library.select(entry)
+        if canPerform(.start, for: entry) { start(entry) }
+    }
+
+    /// A device finished preparing: show it and start it, as if the user had clicked Start.
+    @objc private func preparationDidPublish(_ notification: Notification) {
+        guard let entry = host.catalog.entries.first(where: { $0.id == notification.object as? String }) else { return }
         library.select(entry)
         if canPerform(.start, for: entry) { start(entry) }
     }

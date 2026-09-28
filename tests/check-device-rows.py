@@ -62,10 +62,35 @@ import Foundation
 
         // Jobs: downloading and preparing, with progress and Cancel.
         r = row(iPad32, job: .downloading(fraction: 0.425))
-        precondition(r.state == .downloading(fraction: 0.425) && r.stateDescription == "Downloading, 43%")
+        precondition(r.state == .downloading(fraction: 0.425) && r.stateDescription == "Downloading, 42%", r.stateDescription)
         precondition(r.primaryTitle == "Cancel" && allowed(r) == ["cancel"], "\(allowed(r))")
-        r = row(iPad32, job: .preparing(step: 2, of: 5, name: "Decrypting"))
-        precondition(r.stateDescription == "Preparing, Step 2 of 5" && allowed(r, canDownload: true) == ["cancel"])
+        precondition(r.progress == 0.425 && r.progressLines == ["42%"], "\(r.progressLines)")
+        r = row(iPad32, job: .downloading(fraction: 0.5, remaining: 125))
+        precondition(r.progressLines == ["50% · About 2 min remaining"] && r.progressSummary == "50%", "\(r.progressLines)")
+        r = row(iPad32, job: .preparing(.init(step: 2, steps: 5, name: "Decrypting")))
+        precondition(r.stateDescription == "Preparing, Step 2 of 5 · 20%" && allowed(r, canDownload: true) == ["cancel"], r.stateDescription)
+
+        // Overall progress: equal steps without the preparer's seconds, weighted by them with.
+        var p = Preparation(step: 6, steps: 7, name: "Sealing the NAND", fraction: 0.5)
+        precondition(abs(row(iPad32, job: .preparing(p)).progress! - 5.5 / 7) < 1e-9)
+        p.seconds = [2, 5, 1, 12, 4, 71, 3]
+        precondition(abs(p.overall! - (24 + 35.5) / 98) < 1e-9, "\(p.overall!)")
+        p.detail = "Booting to seal the flash — 42 s"
+        p.remaining = 45
+        r = row(iPad32, job: .preparing(p))
+        precondition(r.progressSummary == "Step 6 of 7 · 60%", r.progressSummary ?? "nil")
+        precondition(r.progressLines == ["Step 6 of 7: Sealing the NAND", "Booting to seal the flash — 42 s", "60% · About 50 s remaining"],
+                     "\(r.progressLines)")
+        p.step = 7; p.fraction = 1
+        precondition(p.overall == 1)
+        r = row(iPad32, job: .preparing(.init(name: "Checking the IPSW")))
+        precondition(r.progress == nil && r.progressLines == ["Checking the IPSW"] && r.stateDescription == "Preparing, Checking the IPSW")
+
+        // Time remaining: nothing for the first 5 s or 2 %, then the rate so far.
+        precondition(estimatedRemaining(elapsed: 4, from: 0, to: 0.5) == nil && estimatedRemaining(elapsed: 60, from: 0.3, to: 0.31) == nil)
+        precondition(estimatedRemaining(elapsed: 30, from: 0, to: 0.25) == 90 && estimatedRemaining(elapsed: 10, from: 0.5, to: 0.75) == 10)
+        precondition(DeviceRow.remainingText(5) == "Almost done" && DeviceRow.remainingText(41) == "About 50 s remaining"
+                     && DeviceRow.remainingText(3000) == "About 50 min remaining" && DeviceRow.remainingText(7200) == "About 2 h remaining")
         r = row(iPad32, job: .failed("Download corrupted."))
         precondition(r.state == .error("Download corrupted.") && r.primaryTitle == "Try Again")
         precondition(r.primaryAction == .downloadAndPrepare, "retrying a failed download downloads again")

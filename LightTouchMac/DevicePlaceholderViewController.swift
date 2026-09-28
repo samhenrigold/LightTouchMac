@@ -13,7 +13,7 @@ final class DevicePlaceholderViewController: NSViewController {
     private let version = NSTextField(labelWithString: "")
     private let status = NSTextField(wrappingLabelWithString: "")
     private let progress = NSProgressIndicator()
-    private let step = NSTextField(labelWithString: "")
+    private let step = NSTextField(wrappingLabelWithString: "")
     private let reason = NSTextField(wrappingLabelWithString: "")
     private let showLog = NSButton(title: "Show Log", target: nil, action: nil)
     private let primary = NSButton(title: "", target: nil, action: nil)
@@ -34,7 +34,7 @@ final class DevicePlaceholderViewController: NSViewController {
         model.font = .systemFont(ofSize: NSFont.systemFontSize * 1.7, weight: .semibold)
         version.textColor = .secondaryLabelColor
         version.isSelectable = true
-        for label in [status, reason, note] {
+        for label in [status, step, reason, note] {
             label.alignment = .center
             label.preferredMaxLayoutWidth = 320
         }
@@ -45,6 +45,7 @@ final class DevicePlaceholderViewController: NSViewController {
         sizes.textColor = .secondaryLabelColor
         sizes.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         progress.style = .bar
+        progress.isIndeterminate = false   // NSProgressIndicator starts indeterminate: a bar that never fills
         progress.minValue = 0
         progress.maxValue = 1
         progress.setAccessibilityLabel("Progress")
@@ -90,6 +91,7 @@ final class DevicePlaceholderViewController: NSViewController {
         version.stringValue = "iOS \(entry.version) (\(entry.build))"
 
         progress.isHidden = true
+        progress.stopAnimation(nil)
         step.isHidden = true
         reason.isHidden = true
         showLog.isHidden = true
@@ -97,12 +99,12 @@ final class DevicePlaceholderViewController: NSViewController {
         case .notDownloaded:
             status.stringValue = "Not Downloaded"
             if !canDownload, let why = FirmwareJobs.shared.unavailableReason { reason.stringValue = why; reason.isHidden = false }
-        case let .downloading(fraction):
+        case .downloading:
             status.stringValue = "Downloading…"
-            show(progress: fraction, step: "\(Int((fraction * 100).rounded()))%")
-        case let .preparing(index, count, name, _):
+            show(row)
+        case .preparing:
             status.stringValue = "Preparing…"
-            show(progress: row.progress ?? 0, step: count > 0 ? "Step \(index) of \(count): \(name)" : name)
+            show(row)
         case .ready: status.stringValue = "Ready"
         case .running: status.stringValue = "Running"
         case .stopping: status.stringValue = "Stopping…"
@@ -135,11 +137,13 @@ final class DevicePlaceholderViewController: NSViewController {
         note.isHidden = !row.isExperimental
     }
 
-    private func show(progress value: Double, step text: String) {
-        progress.doubleValue = value
+    /// The bar (moving without a fraction yet) and the row's progress lines.
+    private func show(_ row: DeviceRow) {
+        progress.isIndeterminate = row.progress == nil
+        if let value = row.progress { progress.doubleValue = value } else { progress.startAnimation(nil) }
         progress.isHidden = false
-        step.stringValue = text
-        step.isHidden = false
+        step.stringValue = row.progressLines.joined(separator: "\n")
+        step.isHidden = step.stringValue.isEmpty
     }
 
     @objc private func primaryClicked(_ sender: Any?) {
