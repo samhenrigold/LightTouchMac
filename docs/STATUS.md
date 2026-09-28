@@ -24,6 +24,7 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 | USB zero-length packets | Sent by usbmuxd (`qemu-zlp`, pinned `41631a7`), not faked by the emulator | AFC 16384/16385/65536 round trips in the release verify |
 | Offline root-FS read (F1) | `firmwarekit mount/export` for both boards, oracle-checked | `docs/filesystem-f0-findings.md` U1 table |
 | iPad app bugs (09-28) | 4.x keyboard (`enable-hsic`, usb-kbd max-power), guest-package report read on every boot, iPad readiness pipeline (boot progress, ready notice, proxy apply), it_agent on k48 via package serial 2 (foreground app in the title bar), A008 alpha surfaces for CA shadows, Stop = flush + hard halt (helper exits in ~0.04 s) | check-sessions 18/18 on 7B500 and 8C148 with `--ipad-itpack`; check-helper-boot 22/22; KBootTests byte-equal to Python; regress `shadow` check |
+| USB "not supported" alert gone on both iPad versions (Sam's call: an Apple bug that also blocked manual lock) | `it_msmquiet.dylib` in the mounter's own job interposes the notice, matched on the mounter's localized strings at runtime; one armv7 binary for 3.2.x (DisplayNotice) and 4.2.1 (Create + Cancel); guest package serial 3 | qemu-ios regress boot on 7B500, 8C148 (upgrade path), 7E18: no alert; Hold locks the panel in 5 s (was: stayed lit) |
 | Storage fixes from the audit | App and device locks, atomic delete/publish, launch sweeps, TM exclusions, disk checks, Settings ▸ Storage | `221ef9a`; check-sessions 17/17, check-helper-boot lease 6/6, offline checks |
 | Silent headless boots | `-audio driver=none` everywhere headless | grep of tests and helper modes |
 
@@ -43,7 +44,6 @@ Last update: 2026-09-28, multidevice storage-fixes merge, qemu-ios ipad1 `821f1b
 | Work | Branch | Covers |
 |---|---|---|
 
-| USB "not supported" alert suppressed through the guest agent (Sam's call: not fidelity; blocks auto-lock) | qemu-ios `usb-alert` | one agent binary per arch, runtime detection, package serial 3 |
 | GL bridge rejection audit | qemu-ios `gl-coverage` | every reject/unimplemented path counted + logged, magenta fallback under `gles-debug`, produced-vs-rejected list from the firmwares' own frameworks, cheap formats implemented |
 | Real-iBoot boot chain in FirmwareKit | `fk-k48-iboot` | app-prepared iPads boot SecureROM→LLB→iBoot→kernel like the Python-built ones |
 | Consolidation sweep | docs/sweep/PLAN.md | surveys done (docs/sweep/*.md); Track A (app correctness: activation check, boot deadline, per-device install queue, device-file protection, guest-tools status line) on `app-correctness`; B–E sequenced in the plan; decisions S1–S6 with Sam |
