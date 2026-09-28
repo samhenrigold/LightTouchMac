@@ -351,12 +351,14 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 **stdout is JSON Lines only, one object per line.** Diagnostics go to stderr.
 ```
 {"event":"begin","steps":9}
-{"event":"step","index":3,"name":"Building the system volume"}
+{"event":"step","index":3,"name":"Building the system volume"}   // index is 1-based, 1…steps
 {"event":"progress","fraction":0.42}            // within the current step, optional
 {"event":"warning","message":"…"}
 {"event":"done","lock":"device.lock.json"}      // relative to STAGING_DIR
 {"event":"error","code":"key_missing|sha_mismatch|unsupported|hook_failed|oneshot_failed|disk_full|internal","message":"…"}
 ```
+
+STAGING_DIR exists and is empty when firmwarekit starts; the app creates it.
 
 **Exit codes:** 0 on done; 1 on error, after emitting an error event; SIGTERM means cancel. On cancel the preparer stops within 2 s and leaves STAGING_DIR for the app to delete.
 
@@ -368,3 +370,16 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 - `device.lock.json`: the inputs and their hashes, the tool version, the UDID, the hook sha256, and the product version.
 
 The app publishes STAGING_DIR by rename.
+
+**W5/W6, 2026-09-28 (`b4d14f4`):**
+- **Resumed downloads return HTTP 206.** Any 2xx is accepted; the size and SHA1 checks guarantee integrity.
+- **`kill -9` of the app doesn't cancel a background download.** A relaunch reattaches; resume data only comes from a cancel or a failure.
+- **Prepared bases are read-only** (`chmod a-w`), so deletion needs `IPSWStore.removeTree`.
+- **Still open for W4:**
+  - a preparing row with a step count of 0 (import hashing) should show just its name;
+  - add a fraction to `FirmwareJob.preparing` for in-step progress.
+- **For W2, how prepared devices boot** (`base.kind == .prepared`):
+  - iPad: `kboot=<base>/kboot.bin`, `nand=<base>/nand`, `nand-overlay=<paths.overlay>`, and die id from `instance.identity.dieID`.
+  - When `storage.writableNOR` is set, clone `base/nor.bin` to that path on first boot (`cp -c`, then `chmod u+w`) and pass it as the writable NOR.
+  - Create the overlay and usbmuxd-conf directories on first boot.
+  - Never write inside `base/`, and skip `missingAssets` and the legacy development paths.
