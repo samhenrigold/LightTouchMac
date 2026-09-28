@@ -210,7 +210,10 @@ final class DeviceHost: @unchecked Sendable {
             }
             // Still in qemu_init: nothing can be scheduled on the VM yet.
             while !qemu.ready(), !stopped(), Date().timeIntervalSince(start) < 5 { usleep(50_000) }
-            if qemu.ready() {
+            // Already powered off (-no-shutdown keeps QEMU in 'shutdown'): just quit.
+            // Resuming that VM is an invalid runstate transition and aborts QEMU,
+            // which is what a quit after Power Off (or after the app's own halt) did.
+            if qemu.ready(), !confirmed() {
                 qemu.snapshotResume()          // a paused vCPU cannot unmount
                 if !isIPad, qemu.agentStatus() == 1 {
                     let submitted = "\(UUID().uuidString) halt \n".withCString { qemu.agentRequest($0) }
