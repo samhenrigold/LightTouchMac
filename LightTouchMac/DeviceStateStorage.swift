@@ -176,8 +176,10 @@ nonisolated enum DeviceStateStorage {
         let latest = try bundledImage(nand: nand, manifest: manifest)
         let pointer = state.appendingPathComponent("device/active-\(nand).json")
         var active: PackedImage
+        var recorded: PackedImage?
         if fm.fileExists(atPath: pointer.path) {
             active = try JSONDecoder().decode(PackedImage.self, from: Data(contentsOf: pointer))
+            recorded = active
         } else if fm.fileExists(atPath: state.appendingPathComponent("device/\(nand)").path) {
             let names = try fm.contentsOfDirectory(atPath: state.path)
             let candidates = names.filter { $0 == "nandrw-\(nand)" || $0.hasPrefix("nandrw-\(nand)-") }
@@ -204,8 +206,11 @@ nonisolated enum DeviceStateStorage {
         if active != latest, !fm.fileExists(atPath: state.appendingPathComponent(active.directory).path) {
             throw CocoaError(.fileNoSuchFile)
         }
-        try fm.createDirectory(at: pointer.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(active).write(to: pointer, options: .atomic)
+        // Rewriting an unchanged pointer only churns its inode.
+        if recorded != active {
+            try fm.createDirectory(at: pointer.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(active).write(to: pointer, options: .atomic)
+        }
         return (active, active != latest)
     }
     private static func bundledImage(nand: String, manifest: URL) throws -> PackedImage {

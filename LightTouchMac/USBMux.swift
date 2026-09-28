@@ -47,8 +47,9 @@ final class USBMux {
     /// record per device into it. Pointed at the bundle it cannot write at all
     /// (read-only, and writing would break the signature), so pairing could
     /// never persist. Seed a copy in Application Support once and use that.
-    private static var conf: String {
-        let work = Bundled.workDirectory.appendingPathComponent("usbmuxd-conf", isDirectory: true)
+    /// Each device has its own (DeviceInstance.Storage.usbmuxConf); the
+    /// adopted iPod keeps work/usbmuxd-conf.
+    private static func conf(_ work: URL) -> String {
         let fm = FileManager.default
         if !fm.fileExists(atPath: work.path) {
             try? fm.createDirectory(at: work, withIntermediateDirectories: true)
@@ -65,9 +66,10 @@ final class USBMux {
     /// Start usbmuxd and record a session. Returns nil (and does nothing) if the
     /// binary is missing — the app still runs, just without app management.
     /// `filesRoot`/`nand`/`overlay` are written into the session file the
-    /// existing install/terminal scripts read.
+    /// existing install/terminal scripts read. Everything the daemon writes
+    /// is the device's own (`paths`), so two devices' daemons never collide.
     @discardableResult
-    func start(filesRoot: String, nand: String, overlay: String) -> Session? {
+    func start(paths: DeviceInstance.Paths, filesRoot: String, nand: String, overlay: String) -> Session? {
         guard FileManager.default.isExecutableFile(atPath: Self.binary) else {
             logEvent("usbmux: no binary at \(Self.binary); app management disabled")
             return nil
@@ -75,14 +77,25 @@ final class USBMux {
         
         // All writable scratch lives under Application Support, never files-root
         // (which is read-only inside a packaged app's signed bundle).
-        let work = Bundled.workDirectory
-        pidFile = work.appendingPathComponent("usbmuxd.pid").path
+        do { try StorageLocations.privateDirectory(paths.work) }
+        catch {
+            logEvent("usbmux: no work directory \(paths.work.path): \(error.localizedDescription); app management disabled")
+            return nil
+        }
+        pidFile = paths.usbmuxPID.path
+        sessionFile = paths.sessionFile.path
         // A daemon from a previous run survives anything that skips stop() —
         // Xcode's stop button is a SIGKILL — and orphans accumulate one per
         // dev cycle. The pid file names the only process this may kill, and
         // the executable path is checked so a recycled pid is never someone
         // else's process.
-        reapStaleDaemon()
+        reapStaleDaemon(pidFile)
+        // Builds before the device library kept one pid file for the app.
+        let legacyPID = Bundled.workDirectory.appendingPathComponent("usbmuxd.pid").path
+        if FileManager.default.fileExists(atPath: legacyPID) {
+            reapStaleDaemon(legacyPID)
+            try? FileManager.default.removeItem(atPath: legacyPID)
+        }
 
         let clientSocket = "127.0.0.1:\(Self.freePort())"
         let guestAddress = "127.0.0.1:\(Self.freePort())"
@@ -92,8 +105,8 @@ final class USBMux {
         writeSessionFile(filesRoot: filesRoot, nand: nand, overlay: overlay,
                          session: session)
 
-        let binary = Self.binary, conf = Self.conf
-        let logURL = Bundled.logsDirectory.appendingPathComponent("usbmuxd.log")
+        let binary = Self.binary, conf = Self.conf(paths.usbmuxConf)
+        let logURL = paths.logs.appendingPathComponent("usbmuxd.log")
         daemonTask = Task.detached {
             do {
                 // The app drains a pipe to a bounded writer. Giving the child
@@ -178,7 +191,7 @@ final class USBMux {
 
     private var pidFile: String?
 
-    private func reapStaleDaemon() {
+    private func reapStaleDaemon(_ pidFile: String?) {
         guard let pidFile,
               let text = try? String(contentsOfFile: pidFile, encoding: .utf8),
               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -195,7 +208,7 @@ final class USBMux {
         // the task cancellation would otherwise run. Only ever our own child.
         if let pid = daemonPID { kill(pid, SIGTERM) }
         if let pidFile { try? FileManager.default.removeItem(atPath: pidFile) }
-        try? FileManager.default.removeItem(atPath: Self.sessionFile)
+        if let sessionFile { try? FileManager.default.removeItem(atPath: sessionFile) }
         daemonPID = nil
         daemonTask?.cancel()
         daemonTask = nil
@@ -204,11 +217,9 @@ final class USBMux {
     
     // MARK: - session.env (consumed by it-ssh-terminal.sh; installs are in-process)
 
-    /// Where the SSH-terminal script reads the mux socket from. DeviceTools
-    /// points the script at this via the SESSION env var.
-    static var sessionFile: String {
-        Bundled.workDirectory.appendingPathComponent("session.env").path
-    }
+    /// Where the SSH-terminal script reads the mux socket from
+    /// (DeviceInstance.Paths.sessionFile), set by start().
+    private(set) var sessionFile: String?
 
     private func writeSessionFile(filesRoot: String, nand: String,
                                   overlay: String, session: Session) {
@@ -221,9 +232,10 @@ final class USBMux {
         NAND="\(filesRoot)/\(nand)"
         OVL="\(overlay)"
         """
+        guard let sessionFile else { return }
         do {
-            try contents.write(toFile: Self.sessionFile, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Self.sessionFile)
+            try contents.write(toFile: sessionFile, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: sessionFile)
         } catch {
             // Not fatal — only the Terminal feature reads this — but no longer
             // silent: a write failure here used to be invisible.

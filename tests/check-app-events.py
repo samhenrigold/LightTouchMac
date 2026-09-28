@@ -7,7 +7,7 @@ controller=(root/'LightTouchMac/EmulatorController.swift').read_text()
 notice=controller[controller.index('    enum NoticeOperation:'):controller.index('    private var foregroundTask:')].replace('UserDefaults.standard','defaults')
 with tempfile.TemporaryDirectory(prefix='ltm-events-') as temp:
  p=Path(temp)
- (p/'check.swift').write_text('import Foundation\nlet domain=UUID().uuidString\nlet defaults=UserDefaults(suiteName:domain)!\n@MainActor final class NoticeDevice { var storageFailed=false; var onStatusChange:(()->Void)?\n'+notice+'}\n'+r'''
+ (p/'check.swift').write_text('import Foundation\nlet domain=UUID().uuidString\nlet defaults=UserDefaults(suiteName:domain)!\n@MainActor final class NoticeDevice { var storageFailed=false; var onStatusChange:(()->Void)?\n struct Instance { func defaultsKey(_ name:String)->String { name } }\n let instance=Instance()\n'+notice+'}\n'+r'''
 @main struct Check {
  static func main() async throws {
   let device=NoticeDevice();var changes=0;device.onStatusChange={changes+=1}

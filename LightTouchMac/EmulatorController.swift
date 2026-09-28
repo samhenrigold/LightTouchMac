@@ -35,8 +35,8 @@ final class EmulatorController {
         onStatusChange?()
     }
     enum NoticeOperation: String { case storage, preparation, erase, snapshot, restore, powerOff }
-    private(set) var deviceNotice = UserDefaults.standard.dictionary(forKey: "deviceNotice")?["message"] as? String
-    private var noticeOperation = UserDefaults.standard.dictionary(forKey: "deviceNotice")?["operation"] as? String
+    private(set) lazy var deviceNotice = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["message"] as? String
+    private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
         let value = storageFailed
             ? "Storage writes failed. The device is stopped and recent changes were not saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
@@ -45,7 +45,7 @@ final class EmulatorController {
         deviceNotice = value
         let kind = (storageFailed ? .storage : operation).rawValue
         noticeOperation = kind
-        UserDefaults.standard.set(["message": value, "operation": kind], forKey: "deviceNotice")
+        UserDefaults.standard.set(["message": value, "operation": kind], forKey: instance.defaultsKey("deviceNotice"))
         onStatusChange?()
     }
     /// The notice's remedy is Erase All Content and Settings (a refused
@@ -58,7 +58,7 @@ final class EmulatorController {
         guard !storageFailed else { return }
         deviceNotice = nil
         noticeOperation = nil
-        UserDefaults.standard.removeObject(forKey: "deviceNotice")
+        UserDefaults.standard.removeObject(forKey: instance.defaultsKey("deviceNotice"))
         onStatusChange?()
     }
 
@@ -169,9 +169,23 @@ final class EmulatorController {
 
     private var didSweepStaging = false
 
+    /// The device record whose state this controller runs (LegacyAdoption).
+    let instance: DeviceInstance
+    private let instanceError: (any Error)?
+
     init(options: LaunchOptions, profile: DeviceProfile) {
         self.options = options
         self.profile = profile
+        do {
+            let resolved = try DeviceLibrary.shared.resolve(options.adoptionInputs, profile: profile)
+            instance = resolved.instance
+            packedImage = resolved.packedImage
+            retainedPackedImage = resolved.retained
+            instanceError = nil
+        } catch {
+            instance = LegacyAdoption.unresolved(options.adoptionInputs, profile: profile, state: Bundled.stateDirectory)
+            instanceError = error
+        }
         usbmux.onUnexpectedExit = { [weak self] in self?.onStatusChange?() }
     }
 
@@ -193,26 +207,15 @@ final class EmulatorController {
         #if DEBUG
         checkScreenGeometry()
         #endif
-        if profile == .iPad1 { startIPad1(); return }
-
-        if !FileManager.default.fileExists(atPath: options.nandImage),
-           FileManager.default.fileExists(atPath: options.packedNAND + ".sha256") {
-            do {
-                let selected = try DeviceStateStorage.packedImage(
-                    state: stateDir, nand: options.nand, legacyKey: legacyImageKey,
-                    manifest: URL(fileURLWithPath: options.packedNAND + ".sha256"))
-                packedImage = selected.image
-                retainedPackedImage = selected.retained
-                if selected.retained {
-                    logEvent("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
-                }
-            } catch {
-                logEvent("nand: could not resolve device image: \(error.localizedDescription)")
-                state = .dead(exitCode: 1)
-                return
-            }
+        if let instanceError {
+            logEvent("nand: could not resolve device image: \(instanceError.localizedDescription)")
+            state = .dead(exitCode: 1)
+            return
         }
-        migrateStateNames()
+        if profile == .iPad1 { startIPad1(); return }
+        if retainedPackedImage {
+            logEvent("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
+        }
 
         // One overlay per base image, so an overlay is never replayed onto a
         // different NAND (which would shadow unrelated blocks).
@@ -237,7 +240,7 @@ final class EmulatorController {
 
         // usbmuxd must be listening before the guest USB core comes up.
         let usbSession = options.appsync
-            ? usbmux.start(filesRoot: options.filesRoot, nand: options.nand, overlay: overlay.path)
+            ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: options.nand, overlay: overlay.path)
             : nil
 
         // A raw NAND directory (dev checkout) is used as-is; a packaged app
@@ -275,7 +278,7 @@ final class EmulatorController {
         }
 
         do {
-            serialCapture = try SerialLogCapture(url: Bundled.logsDirectory.appendingPathComponent("serial.log"))
+            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"))
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
 
         var argv = [
@@ -373,10 +376,10 @@ final class EmulatorController {
             return
         }
         let usbSession = options.appsync
-            ? usbmux.start(filesRoot: options.filesRoot, nand: options.ipad1NAND, overlay: overlay.path)
+            ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: options.ipad1NAND, overlay: overlay.path)
             : nil
         do {
-            serialCapture = try SerialLogCapture(url: Bundled.logsDirectory.appendingPathComponent("serial.log"))
+            serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"))
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
 
         let escape = { (path: String) in path.replacingOccurrences(of: ",", with: ",,") }
@@ -811,10 +814,10 @@ final class EmulatorController {
         }
     }
     enum MotionPose: Int { case upright, flat }
-    private(set) var motionPose = MotionPose(rawValue: UserDefaults.standard.integer(forKey: "motionPose")) ?? .upright
+    private(set) lazy var motionPose = MotionPose(rawValue: UserDefaults.standard.integer(forKey: instance.defaultsKey("motionPose"))) ?? .upright
     func setMotionPose(_ pose: MotionPose) {
         motionPose = pose
-        UserDefaults.standard.set(pose.rawValue, forKey: "motionPose")
+        UserDefaults.standard.set(pose.rawValue, forKey: instance.defaultsKey("motionPose"))
         onStatusChange?()
     }
 
@@ -1306,56 +1309,8 @@ final class EmulatorController {
     // is quarantined and the next launch cold-boots). The overlay is never
     // auto-deleted — nuking the device is always the user's deliberate choice.
 
-    /// Adopt state written before the key included the files-root.
-    ///
-    /// Without this, adding the root to the key silently hands every existing
-    /// user a factory-fresh device: their overlay is still on disk under the old
-    /// name, just no longer looked at. Renaming is the whole migration, and it
-    /// only fires when the new name is absent — so it can never overwrite state
-    /// that already belongs to this image.
-    private func migrateStateNames() {
-        // Content-keyed images must never adopt another image's overlay.
-        guard packedImage == nil || packedImage?.key == legacyImageKey else { return }
-        let fm = FileManager.default
-        for (old, new) in [("nandrw-\(options.nand)", "nandrw-\(imageKey)"),
-                           ("snapshot-\(options.nand)", "snapshot-\(imageKey)"),
-                           (".reset-\(options.nand)", ".reset-\(imageKey)")]
-        where old != new {
-            let from = stateDir.appendingPathComponent(old)
-            let to = stateDir.appendingPathComponent(new)
-            guard fm.fileExists(atPath: from.path), !fm.fileExists(atPath: to.path) else { continue }
-            do {
-                try fm.moveItem(at: from, to: to)
-                logEvent("state: adopted \(old) as \(new)")
-            } catch {
-                logEvent("state: could not adopt \(old) (\(error.localizedDescription))")
-            }
-        }
-    }
-
-    /// Distinguishes two base images that happen to share a directory name.
-    /// Keying on the name alone meant `LTM_FILES=/a` and `LTM_FILES=/b`, both
-    /// holding a "nand-ultimate", shared one copy-on-write overlay and one
-    /// snapshot — image B read through image A's overlay, and a snapshot taken
-    /// on A restored onto B. That is the stale-RAM-over-different-flash
-    /// corruption this file's own comments spend paragraphs avoiding.
-    private var imageKey: String {
-        if profile == .iPad1 {
-            var hash: UInt64 = 5381
-            for byte in options.ipad1NAND.utf8 { hash = hash &* 33 &+ UInt64(byte) }
-            return "ipad1-\((options.ipad1NAND as NSString).lastPathComponent)-\(String(hash, radix: 36))"
-        }
-        return packedImage?.key ?? legacyImageKey
-    }
-
-    private var legacyImageKey: String {
-        let root = options.filesRoot
-        guard !root.isEmpty else { return options.nand }
-        // Short, stable, and readable enough to identify in Finder.
-        var hash: UInt64 = 5381
-        for byte in root.utf8 { hash = hash &* 33 &+ UInt64(byte) }
-        return "\(options.nand)-\(String(hash, radix: 36))"
-    }
+    /// Frozen in the device record; LegacyAdoption derived it once.
+    private var imageKey: String { instance.storage.key }
 
     private func snapshotIdentity() throws -> DeviceStateStorage.SnapshotIdentity {
         guard let build = qemu_ios_build_id() else { throw CocoaError(.fileReadCorruptFile) }
@@ -1372,12 +1327,12 @@ final class EmulatorController {
         return .init(emulatorBuild: String(cString: build), nand: nand)
     }
 
-    private var snapshotURL: URL { stateDir.appendingPathComponent("snapshot-\(imageKey)") }
+    private var snapshotURL: URL { instance.paths.snapshot }
     private var snapshotTmpURL: URL { snapshotURL.appendingPathExtension("tmp") }
     private var snapshotBadURL: URL { snapshotURL.appendingPathExtension("bad") }
-    private var overlayURL: URL { stateDir.appendingPathComponent("nandrw-\(imageKey)", isDirectory: true) }
+    private var overlayURL: URL { instance.paths.overlay }
     /// Legacy marker, removed without erasing when opening an older device.
-    private var resetMarkerURL: URL { stateDir.appendingPathComponent(".reset-\(imageKey)") }
+    private var resetMarkerURL: URL { instance.paths.resetMarker }
     private var restoringFromSnapshot = false
 
     /// UserDefaults key for the Settings toggle.

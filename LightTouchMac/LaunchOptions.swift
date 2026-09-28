@@ -73,6 +73,21 @@ struct LaunchOptions: ParsableArguments {
     var ipad1KBoot: String { "\(filesRoot)/ipad1/7B500/k48-kboot.bin" }
     var ipad1NAND: String  { "\(filesRoot)/ipad1/userland/golden-appsync" }
 
+    /// What the pre-library state keys were derived from (LegacyAdoption).
+    var adoptionInputs: LegacyAdoption.Inputs {
+        .init(filesRoot: filesRoot, nand: nand, nandImage: nandImage, packedNAND: packedNAND, ipad1NAND: ipad1NAND)
+    }
+
+    /// Development override for which board a launch runs: LIGHTTOUCH_DEVICE=ipad1
+    /// (or ipod). With LTM_FILES it chooses, or adopts, that device's instance.
+    static var deviceOverride: DeviceProfile? {
+        switch ProcessInfo.processInfo.environment["LIGHTTOUCH_DEVICE"] {
+        case "ipad1": .iPad1
+        case "ipod": .iPodTouch2G
+        default: nil
+        }
+    }
+
     /// Required assets that don't exist, so the app can report them up front
     /// instead of failing inside the dylib on the QEMU thread with no UI — a
     /// missing NAND used to be an invisible hang.
