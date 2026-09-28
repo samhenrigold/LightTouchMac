@@ -1,0 +1,117 @@
+# Sweep survey: app (2026-09-28, read-only)
+
+# LightTouchMac consolidation survey (read-only, multidevice @ fb36fb3)
+
+Paths below are under `/Users/shg/Developer/LightTouchMac-multidevice/`. No files were edited, built or run.
+
+## (a) Ranked consolidation proposals
+
+### 1. Make the bundled iPod a prepared device; delete every legacy path (~1,130 app LOC + ~640 test LOC)
+**Evidence.** Two storage shapes coexist. New: `Devices/<uuid>/{base,overlay,...}` with `base.kind == .prepared` (`DeviceInstance.swift:15`, `EmulatorController.swift:317-330, 367-373`). Old, only for the adopted iPod/dev images: `LegacyAdoption.swift` (264, all), `DeviceStateStorage.swift:258-361` (`packedImage`, `bundledImage`, `adoptBundledImageAfterErase`, `removeUnreferencedBases`: `active-<nand>.json`, `device/<nand>-<digest>`, `nandrw-<key>`), `:156-177` (`developmentImageIdentity`), `StorageLocations.swift:47-202` (rename of `Application Support/LightTouchMac`, legacy daemon reap, pointer normalizing, log migration), `LaunchOptions.swift` (105: `filesRoot/nand/bootrom/iBoot/nor/packedNAND/ipad1KBoot/ipad1NAND/adoptionInputs/deviceOverride/missingAssets`), `EmulatorController.swift:80-82,185-192,229-236` (packedImage/retained/instanceError), `:248-259, 289-298, 576-633` (`iPodNAND`, `unpackNAND`, `unpackedNANDBytes`), `:331-334, 342, 374-377, 1423-1433, 1856-1870, 749` (dev/bundled branches in boot, snapshot identity, erase, status line), `DeviceSession.swift:560, 577-594, 629-655, 683-688` (legacy filesRoot match, `launchSelection`, `adoptLegacyDevices`, `options(for:)`, `resolution(for:)`), `DeviceInstance.swift:15-21, 53-58, 96` (`.legacyBundled/.development`, `Legacy`), `USBMux.swift:110-115` (legacy pid) and `:122, 236-262` (`session.env`, read by nothing in the repo: only docs match `SOCK=`), `Bundled.swift:89-93` (`workDirectory`), `IPALibrary.swift:59-88` (`migrateShared`), `AppMetadataCache.swift:53-66` (AppCache move), `AppDelegate.swift:166-169` (old log names), plus the legacy-image guest upgrade: `GuestServices.swift:320-463` (`updateComponents`, `reloadSpringBoard`, `lockButtonPreferences`, `mediaLaunchConfiguration`, `agentVersion`), `DeviceTools.swift:327-336`, `EmulatorController.swift:455-520` (`startMediaPreparation`). Tests: `check-legacy-adoption.py` (356), `check-storage-locations.py` (231), `check-media-components.py` (50).
+
+**Can it become a prepared device?** Yes. `firmwarekit create` for `n72ap-7E18` is already what the release verify boots (`docs/multi-device-plan.md:382`; `docs/STATUS.md:18`), and the catalog entry exists with recipe n72 (`Resources/firmware-catalog.json`, id `n72ap-7E18`, `user_ipsw`). Ship firmwarekit's 7E18 output packed as the one blob instead of nand-agent-v4 pages; first launch unpacks into `Preparing/<job>.publish/base` and publishes with the existing rename (`PreparationJob.swift:228-260`), record `.prepared`. The old `nandrw-<key>` overlay cannot ride the new base (`pinOverlay`, `DeviceStateStorage.swift:185`, would refuse, correctly), so the one-time migration is the Erase prompt Sam already accepted for the image swap (memory `ipod-swap-at-main-merge`); keep `Devices/<uuid>/IPAs` and copy `work/usbmuxd-conf`. Also retires "Bundled iPod image carries the old GL shim" (`STATUS.md:67`) and `updateMediaComponents` (guest-package-bootstrap P5 says delete it). Development raw-image boots move to `LightTouchDevice --headless`/session-driver (tests already do this) or an explicit `LTM_DEV_BASE=<firmwarekit out>` that writes a `.prepared` record once. Activation: firmwarekit's built-in step at build time; the app calls nothing (`multi-device-plan.md:14`).
+**Benefit.** One boot path per board, one storage layout, `LaunchOptions` gone, `DeviceStateStorage` halves, `LegacyAdoption` gone.
+**Risk.** Users of the private 1.0 lose installed apps (retained IPAs remain); keep `StorageLocations.migrateState` one release as "old state found → Erase & continue / Quit". Product call (image swap) is Sam's.
+**Effort.** 2.5 d. **Proving.** `check-firmware-jobs.py` (publish), `check-sessions.py --single --board ipod` on the bundled base, one new offline check "legacy tree present → prompt, then Devices/<uuid> prepared, IPAs kept".
+
+### 2. One service layering; collapse the pass-through chains (~250 LOC removed, mostly moves)
+**Ownership today.** `IMobileDevice.swift`: dlopen/FFI + `startInstallationProxy` + plist bridge + `checkAttachment` (transport). `DeviceServices.swift`: instproxy/AFC/lockdown services *and* the execution kernel (`run` 604, `withDeadline` 650, `withSoftDeadline` 722, `ResumeOnce` 741, `AbandonedWork` 694, `SyncBox` 779, `DeviceGate` 807-867, errors 871-1002, `Timeouts` 1006). `DeviceFiles.swift`: AFC browse/download, same layer, separate file. `SpringBoardIcons.swift:186-238` and `GuestNotifications.swift:146-258` each re-implement "gate + deadline + free a late handle" (`LateSession` duplicates `PendingInstallConnection`, `DeviceServices.swift:397-416`). `GuestServices.swift`: `GuestAgent` wire (82-239) + typed ops (242-318) + legacy upgrade (320-463) + `setTimeZone` child process (467-490, a lockdown thing in the guest file). `DeviceTools.swift`: the facade: install pipeline (112-207), then 8 one-line forwarders to `DeviceServices` (49-51, 55-57, 82-96, 306-312), child-process tools (`configureWebProxy` 356-377, `setTimeZone` 451-458). `EmulatorController.swift:1972-2068` forwards 10 more one-liners to `DeviceTools`. `installedApps()` crosses three files to do one thing.
+**Dead since SSH.** `Timeouts.ssh` (`DeviceServices.swift:1014`, 0 refs); stale comments only elsewhere (`Bundled.swift:7`, `DeviceStateStorage.swift:7`, `USBMux.swift:83`).
+**Target.** `Transport/`: IMobileDevice, USBMux, `DeviceExecution.swift` (gate, deadlines, AbandonedWork, Timeouts pulled out of DeviceServices). `Services/`: `InstallationProxy`, `AFC` (DeviceServices AFC + DeviceFiles merged), `SpringBoardServices`, `NotificationProxy`, `LockdownTools` (activationState, lockdown-tz, mcinstall), all on one `run` kernel. `Guest/`: GuestAgent, GuestServices, GuestPackage. `Features/`: `AppInstallPipeline` (DeviceTools.install + exec-bit + placeholder + minOS), `MediaImport`, `WebProxySetup`. EC vends `services` and drops its forwarders; callers use `session.services.x`.
+**Risk.** 30+ checks slice production files by `source.index('marker')` (e.g. `check-app-events.py:4`, `check-install-startup.py`, `check-guest-notifications.py`); every move needs marker updates. Do with proposal 7.
+**Effort.** 3 d. **Proving.** `check-agent-transport`, `check-install-startup`, `check-guest-notifications`, `check-media-native`, `check-sessions --single`.
+
+### 3. Make the install model per-device; content-addressed IPA library (fixes real multi-device bugs)
+**Flow today.** Drop on screen (`DisplayView.swift:1456` → `DeviceViewController.swift:65` → `AppInstaller.start`), File → Install (`MainWindowController.swift:988`), drop on the table (`AppsInspectorViewController.swift:1779`), Store row (`AppInstaller.startCatalog:224` → `CatalogClient.download:139` into `State/work/catalog-<id>-<uuid>/`). Then: `InstallJob` row → `AppMetadataCache.bundleID/preview` (unzip) → global `readyQueue.acquire` (`InstallationQueue.swift`) → `EmulatorController.install:2025` → `DeviceTools.install:112` (minOS vs hard-coded "3.1.3" at 280, `appRoot` preflight, agent placeholder, exec-bit repack via ipod-helper, AFC free space, AFC stage, `instproxy_install` with retry) → `AppMetadataCache.learn` (app-wide, keyed by bundle id) + `IPALibrary.adopt` → `Devices/<uuid>/IPAs/<bundle>.ipa`; scratch deleted. Drag-out: `AppsInspectorViewController.swift:1729` → `IPALibrary.url(for:device:)`.
+**Second device.** Nothing is shared: the IPA is copied per device (`migrateShared` clones every IPA into every device, `IPALibrary.swift:59-88`), a Store app is re-downloaded from archive.org, and the name/icon cache collides across versions. Cross-device bugs: `InstallJob` has no device; every inspector observes with `object: nil` (`AppsInspectorViewController.swift:662-664`) and `installStarted` appends the job unconditionally (`:874-889`), so device A's install row appears in device B's inspector and un-collapses it; `AppInstaller.discardAll()` on one device's Power Off/Erase cancels every device's installs (`EmulatorController.swift:1300, 1829`); `AppInstaller.isUsingDevice` gates all controllers (`:155, 1919`); `AppMetadataCache.forget` on uninstall from A drops B's icon (`AppsInspectorViewController.swift:389`).
+**Proposal.** `State/Library/IPAs/<sha256>.ipa` + `index.json` {sha, bundleID, version, name, minOS, size, ipaID} (what `AppMetadataCache` already extracts; `CatalogCopy.md5` seeds dedupe) and per-device `Devices/<uuid>/installed.json` [{bundleID, sha}] (or clonefile links into IPAs/). Uninstall drops the record, not the blob; drag-out and "install on another device" resolve through the record; Store downloads dedupe by sha. `InstallJob.deviceID`; notifications carry it; inspectors filter; `discardAll(for:)`. Code supports it: `IPALibrary.adopt` already clone-copies; metadata reading is already per archive.
+**Effort.** 2.5 d. **Proving.** new offline check (adopt same IPA on two records → one blob, two records; uninstall on A keeps B's icon and file), `check-uninstall-queue`, `check-media-queue`, `check-sessions` install step.
+
+### 4. Board facts in one place; kill the four scattered board switches
+`DeviceProfile` holds 13 facts (`DeviceProfile.swift:16-43`) + 9 display facts (`+Display.swift`). Still switched elsewhere: `EmulatorController.swift:281` (`iPadBoot()`/`iPodBoot()`), `:1707` (shutdown ladder), `:248, 1425`; `DeviceHost.swift:47, 230, 238` (`isIPad` by machine prefix, duplicating EC's budgets `:1664-1673` vs `DeviceHost:10-14`); `MainWindowController.swift:84` (window sizes); `PreparationJob.swift:230` (`?? .iPad1`); `GuestPackage.swift:71` (arch map); `FirmwareCatalog.swift:109-117` (`init?(boardID:)`); `DeviceSession.swift:581-583`; `LaunchOptions.swift:96`. Version/arch hard-coding that ignores the instance's catalog entry: `CatalogCopy.swift:31-32, 43-44` ("3.1.3", armv6), `CatalogDetailsViewController.swift:74, 124`, `DeviceTools.swift:280` (`deviceOS: "3.1.3"` default; `install:121` never passes the device's version, so a 4.2.1 device warns wrongly), `AppsInspectorViewController.swift:333-348` (alert text "3.1.3"). Move: `bootRecipe(_:)`, `shutdownPolicy`, `windowContentSize`, `guestArch` onto `DeviceProfile`; thread `entry.version`/`recipe.guest.arch` into the install/catalog checks via the instance. Effort 1 d. Proving: `check-device-rows`, `check-clean-shutdown`, `check-sessions`, new `sdkTooNew(minOS, deviceOS:)` assertions.
+
+### 5. Extract the non-UI from the three big view controllers (only what's reused/tested)
+- `AppsInspectorViewController.swift:1-422` is `InstallJob` + `AppInstaller` (queue state machine, no AppKit but alerts) → `AppInstaller.swift` (goes with #3; 8 tests slice this file).
+- `MainWindowController.swift:1518-1590` `DiagnosticsExport` (already `nonisolated`, used by `check-storage-lifecycle`) → own file; `:1043-1150` screenshot pipeline and `:1197-1450` recording orchestration (5 `check-capture-*`/`check-recording-*` slice them) → `CaptureController`. Leave device commands/toolbar/menus.
+- `DisplayView.swift:1404-1488` drop classification (duplicated at `AppsInspectorViewController.swift:1773`) → pure `DroppedFiles` enum; and stop the view calling `FirmwareJobs.shared.importIPSW` (`:1444`), give it `onDropIPSW` like the other callbacks. Gesture math (`:792, 1015, 1148, 1169`) only if a second board needs it: skip.
+Effort 1.5 d. Proving: existing slicing checks after marker updates.
+
+### 6. Delete or re-enable the snapshot feature (~350 LOC unreachable)
+`EmulatorController.swift:1452` `resumeOnLaunch { false }` and no menu item calls `saveStateNow`/`discardSavedState` (`MainMenu.swift` has none; only `MainWindowController.swift:946-965, 1771-1772` exist). Unreachable: EC `:1417-1500` (`snapshotIdentity`, `restoreArgs` restore branch), `:1505-1527` (`verifyRestoreIfNeeded`), `:1529-1660` (`performSnapshot`, `resumeAfterFailedSave`, `proveAlive`, `beginQuitSnapshot`), `:1774-1820`, `:1891-1897`; `DeviceStateStorage.swift:142-153, 197-256` (`SnapshotIdentity`, `promoteSnapshot`, `snapshotMatches`, `overlayIsNewer`); `AppDelegate.swift:228-229, 253-256`; `scripts/regress_app.py:216` `check_snapshot_roundtrip`; half of `tests/device-state-storage.swift`. The helper's snapshot ops stay (`check-helper-boot` restore scenario). Product call: memory `stop-is-hard-halt` says quit-with-resume "still saves"; the code says it never does. Effort 0.5 d either way.
+
+### 7. Tests: three tiers, one entry point, stop slicing by string
+Classification of 70 `check-*.py` + drivers (see table in text below). Structure: `tests/offline/` (swiftc slices + tmp fixtures, no emulator: 58 checks + `run-catalog-checks.py` with its local `catalog-server.py`), `tests/sessions/` (helper + images: `check-helper-boot`, `check-sessions`, `check-files-native`, `check-media-native`, `scripts/regress_app.py`, `scripts/install-durability.py`, `scripts/check-guest-agent.py`, `volume-rebuild-oracle.py`), `tests/release/` (`scripts/test-package.py`, `test-release.py`, `test-signing.py`, `check-package-layout.py`, `test-guest-build.py`, `test-glib-compat.py`, `check-macho.py`; `test-dependency-sources.py` is the only network one), `tests/drivers/`, `tests/fixtures/` (`fake-firmwarekit.py`, `catalog-server.py`, `tests/*.swift` helpers). Entry point `tests/run.py {offline|sessions|release}` (or `make check-offline`/`check-sessions`/`check-release`) globbing `check-*.py`, parallel, shared `-module-cache-path`, PASS/FAIL per file; there is no Makefile or runner today (`scripts/regress-app.sh` only wraps `regress_app.py`). Stale: `regress_app.check_env_parity` parses `EmulatorController.swift` for the `-M …boot-args=` string that now lives in `DeviceSession.swift:417-433` (compares nothing); `check_snapshot_roundtrip` (feature off); `check-media-components` (legacy upgrade); `check-legacy-adoption`/`check-storage-locations` (go with #1); `check-extracted.py` tests `appRoot`+`ResumeOnce`, not extraction (merge into `check-deadlines`/`check-upload`); `scripts/test-zoom.py` is an offline swiftc check living in scripts/. Duplicate-by-area (recording ×5, capture ×5, media ×7, install/queue ×5): keep code, one runner per area. Convert slicers to whole-file compiles with `tests/offline/stubs/*.swift` where feasible so #2/#5 don't break 30 tests. Effort 2 d. Proving: `run.py offline` green before and after.
+
+### 8. Smaller per-device fixes (0.5 d total)
+`EmulatorController.swift:529` adds an `NSSystemTimeZoneDidChange` observer per controller and never removes it (one per boot/restart). `EmulatorController.swift:1100` reaches `DeviceLibrary.shared` directly (route via host). `AbandonedWork.cap` (`DeviceServices.swift:702, 857`) is process-wide: one wedged device refuses the other's operations (documented `:815-817`; phase-4 "services in the helper" is the real fix).
+
+## (b) Singleton / per-device-safety table
+
+| Global | Where | Safe with several devices? |
+|---|---|---|
+| `DeviceGate.shared` + `setenv(USBMUXD_SOCKET_ADDRESS)` + `AbandonedWork` | `DeviceServices.swift:694-867` | Correct by serialization (`point(at:)` 818); devices wait on each other; `cap` shared (857) |
+| `AppInstaller` statics `jobs/removals/rows/readyQueue`, `InstallJob` without device | `AppsInspectorViewController.swift:79-112` | **No**: rows leak across inspectors (874), `discardAll` cross-device (EC 1300, 1829), `isUsingDevice`/`hasPendingWork` gate all (EC 155, 1351, 1919) |
+| `.ltmAppsChanged/.ltmInstallStarted/.ltmInstallProgress` (object nil/job) | `:13-22`, observers `:662-664` | **No**: no device id |
+| `AppMetadataCache.shared` keyed by bundle id | `AppMetadataCache.swift:18, 120-136` | Partly: shared names/icons; `forget` from one device hits all |
+| `DeviceLibrary.shared`, `FirmwareJobs.shared`, `IPSWStore.shared` | `DeviceLibrary.swift:12`, `FirmwareJobs.swift:11`, `IPSWStore.swift:35` | Yes (library scope by design) |
+| `CatalogClient` statics (`baseURL`, `iconMemo`, `workDirectory` downloads) | `CatalogClient.swift:69, 158, 175` | Yes (stateless; unique dirs) |
+| EC static defaults: `autoRotateEnabled` 963, `keyboardInputEnabled` 1219, `verboseBoot/kernelConsole/bootArgs` 2072-2091 | `EmulatorController.swift` | App-wide settings applied to every boot; acceptable, document |
+| `MainMenuBuilder.install(profile:)` rebuilt on selection | `AppDelegate.swift:111,141`, `MainWindowController.swift:331` | Yes: titles follow the selection; per-device checkmarks validated on the selected emulator |
+| `DeviceServices.stagingSession` (static UUID) | `:271` | Yes (per process, names unique per upload) |
+| `Timeouts` static vars | `:1006-1015` | Yes (tests only mutate) |
+| `IMobileDevice.handles` (dlopen) | `IMobileDevice.swift:38` | Yes |
+| `DeviceRendezvousServer.shared` | `Shared/DeviceRendezvous.swift:76, 123` | Yes (per-pid registry) |
+| `Bundled` layout/app lock, `AppEventLog.shared`, `NativeLogging` | `Bundled.swift:38-62`, `AppEventLog.swift:14` | Yes; app-wide `native.log`, helpers log per device |
+| `CaptureNotifications.shared`, `CapturePreferences.shared` | | Yes (app prefs; reminders keyed by recording id) |
+| UserDefaults `zoomMode`, `showsTouches`, `captureMode`, `guestNetworkEnabled` | `MainWindowController.swift:764`, `DisplayView.swift:622`, `NetworkAccessPreference.swift:6` | App-wide; network pref applies to the next boot of any device (`AppDelegate.swift:41-52`) |
+| `USBMux`, `GuestAgentCache`, `WebProxyConfiguration.directory(for:)`, `GuestNotifications`, `SerialLogCapture` | per EC / per inspector | Yes |
+| `DeviceHost`/`AgentDispatcher`/`AudioPump` | helper | One per process by design |
+
+## (c) Third-board touch points
+1. `DeviceProfile.swift`: new case + 13 properties (16-43). 2. `DeviceProfile+Display.swift`: 9 geometry/art properties. 3. `FirmwareCatalog.swift:109-117` `init?(boardID:)`. 4. `GuestPackage.swift:71` arch map. 5. `DeviceSession.swift` `BootRecipe.<board>` (417-451) + `EmulatorController.swift:281` boot switch, `:1707` shutdown branch, `:1425` snapshot branch. 6. `LightTouchDevice/DeviceHost.swift:47, 230, 238` `isIPad`. 7. `MainWindowController.swift:84` window size. 8. `Assets.xcassets` shell image (+ optional `.usdz` and `hasDeviceModel`, `DisplayView.swift:231`). 9. `Resources/firmware-catalog.json` entries + keys. 10. `CatalogCopy.swift:31-44`, `CatalogDetailsViewController.swift:74,124`, `DeviceTools.swift:280`, `AppsInspectorViewController.swift:333-348` version/arch strings. 11. `PreparationJob.swift:230` default. 12. `tests/session-driver/single.swift` board switch; `check-sessions.py --board`. 13. `Help.txt` (says "iPod" throughout). 14. Out of app: FirmwareKit recipe, `build-guest-tools.sh` itpack family. After #4 this is 1, 2, 5 (one recipe func), 8, 9, 14.
+
+## (d) Dead code (grep evidence)
+- `Timeouts.ssh` `DeviceServices.swift:1014` — 0 refs.
+- `IMobileDevice.deviceReady(socket:)` `:249`; `instproxy_client_start_service` `:137` — definition only.
+- `DeviceServices.installProxyReady()` `:590` — definition only.
+- `AppMetadataCache.sdkName(from:)` `:216` — definition only.
+- `EmulatorController.resumeDefaultsKey` `:1451` — definition only; whole snapshot feature unreachable (proposal 6).
+- `EmulatorController.cancelFactoryReset` `:1887` (called `AppDelegate.swift:201`) removes a marker nothing writes (`DeviceInstance.swift:34` "removed, never acted on"); `:306-309` marker notice likewise.
+- `DeviceInstance.lastEmulatorBuild` `:95` — never written or read. `provenance` `:94` written (`PreparationJob.swift:249`), never read.
+- `.ltmAppLaunched` `AppsInspectorViewController.swift:21` posted (1434), never observed.
+- `USBMux.writeSessionFile`/`session.env` `:236-262`, `DeviceInstance.Paths.sessionFile` — no reader in repo (docs only); diagnostics copies it (`MainWindowController.swift:1492`).
+- `Bundled.resolveResource` `:117` only for legacy `updateMediaComponents`; `Bundled.workDirectory` `:89` only for legacy pid, catalog scratch, DEBUG dev-tools.
+- Packaging: `scripts/package.sh:157` ships `ideviceinstaller ideviceinfo idevicesyslog idevice_id iproxy idevicepair` — 0 app refs; `:190` ships `install-ipa.sh` — 0 refs (comments only `DeviceTools.swift:170, 210`). `build-release.py:17-19` `GUEST_PAYLOADS` still requires `sbdlicon ithalt itstatus itproxy ittrust itorient` which the plan says are gone (`multi-device-plan.md:561`).
+- `Help.txt`: "Erase … then quits Light Touch" (`:54`) contradicts `EmulatorController.swift:1874-1876` (restarts); no sidebar, Download & Prepare, Import IPSW, Delete Device, Settings ▸ Storage, Restart with Guest Tools, iPad; `check-help.py` asserts only four phrases.
+- Stale comments: `ideviceinstaller` (`AppsInspectorViewController.swift:674, 693`, `AppMetadataCache.swift:4,115,149`), SSH (`Bundled.swift:7`, `DeviceStateStorage.swift:7`, `USBMux.swift:83`).
+- Tests: `regress_app.check_env_parity` (parses moved code), `check_snapshot_roundtrip`, `check-media-components.py`, `check-extracted.py` (misnamed).
+
+## (e) Proposed layout
+
+```
+LightTouchMac/
+  App/            main, AppDelegate, MainMenu, WindowRestorationPolicy, NetworkAccessPreference, Help.txt
+  Library/        DeviceInstance, DeviceLibrary, DeviceStateStorage, StorageLocations, Bundled, IPSWStore,
+                  FirmwareCatalog, FirmwareJobs, FirmwareDownloads, PreparationJob, IPALibrary(+index), AppMetadataCache
+  Device/         DeviceProfile(+Display), DeviceSession (Session/Host/Row), DeviceProcess, BootRecipe,
+                  EmulatorController (lifecycle+input only), USBMux, GuestPackage, WebProxyConfiguration
+  Transport/      IMobileDevice, DeviceExecution (gate/deadlines/timeouts), NativeLogging, AppEventLog
+  Services/       InstallationProxy, AFC (incl. DeviceFiles), SpringBoardServices, NotificationProxy, LockdownTools
+  Guest/          GuestAgent, GuestServices
+  Features/       AppInstaller (InstallJob/queue, per device), AppInstallPipeline, MediaImport (+Media*), CatalogClient/Copy,
+                  CaptureController, ScreenRecordingSession, ScreenMovieWriter, CanvasCapture, DiagnosticsExport
+  UI/             MainWindowController, DeviceLibraryVC, DevicePlaceholderVC, DeviceViewController, DeviceContentView,
+                  DisplayView, DeviceModelView, AppsInspectorVC, CatalogDetailsVC, DeviceFiles{VC,WindowController},
+                  LogWindowController, Storage/Proxy/CaptureOptions views, small controls
+  Resources/, Assets.xcassets, Shim/
+tests/
+  run.py  offline/  sessions/  release/  drivers/{helper-driver,session-driver}  fixtures/  stubs/
+```
+(`LightTouchDevice/`, `Shared/`, `Packages/FirmwareKit` unchanged; the "FirmwareKitCLI" in the brief is `Packages/FirmwareKit/Sources/FirmwareKitCLI`, 143 lines.)
+
+### Critical files for implementation
+- /Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/EmulatorController.swift
+- /Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/DeviceSession.swift
+- /Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/LegacyAdoption.swift
+- /Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/AppsInspectorViewController.swift
+- /Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/DeviceServices.swift
