@@ -198,7 +198,8 @@ if [ "$IPAD" = 1 ]; then
     if ! (IPAD_SDK="$IPAD_SDK_DIR" IPOD_SDK="$ARMV6_SDK" bash "$C/ipad1-guest/build.sh" "$ROOT/ipad-build" &&
           IPAD_SDK="$IPAD_SDK_DIR" IPOD_SDK="$ARMV6_SDK" bash "$C/appsync/build.sh" "$ROOT/ipad-build" &&
           IPAD_SDK="$IPAD_SDK_DIR" bash "$C/ipad1-gles/build.sh" &&
-          ARMV6_SDK="$ARMV6_SDK" LDID="$LDID" bash "$C/it-keybag/build-ipod.sh") >"$ROOT/logs/ipad.log" 2>&1; then
+          ARMV6_SDK="$ARMV6_SDK" LDID="$LDID" bash "$C/it-keybag/build-ipod.sh" &&
+          ARMV6_SDK="$ARMV6_SDK" LDID="$LDID" bash "$C/it-prefs/build-ipod.sh") >"$ROOT/logs/ipad.log" 2>&1; then
         cat "$ROOT/logs/ipad.log" >&2
         fail "iPad guest tools failed; build inputs and logs retained in $ROOT"
     fi
@@ -271,6 +272,9 @@ if [ "$IPAD" = 1 ]; then
     # The iPod's armv6 it_keybag (4.x data protection: disk0s1, /private/var).
     [ -s "$ROOT/src/build/ipod-guest/it_keybag" ] || fail "build did not produce the armv6 it_keybag"
     cp -p "$ROOT/src/build/ipod-guest/it_keybag" "$ROOT/ipad-guest-tools.incomplete/it_keybag-armv6"
+    # The iPod's armv6 it_prefs (SpringBoard's first-run tip only); its job is the iPad's com.qemu.it-prefs.plist.
+    [ -s "$ROOT/src/build/ipod-guest/it_prefs" ] || fail "build did not produce the armv6 it_prefs"
+    cp -p "$ROOT/src/build/ipod-guest/it_prefs" "$ROOT/ipad-guest-tools.incomplete/it_prefs-armv6"
     chmod 0644 "$ROOT"/ipad-guest-tools.incomplete/*.plist "$ROOT"/ipad-guest-tools.incomplete/*.tsv
 fi
 python3 - "$ROOT" <<'PY'

@@ -11,7 +11,8 @@
 // optionally pins the shim's ABI table (else every gli-dispatch-<BUILD>.tsv with an MBXGLEngine-<BUILD> is
 // tried, as ipod2g_device.gli_engine does). --guest-tools holds those MBXGLEngine-<BUILD> and TSVs, sblaunch,
 // sbdlicon (optional), it_agent, it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib, armv6.itpack (the
-// guest-package loader and seed package, as ipod2g_device.py bakes them) and it_keybag-armv6 (data protection).
+// guest-package loader and seed package, as ipod2g_device.py bakes them), it_prefs-armv6 + com.qemu.it-prefs.plist
+// (3.x+: no first-run "Edit Home Screen" tip) and it_keybag-armv6 (data protection).
 
 import CryptoKit
 import Foundation
@@ -24,6 +25,7 @@ public enum N72Recipe {
     static let itKeybag = "it_keybag-armv6", keybagStep = "Booting the restore ramdisk"
     static let prefs = "private/var/mobile/Library/Preferences"
     static let agentJob = "System/Library/LaunchDaemons/com.qemu.it-agent.plist"
+    static let prefsJob = "System/Library/LaunchDaemons/com.qemu.it-prefs.plist"
     static let fstabRW = "/dev/disk0s1 / hfs rw 0 1\n"
     /// set-sound-defaults.py: the five Sounds switches of a new device.
     static var soundDefaults: [(String, [String: Any])] { [
@@ -353,6 +355,12 @@ public enum N72Recipe {
             try SystemEdits.rewritePlist(job) { SystemEdits.dyldInsert($0, "/" + SystemEdits.appsyncPath) }
             report["appsync"] = [line, "installd (\(job.lastPathComponent)) DYLD_INSERT_LIBRARIES += /\(SystemEdits.appsyncPath)"]
             owners.append((0, SystemEdits.appsyncPath))
+        }
+        if tools {   // ipod2g_device.PREFS: the iPad's it_prefs, SpringBoard tip only (contrib/it-prefs/build-ipod.sh)
+            try SystemEdits.put(helper("it_prefs-armv6"), at("usr/local/bin/it_prefs"), mode: 0o755)
+            try SystemEdits.put(helper("com.qemu.it-prefs.plist"), at(prefsJob), mode: 0o644)
+            owners += [(0, "usr/local/bin/it_prefs"), (0, prefsJob)]
+            report["prefs"] = "it_prefs: SBDidShowReorderText at first boot"
         }
         if opt["web_proxy"] ?? true {   // install_web_proxy
             let sc = "private/var/preferences/SystemConfiguration"

@@ -28,7 +28,7 @@ IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquie
                                  # the n72 recipe's (N72Recipe)
                                  'MBXGLEngine', 'sblaunch', 'sbdlicon', 'it_agent', 'it_typein.dylib',
                                  'com.qemu.it-agent.plist', 'gli-dispatch-7E18.tsv', 'MBXGLEngine-7E18',
-                                 'MBXGLEngine-8C148', 'it_keybag-armv6'))
+                                 'MBXGLEngine-8C148', 'it_keybag-armv6', 'it_prefs-armv6'))
 IPAD_GUEST_COMPONENTS = ('ipad1-guest', 'appsync', 'ipad1-gles', 'it-pasteboard', 'it-ethlink', 'it-seal', 'it-prefs',
                          'it-keybag', 'it-heading', 'it-cctest', 'it-gltest', 'it-msmquiet', 'it-boot', 'guest-package')
 SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS_Store'}
