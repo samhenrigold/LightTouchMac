@@ -506,3 +506,11 @@ The app publishes STAGING_DIR by rename.
   keeps whatever proxy settings itproxy last wrote.
 - The helper's SIGTERM path no longer resumes a VM whose guest already powered off (a quit after Power
   Off or after the app's halt aborted QEMU: "invalid runstate transition: 'shutdown' -> 'running'").
+
+**Integration, 2026-09-28** (fk-n72, gpkg-p4, prep-ux, finder-f0, automatic-activation):
+- **Activation is built in for both recipes** (automatic-activation): `firmwarekit create` has no `--activation-hook` (an unknown argument now), the lock records `inputs.activation {input_sha256, output_sha256}`, and a failure is `activation_failed`.
+- **Prepared iPods boot** (`base.kind == .prepared`, n72ap): `direct-iboot=<base>/iBoot.bin`, `nor=<base>/nor.bin` with `nor-rw=` the private copy (`storage.writableNOR`, cloned on first boot, removed by Erase with the overlay), `gid-blobs=<base>/gid-blobs.bin`, `nand=<base>/nand`, and the overlay pinned to `storage.key`. The n72 machine has no `die-id`: the identity is in nor.bin.
+- **Lock `machine` options**: every boot of a prepared base appends its device.lock.json `"machine"` (sorted, escaped) to `-M`. N72Recipe always writes `{"aes-uid": "engine"}`, as ipod2g_device.py does; the shipping and adopted images keep the legacy default.
+- **iPod 3.1.3 is a `user_ipsw` entry** (pinned `5f4f5c01…`, the IPSW docs/ipod/from-ipsw.md names; no URL) with recipe n72 (8g, system_mib 7168, gles_shim/appsync/web_proxy, gli-dispatch-7E18.tsv). The shipping image is unchanged: LegacyAdoption still adopts it at first launch, so the row is Ready with it; with no record the row offers Import IPSW….
+- **The seal's check boot matches `FTL_Open\s*\[OK\]` over the log with its newlines removed** (the helper's `--oneshot` `stopPattern`), as ipad1_seal.py now does.
+- **`build-guest-tools.sh` stages the n72 inputs** into the firmwarekit directory: MBXGLEngine, sblaunch, sbdlicon, it_agent, it_typein.dylib, com.qemu.it-agent.plist and gli-dispatch-7E18.tsv (libappsync.dylib is the fat one already there).

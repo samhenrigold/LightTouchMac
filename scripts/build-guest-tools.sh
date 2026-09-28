@@ -56,6 +56,7 @@ if [ -f "$QEMU/contrib/ipad1-guest/build.sh" ]; then
         [ -d "$QEMU/contrib/$component" ] || fail "missing iPad guest source: $component"
     done
     ls "$QEMU"/docs/ipad1/gli-dispatch-*.tsv >/dev/null || fail "missing docs/ipad1/gli-dispatch-*.tsv"
+    [ -f "$QEMU/docs/ipod/gli-dispatch-7E18.tsv" ] || fail "missing docs/ipod/gli-dispatch-7E18.tsv"
     COPY_EXTRA=("${IPAD_RECIPES[@]}" "${IPAD_SOURCES[@]}")
 else
     COPY_EXTRA=()
@@ -81,8 +82,9 @@ for component in armv6-toolchain "${COMPONENTS[@]}" ${COPY_EXTRA[@]+"${COPY_EXTR
     done
 done
 if [ "$IPAD" = 1 ]; then
-    mkdir -p "$ROOT/src/docs/ipad1"
+    mkdir -p "$ROOT/src/docs/ipad1" "$ROOT/src/docs/ipod"
     cp -p "$QEMU"/docs/ipad1/gli-dispatch-*.tsv "$ROOT/src/docs/ipad1/"
+    cp -p "$QEMU/docs/ipod/gli-dispatch-7E18.tsv" "$ROOT/src/docs/ipod/"
 fi
 
 # Keep the package recipe here: the component build.sh files also build probes
@@ -96,6 +98,10 @@ build_component() (
             python3 "$HERE/genstubs.py" "$HERE/gles_stubs.h"
             cc6 "$HERE/mbxshim.c" "$HERE/mbxshim.o"
             link6 -bundle "$HERE/MBXGLEngine" "$HERE/mbxshim.o"
+            # firmwarekit's n72 recipe bakes sblaunch (SpringBoard launch helper) into new iPods.
+            cc6 "$HERE/sblaunch.c" "$HERE/sblaunch.o"
+            link6 -execute "$HERE/sblaunch" "$HERE/sblaunch.o"
+            "$LDID" -S"$HERE/sblaunch-entitlements.xml" "$HERE/sblaunch"
             ;;
         it-instprogress|it-halt|it-orientation)
             case "$1" in
@@ -233,6 +239,12 @@ if [ "$IPAD" = 1 ]; then
     ipad_payload "$C/ipad1-gles/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU"
     ipad_payload "$ROOT/guest-package/armv6.itpack"
     ipad_payload "$ROOT/guest-package/armv7.itpack"
+    # The n72 recipe's inputs (N72Recipe: new iPods from a stock IPSW); libappsync.dylib is the fat one above.
+    for p in it-gles/MBXGLEngine it-gles/sblaunch it-instprogress/sbdlicon it-agent/it_agent \
+             it-agent/it_typein.dylib it-agent/com.qemu.it-agent.plist; do
+        ipad_payload "$C/$p"
+    done
+    ipad_payload "$ROOT/src/docs/ipod/gli-dispatch-7E18.tsv"
     chmod 0644 "$ROOT"/ipad-guest-tools.incomplete/*.plist "$ROOT"/ipad-guest-tools.incomplete/*.tsv
 fi
 python3 - "$ROOT" <<'PY'

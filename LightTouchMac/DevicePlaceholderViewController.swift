@@ -128,7 +128,7 @@ final class DevicePlaceholderViewController: NSViewController {
 
         var parts: [String] = []
         let format = { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
-        if entry.source.kind == .ipsw, let bytes = entry.source.bytes, bytes > 0 { parts.append("Download \(format(bytes))") }
+        if entry.source.url != nil, let bytes = entry.source.bytes, bytes > 0 { parts.append("Download \(format(bytes))") }
         if entry.estimates.preparedBytes > 0 { parts.append("\(format(entry.estimates.preparedBytes)) on disk") }
         if entry.estimates.peakBytes > 0 { parts.append("\(format(entry.estimates.peakBytes)) free space to prepare") }
         sizes.stringValue = parts.joined(separator: " · ")

@@ -231,11 +231,6 @@ final class EmulatorController {
             state = .dead(exitCode: 1)
             return
         }
-        if instance.base.kind == .prepared, profile != .iPad1 {
-            reportDeviceNotice("This \(profile.shortName) can’t start in this version of Light Touch.", for: .storage)
-            state = .dead(exitCode: 1)
-            return
-        }
         if retainedPackedImage {
             logEvent("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
         }
@@ -249,7 +244,7 @@ final class EmulatorController {
         }
         process.onAudio = { [weak self] event in self?.audioSink?(event) }
         startStatusPoll()
-        let unpack = profile == .iPodTouch2G ? iPodNAND().unpack : nil
+        let unpack = profile == .iPodTouch2G && instance.base.kind != .prepared ? iPodNAND().unpack : nil
         Task { [weak self] in
             // First boot of a packaged app: inflate the device image before the
             // helper opens it, off the main actor (the window says "Booting…").
@@ -307,26 +302,46 @@ final class EmulatorController {
             try? FileManager.default.removeItem(at: resetMarkerURL)
             reportDeviceNotice("The previous erase did not finish. Choose Erase All Content and Settings to try again.", for: .erase)
         }
-        let writableNOR: URL
+        // A prepared device (firmwarekit's n72 recipe) boots its own base/: iBoot.bin, nor.bin with a
+        // private writable copy, gid-blobs.bin (the emulated AES has no GID key) and nand/, with the
+        // machine options its lock names. The shipping and development images boot the files they
+        // were adopted from, with the legacy defaults.
+        var iBoot = options.iBoot, nor = options.nor, gidBlobs: String?, machineOptions: [String: String] = [:]
+        let writableNOR: URL, nand: String
         do {
-            writableNOR = try DeviceStateStorage.writableNOR(
-                base: URL(fileURLWithPath: options.nor), overlay: overlay)
+            if instance.base.kind == .prepared {
+                let base = instance.paths.base
+                let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: instance.paths.writableNOR,
+                                                         boot: "iBoot.bin", also: ["nor.bin", "gid-blobs.bin"])
+                guard let rw = files.writableNOR else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
+                guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
+                    baseImageMismatch = true
+                    reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
+                    state = .dead(exitCode: 1)
+                    return nil
+                }
+                (iBoot, nor, writableNOR, nand) = (files.boot.path, base.appendingPathComponent("nor.bin").path, rw, files.nand.path)
+                gidBlobs = base.appendingPathComponent("gid-blobs.bin").path
+                machineOptions = BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))
+            } else {
+                writableNOR = try DeviceStateStorage.writableNOR(base: URL(fileURLWithPath: options.nor), overlay: overlay)
+                nand = iPodNAND().base
+            }
         } catch {
             reportDeviceNotice("Could not prepare device storage: \(error.localizedDescription)", for: .storage)
             state = .dead(exitCode: 1)
             return nil
         }
-        let nand = iPodNAND().base
         // usbmuxd must be listening before the guest USB core comes up.
         let usbSession = options.appsync
-            ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: options.nand, overlay: overlay.path)
+            ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: instance.base.kind == .prepared ? nand : options.nand, overlay: overlay.path)
             : nil
         openSerialLog()
         let netdev = options.network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
-        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: options.iBoot, bootrom: options.bootrom, nand: nand,
-                                     nor: options.nor, writableNOR: writableNOR.path, overlay: overlay.path,
+        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: iBoot, bootrom: options.bootrom, nand: nand,
+                                     nor: nor, writableNOR: writableNOR.path, overlay: overlay.path,
                                      usbAddress: usbSession?.guestAddress, wifi: options.network, memory: options.memory,
-                                     guestPackage: composeGuestOffer()),
+                                     gidBlobs: gidBlobs, guestPackage: composeGuestOffer(), machineOptions: machineOptions),
                                serial: serialCapture?.argument ?? "null",
                                audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
                                netdev: netdev, restore: restoreArgs(overlay: overlay))   // -incoming, if a snapshot is trusted
@@ -341,12 +356,14 @@ final class EmulatorController {
     private func iPadBoot() -> BootConfig? {
         let overlay = overlayURL
         let kboot: String, nand: String, writableNOR: String?, dieID: String?
+        var machineOptions: [String: String] = [:]
         do {
             let identity: String
             if instance.base.kind == .prepared {
                 let files = try BootRecipe.preparedFiles(base: instance.paths.base, overlay: overlay,
                                                          writableNOR: instance.paths.writableNOR)
-                (kboot, nand, writableNOR, dieID) = (files.kboot.path, files.nand.path, files.writableNOR?.path, instance.identity?.dieID)
+                (kboot, nand, writableNOR, dieID) = (files.boot.path, files.nand.path, files.writableNOR?.path, instance.identity?.dieID)
+                machineOptions = BootRecipe.lockMachine(instance.paths.base.appendingPathComponent("device.lock.json"))
                 identity = instance.storage.key
             } else {
                 (kboot, nand, writableNOR, dieID) = (options.ipad1KBoot, options.ipad1NAND, nil, nil)
@@ -375,7 +392,7 @@ final class EmulatorController {
         // over the overlay it was saved with.
         return BootRecipe.iPad(.init(kboot: kboot, nand: nand, overlay: overlay.path, dieID: dieID, writableNOR: writableNOR,
                                      usbAddress: usbSession?.guestAddress, wifi: options.network,
-                                     guestPackage: composeGuestOffer()),
+                                     guestPackage: composeGuestOffer(), machineOptions: machineOptions),
                                serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev,
                                restore: restoreArgs(overlay: overlay))
     }
@@ -1404,6 +1421,9 @@ final class EmulatorController {
     private var snapshotTmpURL: URL { snapshotURL.appendingPathExtension("tmp") }
     private var snapshotBadURL: URL { snapshotURL.appendingPathExtension("bad") }
     private var overlayURL: URL { instance.paths.overlay }
+    /// A prepared device's private NOR copy, which pairs with its overlay: Erase removes it too, and the
+    /// next boot clones base/nor.bin again.
+    private var preparedNORURL: URL? { instance.base.kind == .prepared ? instance.paths.writableNOR : nil }
     /// Legacy marker, removed without erasing when opening an older device.
     private var resetMarkerURL: URL { instance.paths.resetMarker }
     private var restoringFromSnapshot = false
@@ -1818,9 +1838,13 @@ final class EmulatorController {
             let stateDirectory = stateDir
             let nand = options.nand
             let manifest = packedImage.map { _ in URL(fileURLWithPath: options.packedNAND + ".sha256") }
+            let preparedNOR = preparedNORURL
             do {
                 try await Task.detached {
                     try DeviceStateStorage.erase(overlay: overlay, snapshots: snapshots, legacyMarker: marker)
+                    if let preparedNOR, FileManager.default.fileExists(atPath: preparedNOR.path) {
+                        try FileManager.default.removeItem(at: preparedNOR)
+                    }
                     if let manifest {
                         try DeviceStateStorage.adoptBundledImageAfterErase(state: stateDirectory, nand: nand, manifest: manifest)
                     }

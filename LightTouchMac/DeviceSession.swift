@@ -181,7 +181,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case .ready: .start
         case .notDownloaded: .downloadAndPrepare
         case .downloading, .preparing: .cancel
-        case .error: isStartable ? .start : .downloadAndPrepare
+        case .error: isStartable ? .start : entry.status == .userIPSW ? .importIPSW : .downloadAndPrepare
         case .unavailable(.requiresIPSW): .importIPSW
         case .unavailable(.comingSoon), .running, .stopping: nil
         }
@@ -376,6 +376,8 @@ nonisolated enum BootRecipe {
         var gidBlobs: String? = nil
         /// This boot's guest-package offer directory (GuestPackage).
         var guestPackage: String? = nil
+        /// The -machine options the device was made for (device.lock.json "machine", e.g. aes-uid=engine).
+        var machineOptions: [String: String] = [:]
     }
 
     struct IPad {
@@ -388,6 +390,19 @@ nonisolated enum BootRecipe {
         var usbAddress: String?
         var wifi: Bool
         var guestPackage: String? = nil
+        var machineOptions: [String: String] = [:]
+    }
+
+    /// A prepared base's device.lock.json "machine" options; none for a missing lock or field.
+    static func lockMachine(_ lock: URL) -> [String: String] {
+        guard let data = try? Data(contentsOf: lock),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let machine = object["machine"] as? [String: Any] else { return [:] }
+        return machine.mapValues { "\($0)" }
+    }
+
+    static func options(_ machine: [String: String]) -> String {
+        machine.sorted { $0.key < $1.key }.map { ",\($0.key)=\(escape($0.value))" }.joined()
     }
 
     /// `audio`: the app's CoreAudio arguments, or `-audio driver=none` in tests.
@@ -403,6 +418,7 @@ nonisolated enum BootRecipe {
         if d.wifi { machine += ",wifi=on" }          // brings up the emulated BCM4325
         if let blobs = d.gidBlobs { machine += ",gid-blobs=\(escape(blobs))" }
         if let offer = d.guestPackage { machine += ",guest-package=\(escape(offer))" }
+        machine += options(d.machineOptions)
         let argv = ["LightTouchMac", "-M", machine, "-m", d.memory, "-display", "none", "-no-shutdown"]
             + audio + ["-serial", serial] + (netdev.map { ["-netdev", $0] } ?? []) + restore
         // The settings 3.1.3 will not boot without (contrib/run-ipod-touch.sh). No
@@ -420,20 +436,23 @@ nonisolated enum BootRecipe {
         if let usb = d.usbAddress { machine += ",usb-tcp-addr=\(usb)" }
         if !d.wifi { machine += ",wifi=off" }
         if let offer = d.guestPackage { machine += ",guest-package=\(escape(offer))" }
+        machine += options(d.machineOptions)
         // usb-kbd on the always-on EHCI becomes the active keyboard for key_mac.
         let argv = ["LightTouchMac", "-M", machine, "-display", "none", "-no-shutdown"] + audio
             + ["-serial", serial, "-device", "usb-kbd,bus=usb-bus.0"] + (netdev.map { ["-netdev", $0] } ?? []) + restore
         return BootConfig(argv: argv, machine: "ipad1")
     }
 
-    /// A prepared device's boot files (W5/W6): kboot.bin and nand/ from base, and
+    /// A prepared device's boot files (W5/W6): the board's boot file (the iPad's
+    /// kboot.bin, the iPod's iBoot.bin), nand/ and any `also` files from base, and
     /// on first boot the overlay directory and the writable NOR, cloned from
     /// base/nor.bin (cp -c) and made owner-writable. Nothing is written inside
     /// base/, which is read-only. usbmuxd-conf is created (and seeded) by USBMux.
-    static func preparedFiles(base: URL, overlay: URL, writableNOR: URL?) throws -> (kboot: URL, nand: URL, writableNOR: URL?) {
+    static func preparedFiles(base: URL, overlay: URL, writableNOR: URL?, boot: String = "kboot.bin",
+                              also: [String] = []) throws -> (boot: URL, nand: URL, writableNOR: URL?) {
         let fm = FileManager.default
-        let kboot = base.appendingPathComponent("kboot.bin"), nand = base.appendingPathComponent("nand", isDirectory: true)
-        for file in [kboot, nand] where !fm.fileExists(atPath: file.path) {
+        let kboot = base.appendingPathComponent(boot), nand = base.appendingPathComponent("nand", isDirectory: true)
+        for file in [kboot, nand] + also.map(base.appendingPathComponent) where !fm.fileExists(atPath: file.path) {
             throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: file.path])
         }
         try fm.createDirectory(at: overlay, withIntermediateDirectories: true)

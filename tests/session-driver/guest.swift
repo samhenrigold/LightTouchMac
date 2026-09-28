@@ -40,7 +40,8 @@ struct GuestConfig: Decodable {
         self.spec = spec
         self.guest = guest
         device = Device(name: spec.name, profile: .iPodTouch2G)
-        device.ipod = .init(nand: spec.nand, nor: spec.nor, iBoot: spec.iBoot, gidBlobs: spec.gidBlobs)
+        device.ipod = .init(nand: spec.nand, nor: spec.nor, iBoot: spec.iBoot, gidBlobs: spec.gidBlobs,
+                            machine: spec.lock.map { BootRecipe.lockMachine(URL(fileURLWithPath: $0)) } ?? [:])
     }
     var name: String { spec.name }
     var agent: GuestAgent { GuestAgent(link: device.process.link, cache: cache) }

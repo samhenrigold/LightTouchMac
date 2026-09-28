@@ -34,7 +34,10 @@ public enum N72Recipe {
         (501, prefs + "/com.apple.preferences.sounds.plist"), (501, "private/var/mobile/Media/.lt-guest-tools-v1"),
         (501, "private/var/mobile/Media/.lt-guest-tools-v2"), (501, "private/var/mobile/Media/.lt-guest-tools-v3")]
 
-    public static func create(_ o: Preparer.Options, emit: (PrepareEvent) -> Void) throws {
+    /// The -machine options every device this recipe builds boots with (device.lock.json "machine").
+    public static let machine = ["aes-uid": "engine"]
+
+    public static func create(_ o: Preparer.Options, emit: @escaping @Sendable (PrepareEvent) -> Void) throws {
         let fm = FileManager.default, e = o.entry
         func log(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
         guard let recipe = e.recipe, recipe.name == "n72", let model = models[recipe.storage] else {
@@ -47,14 +50,18 @@ public enum N72Recipe {
         let blocks = recipe.systemMiB * 256
         let steps = ["Verifying the IPSW", "Decrypting the firmware", "Writing the identity, NOR and boot files",
                      "Building the system volume", "Writing the NAND", "Writing the lock"]
-        emit(.begin(steps: steps.count))
+        emit(.begin(steps: steps.count, seconds: steps.map { StepPlan.plan($0).seconds }))
+        let progress = StepProgress(work: nil, emit: emit)
+        defer { progress.stop() }
         var index = 0
-        func step() { index += 1; emit(.step(index: index, name: steps[index - 1])); log("[\(index)/\(steps.count)] \(steps[index - 1])") }
+        func step() { index += 1; progress.next(index: index, name: steps[index - 1]); log("[\(index)/\(steps.count)] \(steps[index - 1])") }
         let file = { (n: String) in o.out.appendingPathComponent(n) }
         let work = file("work")
 
         step()   // verify
-        let got = try Preparer.digest(o.ipsw, Insecure.SHA1())
+        let ipswBytes = ByteCount(total: (try? fm.attributesOfItem(atPath: o.ipsw.path)[.size] as? Int) ?? 0)
+        progress.measure = { ipswBytes.fraction }
+        let got = try Preparer.digest(o.ipsw, Insecure.SHA1(), count: ipswBytes.add)
         guard got == sha1.lowercased() else { throw FirmwareError(.shaMismatch, "\(o.ipsw.lastPathComponent): sha1 \(got), \(e.id) pins \(sha1)") }
         let ipsw = IPSWArchive(o.ipsw)
         let restorePlist = try ipsw.read("Restore.plist")
@@ -177,13 +184,15 @@ public enum N72Recipe {
             "outputs": ["nand": ["path": "nand", "pages": pages.count, "listing_sha256": listing.finalize().map { String(format: "%02x", $0) }.joined()],
                         "nor": try sha("nor.bin"), "iboot": major >= 3 ? try sha("iBoot.bin") as Any : NSNull(), "gid_blobs": try sha("gid-blobs.bin")],
             "derived": derived,
-            // machine options the device must boot with (ipod2g_device.py; none without data protection)
-            "machine": [String: String](),
+            // machine options the device must boot with (ipod2g_device.py): every device built here uses the
+            // engine UID path; adopted and shipping images keep the legacy default
+            "machine": machine,
         ]
         try fm.removeItem(at: work)
         try JSONSerialization.data(withJSONObject: lock, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             .write(to: file("device.lock.json"))
         log("\(o.out.path): UDID \(ident.udid ?? "-")")
+        progress.finish()
         emit(.done(lock: "device.lock.json"))
     }
 

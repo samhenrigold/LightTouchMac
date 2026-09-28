@@ -5,8 +5,8 @@
   "product_type": "iPod2,1",
   "version": "3.1.3",
   "build": "7E18",
-  "status": "available",
-  "source": {"kind": "bundled", "resource": "device/nand.itnand"},
+  "status": "user_ipsw",
+  "source": {"kind": "ipsw", "sha1": "5f4f5c01eda2f811f73167e7d1f82dbeed82367b", "bytes": 263275211},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "f246cfefd363c2ec38927473be6f6d45", "key": "afa37377de73fdf1e2ad6b0117cd2847"},
    "BatteryCharging0": {"file": "batterycharging0.s5l8720x.img3", "iv": "f617033546f742170011669656b57494", "key": "a8ab6a757b1f2cfdb69f8a2455e0aa95"},
@@ -28,6 +28,7 @@
    "rootfs": {"file": "018-6481-015.dmg", "key": "2360d83b606481a5ca080fe7a6fc64f8d5a5556413dfcf3e1277fe564734ee0b188798b8"},
    "UpdateRamDisk": {"file": "018-6509-015.dmg", "iv": "c23f914e487b35897d065202db69a507", "key": "45544b6e783b0d80da04ad6cbcf55175"}
   },
+  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}, "gli_dispatch": "gli-dispatch-7E18.tsv"},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
  },

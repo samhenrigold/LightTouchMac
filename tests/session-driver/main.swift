@@ -95,7 +95,7 @@ extension String {
     var serial: SerialLogCapture?
     var deaths: [String] = []
     /// An iPod's own files (a device.py device); nil: the shipping image in `files`.
-    struct IPodFiles { var nand, nor, iBoot: String; var gidBlobs: String? }
+    struct IPodFiles { var nand, nor, iBoot: String; var gidBlobs: String?; var machine: [String: String] = [:] }
     var ipod: IPodFiles?
     init(name: String, profile: DeviceProfile) { self.name = name; self.profile = profile }
     var dir: URL { work.appendingPathComponent(name) }
@@ -111,7 +111,7 @@ extension String {
             let files = try BootRecipe.preparedFiles(base: URL(fileURLWithPath: Self.ipadBase), overlay: overlay, writableNOR: nil)
             let identity = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: Self.ipadBase + "/identity.json"))) as! [String: Any]
             let dieID = (identity["die-id"] as? [String])?.joined(separator: ":")
-            config = BootRecipe.iPad(.init(kboot: files.kboot.path, nand: files.nand.path, overlay: overlay.path, dieID: dieID,
+            config = BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: dieID,
                                            writableNOR: files.writableNOR?.path, usbAddress: mux.guestAddress, wifi: true),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: nil, restore: [])
         } else {
@@ -121,7 +121,7 @@ extension String {
                                            iBoot: files.iBoot, bootrom: Self.files + "/bootrom_240_4",
                                            nand: files.nand, nor: files.nor, writableNOR: nor.path,
                                            overlay: overlay.path, usbAddress: mux.guestAddress, wifi: true,
-                                           gidBlobs: files.gidBlobs, guestPackage: guestPackage),
+                                           gidBlobs: files.gidBlobs, guestPackage: guestPackage, machineOptions: files.machine),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: "user,id=wifi0", restore: [])
         }
         let process = DeviceProcess(instance: UUID(), profile: profile, log: dir.appendingPathComponent("native.log"),
@@ -263,7 +263,7 @@ func checkPreparedFiles() throws {
     let kept = try Data(contentsOf: clone) == Data("guest write".utf8)
     var missingThrows = false
     do { _ = try BootRecipe.preparedFiles(base: state, overlay: overlay, writableNOR: nil) } catch { missingThrows = true }
-    emit("preparedFiles", ["kboot": files.kboot.path == base.appendingPathComponent("kboot.bin").path,
+    emit("preparedFiles", ["kboot": files.boot.path == base.appendingPathComponent("kboot.bin").path,
                            "nand": files.nand.path == base.appendingPathComponent("nand").path,
                            "overlay": fm.fileExists(atPath: overlay.path), "cloneMode": mode, "cloneMatches": cloneMatches,
                            "secondBootKeeps": kept, "stamp": stamp.timeIntervalSince1970, "missingThrows": missingThrows,

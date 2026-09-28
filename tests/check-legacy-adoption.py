@@ -45,9 +45,10 @@ for e in catalog['entries']:
             assert field in r, (e['id'], field)
     assert e['emulator']['min_protocol'] >= 1
 status = {e['id']: e['status'] for e in catalog['entries']}
-assert status == {'n72ap-7E18': 'available', 'k48ap-7B500': 'available', 'k48ap-7B367': 'available',
+assert status == {'n72ap-7E18': 'user_ipsw', 'k48ap-7B500': 'available', 'k48ap-7B367': 'available',
                   'k48ap-8C148': 'experimental', 'n72ap-8C148': 'coming_soon', 'n72ap-5F138': 'coming_soon'}, status
 sha = {e['id']: e['source'].get('sha1') for e in catalog['entries']}
+assert sha['n72ap-7E18'] == '5f4f5c01eda2f811f73167e7d1f82dbeed82367b'   # docs/ipod/from-ipsw.md's IPSW
 assert sha['k48ap-7B367'] == '172e8297af74b91971a802e6ad137c891f553099'
 assert sha['k48ap-8C148'] == '8717b3bedc925b587566442ad375aa65d857e79a'
 assert sha['k48ap-7B500'] == '68b613f78581d36eab96aa5a007001dff142baa3'

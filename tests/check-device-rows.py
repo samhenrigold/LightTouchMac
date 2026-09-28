@@ -30,10 +30,14 @@ import Foundation
             Set(DeviceAction.allCases.filter { r.allows($0, canDownload: canDownload) }.map { "\($0)" })
         }
 
-        // The bundled iPod is ready without a record: starting adopts it.
+        // iPod 3.1.3 is a user_ipsw entry: the shipping image is its adopted device (LegacyAdoption, at
+        // launch); without a record it is built from the user's IPSW.
         var r = row(iPod)
+        precondition(r.state == .unavailable(.requiresIPSW) && r.primaryTitle == "Import IPSW…")
+        precondition(allowed(r, canDownload: true) == ["importIPSW"], "\(allowed(r))")
+        r = row(iPod, instance: id)
         precondition(r.state == .ready && r.isStartable && r.primaryTitle == "Start")
-        precondition(allowed(r) == ["start"], "\(allowed(r))")
+        precondition(allowed(r) == ["start", "erase", "showInFinder", "delete"], "\(allowed(r))")
         precondition(r.title == "iOS 3.1.3" && !r.isExperimental && r.stateDescription == "Ready")
 
         // An IPSW entry without a device is not downloaded, with its size.
@@ -96,7 +100,7 @@ import Foundation
         precondition(r.primaryAction == .downloadAndPrepare, "retrying a failed download downloads again")
 
         // A start failure: Try Again starts again.
-        r = row(iPod, failure: "These device files are missing: /x")
+        r = row(iPod, instance: id, failure: "These device files are missing: /x")
         precondition(r.state == .error("These device files are missing: /x") && r.primaryAction == .start)
         precondition(r.primaryTitle == "Try Again" && r.allows(.start, canDownload: false))
 
@@ -112,6 +116,7 @@ import Foundation
         precondition(r.state == .unavailable(.requiresIPSW) && r.primaryTitle == "Import IPSW…")
         precondition(allowed(r, canDownload: true) == ["importIPSW"] && r.stateDescription == "Requires IPSW")
         precondition(row(beta, instance: id).state == .ready, "an imported beta runs like any device")
+        precondition(row(beta, failure: "x").primaryAction == .importIPSW, "a failed import offers the import again")
 
         // Experimental carries a tag and a note.
         r = row(iPad4)

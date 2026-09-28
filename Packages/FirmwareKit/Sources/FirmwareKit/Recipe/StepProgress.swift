@@ -38,6 +38,9 @@ struct StepPlan: Sendable {
             .init(file: "check.log", marker: "iBoot version", at: 68, text: "Checking the sealed flash"),
         ]),
         "Writing the lock": .init(seconds: 3, text: "Hashing the prepared flash"),
+        // n72 (N72Recipe; ~35 s for 7E18)
+        "Writing the identity, NOR and boot files": .init(seconds: 2, text: "Writing the NOR and boot files"),
+        "Building the system volume": .init(seconds: 20, text: "Building the system volume"),
     ]
 
     static func plan(_ name: String) -> StepPlan { plans[name] ?? .init(seconds: 10, text: name) }

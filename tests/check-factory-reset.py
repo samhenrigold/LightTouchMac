@@ -35,6 +35,7 @@ nonisolated func logEvent(_ s:String){}
  var stateDir:URL{root}
  let root:URL
  var overlayURL:URL{root.appendingPathComponent("overlay")}
+ var preparedNORURL:URL?{root.appendingPathComponent("nor.bin")}
  var snapshotURL:URL{root.appendingPathComponent("snapshot")}
  var snapshotTmpURL:URL{snapshotURL.appendingPathExtension("tmp")}
  var snapshotBadURL:URL{snapshotURL.appendingPathExtension("bad")}
@@ -43,6 +44,7 @@ nonisolated func logEvent(_ s:String){}
   self.root=root
   try FileManager.default.createDirectory(at:overlayURL,withIntermediateDirectories:true)
   try Data("personal data".utf8).write(to:overlayURL.appendingPathComponent("file"))
+  try Data("nvram".utf8).write(to:preparedNORURL!)
  }
  func beginCleanShutdown(completion:@escaping(Bool)->Void){events.append("halt");completion(true)}
  func resolveDeviceNotice(for operation:Notice){}
@@ -56,6 +58,7 @@ nonisolated func logEvent(_ s:String){}
   current.requestFactoryReset();current.requestFactoryReset()
   while current.isErasing {try await Task.sleep(for:.milliseconds(5))}
   precondition(events==["halt","stop","restart"])
+  precondition(!FileManager.default.fileExists(atPath:current.preparedNORURL!.path), "a prepared device's NOR copy is erased with its overlay")
   events=[];exitNative=false
   current=try Controller(root.appendingPathComponent("stuck"))
   current.requestFactoryReset()
@@ -73,7 +76,7 @@ nonisolated func logEvent(_ s:String){}
   current.requestFactoryReset()
   while current.isErasing {try await Task.sleep(for:.milliseconds(5))}
   precondition(events==[] && !FileManager.default.fileExists(atPath:current.overlayURL.path))
-  print("PASS: erase waits for the helper to exit, removes data before restarting the device, coalesces requests, preserves data on stop failure, retries from a dead helper, and erases a stopped device without quitting")
+  print("PASS: erase waits for the helper to exit, removes data before restarting the device, coalesces requests, preserves data on stop failure, retries from a dead helper, and erases a stopped device without quitting; a prepared device's NOR copy goes with its overlay")
  }
 }
 '''
