@@ -43,6 +43,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(404, {'error': 'not_compatible'})
                 data = dict(data, apps=apps)
             return self.reply(200, data)
+        if url.path == '/api/v1/copies/7':   # a copy record whose ipa_id isn't a string: the app can't read it
+            return self.reply(200, {'ipa_id': [7]})
         if url.path == '/api/v1/copies/195588':
             return self.reply(200, load('new-copy-195588.json' if self.server.new else 'old-copy-195588.json'))
         self.send_error(500)   # /ipa/…: every download here must come from the library
@@ -90,6 +92,15 @@ code = r'''import Foundation
    return
   }
 
+  // A response that doesn't decode: CatalogError.unreadable in plain words; app.log has the coding path.
+  do { _ = try await CatalogClient.copyDetails(7); preconditionFailure("decoded a garbled copy record") }
+  catch CatalogError.unreadable {}
+  check(CatalogError.unreadable.localizedDescription == "Legacy Store sent a response Light Touch couldn’t read.", "plain words")
+  await AppEventLog.shared.flush()
+  let appLog = { (try? String(contentsOf: Bundled.preparedLogsDirectory!.appendingPathComponent("app.log"), encoding: .utf8)) ?? "" }
+  check(appLog().contains("Legacy Store: couldn’t read /api/v1/copies/7") && appLog().contains("typeMismatch") && appLog().contains("ipa_id"),
+        "the DecodingError and its coding path are in app.log: \(appLog())")
+
   // iPod touch 2G: Enigmo 3.3-H's armv6 slice is ARMv7 code, greyed with the reason; the other three run.
   let ipod2 = try await CatalogClient.search("enigmo", device: "iPod2,1", os: "3.1.3")
   check(names(ipod2) == ["Enigmo": "Needs a newer processor", "Enigmo 2": nil, "Enigmo!": nil, "Enigmous": nil], "\(names(ipod2))")
@@ -97,6 +108,8 @@ code = r'''import Foundation
   check(ipod2[0].md5 == "1ce61d09f89df054e99b72eabffbd640", "search record md5")
   do { _ = try await CatalogClient.compatibleCopy(195588, device: "iPod2,1", os: "3.1.3"); preconditionFailure("iPod took Enigmo") }
   catch CatalogError.badStatus(404) {}
+  await AppEventLog.shared.flush()
+  check(appLog().contains("Legacy Store: HTTP 404 for /api/emulator/apps?"), "the HTTP status is in app.log")
   // The suggested list (no query) asks for compatible apps only.
   _ = try await CatalogClient.search("", device: "iPod2,1", os: "3.1.3")
 

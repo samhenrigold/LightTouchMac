@@ -139,6 +139,10 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | needsTap (no guest agent: the profile was offered) | Tap Install on the iPod to trust the proxy certificate. |
 | Settings ▸ Storage | Devices (Base · Data · Snapshot), IPSWs (Downloaded / Imported IPSW), Caches and logs, Library (N IPAs · size · size on no device) |
 
+### Install failures
+
+Every failed install, download or removal writes its whole error to app.log (`install: <name> failed: …`, with a DecodingError's coding path; `Legacy Store: HTTP <code> for <path>`). A Legacy Store response that doesn’t decode reads “Legacy Store sent a response Light Touch couldn’t read.”, never Foundation’s “isn’t in the correct format”.
+
 ### Store on iPhone OS 1.x
 
 The suggested list isn’t asked for: “iPhone OS 1.1 has no App Store.” A search still lists apps greyed with “Requires iOS 2.0”.

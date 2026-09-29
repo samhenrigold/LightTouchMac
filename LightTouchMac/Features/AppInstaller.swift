@@ -222,10 +222,18 @@ enum AppInstaller {
                 guard !Task.isCancelled else { return }
                 job.failed = true
                 pauseIfNeeded(error, with: emulator, excluding: job)
-                job.status = error.localizedDescription
+                job.status = failureText(error, job)
             }
         }
         return job
+    }
+
+    /// A failed job's row text, with the whole error in app.log first: the row's words alone
+    /// ("isn't in the correct format") left diagnostics with nothing to go on. A decoding error
+    /// never reaches the row as Foundation's text.
+    static func failureText(_ error: Error, _ job: InstallJob) -> String {
+        logEvent("install: \(job.name) failed: \(String(reflecting: error)) [\((error as NSError).domain) \((error as NSError).code)]")
+        return error is DecodingError ? CatalogError.unreadable.localizedDescription : error.localizedDescription
     }
 
     /// A Legacy Store copy: same pipeline, same queue, but the row exists —
@@ -304,7 +312,7 @@ enum AppInstaller {
                 // decision, not a failure, either way.
                 guard !Task.isCancelled else { return }
                 job.failed = true
-                job.status = error.localizedDescription
+                job.status = failureText(error, job)
             }
         }
         return job
@@ -378,7 +386,7 @@ enum AppInstaller {
             job.failed = true
             guard !Task.isCancelled else { return }
             pauseIfNeeded(error, with: emulator, excluding: job)
-            job.status = error.localizedDescription
+            job.status = failureText(error, job)
         }
     }
 
@@ -416,6 +424,7 @@ enum AppInstaller {
                 // Quit can cancel a waiting batch, never an active C call.
             } catch {
                 guard !Task.isCancelled else { return }
+                logEvent("uninstall failed: \(String(reflecting: error))")
                 pauseIfNeeded(error, with: emulator)
                 presentError(error, window)
             }

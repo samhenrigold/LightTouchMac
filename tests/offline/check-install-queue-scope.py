@@ -8,7 +8,8 @@ import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
 app = root / 'LightTouchMac'
 code = r'''import Cocoa
-nonisolated func logEvent(_ message: String) {}
+nonisolated(unsafe) var logged: [String] = []
+nonisolated func logEvent(_ message: String) { logged.append(message) }
 struct DeviceInstance { let id = UUID() }
 @MainActor final class EmulatorController {
  var services: EmulatorController { get throws { self } }  // EmulatorController.services: the uninstall
@@ -95,6 +96,8 @@ extension AppInstaller {
   try await until { lostA.isFinished }
   precondition(lostA.failed && AppInstaller.isPaused(a.instance.id) && !AppInstaller.isPaused(b.instance.id))
   precondition(waitA.status == "Paused" && waitB.status == "Copying media…" && a.failures == 1 && b.failures == 0)
+  // The failure's whole error is in app.log, not only the row's words.
+  precondition(logged.contains { $0.hasPrefix("install: Lost A failed: ") && $0.contains("timedOut") && $0.contains("upload") }, "\(logged)")
   b.finish("Wait B")
   try await until { waitB.isFinished }
   precondition(waitB.status == "Added to Photos" && !waitB.failed)
@@ -115,7 +118,18 @@ extension AppInstaller {
   b.finish("app.b")
   try await until { finished == 1 }
   precondition(!AppInstaller.hasPendingWork)
-  print("PASS: jobs carry their device; discard(for:), pause and busy/pending checks are scoped to one device")
+  // A response that didn't decode: the row says so plainly; app.log has the DecodingError and its coding path.
+  struct Copy: Decodable { let ipa_id: String }
+  var decodeError: Error?
+  do { _ = try JSONDecoder().decode(Copy.self, from: Data(#"{"ipa_id": [1, 2]}"#.utf8)) } catch { decodeError = error }
+  let garbled = add("Garbled", to: b)
+  try await until { b.imported.last == "Garbled" }
+  b.finish("Garbled", error: decodeError!)
+  try await until { garbled.isFinished }
+  precondition(garbled.failed && garbled.status == "Legacy Store sent a response Light Touch couldn’t read.", garbled.status)
+  precondition(!garbled.status.contains("correct format"))
+  precondition(logged.contains { $0.hasPrefix("install: Garbled failed: ") && $0.contains("typeMismatch") && $0.contains("ipa_id") }, "\(logged.last ?? "")")
+  print("PASS: jobs carry their device; discard(for:), pause and busy/pending checks are scoped to one device; failures log their whole error")
  }
 }
 '''
