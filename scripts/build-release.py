@@ -484,6 +484,7 @@ PREPARE_ENTRY = 'k48ap-7B500'
 VERIFY_ENTRIES = {
     'k48ap-7B500': ('ipad', None),   # --verify-ipsw
     'k48ap-8C148': ('ipad', Path.home() / 'Downloads/ipad1-ios32-feasibility/iPad1,1_4.2.1_8C148_Restore.ipsw'),
+    'k48ap-7B367': ('ipad', Path.home() / 'Downloads/ipad1-ios32-feasibility/iPad1,1_3.2_7B367_Restore.ipsw'),
     'n72ap-7E18': ('ipod', Path.home() / 'Developer/ipod2g-re/OldSDK/iPod2,1_3.1.3_7E18_Restore.ipsw'),
     'n72ap-8C148': ('ipod', Path.home() / 'Downloads/ios4/iPod2,1_4.2.1_8C148_Restore.ipsw'),
 }
