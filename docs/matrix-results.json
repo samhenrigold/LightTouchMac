@@ -212,11 +212,11 @@
   "version": "2.1.1",
   "board": "n72ap",
   "status": "experimental",
-  "when": "2026-09-29T08:29:28+00:00",
+  "when": "2026-09-29T17:24:20+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-2x-hold-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-2x-hold/build/libqemu-arm.dylib",
-   "guest_tools": "/tmp/hold2x/gt"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
   },
   "keys": {
    "total": 14,
@@ -225,7 +225,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 34.1,
+   "seconds": 58.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -238,12 +238,12 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-5F138/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5F138/firmwarekit.log",
    "lock": {
     "boot_strategy": "bootrom",
-    "gles": "stock engine, software CA: no dyld shared cache (2.x, 3.0)",
+    "gles": "GL front end replaces OpenGLES (218 exports, the firmware's own); CA composites through it (CA_ENABLE_OGL=1)",
     "gli": null,
-    "guest_package": null,
+    "guest_package": "n72-ios2",
     "activation": true,
     "kernel": "Darwin Kernel Version 9.4.1: Sun Aug 10 21:25:25 PDT 2008; root:xnu-1228.7.27~12/RELEASE_ARM_S5L8720X"
    }
@@ -251,11 +251,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 11.1
+    "seconds": 47.1
    },
    "lockdown": {
     "ok": true,
-    "seconds": 3.1,
+    "seconds": 3.8,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -273,12 +273,28 @@
     "error": null
    },
    "install": {
-    "ok": null,
-    "note": "appsync off"
+    "ok": true,
+    "seconds": 3,
+    "attempt": 1,
+    "apps": [
+     "com.namconetworks.pacmanlite"
+    ],
+    "launch": {
+     "at": [
+      0.384,
+      0.677
+     ],
+     "bundleID": "com.namconetworks.pacmanlite",
+     "shot1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5F138/boot/ipod/launched1.png",
+     "shot2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5F138/boot/ipod/launched2.png",
+     "shot3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5F138/boot/ipod/launched3.png"
+    }
    },
    "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "ok": true,
+    "offered": 7,
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": true,
@@ -290,28 +306,34 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 8.9,
-     "lockdown": 6.6
+     "lit": 9.6,
+     "lockdown": 3.2
     }
    },
    "shutdown": {
     "ok": true,
     "seconds": 15.4,
     "reason": "The iPod stopped.",
-    "second": 15.7
+    "second": 15.2
    },
-   "base_unchanged": true,
+   "base_unchanged": false,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/installed.png",
+   "tip": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/tip.png",
+   "prelaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/prelaunch.png",
+   "launched1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/launched1.png",
+   "launched2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/launched2.png",
+   "launched3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/launched3.png",
+   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/afterlaunch.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/driver.jsonl",
-  "triage": "(a)+(c) 2.1.1 through the app pipeline (ipod-2x): prepare needed only the catalog recipe block (the Swift n72 recipe already had the 2.x paths: no BuildManifest, plain-tail img3, epoch-1 NAND, only iBoot's SHSH wrapped, no iBoot.bin, no helpers/seed package without the shared cache); boot needed the lock's boot_strategy \"bootrom\" (SecureROM -> NOR LLB -> iBoot; the app and the session driver passed a missing iBoot.bin as direct-iboot) and the session driver setting the time over lockdown-tz as the app does (clears lockdownd's BrickState; before it the screen sat on Connect to iTunes). Home screen, Activated, AFC 4/4, persist. Byte-matched to qemu-ios ipod2g_device.py: nor.bin, gid-blobs.bin, identity.json identical; the system volumes list the same 10801 entries with equal contents except the SpringBoard job plist (same content, different binary-plist encoding) and lockdownd (same patched code; the signature blob differs, ldid vs FirmwareKit). Shutdown passes since qemu-ios ipod-2x-hold 19649e467c (smoke #19, closed): the hold button was never the gap (the 2.x DeviceTree has function-button_hold <gpio 0x0c02> like 3.x; Hold locks the screen). Two gaps in the machine's hold-and-slide: (1) it held Home through the 2.5 s settle and pressed Hold in the same tick as the release, so both edges arrived in one GPIO status read (group 3 = 0x06000000) and 2.x's SpringBoard never raised the power-off sheet (from a dark lock screen the first press only wakes the display, which hid it); Home is now a tap. (2) 2.x's AppleD1759PMU-36.2 halt, tethered, prints \"pmu waiting for stdby\" and sleeps on the PMU interrupt until the cable comes out (EVENT_A bit 3 -> 0x0a bit 0), where 3.x/4.x's -94.7 writes 0x6f=0x90; the gesture now unplugs once the guest has turned the backlight rail off. Earlier rows (ipod-2x 43f7aff9ac) failed shutdown only. Rows from qemu-ios ipod-2x 43f7aff9ac (bd8d6b1363 + the 0x38100000 block); 5F138 also passes everything but shutdown on the pinned bd8d6b1363."
+  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/driver.jsonl",
+  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). Earlier: (a)+(c) 2.1.1 through the app pipeline (ipod-2x): prepare needed only the catalog recipe block (the Swift n72 recipe already had the 2.x paths: no BuildManifest, plain-tail img3, epoch-1 NAND, only iBoot's SHSH wrapped, no iBoot.bin, no helpers/seed package without the shared cache); boot needed the lock's boot_strategy \"bootrom\" (SecureROM -> NOR LLB -> iBoot; the app and the session driver passed a missing iBoot.bin as direct-iboot) and the session driver setting the time over lockdown-tz as the app does (clears lockdownd's BrickState; before it the screen sat on Connect to iTunes). Home screen, Activated, AFC 4/4, persist. Byte-matched to qemu-ios ipod2g_device.py: nor.bin, gid-blobs.bin, identity.json identical; the system volumes list the same 10801 entries with equal contents except the SpringBoard job plist (same content, different binary-plist encoding) and lockdownd (same patched code; the signature blob differs, ldid vs FirmwareKit). Shutdown passes since qemu-ios ipod-2x-hold 19649e467c (smoke #19, closed): the hold button was never the gap (the 2.x DeviceTree has function-button_hold <gpio 0x0c02> like 3.x; Hold locks the screen). Two gaps in the machine's hold-and-slide: (1) it held Home through the 2.5 s settle and pressed Hold in the same tick as the release, so both edges arrived in one GPIO status read (group 3 = 0x06000000) and 2.x's SpringBoard never raised the power-off sheet (from a dark lock screen the first press only wakes the display, which hid it); Home is now a tap. (2) 2.x's AppleD1759PMU-36.2 halt, tethered, prints \"pmu waiting for stdby\" and sleeps on the PMU interrupt until the cable comes out (EVENT_A bit 3 -> 0x0a bit 0), where 3.x/4.x's -94.7 writes 0x6f=0x90; the gesture now unplugs once the guest has turned the backlight rail off. Earlier rows (ipod-2x 43f7aff9ac) failed shutdown only. Rows from qemu-ios ipod-2x 43f7aff9ac (bd8d6b1363 + the 0x38100000 block); 5F138 also passes everything but shutdown on the pinned bd8d6b1363."
  },
  "k48ap-7B500": {
   "version": "3.2.2",
@@ -643,11 +665,11 @@
   "version": "3.0",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T00:14:03+00:00",
+  "when": "2026-09-29T17:40:32+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
   },
   "keys": {
    "total": 19,
@@ -656,7 +678,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 21.2,
+   "seconds": 61.9,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -669,49 +691,66 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-7A341/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-7A341/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "stock engine, software CA: no dyld shared cache (2.x, 3.0)",
+    "boot_strategy": "iboot",
+    "gles": "stock OpenGLES exports differ from opengles-2x.exports (missing [\"eglBindTexImage\", \"eglChooseConfig\", \"eglCopyBuffers\", \"eglCreateContext\"], extra [\"glAttachShader\", \"glBeginQuery\", \"glBindAttribLocation\", \"glBindFramebuffer\"]): stock kept",
     "gli": null,
-    "guest_package": "n72-ios3",
+    "guest_package": null,
     "activation": true,
     "kernel": "Darwin Kernel Version 10.0.0d3: Wed May 13 22:14:24 PDT 2009; root:xnu-1357.2.89~4/RELEASE_ARM_S5L8720X"
    }
   },
   "checks": {
    "lit": {
-    "ok": false,
-    "seconds": null
+    "ok": true,
+    "seconds": 10.4
    },
    "lockdown": {
-    "ok": false,
-    "seconds": null,
-    "productType": null
+    "ok": true,
+    "seconds": 10.0,
+    "productType": "iPod2,1"
    },
    "activation": {
-    "ok": false,
-    "state": null
+    "ok": true,
+    "state": "Activated"
    },
    "afc": {
-    "ok": false,
-    "sizes": [],
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
     "error": null
    },
    "install": {
-    "ok": false,
-    "seconds": null,
-    "attempt": null
+    "ok": true,
+    "seconds": 12,
+    "attempt": 1,
+    "apps": [
+     "se.illusionlabs.labyrinth2lite"
+    ],
+    "launch": {
+     "at": [
+      0.147,
+      0.129,
+      1
+     ],
+     "bundleID": "se.illusionlabs.labyrinth2lite",
+     "shot1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-7A341/boot/ipod/launched1.png",
+     "shot2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-7A341/boot/ipod/launched2.png",
+     "shot3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-7A341/boot/ipod/launched3.png"
+    }
    },
    "package": {
-    "ok": false,
-    "offered": 3,
-    "reported": null,
-    "result": null
+    "ok": null,
+    "note": "no loader baked (the lock has no guest_package)"
    },
    "gl": {
     "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "note": "no GL path on 3.0: its OpenGLES exports differ from the 2.x front end's list (ES2 names, no EGL), so the stock engine stays, and without a shared cache no MBXGLEngine is installed (smoke #47)"
    },
    "persist": {
     "ok": false,
@@ -722,22 +761,34 @@
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": null,
+    "ok": true,
+    "seconds": 35.4,
+    "reason": "The iPod stopped.",
     "second": null
    },
-   "base_unchanged": true,
+   "base_unchanged": false,
    "driver_exit": 1,
    "driver_fail": "ipod never lit"
   },
-  "screenshots": {},
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7A341/driver.jsonl",
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/installed.png",
+   "tip": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/tip.png",
+   "prelaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/prelaunch.png",
+   "launched1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/launched1.png",
+   "launched2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/launched2.png",
+   "launched3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/launched3.png",
+   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/afterlaunch.png",
+   "never-lit": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/never-lit.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/driver.jsonl",
   "first_failure": {
-   "check": "lit",
+   "check": "persist",
    "why": "ipod never lit",
-   "excerpt": ""
-  }
+   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\nBoot Failure Count: 0\tPanic Fail Count: 0"
+  },
+  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): 3.0 lights now (it never did before the per-iBoot epoch fix, it_iboot.c). AppSync (installd injection) installs Labyrinth 2 Lite (Legacy Store ipa 257098, min OS 3.0, armv6) in 12 s and it launches, but its window stays grey: no GL on 3.0 (smoke #47). Enigmo (ipa 195588, labelled armv6/min OS 3.0) installs too and dies at launch with SIGILL on a MOVW (armv7) in its own initializer: that copy is not an ARM1176 binary (Legacy Store data, not the emulator). No springboardservices on 3.0 (it arrives in 3.1): the reorder fails with Invalid service, so the icon is tapped on page 2 (--launch-at 0.147,0.129,1); the app no longer waits for that service at boot. Package: no loader baked on 3.0 (the lock has no guest_package; smoke #10). Persist: boot 2 never lit in 240 s after a confirmed clean shutdown (2 of 6 runs today; the other 4 lit in 10-36 s; smoke #46). Shutdown 12-35 s."
  },
  "n72ap-7C145": {
   "version": "3.1.1",
@@ -1374,11 +1425,11 @@
   "version": "2.2",
   "board": "n72ap",
   "status": "experimental",
-  "when": "2026-09-29T08:32:04+00:00",
+  "when": "2026-09-29T17:28:35+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-2x-hold-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-2x-hold/build/libqemu-arm.dylib",
-   "guest_tools": "/tmp/hold2x/gt"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
   },
   "keys": {
    "total": 14,
@@ -1387,7 +1438,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 31.1,
+   "seconds": 56.3,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1400,12 +1451,12 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-5G77a/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5G77a/firmwarekit.log",
    "lock": {
     "boot_strategy": "bootrom",
-    "gles": "stock engine, software CA: no dyld shared cache (2.x, 3.0)",
+    "gles": "GL front end replaces OpenGLES (218 exports, the firmware's own); CA composites through it (CA_ENABLE_OGL=1)",
     "gli": null,
-    "guest_package": null,
+    "guest_package": "n72-ios2",
     "activation": true,
     "kernel": "Darwin Kernel Version 9.4.1: Sat Nov  1 19:13:13 PDT 2008; root:xnu-1228.7.36~2/RELEASE_ARM_S5L8720X"
    }
@@ -1413,11 +1464,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 9.6
+    "seconds": 11.4
    },
    "lockdown": {
     "ok": true,
-    "seconds": 2.4,
+    "seconds": 3.6,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1435,12 +1486,28 @@
     "error": null
    },
    "install": {
-    "ok": null,
-    "note": "appsync off"
+    "ok": true,
+    "seconds": 3,
+    "attempt": 1,
+    "apps": [
+     "com.namconetworks.pacmanlite"
+    ],
+    "launch": {
+     "at": [
+      0.384,
+      0.677
+     ],
+     "bundleID": "com.namconetworks.pacmanlite",
+     "shot1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5G77a/boot/ipod/launched1.png",
+     "shot2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5G77a/boot/ipod/launched2.png",
+     "shot3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5G77a/boot/ipod/launched3.png"
+    }
    },
    "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "ok": true,
+    "offered": 7,
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": true,
@@ -1452,38 +1519,44 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 8.8,
-     "lockdown": 4.3
+     "lit": 16.3,
+     "lockdown": 2.8
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.3,
+    "seconds": 16.1,
     "reason": "The iPod stopped.",
-    "second": 15.4
+    "second": 12.3
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/installed.png",
+   "tip": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/tip.png",
+   "prelaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/prelaunch.png",
+   "launched1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/launched1.png",
+   "launched2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/launched2.png",
+   "launched3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/launched3.png",
+   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/afterlaunch.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/driver.jsonl",
-  "triage": "(a)+(c) 2.2: SecureROM -> LLB looped into DFU (a CPU reset every ~0.15 s, no serial): iBoot-385.49's LLB stores to 0x38100040/44 in the routine that latches the security epoch into POWER_ID, an unmapped block (external abort -> reset). qemu-ios ipod-2x maps it as an unimplemented RAZ/WI device (class S, smoke #18); the LLB then reaches iBoot. iBoot-385.49 then failed 'load_macho_image: failed to load device tree' with 2.1.1's NOR convention (only iBoot's SHSH wrapped): the epoch-2 chain unwraps every image it loads, so the recipe (and the Python oracle, same branch) now wraps every image but the LLB when Restore.plist SCEP >= 2 (the SecureROM verifies the LLB raw). Byte-matched to the updated oracle: nor.bin, gid-blobs.bin, identity.json identical; 11307 volume entries, same two encoding-only differences as 5F138. Home screen, Activated, AFC, persist. Shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
+  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/driver.jsonl",
+  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). Earlier: (a)+(c) 2.2: SecureROM -> LLB looped into DFU (a CPU reset every ~0.15 s, no serial): iBoot-385.49's LLB stores to 0x38100040/44 in the routine that latches the security epoch into POWER_ID, an unmapped block (external abort -> reset). qemu-ios ipod-2x maps it as an unimplemented RAZ/WI device (class S, smoke #18); the LLB then reaches iBoot. iBoot-385.49 then failed 'load_macho_image: failed to load device tree' with 2.1.1's NOR convention (only iBoot's SHSH wrapped): the epoch-2 chain unwraps every image it loads, so the recipe (and the Python oracle, same branch) now wraps every image but the LLB when Restore.plist SCEP >= 2 (the SecureROM verifies the LLB raw). Byte-matched to the updated oracle: nor.bin, gid-blobs.bin, identity.json identical; 11307 volume entries, same two encoding-only differences as 5F138. Home screen, Activated, AFC, persist. Shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
  },
  "n72ap-5H11a": {
   "version": "2.2.1",
   "board": "n72ap",
   "status": "experimental",
-  "when": "2026-09-29T08:34:11+00:00",
+  "when": "2026-09-29T17:50:44+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-2x-hold-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-2x-hold/build/libqemu-arm.dylib",
-   "guest_tools": "/tmp/hold2x/gt"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
   },
   "keys": {
    "total": 14,
@@ -1492,7 +1565,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 29.9,
+   "seconds": 49.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1505,12 +1578,12 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-5H11a/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5H11a/firmwarekit.log",
    "lock": {
     "boot_strategy": "bootrom",
-    "gles": "stock engine, software CA: no dyld shared cache (2.x, 3.0)",
+    "gles": "GL front end replaces OpenGLES (218 exports, the firmware's own); CA composites through it (CA_ENABLE_OGL=1)",
     "gli": null,
-    "guest_package": null,
+    "guest_package": "n72-ios2",
     "activation": true,
     "kernel": "Darwin Kernel Version 9.4.1: Mon Dec  8 21:02:57 PST 2008; root:xnu-1228.7.37~4/RELEASE_ARM_S5L8720X"
    }
@@ -1518,11 +1591,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 9.9
+    "seconds": 31.7
    },
    "lockdown": {
     "ok": true,
-    "seconds": 3.4,
+    "seconds": 2.0,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1540,12 +1613,28 @@
     "error": null
    },
    "install": {
-    "ok": null,
-    "note": "appsync off"
+    "ok": true,
+    "seconds": 4,
+    "attempt": 1,
+    "apps": [
+     "com.namconetworks.pacmanlite"
+    ],
+    "launch": {
+     "at": [
+      0.384,
+      0.677
+     ],
+     "bundleID": "com.namconetworks.pacmanlite",
+     "shot1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5H11a/boot/ipod/launched1.png",
+     "shot2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5H11a/boot/ipod/launched2.png",
+     "shot3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5H11a/boot/ipod/launched3.png"
+    }
    },
    "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "ok": true,
+    "offered": 7,
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": true,
@@ -1557,28 +1646,34 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 9.4,
-     "lockdown": 5.1
+     "lit": 20.1,
+     "lockdown": 0.4
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.3,
+    "seconds": 15.5,
     "reason": "The iPod stopped.",
-    "second": 15.3
+    "second": 16.0
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/installed.png",
+   "tip": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/tip.png",
+   "prelaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/prelaunch.png",
+   "launched1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/launched1.png",
+   "launched2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/launched2.png",
+   "launched3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/launched3.png",
+   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/afterlaunch.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/driver.jsonl",
-  "triage": "(a)+(c) 2.2.1: identical to 5G77a (iBoot-385.49, SCEP 2): the 0x38100000 block and the wrap-all-but-LLB NOR; byte-matched to the updated oracle (nor, gid-blobs, identity identical; 11307 volume entries, the two encoding-only differences). Home screen, Activated, AFC, persist; shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
+  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/driver.jsonl",
+  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). 5H11a: one earlier run of the final set had boot 1 never answer lockdown (lit 30 s, SpringBoard's IOHIDFamily loop in serial, smoke #20's pattern, host load ~50); the rerun recorded here passed. Earlier: (a)+(c) 2.2.1: identical to 5G77a (iBoot-385.49, SCEP 2): the 0x38100000 block and the wrap-all-but-LLB NOR; byte-matched to the updated oracle (nor, gid-blobs, identity identical; 11307 volume entries, the two encoding-only differences). Home screen, Activated, AFC, persist; shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
  },
  "k48ap-8F190": {
   "version": "4.3",
@@ -3968,5 +4063,212 @@
   },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/driver.jsonl",
   "triage": "pass on the first run: catalog entry only."
+ },
+ "n45ap-3A101a": {
+  "version": "1.1",
+  "board": "n45ap",
+  "status": "untested",
+  "when": "2026-09-29T17:10:41+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 1,
+   "ok": 1,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 120.3,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n45ap-3A101a/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
+    "gli": null,
+    "guest_package": "n45-ios1",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 9.0.0d1: Thu Sep  6 23:26:45 PDT 2007; root:xnu-933.0.0.203.obj~6/RELEASE_ARM_S5L8900XRB"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 11.9
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null,
+    "error": "iPod-Touch-1G has no USB link (smoke.md #43)"
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": null,
+    "note": "appsync off"
+   },
+   "package": {
+    "ok": true,
+    "offered": 7,
+    "reported": 7,
+    "result": 0
+   },
+   "gl": {
+    "ok": true,
+    "note": "regress gles: one front-end hello, CA pixmap surfaces, 2 contexts, no refusals",
+    "source": "qemu-ios aec1594bf7 tests/ipod/regress.py --device <this branch's firmwarekit create> --checks boot,gles (legacy-gate, 09-29)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 11.3,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": "The iPod stopped.",
+    "second": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/driver.jsonl",
+  "first_failure": {
+   "check": "lockdown",
+   "why": "iPod-Touch-1G has no USB link (smoke.md #43)",
+   "excerpt": "Dec 30 15:45:10 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: [mbxshim] GLESCreateGC\nDec 30 15:45:10 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: [gles] egl: first pixmap surface 320x480: CoreAnimation renders through the host\nDec 30 15:45:11 SpringBoard[10]: Apple80211GetIfListCopy failed, error: -4"
+  },
+  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): First 1G row through the app's own path: DeviceProfile.iPodTouch1G / BootRecipe.iPod1G (bootrom_s5l8900 from the device assets, the base's iBoot.bin, nand-overlay, the private NOR as pflash) under the helper and the app's dylib. Prepare 120 s from the stock IPSW; lit 12 s; home screen on boot 1; the legacy-linked loader reports package serial 7; boot 2 after the app's Stop (flush + hard halt) lit in 11 s and showed its lock screen: no smoke #12 storage panic on this store. Activation is Sam's automatic path: lockdownd logs 'Setting the activation state to Activated' on boot 1 and 'Using the cached activation state' on boot 2 (serial). Lockdown/AFC/install fail and Shut Down does nothing because the 1G machine has no USB link, device-info row, app-driven buttons or powerdown gesture (smoke #43). Under QMP (build/qemu-system-arm, same base) Hold \u2192 slide to power off \u2192 'pmu go stdby', QEMU exit 0, 6.7 s after the swipe, on both boots (the first hold worked: smoke #21 did not recur); boot 2 used the cached activation. Stays untested: the USB columns cannot pass until #43."
+ },
+ "n45ap-4B1": {
+  "version": "1.1.5",
+  "board": "n45ap",
+  "status": "untested",
+  "when": "2026-09-29T17:17:51+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 1,
+   "ok": 1,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 90.1,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n45ap-4B1/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
+    "gli": null,
+    "guest_package": "n45-ios1",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 9.0.0d1: Wed Dec 12 00:16:00 PST 2007; root:xnu-933.0.0.211.obj~2/RELEASE_ARM_S5L8900XRB"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": false,
+    "seconds": null
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": null,
+    "note": "appsync off"
+   },
+   "package": {
+    "ok": false,
+    "offered": 7,
+    "reported": null,
+    "result": null
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null
+   },
+   "base_unchanged": false,
+   "driver_exit": 1,
+   "driver_fail": "ipod1g never lit"
+  },
+  "screenshots": {},
+  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-4B1/driver.jsonl",
+  "first_failure": {
+   "check": "lit",
+   "why": "ipod1g never lit",
+   "excerpt": ""
+  },
+  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): Prepares (90 s) but never lights: iBoot-204.3.16 panics in miu_init ('Epoch Mismatch': wants POWER_ID epoch 3, the 1G machine synthesises 2 for every build). With the compare patched in a scratch copy iBoot reaches its recovery screen (images of epoch 3 rejected against 2). Emulator side, smoke #44."
  }
 }

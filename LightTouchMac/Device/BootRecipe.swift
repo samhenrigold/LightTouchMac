@@ -45,6 +45,27 @@ nonisolated enum BootRecipe {
         var machineOptions: [String: String] = [:]
     }
 
+    /// The iPod touch 1G (qemu-ios `-M iPod-Touch-1G`): the S5L8900 bootrom and the base's iBoot-204 (IMG2 payload),
+    /// the base's NAND under a page overlay, and the NOR as a pflash drive on the private writable copy (iBoot and
+    /// the kernel write it). No USB link, Wi-Fi or GID blobs on this machine yet (DeviceProfile.hasUSBLink).
+    struct IPod1G {
+        var bootrom: String
+        var iBoot: String
+        var nand: String
+        var writableNOR: String
+        var overlay: String
+        /// This boot's guest-package offer directory (GuestPackage; n45-ios1 has it_boot since qemu-ios ff2f139cf9).
+        var guestPackage: String? = nil
+        var machineOptions: [String: String] = [:]
+    }
+
+    /// A board's SecureROM image (DeviceProfile.bootromName) under the device assets: `root/<name>` (the bundle's
+    /// Resources/device, LTM_FILES), else a qemu-ios-files checkout's `root/ipod1g/<name>` (devos50's n45ap set).
+    static func bootrom(_ name: String, filesRoot root: String) -> String {
+        let flat = "\(root)/\(name)", set = "\(root)/ipod1g/\(name)"
+        return !FileManager.default.fileExists(atPath: flat) && FileManager.default.fileExists(atPath: set) ? set : flat
+    }
+
     /// A prepared base's device.lock.json "machine" options; none for a missing lock or field.
     static func lockMachine(_ lock: URL) -> [String: String] {
         guard let data = try? Data(contentsOf: lock),
@@ -89,6 +110,16 @@ nonisolated enum BootRecipe {
         // The settings 3.1.3 will not boot without (contrib/run-ipod-touch.sh). No
         // IT_LCD_BRIGHT: the guest's own backlight is what makes Lock visible.
         return BootConfig(argv: argv, environment: ["IT_TVOUT_READY": "1"], machine: "iPod-Touch")
+    }
+
+    /// `-drive` takes its own comma escaping (as -M does). No -m: the machine's 128 MiB.
+    static func iPod1G(_ d: IPod1G, serial: String, audio: [String]) -> BootConfig {
+        let machine = "iPod-Touch-1G,bootrom=\(escape(d.bootrom)),iboot=\(escape(d.iBoot))"
+            + ",nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
+            + (d.guestPackage.map { ",guest-package=\(escape($0))" } ?? "") + options(d.machineOptions)
+        let argv = ["LightTouchMac", "-M", machine, "-drive", "if=pflash,format=raw,file=\(escape(d.writableNOR))",
+                    "-display", "none", "-no-shutdown"] + audio + ["-serial", serial]
+        return BootConfig(argv: argv, machine: "iPod-Touch-1G")
     }
 
     /// Wi-Fi is the machine's default (a BCM4329 on its own slirp wifi0); an

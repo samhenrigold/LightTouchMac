@@ -1,6 +1,6 @@
 # Device × firmware matrix
 
-Every public build for the two emulated boards and, for the record, the iPod touch 1G (no board yet). Sources:
+Every public build for the three emulated boards (iPad 1, iPod touch 2G, iPod touch 1G). Sources:
 build ids, Apple CDN URLs, SHA-1s and sizes from api.ipsw.me (plus The Apple Wiki's firmware tables for the builds
 ipsw.me lacks: the paid-update series Apple served through iTunes only, and the pulled 4.2 GM); "hosted" is a HEAD
 request against Apple's URL on the date below. The paid updates (iPod touch 1G 2.x/3.x, iPod touch 2G 3.x) come from
@@ -28,22 +28,22 @@ Checked 2026-09-28.
 | iPad1,1 | 5.0.1 | 9A405 | hosted | `732fc3ca3f5654e6f0df787c817ca16054dfb8da` | 751,358,387 | 18 keys | untested |
 | iPad1,1 | 5.1 | 9B176 | hosted | `f6b19779d2fe4242f87d55701e049291c978e3b3` | 761,232,912 | 18 keys | untested |
 | iPad1,1 | 5.1.1 | 9B206 | hosted | `ad9b607439250f2337fe132890dadc4c487beca8` | 761,323,675 | 18 keys | untested |
-| iPod1,1 | 1.1 | 3A101a | hosted | `9b0d83c7f8b4328174a3f31e0e93f60e591ae143` | 157,890,186 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 1.1.1 | 3A110a | hosted | `84bbc6ea8bf29745195bc9926c1874f7c2a36f32` | 157,906,686 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 1.1.2 | 3B48b | hosted | `108d8ffe9ea75e61cd5e57170ad388b7fa00d923` | 165,567,897 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 1.1.3 | 4A93 | hosted | `8dca23eec69d5ae58fbf3d4a23276e46cbb2e3c6` | 173,511,411 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 1.1.4 | 4A102 | hosted | `c148d1eb1c979bb6434175411d4a372103a4fdd2` | 173,519,589 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 1.1.5 | 4B1 | hosted | `1b818911316e4248ee01d3ec67f9d39afc3db240` | 173,519,637 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 2.0 | 5A347 | mirror (sha1 verified), Apple never hosted | `ae82798e85f9953b0f4798bad36187cb020c9d22` | 233,409,573 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 2.0.1 | 5B108 | mirror (sha1 verified), Apple never hosted | `a81b6e7af4b85ef436d047f9da57c0f694d8964a` | 258,660,321 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 2.0.2 | 5C1 | mirror (sha1 verified), Apple never hosted | `c8b6f9fefa3f3777c56285dfe4c735b1e08a81a2` | 258,201,218 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 2.1 | 5F137 | mirror (sha1 verified), Apple never hosted | `fc7f6d0972927df502ffca47438ca75dcccffaf3` | 251,155,156 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 2.2 | 5G77 | mirror (sha1 verified), Apple never hosted | `081a7de363230fb38d0ce092cbbe42f2a50c8a5f` | 260,186,851 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 2.2.1 | 5H11 | mirror (sha1 verified), Apple never hosted | `fc69be9e421bc0630567184506ab771f6b7ef68b` | 260,166,688 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 3.0 | 7A341 | mirror (sha1 verified), Apple never hosted | `dff2bd14931225908a360fb8e60a336f17d2dd6d` | 242,458,552 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 3.1.1 | 7C145 | mirror (sha1 verified), Apple never hosted | `c6270780c166db4c9f4f0a7fa945754a1f9fe7e8` | 249,755,862 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 3.1.2 | 7D11 | mirror (sha1 verified), Apple never hosted | `7367dd9ba58a3b9777307368a0128e696fdfc9a6` | 249,780,497 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod1,1 | 3.1.3 | 7E18 | mirror (sha1 verified), Apple never hosted | `5f897990f19d2f093b35e0813d7d77806404fb1f` | 235,678,189 | n/a (1.x: only the rootfs is encrypted) | no board |
+| iPod1,1 | 1.1 | 3A101a | hosted | `9b0d83c7f8b4328174a3f31e0e93f60e591ae143` | 157,890,186 | rootfs key verified | untested |
+| iPod1,1 | 1.1.1 | 3A110a | hosted | `84bbc6ea8bf29745195bc9926c1874f7c2a36f32` | 157,906,686 | rootfs key verified | untested |
+| iPod1,1 | 1.1.2 | 3B48b | hosted | `108d8ffe9ea75e61cd5e57170ad388b7fa00d923` | 165,567,897 | rootfs key verified | untested |
+| iPod1,1 | 1.1.3 | 4A93 | hosted | `8dca23eec69d5ae58fbf3d4a23276e46cbb2e3c6` | 173,511,411 | rootfs key verified | untested |
+| iPod1,1 | 1.1.4 | 4A102 | hosted | `c148d1eb1c979bb6434175411d4a372103a4fdd2` | 173,519,589 | rootfs key verified | untested |
+| iPod1,1 | 1.1.5 | 4B1 | hosted | `1b818911316e4248ee01d3ec67f9d39afc3db240` | 173,519,637 | rootfs key verified | untested |
+| iPod1,1 | 2.0 | 5A347 | mirror (sha1 verified), Apple never hosted | `ae82798e85f9953b0f4798bad36187cb020c9d22` | 233,409,573 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 2.0.1 | 5B108 | mirror (sha1 verified), Apple never hosted | `a81b6e7af4b85ef436d047f9da57c0f694d8964a` | 258,660,321 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 2.0.2 | 5C1 | mirror (sha1 verified), Apple never hosted | `c8b6f9fefa3f3777c56285dfe4c735b1e08a81a2` | 258,201,218 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 2.1 | 5F137 | mirror (sha1 verified), Apple never hosted | `fc7f6d0972927df502ffca47438ca75dcccffaf3` | 251,155,156 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 2.2 | 5G77 | mirror (sha1 verified), Apple never hosted | `081a7de363230fb38d0ce092cbbe42f2a50c8a5f` | 260,186,851 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 2.2.1 | 5H11 | mirror (sha1 verified), Apple never hosted | `fc69be9e421bc0630567184506ab771f6b7ef68b` | 260,166,688 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 3.0 | 7A341 | mirror (sha1 verified), Apple never hosted | `dff2bd14931225908a360fb8e60a336f17d2dd6d` | 242,458,552 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 3.1.1 | 7C145 | mirror (sha1 verified), Apple never hosted | `c6270780c166db4c9f4f0a7fa945754a1f9fe7e8` | 249,755,862 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 3.1.2 | 7D11 | mirror (sha1 verified), Apple never hosted | `7367dd9ba58a3b9777307368a0128e696fdfc9a6` | 249,780,497 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
+| iPod1,1 | 3.1.3 | 7E18 | mirror (sha1 verified), Apple never hosted | `5f897990f19d2f093b35e0813d7d77806404fb1f` | 235,678,189 | n/a (1.x: only the rootfs is encrypted) | not in catalog (no 2.x/3.x n45 recipe) |
 | iPod2,1 | 2.1.1 | 5F138 | hosted | `c3c700be49ad227d1152188e7c1e46b8958fd1e4` | 282,083,944 | 14 keys, wiki lacks iBEC, iBSS | experimental |
 | iPod2,1 | 2.2 | 5G77a | hosted | `34a0a489605f34d6cc6c9954edcaaf9a050deedc` | 291,123,491 | 14 keys, wiki lacks iBEC, iBSS | untested |
 | iPod2,1 | 2.2.1 | 5H11a | hosted | `9af5625ea34acdd8abeb6fce71a72651d0c815d5` | 291,140,244 | 14 keys, wiki lacks iBEC, iBSS | untested |
@@ -74,13 +74,29 @@ Notes:
   `recipe.boot: "kboot"` until then.
 - iPod2,1 2.2 / 2.2.1: the wiki has no iBSS/iBEC keys; neither recipe needs those two components. They boot only with
   qemu-ios `ipod-2x` (the LLB's 0x38100000 block, smoke #18); `experimental` since the merge and pin bump (qemu-ios ipad1, 2026-09-29).
-- iPod2,1 2.x: no guest tools, no AppSync (no shared cache); SpringBoard composites through the GL front end (the
+- iPod2,1 2.x and 3.0 with AppSync (catalog on since `legacy-activation-appsync`): the app's pipeline installs a Legacy
+  Store game and it launches — PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) on 5F138, 5G77a and
+  5H11a; on 7A341 Labyrinth 2 Lite (ipa 257098) installs and launches but draws nothing (no GL on 3.0, smoke #47). The install needed an app fix: iPhone OS
+  2.x's installation_proxy silently drops an Install without ClientOptions (libimobiledevice omits the key for NULL
+  options), so the app now always sends an empty dictionary (`legacy-gate`). Neither 2.x nor 3.0 has
+  com.apple.springboardservices (it arrives in 3.1), so the app no longer waits for it at boot and the matrix taps the
+  icon where the firmware puts it (`--launch-at`). The first install raises SpringBoard's Edit Home Screen tip (smoke #45).
+- iPod2,1 2.x: no guest agent (smoke #10); SpringBoard composites through the GL front end (the
   seed package's `n72-ios2` OpenGLES hook, guest package serial 5+; the GL column is regress.py's gles leg). Hold locks;
   the machine's hold-and-slide shuts all three down cleanly (~15 s) since qemu-ios dc2794f46f (smoke #19 closed): a
   tethered 2.x halt waits for the cable to come out, so the gesture unplugs once the screen is dark. The app's Stop is
   a flush + halt and persist passes either way.
 - iPod2,1 4.0 (8A293) and iPad1,1 5.0 (9A334): no Update-ramdisk key on the wiki.
-- iPod1,1: only the root filesystem is encrypted on 1.x; listed for the record, no board is emulated.
+- iPod1,1 1.1–1.1.5: in the catalog since `legacy-gate` (09-29), `untested`: the six Apple URLs/SHA-1s from api.ipsw.me,
+  release dates and the rootfs VFDecrypt keys from The Apple Wiki (`Keys:Snowbird 3A101a (iPod1,1)` … `Keys:LittleBear 4B1
+  (iPod1,1)`), each verified by `firmwarekit verify-keys` (only the rootfs is encrypted on 1.x; the 8900 images use the fixed
+  key). Board `n45ap`, recipe `n45`; they list between the iPad and the iPod touch 2G. The app boots them
+  (`DeviceProfile.iPodTouch1G`: bootrom_s5l8900 from the device assets, the base's iBoot.bin, a private pflash NOR), but
+  the machine has no USB link or app-reachable buttons yet (smoke #43), so lockdown, AFC, installs and Shut Down fail and
+  none is `experimental`. 3A101a: prepare, lit, the loader's package report, persist through Stop's hard halt; activation
+  and the Hold → slider power-off pass only under QMP (lockdownd's own log; `pmu go stdby`). 4B1 never lights: its
+  iBoot-204.3.16 wants security epoch 3, the machine gives 2 (smoke #44). 3A110a–4A102: prepared by no one yet.
+- iPod1,1 2.0–3.1.3 (the paid updates): listed for the record; no n45 recipe for 2.x/3.x.
 
 ## Betas
 

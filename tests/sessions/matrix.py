@@ -158,14 +158,15 @@ def excerpt(path, n=3):
 
 def boot(entry, base, a, helper, work, env):
     """tests/drivers/session-driver --single with reboot; returns the parsed events, the driver's exit and the serial log."""
-    board = "ipad" if entry["board"] == "k48ap" else "ipod"
+    board = {"k48ap": "ipad", "n45ap": "ipod1g"}.get(entry["board"], "ipod")
     nand_current = a.files / "nand-current"
     cfg = {"helper": str(helper), "requirement": check_sessions.TEAM_REQ, "usbmuxd": str(a.usbmuxd), "ipa": str(a.ipa),
            "bundleID": a.bundle_id, "work": str(work), "files": str(a.files),
            "ipodNAND": str(a.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(base) if board == "ipad" else "", "timeout": a.boot_timeout - 20,
            "single": {"board": board, "base": str(base), "reboot": True, "lockdownTZ": str(a.lockdown_tz),
-                      "install": (entry.get("recipe") or {}).get("options", {}).get("appsync", False)}}
+                      "install": (entry.get("recipe") or {}).get("options", {}).get("appsync", False), "launch": a.launch,
+                      **({"launchAt": [float(v) for v in a.launch_at.split(",")]} if a.launch_at else {})}}
     if a.frameworks:
         cfg["frameworks"] = str(a.frameworks)
     itpack = a.guest_tools / ("armv7.itpack" if board == "ipad" else "armv6.itpack")
@@ -211,6 +212,8 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     want = entry["product_type"]
     r["lockdown"] = {"ok": bool(usb) and usb[0].get("productType") == want, "seconds": round(usb[0]["seconds"], 1) if usb else None,
                      "productType": usb[0].get("productType") if usb else None}
+    if nousb := find("noUSB"):   # the 1G machine: no USB link, so nothing over lockdown can run
+        r["lockdown"]["error"] = nousb[0]["why"]
     act = find("activation")
     r["activation"] = {"ok": bool(act) and act[0].get("state") == "Activated", "state": act[0].get("state") if act else None}
     afc = find("afc")
@@ -219,7 +222,10 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     inst = find("installed")
     if appsync:
         r["install"] = {"ok": bool(inst) and inst[0].get("has"), "seconds": round(inst[0]["seconds"]) if inst else None,
-                        "attempt": inst[0].get("attempt") if inst else None}
+                        "attempt": inst[0].get("attempt") if inst else None,
+                        "apps": [x for x in (inst[0].get("apps") or []) if not x.startswith("com.apple.")] if inst else None}
+        if launched := find("launched"):   # --launch: the launched1-3 screenshots are the evidence
+            r["install"]["launch"] = {k: v for k, v in launched[0].items() if k not in ("event", "t", "device")}
     else:
         r["install"] = {"ok": None, "note": "appsync off"}
     pkg = find("guestPackage", generation=1)
@@ -232,6 +238,8 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
                         "result": pkg[0].get("result") if pkg else None}
     else:
         r["package"] = {"ok": None, "note": "no offer (no itpack or nothing for this build)"}
+    if not json.loads((base / "device.lock.json").read_text()).get("guest_package"):   # 3.0: no loader baked
+        r["package"] = {"ok": None, "note": "no loader baked (the lock has no guest_package)"}
     r["gl"] = {"ok": None, "note": "skipped: qemu-ios gl-coverage not merged (no counters)"}
     per = find("persist")
     r["persist"] = {"ok": bool(per) and per[0].get("kept") and per[0].get("same"), "error": per[0].get("error") if per else None}
@@ -351,6 +359,8 @@ def main():
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
     ap.add_argument("--ipa", type=Path, default=sources.path("qemu-ios") / "contrib/it-harness/build/Harness.ipa")
     ap.add_argument("--bundle-id", default="com.qemuios.harness")
+    ap.add_argument("--launch-at", help="--launch on 2.x (no springboardservices): the icon's normalized X,Y")
+    ap.add_argument("--launch", action="store_true", help="after the install, open the app from the Home screen (screenshots launched1-3)")
     ap.add_argument("--frameworks", type=Path, help="where libimobiledevice is loaded from (default Homebrew's)")
     ap.add_argument("--qemu-ios", type=Path, default=sources.path("qemu-ios"))
     ap.add_argument("--patcher", type=Path, default=Path(os.environ.get("FIRMWAREKIT_IBOOT_PATCHER", PATCHER)), help="iBoot32Patcher for the k48 recipe")

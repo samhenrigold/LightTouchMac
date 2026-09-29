@@ -155,6 +155,16 @@ extension String {
                                            machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"],
                                      netdev: netdevExtra.map { "user,id=wifi0" + $0 }, restore: [])
+        } else if profile == .iPodTouch1G {
+            // As EmulatorController.iPod1GBoot: the base's iBoot.bin, nand/ and a private writable NOR; no USB link.
+            let base = URL(fileURLWithPath: ipod!.nand).deletingLastPathComponent()
+            let boot = profile.preparedBoot(strategy: nil)
+            let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: dir.appendingPathComponent("nor.bin"),
+                                                     boot: boot.boot, also: boot.files)
+            config = BootRecipe.iPod1G(.init(bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Self.files), iBoot: files.boot.path,
+                                             nand: files.nand.path, writableNOR: files.writableNOR!.path, overlay: overlay.path,
+                                             guestPackage: guestPackage, machineOptions: ipod!.machine),
+                                       serial: serial!.argument, audio: ["-audio", "driver=none"])
         } else {
             let files = ipod ?? IPodFiles(nand: Self.ipodNAND, nor: Self.files + "/ios3/nor_7E18.bin", iBoot: Self.files + "/ios3/iBoot.bin")
             let nor = try DeviceStateStorage.writableNOR(base: URL(fileURLWithPath: files.nor), overlay: overlay)
@@ -237,6 +247,12 @@ extension String {
         link.send(.touch(slot: 0, phase: 2, x: x1, y: y1))
     }
 
+    /// A short tap (a drag holds long enough to start SpringBoard's icon editing).
+    func tap(_ x: Double, _ y: Double) async {
+        process.link.send(.touch(slot: 0, phase: 0, x: x, y: y)); try? await Task.sleep(for: .milliseconds(80))
+        process.link.send(.touch(slot: 0, phase: 2, x: x, y: y))
+    }
+
     /// lockdown's ProductType through this device's socket, under the gate.
     func productType() async -> String? { await lockdownValue("ProductType") }
 
@@ -302,6 +318,48 @@ extension String {
         }
     }
     fail("\(d.name): install failed: \(lastError)")
+}
+
+/// The installed app, opened from the Home screen: moved into page 1's first slot through SpringBoardServices (the
+/// Apps inspector's reorder), then tapped there (iPhone OS 2.x/3.x 320x480 grid: slot 0 centred at 47,62). With
+/// `point` (2.x: no springboardservices) the icon is tapped where the caller says it is. The first install's
+/// "Edit Home Screen" tip is dismissed first (its button sits in a gap between icons when there is no tip).
+@MainActor func launch(_ d: Device, at point: [Double]? = nil) async {
+    var event: [String: Any] = ["device": d.name, "bundleID": config.bundleID]
+    var target = (47.0 / 320, 62.0 / 480)
+    try? await Task.sleep(for: .seconds(3))
+    d.screenshot("tip")
+    await d.tap(0.5, 330.0 / 480)
+    try? await Task.sleep(for: .seconds(2))
+    if let point, point.count >= 2 {   // [x, y, page]: page 1+ is a swipe left per page
+        target = (point[0], point[1])
+        event["at"] = point
+        for _ in 0..<Int(point.count > 2 ? point[2] : 0) {
+            await d.drag(0.85, 0.45, 0.15, 0.45)
+            try? await Task.sleep(for: .seconds(2))
+        }
+    } else {
+        do {
+            let order = try await d.services.homeScreenOrder()
+            event["slot"] = order.firstIndex(of: config.bundleID) ?? -1
+            if let first = order.first, first != config.bundleID {
+                let moved = try await d.services.moveOnHomeScreen(config.bundleID, before: first, profile: d.profile)
+                event["movedTo"] = moved.firstIndex(of: config.bundleID) ?? -1
+            }
+        } catch { event["reorderError"] = "\(error)" }
+    }
+    try? await Task.sleep(for: .seconds(3))
+    d.screenshot("prelaunch")
+    await d.tap(target.0, target.1)
+    for (i, wait) in [8, 12, 20].enumerated() {
+        try? await Task.sleep(for: .seconds(wait))
+        if let path = d.screenshot("launched\(i + 1)") { event["shot\(i + 1)"] = path }
+    }
+    emit("launched", event)
+    d.process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))
+    d.process.link.send(.button(0, down: false))
+    try? await Task.sleep(for: .seconds(3))
+    d.screenshot("afterlaunch")
 }
 
 /// With an offer: the loader's report, then the agent through the app's GuestServices (the window

@@ -74,7 +74,7 @@ nonisolated enum GuestPackage {
         case unchanged = 0, installed, switched, revertedBad, revertedTries, refused
     }
 
-    static func arch(board: String) -> String? { ["n72ap": "armv6", "k48ap": "armv7"][board] }
+    static func arch(board: String) -> String? { ["n72ap": "armv6", "n45ap": "armv6", "k48ap": "armv7"][board] }
 
     /// The bundled itpack for an arch: the app's flat Resources/guest-tools (which
     /// firmwarekit also seeds from), else (development) LTM_GUEST_PACKAGE or a

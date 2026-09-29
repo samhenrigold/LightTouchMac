@@ -274,7 +274,7 @@ final class EmulatorController {
     private func bootConfiguration() -> BootConfig? {
         guard !isDead, !releasing else { return nil }
         proxyEndpoint = nil
-        var config = profile == .iPad1 ? iPadBoot() : iPodBoot()
+        var config = switch profile { case .iPad1: iPadBoot(); case .iPodTouch2G: iPodBoot(); case .iPodTouch1G: iPod1GBoot() }
         config?.webProxy = proxyEndpoint
         if config != nil {
             logEmulatorBuild()
@@ -319,7 +319,7 @@ final class EmulatorController {
         let usbSession = usbmux.start(paths: instance.paths)
         openSerialLog()
         let netdev = network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
-        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: files.boot.lastPathComponent == "iBoot.bin" ? files.boot.path : "", bootrom: "\(Bundled.filesRoot)/bootrom_240_4",
+        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: files.boot.lastPathComponent == "iBoot.bin" ? files.boot.path : "", bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Bundled.filesRoot),
                                      nand: files.nand.path, nor: base.appendingPathComponent("nor.bin").path,
                                      writableNOR: files.writableNOR!.path, overlay: overlay.path,
                                      usbAddress: usbSession?.guestAddress, wifi: network,
@@ -328,6 +328,30 @@ final class EmulatorController {
                                serial: serialCapture?.argument ?? "null",
                                audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
                                netdev: netdev, restore: [])
+    }
+
+    /// The iPod touch 1G boots its base/ (firmwarekit's n45 recipe): the S5L8900 bootrom, iBoot.bin, nand/ under
+    /// this device's overlay and a private writable NOR. No usbmuxd: the machine has no USB link yet
+    /// (DeviceProfile.hasUSBLink), so a lit screen is the boot's end (bootFinished) and Stop is the only halt.
+    private func iPod1GBoot() -> BootConfig? {
+        let overlay = overlayURL
+        let base = instance.paths.base
+        let files: (boot: URL, nand: URL, writableNOR: URL?)
+        do {
+            let boot = profile.preparedBoot(strategy: nil)
+            files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: instance.paths.writableNOR,
+                                                 boot: boot.boot, also: boot.files)
+            guard let nor = files.writableNOR else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
+            guard try pinOverlay(overlay) else { return nil }
+            openSerialLog()
+            return BootRecipe.iPod1G(.init(bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Bundled.filesRoot),
+                                           iBoot: files.boot.path, nand: files.nand.path, writableNOR: nor.path, overlay: overlay.path,
+                                           guestPackage: composeGuestOffer(), machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
+                                     serial: serialCapture?.argument ?? "null", audio: ["-audio", "driver=coreaudio,out.buffer-count=16"])
+        } catch {
+            failBoot(error)
+            return nil
+        }
     }
 
     /// iPad 1 boots its base/ by the lock's boot_strategy: iboot (default) = iBoot.bin + nor.bin +
@@ -509,6 +533,7 @@ final class EmulatorController {
     /// screen answers: lockdown, then SpringBoard.
     private func startReadinessWatch() {
         guard !shuttingDown else { return }
+        guard profile.hasUSBLink else { preparingDevice = false; return }   // nothing to wait for: lit is up
         readinessTask?.cancel()
         preparingDevice = true
         preparationStatus = "Starting iOS…"
@@ -1679,7 +1704,12 @@ final class EmulatorController {
         try await waitForSpringBoard()
     }
 
+    /// springboardservices first ships in iPhone OS 3.1: 2.x and 3.0 lockdownd has no such service (Invalid service
+    /// on every try), so there lockdown answering is as ready as the Home screen gets.
+    var hasSpringBoardServices: Bool { iosVersion.compare("3.1", options: .numeric) != .orderedAscending }
+
     private func waitForSpringBoard() async throws {
+        guard hasSpringBoardServices else { return }
         let deadline = ContinuousClock.now + .seconds(45)
         while ContinuousClock.now < deadline {
             try Task.checkCancellation()

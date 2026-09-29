@@ -200,7 +200,11 @@ extension DeviceServices {
         let box = SyncBox()
         let ctx = InstallContext(box, progress)
         let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
-        let ir = stagedPath.withCString { installFn(connection.client, $0, nil, installCallback, ctxPtr) }
+        // An empty ClientOptions, never none: iPhone OS 2.x's installation_proxy silently drops an Install
+        // request without the key (libimobiledevice omits it for NULL options), so no status ever arrives.
+        let options = imd.encode([String: String]())
+        defer { if let options { imd.plist_free?(options) } }
+        let ir = stagedPath.withCString { installFn(connection.client, $0, options, installCallback, ctxPtr) }
         guard ir == imd.success else {
             connection.free()
             Unmanaged<InstallContext>.fromOpaque(ctxPtr).release()

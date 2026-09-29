@@ -67,7 +67,7 @@ TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"
 APP_SOURCES = ["Services/DeviceServices", "Device/DeviceProcess", "Transport/DeviceExecution", "Device/BootRecipe", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
                "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestAgent", "Guest/GuestPackage",
                "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
-               "Device/WebProxyConfiguration"]
+               "Device/WebProxyConfiguration", "Services/SpringBoardServices"]
 
 
 def tree(root):

@@ -8,7 +8,7 @@ nonisolated extension DeviceProfile {
     /// helper's hello disagrees.
     var screenPixels: CGSize {
         switch self {
-        case .iPodTouch2G: CGSize(width: 320, height: 480)
+        case .iPodTouch2G, .iPodTouch1G: CGSize(width: 320, height: 480)
         case .iPad1: CGSize(width: 1024, height: 768)
         }
     }
@@ -38,14 +38,15 @@ nonisolated extension DeviceProfile {
 
     var shellPixels: CGSize {
         switch self {
-        case .iPodTouch2G: CGSize(width: 737, height: 1318)
+        // ponytail: the 1G wears the 2G's shell art (same screen and button layout) until it has its own.
+        case .iPodTouch2G, .iPodTouch1G: CGSize(width: 737, height: 1318)
         case .iPad1: CGSize(width: 852, height: 1108)
         }
     }
 
     var screenCutout: CGRect {
         switch self {
-        case .iPodTouch2G: CGRect(x: 74, y: 213, width: 594, height: 891)
+        case .iPodTouch2G, .iPodTouch1G: CGRect(x: 74, y: 213, width: 594, height: 891)
         // (852 - 768) / 2 and (1108 - 1024) / 2: the Simulator centres its screen.
         case .iPad1: CGRect(x: 42, y: 42, width: 768, height: 1024)
         }

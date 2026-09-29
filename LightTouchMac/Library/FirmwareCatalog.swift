@@ -154,6 +154,7 @@ nonisolated extension DeviceProfile {
         switch boardID {
         case DeviceProfile.iPodTouch2G.boardID: self = .iPodTouch2G
         case DeviceProfile.iPad1.boardID: self = .iPad1
+        case DeviceProfile.iPodTouch1G.boardID: self = .iPodTouch1G
         default: return nil
         }
     }
