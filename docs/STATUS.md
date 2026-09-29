@@ -4,6 +4,8 @@ The one place that says what is done, what is running and what is left. Updated 
 `multidevice` (this repo) or `ipad1` (qemu-ios). Every "done" line names how it was checked. Answer
 status questions from this file, after checking it against the commits it cites.
 
+Build for Sam: `multidevice-20260928b` (09ad91f + qemu-ios 082b45e77d, notarized adfbf096…, verified in-bundle 11/11 on all five entries; iPads on the real iBoot chain; typing on 4.2.1; package serial 3; no USB alert). Not in it: the DeviceLink.reap fix (a helper killed under load could go unnoticed), the bundled-iPod conversion, runtime GL.
+
 Last update: 2026-09-28, `ipa-library` merged (IPA library; iBoot shipped; Track A), qemu-ios ipad1 `082b45e77d`.
 
 ## Done
