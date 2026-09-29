@@ -108,7 +108,8 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - Finder native device recognition: deferred, needs Apple's USB host-controller entitlement (don't raise unless Sam does).
 
 ### Debts
-- The `iboot=` path synthesises POWER_ID's security epoch as 1; iBoot-1072+ (4.3.5, iOS 5) wants 2 and loops in miu_init. Generic fix: read SEPO off the image like the iPod's `it_iboot_find_epoch`, or boot from the ROM so LLB sets it (qemu-ios docs/ipad1/ios5.md). Until then 8L1/9B206 recipes must use `boot: kboot`.
+- The `iboot=` path synthesises POWER_ID's security epoch as 1; iBoot-1072+ (4.3.5, iOS 5) wants 2 and loops in miu_init. Generic fix: read SEPO off the image like the iPod's `it_iboot_find_epoch`, or boot from the ROM so LLB sets it (qemu-ios docs/ipad1/ios5.md). Until then the SEPO-2 builds use `boot: kboot`: 8K2 and 8L1 in the catalog (`ipad-43x`), 9B206 when it is added.
+- iPad 4.3.x (all six, `ipad-43x` 09-29): prepare and lit pass through the app's path, lockdown never answers: the 4.3 power source classifies the cable as `Detached` (4.2.1 on the same pin: `USBHost`), so USB never connects (smoke #35, qemu-ios side). Nothing 4.3 goes `experimental` until that lands.
 - App: when a recipe names `keybag_ramdisk_from`, queue the sibling IPSW download instead of failing with a message.
 - The pinned dev dylib (`build-w1-native`) predates the `gid-blobs` machine property; rebuild it from the pinned commit (dev-only; releases build their own).
 - iPad 4.3.x: clean shutdown panics in EmbeddedIOP-20's sleep/stop watchdog under the v3 instrument; the IOP core is the fix. 4.3.1–4.3.5 use 8F190's ramdisk for the keybag (`recipe.keybag_ramdisk_from`, on `matrix-43`).

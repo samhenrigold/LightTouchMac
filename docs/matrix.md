@@ -61,14 +61,17 @@ Notes:
 - iPod2,1 3.0–3.1.3 were the paid "iPod touch Software Update" series: no Apple CDN URL ever existed; the catalog
   points at the third-party mirror (status note says so). 7E18 keeps `user_ipsw` (the bundled image's build).
 - iPod2,1 4.2 (8C134) was the 4.2 GM Apple pulled a week before 4.2.1; it is not in the catalog.
-- iPad1,1 4.3.1–4.3.5: the wiki has no ramdisk keys (checked again 2026-09-28 through the MediaWiki API: the
-  RestoreRamdisk/UpdateRamdisk rows do not exist on the `Keys:` pages); the k48 recipe's data-protection keybag step
+- iPad1,1 4.3.1–4.3.5: the wiki has no ramdisk keys (checked again 2026-09-29 through the MediaWiki API: the
+  RestoreRamdisk/UpdateRamdisk rows do not exist on the `Keys:` pages, last edited 2024-01-23; every other component key
+  on them matches the catalog); the k48 recipe's data-protection keybag step
   needs a restore ramdisk. Those entries carry `recipe.keybag_ramdisk_from: "k48ap-8F190"`: a sibling build's
   ramdisk (same iOS major, keys known; only it_keybag runs on it, under this build's kernel) boots the keybag
   one-shot. The app (FirmwareJobs) and `tests/matrix.py` resolve the sibling entry's IPSW and pass
   `firmwarekit create --sibling-entry/--sibling-ipsw`; firmwarekit decrypts just that ramdisk with the sibling's key.
-  The app needs the sibling IPSW downloaded first (it says so); queueing that download is the follow-up. 8G4 and 8L1
-  both get their keybag this way (matrix-results.md).
+  The app queues the sibling IPSW's download beside the entry's own. All five get their keybag this way
+  (matrix-results.md). 8K2 and 8L1 carry `recipe.boot: "kboot"`: their iBoot-1072 is security epoch (SEPO) 2 and the
+  emulator's `iboot=` path models POWER_ID's epoch as 1 (smoke.md #7), so they boot the kernel directly until it is read
+  off the image; 8F190–8J3 are SEPO 1 and take the iBoot chain.
 - iPod2,1 2.2 / 2.2.1: the wiki has no iBSS/iBEC keys; neither recipe needs those two components. They boot only with
   qemu-ios `ipod-2x` (the LLB's 0x38100000 block, smoke #18); `experimental` since the merge and pin bump (qemu-ios ipad1, 2026-09-29).
 - iPod2,1 2.x: no guest tools, no AppSync (no shared cache); SpringBoard composites through the GL front end (the
