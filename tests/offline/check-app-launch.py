@@ -13,7 +13,7 @@ def method(source, signature):
 tools = (root / 'LightTouchMac/Guest/GuestServices.swift').read_text()
 controller = (root / 'LightTouchMac/Device/EmulatorController.swift').read_text()
 inspector = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
-error = tools[tools.index('enum AppLaunchError:'):tools.index('enum DeviceToolsError:')]
+error = tools[tools.index('enum AppLaunchError:'):tools.index("/// The app's guest operations")]
 code = r'''import Cocoa
 ''' + error + r'''
 enum DeviceToolsError: LocalizedError { case failed(String); var errorDescription: String? { switch self { case .failed(let text): text } } }

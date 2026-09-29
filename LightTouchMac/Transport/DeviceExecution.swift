@@ -353,6 +353,19 @@ nonisolated enum DeviceError: Error, LocalizedError {
     }
 }
 
+/// A failure the app words itself: a missing bundled tool, or a message for the alert.
+nonisolated enum DeviceToolsError: LocalizedError {
+    case toolMissing(String)
+    case failed(String)
+    var errorDescription: String? {
+        switch self {
+        case .toolMissing(let t):
+            return "A component (\(t)) is missing from this copy of Light Touch. Reinstall Light Touch."
+        case .failed(let msg): return msg
+        }
+    }
+}
+
 /// installation_proxy error codes (installation_proxy.h). Only the ones the
 /// retry policy keys on are named; everything else is `.other`.
 nonisolated enum InstproxyError: Equatable, CustomStringConvertible {

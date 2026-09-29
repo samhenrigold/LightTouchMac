@@ -190,7 +190,7 @@ subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-
     str(APP/'LightTouchMac/Features/MediaIdentity.swift'),str(APP/'LightTouchMac/Features/MediaSong.swift'),str(APP/'LightTouchMac/Services/DeviceServices.swift'),str(APP/'LightTouchMac/Services/AFC.swift'),str(APP/'LightTouchMac/Transport/DeviceExecution.swift'),
     str(APP/'LightTouchMac/Transport/IMobileDevice.swift'),str(APP/'LightTouchMac/Features/MediaPhoto.swift'),
     str(APP/'LightTouchMac/Features/MediaVideo.swift'),str(APP/'LightTouchMac/Features/PreparedMedia.swift'),
-    str(APP/'LightTouchMac/Guest/GuestServices.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
+    str(APP/'LightTouchMac/Guest/GuestServices.swift'),str(APP/'LightTouchMac/Guest/GuestAgent.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
 if args.photo:
     from PIL import Image,ImageDraw
     source = out/"Photo 'quoted' $title — été.png"
