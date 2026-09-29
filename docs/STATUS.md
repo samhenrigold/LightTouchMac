@@ -71,7 +71,7 @@ Last update: 2026-09-28, `ipa-library` merged (IPA library; iBoot shipped; Track
 
 | GL bridge rejection audit | qemu-ios `gl-coverage` | every reject/unimplemented path counted + logged, magenta fallback under `gles-debug`, produced-vs-rejected list from the firmwares' own frameworks, cheap formats implemented |
 | iPod touch 1G, milestone 0 | qemu-ios `ipod-1g` | devos50's S5L8900 machine on our tree with shared models + properties; boot 3A101a from his public images (docs/sweep/ipod-1g.md) |
-| IOP second core | qemu-ios `iop-core` | Apple's EmbeddedIOP firmware on a modelled second core + register-level H2FMI (Sam's call 09-28); the v3 instrument is merged and gets 4.3.5 to VFL init |
+| IOP second core | qemu-ios `iop-core` | milestone 4: 4.2.1 boots to a lit screen and powers off cleanly on Apple's EmbeddedIOP firmware with the HLE off (real H2FMI + CDMA inline AES); 4.3.5 reaches launchd on the core, then a read-fidelity gap at fsck; the SDIO task needs a real SDHCI model (Wi-Fi off with the core). Next: 4.3.5 reads → 4.3 shutdown → 5.1.1 → SDHCI (2–3 d + 1–2 d) |
 | Runtime GL dispatch | qemu-ios `gl-runtime` | one shim per arch, dispatch discovered at load, name-keyed wire |
 | Consolidation sweep | docs/sweep/PLAN.md | surveys done (docs/sweep/*.md); Tracks A and B merged; C–E sequenced in the plan; S1–S3 decided |
 
