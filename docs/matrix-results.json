@@ -1404,7 +1404,7 @@
   "version": "4.3.1",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T02:36:44+00:00",
+  "when": "2026-09-29T02:59:18+00:00",
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-acb86d65823cd73b2/Packages/FirmwareKit/.build/release/firmwarekit",
    "dylib": "/Users/shg/Developer/qemu-ios-matrix43/build-native/libqemu-arm.dylib",
@@ -1417,7 +1417,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 343.3,
+   "seconds": 320.8,
    "ok": false,
    "steps": [
     "Verifying the IPSW",
@@ -1441,7 +1441,7 @@
    "why": "oneshot_failed: seal boot: no clean halt after 300 s",
    "excerpt": "one-shot: timed out after 300 s (exit 0)\nfirmwarekit: oneshot_failed: seal boot: no clean halt after 300 s"
   },
-  "triage": "(b -> pipeline) 4.3.1: no public ramdisk keys (the wiki's Keys page has no RestoreRamdisk/UpdateRamdisk rows; checked through the MediaWiki API 2026-09-28). Run with --keybag-ramdisk = 8F190's decrypted Update ramdisk (038-0707-006): the 4.3.1 kernel boots that sibling ramdisk as md0, it_keybag formats effaceable and writes the system keybag, the one-shot halts cleanly (18 s). The seal boot then reaches FTL_Open, disk0s1, SpringBoard and stops in the same 4.3 IOP shutdown watchdog as 8F190 (class H, iop-v3 instrument). Proposal: catalog recipe.keybag_ramdisk_from = 'k48ap-8F190' (the app fetches the sibling IPSW, decrypts its ramdisk with that entry's key); the same works for 8H7/8J3/8K2/8L1 (8L1 verified by hand: NAND signature epoch 2 from its kernel, boot_args 3, keybag ok, SpringBoard; ~/Developer/qemu-ios-files/ipad1/repro/matrix-8L1). Evidence: matrix-results/k48ap-8G4/{keybag-1.log,seal.log,firmwarekit.log}."
+  "triage": "(pipeline done) 4.3.1: no public ramdisk keys (wiki Keys page has no RestoreRamdisk/UpdateRamdisk rows; MediaWiki API 2026-09-28). recipe.keybag_ramdisk_from = k48ap-8F190: firmwarekit decrypts 8F190's Update ramdisk (038-0707-006) with that entry's key, the 4.3.1 kernel boots it as md0, it_keybag formats effaceable and writes the system keybag, the one-shot halts cleanly (6 s). The seal boot then reaches FTL_Open, disk0s1, SpringBoard and stops in the 4.3 IOP shutdown watchdog, as 8F190 (class H, iop-v3 instrument). Same field on 8H7/8J3/8K2/8L1 (8L1 verified by hand: NAND signature epoch 2, boot_args 3, keybag ok, SpringBoard; ~/Developer/qemu-ios-files/ipad1/repro/matrix-8L1). Evidence: matrix-results/k48ap-8G4/{keybag-1.log,seal.log,firmwarekit.log}."
  },
  "k48ap-8H7": {
   "version": "4.3.2",
