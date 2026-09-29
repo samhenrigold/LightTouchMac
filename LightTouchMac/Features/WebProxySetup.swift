@@ -1,11 +1,10 @@
-// The web proxy on one running device: the host side's CA (itwebproxy
-// --init-ca), then, through the agent, the route (a legacy image without the
+// The web proxy on one running device: the host side's CA (WebProxyCA,
+// served by the helper's WebProxy), then, through the agent, the route (a legacy image without the
 // PAC) and the trust; lockdown's MCInstall profile only for a guest without an
 // agent (LockdownTools).
 
 import Foundation
-import Subprocess
-import System
+import Security
 
 struct WebProxySetup: Sendable {
     let services: DeviceServices
@@ -16,8 +15,8 @@ struct WebProxySetup: Sendable {
     private var proxyFile: String { WebProxyConfiguration.file(in: proxyDirectory).path }
 
     /// Both boards, no guest helper: routing is the image's PAC (always the proxy, DIRECT as fallback), or
-    /// itproxy's configd setting on an image without one (GuestServices.routeThroughProxy), and the host's
-    /// itwebproxy mode. Turning the proxy on trusts this
+    /// itproxy's configd setting on an image without one (GuestServices.routeThroughProxy), and the helper's
+    /// proxy mode. Turning the proxy on trusts this
     /// device's CA in the guest silently through the agent (GuestServices.trustCertificate, the store
     /// keeps it); only a guest without an agent gets the configuration profile through lockdown's stock
     /// MCInstall service (lockdown-mcinstall, a child process like lockdown-tz), once: an installed
@@ -26,16 +25,14 @@ struct WebProxySetup: Sendable {
     /// never leaves the Mac); add `ittrust remove` / RemoveProfile if asked.
     func configure(enabled: Bool) async throws -> WebProxyStatus {
         guard enabled else { return .ready }
-        guard let host = Bundled.resolve("itwebproxy", fallbacks: [
-            "\(Bundled.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
-        ]) else { throw DeviceToolsError.toolMissing("itwebproxy") }
-        let prepared = try await run(.path(FilePath(host)), arguments: ["--init-ca", proxyFile],
-                                     output: .discarded, error: .string(limit: 1 << 16))
-        guard prepared.terminationStatus.isSuccess else {
-            logEvent("proxy: certificate preparation failed: \(prepared.standardError)")
+        let config = URL(fileURLWithPath: proxyFile)
+        let der: Data
+        do {
+            der = SecCertificateCopyData(try await Task.detached { try WebProxyCA.prepare(config: config) }.value.certificate) as Data
+        } catch {
+            logEvent("proxy: certificate preparation failed: \(error)")
             throw DeviceToolsError.failed("Couldn’t prepare the proxy certificate.")
         }
-        let der = try Data(contentsOf: URL(fileURLWithPath: proxyFile + ".ca.der"))
         // The agent claims its channel shortly after lockdown answers; give it a moment before falling back.
         if await guest.agent.waitAlive(seconds: 15) {
             do {

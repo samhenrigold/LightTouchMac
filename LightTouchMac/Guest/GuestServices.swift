@@ -94,7 +94,7 @@ nonisolated struct GuestServices: Sendable {
         }
     }
 
-    /// The image's baked PAC (/usr/local/share/ltm/proxy.pac: every request to the itwebproxy guestfwd,
+    /// The image's baked PAC (/usr/local/share/ltm/proxy.pac: every request to the web proxy guestfwd,
     /// DIRECT as fallback) routes the guest through the proxy. An image without it (the legacy iPod
     /// image) goes straight out through slirp, so the trusted CA never sees a request: itproxy points
     /// the Wi-Fi service's HTTP and HTTPS proxies at the guestfwd through configd (idempotent; it keeps

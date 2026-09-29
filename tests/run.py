@@ -178,15 +178,13 @@ def session_checks():
         if want(f'sessions/{check}', sources.qemu_build() / 'qemu-system-arm', 'qemu-system-arm (QEMU_BUILD_DIR)') \
                 and want(f'sessions/{check}', files / 'nand-current', 'shipping image'):
             checks.append([S / check])
-    # The web proxy's CA trusted through the guest agent on the shipping image: the host proxy and the armv6
+    # The web proxy's CA trusted through the guest agent on the shipping image: the helper's proxy, the armv6
     # package from the checkout, httpget (contrib/it-proxy/build.sh) for the guest-side fetch proof.
     trust = 'sessions/check-proxy-trust.py'
     if dylib.exists() and want(trust, files / 'nand-current', 'shipping image') \
-            and want(trust, qemu_ios / 'contrib/it-webproxy/itwebproxy', 'itwebproxy (contrib/it-webproxy/build.sh)') \
             and want(trust, itpack, 'armv6 package (LTM_ITPACK)') \
             and want(trust, qemu_ios / 'contrib/it-proxy/httpget', 'httpget (contrib/it-proxy/build.sh)'):
-        checks.append([S / 'check-proxy-trust.py', '--board', 'ipod', '--itwebproxy', qemu_ios / 'contrib/it-webproxy/itwebproxy',
-                       '--itpack', itpack, '--httpget', qemu_ios / 'contrib/it-proxy/httpget', '--dylib', dylib])
+        checks.append([S / 'check-proxy-trust.py', '--board', 'ipod', '--itpack', itpack, '--httpget', qemu_ios / 'contrib/it-proxy/httpget', '--dylib', dylib])
     return checks, skips
 
 

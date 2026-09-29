@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Enabling the web proxy trusts its certificate in the guest silently: no "Install Profile" screen, ever.
 
-The session driver (tests/drivers/session-driver/proxy.swift) boots one device as the app does, with itwebproxy on
-the wifi guestfwd, and trusts the `--init-ca` certificate the way WebProxySetup.configure does when
+The session driver (tests/drivers/session-driver/proxy.swift) boots one device as the app does, with the helper's web
+proxy (LightTouchDevice/WebProxy.swift) on the wifi guestfwd, and trusts its WebProxyCA certificate the way WebProxySetup.configure does when
 the guest agent is up: GuestServices.trustCertificate, which runs the package's ittrust (securityd's own
 trust-store API) or the app's copy out of the armv6 itpack. Checked: the guest's own HTTPS client through
 the proxy (httpget) fails before the trust and answers HTTP 200 after; Safari stays the front app with the
 HTTPS page open (safari-https.png); a restart on the same overlay, unlocked, shows the home screen and no
 profile screen (rebooted-unlocked.png) after the trust runs again; the fetch still answers 200.
 
-    tests/sessions/check-proxy-trust.py --board ipod|ipad [--base DIR] --itwebproxy PATH --itpack armv6.itpack
+    tests/sessions/check-proxy-trust.py --board ipod|ipad [--base DIR] --itpack armv6.itpack
                                [--ipad-itpack armv7.itpack] [--httpget PATH] [--url https://example.com/]
                                [--helper PATH] [--dylib PATH] [--work DIR]
 
@@ -28,11 +28,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--board", choices=("ipod", "ipad"), required=True)
     ap.add_argument("--base", type=Path, help="a prepared base; omit for the shipping iPod image")
-    ap.add_argument("--itwebproxy", required=True, help="the host proxy helper (a packaged app's Contents/MacOS/itwebproxy)")
     ap.add_argument("--itpack", type=Path, default=sources.path("qemu-ios") / "build/guest-package/armv6.itpack")
     ap.add_argument("--httpget", type=Path, help="contrib/it-proxy/httpget built for armv6 (the guest-side fetch proof)")
     ap.add_argument("--ipad-itpack", type=Path, help="--board ipad: the armv7.itpack whose offer brings it_agent up (as the app boots an iPad)")
     ap.add_argument("--url", default="https://example.com/")
+    ap.add_argument("--page", action="append", help="--board ipad: another Safari page after the trust, 'URL' or "
+                    "'archive:yyyyMMdd URL' (page-N.png; looked at, not scored)")
     ap.add_argument("--helper")
     ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(sources.qemu_build() / "libqemu-arm.dylib")))
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
@@ -55,8 +56,9 @@ def main():
            "work": str(work), "files": str(args.files),
            "ipodNAND": str(args.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(args.base if args.board == "ipad" else ""), "timeout": 900,
-           "proxy": {"board": args.board, "base": str(args.base or ""), "itwebproxy": args.itwebproxy, "itpack": str(args.itpack),
-                     "httpget": str(args.httpget) if args.httpget else None, "url": args.url}}
+           "proxy": {"board": args.board, "base": str(args.base or ""), "itpack": str(args.itpack),
+                     "httpget": str(args.httpget) if args.httpget else None, "url": args.url,
+                     "pages": args.page or []}}
     if args.frameworks:
         cfg["frameworks"] = args.frameworks
     if args.ipad_itpack:

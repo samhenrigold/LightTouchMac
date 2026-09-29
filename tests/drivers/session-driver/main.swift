@@ -124,8 +124,9 @@ extension String {
     /// An iPod's own files (a device.py device); nil: the shipping image in `files`.
     struct IPodFiles { var nand, nor, iBoot: String; var gidBlobs: String?; var machine: [String: String] = [:] }
     var ipod: IPodFiles?
-    /// EmulatorController.proxyForward's guestfwd, appended to the wifi netdev (proxy.swift).
+    /// EmulatorController.proxyForward's guestfwd, appended to the wifi netdev, and the proxy the helper serves (proxy.swift).
     var netdevExtra: String?
+    var webProxy: WebProxyEndpoint?
     init(name: String, profile: DeviceProfile) { self.name = name; self.profile = profile }
     var dir: URL { work.appendingPathComponent(name) }
 
@@ -136,7 +137,7 @@ extension String {
         serial = try SerialLogCapture(url: dir.appendingPathComponent("serial.log"), temporaryRoot: work,
                                       watch: serialWatch?.phrases ?? [], onMatch: serialWatch?.onMatch ?? { _ in })
         let overlay = dir.appendingPathComponent("overlay")
-        let config: BootConfig
+        var config: BootConfig
         if profile == .iPad1 {
             // As EmulatorController.iPadBoot: the lock's boot_strategy picks iboot (iBoot.bin + nor.bin + gid-blobs.bin)
             // or kboot (kboot.bin); both boot over a private writable NOR copy.
@@ -165,6 +166,7 @@ extension String {
                                      serial: serial!.argument, audio: ["-audio", "driver=none"],
                                      netdev: "user,id=wifi0" + (netdevExtra ?? ""), restore: [])
         }
+        config.webProxy = webProxy
         let process = DeviceProcess(instance: UUID(), profile: profile, log: dir.appendingPathComponent("native.log"),
                                     lease: dir.appendingPathComponent("work/lease"), helper: URL(fileURLWithPath: Self.helper), requirement: Self.requirement)
         self.process = process

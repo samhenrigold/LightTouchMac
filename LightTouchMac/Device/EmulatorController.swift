@@ -33,8 +33,8 @@ final class EmulatorController {
     private(set) var isSleeping = false { didSet { if oldValue != isSleeping { onStatusChange?() } } }
     private(set) var foregroundAppName: String? { didSet { if oldValue != foregroundAppName { onStatusChange?() } } }
     /// Each device's proxy routing and certificate live beside its own state
-    /// (WebProxyConfiguration.directory): the itwebproxy of one device's
-    /// guestfwd never reads another's mode.
+    /// (WebProxyConfiguration.directory): one device's proxy (in its
+    /// helper) never reads another's mode.
     private var proxyDirectory: URL { WebProxyConfiguration.directory(for: instance) }
     private(set) lazy var webProxy = WebProxyConfiguration.load(from: proxyDirectory)
     private(set) var webProxyStatus: WebProxyStatus = .waiting
@@ -273,7 +273,9 @@ final class EmulatorController {
     /// nil when the device can't boot; the notice says why and the state is dead.
     private func bootConfiguration() -> BootConfig? {
         guard !isDead, !releasing else { return nil }
-        let config = profile == .iPad1 ? iPadBoot() : iPodBoot()
+        proxyEndpoint = nil
+        var config = profile == .iPad1 ? iPadBoot() : iPodBoot()
+        config?.webProxy = proxyEndpoint
         if config != nil {
             logEmulatorBuild()
             startGuestPackageWatch()  // after composeGuestOffer(): a watch with no offer judges nothing
@@ -348,9 +350,9 @@ final class EmulatorController {
         }
         let usbSession = usbmux.start(paths: instance.paths)
         openSerialLog()
-        // The web proxy, as on the iPod: itwebproxy on a slirp guestfwd at 10.0.2.100:3128. This
-        // explicit wifi0 replaces the machine's own. The image's Wi-Fi service carries a PAC that
-        // uses the proxy and falls back to DIRECT, so Proxy off is purely host-side (itwebproxy "off").
+        // The web proxy, as on the iPod: the helper's WebProxy behind a slirp guestfwd at 10.0.2.100:3128.
+        // This explicit wifi0 replaces the machine's own. The image's Wi-Fi service carries a PAC that
+        // uses the proxy and falls back to DIRECT, so Proxy off is purely host-side (the "off" mode).
         let netdev = network ? proxyForward().map { "user,id=wifi0" + $0 } : nil
         return BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: instance.identity?.dieID,
                                      writableNOR: files.writableNOR?.path,
@@ -460,14 +462,16 @@ final class EmulatorController {
         }
     }
 
-    /// The guestfwd for itwebproxy, reading this device's routing file; nil
-    /// when the helper is missing or the routing can't be written.
+    /// This boot's web proxy: the helper serves `proxyEndpoint` (BootConfig.webProxy, reading this device's
+    /// routing file) and the guestfwd returned here reaches it; nil when the routing can't be written.
+    private var proxyEndpoint: WebProxyEndpoint?
     private func proxyForward() -> String? {
-        guard let helper = Bundled.resolve("itwebproxy", fallbacks: ["\(Bundled.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"]) else { return nil }
         do {
             try webProxy.writeRouting(in: proxyDirectory)
             webProxyAvailable = true
-            return WebProxyConfiguration.guestForward(helper: helper, directory: proxyDirectory)
+            let endpoint = WebProxyConfiguration.endpoint(directory: proxyDirectory)
+            proxyEndpoint = endpoint
+            return WebProxyConfiguration.guestForward(socket: endpoint.socket)
         } catch {
             webProxyStatus = .failed
             logEvent("proxy routing: \(error.localizedDescription)")

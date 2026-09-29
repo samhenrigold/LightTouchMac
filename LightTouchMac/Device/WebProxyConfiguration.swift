@@ -67,9 +67,16 @@ struct WebProxyConfiguration: Codable, Equatable {
         try writeRouting(in: directory)
         try JSONEncoder().encode(self).write(to: Self.preferencesFile(in: directory), options: .atomic)
     }
-    static func guestForward(helper: String, directory: URL) -> String {
+    /// What the helper serves (BootConfig.webProxy): this directory's routing, and a socket in the temporary
+    /// directory named for it (a Unix socket path stays under 104 bytes; the device directory may not).
+    static func endpoint(directory: URL) -> WebProxyEndpoint {
+        let config = file(in: directory).path
+        let hash = config.utf8.reduce(UInt64(14695981039346656037)) { ($0 ^ UInt64($1)) &* 1099511628211 }
+        return WebProxyEndpoint(config: config, socket: NSTemporaryDirectory() + "ltm-proxy-" + String(hash, radix: 16) + ".sock")
+    }
+    /// The guest's 10.0.2.100:3128: slirp runs one `nc` per connection into the helper's proxy (WebProxy.swift).
+    static func guestForward(socket: String) -> String {
         func quote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'" }
-        let command = quote(helper) + " " + quote(file(in: directory).path)
-        return ",guestfwd=tcp:10.0.2.100:3128-cmd:" + command.replacingOccurrences(of: ",", with: ",,")
+        return ",guestfwd=tcp:10.0.2.100:3128-cmd:" + ("/usr/bin/nc -U " + quote(socket)).replacingOccurrences(of: ",", with: ",,")
     }
 }

@@ -3,7 +3,7 @@
  * lockdown-mcinstall --installed
  *
  * Offer the device a configuration profile that trusts one root certificate
- * (the per-device web proxy CA, itwebproxy --init-ca), through lockdown's
+ * (the per-device web proxy CA, WebProxyCA), through lockdown's
  * stock com.apple.mobile.MCInstall service: what iPhone Configuration Utility
  * did. The device shows "Install Profile" in Settings and the user confirms it
  * once; nothing is trusted without that tap. Reinstalling replaces the profile

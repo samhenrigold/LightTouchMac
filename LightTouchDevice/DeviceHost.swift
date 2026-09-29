@@ -22,6 +22,8 @@ final class DeviceHost: @unchecked Sendable {
     private var frameSerial: UInt64 = 0
     private let stateLock = NSLock()
     private var bootConfig: BootConfig?
+    /// The device's web proxy (WebProxy.swift), for the life of the process.
+    private var webProxy: WebProxy?
     private var exited = false
     private var shuttingDown = false
     private var activity: NSObjectProtocol?
@@ -105,6 +107,10 @@ final class DeviceHost: @unchecked Sendable {
         }
         guard first else { return false }
         for (k, v) in config.environment { setenv(k, v, 1) }
+        if let endpoint = config.webProxy {
+            let proxy = WebProxy(config: URL(fileURLWithPath: endpoint.config))
+            do { try proxy.listen(socket: endpoint.socket); webProxy = proxy } catch { helperLog("web proxy: \(error)") }
+        }
         activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
                                                          reason: "Running an emulated device")
         qemu.attach(nil, nil)

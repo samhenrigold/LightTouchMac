@@ -170,13 +170,6 @@ MC_BIN="$WORK/lockdown-mcinstall"
 cc -O2 -mmacosx-version-min="$MINOS" -o "$MC_BIN" "$SRC/scripts/lockdown-mcinstall.c" \
    -I"$DEPS/include" -L"$DEPS/lib" -limobiledevice-1.0 -lplist-2.0
 copy_tool "$MC_BIN"
-mkdir -p "$WORK/it-webproxy"
-for source in build.sh itwebproxy.c tls-bridge.h weather.m; do
-    cp "$QEMU/contrib/it-webproxy/$source" "$WORK/it-webproxy/"
-done
-OPENSSL_PREFIX="$STATIC" CFLAGS="-mmacosx-version-min=$MINOS" \
-    bash "$WORK/it-webproxy/build.sh"
-copy_tool "$WORK/it-webproxy/itwebproxy"
 copy_tool "${USBMUXD_BIN:-$(python3 "$SRC/scripts/sources.py" usbmuxd)/src/usbmuxd}"
 # iBoot32Patcher (GPL-3.0, built by build-iboot32patcher.sh next to usbmuxd): firmwarekit's k48
 # real-iBoot recipe runs it from Contents/MacOS, where K48IBoot.patcher looks first.
