@@ -17,7 +17,7 @@ struct GLIDispatchCheckTests {
 
     /// Every firmware the catalog prepares with a shim has its dispatch fields in the shipped name table, and the
     /// gld plugin check still sees what 4.x's libGFXShared wants (a stand-in lacking the first name).
-    @Test(arguments: ["7B500", "8C148", "7E18", "8C148-ipod"]) func firmwareFieldsAreNamed(_ build: String) throws {
+    @Test(arguments: ["7B500", "8C148", "9B206", "7E18", "8C148-ipod"]) func firmwareFieldsAreNamed(_ build: String) throws {
         guard Fixtures.hasRootfs(build), Fixtures.exists(Self.names.appendingPathComponent(SystemEdits.Helpers.glesNames)) else { return }
         let dir = try Fixtures.tempDir("gli")
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -30,7 +30,12 @@ struct GLIDispatchCheckTests {
         let fake = dir.appendingPathComponent("fake-gld")
         try Data(wanted.dropFirst().map { "\0_" + $0 + "\0" }.joined().utf8).write(to: fake)
         let gld = GLIDispatch.gldProblem(cache, plugin: fake)
-        #expect(gld.needed == build.hasPrefix("8C148"))
-        if build.hasPrefix("8C148") { #expect(gld.why == "gldshim lacks " + wanted[0]) }
+        let needed = build.hasPrefix("8C148") || build.hasPrefix("9")
+        #expect(gld.needed == needed)
+        if needed { #expect(gld.why == "gldshim lacks " + wanted[0]) }
+        // 5.x's libGFXShared (gld interface 4.0.44) names 113 gld* strings, and the shipped plugin exports each
+        if build.hasPrefix("9") { #expect(wanted.count == 113, "\(wanted.count): \(wanted)") }
+        let plugin = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.gld)
+        if needed, Fixtures.exists(plugin) { #expect(GLIDispatch.gldProblem(cache, plugin: plugin).why == nil) }
     }
 }

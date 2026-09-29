@@ -205,8 +205,11 @@ public enum Recipe {
     /// or, for a build without ramdisk keys (recipe.keybag_ramdisk_from), the sibling entry's, decrypted into work.
     /// Returns (its URL, the lock's name for it).
     static func keybagRamdisk(_ c: Context) throws -> (URL, String) {
-        let comp = try BuildComponents.load(c.ipsw)   // a restore-only build ships just the Restore ramdisk
-        guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(c.e.id): no ramdisk") }
+        // A restore-only build ships just the Restore ramdisk; a build whose Update ramdisk has no public key (the 5.0
+        // betas, 9A334) boots its keyed Restore ramdisk: it runs the same restored_external.
+        let comp = try BuildComponents.load(c.ipsw)
+        guard let update = [comp["UpdateRamDisk"], comp["RestoreRamDisk"]].compactMap({ $0 }).first(where: { (try? c.e.key(forPath: $0)) != nil })
+                ?? comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(c.e.id): no ramdisk") }
         let name = String(update.dropLast(4)) + "-ramdisk.dmg"
         guard let from = c.recipe.keybagRamdiskFrom else { return (c.decFile(name), name) }
         guard let sib = c.o.sibling, sib.entry.id == from else {

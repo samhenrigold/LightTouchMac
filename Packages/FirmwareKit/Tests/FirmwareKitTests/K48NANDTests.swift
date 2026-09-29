@@ -11,6 +11,23 @@ struct K48NANDTests {
         #expect(g.exportedPages == 3_925_449)          // the real 16 GB unit's sector count
     }
 
+    /// The FIL's epoch getter, `ldr rN, [pc, #8]; blx rN; adds r0, #0x30; uxtb r0, r0; pop {r7, pc}` naming `movs r0, #2;
+    /// bx lr`: r3 as on 4.3.5, r0 as on the 5.0 betas; no getter (4.3.0, 5.0 GM on) is epoch 1.
+    @Test(arguments: [(UInt8(3), UInt8(2)), (0, 2), (nil, 1)]) func signatureEpochFromTheGetter(_ reg: UInt8?, _ want: UInt8) throws {
+        var k = KBootTests.kernel(at: 0x8000_0000)   // __TEXT at 0x80001000 from file offset 0
+        if let reg {
+            k.replaceSubrange(0x200..<0x208, with: Data([0x02, 0x48 | reg, 0x80 | reg << 3, 0x47, 0x30, 0x30, 0xC0, 0xB2]))
+            k.replaceSubrange(0x208..<0x20a, with: Data([0x80, 0xBD]))
+            k.replaceSubrange(0x20c..<0x210, with: DeviceTree.Value.le([0x8000_1301]))   // the getter, Thumb
+            k.replaceSubrange(0x300..<0x304, with: Data([0x02, 0x20, 0x70, 0x47]))      // movs r0, #2; bx lr
+        }
+        try Oracle.withTemp { dir in
+            let url = dir.appendingPathComponent("kernelcache.mach")
+            try k.write(to: url)
+            #expect(try K48NAND.signatureEpoch(kernelcache: url) == want)
+        }
+    }
+
     /// make_mbr reproduces the 16 GB unit's sector 0 (ipad1_nand.py selfcheck's bytes).
     @Test func mbrMatchesUnit() throws {
         let head = [UInt8](K48NAND.makeMBR())

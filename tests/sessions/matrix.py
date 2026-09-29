@@ -207,6 +207,8 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     r = {}
     lit = find("lit")
     r["lit"] = {"ok": bool(lit), "seconds": round(lit[0]["seconds"], 1) if lit else None}
+    if setup := find("setup"):   # a fresh 5.x iPad's Setup Assistant, walked by the driver (single.swift Setup5)
+        r["lit"]["setup"] = {"ok": setup[0].get("ok"), "detail": setup[0].get("detail"), "frontmost": setup[0].get("frontmost")}
     usb = find("usb")
     want = entry["product_type"]
     r["lockdown"] = {"ok": bool(usb) and usb[0].get("productType") == want, "seconds": round(usb[0]["seconds"], 1) if usb else None,
@@ -303,7 +305,7 @@ def write_md(results, catalog):
         ff = r.get("first_failure") or {}
         fftxt = ""
         if ff:
-            fftxt = f"**{ff['check']}**: {ff.get('why', '')}".replace("|", "\\|")
+            fftxt = f"**{ff['check']}**: {ff.get('why', '')}".replace("|", "\\|").replace("\n", " ")  # a multi-line error (a tool's output) stays in its cell
             if ff.get("excerpt"):
                 fftxt += "<br>" + "<br>".join("`" + l.replace("`", "'").replace("|", "\\|") + "`" for l in ff["excerpt"].splitlines())
         rows.append(f"| {eid} | {r.get('version', '')} | {ktxt} | {ptxt} | {cell('lit')} | {cell('lockdown')} | {cell('activation')} | "

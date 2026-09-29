@@ -79,7 +79,13 @@ Notes:
   the machine's hold-and-slide shuts all three down cleanly (~15 s) since qemu-ios dc2794f46f (smoke #19 closed): a
   tethered 2.x halt waits for the cable to come out, so the gesture unplugs once the screen is dark. The app's Stop is
   a flush + halt and persist passes either way.
-- iPod2,1 4.0 (8A293) and iPad1,1 5.0 (9A334): no Update-ramdisk key on the wiki.
+- iPod2,1 4.0 (8A293) and iPad1,1 5.0 (9A334): no Update-ramdisk key on the wiki. The k48 keybag one-shot then boots
+  the build's keyed Restore ramdisk (same restored_external), so 9A334 and the 5.0 betas need no sibling.
+- iPad1,1 5.x (`fk-ios5`, 09-29): all six entries carry the k48 recipe with `appsync: false` (Sam's AppSync matcher does
+  not know the 5.x shared caches yet) and the default iBoot chain; the keybag comes from the build's own ramdisk
+  (`writable_nor`). On first boot the session driver walks the Setup Assistant (9 pages; 8 when Wi-Fi has not joined,
+  which skips the Apple ID page). 9A334/9A405/9B176/9B206 pass everything but the clean shutdown: the 5.x halt with the
+  cable attached restarts (smoke #28). 9A5220p stops at iBoot32Patcher (smoke #43).
 - iPod1,1: only the root filesystem is encrypted on 1.x; listed for the record, no board is emulated.
 
 ## Betas
@@ -125,5 +131,7 @@ once per boot). Sam (2026-09-28): no fussing with the device date unless it is r
 | iPod2,1 | 4.2 beta 3 | 8C5115c | 2010-10-12 | `c1113a43303b99ba2bed9333477df162c6d043e1` | 364,755,569 | 18/18 verified | untested |
 | iPod2,1 | 4.2 GM | 8C134 | 2010-11-01 | `cd4bb233a54f35f765ce12625f00b20ef31a777f` | 363,581,294 | 18/18 verified | untested |
 
-- iPad1,1 4.3 and 5.0 betas: blocked as their releases are (8F190's IOP startup ping, docs/matrix-results.md); listed, not run.
+- iPad1,1 4.3 betas: blocked as their releases were (8F190's IOP startup ping, docs/matrix-results.md); listed, not run.
+  The 5.0 betas were run with 5.x's recipe (`fk-ios5`, docs/matrix-results.md): 9A5220p stops at iBoot32Patcher
+  (smoke #43); 9A5288d's FIL has the NAND epoch getter 4.3.5 has (epoch 2, the register differs).
 - iPod2,1 4.0 betas and iPad1,1 5.0 betas: no Update-ramdisk key on the wiki (as 8A293 / 9A334).

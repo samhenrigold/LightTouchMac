@@ -82,7 +82,7 @@ enum K48Oracle {
 
     /// GuestPackage.seed against mkpkg.seed on a plain directory with the real armv7.itpack: the same tree
     /// (paths, modes, bytes, symlinks) and the same record, for a shim image and a no-shim one.
-    @Test(arguments: [("7B500", true), ("8C148", false)]) func seedMatchesPython(_ build: String, _ gles: Bool) throws {
+    @Test(arguments: [("7B500", true), ("8C148", false), ("9B206", true)]) func seedMatchesPython(_ build: String, _ gles: Bool) throws {
         let itpack = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
         guard Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py")) else { return }
         try Oracle.withTemp { dir in
@@ -111,6 +111,7 @@ enum K48Oracle {
             #expect(written == py["written"] as? [String])
             #expect(NSDictionary(dictionary: record.object) == py["record"] as? NSDictionary)
             #expect(record.gles == gles && record.hooks.contains("/" + SystemEdits.glEngine) == gles)
+            if build.hasPrefix("9") { #expect(record.family == "k48-ios5" && record.seed >= 8) }   // "9*": 5.x's own family
             func tree(_ v: URL) throws -> [String: String] {
                 var t: [String: String] = [:]
                 try SystemEdits.walk(v) { rel in
