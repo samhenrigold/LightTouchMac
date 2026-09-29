@@ -26,6 +26,14 @@ SOURCES = ['FirmwareJobs.swift', 'IPSWStore.swift', 'FirmwareDownloads.swift', '
            'FirmwareCatalog.swift', 'DeviceProfile.swift', 'StorageLocations.swift', 'DeviceStateStorage.swift',
            'DeviceRow.swift', 'BundledBase.swift', 'BootRecipe.swift']
 
+
+def source(name):
+    """The app's sources live in LightTouchMac/<layer>/ since the service-layering move; find by name."""
+    hits = [p for p in APP.rglob(name) if p.is_file()]
+    if len(hits) != 1:
+        raise SystemExit(f"{name}: expected one file under {APP}, found {hits}")
+    return hits[0]
+
 STUBS = r'''
 import Foundation
 nonisolated enum Bundled {
@@ -136,7 +144,7 @@ def main():
         (tmp / 'stubs.swift').write_text(STUBS)
         (tmp / 'main.swift').write_text(CHECK)
         subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', '-default-isolation', 'MainActor', '-D', 'DEBUG',
-                        '-parse-as-library', '-module-cache-path', tmp / 'modules', *[APP / s for s in SOURCES],
+                        '-parse-as-library', '-module-cache-path', tmp / 'modules', *[source(s) for s in SOURCES],
                         ROOT / 'Shared/DeviceLinkProtocol.swift', tmp / 'stubs.swift', tmp / 'main.swift', '-o', tmp / 'check'], check=True)
 
         for case in ('download', 'import', 'cancel'):
