@@ -1,6 +1,8 @@
+import CActivation
 import CryptoKit
 import Foundation
-import CActivation
+import MachO
+import MachOKit
 
 public struct ActivationFailure: Error, CustomStringConvertible, Sendable {
     public let code = "activation_failed"
@@ -51,10 +53,8 @@ public enum Activation {
     static func signed(_ data: Data) throws -> Data {
         var b = [UInt8](data)
         func invalid() -> ActivationFailure { ActivationFailure("Unsupported code signature") }
-        guard b.count >= 28, le32(b, 0) == 0xFEED_FACE,
-              let lc = MachOSignature.commands(b[...]).first(where: { $0.cmd == MachOSignature.lcCodeSignature }),
-              lc.at + 16 <= b.count else { throw invalid() }
-        let start = Int(le32(b, lc.at + 8)), size = Int(le32(b, lc.at + 12))
+        guard let cs = MachOSignature.codeSignature(in: data) else { throw invalid() }
+        let (start, size) = cs
         guard size >= 12, start <= b.count - size, be32(b, start) == 0xFADE_0CC0 else { throw invalid() }
         let length = Int(be32(b, start + 4)), count = Int(be32(b, start + 8))
         guard length >= 12, length <= size, count <= (length - 12) / 8 else { throw invalid() }
@@ -105,88 +105,47 @@ private func putBE32(_ b: inout [UInt8], _ offset: Int, _ value: UInt32) {
     for i in 0..<4 { b[offset + i] = UInt8(truncatingIfNeeded: value >> (24 - i * 8)) }
 }
 
-/// Mach-O header checks: load commands and whether each slice carries a parseable code signature.
+/// Mach-O header checks for the guest helpers, through MachOKit: thin/fat files, their slices' cpu, load
+/// commands and LC_CODE_SIGNATURE.
 enum MachOSignature {
-    static let lcCodeSignature: UInt32 = 0x1D, lcMain: UInt32 = 0x8000_0028, lcVersionMinIPhoneOS: UInt32 = 0x25
+    static let armCPU: Int32 = 12, armv7: Int32 = 9   // CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V7
 
-    /// (cputype, cpusubtype, slice bytes) for a thin Mach-O, or each slice of a fat one; nil if neither.
-    static func slices(_ d: [UInt8]) -> [(cpu: Int32, sub: Int32, bytes: ArraySlice<UInt8>)]? {
-        guard d.count >= 28 else { return nil }
-        if be32(d, 0) == 0xCAFE_BABE {
-            let n = Int(be32(d, 4))
-            var out: [(Int32, Int32, ArraySlice<UInt8>)] = []
-            for i in 0..<n {
-                let o = 8 + 20 * i
-                guard o + 20 <= d.count else { return nil }
-                let off = Int(be32(d, o + 8)), size = Int(be32(d, o + 12))
-                guard off + size <= d.count else { return nil }
-                out.append((Int32(bitPattern: be32(d, o)), Int32(bitPattern: be32(d, o + 4)), d[off..<off + size]))
-            }
-            return out
-        }
-        let magic = le32(d, 0)
-        guard magic == 0xFEED_FACE || magic == 0xFEED_FACF else { return nil }
-        return [(Int32(bitPattern: le32(d, 4)), Int32(bitPattern: le32(d, 8)), d[...])]
-    }
-
-    /// The load commands of one (thin) slice: (cmd, offset of the command within the slice).
-    static func commands(_ s: ArraySlice<UInt8>) -> [(cmd: UInt32, at: Int)] {
-        let b = Array(s)
-        guard b.count >= 28 else { return [] }
-        var off = le32(b, 0) == 0xFEED_FACF ? 32 : 28, out: [(UInt32, Int)] = []
-        for _ in 0..<Int(le32(b, 16)) {
-            guard off + 8 <= b.count else { break }
-            let size = Int(le32(b, off + 4))
-            out.append((le32(b, off), off))
-            guard size >= 8 else { break }
-            off += size
-        }
-        return out
-    }
-
-    /// Every slice has an LC_CODE_SIGNATURE whose SuperBlob holds a CodeDirectory that parses.
-    static func present(in data: Data) -> Bool {
-        guard let slices = slices([UInt8](data)), !slices.isEmpty else { return false }
-        return slices.allSatisfy { s in
-            let b = Array(s.bytes)
-            guard let lc = commands(s.bytes).first(where: { $0.cmd == lcCodeSignature }), lc.at + 16 <= b.count else { return false }
-            let off = Int(le32(b, lc.at + 8)), size = Int(le32(b, lc.at + 12))
-            guard size >= 12, off + size <= b.count, be32(b, off) == 0xFADE_0CC0 else { return false }
-            let count = Int(be32(b, off + 8))
-            for i in 0..<count where 12 + 8 * i + 8 <= size {
-                guard be32(b, off + 12 + 8 * i) == 0 else { continue }   // CSSLOT_CODEDIRECTORY
-                let cd = off + Int(be32(b, off + 16 + 8 * i))
-                guard cd + 44 <= off + size, be32(b, cd) == 0xFADE_0C02 else { return false }
-                let len = Int(be32(b, cd + 4)), hashOff = Int(be32(b, cd + 16)), identOff = Int(be32(b, cd + 20))
-                let nCode = Int(be32(b, cd + 28)), hashSize = Int(b[cd + 36])
-                guard len >= 44, cd + len <= off + size, identOff < len, hashOff + nCode * hashSize <= len,
-                      b[(cd + identOff)..<(cd + len)].contains(0) else { return false }
-                return true
-            }
-            return false
-        }
+    static func codeSignature(_ cmds: some Sequence<LoadCommand>) -> LoadCommandInfo<linkedit_data_command>? {
+        for lc in cmds { if case .codeSignature(let info) = lc { return info } }
+        return nil
     }
 
     /// ipad1_rootfs.guest_tool_problem: nil for a thin armv7 Mach-O that 3.2's dyld takes (no LC_MAIN, no
     /// LC_VERSION_MIN_IPHONEOS) and that is signed; else why not.
-    static func guestToolProblem(_ data: Data) -> String? {
-        let d = [UInt8](data)
-        guard d.count >= 28, le32(d, 0) == 0xFEED_FACE else { return "not a thin 32-bit Mach-O" }
-        let (cpu, sub) = (Int32(bitPattern: le32(d, 4)), Int32(bitPattern: le32(d, 8)))
-        guard (cpu, sub) == (12, 9) else { return "cpu \(cpu)/\(sub), not armv7" }
-        let cmds = Set(commands(d[...]).map(\.cmd))
-        if cmds.contains(lcMain) || cmds.contains(lcVersionMinIPhoneOS) { return "carries LC_MAIN/LC_VERSION_MIN (not run through mkold.py)" }
-        return cmds.contains(lcCodeSignature) ? nil : "unsigned (ldid -S)"
+    static func guestToolProblem(_ url: URL) -> String? {
+        guard case .machO(let m)? = try? MachOKit.loadFromFile(url: url), !m.is64Bit else { return "not a thin 32-bit Mach-O" }
+        let h = m.header.layout
+        guard h.cputype == armCPU, h.cpusubtype == armv7 else { return "cpu \(h.cputype)/\(h.cpusubtype), not armv7" }
+        for lc in m.loadCommands {
+            switch lc {
+            case .main, .versionMinIphoneos: return "carries LC_MAIN/LC_VERSION_MIN (not run through mkold.py)"
+            default: continue
+            }
+        }
+        return codeSignature(m.loadCommands) != nil ? nil : "unsigned (ldid -S)"
     }
 
     /// ipad1_rootfs.appsync_problem: nil for a fat Mach-O with an armv7 slice and a signature per slice.
-    static func appSyncProblem(_ data: Data) -> String? {
-        let d = [UInt8](data)
-        guard d.count >= 8, be32(d, 0) == 0xCAFE_BABE, let slices = slices(d) else { return "not a fat Mach-O (expected armv6+armv7)" }
-        for (i, s) in slices.enumerated() where !commands(s.bytes).contains(where: { $0.cmd == lcCodeSignature }) {
-            return "slice \(i) (cpu \(s.cpu)/\(s.sub)) is not ldid-signed"
+    static func appSyncProblem(_ url: URL) -> String? {
+        guard case .fat(let f)? = try? MachOKit.loadFromFile(url: url), let slices = try? f.machOFiles() else { return "not a fat Mach-O (expected armv6+armv7)" }
+        for (i, s) in slices.enumerated() where codeSignature(s.loadCommands) == nil {
+            return "slice \(i) (cpu \(s.header.layout.cputype)/\(s.header.layout.cpusubtype)) is not ldid-signed"
         }
-        return slices.contains { $0.cpu == 12 && $0.sub == 9 } ? nil : "no armv7 slice"
+        return slices.contains { $0.header.layout.cputype == armCPU && $0.header.layout.cpusubtype == armv7 } ? nil : "no armv7 slice"
+    }
+
+    /// LC_CODE_SIGNATURE's (dataoff, datasize) of a thin 32-bit Mach-O in memory (Activation.signed patches the buffer).
+    static func codeSignature(in data: Data) -> (offset: Int, size: Int)? {
+        data.withUnsafeBytes { b -> (Int, Int)? in
+            guard b.count >= 28, let base = b.baseAddress, b.loadUnaligned(as: UInt32.self) == 0xFEED_FACE,
+                  let cs = codeSignature(MachOImage(ptr: base.assumingMemoryBound(to: mach_header.self)).loadCommands) else { return nil }
+            return (Int(cs.dataoff), Int(cs.datasize))
+        }
     }
 }
 

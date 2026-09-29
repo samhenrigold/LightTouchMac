@@ -224,6 +224,45 @@
       "sha256": "8e6740aa1a248af8cf26aa7af1d785dbc089c67f510db282cc4c9dd529d4cb2f",
       "license": "GPL-3.0-or-later",
       "checksum_source": "SHA-256 calculated from this GitHub archive on 2026-09-28. LukeZGD's fork (the one Legacy-iOS-Kit ships), master of 2026-09-14. firmwarekit runs it as a separate process (K48IBoot.patchIBoot) for the k48 iboot recipe; K48IBootTests checks its output byte-for-byte against the Legacy-iOS-Kit v25.09.01 binary."
+    },
+    {
+      "name": "ZIPFoundation",
+      "version": "0.9.20",
+      "groups": [
+        "swiftpm"
+      ],
+      "archive": "ZIPFoundation-0.9.20.tar.gz",
+      "directory": "ZIPFoundation-0.9.20",
+      "url": "https://github.com/weichsel/ZIPFoundation/archive/refs/tags/0.9.20.tar.gz",
+      "sha256": "3ddad93f81480d141f15d9b8bdc276a21c5242446c179672c2e787799a423b5e",
+      "license": "MIT",
+      "checksum_source": "SHA-256 calculated from this GitHub archive on 2026-09-28. Pinned exact in Packages/FirmwareKit/Package.swift (SwiftPM fetches it; this record is the license and provenance ledger). FirmwareKit's IPSWArchive reads IPSW members through it."
+    },
+    {
+      "name": "MachOKit",
+      "version": "0.53.0",
+      "groups": [
+        "swiftpm"
+      ],
+      "archive": "MachOKit-0.53.0.tar.gz",
+      "directory": "MachOKit-0.53.0",
+      "url": "https://github.com/p-x9/MachOKit/archive/refs/tags/0.53.0.tar.gz",
+      "sha256": "f99e68647cd65664740780e6777441c3cd55ff434bbf5bfdde5dfc33132f9aed",
+      "license": "MIT",
+      "checksum_source": "SHA-256 calculated from this GitHub archive on 2026-09-28. Pinned exact in Packages/FirmwareKit/Package.swift. FirmwareKit's guest-helper checks (MachOSignature: thin/fat headers, load commands, LC_CODE_SIGNATURE) go through it; the dyld_v1 shared-cache reader stays FirmwareKit's own (MachOKitProbeTests says why)."
+    },
+    {
+      "name": "swift-subprocess",
+      "version": "1.0.0",
+      "groups": [
+        "swiftpm"
+      ],
+      "archive": "swift-subprocess-1.0.0.tar.gz",
+      "directory": "swift-subprocess-1.0.0",
+      "url": "https://github.com/swiftlang/swift-subprocess/archive/refs/tags/1.0.0.tar.gz",
+      "sha256": "16dccc16e162f043999078fc8be36938ef723188518d3d4d9f734775bb593c8d",
+      "license": "Apache-2.0",
+      "checksum_source": "SHA-256 calculated from this GitHub archive on 2026-09-28. Pinned exact in Packages/FirmwareKit/Package.swift (the app pins the same version through Xcode). FirmwareKit's DiskImage runs diskutil/hdiutil through it."
     }
   ]
 }

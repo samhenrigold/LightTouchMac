@@ -24,8 +24,7 @@ struct ActivationTests {
                 let after = [UInt8](try Data(contentsOf: target))
                 #expect(result.inputSHA256 != result.outputSHA256)
                 #expect((try FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)?.intValue == 0o751)
-                let command = try #require(MachOSignature.commands(after[...]).first { $0.cmd == 0x1d })
-                let start = u32(after, command.at + 8, big: false)
+                let start = try #require(MachOSignature.codeSignature(in: Data(after))).offset
                 let count = u32(after, start + 8)
                 for index in 0..<count {
                     let type = u32(after, start + 12 + index * 8)

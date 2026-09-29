@@ -157,7 +157,7 @@ public enum DiskImage {
                 let r = try await Subprocess.run(.path(FilePath(argv[0])), arguments: Arguments(Array(argv.dropFirst())),
                                                  output: .string(limit: 1 << 24), error: .string(limit: 1 << 24))
                 let status: Int32 = switch r.terminationStatus { case .exited(let c): c; case .signaled(let s): -s }
-                box.result = (status, (r.standardOutput ?? "") + (r.standardError ?? ""))
+                box.result = (status, r.standardOutput + r.standardError)
             } catch { box.result = (-1, "\(error)") }
             done.signal()
         }

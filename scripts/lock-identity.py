@@ -6,8 +6,10 @@
 
 create runs BIN (a built firmwarekit) with the app bundle's helper, guest tools, bootrom and iBoot32Patcher, a
 fixed seed and a cache shared by both runs, one entry at a time (the k48 seal and keybag boots are emulator
-boots). diff compares, per entry, outputs.nand.built_listing_sha256, the iboot / nor / gid_blobs hashes and
-the whole lock minus `created`; exit 1 on any difference. IPSWs are looked up as OracleFixtures.swift does.
+boots), for every catalog entry with a recipe whose IPSW is in the app's download store
+(~/Library/Caches/gold.samhenri.LightTouchMac/IPSW/<sha1>.ipsw, as tests/matrix.py fills it). diff compares,
+per entry, outputs.nand.built_listing_sha256, the iboot / nor / gid_blobs hashes and the whole lock minus
+`created`; exit 1 on any difference. An entry that fails to prepare in both runs is reported, not a difference.
 """
 import argparse, json, os, subprocess, sys, time
 from pathlib import Path
@@ -15,13 +17,7 @@ from pathlib import Path
 HOME = Path.home()
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "LightTouchMac/Resources/firmware-catalog.json"
-IPSWS = {
-    "k48ap-7B500": HOME / "Downloads/ipad1-ios32-feasibility/iPad1,1_3.2.2_7B500_Restore.ipsw",
-    "k48ap-7B367": HOME / "Downloads/ipad1-ios32-feasibility/iPad1,1_3.2_7B367_Restore.ipsw",
-    "k48ap-8C148": HOME / "Downloads/ipad1-ios32-feasibility/iPad1,1_4.2.1_8C148_Restore.ipsw",
-    "n72ap-7E18": HOME / "Developer/ipod2g-re/OldSDK/iPod2,1_3.1.3_7E18_Restore.ipsw",
-    "n72ap-8C148": HOME / "Downloads/ios4/iPod2,1_4.2.1_8C148_Restore.ipsw",
-}
+IPSW_CACHE = HOME / "Library/Caches/gold.samhenri.LightTouchMac/IPSW"
 SEED = "lock-identity"
 
 
@@ -31,8 +27,8 @@ def create(args):
     args.out.mkdir(parents=True, exist_ok=True)
     cache = args.cache or args.out.parent / "cache"
     failed = []
-    for eid in args.entry or list(IPSWS):
-        ipsw = IPSWS[eid]
+    for eid in args.entry or [e for e in entries if entries[e].get("recipe")]:
+        ipsw = IPSW_CACHE / f"{entries[eid]['source'].get('sha1')}.ipsw"
         if not ipsw.exists():
             print(f"SKIP  {eid}: no IPSW at {ipsw}"); continue
         out = args.out / eid
@@ -63,9 +59,11 @@ def scrub(lock):
 
 def diff(args):
     bad = 0
-    for eid in sorted(p.name for p in args.before.iterdir() if (p / "device.lock.json").exists()):
-        b = json.loads((args.before / eid / "device.lock.json").read_text())
-        after = args.after / eid / "device.lock.json"
+    for eid in sorted(p.name for p in args.before.iterdir() if p.is_dir()):
+        before, after = args.before / eid / "device.lock.json", args.after / eid / "device.lock.json"
+        if not before.exists():
+            print(("BOTH-FAIL " if not after.exists() else "FIXED ") + eid); bad += after.exists(); continue
+        b = json.loads(before.read_text())
         if not after.exists():
             print(f"MISSING {eid}: no lock in {args.after}"); bad += 1; continue
         a = json.loads(after.read_text())

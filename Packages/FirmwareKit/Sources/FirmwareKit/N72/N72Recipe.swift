@@ -1,9 +1,10 @@
-// N72Recipe: `firmwarekit create` for the iPod touch 2G (n72ap, recipe "n72"). Ports imgtools/device.py create +
-// ipod2g_device.build/bake + build_nand.py (--epoch) over the other modules; Preparer.create hands n72ap here.
+// N72Board: the iPod touch 2G (n72ap, recipe "n72") side of Recipe.create. Ports ipod2g_device.build/bake +
+// build_nand.py (--epoch) over the other modules.
 //
-// STAGING_DIR gets nor.bin, iBoot.bin (3.x+: the machine's direct-iboot), gid-blobs.bin, nand/ (page directory),
-// identity.json (600) and device.lock.json; all but the lock and identity are made read-only (the seal).
-// There is no seal boot: the legacy FTL store needs no clean halt. Scratch goes to STAGING_DIR/work.
+// Boot files: nor.bin, iBoot.bin (3.x+: the machine's direct-iboot), gid-blobs.bin. Volume: the IPSW rootfs
+// grown to the recipe, fstab, the kernelcache at the path iBoot names, the shared bake (SystemEdits) plus the
+// iPod's own pieces (MBXGLEngine shim, sound defaults, guest-tools markers), owners patched in the catalog.
+// Store: N72NAND's page directory. There is no seal boot: the legacy FTL store needs no clean halt.
 // options.data_protection (4.x) adds the restore-ramdisk keybag one-shot (N72Keybag) through --helper.
 //
 // The recipe: storage "8g" (model MB528; 16g MB531, 32g MB533; region LL/A), system_mib = the volume
@@ -17,12 +18,10 @@
 import CryptoKit
 import Foundation
 
-public enum N72Recipe {
+final class N72Board: Board {
     static let models = ["8g": "MB528", "16g": "MB531", "32g": "MB533"]
     static let kcPrefix = "/System/Library/Caches/com.apple.kernelcaches/"
-    static let armv6Cache = "System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv6"
     static let mbx = "System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"
-    static let itKeybag = "it_keybag-armv6", keybagStep = "Booting the restore ramdisk"
     static let prefs = "private/var/mobile/Library/Preferences"
     static let agentJob = "System/Library/LaunchDaemons/com.qemu.it-agent.plist"
     static let prefsJob = "System/Library/LaunchDaemons/com.qemu.it-prefs.plist"
@@ -43,83 +42,67 @@ public enum N72Recipe {
     /// The -machine options every device this recipe builds boots with (device.lock.json "machine").
     public static let machine = ["aes-uid": "engine"]
 
-    public static func create(_ o: Preparer.Options, emit: @escaping @Sendable (PrepareEvent) -> Void) throws {
-        let fm = FileManager.default, e = o.entry
-        func log(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
-        guard let recipe = e.recipe, recipe.name == "n72", let model = models[recipe.storage] else {
-            throw FirmwareError(.unsupported, "\(e.id): no n72 recipe for storage \(e.recipe?.storage ?? "none")")
-        }
-        guard let sha1 = e.source.sha1 else { throw FirmwareError(.unsupported, "\(e.id) pins no IPSW sha1") }
-        guard (try? fm.contentsOfDirectory(atPath: o.out.path))?.isEmpty == true else {
-            throw FirmwareError(.internal, "\(o.out.path) is not an empty directory")
-        }
-        let blocks = recipe.systemMiB * 256
-        let dataProtection = recipe.options["data_protection"] == true
-        let bootrom = bootromPath(helper: o.helper)
-        if dataProtection {
-            guard let helper = o.helper, fm.isExecutableFile(atPath: helper.path) else {
-                throw FirmwareError(.internal, "the keybag boot needs --helper (LightTouchDevice); got \(o.helper?.path ?? "none")")
-            }
-            guard let bootrom else { throw FirmwareError(.internal, "the keybag boot needs the iPod bootrom (bootrom_240_4) next to the helper") }
-            guard fm.fileExists(atPath: o.guestTools.appendingPathComponent(itKeybag).path) else {
-                throw FirmwareError(.internal, "guest helper \(itKeybag) missing from \(o.guestTools.path)")
-            }
-        }
-        let steps = ["Verifying the IPSW", "Decrypting the firmware", "Writing the identity, NOR and boot files",
-                     "Building the system volume", "Writing the NAND"] + (dataProtection ? [keybagStep] : []) + ["Writing the lock"]
-        emit(.begin(steps: steps.count, seconds: steps.map { StepPlan.plan($0).seconds }))
-        let progress = StepProgress(work: o.out.appendingPathComponent("work"), emit: emit)
-        defer { progress.stop() }
-        var index = 0
-        func step() { index += 1; progress.next(index: index, name: steps[index - 1]); log("[\(index)/\(steps.count)] \(steps[index - 1])") }
-        let file = { (n: String) in o.out.appendingPathComponent(n) }
-        let work = file("work")
+    let arch = "armv6", seedPrefix = "ipod2g"
+    let bootStep = "Writing the identity, NOR and boot files", volumesStep = "Building the system volume", keybagStep = "Booting the restore ramdisk"
+    let needsSeal = false
+    let recipe: FirmwareEntry.Recipe, model: String, blocks: Int, dataProtection: Bool
+    var helper: URL?, bootrom: URL?, ident: UnitIdentity!
+    var epoch = 0, major = 0, kcPath = "", kcMember = "", prefix = ""
+    var derived: [String: Any] = [:]
+    var shipped: [String] { ["nor.bin", "gid-blobs.bin"] + (major >= 3 ? ["iBoot.bin"] : []) }
+    var itKeybag: String { SystemEdits.Helpers.name("it_keybag", arch) }
 
-        step()   // verify
-        let ipswBytes = ByteCount(total: (try? fm.attributesOfItem(atPath: o.ipsw.path)[.size] as? Int) ?? 0)
-        progress.measure = { ipswBytes.fraction }
-        let got = try Preparer.digest(o.ipsw, Insecure.SHA1(), count: ipswBytes.add)
-        guard got == sha1.lowercased() else { throw FirmwareError(.shaMismatch, "\(o.ipsw.lastPathComponent): sha1 \(got), \(e.id) pins \(sha1)") }
-        let ipsw = IPSWArchive(o.ipsw)
-        let restorePlist = try ipsw.read("Restore.plist")
-        let restore = try RestoreInfo(plistData: restorePlist)
-        try restore.verify(against: e)
-        guard let rp = try PropertyListSerialization.propertyList(from: restorePlist, format: nil) as? [String: Any],
+    init(_ o: Preparer.Options) throws {
+        guard let recipe = o.entry.recipe, let model = Self.models[recipe.storage] else {
+            throw FirmwareError(.unsupported, "\(o.entry.id): no n72 recipe for storage \(o.entry.recipe?.storage ?? "none")")
+        }
+        self.recipe = recipe; self.model = model
+        blocks = recipe.systemMiB * 256
+        dataProtection = recipe.options["data_protection"] == true
+    }
+
+    func check(_ c: Recipe.Context) throws {
+        let fm = FileManager.default
+        helper = c.o.helper
+        bootrom = Self.bootromPath(helper: helper)
+        if dataProtection {
+            guard let helper, fm.isExecutableFile(atPath: helper.path) else {
+                throw FirmwareError(.internal, "the keybag boot needs --helper (LightTouchDevice); got \(c.o.helper?.path ?? "none")")
+            }
+            guard bootrom != nil else { throw FirmwareError(.internal, "the keybag boot needs the iPod bootrom (bootrom_240_4) next to the helper") }
+            guard fm.fileExists(atPath: c.o.guestTools.appendingPathComponent(itKeybag).path) else {
+                throw FirmwareError(.internal, "guest helper \(itKeybag) missing from \(c.o.guestTools.path)")
+            }
+        }
+    }
+
+    /// Restore.plist: the NAND epoch (DeviceMap SCEP) and the iOS major.
+    func inspect(_ c: Recipe.Context) throws {
+        guard let rp = try PropertyListSerialization.propertyList(from: try c.ipsw.read("Restore.plist"), format: nil) as? [String: Any],
               let epoch = ((rp["DeviceMap"] as? [[String: Any]])?.first?["SCEP"] as? NSNumber)?.intValue,
-              let major = Int(restore.productVersion.prefix { $0 != "." }) else {
+              let major = Int(c.restore.productVersion.prefix { $0 != "." }) else {
             throw FirmwareError(.unsupported, "Restore.plist has no DeviceMap SCEP (NAND epoch)")
         }
+        self.epoch = epoch; self.major = major
+    }
 
-        step()   // decrypt, once per IPSW
-        try fm.createDirectory(at: work, withIntermediateDirectories: true)
-        let cacheRoot = o.cache ?? work.appendingPathComponent("cache")
-        let dec = cacheRoot.appendingPathComponent(sha1)
-        if !fm.fileExists(atPath: dec.appendingPathComponent(".done").path) {
-            let tmp = cacheRoot.appendingPathComponent(sha1 + ".tmp")
-            try? fm.removeItem(at: tmp)
-            try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
-            _ = try FirmwareDecryptor.decrypt(ipsw: o.ipsw, entry: e, into: tmp)
-            try JSONSerialization.data(withJSONObject: ["ipsw": o.ipsw.path, "entry": e.id, "tool": FirmwareKit.version])
-                .write(to: tmp.appendingPathComponent(".done"))
-            try? fm.removeItem(at: dec)
-            try fm.moveItem(at: tmp, to: dec)
-        } else {
-            log("decrypted components cached in \(dec.path)")
-        }
-        let iboot = try Data(contentsOf: dec.appendingPathComponent("iBoot.bin"))
-        let kcPath = try kernelcachePath(iboot)
-        guard let kcMember = try BuildComponents.load(ipsw)["KernelCache"] else { throw FirmwareError(.unsupported, "\(e.id): the IPSW names no KernelCache") }
-        var derived: [String: Any] = ["nand_epoch": epoch, "wrap_shsh": major >= 3, "kernelcache_path": kcPath, "kernelcache_member": kcMember,
-                                      "kernel": firstMatch(try Data(contentsOf: dec.appendingPathComponent("kernelcache.mach")), /Darwin Kernel Version [^\x00]+/) ?? NSNull(),
-                                      "iboot": firstMatch(iboot, /iBoot-[0-9.]+/) ?? "?", "direct_iboot": major >= 3]
+    func identity(seed: String) throws -> UnitIdentity {
+        ident = try UnitIdentity.synthesizeIPod(seed: seed, modelNumber: model, regionInfo: UnitIdentity.iPadRegion)
+        return ident
+    }
 
-        step()   // identity.json, nor.bin, gid-blobs.bin, iBoot.bin
-        let seed = o.seed ?? "ipod2g-\(e.build)-default"
-        let ident = try UnitIdentity.synthesizeIPod(seed: seed, modelNumber: model, regionInfo: UnitIdentity.iPadRegion)
-        try ident.write(to: file("identity.json"))
-        let prefix = "Firmware/all_flash/all_flash.\(e.board).production/"
-        let names = try ipsw.names()
-        let img3Members = names.filter { $0.hasPrefix(prefix) && $0.hasSuffix(".img3") }
+    /// nor.bin, gid-blobs.bin, iBoot.bin (3.x+), and the derived facts the lock records.
+    func bootFiles(_ c: Recipe.Context) throws {
+        let e = c.e, ipsw = c.ipsw
+        let iboot = try Data(contentsOf: c.decFile("iBoot.bin"))
+        kcPath = try Self.kernelcachePath(iboot)
+        guard let kc = try BuildComponents.load(ipsw)["KernelCache"] else { throw FirmwareError(.unsupported, "\(e.id): the IPSW names no KernelCache") }
+        kcMember = kc
+        derived = ["nand_epoch": epoch, "wrap_shsh": major >= 3, "kernelcache_path": kcPath, "kernelcache_member": kcMember,
+                   "kernel": Self.firstMatch(try Data(contentsOf: c.decFile("kernelcache.mach")), /Darwin Kernel Version [^\x00]+/) ?? NSNull(),
+                   "iboot": Self.firstMatch(iboot, /iBoot-[0-9.]+/) ?? "?", "direct_iboot": major >= 3]
+        prefix = "Firmware/all_flash/all_flash.\(e.board).production/"
+        let img3Members = try ipsw.names().filter { $0.hasPrefix(prefix) && $0.hasSuffix(".img3") }
         var images: [String: Data] = [:]
         for n in img3Members {
             let d = try ipsw.read(n), t = try N72NOR.type(of: d)
@@ -131,95 +114,74 @@ public enum N72Recipe {
         let norTypes = N72NOR.order.filter(shipped.contains)
         derived["nor_images"] = norTypes
         derived["wrap_shsh_types"] = major >= 3 ? norTypes : ["ibot"]
-        try N72NOR.build(identity: ident, images: images, types: norTypes, wrapTypes: major >= 3 ? nil : ["ibot"]).write(to: file("nor.bin"))
-        let (blobs, blobNames) = try gidBlobs(ipsw, members: img3Members + [kcMember], entry: e)
+        try N72NOR.build(identity: ident, images: images, types: norTypes, wrapTypes: major >= 3 ? nil : ["ibot"]).write(to: c.file("nor.bin"))
+        let (blobs, blobNames) = try Self.gidBlobs(ipsw, members: img3Members + [kcMember], entry: e)
         derived["gid_blobs"] = blobNames
-        try blobs.write(to: file("gid-blobs.bin"))
-        if major >= 3 { try iboot.write(to: file("iBoot.bin")) }
+        try blobs.write(to: c.file("gid-blobs.bin"))
+        if major >= 3 { try iboot.write(to: c.file("iBoot.bin")) }
+    }
 
-        step()   // the system volume: IPSW rootfs grown to the recipe, fstab, kernelcache, bake
-        let volume = work.appendingPathComponent("volume.img")
-        try UDIF.extractRootfs(dmg: dec.appendingPathComponent("rootfs.dmg"), to: volume)
+    var volume: URL!
+
+    /// The system volume: IPSW rootfs grown to the recipe, fstab, kernelcache, the bake; owners and dates patched.
+    func volumes(_ c: Recipe.Context) throws {
+        volume = c.work.appendingPathComponent("volume.img")
+        try UDIF.extractRootfs(dmg: c.decFile("rootfs.dmg"), to: volume)
         try VolumeMount.grow(volume, toBytes: blocks * 4096)
         let newest: UInt32   // the IPSW's newest file: everything the recipe writes gets dated as of it
         do {
             let v = try HFSPlusVolume(volume)
-            log("\(v.signature) blocksize=\(v.blockSize) total=\(v.totalBlocks) free=\(v.freeBlocks) files=\(v.fileCount) dirs=\(v.folderCount)")
+            c.log("\(v.signature) blocksize=\(v.blockSize) total=\(v.totalBlocks) free=\(v.freeBlocks) files=\(v.fileCount) dirs=\(v.folderCount)")
             guard v.totalBlocks == blocks, v.blockSize == 4096 else { throw FirmwareError(.internal, "resize produced \(v.totalBlocks) x \(v.blockSize) B blocks, wanted \(blocks) x 4096") }
             newest = try v.newestDate()
         }
         var owners: [(UInt32, String)] = [(0, kcPath)]
-        let baked = try VolumeMount.withMounted(volume, at: work.appendingPathComponent("mnt")) { m -> [String: Any] in
-            try SystemEdits.put(Data(fstabRW.utf8), m.appendingPathComponent(SystemEdits.fstab))
+        let report = try VolumeMount.withMounted(volume, at: c.work.appendingPathComponent("mnt")) { m -> [String: Any] in
+            try SystemEdits.put(Data(Self.fstabRW.utf8), m.appendingPathComponent(SystemEdits.fstab))
             let kc = m.appendingPathComponent(kcPath)
             try SystemEdits.mkdirs(kc.deletingLastPathComponent())
-            try ipsw.extract(kcMember, to: kc)
-            return try bake(m, options: recipe.options, tools: major >= 3, helpers: o.guestTools, gliDispatch: recipe.gliDispatch,
-                            owners: &owners, log: log)
+            try c.ipsw.extract(kcMember, to: kc)
+            return try bake(m, c, owners: &owners)
         }
-        for (k, v) in baked where k != "guest_package" { derived[k] = v }
-        let guestPackage = baked["guest_package"] as? GuestPackage.Record
+        c.activation = report["activation"] as? Activation.Result
+        c.guestPackage = report["guest_package"] as? GuestPackage.Record
+        for (k, v) in report where k != "guest_package" && k != "activation" { derived[k] = v }
         let hfs = try HFSPlusVolume(volume, writable: true)
         for uid in Set(owners.map(\.0)).sorted() {
             let n = try hfs.setOwner(owners.filter { $0.0 == uid }.map(\.1), uid: uid, gid: uid)
-            log("\(uid):\(uid) patched \(n) catalog record(s)")
+            c.log("\(uid):\(uid) patched \(n) catalog record(s)")
         }
-        log("\(try hfs.normalize(after: newest, to: newest)) catalog records dated as of the IPSW's newest file")
+        c.log("\(try hfs.normalize(after: newest, to: newest)) catalog records dated as of the IPSW's newest file")
+    }
 
-        step()   // the page directory
-        let nand = file("nand")
-        let (written, meta) = try N72NAND.write(volume: volume, blocks: blocks, epoch: epoch, out: nand)
-        log("\(written) filesystem pages, \(meta) metadata pages generated (epoch \(epoch))")
-        try fm.removeItem(at: volume)
-        let pageNames = { try (0..<4).flatMap { cs in try fm.contentsOfDirectory(atPath: nand.appendingPathComponent("cs\(cs)").path).map { "cs\(cs)/\($0)" } }.sorted() }
-        // The pages as written, before a keybag boot folds the guest's keybag in: the same for the same inputs.
-        let built = try Preparer.nandListing(nand, files: try pageNames()).sha256
-        log("pages as written: listing sha256 \(built)")
+    func store(_ c: Recipe.Context) throws {
+        let (written, meta) = try N72NAND.write(volume: volume, blocks: blocks, epoch: epoch, out: c.nand)
+        c.log("\(written) filesystem pages, \(meta) metadata pages generated (epoch \(epoch))")
+        try FileManager.default.removeItem(at: volume)
+    }
 
-        if dataProtection, let helper = o.helper, let bootrom {
-            step()   // 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk (a
-            // restore-only build such as 8A293 ships just the Restore one; restored_external runs first on either)
-            let comp = try BuildComponents.load(ipsw)
-            guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no ramdisk") }
-            let ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
-            _ = try N72Keybag.run(out: o.out, dec: dec, ramdisk: ramdisk, itKeybag: o.guestTools.appendingPathComponent(itKeybag),
-                                  bootrom: bootrom, helper: helper, work: work, log: log)
-            derived["keybag_ramdisk"] = ramdisk
-        }
+    /// 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk (a restore-only build such
+    /// as 8A293 ships just the Restore one; restored_external runs first on either).
+    func keybag(_ c: Recipe.Context) throws {
+        let comp = try BuildComponents.load(c.ipsw)
+        guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(c.e.id): no ramdisk") }
+        let ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
+        _ = try N72Keybag.run(out: c.o.out, dec: c.dec, ramdisk: ramdisk, itKeybag: c.o.guestTools.appendingPathComponent(itKeybag),
+                              bootrom: bootrom!, helper: helper!, work: c.work, log: c.log)
+        derived["keybag_ramdisk"] = ramdisk
+    }
 
-        step()   // read-only outputs (the seal), lock
-        let ship = ["nand", "nor.bin", "gid-blobs.bin"] + (major >= 3 ? ["iBoot.bin"] : [])
-        for n in ship { try Preparer.readOnly(file(n)) }
-        let pages = try pageNames()
-        let listingSHA = try Preparer.nandListing(nand, files: pages).sha256
-        let activation = baked["activation"] as? Activation.Result
-        derived["activation"] = nil
-        let used = try fm.contentsOfDirectory(atPath: o.guestTools.path).sorted()
-        func sha(_ n: String) throws -> [String: String] { ["path": n, "sha256": try Preparer.digest(file(n), SHA256())] }
-        let lock: [String: Any] = [
-            "format": 1, "created": ISO8601DateFormatter().string(from: Date()),
-            "entry": ["id": e.id, "sha256": Preparer.sha256(try JSONEncoder().encode(e)), "content": try JSONSerialization.jsonObject(with: JSONEncoder().encode(e))],
-            "build": e.build, "product_version": restore.productVersion, "product_type": e.productType, "board": e.board,
-            "storage": recipe.storage,
-            "tool": ["name": "firmwarekit", "version": FirmwareKit.version, "helper": o.helper.map { $0.path as Any } ?? NSNull(),
-                     "built": ["guest tools": Dictionary(uniqueKeysWithValues: try used.map { ($0, try Preparer.digest(o.guestTools.appendingPathComponent($0), SHA256())) })]],
-            "inputs": ["ipsw": ["path": o.ipsw.path, "sha1": got], "decrypted": dec.path, "identity": "identity.json",
-                       "activation": activation.map { ["input_sha256": $0.inputSHA256, "output_sha256": $0.outputSHA256] as Any } ?? NSNull(),
-                       "rootfs": "rootfs.dmg", "kernelcache": kcMember, "iboot": "iBoot.bin", "all_flash": prefix,
-                       "guest_tools": o.guestTools.path, "lockdown": NSNull()],
-            "identity": ["seed": seed, "udid": ident.udid ?? "", "sha256": try Preparer.digest(file("identity.json"), SHA256())],
-            "outputs": ["nand": ["path": "nand", "pages": pages.count, "listing_sha256": listingSHA, "built_listing_sha256": built],
-                        "nor": try sha("nor.bin"), "iboot": major >= 3 ? try sha("iBoot.bin") as Any : NSNull(), "gid_blobs": try sha("gid-blobs.bin")],
-            "derived": derived, "guest_package": guestPackage?.object ?? NSNull(),
+    func lock(_ c: Recipe.Context) throws -> [String: Any] {
+        [
+            "inputs": ["kernelcache": kcMember, "iboot": "iBoot.bin", "all_flash": prefix],
+            "outputs": ["nand": ["pages": c.nandHashes.count],
+                        "nor": try Recipe.fileRecord(c, "nor.bin"), "iboot": major >= 3 ? try Recipe.fileRecord(c, "iBoot.bin") as Any : NSNull(),
+                        "gid_blobs": try Recipe.fileRecord(c, "gid-blobs.bin")],
+            "derived": derived,
             // machine options the device must boot with (ipod2g_device.py): every device built here uses the
             // engine UID path; adopted and shipping images keep the legacy default
-            "machine": machine,
+            "machine": Self.machine,
         ]
-        try fm.removeItem(at: work)
-        try Preparer.lockData(lock).write(to: file("device.lock.json"))
-        log("\(o.out.path): UDID \(ident.udid ?? "-")")
-        progress.finish()
-        emit(.done(lock: "device.lock.json"))
     }
 
     /// The iPod bootrom the keybag boot's machine loads: LTM_FILES, then the app bundle's Resources/device next to
@@ -268,10 +230,11 @@ public enum N72Recipe {
     }
 
     /// ipod2g_device.bake over the mounted volume `m` (bake-guest-tools.sh, patch-appsync-dylib.sh,
-    /// install_web_proxy, activation). Appends the owners to patch; returns the report.
-    static func bake(_ m: URL, options opt: [String: Bool], tools: Bool, helpers: URL, gliDispatch: String?,
-                     owners: inout [(UInt32, String)], log: (String) -> Void) throws -> [String: Any] {
-        let fm = FileManager.default
+    /// install_web_proxy, activation) with the shared pieces of SystemEdits. Appends the owners to patch;
+    /// returns the report (the lock's `derived`, plus activation and guest_package).
+    func bake(_ m: URL, _ c: Recipe.Context, owners: inout [(UInt32, String)]) throws -> [String: Any] {
+        let fm = FileManager.default, opt = recipe.options, tools = major >= 3, helpers = c.o.guestTools, mbx = Self.mbx
+        let cache = SystemEdits.dyldCache(arch)
         let at = { (rel: String) in m.appendingPathComponent(rel) }
         func helper(_ n: String) throws -> Data {
             let u = helpers.appendingPathComponent(n)
@@ -283,10 +246,10 @@ public enum N72Recipe {
         var gli: String?
         let problem: String? = try {
             guard opt["gles_shim"] ?? true else { return "options.gles_shim off" }
-            guard fm.fileExists(atPath: at(armv6Cache).path) else { return "no dyld shared cache (2.x, 3.0)" }
-            let tsvs = try gliDispatch.map { [helpers.appendingPathComponent($0)] } ?? fm.contentsOfDirectory(at: helpers, includingPropertiesForKeys: nil)
+            guard fm.fileExists(atPath: at(cache).path) else { return "no dyld shared cache (2.x, 3.0)" }
+            let tsvs = try recipe.gliDispatch.map { [helpers.appendingPathComponent($0)] } ?? fm.contentsOfDirectory(at: helpers, includingPropertiesForKeys: nil)
                 .filter { $0.lastPathComponent.wholeMatch(of: /gli-dispatch-\w+\.tsv/) != nil && fm.fileExists(atPath: helpers.appendingPathComponent(engine($0)).path) }
-            let (tsv, why) = try GLIDispatch.engine(cache: try Data(contentsOf: at(armv6Cache), options: .alwaysMapped), cachePath: at(armv6Cache).path, tsvs: tsvs)
+            let (tsv, why) = try GLIDispatch.engine(cache: try Data(contentsOf: at(cache), options: .alwaysMapped), cachePath: at(cache).path, tsvs: tsvs)
             gli = tsv.map { String(engine($0).dropFirst("MBXGLEngine-".count)) }
             return tsv == nil ? why ?? "no dispatch tables" : nil
         }()
@@ -312,81 +275,64 @@ public enum N72Recipe {
             try SystemEdits.put(helper("it_agent"), at("usr/local/bin/it_agent"), mode: 0o755)
             try SystemEdits.put(helper("it_typein.dylib"), at("usr/lib/it_typein.dylib"), mode: 0o755)
         }
-        try SystemEdits.rewritePlist(at(SystemEdits.springBoardJob)) { d in
-            guard d["Label"] as? String == "com.apple.SpringBoard" else { throw FirmwareError(.unsupported, "\(SystemEdits.springBoardJob): not SpringBoard's job") }
-            let env = SystemEdits.dict(d, "EnvironmentVariables")
+        try SystemEdits.editSpringBoardJob(m) { env, _ in
             for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = problem == nil ? "1" : "0" }
             for k in ["CA_AUTO_ENABLE_OGL", "LK_AUTO_ENABLE_OGL", "CA_ENABLE_MBX2D", "LK_ENABLE_MBX2D"] { env[k] = "0" }
             let old = (env["DYLD_INSERT_LIBRARIES"] as? String ?? "").split(separator: ":").map(String.init)
             let libs = old.filter { !["/usr/lib/it_kbd_agent.dylib", "/usr/lib/it_typein.dylib"].contains($0) } + (tools ? ["/usr/lib/it_typein.dylib"] : [])
             env["DYLD_INSERT_LIBRARIES"] = libs.isEmpty ? nil : libs.joined(separator: ":")
         }
-        if tools { try SystemEdits.put(helper("com.qemu.it-agent.plist"), at(agentJob), mode: 0o644) }
+        if tools { try SystemEdits.put(helper("com.qemu.it-agent.plist"), at(Self.agentJob), mode: 0o644) }
         try? fm.removeItem(at: at("System/Library/LaunchDaemons/com.qemu.it-pbd.plist"))
-        let sbp = at(prefs + "/com.apple.springboard.plist")
+        let sbp = at(Self.prefs + "/com.apple.springboard.plist")
         if fm.fileExists(atPath: sbp.path),
            let d = try PropertyListSerialization.propertyList(from: Data(contentsOf: sbp), format: nil) as? [String: Any],
            d["SBDontLockEver"] != nil || d["SBDisableCABlanking"] != nil {
             try SystemEdits.rewritePlist(sbp) { $0.removeObjects(forKeys: ["SBDontLockEver", "SBDisableCABlanking"]) }
         }
-        for (name, changes) in soundDefaults {
-            try SystemEdits.seedPlist(at(prefs + "/" + name)) { $0.addEntries(from: changes) }
+        for (name, changes) in Self.soundDefaults {
+            try SystemEdits.seedPlist(at(Self.prefs + "/" + name)) { $0.addEntries(from: changes) }
         }
         let media = at("private/var/mobile/Media")
         if tools {
             try SystemEdits.mkdirs(media)
             for v in 1...3 { try SystemEdits.put(Data("v\(v)\n".utf8), media.appendingPathComponent(".lt-guest-tools-v\(v)")) }
         } else {
-            for rel in [agentJob] + (1...3).map({ "private/var/mobile/Media/.lt-guest-tools-v\($0)" }) { try? fm.removeItem(at: at(rel)) }
+            for rel in [Self.agentJob] + (1...3).map({ "private/var/mobile/Media/.lt-guest-tools-v\($0)" }) { try? fm.removeItem(at: at(rel)) }
         }
 
         if gli != nil {   // ipad1_rootfs.gli_uncache: 4.x caches MBXGLEngine, so dyld must prefer the file
-            let status = try autoreleasepool { try SystemEdits.overrideCachedImage(m, image: mbx, cache: armv6Cache) }
+            let status = try autoreleasepool { try SystemEdits.overrideCachedImage(m, image: mbx, cache: cache) }
             report["gles_cache"] = status
             if status.contains("overridden") { owners.append((0, SystemEdits.dyldOverride)) }
         }
         if opt["appsync"] == true {   // patch-appsync-dylib.sh
-            // 2.x and 3.0 have no dyld shared cache (libmis is its own dylib): only installd's interposer then,
-            // so amfid and SpringBoard's launch gate stay stock (docs/matrix.md).
-            let line = fm.fileExists(atPath: at(armv6Cache).path) ? try AppSyncCachePatch.patchCache(at: at(armv6Cache))
-                : "warning: no dyld shared cache: MISValidateSignature unpatched (installd interposer only)"
-            log(line)
-            try SystemEdits.put(helper(SystemEdits.Helpers.appsync), at(SystemEdits.appsyncPath), mode: 0o644)
-            let job = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map { at("System/Library/LaunchDaemons/" + $0) }
-                .first { fm.fileExists(atPath: $0.path) }
-            guard let job else { throw FirmwareError(.unsupported, "no installd launchd plist") }
-            try SystemEdits.rewritePlist(job) { SystemEdits.dyldInsert($0, "/" + SystemEdits.appsyncPath) }
-            report["appsync"] = [line, "installd (\(job.lastPathComponent)) DYLD_INSERT_LIBRARIES += /\(SystemEdits.appsyncPath)"]
+            let (line, job) = try SystemEdits.installAppSync(m, helper: helpers.appendingPathComponent(SystemEdits.Helpers.appsync), cache: cache, log: c.log)
+            report["appsync"] = [line, "installd (\(job)) DYLD_INSERT_LIBRARIES += /\(SystemEdits.appsyncPath)"]
             owners.append((0, SystemEdits.appsyncPath))
         }
         if tools {   // ipod2g_device.PREFS: the iPad's it_prefs, SpringBoard tip only (contrib/it-prefs/build-ipod.sh)
-            try SystemEdits.put(helper("it_prefs-armv6"), at("usr/local/bin/it_prefs"), mode: 0o755)
-            try SystemEdits.put(helper("com.qemu.it-prefs.plist"), at(prefsJob), mode: 0o644)
-            owners += [(0, "usr/local/bin/it_prefs"), (0, prefsJob)]
+            try SystemEdits.put(helper(SystemEdits.Helpers.name("it_prefs", arch)), at("usr/local/bin/it_prefs"), mode: 0o755)
+            try SystemEdits.put(helper("com.qemu.it-prefs.plist"), at(Self.prefsJob), mode: 0o644)
+            owners += [(0, "usr/local/bin/it_prefs"), (0, Self.prefsJob)]
             report["prefs"] = "it_prefs: SBDidShowReorderText at first boot"
         }
-        if opt["web_proxy"] ?? true {   // install_web_proxy
+        if opt["web_proxy"] ?? true {   // install_web_proxy: the PAC, and the Wi-Fi service on the system volume's /private/var
             let sc = "private/var/preferences/SystemConfiguration"
-            for rel in ["usr/local", "usr/local/share", "usr/local/share/ltm", sc] where !fm.fileExists(atPath: at(rel).path) {
-                try SystemEdits.mkdirs(at(rel))
-                owners.append((0, rel))
-            }
-            try SystemEdits.put(Data(SystemEdits.pac.utf8), at(SystemEdits.pacPath))
+            owners += try SystemEdits.installPAC(m, dirs: [sc]).map { (UInt32(0), $0) }
             try SystemEdits.seedPlist(at(sc + "/preferences.plist"), SystemEdits.wifiProxyPrefs)
-            owners += [(0, SystemEdits.pacPath), (0, sc + "/preferences.plist")]
+            owners.append((0, sc + "/preferences.plist"))
             report["web_proxy"] = "PAC /\(SystemEdits.pacPath) on the en0 Wi-Fi service"
         }
-        log("Activating device")
-        report["activation"] = try Activation.run(on: at(SystemEdits.lockdownd))
+        report["activation"] = try SystemEdits.activate(m, log: c.log)
         owners.append((0, SystemEdits.lockdownd))
         // mkpkg.seed: the loader and the seed package; it_boot loads the package's jobs (com.qemu.it-agent), so
         // the baked copies it provides are removed. Owners after it, for only what is left.
-        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent("armv6.itpack"), gli: gli)
-        log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
+        let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gli: gli, log: c.log)
         report["guest_package"] = record
         owners += seeded.map { (UInt32(0), $0) }
-        owners += guestToolOwners.filter { (try? fm.destinationOfSymbolicLink(atPath: at($0.1).path)) != nil || fm.fileExists(atPath: at($0.1).path) }
-        log("bake: \(report.filter { $0.key != "activation" && $0.key != "guest_package" })")
+        owners += Self.guestToolOwners.filter { (try? fm.destinationOfSymbolicLink(atPath: at($0.1).path)) != nil || fm.fileExists(atPath: at($0.1).path) }
+        c.log("bake: \(report.filter { $0.key != "activation" && $0.key != "guest_package" })")
         return report
     }
 }
