@@ -49,7 +49,7 @@ final class EmulatorController {
     private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
         let value = storageFailed
-            ? "Storage writes failed. The device is stopped and recent changes were not saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
+            ? "Couldn’t save to disk. The device stopped and recent changes weren’t saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
             : message
         logEvent(value)
         deviceNotice = value

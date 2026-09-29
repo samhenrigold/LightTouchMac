@@ -244,7 +244,7 @@ case "unit":
     let sha1 = iPad32.source.sha1!
     try StorageLocations.privateDirectory(cache.appendingPathComponent("\(sha1).tmp"))
     run = prepare(iPad32, state: state, cache: cache, mode: "error")
-    expect(run.events.last == .failed("This firmware’s keys are missing."), "\(run.events)")
+    expect(run.events.last == .failed("Light Touch doesn’t have the keys for this firmware."), "\(run.events)")
     expect(!fm.fileExists(atPath: cache.appendingPathComponent(sha1).path) && !fm.fileExists(atPath: cache.appendingPathComponent("\(sha1).tmp").path),
            "the decrypt cache and its .tmp go after a failure too")
     // An IPSW failing its SHA in the preparer is deleted.

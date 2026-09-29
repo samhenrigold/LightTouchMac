@@ -105,6 +105,7 @@
   "version": "4.2.1",
   "build": "8C148",
   "status": "experimental",
+  "status_note": "iOS 4.2.1 on iPad is experimental.",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPad/061-9857.20101122.VGthy/iPad1,1_4.2.1_8C148_Restore.ipsw", "sha1": "8717b3bedc925b587566442ad375aa65d857e79a", "bytes": 578084840},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "d108bbfc6e3e4d6d3c9fec1d19fe1769", "key": "3359842bed66e5f2b942f60ac30667a36a86f049b8cb33bd101c1caf5cb422e8"},
@@ -759,6 +760,7 @@
   "version": "4.2.1",
   "build": "8C148",
   "status": "experimental",
+  "status_note": "iOS 4.2.1 on iPod touch is experimental.",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/061-9855.20101122.Lrft6/iPod2,1_4.2.1_8C148_Restore.ipsw", "sha1": "b9efddc7bb4350c237a8d3846af61bbfc8a2f647", "bytes": 363553480},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "75155f29cafe8dfdfdcf6fbf107664c1", "key": "6788b9096c321f1f3563f546e1809676"},
