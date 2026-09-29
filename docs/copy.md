@@ -139,6 +139,10 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | needsTap (no guest agent: the profile was offered) | Tap Install on the iPod to trust the proxy certificate. |
 | Settings ▸ Storage | Devices (Base · Data · Snapshot), IPSWs (Downloaded / Imported IPSW), Caches and logs, Library (N IPAs · size · size on no device) |
 
+### Store on iPhone OS 1.x
+
+The suggested list isn’t asked for: “iPhone OS 1.1 has no App Store.” A search still lists apps greyed with “Requires iOS 2.0”.
+
 ### Store rows the device can't run (`CatalogApp.incompatibility`, Legacy Store `compat.reasons`)
 
 A search lists them greyed, with the first reason as the subtitle and no Install; the suggested list leaves them out.

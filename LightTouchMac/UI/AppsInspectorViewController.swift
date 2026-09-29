@@ -915,6 +915,13 @@ final class AppsInspectorViewController: NSViewController {
         catalogFailed = false
         catalogResults = []
         reloadTablePreservingSelection()
+        // iPhone OS 1 predates the App Store: Legacy Store's suggested list is empty for it by definition,
+        // which read as the store being broken. A search still runs (and says why each app can't install).
+        if query.isEmpty, emulator.iosVersion.compare("2.0", options: .numeric) == .orderedAscending {
+            showPlaceholder("iPhone OS \(emulator.iosVersion) has no App Store.")
+            updateButtons()
+            return
+        }
         // Replace the other mode's overlay before any debounce/network await.
         // Cached Store rows remain usable while their refresh is in flight.
         showPlaceholder(catalogResults.isEmpty
