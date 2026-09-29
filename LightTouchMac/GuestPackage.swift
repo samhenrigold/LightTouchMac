@@ -110,13 +110,20 @@ nonisolated enum GuestPackage {
         return entries
     }
 
+    /// mkpkg's requires.builds: an exact build id, or "<major>*" for every build of that iOS major (2.x = 5*,
+    /// 3.x = 7*, 4.x = 8*), as FirmwareKit's GuestPackage.buildMatches.
+    static func buildMatches(_ builds: [String], _ build: String) -> Bool {
+        let major = build.prefix { $0.isNumber }
+        return builds.contains { $0 == build || ($0.hasSuffix("*") && $0.dropLast() == major) }
+    }
+
     /// The package in an itpack for this board and build, with its payloads by
     /// package path; nil when there is none (or only a stub).
     static func package(in itpack: URL, board: String, build: String) throws -> (Manifest, [String: Data])? {
         let entries = try read(itpack)
         for (name, data) in entries where name.hasSuffix("/manifest.json") {
             let manifest = try JSONDecoder().decode(Manifest.self, from: data)
-            guard manifest.requires.boards.contains(board), manifest.requires.builds.contains(build),
+            guard manifest.requires.boards.contains(board), buildMatches(manifest.requires.builds, build),
                   manifest.stub != true else { continue }
             let prefix = String(name.dropLast("manifest.json".count))
             var payloads: [String: Data] = [:]

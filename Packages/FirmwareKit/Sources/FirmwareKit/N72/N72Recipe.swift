@@ -177,8 +177,10 @@ public enum N72Recipe {
         log("pages as written: listing sha256 \(built)")
 
         if dataProtection, let helper = o.helper, let bootrom {
-            step()   // 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk
-            guard let update = try BuildComponents.load(ipsw)["UpdateRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no Update ramdisk") }
+            step()   // 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk (a
+            // restore-only build such as 8A293 ships just the Restore one; restored_external runs first on either)
+            let comp = try BuildComponents.load(ipsw)
+            guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no ramdisk") }
             let ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
             _ = try N72Keybag.run(out: o.out, dec: dec, ramdisk: ramdisk, itKeybag: o.guestTools.appendingPathComponent(itKeybag),
                                   bootrom: bootrom, helper: helper, work: work, log: log)
@@ -281,7 +283,7 @@ public enum N72Recipe {
         var gli: String?
         let problem: String? = try {
             guard opt["gles_shim"] ?? true else { return "options.gles_shim off" }
-            guard fm.fileExists(atPath: at(armv6Cache).path) else { return "no dyld shared cache (2.x)" }
+            guard fm.fileExists(atPath: at(armv6Cache).path) else { return "no dyld shared cache (2.x, 3.0)" }
             let tsvs = try gliDispatch.map { [helpers.appendingPathComponent($0)] } ?? fm.contentsOfDirectory(at: helpers, includingPropertiesForKeys: nil)
                 .filter { $0.lastPathComponent.wholeMatch(of: /gli-dispatch-\w+\.tsv/) != nil && fm.fileExists(atPath: helpers.appendingPathComponent(engine($0)).path) }
             let (tsv, why) = try GLIDispatch.engine(cache: try Data(contentsOf: at(armv6Cache), options: .alwaysMapped), cachePath: at(armv6Cache).path, tsvs: tsvs)
@@ -344,7 +346,10 @@ public enum N72Recipe {
             if status.contains("overridden") { owners.append((0, SystemEdits.dyldOverride)) }
         }
         if opt["appsync"] == true {   // patch-appsync-dylib.sh
-            let line = try AppSyncCachePatch.patchCache(at: at(armv6Cache))
+            // 2.x and 3.0 have no dyld shared cache (libmis is its own dylib): only installd's interposer then,
+            // so amfid and SpringBoard's launch gate stay stock (docs/matrix.md).
+            let line = fm.fileExists(atPath: at(armv6Cache).path) ? try AppSyncCachePatch.patchCache(at: at(armv6Cache))
+                : "warning: no dyld shared cache: MISValidateSignature unpatched (installd interposer only)"
             log(line)
             try SystemEdits.put(helper(SystemEdits.Helpers.appsync), at(SystemEdits.appsyncPath), mode: 0o644)
             let job = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map { at("System/Library/LaunchDaemons/" + $0) }

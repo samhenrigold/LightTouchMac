@@ -41,8 +41,11 @@ public enum FirmwareDecryptor {
             return (iv, key)
         }
         func dec(_ p: String, plainTail: Bool) throws -> Data {
+            let raw = try ipsw.read(p)
+            // 2.x DFU stages have no KBAG: the payload is in the clear (a key for one would only make noise).
+            if try IMG3.tags(raw)["KBAG"] == nil { return try IMG3.payload(raw) }
             let (iv, key) = try img3Key(p)
-            return try IMG3.decrypt(ipsw.read(p), iv: iv, key: key, plainTail: plainTail)
+            return try IMG3.decrypt(raw, iv: iv, key: key, plainTail: plainTail)
         }
 
         let kcPath = try path("KernelCache")
@@ -56,18 +59,31 @@ public enum FirmwareDecryptor {
             kernel = try LZSS.complzss(IMG3.decrypt(kcRaw, iv: kcIV, key: kcKey, plainTail: true))
         }
 
+        // Components no recipe reads after this (the DFU stage, the ramdisks) are skipped without a key rather
+        // than failing the build: public key pages lack them for several builds (docs/matrix.md). A step that
+        // does need one (the 4.x keybag's Update ramdisk) fails on the missing file with its own message.
         var files: [String] = []
+        func keyed(_ p: String) -> Bool { (try? entry.key(forPath: p)) != nil }
         for (name, c) in components {
             if c == "KernelCache" {
                 try kernel.write(to: dir.appendingPathComponent("kernelcache.mach"))
                 files.append("kernelcache.mach")
             } else {
-                try dec(try path(c), plainTail: plainTail).write(to: dir.appendingPathComponent("\(name).bin"))
+                let p = try path(c)
+                if ["iBSS", "iBEC"].contains(c), !keyed(p), try IMG3.tags(ipsw.read(p))["KBAG"] != nil {
+                    FileHandle.standardError.write(Data("warning: \(entry.id): no key for \(c) (\(p)); skipped\n".utf8))
+                    continue
+                }
+                try dec(p, plainTail: plainTail).write(to: dir.appendingPathComponent("\(name).bin"))
                 files.append("\(name).bin")
             }
         }
         for c in ["RestoreRamDisk", "UpdateRamDisk"] {
             guard let p = comp[c] else { continue }
+            guard keyed(p) else {
+                FileHandle.standardError.write(Data("warning: \(entry.id): no key for \(c) (\(p)); skipped\n".utf8))
+                continue
+            }
             let out = String(p.dropLast(4)) + "-ramdisk.dmg"
             try dec(p, plainTail: plainTail).write(to: dir.appendingPathComponent(out))
             files.append(out)

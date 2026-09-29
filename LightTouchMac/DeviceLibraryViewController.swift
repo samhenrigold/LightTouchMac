@@ -359,6 +359,7 @@ private final class DeviceRowCell: NSTableCellView {
         case .stopping: spin(fraction: nil)
         case .error: show(symbol: "exclamationmark.triangle.fill", color: .systemYellow, size: 12)
         case .unavailable(.comingSoon): show("Coming Soon")
+        case .unavailable(.untested): show("Untested")
         case .unavailable(.requiresIPSW): show("Requires IPSW")
         }
         if let note = row.note, detail.isHidden { show(note) }

@@ -60,7 +60,7 @@ nonisolated enum SessionPhase: Equatable, Sendable {
 }
 
 nonisolated enum DeviceRowState: Equatable, Sendable {
-    enum Unavailable: Equatable, Sendable { case comingSoon, requiresIPSW }
+    enum Unavailable: Equatable, Sendable { case comingSoon, untested, requiresIPSW }
     case notDownloaded(bytes: Int64?)
     /// Its IPSW is in a store (downloaded or imported), not yet prepared.
     case downloaded
@@ -106,6 +106,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case nil: break
         }
         if entry.status == .comingSoon { return .unavailable(.comingSoon) }
+        if entry.status == .untested { return .unavailable(.untested) }
         switch job {
         case let .downloading(fraction, remaining)?: return .downloading(fraction: fraction, remaining: remaining)
         case let .preparing(preparation)?: return .preparing(preparation)
@@ -177,7 +178,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case .downloadAndPrepare:
             return (canDownload || state == .bundled) && !isStartable && !working && !isDimmed
         case .importIPSW:
-            return !isStartable && entry.status != .comingSoon && !working
+            return !isStartable && entry.status != .comingSoon && entry.status != .untested && !working
         case .cancel: return !hasSession && working
         case .erase: return instanceID != nil && !working
         case .showInFinder: return instanceID != nil
@@ -193,7 +194,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case .downloading, .preparing: .cancel
         case .error: isStartable ? .start : entry.status == .userIPSW ? .importIPSW : .downloadAndPrepare
         case .unavailable(.requiresIPSW): .importIPSW
-        case .unavailable(.comingSoon), .running, .stopping: nil
+        case .unavailable(.comingSoon), .unavailable(.untested), .running, .stopping: nil
         }
     }
 
@@ -225,6 +226,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case .stopping: "Stopping"
         case .error: "Error"
         case .unavailable(.comingSoon): "Coming Soon"
+        case .unavailable(.untested): "Untested"
         case .unavailable(.requiresIPSW): "Requires IPSW"
         }
     }

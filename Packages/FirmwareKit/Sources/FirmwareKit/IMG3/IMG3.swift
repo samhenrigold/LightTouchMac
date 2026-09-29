@@ -32,6 +32,14 @@ public enum IMG3 {
         return tags
     }
 
+    /// The DATA payload as stored (an unencrypted img3's plaintext, else the ciphertext).
+    public static func payload(_ data: Data) throws -> Data {
+        guard let tag = try tags(data)["DATA"] else { throw FirmwareError(.unsupported, "img3 has no DATA tag") }
+        let start = data.startIndex + tag.offset + 12
+        guard start + tag.dataLength <= data.endIndex else { throw FirmwareError(.unsupported, "img3 DATA runs past the file") }
+        return data[start..<start + tag.dataLength]
+    }
+
     public static func decrypt(_ data: Data, iv: Data, key: Data, plainTail: Bool = false) throws -> Data {
         guard let tag = try tags(data)["DATA"] else { throw FirmwareError(.unsupported, "img3 has no DATA tag") }
         let start = data.startIndex + tag.offset + 12, dlen = tag.dataLength
