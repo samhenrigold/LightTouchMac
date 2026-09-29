@@ -59,10 +59,10 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 | C1 Runtime GL shim: parse the dispatch string at load; one GLEngine/MBXGLEngine per arch; no TSVs, no per-build names | 3 | GLIDispatch generate == today's four tables; regress gles 7B500/8C148/7E18/8C148 |
 | C2 mkpkg families by rule (board, iOS major, dyld legacy), hooks filtered at seed | 0.5 | mkpkg selfcheck; seed on 6 entries |
 | C3 Catalog is the manifest; delete qemu-ios manifests/; tests take an entry JSON | 0.5 | fresh-device with --entry |
-| C4 One Recipe with board plug-ins (verify/decrypt/identity/lock/keybag/bake shared) | 2 | swift test; lock diff empty on all entries |
+| C4 One Recipe with board plug-ins (verify/decrypt/identity/lock/keybag/bake shared) — **done 2026-09-28 (`one-recipe`)**: `Recipe.create` + `Board` (K48Board, N72Board); shared bake pieces in SystemEdits; helper names and the dyld cache by arch | 2 | swift test; `scripts/lock-identity.py diff`: every cached entry's lock byte-identical before/after (see STATUS) |
 | C5 Retire Python: port real-iBoot (done in C0) and `--gl-test`; golden-lock oracle; delete ~4,500 lines; `research/` keeps the probes | 4 | fresh-device on all 6 entries via firmwarekit; one-time cross-check against the last Python locks |
 | C6 Bundled iPod as a prepared device (S2); delete LegacyAdoption, LaunchOptions, the legacy branches — **done 2026-09-28 (`bundled-prepared`)**: `Resources/device/n72ap-7E18.itbase` (a packed `firmwarekit create`), published at first launch; one Erase & Continue / Quit prompt for the old layout; `LTM_DEV_BASE` for development | 2.5 | check-bundled-prepared (fresh → `.prepared`; old layout → prompt path); check-firmware-jobs publish (XFAIL retired); check-sessions --single ipod on the unpacked blob; test-release, test-package |
-| C8 Disk images without `hdiutil` (deprecated in macOS 27, replaced by `diskutil image`): one `DiskImage` abstraction in FirmwareKit (attach/detach/convert/resize) with a `diskutil image` backend when present and `hdiutil` otherwise, tested on both; then move the prepare-time volume edits to the native HFSPlus module (it already does catalog, owners, normalize, journal) so preparation never mounts; mounting stays only for the user-facing Mount/Export feature | 2 + 3 | swift test; both backends on macOS 26/27; fresh-device on all entries |
+| C8 Disk images without `hdiutil` — **DiskImage done 2026-09-28 (`one-recipe`)**: one abstraction (attach/detach/resize/convert) on `diskutil image` where it exists (27+) and hdiutil below, both backends unit-tested on every host and byte-identical where both run; ZIPFoundation, MachOKit, swift-subprocess pinned. **Left:** prepare-time edits on the native HFSPlus module (needs a block allocator, fork extension, catalog B-tree insertion: ~3–5 d) so preparation never mounts; the attached-image listing still reads `hdiutil info` | 2 + 3 | swift test (DiskImageTests); lock-identity on every cached entry |
 | C7 iPod 2.1.1 in the app (N72 recipe 2.x path, keys, catalog) | 1 | in-bundle prepare + boot |
 
 ## Track F: fewer lines we own (Sam, 2026-09-28: "the best line of code is the line we never wrote")
@@ -72,6 +72,15 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 | F1 Host GL executor on ANGLE — **dropped 2026-09-28 (Sam):** the deletable translation is a few hundred lines; the rest of gles-host.c is wire/surface/present plumbing and iOS-only extensions ANGLE lacks; a million-line dependency and 10–20 MB for that isn't worth it, and OpenGL deprecation isn't a concern | — | — |
 | F2 VideoToolbox boundary spike — **done 2026-09-28, verdict: ffmpeg stays.** H.264: the guest submits one slice per job with no last-slice marker, so picture completion is only knowable by parsing residuals (libavcodec chunk mode does that); single-slice CAVLC now decodes natively on VideoToolbox (byte-exact), libavcodec only for multi-slice. AAC/MP3/ALAC: the guest DMA is an unframed byte stream; AudioToolbox needs packet boundaries, which only a decoder can find. | done | test_h264_native (VT byte-exact), test_h264_slices/reader |
 | F3 Web proxy in the app on URLSession (system trust store, HTTP/2, cache); guest keeps the PAC redirect only | 2 | check-web-proxy-forwarding; Proxy-compatibility set |
+
+## Track G: iPhone OS 1.x/2.x graphics (docs/sweep/gpu-1x-2x.md)
+
+| Item | Effort | Gate |
+|---|---|---|
+| G1 2.x compositing leaves the software path (Sam: "dog slow and janky"): CoreAnimation composites through the 2.x GL front end (CA_ENABLE_OGL, as 3.x does), else the MBX 2D API shim so the stock MBX2D compositor runs | in G2 | home swipe / Safari zoom / scroll fps and stalls vs the software path; 3.x-level smoothness |
+| G2 2.x GL front end for apps: `mkold.py --legacy` turns rebase opcodes into classic relocations (prereq); `gles2x.c` exports the firmware's own gl*/egl*/EAGL names over the same mbxshim core and gles-names.h wire; replaces OpenGLES.framework's binary via an n72-ios2 hook; first App Store game on screen, then compatibility | 5–8 | a 2.x game renders through the host with zero refusals; 5F138/5H11 boot+gles; 3.x/4.x unchanged |
+| G3 1.x boots first with LK_ENABLE_MBX2D=0 (software) to reach the milestone, then G4 makes it smooth | 0 | 1G milestone screenshots |
+| G4 MBX 2D API shim (~40 exports, 5 draw ops hoisted to host 2D blits): the 1.x compositor path (LayerKit has no EAGL) and the 2.x fallback if CA's GL renderer can't be completed; never a hardware MBX model | 5–8 | 1.x home/Cover Flow/video smooth on 4B1; 2.x if used |
 
 ## Track D: emulator consolidation (after gl-coverage and usb-alert merge; ~10 d)
 

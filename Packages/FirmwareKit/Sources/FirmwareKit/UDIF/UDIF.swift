@@ -1,5 +1,5 @@
 // UDIF: the raw HFS+ volume out of a (decrypted) IPSW rootfs DMG. Ports ipad1_rootfs.extract_rootfs and
-// apm_hfs_slice: `hdiutil convert -format UDTO` makes the raw disk, then the Apple_HFS(X) partition of its
+// apm_hfs_slice: DiskImage.convertToRaw (hdiutil UDTO / diskutil RAW) makes the raw disk, then the Apple_HFS(X) partition of its
 // Apple Partition Map is copied out. A source that already is a bare HFS volume is copied as is.
 //
 //   try UDIF.extractRootfs(dmg: rootfsDMG, to: rawVolume)             // work files go next to `to`
@@ -22,19 +22,8 @@ public enum UDIF {
         let work = out.deletingLastPathComponent().appendingPathComponent(".udif-\(UUID().uuidString)")
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: work) }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-        p.arguments = ["convert", src.path, "-format", "UDTO", "-quiet", "-o", work.appendingPathComponent("raw").path]
-        p.standardOutput = FileHandle.nullDevice
-        let err = Pipe()
-        p.standardError = err
-        try p.run()
-        let msg = err.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        guard p.terminationStatus == 0 else {
-            throw FirmwareError(.unsupported, "hdiutil convert \(src.lastPathComponent): \(String(decoding: msg, as: UTF8.self))")
-        }
-        let raw = work.appendingPathComponent("raw.cdr")
+        let raw = work.appendingPathComponent("raw")
+        try DiskImage.convertToRaw(src, to: raw)
         let f = try FileHandle(forReadingFrom: raw)
         defer { try? f.close() }
         let (off, len) = try APM.hfsSlice(f.read(upToCount: 64 * 512) ?? Data())

@@ -62,6 +62,9 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
             enum CodingKeys: String, CodingKey { case seconds, preparedBytes = "prepared_bytes", peakBytes = "peak_bytes" }
         }
 
+        /// A developer build: a beta or a golden master (docs/matrix.md, Betas).
+        enum Prerelease: String, Codable, Sendable { case beta, gm }
+
         var id: String
         var board: String
         var productType: String
@@ -69,6 +72,9 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var build: String
         var status: Status
         var statusNote: String?
+        var prerelease: Prerelease?
+        /// Which beta/GM of its version (absent: the first).
+        var prereleaseNumber: Int?
         var source: Source
         /// The built-in device: a prepared base packed under the app's Resources
         /// (scripts/pack-base.py), published on first launch (FirmwareJobs.prepareBundled).
@@ -80,11 +86,18 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var estimates: Estimates
 
         enum CodingKeys: String, CodingKey {
-            case id, board, version, build, status, source, bundled, keys, recipe, emulator, estimates
-            case productType = "product_type", statusNote = "status_note"
+            case id, board, version, build, status, source, bundled, keys, recipe, emulator, estimates, prerelease
+            case productType = "product_type", statusNote = "status_note", prereleaseNumber = "prerelease_number"
         }
 
         var profile: DeviceProfile? { DeviceProfile(boardID: board) }
+
+        /// The sidebar's badge: "Beta", "Beta 3", "GM", "GM 2"; nil for a release.
+        var prereleaseBadge: String? {
+            guard let prerelease else { return nil }
+            let name = prerelease == .beta ? "Beta" : "GM"
+            return prereleaseNumber.map { $0 > 1 ? "\(name) \($0)" : name } ?? name
+        }
     }
 
     static func load(from url: URL) throws -> FirmwareCatalog {
