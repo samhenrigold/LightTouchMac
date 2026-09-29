@@ -129,6 +129,11 @@ import Foundation
         // iPod 4.2.1 downloads and prepares like the iPads.
         r = row(iPod4)
         precondition(r.isExperimental && iPod4.statusNote != nil && r.primaryAction == .downloadAndPrepare)
+        precondition(r.badge == "Experimental" && row(iPad).badge == nil)
+        // A developer build: its badge is the beta/GM ordinal.
+        let beta3 = entry("k48ap-8C5115c"), gm2 = entry("k48ap-8C134b"), beta1 = entry("n72ap-8A230m")
+        precondition(row(beta3).badge == "Beta 3" && row(gm2).badge == "GM 2" && row(beta1).badge == "Beta")
+        precondition(row(beta3).state == .unavailable(.untested), "a beta is listed but not offered until the matrix passes it")
         print("PASS: row states, accessories, primary buttons and commands for every catalog status")
     }
 }
