@@ -164,7 +164,7 @@ public enum Recipe {
             "tool": ["name": "firmwarekit", "version": FirmwareKit.version, "helper": opt(o.helper?.path),
                      "built": ["guest tools": Dictionary(uniqueKeysWithValues: try tools.map { ($0, try Preparer.digest(o.guestTools.appendingPathComponent($0), SHA256())) })]],
             "inputs": ["ipsw": ["path": o.ipsw.path, "sha1": c.sha1], "decrypted": c.dec.path, "identity": "identity.json",
-                       "activation": opt(c.activation.map { ["input_sha256": $0.inputSHA256, "output_sha256": $0.outputSHA256] }),
+                       "activation": opt(c.activation.map { $0.record }),
                        "rootfs": "rootfs.dmg", "guest_tools": o.guestTools.path, "lockdown": NSNull()],
             "identity": ["seed": c.seed, "udid": c.ident.udid ?? "", "sha256": try Preparer.digest(c.file("identity.json"), SHA256())],
             "outputs": ["nand": ["path": "nand", "listing_sha256": c.listing, "built_listing_sha256": c.built]],

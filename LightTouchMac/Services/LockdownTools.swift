@@ -32,6 +32,18 @@ extension DeviceServices {
         }
     }
 
+    /// Complete activation acknowledgement and an old iPod's first host connection.
+    /// Uses the guest protocol, independently of the clock and timezone preferences.
+    func finishActivation() async throws {
+        guard let tool = Bundled.tool("lockdown-tz") ?? Self.developmentHelper("lockdown-tz") else {
+            throw DeviceToolsError.toolMissing("lockdown-tz")
+        }
+        let result = try await Self.lockdownChild(tool, ["--finish-activation"], socket: clientSocket)
+        guard result.status == 0 else {
+            throw DeviceToolsError.failed("Couldn’t complete device activation. \(result.error)")
+        }
+    }
+
     /// Sync the guest's timezone through the bundled lockdown-tz helper — a
     /// child process ON PURPOSE. lockdownd_set_value called in-process against
     /// 3.1.3's lockdownd corrupts the heap: the app died ~20 s later in

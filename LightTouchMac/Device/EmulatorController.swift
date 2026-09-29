@@ -1584,7 +1584,7 @@ final class EmulatorController {
         try await DeviceServices(clientSocket: socket).checkAttachment()
     }
 
-    // MARK: - Activation (verified per boot; activating is the preparer's job)
+    // MARK: - Activation (prepared offline, completed and verified per boot)
 
     private var activationCheckedGeneration: Int?
     private var activationTask: Task<Void, Never>?
@@ -1610,7 +1610,20 @@ final class EmulatorController {
                 guard let self, generation == self.bootGeneration else { return }
                 if let answer = await (try? self.services)?.activationState() {
                     state = answer
-                    if DeviceConnectionIssue.activation(state: answer, profile: self.profile) == nil { break }
+                    if DeviceConnectionIssue.activation(state: answer, profile: self.profile) == nil {
+                        do {
+                            try await self.services.finishActivation()
+                            guard generation == self.bootGeneration else { return }
+                            self.activationCheckedGeneration = generation
+                            break
+                        } catch {
+                            guard generation == self.bootGeneration else { return }
+                            logEvent("activation completion: \(error)")
+                            // Retry transient startup failures. Keep a later activation check
+                            // eligible if the protocol did not acknowledge completion.
+                            self.activationCheckedGeneration = nil
+                        }
+                    }
                 }
             }
             guard let self, generation == bootGeneration else { return }

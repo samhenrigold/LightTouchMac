@@ -1,5 +1,6 @@
 /*
  * lockdown-tz <olson zone> [epoch | keep]
+ * lockdown-tz --finish-activation
  *
  * Point the device's lockdown TimeZone at the given zone — the same call
  * iTunes used; the guest's lockdownd rewrites /var/db/timezone/localtime and
@@ -89,12 +90,88 @@ static char *current_zone(lockdownd_client_t cli)
     return s;
 }
 
+/* Finish local preparation through the guest's own protocol. This never sends
+ * identities or activation requests to an external service. Kept in the child
+ * process for the same SetValue isolation as clock synchronization. */
+static char *string_value(lockdownd_client_t cli, const char *key)
+{
+    plist_t value = NULL;
+    char *s = NULL;
+    if (lockdownd_get_value(cli, NULL, key, &value) == LOCKDOWN_E_SUCCESS && value) {
+        if (plist_get_node_type(value) == PLIST_STRING) plist_get_string_val(value, &s);
+        plist_free(value);
+    }
+    return s;
+}
+
+static int bool_value(lockdownd_client_t cli, const char *key)
+{
+    plist_t value = NULL;
+    int result = -1;
+    if (lockdownd_get_value(cli, NULL, key, &value) == LOCKDOWN_E_SUCCESS && value) {
+        if (plist_get_node_type(value) == PLIST_BOOLEAN) {
+            uint8_t b = 0;
+            plist_get_bool_val(value, &b);
+            result = b != 0;
+        }
+        plist_free(value);
+    }
+    return result;
+}
+
+static int activated(const char *state)
+{
+    return state && (!strcmp(state, "Activated") || !strcmp(state, "FactoryActivated") ||
+                     !strcmp(state, "WildcardActivated"));
+}
+
+static int ensure_true(lockdownd_client_t cli, const char *key)
+{
+    if (bool_value(cli, key) == 1) return 1;
+    if (lockdownd_set_value(cli, NULL, key, plist_new_bool(1)) != LOCKDOWN_E_SUCCESS) return 0;
+    return bool_value(cli, key) == 1;
+}
+
+static int finish_activation(lockdownd_client_t cli)
+{
+    char *state = string_value(cli, "ActivationState");
+    if (!activated(state)) {
+        fprintf(stderr, "activation state: %s\n", state ? state : "unavailable");
+        free(state);
+        return 4;
+    }
+    free(state);
+    char *product = string_value(cli, "ProductType");
+    char *version = string_value(cli, "ProductVersion");
+    unsigned major = 0;
+    int legacy_ipod = product && !strncmp(product, "iPod", 4) && version &&
+        sscanf(version, "%u.", &major) == 1 && major >= 1 && major <= 3;
+    free(product);
+    free(version);
+    if (legacy_ipod && (!ensure_true(cli, "iTunesHasConnected") || bool_value(cli, "BrickState") == 1)) {
+        fprintf(stderr, "first iTunes connection has not completed\n");
+        return 5;
+    }
+    // Old releases need the first-connection state but may not expose this
+    // newer acknowledgement key. Do not invent a persistent cache entry.
+    if (!legacy_ipod && !ensure_true(cli, "ActivationStateAcknowledged")) {
+        fprintf(stderr, "activation acknowledgement has not completed\n");
+        return 6;
+    }
+    state = string_value(cli, "ActivationState");
+    int ok = activated(state);
+    printf("%s\n", state ? state : "unavailable");
+    free(state);
+    return ok ? 0 : 4;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2 || argc > 3) {
         fprintf(stderr, "usage: lockdown-tz <olson zone> [epoch | keep]\n");
         return 2;
     }
+    int finishing = argc == 2 && !strcmp(argv[1], "--finish-activation");
     time_t now = time(NULL);
     int keep = 0;
     if (argc == 3) {
@@ -115,6 +192,13 @@ int main(int argc, char **argv)
         fprintf(stderr, "no lockdown\n");
         idevice_free(dev);
         return 1;
+    }
+
+    if (finishing) {
+        int result = finish_activation(cli);
+        lockdownd_client_free(cli);
+        idevice_free(dev);
+        return result;
     }
 
     if (!keep) {

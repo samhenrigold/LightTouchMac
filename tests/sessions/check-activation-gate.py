@@ -6,8 +6,8 @@ lockdown, must ask ActivationState on the first answer of a boot, retry a failed
 answer twice before deciding, set the persistent DeviceConnectionIssue ("This iPod isn't
 activated. Choose Erase All Content and Settings, then prepare it again."), drop reachability,
 cancel the boot preparation, report the notice, and keep that issue over later transient
-failures; a service that answers later clears it. Every activated state lockdown reports
-(Activated, FactoryActivated, WildcardActivated, ...) passes, and so does a lockdown whose
+failures; a service that answers later clears it. The known activated states
+(Activated, FactoryActivated, WildcardActivated) pass, and so does a lockdown whose
 services answer whatever the string says (the built-in iPod reports Unactivated and works);
 an activated guest asks nothing again until the next boot. lockdown -34 maps to the same issue; the sidebar row notes
 "Prepared without activation" from the lock alone.
@@ -57,6 +57,11 @@ nonisolated func logEvent(_ message: String) {}
  func resolveDeviceNotice(for operation: NoticeOperation) { resolved.append("\(operation)") }
  var answers: [String?] = [], asked = 0
  func activationState() async -> String? { asked += 1; return answers.isEmpty ? nil : answers.removeFirst() }
+ var finished = 0, completionFailures = 0
+ func finishActivation() async throws {
+  finished += 1
+  if completionFailures > 0 { completionFailures -= 1; throw NSError(domain: "activation", code: 1) }
+ }
  var servicesAnswer = false, probed = 0
  func installProxyReady() async -> Bool { probed += 1; return servicesAnswer }
  var services: Controller { get throws { self } }  // EmulatorController.services: lockdown's answers
@@ -79,11 +84,11 @@ enum Lock {
  @MainActor static func main() async throws {
   Controller.activationRetryDelay = .milliseconds(5)
   func settle() async { try? await Task.sleep(for: .milliseconds(80)); for _ in 0..<20 { await Task.yield() } }
-  // Every activated state passes; Unactivated and anything else does not.
-  for state in ["Activated", "FactoryActivated", "WildcardActivated", "SomeOtherActivated"] {
+  // The known activated states pass; unknown names do not.
+  for state in ["Activated", "FactoryActivated", "WildcardActivated"] {
    precondition(DeviceConnectionIssue.activation(state: state, profile: .iPodTouch2G) == nil, state)
   }
-  for state in ["Unactivated", "Pending", ""] { precondition(DeviceConnectionIssue.activation(state: state, profile: .iPodTouch2G) != nil, state) }
+  for state in ["Unactivated", "Pending", "", "SomeOtherActivated"] { precondition(DeviceConnectionIssue.activation(state: state, profile: .iPodTouch2G) != nil, state) }
   precondition(DeviceConnectionIssue.activation(state: nil, profile: .iPodTouch2G) == nil)
   // Unactivated three times: persistent issue, blocked, no retry, preparation cancelled, notice.
   let c = Controller(); c.answers = ["Unactivated", "Unactivated", "Unactivated"]
@@ -121,6 +126,11 @@ enum Lock {
   ok.deviceReachable = true; await settle(); precondition(ok.asked == 3 && ok.connectionIssue == nil)
   ok.deviceReachable = true; await settle(); precondition(ok.asked == 4 && ok.connectionIssue == nil && ok.preparingDevice)
   ok.deviceReachable = true; await settle(); precondition(ok.asked == 4)
+  precondition(ok.finished == 1)
+  let retry = Controller(); retry.answers = Array(repeating: "Activated", count: 4); retry.completionFailures = 3
+  retry.deviceReachable = true; await settle(); precondition(retry.finished == 3)
+  retry.deviceReachable = true; await settle(); precondition(retry.finished == 4)
+  retry.deviceReachable = true; await settle(); precondition(retry.finished == 4)
   // A fresh -34 with no prior issue is the same persistent issue.
   let refused = Controller()
   refused.reportConnectionFailure(DeviceError.lockdown(-34), operation: "Refreshing apps")
@@ -138,7 +148,7 @@ enum Lock {
   precondition(lock(#"{"inputs": {"ipsw": {}, "activation_hook": null}}"#))
   precondition(!lock(#"{"inputs": {"activation": {"input_sha256": "a", "output_sha256": "b"}}}"#))
   precondition(!lock("not json") && !Lock.lockLacksActivation(dir.appendingPathComponent("missing")))
-  print("PASS: activation verified per boot with retries; every activated state passes, services that answer win; unactivated is a persistent issue that a later service answer clears; -34 maps to it; the lock's note")
+  print("PASS: activation verified per boot with retries; known activated states pass, completion retries, services that answer win; unactivated is a persistent issue that a later service answer clears; -34 maps to it; the lock's note")
  }
 }
 '''.replace("TEXT", json.dumps(TEXT, ensure_ascii=False))

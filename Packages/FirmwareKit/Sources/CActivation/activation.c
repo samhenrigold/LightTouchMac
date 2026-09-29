@@ -515,14 +515,27 @@ static Match locate(const Image *m) {
     return result;
 }
 #ifdef LT_ACTIVATION_LIBRARY
-int lt_activate(uint8_t *bytes, size_t size, const char **error) {
+int lt_activate_report(uint8_t *bytes, size_t size, LTActivationReport *report, const char **error) {
+    if (report) memset(report, 0, sizeof(*report));
     if (setjmp(failure)) { *error = failure_message; return 0; }
     if (size < 28 || size > LIMIT) fail("invalid input size");
     Image m = {.bytes = bytes, .size = size};
     parse(&m);
     Match match = locate(&m);
+    if (report) {
+        report->strategy = match.legacy ? "legacy-no-record-initializer" :
+            match.shared_no_record ? "ipod-no-record-initializer" : "development-activation-shortcut";
+        report->isa = match.isa;
+        report->offset = match.off;
+        report->width = match.width;
+        memcpy(report->original, bytes + match.off, match.width);
+        memcpy(report->replacement, match.replacement, match.width);
+    }
     memcpy(bytes + match.off, match.replacement, match.width);
     return match.legacy ? 2 : 1;
+}
+int lt_activate(uint8_t *bytes, size_t size, const char **error) {
+    return lt_activate_report(bytes, size, NULL, error);
 }
 #else
 static void atomic_write(const char *path, const Image *m, const struct stat *original) {

@@ -23,6 +23,16 @@ struct ActivationTests {
                 let result = try Activation.run(on: target)
                 let after = [UInt8](try Data(contentsOf: target))
                 #expect(result.inputSHA256 != result.outputSHA256)
+                let patch = try #require(result.patch)
+                #expect(!patch.strategy.isEmpty && !patch.isa.isEmpty)
+                #expect(patch.original != patch.replacement)
+                #expect(Data(before[patch.offset..<(patch.offset + patch.original.count)]) == patch.original)
+                #expect(Data(after[patch.offset..<(patch.offset + patch.replacement.count)]) == patch.replacement)
+                if name.contains("9B206") {
+                    #expect(patch.strategy == "development-activation-shortcut")
+                    #expect(patch.original == Data([0x3f, 0xf4, 0x71, 0xaf]))
+                    #expect(patch.replacement == Data([0, 0xbf, 0, 0xbf]))
+                }
                 #expect((try FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)?.intValue == 0o751)
                 if name.contains("4B1") {
                     #expect(MachOSignature.codeSignature(in: Data(after)) == nil)
@@ -56,6 +66,13 @@ struct ActivationTests {
                 #expect(try Data(contentsOf: target) == Data(after))
             }
         }
+    }
+
+    @Test func olderPreparationRecordsRemainReadable() throws {
+        let old = Data(#"{"inputSHA256":"input","outputSHA256":"output"}"#.utf8)
+        let result = try JSONDecoder().decode(Activation.Result.self, from: old)
+        #expect(result.patch == nil)
+        #expect(result.inputSHA256 == "input")
     }
 
     @Test func activationSignsSyntheticMachO() throws {

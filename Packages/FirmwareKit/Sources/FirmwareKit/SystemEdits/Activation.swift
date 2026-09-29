@@ -15,14 +15,31 @@ public struct ActivationFailure: Error, CustomStringConvertible, Sendable {
 public enum Activation {
     public struct Result: Sendable, Equatable, Codable {
         public let inputSHA256: String, outputSHA256: String
+        // Optional so device records written by earlier releases remain decodable.
+        public var patch: Patch? = nil
+        var record: [String: Any] {
+            var result: [String: Any] = ["input_sha256": inputSHA256, "output_sha256": outputSHA256]
+            if let patch {
+                result["patch"] = ["strategy": patch.strategy, "isa": patch.isa, "offset": patch.offset,
+                                   "original": patch.original.map { String(format: "%02x", $0) }.joined(),
+                                   "replacement": patch.replacement.map { String(format: "%02x", $0) }.joined()]
+            }
+            return result
+        }
+    }
+    public struct Patch: Sendable, Equatable, Codable {
+        public let strategy: String, isa: String
+        public let offset: Int
+        public let original: Data, replacement: Data
     }
 
     public static func run(on file: URL) throws -> Result {
         let before = try Data(contentsOf: file)
         var after = before
         var error: UnsafePointer<CChar>?
+        var report = LTActivationReport()
         let success = after.withUnsafeMutableBytes {
-            lt_activate($0.bindMemory(to: UInt8.self).baseAddress, $0.count, &error)
+            lt_activate_report($0.bindMemory(to: UInt8.self).baseAddress, $0.count, &report, &error)
         }
         guard success != 0 else {
             throw ActivationFailure(error.map { String(cString: $0) } ?? "Unsupported activation path")
@@ -57,7 +74,11 @@ public enum Activation {
                 offset += count
             }
         }
-        return Result(inputSHA256: hash(before), outputSHA256: hash(after))
+        let patch = Patch(strategy: String(cString: report.strategy), isa: String(cString: report.isa),
+                          offset: report.offset,
+                          original: withUnsafeBytes(of: report.original) { Data($0.prefix(Int(report.width))) },
+                          replacement: withUnsafeBytes(of: report.replacement) { Data($0.prefix(Int(report.width))) })
+        return Result(inputSHA256: hash(before), outputSHA256: hash(after), patch: patch)
     }
 
     private static func hash(_ data: Data) -> String {
