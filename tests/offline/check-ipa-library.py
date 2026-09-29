@@ -55,6 +55,7 @@ extension Notification.Name {
 }
 @MainActor final class DeviceLibrary { static let shared = DeviceLibrary(); var instances: [DeviceInstance] = [] }
 @MainActor final class EmulatorController {
+ var services: EmulatorController { self }  // the services the installer reaches through the controller
  let instance: DeviceInstance
  init(_ instance: DeviceInstance) { self.instance = instance }
  var removed: [String] = []

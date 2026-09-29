@@ -19,20 +19,23 @@ code = r'''import Cocoa
 enum DeviceToolsError: LocalizedError { case failed(String); var errorDescription: String? { switch self { case .failed(let text): text } } }
 func logEvent(_ message: String) { }
 @MainActor var displaySleeping = false
-@MainActor final class DeviceTools {
+@MainActor final class FakeGuest {
  var failure: Error?
  var commands: [String] = []
- func launchApp(_ bundleID: String) async throws {
+ func launch(_ bundleID: String) async throws {
   commands.append(bundleID)
   if let failure { throw failure }
  }
 }
+struct Agent { let isAlive = true }
 @MainActor final class EmulatorController {
  let profile = DeviceProfile.iPodTouch2G
  var acceptsInput = true, isSleeping = false
  var wakes = 0
- let deviceTools = DeviceTools()
- func tools() throws -> DeviceTools { deviceTools }
+ let deviceTools = FakeGuest()
+ var guest: FakeGuest { deviceTools }        // GuestServices
+ let guestAgent = Agent()
+ var services: Void { get throws {} }          // EmulatorController.services: USB is up
  func pressHome() { wakes += 1; displaySleeping = false }
  var status: (displaySleeping: Bool, Void)? { (displaySleeping, ()) }  // the helper's status block
 ''' + method(controller, '    func launchApp(_ bundleID: String) async throws {') + r'''

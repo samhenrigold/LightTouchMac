@@ -31,6 +31,7 @@ struct DeviceInstance { let id = UUID() }
  static func retained(_ id: String, by devices: [DeviceInstance]) -> Bool { elsewhere.contains(id) }
 }
 @MainActor final class EmulatorController {
+ var services: EmulatorController { self }  // the services the installer reaches through the controller
  let instance = DeviceInstance()
  var deviceReachable: Bool? = true
  func reportConnectionFailure(_ error: Error, operation: String) { deviceReachable = false }

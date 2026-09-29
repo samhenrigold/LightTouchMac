@@ -38,6 +38,7 @@ struct DeviceInstance { let id = UUID() }
  }
 }
 @MainActor final class EmulatorController {
+ var services: EmulatorController { self }  // the services the installer reaches through the controller
  let profile = DeviceProfile.iPodTouch2G
  let instance = DeviceInstance()
  var deviceReachable: Bool? = true

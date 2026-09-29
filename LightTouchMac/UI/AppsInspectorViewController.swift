@@ -275,11 +275,11 @@ enum AppInstaller {
             // cancel of an id already gone is a no-op on SpringBoard.
             var raised: Task<Void, Never>?
             if let bundleID = app.bundleID {
-                raised = emulator.installPlaceholder("add", bundleID: bundleID)
+                raised = (try? emulator.installPipeline)?.installPlaceholder("add", bundleID: bundleID)
             }
             defer {
                 if let bundleID = app.bundleID {
-                    emulator.installPlaceholder("cancel", bundleID: bundleID, after: raised)
+                    (try? emulator.installPipeline)?.installPlaceholder("cancel", bundleID: bundleID, after: raised)
                 }
             }
             do {
@@ -342,7 +342,7 @@ enum AppInstaller {
                 Task { @MainActor in
                     job.status = line
                     // The upload is still interruptible; the install itself
-                    // is not (DeviceTools checks cancellation between them).
+                    // is not (AppInstallPipeline checks cancellation between them).
                     if line.hasPrefix("Installing") { job.isCancellable = false }
                     NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
                 }
@@ -409,7 +409,7 @@ enum AppInstaller {
                 for app in apps {
                     try Task.checkCancellation()
                     willRemove(app)
-                    try await emulator.uninstall(app.id)
+                    try await emulator.services.uninstall(app.id)
                     IPALibrary.forget(app.id, device: emulator.instance)
                     // The name and icon are app-wide: another device that still has the app keeps them.
                     if !IPALibrary.retained(app.id, by: DeviceLibrary.shared.instances) { AppMetadataCache.shared.forget(app.id) }
@@ -956,7 +956,7 @@ final class AppsInspectorViewController: NSViewController {
             if needsReload { needsReload = false; Task { await loadOnce() } }
         }
         do {
-            let live = try await emulator.installedApps()
+            let live = try await emulator.services.installedApps()
             // Read the home-screen order BEFORE publishing anything. Assigning
             // `apps` and then awaiting left the data source reporting a row
             // count the table had never been told about, and anything that

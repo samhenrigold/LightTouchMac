@@ -56,6 +56,8 @@ nonisolated enum Bundled {
     static var stateDirectory: URL { URL(fileURLWithPath: config.work) }
     static var workDirectory: URL { URL(fileURLWithPath: config.work) }
     static func tool(_ name: String) -> String? { nil }
+    static func resolve(_ name: String, fallbacks: [String]) -> String? { nil }
+    static var binarySearchPaths: [String] { [] }
 }
 extension DeviceInstance { var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) } }
 struct MediaVideo: Sendable { let id: String; let video: URL }

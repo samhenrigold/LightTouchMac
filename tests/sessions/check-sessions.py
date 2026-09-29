@@ -188,7 +188,7 @@ def main():
         cfg["ipadItpack"] = str(args.ipad_itpack)
     if args.guest:
         tz = work / "lockdown-tz"
-        # The app's Debug build compiles the same source (DeviceTools.developmentHelper).
+        # The app's Debug build compiles the same source (LockdownTools: DeviceServices.developmentHelper).
         r = subprocess.run(["/bin/sh", "-c", 'PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; cc -O2 -o "$1" "$2" '
                             '$(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)', "sh", str(tz),
                             str(ROOT / "scripts/lockdown-tz.c")])

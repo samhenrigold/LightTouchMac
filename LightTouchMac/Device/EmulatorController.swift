@@ -181,7 +181,10 @@ final class EmulatorController {
             defer { connectionRecoveryTask = nil; isReconnecting = false }
             do {
                 guard isRunning, !preparingDevice, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice(instance.id) else { return }
-                if try await DeviceTools.reconnectManagementService(agent: link, cache: agentCache) {
+                // Not through the management transport that broke: the agent
+                // is independent of lockdown, and launchd relaunches lockdownd.
+                if guest.agent.isAlive {
+                    try await guest.reconnectManagement()
                     logEvent("device: restarted unresponsive management service; reconnecting")
                     try await Task.sleep(for: .seconds(2))
                     guard isRunning else { return }
@@ -583,7 +586,7 @@ final class EmulatorController {
         while !Task.isCancelled {
             guard !shuttingDown, !isDead, !isPoweredOff else { return }
             if state == .running, !preparingDevice, canManageApps, await deviceReady(),
-               (try? await tools().setTimeZone(TimeZone.current.identifier)) != nil {
+               (try? await services.setTimeZone(TimeZone.current.identifier)) != nil {
                 return
             }
             try? await Task.sleep(for: .seconds(5))
@@ -1050,7 +1053,7 @@ final class EmulatorController {
                 if self.state == .running, !self.preparingDevice, !self.isSleeping, !self.isInstalling {
                     let generation = self.bootGeneration
                     do {
-                        if let degrees = try await self.tools().guestOrientation() {
+                        if let degrees = try await self.guestOrientation() {
                             try Task.checkCancellation()
                             guard generation == self.bootGeneration else { continue }
                             self.guestOrientationChanged(to: degrees)
@@ -1258,7 +1261,7 @@ final class EmulatorController {
                 self.halt { [weak self] _ in self?.onRestartRequested?() }
                 return
             } else if self.canManageApps {
-                _ = await withSoftDeadline(20) { try? await self.syncFilesystem() }
+                _ = await withSoftDeadline(20) { try? await self.guestAgent.sync() }
             }
             guard !self.storageFailed else { return }
             self.link?.send(.machine(.reset))
@@ -1333,7 +1336,8 @@ final class EmulatorController {
                             self.onStatusChange?()
                         }
                         do {
-                            let trust = try await self.tools().configureWebProxy(enabled: self.webProxy.mode != .off)
+                            let trust = try await WebProxySetup(services: self.services, guest: self.guest, proxyDirectory: self.proxyDirectory)
+                                .configure(enabled: self.webProxy.mode != .off)
                             try Task.checkCancellation()
                             guard generation == self.bootGeneration else { return }
                             if revision == self.proxyRevision {
@@ -1351,7 +1355,7 @@ final class EmulatorController {
                         }
                     }
                     do {
-                        let name = try await self.tools().foregroundAppName()
+                        let name = self.guestAgent.isAlive ? try await self.guest.foregroundAppName() : nil
                         try Task.checkCancellation()
                         guard generation == self.bootGeneration else { return }
                         self.foregroundAppName = name
@@ -1527,13 +1531,33 @@ final class EmulatorController {
     /// notification_proxy watcher (which owns its own session, not a gated one).
     var usbmuxSession: String? { usbmux.session?.clientSocket }
     
-    private func tools() throws -> DeviceTools {
-        guard let session = usbmux.session else {
-            throw DeviceToolsError.failed("The device is not reachable over USB yet.")
+    /// The guest agent through this device's helper, and the app's operations on it.
+    var guestAgent: GuestAgent { GuestAgent(link: link, cache: agentCache) }
+    var guest: GuestServices { GuestServices(agent: guestAgent, packaged: status?.guestPackage != nil) }
+
+    /// This device's stock lockdown services (installation_proxy, AFC,
+    /// springboardservices, lockdownd) on its usbmuxd; throws until usbmuxd is up.
+    var services: DeviceServices {
+        get throws {
+            guard let session = usbmux.session else {
+                throw DeviceToolsError.failed("The device is not reachable over USB yet.")
+            }
+            return DeviceServices(clientSocket: session.clientSocket)
         }
-        return DeviceTools(clientSocket: session.clientSocket,
-                           proxyDirectory: proxyDirectory, agent: link, agentCache: agentCache,
-                           packaged: status?.guestPackage != nil, deviceOS: iosVersion)
+    }
+
+    /// The install pipeline for this device (AppInstaller runs it, and raises
+    /// a catalog download's placeholder through it).
+    var installPipeline: AppInstallPipeline {
+        get throws { AppInstallPipeline(services: try services, agent: guestAgent, deviceOS: iosVersion) }
+    }
+
+    /// The guest's orientation in degrees; nil when this image has no agent.
+    /// Failures must not start a second transport.
+    private func guestOrientation() async throws -> Int? {
+        _ = try services
+        guard guestAgent.status != 0 else { return nil }
+        return try await guestAgent.orientation()
     }
 
     /// This device's firmware, from its catalog entry: what an app's minimum
@@ -1542,13 +1566,9 @@ final class EmulatorController {
     var iosVersion: String { catalogEntry?.version ?? "3.1.3" }
     var guestArch: String { catalogEntry?.recipe?.guest?.arch ?? GuestPackage.arch(board: instance.board) ?? "armv6" }
     
-    /// Cheap in-process check that the USB bridge sees the guest. App-service
-    /// reads establish lockdownd readiness separately.
-    /// Bounded and gated. A bare `Task.detached` here had neither: `idevice_new`
-    /// against a half-open usbmuxd socket blocks with no timeout, and this is
-    /// called from the quit-time snapshot health gate and the restore verifier —
-    /// so a wedged socket hung the quit itself. `withDeadline` abandons the
-    /// blocked thread; the gate keeps it from racing other device work.
+    /// Cheap in-process check that the USB bridge sees the guest (bounded and
+    /// gated: DeviceServices.checkAttachment). App-service reads establish
+    /// lockdownd readiness separately.
     func deviceReady() async -> Bool {
         (try? await checkDeviceConnection()) != nil
     }
@@ -1557,42 +1577,7 @@ final class EmulatorController {
         try Task.checkCancellation()
         guard usbConnected, !isPoweredOff, !shuttingDown,
               let socket = usbmux.session?.clientSocket else { throw DeviceError.notAttached }
-        // Bounded INCLUDING the wait for the gate. withDeadline bounds the probe
-        // itself, but not the queue in front of it, and this is called from the
-        // quit path — where waiting out a 120s uninstall means the app's own
-        // backstop fires and the guest is killed without ever being asked to
-        // power down. Giving up on the answer is safe; every caller treats a
-        // silent device as "could not prove it is alive", not "it is dead".
-        let result: Result<Void, Error>? = await withSoftDeadline(Timeouts.serviceProbe * 2) {
-            do {
-                try await DeviceGate.shared.serialized {
-                    try await withDeadline(Timeouts.serviceProbe, "USB connection") {
-                        try IMobileDevice.checkAttachment(socket: socket)
-                    }
-                }
-                return .success(())
-            } catch {
-                return .failure(error)
-            }
-        }
-        try Task.checkCancellation()
-        guard let result else { throw DeviceError.timedOut(operation: "USB connection") }
-        try result.get()
-    }
-
-    func installedApps() async throws -> [InstalledApp] { try await tools().installedApps() }
-
-    /// nil when we could not ask. Anything other than "Activated"/"FactoryActivated"
-    /// means the guest is sitting on the Connect-to-iTunes screen.
-    func activationState() async -> String? {
-        guard let socket = usbmux.session?.clientSocket else { return nil }
-        return await DeviceServices(clientSocket: socket).activationState()
-    }
-
-    /// installation_proxy answers right now (a lockdown that serves is activated enough).
-    func installProxyReady() async -> Bool {
-        guard let socket = usbmux.session?.clientSocket else { return false }
-        return await DeviceServices(clientSocket: socket).installProxyReady()
+        try await DeviceServices(clientSocket: socket).checkAttachment()
     }
 
     // MARK: - Activation (verified per boot; activating is the preparer's job)
@@ -1619,7 +1604,7 @@ final class EmulatorController {
             for attempt in 0..<3 {
                 if attempt > 0 { try? await Task.sleep(for: Self.activationRetryDelay) }
                 guard let self, generation == self.bootGeneration else { return }
-                if let answer = await self.activationState() {
+                if let answer = await (try? self.services)?.activationState() {
                     state = answer
                     if DeviceConnectionIssue.activation(state: answer, profile: self.profile) == nil { break }
                 }
@@ -1631,7 +1616,8 @@ final class EmulatorController {
                 resolveDeviceNotice(for: .activation)
                 return
             }
-            if await installProxyReady() {
+            // installation_proxy answers: a lockdown that serves is activated enough.
+            if await (try? services)?.installProxyReady() == true {
                 guard generation == bootGeneration else { return }
                 logEvent("activation: services answer; not blocking on \(state)")
                 resolveDeviceNotice(for: .activation)
@@ -1645,7 +1631,6 @@ final class EmulatorController {
             reportDeviceNotice(issue.summary, for: .activation)
         }
     }
-    func uninstall(_ bundleID: String) async throws      { try await tools().uninstall(bundleID) }
     func launchApp(_ bundleID: String) async throws {
         guard acceptsInput else { throw AppLaunchError.unavailable }
         if isSleeping {
@@ -1658,14 +1643,22 @@ final class EmulatorController {
                 if status?.displaySleeping != true { break }
             }
         }
-        try await tools().launchApp(bundleID)
+        _ = try services
+        guard guestAgent.isAlive else {
+            throw DeviceToolsError.failed("Open the app on the device’s Home screen; launching from the sidebar isn’t available for this device yet.")
+        }
+        try await guest.launch(bundleID)
     }
-    func syncFilesystem() async throws                   { try await tools().syncFilesystem() }
     func restartSpringBoard() async throws {
         guard isRunning, !isInstalling else { return }
         restartingSpringBoard = true
         defer { restartingSpringBoard = false }
-        try await tools().restartSpringBoard()
+        // launchd stops SpringBoard and KeepAlive brings it straight back: the
+        // cheap fix for "a freshly sideloaded app crashes until I restart", as
+        // SpringBoard rebuilds what it caches about installed apps in seconds
+        // where a boot costs ~40. User-invoked only, never the install path's.
+        _ = try services
+        try await guest.respring()
         try await waitForSpringBoard()
     }
 
@@ -1687,7 +1680,7 @@ final class EmulatorController {
                  progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> String {
         isInstalling = true
         defer { isInstalling = false }
-        return try await tools().install(ipa, placeholderRaised: placeholderRaised, progress: progress)
+        return try await installPipeline.install(ipa, placeholderRaised: placeholderRaised, progress: progress)
     }
 
     func importMedia(_ media: PreparedMedia, progress: @escaping @Sendable (Double) -> Void,
@@ -1695,32 +1688,11 @@ final class EmulatorController {
         guard canQueueInstall else { throw DeviceToolsError.failed("The device is not ready for media import.") }
         isInstalling = true
         defer { isInstalling = false }
-        let device = try tools()
-        try await device.stageMedia(media, progress: progress)
+        let device = MediaImport(services: try services, guest: guest)
+        try await device.stage(media, progress: progress)
         try Task.checkCancellation()
         willCommit()
-        try await device.commitMedia(media)
-    }
-
-    /// Fire-and-forget App Store-style "downloading" placeholder on the guest
-    /// home screen, mirroring a catalog download the host is running — under
-    /// the SAME id the install path uses, so the install adopts it. Cosmetic
-    /// by design: a device that can't take it right now costs nothing.
-    @discardableResult
-    func installPlaceholder(_ action: String, bundleID: String,
-                            after previous: Task<Void, Never>? = nil) -> Task<Void, Never>? {
-        (try? tools())?.installPlaceholder(action, bundleID: bundleID, after: previous)
-    }
-
-    /// This device's stock lockdown services (installation_proxy, AFC,
-    /// springboardservices, lockdownd) on its usbmuxd; throws until usbmuxd is up.
-    var services: DeviceServices {
-        get throws {
-            guard let session = usbmux.session else {
-                throw DeviceToolsError.failed("The device is not reachable over USB yet.")
-            }
-            return DeviceServices(clientSocket: session.clientSocket)
-        }
+        try await device.commit(media)
     }
 
     // MARK: - Boot environment

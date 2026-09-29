@@ -398,7 +398,7 @@ nonisolated enum InstproxyError: Equatable, CustomStringConvertible {
         case .opFailed: return "operation failed"
         case .receiveTimeout: return "receive timeout"
         case .alreadyInstalled: return "already installed"
-        // NOT "(device may be full)" any more: DeviceTools.install checks free
+        // NOT "(device may be full)" any more: AppInstallPipeline.install checks free
         // space against the archive before it uploads, so by the time installd
         // says this, space has been PROVEN. Blaming it sent people off
         // uninstalling their apps to fix something else entirely.

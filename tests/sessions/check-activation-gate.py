@@ -38,7 +38,7 @@ def offline():
     a = s.index("    func reportConnectionFailure(_ error: Error, operation: String) {")
     report = s[a:s.index("    private var connectionFailures =", a)]
     a = s.index("    // MARK: - Activation (verified per boot")
-    activation = s[a:s.index("    func uninstall(_ bundleID: String)", a)]
+    activation = s[a:s.index("    func launchApp(_ bundleID: String)", a)]
     instance = (ROOT / "LightTouchMac/Library/DeviceInstance.swift").read_text()
     a = instance.index("    static func lockLacksActivation(_ lock: URL) -> Bool {")
     lock = instance[a:instance.index("\n    }", a) + 6]
@@ -59,6 +59,7 @@ nonisolated func logEvent(_ message: String) {}
  func activationState() async -> String? { asked += 1; return answers.isEmpty ? nil : answers.removeFirst() }
  var servicesAnswer = false, probed = 0
  func installProxyReady() async -> Bool { probed += 1; return servicesAnswer }
+ var services: Controller { get throws { self } }  // EmulatorController.services: lockdown's answers
  var connectionIssue: DeviceConnectionIssue?
  var deviceReachable: Bool? {
   didSet {

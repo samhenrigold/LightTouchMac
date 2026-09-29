@@ -16,9 +16,11 @@ struct FakeLink {}
 nonisolated func logEvent(_ message:String){}
 extension Notification.Name {static let ltmAppsChanged=Self("apps")}
 @MainActor enum AppInstaller {static var isUsingDevice=false; static func isUsingDevice(_ id:UUID)->Bool {isUsingDevice}}
-@MainActor enum DeviceTools {
- static var recoveries=0
- static func reconnectManagementService(agent: FakeLink?, cache: Int) async throws -> Bool {recoveries+=1;return true}
+@MainActor enum Recoveries { static var count=0 }
+struct FakeGuest {
+ struct Agent { let isAlive=true }
+ let agent=Agent()
+ @MainActor func reconnectManagement() async throws { Recoveries.count+=1 }
 }
 struct Instance { let id=UUID() }
 @MainActor final class Controller {
@@ -28,6 +30,7 @@ struct Instance { let id=UUID() }
  var usbConnected=true
  var link:FakeLink?=FakeLink()
  let agentCache=0
+ var guest:FakeGuest{FakeGuest()}
  var liveAgentStatus:Int{agentReady}
  var onStatusChange:(()->Void)?
  var deviceReachable:Bool? {didSet{if deviceReachable==true {connectionIssue=nil};considerConnectionRecovery()}}
@@ -40,32 +43,32 @@ struct Instance { let id=UUID() }
   for error:DeviceError in [.notAttached,.unavailable,.timedOut(operation:"USB connection"),.instproxy(.opFailed,phase:"browse"),.lockdown(-17),.lockdown(-4),.lockdown(-27),.lockdown(-32)] {
    c.reportConnectionFailure(error,operation:"Checking connection")
    c.deviceReachable=false;c.deviceReachable=false
-   try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==0,"do not restart lockdownd for a different failure")
+   try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==0,"do not restart lockdownd for a different failure")
   }
   let previous=c.connectionIssue
   c.reportConnectionFailure(CancellationError(),operation:"Closing inspector")
   precondition(c.connectionIssue==previous,"cancellation is not a connection failure")
   c.reportConnectionFailure(DeviceError.instproxy(.connFailed,phase:"connect"),operation:"Refreshing apps")
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==0)
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==0)
   c.deviceReachable=false
   for _ in 0..<10 {c.deviceReachable=false}
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1 && !c.isReconnecting)
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==1 && !c.isReconnecting)
   c.deviceReachable=true;precondition(c.connectionIssue==nil)
   c.reportConnectionFailure(DeviceError.lockdown(-8),operation:"Refreshing apps");c.deviceReachable=false
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"must back off")
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==1,"must back off")
   c.lastConnectionRecovery = .distantPast;AppInstaller.isUsingDevice=true
   c.deviceReachable=false;c.deviceReachable=false
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"must not interrupt install")
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==1,"must not interrupt install")
   AppInstaller.isUsingDevice=false;c.preparingDevice=true;c.deviceReachable=false
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"must not interrupt boot preparation")
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==1,"must not interrupt boot preparation")
   c.preparingDevice=false;c.hasFileTransfer=true;c.deviceReachable=false
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"must not interrupt file transfer")
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==1,"must not interrupt file transfer")
   c.hasFileTransfer=false;agentReady=0;c.deviceReachable=false
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"no independent channel")
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==1,"no independent channel")
   agentReady=1;c.isRunning=false;c.deviceReachable=false
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"never recover during shutdown")
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==1,"never recover during shutdown")
   c.isRunning=true;c.deviceReachable=false
-  try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==2)
+  try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==2)
   print("PASS: busy/cancelled/USB/unavailable failures do not reset services; repeated app-service failures recover with cooldown and transfer/lifecycle guards")
  }
 }

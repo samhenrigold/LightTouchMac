@@ -1,6 +1,7 @@
 // lockdownd itself: ActivationState in-process, and the writes that must not be
 // in-process (lockdownd_set_value against 3.1.3 corrupts the app's heap) as child
-// processes pointed at this device's usbmuxd: lockdown-tz for the time zone.
+// processes pointed at this device's usbmuxd: lockdown-tz for the time zone,
+// lockdown-mcinstall for the proxy's profile.
 
 import Foundation
 
@@ -49,9 +50,38 @@ extension DeviceServices {
 
     /// The lockdown-tz child itself (memory lockdown-setvalue-trap); the zone in effect.
     static func setTimeZone(_ identifier: String, tool: String, socket: String) async throws -> String {
+        let result = try await lockdownChild(tool, [identifier], socket: socket)
+        guard result.status == 0 else {
+            throw DeviceToolsError.failed("Couldn’t set the device timezone. \(result.error)")
+        }
+        return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Offer a CA as a configuration profile through lockdown's stock MCInstall
+    /// service (the lockdown-mcinstall child, like lockdown-tz), once: false when
+    /// one is installed already, true when it was offered and waits for Install
+    /// on the device.
+    func offerProfile(_ certificate: String) async throws -> Bool {
+        // Packaged apps bundle it (package.sh); dev builds find it on the usual PATH directories.
+        guard let tool = Bundled.resolve("lockdown-mcinstall", fallbacks: Bundled.binarySearchPaths.map { "\($0)/lockdown-mcinstall" })
+        else { throw DeviceToolsError.toolMissing("lockdown-mcinstall") }
+        if try await Self.lockdownChild(tool, ["--installed"], socket: clientSocket).status == 0 { return false }
+        let offered = try await Self.lockdownChild(tool, [certificate], socket: clientSocket)
+        guard offered.status == 0 else {
+            logEvent("proxy: offering the certificate profile failed: \(offered.error)")
+            throw DeviceToolsError.failed("Couldn’t offer the proxy certificate to the device.")
+        }
+        logEvent("proxy: no guest agent; certificate profile offered, confirm Install on the device")
+        return true
+    }
+
+    /// One of the lockdown child tools, pointed at this device's usbmuxd: its
+    /// status and the first KB of each stream.
+    private static func lockdownChild(_ tool: String, _ arguments: [String], socket: String) async throws
+        -> (status: Int32, output: String, error: String) {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: tool)
-        task.arguments = [identifier]
+        task.arguments = arguments
         task.environment = ProcessInfo.processInfo.environment.merging(["USBMUXD_SOCKET_ADDRESS": socket]) { $1 }
         let output = Pipe(), error = Pipe()
         task.standardOutput = output
@@ -62,11 +92,8 @@ extension DeviceServices {
             do { try task.run() } catch { task.terminationHandler = nil; done.resume(throwing: error) }
         }
         let out = String(decoding: output.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
-        guard status == 0 else {
-            let err = String(decoding: error.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
-            throw DeviceToolsError.failed("Couldn’t set the device timezone. \(err)")
-        }
-        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+        let err = String(decoding: error.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
+        return (status, out, err)
     }
 
     /// A development build has no bundled lockdown helpers (package.sh builds

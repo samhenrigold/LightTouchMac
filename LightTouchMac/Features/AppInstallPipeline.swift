@@ -1,102 +1,19 @@
-// Created by Sam on 2026-08-05.
-//
-// Host-side app management over USB. Installs, listing, uninstalls and media
-// staging are stock lockdown services in-process (DeviceServices); guest
-// commands are the agent's typed ops (GuestServices). No SSH, no guest shell.
-// External host tools run via swift-subprocess.
+// Installing one decrypted .ipa on one running device: MinimumOSVersion
+// against the device's iOS, the archive preflight, the home-screen
+// placeholder, the exec-bit repair, the AFC free-space check and upload, then
+// installation_proxy with its transient-connect retry. The steps are the
+// services' (InstallationProxy, AFC) and the agent's (dlicon); the order and
+// the policy between them live here.
 
 import Foundation
 import Subprocess
 import System
 
-/// Talks to one running device, identified by its usbmuxd client socket. The
-/// facade the UI calls.
-struct DeviceTools: Sendable {
-    let clientSocket: String
-    /// This device's web-proxy files (WebProxyConfiguration.directory).
-    let proxyDirectory: URL
-    /// The device's helper, for the guest agent (DeviceLink `.agent` requests).
-    var agent: DeviceLink?
-    /// The agent's capabilities, per device (EmulatorController's).
-    var agentCache = GuestAgentCache()
-    /// A guest-package report arrived: the guest runs a loader package.
-    var packaged = false
+struct AppInstallPipeline: Sendable {
+    let services: DeviceServices
+    let agent: GuestAgent
     /// The device's iOS version (its catalog entry), which MinimumOSVersion is checked against.
     var deviceOS = "3.1.3"
-
-    private var proxyFile: String { WebProxyConfiguration.file(in: proxyDirectory).path }
-    private var guestAgent: GuestAgent { GuestAgent(link: agent, cache: agentCache) }
-    private var guest: GuestServices { GuestServices(agent: guestAgent, packaged: packaged) }
-
-    private var services: DeviceServices { DeviceServices(clientSocket: clientSocket) }
-
-    // The app's own tools first, then Homebrew's — without assuming any PATH.
-    private static let searchPaths = Bundled.binarySearchPaths
-
-    /// The raw libimobiledevice tools (lockdown-mcinstall) find this device here.
-    private var toolEnvironment: Environment {
-        .inherit.updating(["USBMUXD_SOCKET_ADDRESS": clientSocket])
-    }
-    
-    // MARK: - List (in-process)
-
-    func installedApps() async throws -> [InstalledApp] {
-        try await services.installedApps()
-    }
-
-    // MARK: - Music import
-
-    func stageSong(_ song: MediaSong, progress: @escaping @Sendable (Double) -> Void) async throws {
-        try await services.stageSong(song, progress: progress)
-    }
-
-    /// Once this starts, keep the staged audio even on an uncertain outcome.
-    /// The guest service owns database mutations and reconciles the same path.
-    func commitSong(_ song: MediaSong) async throws {
-        try await commitLibraryMedia(id: song.id, metadata: song.metadata, destination: "Music")
-    }
-
-    private func commitLibraryMedia(id: String, metadata: URL, destination: String) async throws {
-        guard try await guest.commitMedia(id: id, helper: "itmedia", localHelper: { try Self.guestTool("itmedia") },
-                                          metadata: metadata) else {
-            throw DeviceToolsError.failed("\(destination) did not confirm the import. The copied media has been retained.")
-        }
-    }
-
-    /// The app's copy of a guest helper for images whose loader package lacks it.
-    private static func guestTool(_ name: String) throws -> URL {
-        guard let path = Bundled.resolve(name, fallbacks: ["\(Bundled.filesRoot)/../qemu-ios/contrib/it-media/\(name)"]) else {
-            throw DeviceToolsError.toolMissing(name)
-        }
-        return URL(fileURLWithPath: path)
-    }
-
-    // MARK: - Photo import
-
-    func stageMedia(_ media: PreparedMedia, progress: @escaping @Sendable (Double) -> Void) async throws {
-        switch media {
-        case .song(let song): try await stageSong(song, progress: progress)
-        case .photo(let photo): try await services.stagePhoto(photo, progress: progress)
-        case .video(let video): try await services.stageVideo(video, progress: progress)
-        }
-    }
-
-    func commitMedia(_ media: PreparedMedia) async throws {
-        switch media {
-        case .song(let song): try await commitSong(song)
-        case .photo(let photo): try await commitPhoto(photo)
-        case .video(let video): try await commitLibraryMedia(id: video.id, metadata: video.metadata, destination: "Videos")
-        }
-    }
-
-    func commitPhoto(_ photo: MediaPhoto) async throws {
-        guard try await guest.commitMedia(id: photo.id, helper: "itphoto", localHelper: { try Self.guestTool("itphoto") },
-                                          metadata: nil) else {
-            throw DeviceToolsError.failed("Photos did not confirm the import. Check Saved Photos before importing it again.")
-        }
-    }
-
-    // MARK: - Install
 
     /// Install a decrypted .ipa: AFC stage + instproxy, in-process, no shell.
     /// Every supported image carries its GL engine shim. `progress` gets
@@ -264,117 +181,6 @@ struct DeviceTools: Sendable {
         throw lastError
     }
 
-    // MARK: - Uninstall (in-process)
-
-    func uninstall(_ bundleID: String) async throws {
-        try await services.uninstall(bundleID)
-    }
-
-    // MARK: - Free space (in-process)
-
-    func freeSpaceBytes() async throws -> Int64 { try await services.freeSpaceBytes() }
-
-    /// Respring: launchd stops SpringBoard and KeepAlive brings it straight back.
-    ///
-    /// This is the cheap fix for the "a freshly sideloaded app crashes until I
-    /// restart the iPod" problem — SpringBoard caches what it knows about
-    /// installed apps, and a respring rebuilds that in a few seconds where a
-    /// full boot costs ~40. A deliberate, user-invoked action, never something
-    /// the install path does behind your back.
-    func restartSpringBoard() async throws { try await guest.respring() }
-
-    /// Nil means this image has no agent; failures must not start a second transport.
-    func guestOrientation() async throws -> Int? {
-        guard guestAgent.status != 0 else { return nil }
-        return try await guestAgent.orientation()
-    }
-
-    /// SpringBoard's foreground app name (the agent's frontmost); nil without an agent.
-    func foregroundAppName() async throws -> String? {
-        guard guestAgent.isAlive else { return nil }
-        return try await guest.foregroundAppName()
-    }
-
-    /// Both boards, no guest helper: routing is the image's PAC (always the proxy, DIRECT as fallback), or
-    /// itproxy's configd setting on an image without one (GuestServices.routeThroughProxy), and the host's
-    /// itwebproxy mode. Turning the proxy on trusts this
-    /// device's CA in the guest silently through the agent (GuestServices.trustCertificate, the store
-    /// keeps it); only a guest without an agent gets the configuration profile through lockdown's stock
-    /// MCInstall service (lockdown-mcinstall, a child process like lockdown-tz), once: an installed
-    /// profile is never offered again, and the UI says to tap Install (`.needsTap`).
-    /// ponytail: turning it off leaves the trust in place (the CA is this device's own and its key
-    /// never leaves the Mac); add `ittrust remove` / RemoveProfile if asked.
-    func configureWebProxy(enabled: Bool) async throws -> WebProxyStatus {
-        guard enabled else { return .ready }
-        guard let host = Bundled.resolve("itwebproxy", fallbacks: [
-            "\(Bundled.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
-        ]) else { throw DeviceToolsError.toolMissing("itwebproxy") }
-        let prepared = try await run(.path(FilePath(host)), arguments: ["--init-ca", proxyFile],
-                                     output: .discarded, error: .string(limit: 1 << 16))
-        guard prepared.terminationStatus.isSuccess else {
-            logEvent("proxy: certificate preparation failed: \(prepared.standardError)")
-            throw DeviceToolsError.failed("Couldn’t prepare the proxy certificate.")
-        }
-        let der = try Data(contentsOf: URL(fileURLWithPath: proxyFile + ".ca.der"))
-        // The agent claims its channel shortly after lockdown answers; give it a moment before falling back.
-        if await guestAgent.waitAlive(seconds: 15) {
-            do {
-                try await guest.routeThroughProxy(localTool: Self.bundledGuestTool)
-                try await guest.trustCertificate(der, localTool: Self.bundledGuestTool)
-                logEvent("proxy: certificate trusted through the guest agent")
-                return .ready
-            } catch is CancellationError { throw CancellationError() }
-            catch { logEvent("proxy: agent trust failed, offering the profile instead: \(error.localizedDescription)") }
-        }
-        // Packaged apps bundle it (package.sh); dev builds find it on the usual PATH directories.
-        guard let tool = Bundled.resolve("lockdown-mcinstall", fallbacks: Bundled.binarySearchPaths.map { "\($0)/lockdown-mcinstall" })
-        else { throw DeviceToolsError.toolMissing("lockdown-mcinstall") }
-        let installed = try await run(.path(FilePath(tool)), arguments: ["--installed"], environment: toolEnvironment,
-                                      output: .string(limit: 1 << 10), error: .string(limit: 1 << 10))
-        if installed.terminationStatus.isSuccess { return .ready }
-        let offered = try await run(.path(FilePath(tool)), arguments: [proxyFile + ".ca.der"],
-                                    environment: toolEnvironment,
-                                    output: .string(limit: 1 << 10), error: .string(limit: 1 << 10))
-        guard offered.terminationStatus.isSuccess else {
-            logEvent("proxy: offering the certificate profile failed: \(offered.standardError)")
-            throw DeviceToolsError.failed("Couldn’t offer the proxy certificate to the device.")
-        }
-        logEvent("proxy: no guest agent; certificate profile offered, confirm Install on the device")
-        return .needsTap
-    }
-
-    /// A guest binary out of the bundled iPod package (armv6; ittrust runs on the iPad too), for a
-    /// guest whose package lacks it.
-    static func bundledGuestTool(_ name: String) throws -> Data {
-        guard let pack = GuestPackage.bundledPack(arch: "armv6", filesRoot: Bundled.filesRoot),
-              let tool = try GuestPackage.package(in: pack, board: "n72ap", build: "7E18")?.1["bin/\(name)"] else {
-            throw DeviceToolsError.toolMissing(name)
-        }
-        return tool
-    }
-
-    /// Push the guest's dirty buffers to flash.
-    func syncFilesystem() async throws { try await guestAgent.sync() }
-
-    /// Ask SpringBoard to launch an installed app — the same path a tap on
-    /// its icon takes (the agent's SBSLaunchApplicationWithIdentifier).
-    /// SpringBoard refuses the request on a locked device.
-    func launchApp(_ bundleID: String) async throws {
-        guard guestAgent.isAlive else {
-            throw DeviceToolsError.failed("Open the app on the device’s Home screen; launching from the sidebar isn’t available for this device yet.")
-        }
-        try await guest.launch(bundleID)
-    }
-
-    static func reconnectManagementService(agent: DeviceLink?, cache: GuestAgentCache) async throws -> Bool {
-        // Recovery must not queue on the broken management transport: the agent
-        // is independent of lockdown. launchd owns and relaunches lockdownd.
-        let guest = GuestServices(agent: GuestAgent(link: agent, cache: cache))
-        guard guest.agent.isAlive else { return false }
-        try await guest.reconnectManagement()
-        return true
-    }
-
     /// The one id both phases share for a given app, so a placeholder raised
     /// at download start is the SAME icon the install phase adopts and
     /// cancels — never two. (Two ids was tried: the download's icon and the
@@ -390,7 +196,7 @@ struct DeviceTools: Sendable {
     @discardableResult
     func installPlaceholder(_ action: String, bundleID: String,
                             after previous: Task<Void, Never>? = nil) -> Task<Void, Never>? {
-        guard guestAgent.isAlive else { return nil }
+        guard agent.isAlive else { return nil }
         return placeholderIcon(action, Self.placeholderID(for: bundleID), bundleID: bundleID, after: previous)
     }
 
@@ -401,7 +207,7 @@ struct DeviceTools: Sendable {
     @discardableResult
     private func placeholderIcon(_ action: String, _ id: String, bundleID: String? = nil,
                                  after previous: Task<Void, Never>? = nil) -> Task<Void, Never> {
-        let agent = guestAgent
+        let agent = self.agent
         return Task {
             await previous?.value
             guard agent.isAlive else { return }
@@ -409,8 +215,4 @@ struct DeviceTools: Sendable {
             catch { logEvent("install placeholder \(action): \(error.localizedDescription)") }
         }
     }
-
-    // MARK: - Timezone
-
-    func setTimeZone(_ identifier: String) async throws { try await services.setTimeZone(identifier) }
 }

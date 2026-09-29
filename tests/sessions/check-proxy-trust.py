@@ -2,7 +2,7 @@
 """Enabling the web proxy trusts its certificate in the guest silently: no "Install Profile" screen, ever.
 
 The session driver (tests/drivers/session-driver/proxy.swift) boots one device as the app does, with itwebproxy on
-the wifi guestfwd, and trusts the `--init-ca` certificate the way DeviceTools.configureWebProxy does when
+the wifi guestfwd, and trusts the `--init-ca` certificate the way WebProxySetup.configure does when
 the guest agent is up: GuestServices.trustCertificate, which runs the package's ittrust (securityd's own
 trust-store API) or the app's copy out of the armv6 itpack. Checked: the guest's own HTTPS client through
 the proxy (httpget) fails before the trust and answers HTTP 200 after; Safari stays the front app with the
