@@ -309,19 +309,28 @@ every time. Those are H by the ledger's own definitions.
 
 ## Coverage gaps that matter most, ranked
 
-1. **Graphics correctness (all boards).** No boot leg or matrix column compares a frame with a reference, so
-   upside-down, colour-swapped and stale frames all pass.
-   - *What exists.* The method is already here (section 4's GL-vs-software diff: ≤ 1 LSB on 2.x and 1.x).
-   - *What's missing.* A per-device software-CA reference frame at fixed screens, diffed with a tolerance,
-     turns the gles legs from liveness into correctness.
-   - *The matrix.* Its `gl` column must stop skipping: at least the gles-rejects counters, a GL-hello presence
-     check (4.3.5 has none) and a frame diff.
-2. **Boot 2 and screen state in the matrix.** It should judge:
-   - boot 2's shutdown;
-   - `restartedApps`;
-   - a home-screen brightness/colour floor on every screenshot it takes. Boot 1 on 4.x iPads is black today.
-
-   Two open defects are hidden by this today (8L1 boot 2, 4.x boot-1 black).
+1. **Graphics correctness (all boards).** ~~No boot leg or matrix column compares a frame with a reference, so
+   upside-down, colour-swapped and stale frames all pass.~~ **DONE** (matrix-graphics / matrix-graphics-qemu,
+   2026-09-29). `tests/framecheck.py` diffs a capture against a committed software-CA reference: a 64-wide
+   box-filter downsample stored as a tiny PNG (block means, tolerant to host-GPU filtering, not a golden), the
+   status-bar/clock band masked. The 2.x/1.x front-end leg (`check_gles_front_end`) diffs gles-{home,safari,swipe},
+   and the iPad `gl_clean` diffs each pinnable screendump (home/screen/lock), against `tests/gles-refs/`; both FAIL
+   on a mismatch. `tests/ipod/test_framecheck.py` proves, with no boot, that a correct frame passes and the
+   audit's flip / R/B-swap / stale mutants each FAIL on a screen where they manifest (correct 0.000-0.007; flip
+   0.30-0.69, R/B swap 0.21-0.31, stale iPad surface 0.10; THR 0.02). The matrix `gl` column no longer skips: it
+   records the render path (hardware GL vs a software-CA fallback), refusals, and the frame verdict.
+   - *Remaining.* 3.0's MBXGLEngine home and the 4.x/5.x shim path have no committed reference yet, so they stay
+     liveness-only (noted in the pass line); stale is invisible on the single-page 2.x front end (it only
+     manifests on a CPU-updated iPad surface -- caught there).
+2. **Boot 2 and screen state in the matrix.** ~~It should judge boot 2's shutdown, `restartedApps`, and a
+   home-screen brightness/colour floor on every screenshot. Boot 1 on 4.x iPads is black today.~~ **DONE**
+   (matrix-graphics, 2026-09-29). The session driver wakes the panel before every home/installed capture
+   (`wakeForShot`: the display sleeps ~12 s after `lit`) and emits a `home` event with brightness and the
+   SpringBoard-frontmost bundle id for boot 1 and boot 2. The matrix's new `home` check FAILs any home/installed
+   screenshot below the luma floor (the 4.x iPad black home now fails), a non-SpringBoard frontmost, or a
+   frame-reference mismatch. `shutdown` now judges boot 2's clean power-off (8L1's stalled second boot fails);
+   `restartedApps` is recorded. `tests/sessions/test-matrix-judge.py` drives `judge()` to prove each verdict bites.
+   The two defects this hid (8L1 boot 2, 4.x boot-1 black) now surface as row failures instead of passing.
 3. **Activation.** The matrix and sessions check the `ActivationState` string only. Nothing checks that the
    device *behaves* activated: no Setup/activation screen, installs allowed, and on 5.x the hook exists only in
    scratch (#37). A lockdownd patched to report "Activated" while SpringBoard still gates passes.
@@ -330,6 +339,11 @@ every time. Those are H by the ledger's own definitions.
      automated check.
    - *What would close it.* Register-level unit tests in the style of test_dsi_fifo, plus restore-smoke and one
      reboot in the matrix.
+   - **Partly DONE** (matrix-graphics, 2026-09-29): the "one reboot in the matrix" half is closed -- the matrix now
+     judges boot 2's clean shutdown, so a fix whose regression stalls the second power-off (e.g. D1815 restart)
+     fails a row instead of passing. `test_framecheck` also establishes the boot-free "prove the fix with a
+     committed mutant" pattern for graphics. *Remaining:* the register-level H2FMI/CDMA/D1815/IOP/DART unit tests,
+     and restore-smoke in the matrix by default.
 5. **The real iBoot chain on SEPO 2 and 5.x.** No catalog row boots iBoot-1072/1219 (8K2/8L1 are kboot, 9B206
    isn't in the matrix). The epoch, ADC start bit, panel ID and CDMA status fixes have no standing check.
 6. **1G storage.** No two-boot leg and no catalog entry, so the ADM 0x400/0x600 model is unguarded (its revert

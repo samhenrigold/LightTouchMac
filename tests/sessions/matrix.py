@@ -36,11 +36,18 @@ PATCHER = HOME / "Downloads/Legacy-iOS-Kit_complete_v25.09.01/bin/macos/arm64/iB
 ORDER = ["n72ap-7E18", "n72ap-8C148", "n72ap-5F138", "k48ap-7B500", "k48ap-7B367", "k48ap-8C148",
          "n72ap-7A341", "n72ap-7C145", "n72ap-7D11", "k48ap-7B405", "n72ap-8A293", "n72ap-8A400", "n72ap-8B117",
          "n72ap-5G77a", "n72ap-5H11a", "k48ap-8F190", "k48ap-8G4", "k48ap-8H7", "k48ap-8J3", "k48ap-8K2", "k48ap-8L1"]
-CHECKS = ["prepare", "lit", "lockdown", "activation", "afc", "install", "package", "gl", "persist", "shutdown"]
+CHECKS = ["prepare", "lit", "home", "lockdown", "activation", "afc", "install", "package", "gl", "persist", "shutdown"]
 
 spec = importlib.util.spec_from_file_location("check_sessions", ROOT / "tests/sessions/check-sessions.py")
 check_sessions = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(check_sessions)
+
+fspec = importlib.util.spec_from_file_location("framecheck", ROOT / "tests/sessions/framecheck.py")
+framecheck = importlib.util.module_from_spec(fspec)
+fspec.loader.exec_module(framecheck)
+MATRIX_REFS = ROOT / "tests/sessions/matrix-refs"   # per-entry known-good home pictures, if committed
+HOME_FLOOR = 0.05   # a home screenshot below this luma is a slept/black panel (audit finding 3)
+SPRINGBOARD = "com.apple.springboard"
 
 
 def sha1(path):
@@ -210,6 +217,30 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     r["lit"] = {"ok": bool(lit), "seconds": round(lit[0]["seconds"], 1) if lit else None}
     if setup := find("setup"):   # a fresh 5.x iPad's Setup Assistant, walked by the driver (single.swift Setup5)
         r["lit"]["setup"] = {"ok": setup[0].get("ok"), "detail": setup[0].get("detail"), "frontmost": setup[0].get("frontmost")}
+    # home (audit gap #2): judge the home screen, not a slept boot. Every home/installed screenshot
+    # must be lit (not brightness 0), SpringBoard must be frontmost where an agent can say so, and
+    # where a known-good reference is committed the picture must match it (framecheck). Boot 2's home
+    # is judged the same way. This fails the 4.x iPad rows whose boot-1 home is captured black
+    # (audit finding 3), which the single `lit` threshold passed.
+    shots_ev = {Path(e["path"]).stem: e for e in find("screenshot")}
+    homes = find("home")
+    home_names = [n for n in ("home", "home2", "installed") if n in shots_ev]
+    dark = [n for n in home_names if float(shots_ev[n].get("brightness", 0)) < HOME_FLOOR]
+    wrong_app = [h.get("frontmost") for h in homes if h.get("frontmost") and h["frontmost"] != SPRINGBOARD]
+    frame = {}
+    for n in home_names:
+        ref = MATRIX_REFS / f"{entry['id']}-{n}.png"
+        if ref.exists():
+            frame[n] = framecheck.verdict(shots_ev[n]["path"], str(ref))
+    bad_frame = [n for n, v in frame.items() if not v["ok"]]
+    if not home_names:
+        r["home"] = {"ok": None, "note": "no home screenshot taken"}
+    else:
+        r["home"] = {"ok": not dark and not wrong_app and not bad_frame,
+                     "brightness": {n: round(float(shots_ev[n].get("brightness", -1)), 3) for n in home_names},
+                     "frontmost": [h.get("frontmost", "") for h in homes] or None,
+                     "dark": dark or None, "wrongApp": wrong_app or None,
+                     "frame": {n: frame[n]["frac"] for n in frame} or None}
     usb = find("usb")
     want = entry["product_type"]
     r["lockdown"] = {"ok": bool(usb) and usb[0].get("productType") == want, "seconds": round(usb[0]["seconds"], 1) if usb else None,
@@ -242,17 +273,42 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
         r["package"] = {"ok": None, "note": "no offer (no itpack or nothing for this build)"}
     if not json.loads((base / "device.lock.json").read_text()).get("guest_package"):   # 3.0: no loader baked
         r["package"] = {"ok": None, "note": "no loader baked (the lock has no guest_package)"}
-    r["gl"] = {"ok": None, "note": "skipped: qemu-ios gl-coverage not merged (no counters)"}
+    # gl (audit gap #1/#2: this column was a hard-coded skip). The matrix boots with GL on, so its
+    # home/installed screenshots ARE GL output -- a black/slept or wrong picture already fails `home`
+    # above (and the framecheck diff there is the frame reference). Here we also record the render
+    # path and refusals: a software-composited fallback (4.3.5's "no gldshim device ... no GL") must
+    # SHOW in the column, not pass silently.
+    serial_text = serial.read_text(errors="replace") if serial.exists() else ""
+    sw_fallback = "no gldshim device" in serial_text or "GLRendererFloatQEMU.bundle" in serial_text
+    gl_rejects = len(re.findall(r"unsupported graphics hardware|gl[ie]s?[-_ ]?reject", serial_text, re.I))
+    home_ok = r["home"].get("ok")
+    r["gl"] = {"ok": (bool(home_ok) and gl_rejects == 0) if home_ok is not None else None,
+               "path": "software CA (no gldshim device)" if sw_fallback else "hardware GL",
+               "rejects": gl_rejects,
+               "picture": {n: frame[n]["frac"] for n in frame} or None,
+               "note": ("software-composited fallback: no gldshim device, no GL" if sw_fallback else
+                        (None if home_ok is not None else "no home screenshot to judge"))}
     per = find("persist")
     r["persist"] = {"ok": bool(per) and per[0].get("kept") and per[0].get("same"), "error": per[0].get("error") if per else None}
     lit2, usb2 = find("lit"), find("usb")
     r["persist"]["second_boot"] = {"lit": round(lit2[1]["seconds"], 1) if len(lit2) > 1 else None,
                                    "lockdown": round(usb2[1]["seconds"], 1) if len(usb2) > 1 else None}
+    if ra := find("restartedApps"):   # audit gap #2: the reboot's app list, previously ignored
+        r["persist"]["restartedApps"] = ra[0].get("has")
+    # shutdown: judge boot 2's clean power-off too (audit gap #2 / finding 4: 8L1's boot-2 stalls and
+    # the matrix judged only boot 1). If a second boot ran, its quit must confirm PMU standby / exit.
     quits = find("quit")
     q = quits[0] if quits else {}
-    r["shutdown"] = {"ok": bool(quits) and q.get("confirmed", -1) >= 0 and q.get("exited") and str(q.get("reason")).endswith(" stopped."),
+    did_boot2 = len(find("lit")) > 1
+    q2 = quits[1] if len(quits) > 1 else {}
+    def _clean(qq):
+        return qq.get("confirmed", -1) >= 0 and qq.get("exited") and str(qq.get("reason")).endswith(" stopped.")
+    first_ok = bool(quits) and _clean(q)
+    second_ok = _clean(q2)
+    r["shutdown"] = {"ok": first_ok and (second_ok if did_boot2 else True),
                      "seconds": round(q["confirmed"], 1) if q.get("confirmed", -1) >= 0 else None, "reason": q.get("reason"),
-                     "second": (round(quits[1]["confirmed"], 1) if len(quits) > 1 and quits[1].get("confirmed", -1) >= 0 else None)}
+                     "second": (round(q2["confirmed"], 1) if q2.get("confirmed", -1) >= 0 else None),
+                     "second_ok": (second_ok if did_boot2 else None), "boot2_reason": q2.get("reason") if did_boot2 else None}
     r["base_unchanged"] = check_sessions.tree(base) == base_before
     r["driver_exit"] = rc
     fails = find("fail")
@@ -295,14 +351,21 @@ def write_md(results, catalog):
             if v.get("ok") is None:
                 return f"skip ({v.get('note', '')})"
             extra = {"lit": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
+                     "home": lambda: (" black:" + ",".join(v["dark"]) if v.get("dark") else
+                                      " wrong-app" if v.get("wrongApp") else
+                                      " picture off" if not v["ok"] else ""),
                      "lockdown": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
                      "activation": lambda: f" {v.get('state') or '?'}",
                      "afc": lambda: f" {len(v.get('sizes', []))}/4",
                      "install": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
                      "package": lambda: f" serial {v.get('reported')} r{v.get('result')}",
                      "persist": lambda: f" (boot 2 lit {v.get('second_boot', {}).get('lit')} s)" if v.get("ok") else "",
-                     "shutdown": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
-                     "gl": lambda: f" ({v['note']})" if v.get("note") else ""}.get(name, lambda: "")()
+                     "shutdown": lambda: (f" {v['seconds']} s" if v.get("seconds") is not None else "")
+                                         + (f" (boot 2 {v['second']} s)" if v.get("second") is not None else
+                                            " (boot 2 unconfirmed)" if v.get("second_ok") is False else ""),
+                     "gl": lambda: f" ({v.get('path', '')}"
+                                   + (f", {v['rejects']} rejects" if v.get("rejects") else "")
+                                   + (f"; {v['note']}" if v.get("note") else "") + ")"}.get(name, lambda: "")()
             return ("ok" if v["ok"] else "FAIL") + extra
         prep = r.get("prepare") or {}
         ptxt = "-" if not prep else (f"ok {prep['seconds']} s" if prep.get("ok") else f"FAIL {prep.get('seconds', 0)} s")
@@ -316,7 +379,7 @@ def write_md(results, catalog):
             fftxt = f"**{ff['check']}**: {ff.get('why', '')}".replace("|", "\\|").replace("\n", " ")  # a multi-line error (a tool's output) stays in its cell
             if ff.get("excerpt"):
                 fftxt += "<br>" + "<br>".join("`" + l.replace("`", "'").replace("|", "\\|") + "`" for l in ff["excerpt"].splitlines())
-        rows.append(f"| {eid} | {r.get('version', '')} | {ktxt} | {ptxt} | {cell('lit')} | {cell('lockdown')} | {cell('activation')} | "
+        rows.append(f"| {eid} | {r.get('version', '')} | {ktxt} | {ptxt} | {cell('lit')} | {cell('home')} | {cell('lockdown')} | {cell('activation')} | "
                     f"{cell('afc')} | {cell('install')} | {cell('package')} | {cell('gl')} | {cell('persist')} | {cell('shutdown')} | "
                     f"{r.get('restore', {}).get('ok', '-') if r.get('restore') else '-'} | {fftxt} |")
     RESULTS_MD.write_text(f"""# Matrix results
@@ -324,11 +387,13 @@ def write_md(results, catalog):
 Produced by `tests/matrix.py` (docs/matrix.md has the builds). Prepare = `firmwarekit create` as the app runs it; lit,
 lockdown, AFC, install, package, persist and shutdown come from tests/drivers/session-driver `--single` with a second boot on
 the same overlay. Screenshots and logs per entry are outside the repo (`screenshots` in matrix-results.json).
-GL counters are skipped until qemu-ios gl-coverage merges; a GL cell with a note (the 2.x rows) is qemu-ios
-tests/ipod/regress.py --checks boot,gles on the entry's `firmwarekit create` output. Last write {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.
+Home judges the home screen itself (audit gap #2): every home/installed screenshot lit (not brightness 0), SpringBoard
+frontmost where an agent can say, and the picture against a committed reference where one exists. GL records the render
+path (hardware GL vs a software-composited fallback), any refusals, and the frame-reference verdict -- it no longer
+skips. Shutdown judges boot 2's clean power-off as well as boot 1. Last write {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.
 
-| Entry | iOS | Keys | Prepare | Lit | Lockdown | Activation | AFC | Install | Package | GL | Persist | Shutdown | Restore | First failure |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Entry | iOS | Keys | Prepare | Lit | Home | Lockdown | Activation | AFC | Install | Package | GL | Persist | Shutdown | Restore | First failure |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 {chr(10).join(rows)}
 
 ## Triage
