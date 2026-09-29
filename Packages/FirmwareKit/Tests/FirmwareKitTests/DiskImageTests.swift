@@ -3,7 +3,8 @@ import Testing
 @testable import FirmwareKit
 
 /// DiskImage: the argv of both backends on every host; the real operations on each backend this host has
-/// (hdiutil everywhere; `diskutil image` on macOS 27+), and that both produce the same volume.
+/// (hdiutil everywhere; `diskutil image` on macOS 27+), and that both produce the same grown volume and raw disk.
+/// (Editing through a diskutil attach lays files out differently, the solid-state allocation policy: DiskImage.backend.)
 @Suite(.serialized) struct DiskImageTests {
     static let hasDiskutilImage = DiskImage.exec(["/usr/sbin/diskutil", "image"]).0 == 0
     static var backends: [DiskImage.Backend] { [.hdiutil] + (hasDiskutilImage ? [.diskutil] : []) }

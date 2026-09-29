@@ -51,6 +51,24 @@ def create(args):
     return 1 if failed else 0
 
 
+def nand_bytes(a, b, limit=12):
+    """Which store files differ, and where: the first differing bytes of each (a header counter vs a relaid volume)."""
+    fa = {str(p.relative_to(a)) for p in a.rglob("*") if p.is_file()}
+    fb = {str(p.relative_to(b)) for p in b.rglob("*") if p.is_file()}
+    out = []
+    if fa != fb: out.append(f"files: {len(fa - fb)} only before, {len(fb - fa)} only after")
+    for n in sorted(fa & fb):
+        x, y = (a / n).read_bytes(), (b / n).read_bytes()
+        if x == y: continue
+        offs = [i for i in range(min(len(x), len(y))) if x[i] != y[i]] if len(x) < 1 << 20 else \
+               [i for i in range(0, min(len(x), len(y)), 4096) if x[i:i + 4096] != y[i:i + 4096]]
+        unit = "bytes" if len(x) < 1 << 20 else "4K blocks"
+        out.append(f"{n}: {len(offs)} differing {unit}" + ("" if len(x) == len(y) else f" (sizes {len(x)} vs {len(y)})")
+                   + " at " + ", ".join(hex(o) for o in offs[:6]))
+        if len(out) >= limit: out.append("..."); break
+    return out
+
+
 def scrub(lock):
     lock = dict(lock)
     lock.pop("created", None)
@@ -87,6 +105,8 @@ def diff(args):
             walk(sb, sa, [])
         print(("DIFF " if lines else "SAME ") + eid)
         for l in lines: print(l)
+        if lines and any("nand" in l for l in lines):
+            for l in nand_bytes(args.before / eid / "nand", args.after / eid / "nand"): print("  " + l)
         bad += bool(lines)
     return 1 if bad else 0
 

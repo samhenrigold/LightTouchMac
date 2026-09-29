@@ -532,13 +532,17 @@ boot chain (iBoot/kboot vs direct-iboot), data volume (k48) and seal (k48). The 
 `scripts/lock-identity.py create` builds every catalog entry whose IPSW is in the download store and `diff` compares
 `built_listing_sha256`, the iboot/nor/gid_blobs hashes and the whole lock minus `created`.
 
-- **Disk images** go through `DiskImage` (attach, detach, resize, UDIF → raw): `diskutil image` where the running
-  macOS has it (27+, where hdiutil is deprecated), hdiutil below (the floor is 14.4); `FIRMWAREKIT_DISK_IMAGE` overrides.
-  `diskutil image resize` fills an 8 KiB-block volume's last sector where hdiutil stops short, so the diskutil backend
-  asks for 4 KiB less on such volumes and the grown volume is byte-identical on both (DiskImageTests.backendsAgree, 4 KiB
-  and 8 KiB blocks); UDIF → raw is identical too. Listing attached images (cancel, Export's unmount) still reads
-  `hdiutil info -plist`: `diskutil` has no listing that names the image file. Mount/unmount, newfs_hfs and fsck_hfs
-  are not disk-image operations and stay in VolumeMount.
+- **Disk images** go through `DiskImage` (attach, detach, resize, UDIF → raw): hdiutil while macOS ships it
+  (deprecated on 27, functional; the floor is 14.4), `diskutil image` otherwise; `FIRMWAREKIT_DISK_IMAGE` overrides.
+  Not diskutil first: its attach presents the image as a solid-state device and the HFS+ driver then lays files out
+  differently (no metadata zone), so a store edited through it differs from the golden hashes (7E18: 281 pages moved).
+  Resize and convert are byte-identical on both: hdiutil grows to whole allocation blocks less one when the file's
+  end is not block-aligned (the iPad IPSW volumes: 8 KiB blocks, 4 KiB past the last block), so the diskutil backend
+  asks for size - (slack mod block size) (DiskImageTests.backendsAgree, 4 and 8 KiB blocks, 0-8 KiB slack). Listing
+  attached images (cancel, Export's unmount) reads `hdiutil info -plist`: `diskutil` has no listing that names the
+  image file. Mount/unmount, newfs_hfs and fsck_hfs are not disk-image operations and stay in VolumeMount. The
+  volume header's writeCount (the mount's write count, chunking included) is zeroed by `HFSPlusVolume.normalize`
+  like the dates, and the lock's `entry.sha256` is over a sorted-keys encoding (it was per-process random before).
 - **Still mounted at prepare time:** the system volume (file adds: helpers, jobs, PAC, the kernelcache, the guest
   package; plist rewrites that change size), the data volume (newfs_hfs + the /private/var skeleton copy) and the
   keybag ramdisk (restored_external). The native HFSPlus module edits owners, dates, the volume identifier, B-tree

@@ -28,7 +28,9 @@ public struct IPSWArchive: Sendable {
     public let url: URL
     public init(_ url: URL) { self.url = url }
 
-    static let chunk = 1 << 20
+    /// unzip's output buffer: the same write pattern lays a file extracted into a mounted volume out the same way
+    /// (the kernelcache; HFS+ allocates per write), which the golden store hashes depend on.
+    static let chunk = 1 << 15
 
     public func names() throws -> [String] { try archive().map(\.path) }
 

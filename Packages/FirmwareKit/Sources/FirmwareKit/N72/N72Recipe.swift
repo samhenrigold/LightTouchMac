@@ -233,9 +233,15 @@ final class N72Board: Board {
     /// install_web_proxy, activation) with the shared pieces of SystemEdits. Appends the owners to patch;
     /// returns the report (the lock's `derived`, plus activation and guest_package).
     func bake(_ m: URL, _ c: Recipe.Context, owners: inout [(UInt32, String)]) throws -> [String: Any] {
-        let fm = FileManager.default, opt = recipe.options, tools = major >= 3, helpers = c.o.guestTools, mbx = Self.mbx
+        let fm = FileManager.default, opt = recipe.options, helpers = c.o.guestTools, mbx = Self.mbx
         let cache = SystemEdits.dyldCache(arch)
         let at = { (rel: String) in m.appendingPathComponent(rel) }
+        // The guest helpers (it_agent, it_typein DYLD_INSERTed into SpringBoard, sblaunch, it_prefs, the loader and
+        // its seed package) are linked for the dyld that ships the shared cache (3.1+); 2.x's and 3.0's refuse
+        // LC_DYLD_INFO_ONLY ("dyld: unknown required load command 0x80000022") and SpringBoard never comes up with
+        // it_typein inserted (qemu-ios ipod2g_device.py 4074277e42). Detected from the volume, not the version: a
+        // firmware without the cache gets a stock SpringBoard, no AppSync cache patch and no GL shim.
+        let tools = fm.fileExists(atPath: at(cache).path)
         func helper(_ n: String) throws -> Data {
             let u = helpers.appendingPathComponent(n)
             guard fm.fileExists(atPath: u.path) else { throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)") }
@@ -255,7 +261,7 @@ final class N72Board: Board {
         }()
         report["gles"] = gli.map { "shim MBXGLEngine-" + $0 } ?? "stock engine, software CA: " + (problem ?? "")
         report["gli"] = gli.map { $0 as Any } ?? NSNull()
-        report["guest_tools"] = tools ? "installed" : "omitted: current helpers require iOS 3+ dyld"
+        report["guest_tools"] = tools ? "installed" : "omitted: current helpers require the iOS 3.1+ dyld (no shared cache)"
 
         // bake-guest-tools.sh
         if let gli {
@@ -328,9 +334,11 @@ final class N72Board: Board {
         owners.append((0, SystemEdits.lockdownd))
         // mkpkg.seed: the loader and the seed package; it_boot loads the package's jobs (com.qemu.it-agent), so
         // the baked copies it provides are removed. Owners after it, for only what is left.
-        let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gli: gli, log: c.log)
-        report["guest_package"] = record
-        owners += seeded.map { (UInt32(0), $0) }
+        if tools {
+            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gli: gli, log: c.log)
+            report["guest_package"] = record
+            owners += seeded.map { (UInt32(0), $0) }
+        }
         owners += Self.guestToolOwners.filter { (try? fm.destinationOfSymbolicLink(atPath: at($0.1).path)) != nil || fm.fileExists(atPath: at($0.1).path) }
         c.log("bake: \(report.filter { $0.key != "activation" && $0.key != "guest_package" })")
         return report

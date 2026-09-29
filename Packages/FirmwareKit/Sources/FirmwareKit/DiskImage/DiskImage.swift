@@ -1,7 +1,7 @@
-// DiskImage: raw disk images through the stock tools, one backend per process (docs/sweep/PLAN.md C8).
-// `diskutil image` where the running macOS has it (27+, where hdiutil is deprecated), else hdiutil (the floor
-// is 14.4). Every attach/detach/resize/convert of FirmwareKit goes through here; mount/unmount, newfs_hfs and
-// fsck_hfs are not disk-image operations and stay with VolumeMount.
+// DiskImage: raw disk images through the stock tools, one backend per process (docs/sweep/PLAN.md C8): hdiutil
+// while macOS ships it (deprecated on 27, functional), `diskutil image` otherwise (see `backend` for why not the
+// other way round). Every attach/detach/resize/convert of FirmwareKit goes through here; mount/unmount, newfs_hfs
+// and fsck_hfs are not disk-image operations and stay with VolumeMount.
 //
 //   let dev = try DiskImage.attach(image)                       // -nomount, nobrowse: "/dev/diskN"
 //   let a = try DiskImage.attach(image, readOnly: true, mount: true)   // browsable, for Finder: a.mountPoint
@@ -22,10 +22,14 @@ import System
 public enum DiskImage {
     public enum Backend: String, Sendable { case diskutil, hdiutil }
 
-    /// `diskutil image` exists on macOS 27+; hdiutil still works there (deprecated) and is the floor's tool.
+    /// hdiutil while the running macOS still has it (deprecated on 27, functional), else `diskutil image`. Not
+    /// diskutil first: its attach presents the image as a solid-state device ("Solid State: Yes" in diskutil info,
+    /// hdiutil's says "Info not available"), and the HFS+ driver lays a volume out differently on one (no metadata
+    /// zone), so a store edited through a diskutil attach differs from the golden hashes; resize and convert are
+    /// byte-identical on both. FIRMWAREKIT_DISK_IMAGE=hdiutil|diskutil overrides.
     public static let backend: Backend = {
         if let b = ProcessInfo.processInfo.environment["FIRMWAREKIT_DISK_IMAGE"].flatMap(Backend.init) { return b }
-        return ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 ? .diskutil : .hdiutil
+        return FileManager.default.isExecutableFile(atPath: "/usr/bin/hdiutil") ? .hdiutil : .diskutil
     }()
 
     public struct Attached: Sendable, Equatable {

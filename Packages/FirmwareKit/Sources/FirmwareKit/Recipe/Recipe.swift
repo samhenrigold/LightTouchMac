@@ -158,7 +158,7 @@ public enum Recipe {
         func opt(_ v: Any?) -> Any { v ?? NSNull() }
         let shared: [String: Any] = [
             "format": 1, "created": ISO8601DateFormatter().string(from: Date()),
-            "entry": ["id": e.id, "sha256": Preparer.sha256(try JSONEncoder().encode(e)), "content": try JSONSerialization.jsonObject(with: JSONEncoder().encode(e))],
+            "entry": ["id": e.id, "sha256": Preparer.sha256(try entryJSON.encode(e)), "content": try JSONSerialization.jsonObject(with: entryJSON.encode(e))],
             "build": e.build, "product_version": c.restore.productVersion, "product_type": e.productType, "board": e.board,
             "storage": recipe.storage,
             "tool": ["name": "firmwarekit", "version": FirmwareKit.version, "helper": opt(o.helper?.path),
@@ -177,6 +177,10 @@ public enum Recipe {
         progress.finish()
         emit(.done(lock: "device.lock.json"))
     }
+
+    /// The entry's bytes for the lock's entry.sha256: sorted keys, so the hash is the same run to run (a Swift
+    /// dictionary's order is per process; the unsorted encoding gave every lock a different entry.sha256).
+    static var entryJSON: JSONEncoder { let e = JSONEncoder(); e.outputFormatting = [.sortedKeys]; return e }
 
     /// Every file under nand/ by its relative path, sorted (the store's listing order).
     static func nandFiles(_ nand: URL) throws -> [String] {
