@@ -4,7 +4,7 @@
 //
 // A packaged LightTouchMac is meant to be self-contained: someone who has never
 // heard of Homebrew should be able to drag it to /Applications and have app
-// installs, the SSH terminal and the home-screen placeholder all work. So every
+// installs, media import and the home-screen placeholder all work. So every
 // external binary and library is looked for INSIDE the bundle first —
 // Contents/MacOS for native helpers, Resources/tools for scripts and guest data,
 // Contents/Frameworks for

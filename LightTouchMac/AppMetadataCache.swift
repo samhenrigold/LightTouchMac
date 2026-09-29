@@ -1,8 +1,8 @@
 // Created by Sam on 2026-08-05.
 //
 // Installed apps are always files we already have on disk (the .ipa passed to
-// Add). ideviceinstaller's own "list" text is a lossy, format-fragile source
-// of truth for the display name (e.g. it reports Starbucks by bundle ID), so
+// Add). installation_proxy's browse is a lossy source of truth for the
+// display name (e.g. it reports Starbucks by bundle ID), so
 // on install we read the real CFBundleDisplayName/icon straight out of the
 // .ipa via /usr/bin/unzip (shipped with macOS, no new dependency) and cache
 // it to disk keyed by bundle ID. The live device list still drives *which*
@@ -96,7 +96,7 @@ final class AppMetadataCache {
     /// nil if we never learned this bundle ID.
     ///
     /// Entries used to also carry the version and be discarded when it didn't
-    /// match the live list — but ideviceinstaller reports CFBundleVersion while
+    /// match the live list — but the device list reports CFBundleVersion while
     /// we read CFBundleShortVersionString, so for any app where those differ
     /// (most of them) every entry was rejected on read AND deleted by prune,
     /// which is what made the sidebar fall back to bundle IDs at random. A name
@@ -130,7 +130,7 @@ final class AppMetadataCache {
 
     /// Best-effort: read the display name and icon out of a decrypted .ipa and
     /// cache them, returning the name. Silently does nothing on any failure —
-    /// the sidebar just falls back to whatever ideviceinstaller reports.
+    /// the sidebar just falls back to whatever the device list reports.
     /// The archive's display name without touching the cache — for a row that
     /// is only a proposal until the install succeeds. See learn(from:).
     func preview(of ipa: URL) async -> (name: String, bundleID: String)? {
@@ -202,12 +202,6 @@ final class AppMetadataCache {
         guard let root = Self.appRoot(members),
               let data = try? await Self.unzip(ipa, member: root + "Info.plist") else { return nil }
         return try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-    }
-
-    /// The SDK the .ipa was built against (e.g. "iphoneos6.1"), for the
-    /// too-new-to-launch check.
-    func sdkName(from ipa: URL) async -> String? {
-        await Self.info(of: ipa)?["DTSDKName"] as? String
     }
 
     /// The lowest OS the app declares it will run on (Info.plist

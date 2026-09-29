@@ -38,7 +38,6 @@ func logEvent(_ message: String) { }
 ''' + method(controller, '    func launchApp(_ bundleID: String) async throws {') + r'''
 }
 struct InstalledApp { let id: String; let name: String }
-extension Notification.Name { static let ltmAppLaunched = Notification.Name("Launched") }
 @MainActor final class LaunchFixture: NSViewController {
  let emulator = EmulatorController()
  var busyWithDevice = false, uninstalling = Set<String>()

@@ -134,7 +134,6 @@ nonisolated enum IMobileDevice {
     typealias NpObserve = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
     typealias NpSetCB = @convention(c) (OpaquePointer?, NpNotifyCB?, UnsafeMutableRawPointer?) -> Int32
 
-    static let instproxy_client_start_service = symbol("instproxy_client_start_service", StartService2.self)
     static let instproxy_client_new = symbol("instproxy_client_new", NewServiceClient.self)
     static let instproxy_client_free = symbol("instproxy_client_free", FreeHandle.self)
     static let instproxy_browse = symbol("instproxy_browse", Browse.self)
@@ -232,23 +231,7 @@ nonisolated enum IMobileDevice {
         return node
     }
 
-    // MARK: - Readiness probe
-
-    /// Has the guest attached to this usbmuxd? One in-process round trip to
-    /// our own daemon, over in milliseconds — the cheap question to ask before
-    /// spawning any of the CLI tools, whose failures each cost a process
-    /// launch and their own connect timeout.
-    ///
-    /// Deliberately NOT a lockdownd handshake: while the guest is still
-    /// settling, a handshake can fail — or block, it has no timeout — long
-    /// after the tools this gates would already have succeeded, which turned
-    /// the gate into the bottleneck. Attachment is the gate; lockdown errors
-    /// are the tools' own to report and retry. Blocking; call off the main
-    /// actor. Without the library there is nothing to probe with, so answer
-    /// yes and fall through to the tools.
-    static func deviceReady(socket: String) -> Bool {
-        (try? checkAttachment(socket: socket)) != nil
-    }
+    // MARK: - Attachment
 
     /// Preserve the failure for the inspector and diagnostics. Attachment is
     /// only the USB bridge check; it says nothing about app-service readiness.

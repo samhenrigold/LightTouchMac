@@ -381,5 +381,4 @@ nonisolated enum Timeouts {
     nonisolated(unsafe) static var stage: Double = 300           // whole-.ipa AFC upload backstop
     nonisolated(unsafe) static var installIdle: Double = 90      // since the last status callback
     nonisolated(unsafe) static var installAbsolute: Double = 600
-    nonisolated(unsafe) static var ssh: Double = 90
 }

@@ -189,7 +189,6 @@ cp "$(dirname "$PATCHER")/LICENSE" "$(dirname "$PATCHER")/SOURCE.txt" "$APP/Cont
 # and a pairing record per device). The app copies the bundled seed out to
 # Application Support before use — see USBMux.confDirectory — because the bundle
 # is read-only and signed. Ship only the seed, never a pairing record.
-copy_tool "$QEMU/imgtools/install-ipa.sh"
 # Guest-side binaries the app uploads through the guest agent to images without
 # the guest-package loader, and the helper that stands in for the python3 a clean
 # Mac does not have. Nothing here needs a guest shell or SSH.

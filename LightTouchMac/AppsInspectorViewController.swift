@@ -18,8 +18,6 @@ extension Notification.Name {
     static let ltmInstallStarted = Notification.Name("LTMInstallStarted")
     /// Posted as an install reports progress; object is the InstallJob.
     static let ltmInstallProgress = Notification.Name("LTMInstallProgress")
-    /// An app was launched on the guest from the sidebar (post-success).
-    static let ltmAppLaunched = Notification.Name("LTMAppLaunched")
 }
 
 /// One install in flight. The sidebar shows it as a row; cancelling it tears
@@ -699,7 +697,7 @@ final class AppsInspectorViewController: NSViewController {
     // MARK: - Loading / refresh
 
     /// Keep polling for the life of the view, not just until the device answers
-    /// once: right after boot, ideviceinstaller can connect and report an empty
+    /// once: right after boot, installation_proxy can answer with an empty
     /// list before installd has finished registering apps, which used to read
     /// as "answered" and stop the loop — leaving the sidebar empty until an
     /// install/uninstall notification forced a reload. Polling forever instead
@@ -718,7 +716,7 @@ final class AppsInspectorViewController: NSViewController {
             while let self, !Task.isCancelled {
                 // Ask "is the device even up?" in-process before spawning
                 // anything: the probe answers in milliseconds, so a cold boot
-                // no longer costs one failing ideviceinstaller launch per
+                // no longer costs one failing lockdown session per
                 // second, and a transient lockdown wobble skips a poll
                 // instead of failing it. Not while installing — the probe is
                 // itself a lockdown session, the very thing being avoided.
@@ -1467,7 +1465,6 @@ final class AppsInspectorViewController: NSViewController {
             guard let self else { return }
             do {
                 try await emulator.launchApp(app.id)
-                NotificationCenter.default.post(name: .ltmAppLaunched, object: nil)
             } catch is CancellationError {
                 return
             } catch {
