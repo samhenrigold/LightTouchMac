@@ -291,7 +291,8 @@ def write_md(results, catalog):
                      "install": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
                      "package": lambda: f" serial {v.get('reported')} r{v.get('result')}",
                      "persist": lambda: f" (boot 2 lit {v.get('second_boot', {}).get('lit')} s)" if v.get("ok") else "",
-                     "shutdown": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else ""}.get(name, lambda: "")()
+                     "shutdown": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
+                     "gl": lambda: f" ({v['note']})" if v.get("note") else ""}.get(name, lambda: "")()
             return ("ok" if v["ok"] else "FAIL") + extra
         prep = r.get("prepare") or {}
         ptxt = "-" if not prep else (f"ok {prep['seconds']} s" if prep.get("ok") else f"FAIL {prep.get('seconds', 0)} s")
@@ -313,7 +314,8 @@ def write_md(results, catalog):
 Produced by `tests/matrix.py` (docs/matrix.md has the builds). Prepare = `firmwarekit create` as the app runs it; lit,
 lockdown, AFC, install, package, persist and shutdown come from tests/drivers/session-driver `--single` with a second boot on
 the same overlay. Screenshots and logs per entry are outside the repo (`screenshots` in matrix-results.json).
-GL counters are skipped until qemu-ios gl-coverage merges. Last write {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.
+GL counters are skipped until qemu-ios gl-coverage merges; a GL cell with a note (the 2.x rows) is qemu-ios
+tests/ipod/regress.py --checks boot,gles on the entry's `firmwarekit create` output. Last write {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.
 
 | Entry | iOS | Keys | Prepare | Lit | Lockdown | Activation | AFC | Install | Package | GL | Persist | Shutdown | Restore | First failure |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|

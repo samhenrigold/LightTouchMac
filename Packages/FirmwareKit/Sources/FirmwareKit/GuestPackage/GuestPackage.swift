@@ -17,8 +17,9 @@ public enum GuestPackage {
     static let root = "usr/local/lighttouch"
     static let loader = ("usr/local/bin/it_boot", "System/Library/LaunchDaemons/com.qemu.it-boot.plist")
     static let systemVersion = "System/Library/CoreServices/SystemVersion.plist"
-    /// The GL engines' stock paths (mkpkg MBX, GLENGINE, GLD): hooks kept only when the preparer installed the shim.
-    static let glTargets: Set<String> = ["/" + N72Board.mbx, "/" + SystemEdits.glEngine, "/" + SystemEdits.gldPath]
+    /// The GL engines' stock paths (mkpkg GL_TARGETS: MBX, GLENGINE, GLD, and 2.x's OPENGLES front end): hooks kept
+    /// only when the preparer installed the shim or the front end.
+    static let glTargets: Set<String> = ["/" + N72Board.mbx, "/" + SystemEdits.glEngine, "/" + SystemEdits.gldPath, "/" + N72Board.openGLES]
 
     /// What was baked: device.lock.json's guest_package (the same keys as the Python preparers').
     public struct Record: Sendable, Equatable {
@@ -75,7 +76,7 @@ public enum GuestPackage {
     /// Bakes the loader and the seed package into the system volume mounted at `volume` (mkpkg.seed): the
     /// itpack's package for the volume's ProductBuildVersion as it_boot installs one (pkgs/<serial>/ with its
     /// `offer`, `current` -> it, `state` "seed N"); the hooks whose target is on the volume (the GL engines' only
-    /// when the preparer installed the shim: `gles`), as target + <target>.baked with the package's bytes; the baked jobs the package provides
+    /// when the preparer installed the shim: `gles`), target with the package's bytes and <target>.baked with what the volume had; the baked jobs the package provides
     /// removed. Returns (volume-relative paths written, all root-owned; the lock's guest_package record).
     /// mkpkg's requires.builds: an exact build id, or "<major>*" for every build of that iOS major (2.x = 5*,
     /// 3.x = 7*, 4.x = 8*).
@@ -140,7 +141,12 @@ public enum GuestPackage {
         let modes = Dictionary(files.map { ($0["name"] as! String, mode($0["mode"])) }, uniquingKeysWith: { a, _ in a })
         for h in hooks {
             let file = h["file"] as! String, target = String((h["target"] as! String).dropFirst())
-            for rel in [target, target + ".baked"] { try put(rel, payload(family + "/" + file), modes[file] ?? 0o755) }
+            // <target>.baked keeps what the volume had (the stock file, or what the preparer put there), so a
+            // package without the hook puts it back
+            if !fm.fileExists(atPath: at(target + ".baked").path) {
+                try put(target + ".baked", Data(contentsOf: at(target)), try SystemEdits.permissions(at(target)))
+            }
+            try put(target, payload(family + "/" + file), modes[file] ?? 0o755)
         }
         let jobs = (man["jobs"] as? [String] ?? []).map { ($0 as NSString).lastPathComponent }
         for j in jobs {

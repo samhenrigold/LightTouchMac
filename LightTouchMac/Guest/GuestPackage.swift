@@ -43,12 +43,13 @@ nonisolated enum GuestPackage {
         var files: [File]
         var jobs: [String]
         var hooks: [Hook]
-        /// The GL engines' stock paths (mkpkg MBX, GLENGINE, GLD): their hooks exist only where the preparer
-        /// installed the shim.
+        /// The GL engines' stock paths (mkpkg GL_TARGETS: MBX, GLENGINE, GLD, 2.x's OPENGLES front end): their
+        /// hooks exist only where the preparer installed the shim or the front end.
         static let glTargets: Set<String> = [
             "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine",
             "/System/Library/Frameworks/OpenGLES.framework/GLEngine.bundle/GLEngine",
-            "/System/Library/Frameworks/OpenGLES.framework/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU"]
+            "/System/Library/Frameworks/OpenGLES.framework/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU",
+            "/System/Library/Frameworks/OpenGLES.framework/OpenGLES"]
     }
 
     /// What was offered this boot.

@@ -12,7 +12,9 @@
 // holds MBXGLEngine (one shim for every firmware with the armv6 shared cache) and gles-names.h, sblaunch,
 // sbdlicon (optional), it_agent, it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib, armv6.itpack (the
 // guest-package loader and seed package, as ipod2g_device.py bakes them), it_prefs-armv6 + com.qemu.it-prefs.plist
-// (3.x+: no first-run "Edit Home Screen" tip) and it_keybag-armv6 (data protection).
+// (3.x+: no first-run "Edit Home Screen" tip), it_keybag-armv6 (data protection) and opengles-2x.exports (2.x: the
+// stock OpenGLES must export exactly these names before the seed package's n72-ios2 hook, the GL front end, replaces
+// it and SpringBoard gets CA_ENABLE_OGL=1; an itpack without that hook is refused).
 
 import CryptoKit
 import Foundation
@@ -21,6 +23,9 @@ final class N72Board: Board {
     static let models = ["8g": "MB528", "16g": "MB531", "32g": "MB533"]
     static let kcPrefix = "/System/Library/Caches/com.apple.kernelcaches/"
     static let mbx = "System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"
+    /// 1.x/2.x: the framework binary is the driver; the guest package's GL front end (OpenGLES-2x) replaces it.
+    static let openGLES = "System/Library/Frameworks/OpenGLES.framework/OpenGLES"
+    static let openGLESExports = "opengles-2x.exports"
     static let prefs = "private/var/mobile/Library/Preferences"
     static let agentJob = "System/Library/LaunchDaemons/com.qemu.it-agent.plist"
     static let prefsJob = "System/Library/LaunchDaemons/com.qemu.it-prefs.plist"
@@ -260,7 +265,16 @@ final class N72Board: Board {
         let why = !(opt["gles_shim"] ?? true) ? "options.gles_shim off" : "no dyld shared cache (2.x, 3.0)"
         let info = try gles ? SystemEdits.glesSanity(Data(contentsOf: at(cache), options: .alwaysMapped), helpers: helpers) : ""
         report["gles"] = gles ? "shim MBXGLEngine (\(info))" : "stock engine, software CA: " + why
-        report["gles_shim"] = gles
+        // ipod2g_device.gles2x_front_end: 1.x/2.x have no engine to replace; the package's OpenGLES hook (the same
+        // core) goes in instead when the stock framework exports exactly the front end's names
+        var front = false
+        if !tools, opt["gles_shim"] ?? true {
+            let (ok, line) = try Self.frontEnd(at(Self.openGLES), exports: helpers.appendingPathComponent(Self.openGLESExports))
+            front = ok
+            report["gles"] = line + (ok ? "; CA composites through it (CA_ENABLE_OGL=1)" : "")
+        }
+        report["gles_shim"] = gles || front
+        report["gles_engine"] = gles ? "MBXGLEngine" : front ? "OpenGLES" : NSNull() as Any
         report["guest_tools"] = tools ? "installed" : "omitted: current helpers require the iOS 3.1+ dyld (no shared cache)"
 
         // bake-guest-tools.sh
@@ -282,7 +296,7 @@ final class N72Board: Board {
             try SystemEdits.put(helper("it_typein.dylib"), at("usr/lib/it_typein.dylib"), mode: 0o755)
         }
         try SystemEdits.editSpringBoardJob(m) { env, _ in
-            for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = gles ? "1" : "0" }
+            for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = gles || front ? "1" : "0" }
             for k in ["CA_AUTO_ENABLE_OGL", "LK_AUTO_ENABLE_OGL", "CA_ENABLE_MBX2D", "LK_ENABLE_MBX2D"] { env[k] = "0" }
             let old = (env["DYLD_INSERT_LIBRARIES"] as? String ?? "").split(separator: ":").map(String.init)
             let libs = old.filter { !["/usr/lib/it_kbd_agent.dylib", "/usr/lib/it_typein.dylib"].contains($0) } + (tools ? ["/usr/lib/it_typein.dylib"] : [])
@@ -334,14 +348,69 @@ final class N72Board: Board {
         owners.append((0, SystemEdits.lockdownd))
         // mkpkg.seed: the loader and the seed package; it_boot loads the package's jobs (com.qemu.it-agent), so
         // the baked copies it provides are removed. Owners after it, for only what is left.
-        if tools {
-            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles, log: c.log)
+        // On 2.x the package carries only the OpenGLES front-end hook.
+        if tools || front {
+            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles || front, log: c.log)
+            if front, !record.hooks.contains("/" + Self.openGLES) {
+                // CA_ENABLE_OGL=1 over the stock driver drives the unemulated MBX: fail rather than wedge
+                throw FirmwareError(.internal, "\(SystemEdits.Helpers.itpack(arch)) has no OpenGLES hook for this build; rebuild the guest package")
+            }
             report["guest_package"] = record
             owners += seeded.map { (UInt32(0), $0) }
         }
         owners += Self.guestToolOwners.filter { (try? fm.destinationOfSymbolicLink(atPath: at($0.1).path)) != nil || fm.fileExists(atPath: at($0.1).path) }
         c.log("bake: \(report.filter { $0.key != "activation" && $0.key != "guest_package" })")
         return report
+    }
+}
+
+extension N72Board {
+    /// ipod2g_device.gles2x_front_end: (true, line) if the stock OpenGLES exports exactly the names in `exports`
+    /// (contrib/it-gles/opengles-2x.exports), so the package's hook may replace it; else (false, why), stock kept.
+    static func frontEnd(_ stock: URL, exports: URL) throws -> (Bool, String) {
+        guard FileManager.default.fileExists(atPath: stock.path) else { return (false, "no \(openGLES)") }
+        guard let list = try? String(contentsOf: exports, encoding: .utf8) else {
+            throw FirmwareError(.internal, "guest helper \(openGLESExports) missing from \(exports.deletingLastPathComponent().path)")
+        }
+        let want = Set(list.split(separator: "\n").filter { !$0.hasPrefix("#") }.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+        let got = Set(try exportedSymbols(Data(contentsOf: stock)))
+        guard want == got else {
+            return (false, "stock OpenGLES exports differ from \(openGLESExports) (missing \(want.subtracting(got).sorted().prefix(4)), extra \(got.subtracting(want).sorted().prefix(4))): stock kept")
+        }
+        return (true, "GL front end replaces OpenGLES (\(got.count) exports, the firmware's own)")
+    }
+
+    /// gles2x_exports.scan: the defined external symbols of a thin (or the first ARM slice of a fat) 32-bit
+    /// Mach-O, from its classic symbol table (the dysymtab's extdef range when present), without the leading _.
+    static func exportedSymbols(_ data: Data) throws -> [String] {
+        var b = [UInt8](data)
+        func be32(_ o: Int) -> Int { Int(b[o]) << 24 | Int(b[o + 1]) << 16 | Int(b[o + 2]) << 8 | Int(b[o + 3]) }
+        func u32(_ o: Int) -> Int { Int(le32(b, o)) }
+        if b.count >= 8, be32(0) == 0xCAFEBABE {
+            for i in 0..<be32(4) where be32(8 + 20 * i) == 12 {
+                let off = be32(16 + 20 * i), size = be32(20 + 20 * i)
+                b = Array(b[off..<off + size])
+                break
+            }
+        }
+        guard b.count >= 28, u32(0) == 0xFEEDFACE else { throw FirmwareError(.unsupported, "OpenGLES: not a 32-bit Mach-O") }
+        var off = 28, symtab: (Int, Int, Int)?, extdef: (Int, Int)?
+        for _ in 0..<u32(16) {
+            switch u32(off) {
+            case 2: symtab = (u32(off + 8), u32(off + 12), u32(off + 16))
+            case 0xB: extdef = (u32(off + 16), u32(off + 20))
+            default: break
+            }
+            off += u32(off + 4)
+        }
+        guard let (symoff, nsyms, stroff) = symtab else { throw FirmwareError(.unsupported, "OpenGLES: no symbol table") }
+        let (first, count) = extdef ?? (0, nsyms)
+        return (first..<first + count).compactMap { k in
+            let e = symoff + 12 * k, type = b[e + 4], start = stroff + u32(e)
+            guard type & 0x01 != 0, type & 0x0E != 0, let end = b[start...].firstIndex(of: 0) else { return nil }
+            let n = String(decoding: b[start..<end], as: UTF8.self)
+            return n.hasPrefix("_") ? String(n.dropFirst()) : n
+        }.sorted()
     }
 }
 

@@ -51,4 +51,59 @@ import Testing
             #expect(got == (try Data(contentsOf: py)))
         }
     }
+
+    /// 2.x GL front end against the oracle on 5F138's stock OpenGLES: the export scan as gles2x_exports.scan, the
+    /// check against opengles-2x.exports (and its refusal of a list that differs), and, with an armv6.itpack at
+    /// hand, GuestPackage.seed as mkpkg.seed: n72-ios2's OpenGLES hook in, the stock binary kept as OpenGLES.baked.
+    @Test func frontEndMatchesPython() throws {
+        let fw = Oracle.firmware("n72ap-5F138"), dmg = fw.cache?.appendingPathComponent("rootfs.dmg")
+        let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles"), list = it.appendingPathComponent(N72Board.openGLESExports)
+        guard let dmg, Oracle.exists(dmg), Oracle.exists(list) else { return }
+        try Oracle.withTemp { dir in
+            let raw = dir.appendingPathComponent("rootfs.hfs"), stock = dir.appendingPathComponent("OpenGLES")
+            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            let v = try HFSPlusVolume(raw)
+            try v.contents(v.record(at: N72Board.openGLES)).write(to: stock)
+            try FileManager.default.removeItem(at: raw)
+            let scan = dir.appendingPathComponent("scan.txt")
+            try K48Oracle.sh(["python3", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import gles2x_exports; open(sys.argv[3], 'w').write('\\n'.join(gles2x_exports.scan(sys.argv[2])))",
+                              it.path, stock.path, scan.path], cwd: dir)
+            let names = try N72Board.exportedSymbols(Data(contentsOf: stock))
+            let pyNames = try String(contentsOf: scan, encoding: .utf8).split(separator: "\n").map(String.init)
+            #expect(names.count > 200 && names == pyNames)
+            let (ok, line) = try N72Board.frontEnd(stock, exports: list)
+            #expect(ok, "\(line)")
+            let short = dir.appendingPathComponent("short.exports")
+            try (String(contentsOf: list, encoding: .utf8).replacingOccurrences(of: "\nglFlush\n", with: "\n")).write(to: short, atomically: true, encoding: .utf8)
+            #expect(try N72Board.frontEnd(stock, exports: short).0 == false)
+
+            let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
+            guard Oracle.exists(itpack) else { return }
+            func volume(_ name: String) throws -> URL {
+                let m = dir.appendingPathComponent(name), sv = m.appendingPathComponent(GuestPackage.systemVersion)
+                try SystemEdits.mkdirs(m.appendingPathComponent(N72Board.openGLES).deletingLastPathComponent())
+                try SystemEdits.put(Data(contentsOf: stock), m.appendingPathComponent(N72Board.openGLES), mode: 0o755)
+                try SystemEdits.mkdirs(sv.deletingLastPathComponent())
+                try (["ProductBuildVersion": "5F138"] as NSDictionary).write(to: sv)
+                return m
+            }
+            let a = try volume("swift"), b = try volume("python"), out = dir.appendingPathComponent("py.json")
+            let (written, record) = try GuestPackage.seed(volume: a, itpack: itpack, gles: true)
+            try K48Oracle.sh(["python3", "-c", """
+                import json, sys; sys.path.insert(0, sys.argv[1]); import mkpkg
+                made, rec = mkpkg.seed(sys.argv[2], sys.argv[3], True)
+                json.dump({"written": made, "record": rec}, open(sys.argv[4], "w"))
+                """, Oracle.qemuIOS.appendingPathComponent("contrib/guest-package").path, b.path, itpack.path, out.path], cwd: dir)
+            let pyOut = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as! NSDictionary
+            #expect(written == pyOut["written"] as? [String])
+            #expect(NSDictionary(dictionary: record.object) == pyOut["record"] as? NSDictionary)
+            #expect(record.family == "n72-ios2" && record.hooks == ["/" + N72Board.openGLES])
+            let file = { (m: URL, s: String) in try Data(contentsOf: m.appendingPathComponent(N72Board.openGLES + s)) }
+            let hooked = try file(a, ""), pyHooked = try file(b, ""), baked = try file(a, ".baked"), stockBytes = try Data(contentsOf: stock)
+            #expect(hooked == pyHooked && hooked != stockBytes && baked == stockBytes)
+            let modes = try [a, b].map { try SystemEdits.permissions($0.appendingPathComponent(N72Board.openGLES + ".baked")) }
+            #expect(modes[0] == modes[1])
+            #expect(try N72Board.exportedSymbols(hooked) == names)   // the front end exports the firmware's own names
+        }
+    }
 }

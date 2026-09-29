@@ -281,8 +281,10 @@
     "note": "itpack has no package for this build (GuestPackage.compose: nil)"
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
+    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214029, safari lit=452073, home lit=214029",
+    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
    },
    "persist": {
     "ok": true,
@@ -1440,8 +1442,10 @@
     "note": "itpack has no package for this build (GuestPackage.compose: nil)"
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
+    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214095, safari lit=452084, home lit=214095",
+    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
    },
    "persist": {
     "ok": true,
@@ -1543,8 +1547,10 @@
     "note": "itpack has no package for this build (GuestPackage.compose: nil)"
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
+    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214110, safari lit=452100, home lit=214038",
+    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
    },
    "persist": {
     "ok": true,
@@ -1690,14 +1696,14 @@
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
    ],
-   "error": "internal: The file \u201c038-1031-007-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
+   "error": "internal: The file “038-1031-007-ramdisk.dmg” couldn’t be opened because there is no such file.",
    "last_step": "Creating the data-protection keybag",
    "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8H7/firmwarekit.log"
   },
   "first_failure": {
    "check": "prepare",
-   "why": "internal: The file \u201c038-1031-007-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file \u201c038-1031-007-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "why": "internal: The file “038-1031-007-ramdisk.dmg” couldn’t be opened because there is no such file.",
+   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file “038-1031-007-ramdisk.dmg” couldn’t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
   },
   "triage": "(no keys) as 8G4."
  },
@@ -1732,14 +1738,14 @@
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
    ],
-   "error": "internal: The file \u201c038-1437-004-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
+   "error": "internal: The file “038-1437-004-ramdisk.dmg” couldn’t be opened because there is no such file.",
    "last_step": "Creating the data-protection keybag",
    "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8J3/firmwarekit.log"
   },
   "first_failure": {
    "check": "prepare",
-   "why": "internal: The file \u201c038-1437-004-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file \u201c038-1437-004-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "why": "internal: The file “038-1437-004-ramdisk.dmg” couldn’t be opened because there is no such file.",
+   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file “038-1437-004-ramdisk.dmg” couldn’t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
   },
   "triage": "(no keys) as 8G4."
  },
@@ -1774,14 +1780,14 @@
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
    ],
-   "error": "internal: The file \u201c038-2175-001-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
+   "error": "internal: The file “038-2175-001-ramdisk.dmg” couldn’t be opened because there is no such file.",
    "last_step": "Creating the data-protection keybag",
    "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8K2/firmwarekit.log"
   },
   "first_failure": {
    "check": "prepare",
-   "why": "internal: The file \u201c038-2175-001-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file \u201c038-2175-001-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "why": "internal: The file “038-2175-001-ramdisk.dmg” couldn’t be opened because there is no such file.",
+   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file “038-2175-001-ramdisk.dmg” couldn’t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
   },
   "triage": "(no keys) as 8G4."
  },
@@ -1816,14 +1822,14 @@
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
    ],
-   "error": "internal: The file \u201c038-2268-002-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
+   "error": "internal: The file “038-2268-002-ramdisk.dmg” couldn’t be opened because there is no such file.",
    "last_step": "Creating the data-protection keybag",
    "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8L1/firmwarekit.log"
   },
   "first_failure": {
    "check": "prepare",
-   "why": "internal: The file \u201c038-2268-002-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file \u201c038-2268-002-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "why": "internal: The file “038-2268-002-ramdisk.dmg” couldn’t be opened because there is no such file.",
+   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file “038-2268-002-ramdisk.dmg” couldn’t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
   },
   "triage": "(no keys) as 8G4."
  },
