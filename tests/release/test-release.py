@@ -196,7 +196,7 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'missing from the export manifest: ' + Path(name).name):
                 release.validate_guest(self.args, self.guest)
         self.put(self.guest.parent / 'manifest.json', json.dumps(dict(manifest, guest_package={'serial': 6})))
-        with self.assertRaisesRegex(ValueError, 'serial 6 predates 7'):
+        with self.assertRaisesRegex(ValueError, f'serial 6 predates {release.GUEST_PACKAGE_MIN_SERIAL}'):
             release.validate_guest(self.args, self.guest)
 
     def test_guest_directory_must_match_manifest(self):
