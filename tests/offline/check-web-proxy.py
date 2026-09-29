@@ -309,6 +309,8 @@ def main():
                 assert all(b'429' in status(x) for x in pool.map(lambda _: request(b'GET http://example.invalid/other HTTP/1.0\r\n\r\n'), range(8)))
             assert sum(Origin.counts.values()) == count, 'the cooldown covers every connection'
             assert request(b'GET http://example.invalid/page HTTP/1.0\r\n\r\n').endswith(b'ARCHIVED ORIGINAL PAGE'), 'cached pages survive the cooldown'
+            r = request(b'POST /clls/wloc HTTP/1.1\r\nContent-Length: %d\r\n\r\n' % len(LOCATION) + LOCATION)
+            assert status(r) == b'HTTP/1.0 200 OK', 'location answers in archive mode too'
             config.write_text('archive\ninvalid\n')
             assert b'503' in status(request(b'GET http://example.invalid/ HTTP/1.0\r\n\r\n'))
             config.unlink()

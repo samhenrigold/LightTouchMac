@@ -32,6 +32,8 @@ def main():
     ap.add_argument("--httpget", type=Path, help="contrib/it-proxy/httpget built for armv6 (the guest-side fetch proof)")
     ap.add_argument("--ipad-itpack", type=Path, help="--board ipad: the armv7.itpack whose offer brings it_agent up (as the app boots an iPad)")
     ap.add_argument("--url", default="https://example.com/")
+    ap.add_argument("--page", action="append", help="--board ipad: another Safari page after the trust, 'URL' or "
+                    "'archive:yyyyMMdd URL' (page-N.png; looked at, not scored)")
     ap.add_argument("--helper")
     ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(sources.qemu_build() / "libqemu-arm.dylib")))
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
@@ -55,7 +57,8 @@ def main():
            "ipodNAND": str(args.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(args.base if args.board == "ipad" else ""), "timeout": 900,
            "proxy": {"board": args.board, "base": str(args.base or ""), "itpack": str(args.itpack),
-                     "httpget": str(args.httpget) if args.httpget else None, "url": args.url}}
+                     "httpget": str(args.httpget) if args.httpget else None, "url": args.url,
+                     "pages": args.page or []}}
     if args.frameworks:
         cfg["frameworks"] = args.frameworks
     if args.ipad_itpack:
