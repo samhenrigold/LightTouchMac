@@ -1404,11 +1404,11 @@
   "version": "4.3.1",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T00:49:25+00:00",
+  "when": "2026-09-29T02:36:44+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-acb86d65823cd73b2/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-matrix43/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix43-guest/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1417,7 +1417,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 12.1,
+   "seconds": 343.3,
    "ok": false,
    "steps": [
     "Verifying the IPSW",
@@ -1425,22 +1425,23 @@
     "Writing the identity and boot chain",
     "Building the system and data volumes",
     "Writing the NAND",
-    "Creating the data-protection keybag"
+    "Creating the data-protection keybag",
+    "Sealing the NAND"
    ],
    "warnings": [
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
    ],
-   "error": "internal: The file \u201c038-0894-005-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
-   "last_step": "Creating the data-protection keybag",
+   "error": "oneshot_failed: seal boot: no clean halt after 300 s",
+   "last_step": "Sealing the NAND",
    "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8G4/firmwarekit.log"
   },
   "first_failure": {
    "check": "prepare",
-   "why": "internal: The file \u201c038-0894-005-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file \u201c038-0894-005-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "why": "oneshot_failed: seal boot: no clean halt after 300 s",
+   "excerpt": "one-shot: timed out after 300 s (exit 0)\nfirmwarekit: oneshot_failed: seal boot: no clean halt after 300 s"
   },
-  "triage": "(no keys) 4.3.1: The Apple Wiki has no Restore/Update ramdisk keys, so the data-protection keybag step has no ramdisk to boot (the decryptor skips keyless components with a warning). Would then hit 8F190's IOP panic. Needs the ramdisk keys from another public source or the keybag built another way."
+  "triage": "(b -> pipeline) 4.3.1: no public ramdisk keys (the wiki's Keys page has no RestoreRamdisk/UpdateRamdisk rows; checked through the MediaWiki API 2026-09-28). Run with --keybag-ramdisk = 8F190's decrypted Update ramdisk (038-0707-006): the 4.3.1 kernel boots that sibling ramdisk as md0, it_keybag formats effaceable and writes the system keybag, the one-shot halts cleanly (18 s). The seal boot then reaches FTL_Open, disk0s1, SpringBoard and stops in the same 4.3 IOP shutdown watchdog as 8F190 (class H, iop-v3 instrument). Proposal: catalog recipe.keybag_ramdisk_from = 'k48ap-8F190' (the app fetches the sibling IPSW, decrypts its ramdisk with that entry's key); the same works for 8H7/8J3/8K2/8L1 (8L1 verified by hand: NAND signature epoch 2 from its kernel, boot_args 3, keybag ok, SpringBoard; ~/Developer/qemu-ios-files/ipad1/repro/matrix-8L1). Evidence: matrix-results/k48ap-8G4/{keybag-1.log,seal.log,firmwarekit.log}."
  },
  "k48ap-8H7": {
   "version": "4.3.2",

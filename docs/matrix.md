@@ -61,7 +61,12 @@ Notes:
 - iPod2,1 3.0–3.1.3 were the paid "iPod touch Software Update" series: no Apple CDN URL ever existed; the catalog
   points at the third-party mirror (status note says so). 7E18 keeps `user_ipsw` (the bundled image's build).
 - iPod2,1 4.2 (8C134) was the 4.2 GM Apple pulled a week before 4.2.1; it is not in the catalog.
-- iPad1,1 4.3.1–4.3.5: the wiki has no ramdisk keys; the k48 recipe's data-protection keybag step needs the Update ramdisk.
+- iPad1,1 4.3.1–4.3.5: the wiki has no ramdisk keys (checked again 2026-09-28 through the MediaWiki API: the
+  RestoreRamdisk/UpdateRamdisk rows do not exist on the `Keys:` pages); the k48 recipe's data-protection keybag step
+  needs a restore ramdisk. `firmwarekit create --keybag-ramdisk` boots a sibling build's decrypted ramdisk instead
+  (8F190's, keys known; only it_keybag runs on it, under this build's kernel): 8G4 and 8L1 both get their keybag that
+  way (matrix-results.md). Catalog proposal: `recipe.keybag_ramdisk_from: "k48ap-8F190"` so the app resolves the
+  sibling entry's IPSW and key itself.
 - iPod2,1 2.2 / 2.2.1: the wiki has no iBSS/iBEC keys; neither recipe needs those two components.
 - iPod2,1 4.0 (8A293) and iPad1,1 5.0 (9A334): no Update-ramdisk key on the wiki.
 - iPod1,1: only the root filesystem is encrypted on 1.x; listed for the record, no board is emulated.
