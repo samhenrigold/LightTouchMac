@@ -70,7 +70,8 @@ The same state has the same words on every surface (sidebar accessory, placehold
 | booting | Starting iOS… |
 | boot toast | Starting iOS… over the stage and the session’s counter, “Loading iOS · 42 s”, with a Device Logs button throughout. Stages (`BootStage`, from serial lines, the guest tools and USB, never a timer): Powering on, Loading iOS, Starting the system, Connecting over USB, Waiting for the Home screen |
 | readiness wait | Starting iOS… then Waiting for the Home screen… (`preparationStatus`) |
-| running | Running — Guest tools: *state* |
+| running | Running (the window subtitle shows the foreground app instead when there is one) |
+| running, guest tools need attention (out of date, reverted, not responding) | Running — Guest tools: *state* |
 | running, no USB | Running — USB unavailable |
 | sleeping | Sleeping |
 | restarting SpringBoard | Restarting the Home screen… |

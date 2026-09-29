@@ -270,6 +270,15 @@ nonisolated enum GuestPackage {
         /// lockdown hasn't answered yet.
         case notBooted
 
+        /// Worth a word in the status line: the user can act on it (restart, or notice the tools have stopped).
+        /// Up to date, built in, legacy, waiting and unknown are the quiet default.
+        var needsAttention: Bool {
+            switch self {
+            case .outOfDate, .reverted, .notResponding: true
+            default: false
+            }
+        }
+
         var text: String {
             switch self {
             case .unknown: "Unknown"

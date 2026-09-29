@@ -150,6 +150,9 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   check(S.current(serial: 3).text == "Up to date" && S.builtIn(serial: 1).text == "Built in")
   check(S.reverted(serial: 1, why: .revertedBad).text == "Using an earlier version — the update didn’t work")
   check(S.reverted(serial: 1, why: .revertedTries).text.hasSuffix("kept failing") && S.reverted(serial: 1, why: .refused).text.hasSuffix("was refused"))
+  // The status line names the guest tools only when they need attention ("Running" otherwise).
+  check(S.outOfDate.needsAttention && S.notResponding.needsAttention && S.reverted(serial: 1, why: .revertedBad).needsAttention)
+  check(![S.current(serial: 3), .builtIn(serial: 1), .legacy, .unknown, .notBooted, .recovery].contains { $0.needsAttention })
   check(S.unknown.text == "Unknown" && S.notResponding.text == "Not responding" && S.recovery.text == "Unavailable in recovery mode" && S.notBooted.text == "Waiting for iOS")
   // Verdicts.
   typealias V = GuestPackage.Verdict

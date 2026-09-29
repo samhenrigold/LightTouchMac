@@ -779,7 +779,8 @@ final class EmulatorController {
             if restartingSpringBoard { return "Restarting the Home screen…" }
             if let readinessFailure { return "Startup failed — \(readinessFailure)" }
             guard canManageApps else { return "Running — USB unavailable" }
-            return "Running — " + guestToolsLine
+            // Quiet when all is well; the guest tools only when they need attention.
+            return guestToolsState.needsAttention ? "Running — " + guestToolsLine : "Running"
         case .paused:     return "Paused"
         case .dead:       return "Stopped"
         }
