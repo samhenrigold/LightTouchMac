@@ -20,7 +20,7 @@ Apps uses concise selection-based Open, Uninstall, Install, and Choose Version c
 | File | Files-window transfers, refresh, close | Close ⌘W |
 | Edit | Native editing, Find, device text selection and paste | Find ⌘F; Search Apps ⌥⌘F; Paste Text to iPod/iPad ⌃⌘V |
 | View | Zoom, inspector, finger dots, hidden files, toolbar | Physical Size ⌘0; Fit ⌘9; Zoom ⌘+/−; Inspector ⌥⌘I; Toolbar ⌥⌘T |
-| Device | Physical input, orientation, network, device state | Home ⇧⌘H; Lock ⌘L; Rotate ⌘[/]; Volume ⌥⌘↑/↓ |
+| Device | Physical input, orientation, network, device state | Home ⇧⌘H; Lock ⌘L; Rotate ⌘←/→; Volume ⌥⌘↑/↓ |
 | Apps | Install/import and actions on the selected app | Install ⇧⌘I |
 | Capture | Take, copy, record, and choose output | Save ⌘S; Save As ⇧⌘S; Open ⌘O; Record ⌘R; Discard ⌘. |
 | Window | Open and manage app windows | Device ⌘1; Files ⌘2; Minimize ⌘M |

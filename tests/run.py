@@ -12,7 +12,7 @@
                                                         -audio driver=none: check-helper-boot, check-sessions
                                                         (--ipad-device, then --guest), check-guest-package,
                                                         check-activation-gate, check-boot-deadline, check-files-native,
-                                                        check-media-native
+                                                        check-media-native, check-proxy-trust
 
 --only matches a substring of the check's name (repeatable). Offline and release run -j at a time (default 4)
 through one shared Swift module cache: the runner puts a swiftc/xcrun shim on PATH that rewrites every
@@ -46,6 +46,10 @@ import sources  # noqa: E402  the pinned checkouts (build-support/sources.json)
 
 # Failing on today's code, each for a known reason. Delete the line when the check is fixed.
 XFAIL = {
+    'sessions/check-proxy-trust.py --board --itwebproxy --itpack --httpget --dylib':
+        "the shipping 3.1.3 image: ittrust add returns 0 through the agent but the guest's TLS client still answers -1200 "
+        "after the trust (the iPad 3.2.2 loads HTTPS through the same path); to bisect against qemu-ios "
+        "tests/ipod/test_webproxy_tls_guest.py, which passed on 7E18 over SSH",
 }
 
 TIMEOUT = 1800
@@ -179,6 +183,15 @@ def session_checks():
         if want(f'sessions/{check}', sources.qemu_build() / 'qemu-system-arm', 'qemu-system-arm (QEMU_BUILD_DIR)') \
                 and want(f'sessions/{check}', files / 'nand-current', 'shipping image'):
             checks.append([S / check])
+    # The web proxy's CA trusted through the guest agent on the shipping image: the host proxy and the armv6
+    # package from the checkout, httpget (contrib/it-proxy/build.sh) for the guest-side fetch proof.
+    trust = 'sessions/check-proxy-trust.py'
+    if dylib.exists() and want(trust, files / 'nand-current', 'shipping image') \
+            and want(trust, qemu_ios / 'contrib/it-webproxy/itwebproxy', 'itwebproxy (contrib/it-webproxy/build.sh)') \
+            and want(trust, itpack, 'armv6 package (LTM_ITPACK)') \
+            and want(trust, qemu_ios / 'contrib/it-proxy/httpget', 'httpget (contrib/it-proxy/build.sh)'):
+        checks.append([S / 'check-proxy-trust.py', '--board', 'ipod', '--itwebproxy', qemu_ios / 'contrib/it-webproxy/itwebproxy',
+                       '--itpack', itpack, '--httpget', qemu_ios / 'contrib/it-proxy/httpget', '--dylib', dylib])
     return checks, skips
 
 

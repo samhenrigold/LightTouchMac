@@ -25,6 +25,8 @@ struct Config: Decodable {
     var activation: ActivationConfig?
     /// A base that never starts iOS (deadline.swift).
     var deadline: DeadlineConfig?
+    /// The web proxy's certificate trusted through the guest agent, no profile screen (proxy.swift).
+    var proxy: ProxyConfig?
     var frameworks: String?
     /// The driver's own deadline in seconds (default 560; tests/matrix.py's second boot needs more).
     var timeout: Double?
@@ -51,7 +53,9 @@ func fail(_ why: String) -> Never {
 nonisolated enum Bundled {
     static var frameworksDirectory: String? { config.frameworks ?? "/opt/homebrew/lib" }
     static var logsDirectory: URL { URL(fileURLWithPath: config.work) }
+    static var stateDirectory: URL { URL(fileURLWithPath: config.work) }
 }
+extension DeviceInstance { var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) } }
 struct InstalledApp: Sendable { let id, name, version: String }
 struct MediaVideo: Sendable { let id: String; let video: URL }
 struct MediaSong: Sendable { let id: String; let audio: URL; static let extensions: Set<String> = ["m4a"] }
@@ -117,6 +121,8 @@ extension String {
     /// An iPod's own files (a device.py device); nil: the shipping image in `files`.
     struct IPodFiles { var nand, nor, iBoot: String; var gidBlobs: String?; var machine: [String: String] = [:] }
     var ipod: IPodFiles?
+    /// EmulatorController.proxyForward's guestfwd, appended to the wifi netdev (proxy.swift).
+    var netdevExtra: String?
     init(name: String, profile: DeviceProfile) { self.name = name; self.profile = profile }
     var dir: URL { work.appendingPathComponent(name) }
 
@@ -143,7 +149,8 @@ extension String {
                                            writableNOR: files.writableNOR?.path, gidBlobs: gidBlobs, usbAddress: mux.guestAddress, wifi: true,
                                            guestPackage: try iPadOffer(base: base),
                                            machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
-                                     serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: nil, restore: [])
+                                     serial: serial!.argument, audio: ["-audio", "driver=none"],
+                                     netdev: netdevExtra.map { "user,id=wifi0" + $0 }, restore: [])
         } else {
             let files = ipod ?? IPodFiles(nand: Self.ipodNAND, nor: Self.files + "/ios3/nor_7E18.bin", iBoot: Self.files + "/ios3/iBoot.bin")
             let nor = try DeviceStateStorage.writableNOR(base: URL(fileURLWithPath: files.nor), overlay: overlay)
@@ -152,7 +159,8 @@ extension String {
                                            nand: files.nand, nor: files.nor, writableNOR: nor.path,
                                            overlay: overlay.path, usbAddress: mux.guestAddress, wifi: true,
                                            gidBlobs: files.gidBlobs, guestPackage: guestPackage, machineOptions: files.machine),
-                                     serial: serial!.argument, audio: ["-audio", "driver=none"], netdev: "user,id=wifi0", restore: [])
+                                     serial: serial!.argument, audio: ["-audio", "driver=none"],
+                                     netdev: "user,id=wifi0" + (netdevExtra ?? ""), restore: [])
         }
         let process = DeviceProcess(instance: UUID(), profile: profile, log: dir.appendingPathComponent("native.log"),
                                     lease: dir.appendingPathComponent("work/lease"), helper: URL(fileURLWithPath: Self.helper), requirement: Self.requirement)
@@ -436,7 +444,8 @@ func checkPreparedFiles() throws {
 Task { @MainActor in
     if let guest = config.guest { await runGuest(guest) } else if let single = config.single { await runSingle(single) }
     else if let activation = config.activation { await runActivation(activation) }
-    else if let deadline = config.deadline { await runDeadline(deadline) } else { await run() }
+    else if let deadline = config.deadline { await runDeadline(deadline) }
+    else if let proxy = config.proxy { await runProxy(proxy) } else { await run() }
 }
 DispatchQueue.main.asyncAfter(deadline: .now() + (config.timeout ?? 560)) { fail("driver timed out") }
 CFRunLoopRun()
