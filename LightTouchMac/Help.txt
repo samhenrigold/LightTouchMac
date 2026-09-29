@@ -1,54 +1,56 @@
 Light Touch Help
 
-Using the device
-Click and drag on the screen as you would with a finger. Pinch on a trackpad, or Option-drag on the screen, to use two fingers. Home Screen is ⇧⌘H; Lock is ⌘L. Device → Power Off shuts down the iPod and leaves Light Touch open. Choose Power On to start it again.
+In menu names below, [Device] stands for the selected device’s name, such as iPod or iPad.
 
-Rotate left with ⌘[ or right with ⌘]. Device → Orientation also contains Rotate Automatically. View contains Physical Size, Zoom to Fit, and zoom controls. Physical Size uses the current display’s reported measurements. It is unavailable when measurements are missing; moving to an unsupported display returns to Zoom to Fit.
+Using the device
+Click and drag on the screen as you would with a finger. Pinch on a trackpad, or Option-drag on the screen, to use two fingers. Home Screen is ⇧⌘H; Lock is ⌘L. Device → Power Off shuts down the device and leaves Light Touch open. Choose Power On to start it again.
+
+Rotate left with ⌘← or right with ⌘→. Device → Orientation also contains Rotate Automatically. View contains Physical Size, Zoom to Fit, and zoom controls. Physical Size uses the current display’s reported measurements. It is unavailable when measurements are missing; moving to an unsupported display returns to Zoom to Fit.
 
 Controls and windows
 The toolbar provides Home Screen, Lock, Rotate, Zoom, and capture actions. Rotate switches between portrait and landscape; hold Option to turn the other way. View → Customize Toolbar lets you rearrange controls or add Files, Motion, and Capture Options.
 
-Window → Show Device (⌘1) brings the iPod forward and focuses its screen. Window → Show iPod Files (⌘2) opens the separate Files window. ⌘W closes the front window; ⌘M minimizes it. Use ⌘` to cycle through open windows. ⌘Q quits Light Touch.
+Window → Show Device (⌘1) brings the device forward and focuses its screen. Window → Show [Device] Files (⌘2) opens the separate Files window. ⌘W closes the front window; ⌘M minimizes it. Use ⌘` to cycle through open windows. ⌘Q quits Light Touch.
 
 Keyboard access
-Turn off Device → Input → Send Keyboard Input, then choose Window → Show Device. Arrow keys move a visible pointer. Hold Space to touch and use arrows to drag; release Space to lift the finger. Shift-arrow also drags until you release the arrow keys or Shift. The pointer stops interacting when the device sleeps or loses focus. Turn keyboard input back on to type into guest apps. Mac Command and Control shortcuts, including VoiceOver, stay with macOS.
+Turn off Device → Input → Send Keyboard Input, then choose Window → Show Device. Arrow keys move a visible pointer. Hold Space to touch and use arrows to drag; release Space to lift the finger. Shift-arrow also drags until you release the arrow keys or Shift. The pointer stops interacting when the device sleeps or loses focus. Turn keyboard input back on to type into apps on the device. Mac Command and Control shortcuts, including VoiceOver, stay with macOS.
 
 Motion
-Drag the frame side to side to steer tilt games, or up/down to tip the iPod forward/back. Two-finger scrolling outside the screen does the same and follows Natural Scrolling. Rotate with two fingers outside the screen (or hold Option anywhere) for another way to control roll. Releasing a gesture returns it to rest. Device → Orientation contains Upright, Flat, and Reset Tilt. Device → Input contains Shake, volume, and keyboard options.
+Drag the frame side to side to steer tilt games, or up/down to tip the device forward/back. Two-finger scrolling outside the screen does the same and follows Natural Scrolling. Rotate with two fingers outside the screen (or hold Option anywhere) for another way to control roll. Releasing a gesture returns it to rest. Device → Orientation contains Upright, Flat, and Reset Tilt. Device → Input contains Shake, volume, and keyboard options.
 
 Apps and media
 Apps → Install App (⇧⌘I) chooses a decrypted, compatible IPA. You can also drag apps onto the device or find apps in the Store. Edit → Search Apps (⌥⌘F) focuses the inspector search field; Find (⌘F) also searches apps when the device window is active. In Help and Device Logs, Find searches the displayed text. Apps → Refresh Apps refreshes the list.
 
 Select an app for Open, Uninstall, and other actions in Apps or its context menu. Commands that need the device are disabled while it is unavailable. Imports, installations, and removals share the inspector’s queue. A removal requested during an installation starts when the device is free.
 
-Apps → Import Media accepts MP3, M4A, AAC and WAV audio, JPEG, PNG and HEIC photos, and MP4, M4V and QuickTime videos. You can also drop files onto the iPod. The Apps inspector opens to show their progress, including while they wait for another transfer. Songs appear in Music, photos in Saved Photos, and movies in Videos. Light Touch converts raw AAC and videos for the iPod before upload. You can cancel while files are being prepared or copied. If an import fails, its row stays visible with Retry.
+Apps → Import Media accepts MP3, M4A, AAC and WAV audio, JPEG, PNG and HEIC photos, and MP4, M4V and QuickTime videos. You can also drop files onto the device. The Apps inspector opens to show their progress, including while they wait for another transfer. Songs appear in Music, photos in Saved Photos, and movies in Videos. Light Touch converts raw AAC and videos for the device before upload. You can cancel while files are being prepared or copied. If an import fails, its row stays visible with Retry.
 
 Capturing
-Capture → Save Screenshot (⌘S) saves immediately. Save Screenshot As (⇧⌘S) lets you choose a location. Copy Screenshot copies it to the Clipboard; ⌘C does the same when the iPod screen has focus and no text is selected. Open Screenshot (⌘O) opens a new capture in Preview or your chosen app.
+Capture → Save Screenshot (⌘S) saves immediately. Save Screenshot As (⇧⌘S) lets you choose a location. Copy Screenshot copies it to the Clipboard; ⌘C does the same when the device screen has focus and no text is selected. Open Screenshot (⌘O) opens a new capture in Preview or your chosen app.
 
-Captures include the iPod, its motion, and the gradient. Turn on Capture → Capture Screen Only to capture just the guest pixels. This choice is remembered. The window title bar, inspector, and capture controls stay out of captures. View → Show/Hide Finger Dots controls touch indicators on the device and in captures.
+Captures include the device, its motion, and the gradient. Turn on Capture → Capture Screen Only to capture just the screen. The window title bar, inspector, and capture controls stay out of captures. View → Show/Hide Finger Dots controls touch indicators on the device and in captures.
 
 Recordings include device audio. Start/Stop Recording is ⌘R. The toolbar shows elapsed time while recording and progress while saving. Discard Recording (⌘.) offers Discard, Stop and Save, or Cancel. If saving fails, choose another location; cancelling keeps the recording for later. On launch, Light Touch recovers playable unfinished recordings. Help → Show Unfinished Recordings opens retained files. Hiding or minimizing the app stops recording.
 
-Captures save directly to the Desktop by default. Capture → Capture Options changes the save folder, screenshot app, automatic copying, Finder reveal, and sounds. You can also choose a Space shortcut, recording reminders, and recovery notifications. Space goes to the iPod unless you choose a capture action. Drag a saved capture’s thumbnail into another app or Finder. Click its arrow to reveal the file. Moving that file to Trash dismisses its notification.
+Captures save directly to the Desktop by default. Capture → Capture Options changes the save folder, screenshot app, automatic copying, Finder reveal, and sounds. You can also choose a Space shortcut, recording reminders, and recovery notifications. Space goes to the device unless you choose a capture action. Drag a saved capture’s thumbnail into another app or Finder. Click its arrow to reveal the file. Moving that file to Trash dismisses its notification.
 
-Edit → Select Text on Screen uses Live Text to select text on the device screen. Use the ordinary Copy command (⌘C) for selected text. Done Selecting Text or Escape returns to the device. Paste Text to iPod (⌃⌘V) sends Clipboard text to the guest; ordinary Paste (⌘V) remains available to Mac text fields.
+Edit → Select Text on Screen uses Live Text to select text on the device screen. Use the ordinary Copy command (⌘C) for selected text. Done Selecting Text or Escape returns to the device. Paste Text to [Device] (⌃⌘V) sends Clipboard text to the device; ordinary Paste (⌘V) remains available to Mac text fields.
 
 Device files
-Window → Show iPod Files opens the device’s Media folder. File → Copy to iPod copies a file into the selected folder; Save to Mac saves a selected file. The Files window’s buttons perform the same actions. File also has Refresh Files and Cancel Transfer. Closing the window keeps an active transfer running; reopen it from Window (⌘2). View → Show/Hide Hidden Files is also available from the browser’s options menu.
+Window → Show [Device] Files opens the device’s Media folder. File → Copy to [Device] copies a file into the selected folder; Save to Mac saves a selected file. The Files window’s buttons perform the same actions. File also has Refresh Files and Cancel Transfer. Closing the window keeps an active transfer running; reopen it from Window (⌘2). View → Show/Hide Hidden Files is also available from the browser’s options menu.
 
 Browsing the web
-On first launch, choose Connect or Use Offline before the iPod starts. macOS may ask for Local Network access after you choose Connect. Device → Network → Connect to the Internet changes this choice for the next app launch. Offline mode still allows app installation and screen capture.
+On first launch, choose Connect or Use Offline before the device starts. macOS may ask for Local Network access after you choose Connect. Device → Network → Connect to the Internet changes this choice for the next app launch. Offline mode still allows app installation and screen capture.
 
-Device → Network → Proxy selects no proxy, the built-in HTTP proxy, or a dated Internet Archive replay. Nothing separate needs installing. Archived pages depend on available captures and archive rate limits. A modern site’s scripts or layout may still exceed this old version of Safari.
+Device → Network → Proxy selects no proxy, the built-in HTTP proxy, or a dated Internet Archive replay. Archived pages depend on available captures and archive rate limits. A modern site’s scripts or layout may still exceed this old version of Safari.
 
 With the HTTP proxy enabled, Weather uses Open-Meteo forecasts and city search (https://open-meteo.com/, CC BY 4.0). The free service is for noncommercial use. If an old saved city no longer updates, remove it and add it again. The moon icon shows an approximate phase.
 
 Device state and diagnostics
-Device → Pause freezes the emulator; Resume continues it.
+Device → Pause freezes the device; Resume continues it.
 
 During startup, progress stays visible until the Home screen service responds. If startup exceeds 90 seconds, use its Device Logs button to inspect the boot. A status message above the device explains preparation, saved-state, erase, or shutdown failures. Successful retries clear the matching message. Storage-write failures keep the message visible until you free disk space and reopen Light Touch.
 
 Help → Device Logs shows app events, available device console output, and USB logs, including retained previous files. Updates pause while text is selected or Pause updates is checked. Use Find to search the displayed tail. Help → Export Diagnostics collects the complete retained logs for a bug report.
 
-Prefer normal Power Off or Quit so the guest can finish writing its filesystem. Restart and Erase All Content and Settings require confirmation. Erase removes installed apps, media, and settings, then quits Light Touch. It is not a routine repair step.
+Use Power Off or Quit when you can, so the device finishes saving. Restart and Erase All Content and Settings ask first. Erase removes installed apps, media, and settings.

@@ -97,7 +97,7 @@ def guest_checks(find, check, events):
         media = one("media", d)
         check(media.get("imported") and media.get("receipt", "").startswith("done\n"), f"{d}: photo imported (itphoto, receipt {media.get('receipt')!r})")
         for n, halt in enumerate(find("halted", device=d) or [{}]):
-            check(halt.get("submitted") and halt.get("confirmed", -1) >= 0 and halt.get("exited") and halt.get("reason") in ("The iPod stopped.", "The iPad stopped."),
+            check(halt.get("submitted") and halt.get("confirmed", -1) >= 0 and halt.get("exited") and str(halt.get("reason")).endswith(" stopped."),
                   f"{d}: clean halt {n + 1}, power-off confirmed in {halt.get('confirmed', -1):.1f} s, helper exited")
     ship = one("verdict", "shipping", label="boot")
     check(ship.get("serial") == -1 and ship.get("verdict") == "legacy", f"shipping: no report, legacy baked tools ({ship.get('verdict')})")
@@ -252,7 +252,7 @@ def main():
         inst = (find("installed", device=d) or [{}])[0]
         check(inst.get("has"), f"{d}: IPA installed ({inst.get('seconds', 0):.0f} s, attempt {inst.get('attempt')})")
         q = (find("quit", device=d) or [{}])[0]
-        check(q.get("confirmed", -1) >= 0 and q.get("exited") and q.get("reason") in ("The iPod stopped.", "The iPad stopped."),
+        check(q.get("confirmed", -1) >= 0 and q.get("exited") and str(q.get("reason")).endswith(" stopped."),
               f"{d}: clean shutdown, power-off confirmed in {q.get('confirmed', -1):.1f} s, helper exited")
         check(tree(base_dir) == base_before, f"{d}: the prepared base is unchanged")
         check(find("done") and driver.returncode == 0, f"driver finished (exit {driver.returncode})")
