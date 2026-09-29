@@ -70,7 +70,7 @@ struct ProxyConfig: Decodable {
     }
 
     /// The guest's own HTTPS client through the proxy: "HTTP 200" once the CA is trusted, a certificate
-    /// error (-1202) before. Wi-Fi associates a while after lockdown answers: "offline" (-1009) is retried.
+    /// error (-1200 on iOS 3/4) before. Wi-Fi associates a while after lockdown answers: "offline" (-1009) is retried.
     func fetch(_ label: String, url: String? = nil) async {
         guard let httpget = p.httpget, let bytes = try? Data(contentsOf: URL(fileURLWithPath: httpget)) else { return }
         let url = url ?? p.url

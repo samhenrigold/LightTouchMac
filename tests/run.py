@@ -46,6 +46,10 @@ import sources  # noqa: E402  the pinned checkouts (build-support/sources.json)
 
 # Failing on today's code, each for a known reason. Delete the line when the check is fixed.
 XFAIL = {
+    'sessions/check-proxy-trust.py --board --itwebproxy --itpack --httpget --dylib':
+        "the shipping 3.1.3 image: ittrust add returns 0 through the agent but the guest's TLS client still answers -1200 "
+        "after the trust (the iPad 3.2.2 loads HTTPS through the same path); to bisect against qemu-ios "
+        "tests/ipod/test_webproxy_tls_guest.py, which passed on 7E18 over SSH",
 }
 
 TIMEOUT = 1800

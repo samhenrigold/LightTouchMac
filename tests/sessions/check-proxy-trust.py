@@ -108,7 +108,8 @@ def main():
         http = one("httpget", label="http")
         check(http.get("ok"), f"{b}: plain HTTP through the proxy (the guest's Wi-Fi is up): {http.get('output', '')[:60]!r}")
         before = one("httpget", label="untrusted")
-        check(before and not before.get("ok") and ("-1202" in before.get("output", "") or "certificate" in before.get("output", "").lower()),
+        # iOS 3/4 CFNetwork reports the untrusted chain as -1200 "secure connection failed" (-1202 on later releases).
+        check(before and not before.get("ok") and any(code in before.get("output", "") for code in ("-1200", "-1202")),
               f"{b}: HTTPS through the proxy refused before the trust (untrusted certificate): {before.get('output', '')[:90]!r}")
     trust = one("trust", generation=1)
     check(trust.get("ok"), f"{b}: certificate trusted through the agent in {trust.get('seconds', -1):.1f} s"
