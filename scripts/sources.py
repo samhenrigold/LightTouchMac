@@ -9,7 +9,7 @@
 
 From Python: sys.path.insert(0, '<repo>/scripts'); import sources; sources.path('qemu-ios'), sources.qemu_build(),
 sources.commit('usbmuxd'), sources.status(). Configuration/Shared.xcconfig cannot run this: it repeats the qemu-ios
-path and build_dir literally, and scripts/test-release.py checks that it agrees with the pin.
+path and build_dir literally, and tests/release/test-release.py checks that it agrees with the pin.
 """
 import json
 import os
