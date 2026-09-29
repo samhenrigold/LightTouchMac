@@ -20,9 +20,12 @@ import Foundation
 
 final class N45Board: Board {
     static let models = ["8g": "MA623"]
-    /// changes.md: every other job is removed (the rest wait on hardware this machine does not have).
+    /// changes.md: every other job is removed (the rest wait on hardware this machine does not have). Plus ptpd
+    /// (usbptpd): USBDeviceConfiguration's iPod1,1 configurations all carry PTP, and IOIpodUSBDevice starts no USB
+    /// stack ("can't start! Need functions") until every function has registered, so without it there is no usbmux.
     static let keptDaemons: Set = ["com.apple.AddressBook.plist", "com.apple.CommCenter.plist", "com.apple.configd.plist",
-                                   "com.apple.mobile.lockdown.plist", "com.apple.notifyd.plist", "com.apple.SpringBoard.plist"]
+                                   "com.apple.mobile.lockdown.plist", "com.apple.notifyd.plist", "com.apple.SpringBoard.plist",
+                                   "com.apple.usbptpd.plist"]
     static let rootLibrary = "private/var/root/Library"
     static let openGLESExports = "opengles-1x.exports"
 

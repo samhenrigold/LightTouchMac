@@ -4068,11 +4068,11 @@
   "version": "1.1",
   "board": "n45ap",
   "status": "untested",
-  "when": "2026-09-29T17:10:41+00:00",
+  "when": "2026-09-29T20:31:34+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipod1g-app/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
   },
   "keys": {
    "total": 1,
@@ -4081,7 +4081,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 120.3,
+   "seconds": 93.1,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4094,7 +4094,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n45ap-3A101a/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/matrix-scratch/n45ap-3A101a/firmwarekit.log",
    "lock": {
     "boot_strategy": null,
     "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
@@ -4107,7 +4107,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 11.9
+    "seconds": 8.3
    },
    "lockdown": {
     "ok": false,
@@ -4130,56 +4130,55 @@
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": true,
-    "note": "regress gles: one front-end hello, CA pixmap surfaces, 2 contexts, no refusals",
-    "source": "qemu-ios aec1594bf7 tests/ipod/regress.py --device <this branch's firmwarekit create> --checks boot,gles (legacy-gate, 09-29)"
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 11.3,
+     "lit": 8.5,
      "lockdown": null
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
+    "ok": true,
+    "seconds": 15.1,
     "reason": "The iPod stopped.",
-    "second": null
+    "second": 15.1
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-3A101a/driver.jsonl",
+  "events": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/driver.jsonl",
   "first_failure": {
    "check": "lockdown",
    "why": "iPod-Touch-1G has no USB link (smoke.md #43)",
-   "excerpt": "Dec 30 15:45:10 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: [mbxshim] GLESCreateGC\nDec 30 15:45:10 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: [gles] egl: first pixmap surface 320x480: CoreAnimation renders through the host\nDec 30 15:45:11 SpringBoard[10]: Apple80211GetIfListCopy failed, error: -4"
+   "excerpt": "Oct 17 16:46:33 launchd[1]: 16/com.apple.configd: Standard Out/Error: 16:46:33.301 server shutdown complete (750901593.300323)\nOct 17 16:46:33 launchd[1]: 16/com.apple.CommCenter: Standard Out/Error: QUIT received.  Setting flag to shut down.\nOct 17 16:46:33 launchd[1]: 16/com.apple.CommCenter: Standard Out/Error: Communications Center shutdown."
   },
-  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): First 1G row through the app's own path: DeviceProfile.iPodTouch1G / BootRecipe.iPod1G (bootrom_s5l8900 from the device assets, the base's iBoot.bin, nand-overlay, the private NOR as pflash) under the helper and the app's dylib. Prepare 120 s from the stock IPSW; lit 12 s; home screen on boot 1; the legacy-linked loader reports package serial 7; boot 2 after the app's Stop (flush + hard halt) lit in 11 s and showed its lock screen: no smoke #12 storage panic on this store. Activation is Sam's automatic path: lockdownd logs 'Setting the activation state to Activated' on boot 1 and 'Using the cached activation state' on boot 2 (serial). Lockdown/AFC/install fail and Shut Down does nothing because the 1G machine has no USB link, device-info row, app-driven buttons or powerdown gesture (smoke #43). Under QMP (build/qemu-system-arm, same base) Hold → slide to power off → 'pmu go stdby', QEMU exit 0, 6.7 s after the swipe, on both boots (the first hold worked: smoke #21 did not recur); boot 2 used the cached activation. Stays untested: the USB columns cannot pass until #43."
+  "triage": "ipod-1g-app 09-29 (qemu-ios ipod-1g-app, dylib from it; FirmwareKit keeps usbptpd; usbmuxd 33728ae): the app's Shut Down now reaches the 1G: .machine(.powerdown) -> the machine's hold-and-slide gesture -> 'pmu go stdby', confirmed 15.1 s on both boots; persist is boot 2 lit 8.5 s after that clean power-off (package serial 8 r0). The app still runs the 1G without a USB link (DeviceProfile.hasUSBLink false, BootRecipe.iPod1G passes no usb-tcp-addr), so lockdown/Activation/AFC are not attempted; the emulator side is wired (usb-tcp-addr: usbmuxd enumerates 05ac:1291 with the UDID serial, mux v1.0, lockdown answers and pairs) and with an SSLv3 client the session gives iPod1,1 / 1.1 / Activated and AFC lists and round-trips 70000 bytes. The app's libimobiledevice (OpenSSL 3, no SSLv3) cannot open 1.x lockdownd's SSLv3 session (smoke #51). Boot 2's home screenshot shows the status bar without icons 5 s after the unlock (#32 family?)."
  },
  "n45ap-4B1": {
   "version": "1.1.5",
   "board": "n45ap",
   "status": "untested",
-  "when": "2026-09-29T17:17:51+00:00",
+  "when": "2026-09-29T20:37:44+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipod1g-app/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
   },
   "keys": {
    "total": 1,
@@ -4188,7 +4187,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 90.1,
+   "seconds": 100.0,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4201,7 +4200,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n45ap-4B1/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/matrix-scratch/n45ap-4B1/firmwarekit.log",
    "lock": {
     "boot_strategy": null,
     "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
@@ -4213,13 +4212,14 @@
   },
   "checks": {
    "lit": {
-    "ok": false,
-    "seconds": null
+    "ok": true,
+    "seconds": 1.6
    },
    "lockdown": {
     "ok": false,
     "seconds": null,
-    "productType": null
+    "productType": null,
+    "error": "iPod-Touch-1G has no USB link (smoke.md #43)"
    },
    "activation": {
     "ok": false,
@@ -4236,40 +4236,45 @@
    },
    "package": {
     "ok": false,
-    "offered": 7,
-    "reported": null,
-    "result": null
+    "offered": 8,
+    "reported": -1,
+    "result": -99
    },
    "gl": {
     "ok": null,
     "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
-    "ok": false,
+    "ok": true,
     "error": null,
     "second_boot": {
-     "lit": null,
+     "lit": 1.5,
      "lockdown": null
     }
    },
    "shutdown": {
     "ok": false,
     "seconds": null,
-    "reason": null,
+    "reason": "The iPod stopped.",
     "second": null
    },
-   "base_unchanged": false,
-   "driver_exit": 1,
-   "driver_fail": "ipod1g never lit"
+   "base_unchanged": true,
+   "driver_exit": 0
   },
-  "screenshots": {},
-  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n45ap-4B1/driver.jsonl",
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-4B1/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-4B1/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-4B1/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-4B1/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-4B1/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-4B1/driver.jsonl",
   "first_failure": {
-   "check": "lit",
-   "why": "ipod1g never lit",
+   "check": "lockdown",
+   "why": "iPod-Touch-1G has no USB link (smoke.md #43)",
    "excerpt": ""
   },
-  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): Prepares (90 s) but never lights: iBoot-204.3.16 panics in miu_init ('Epoch Mismatch': wants POWER_ID epoch 3, the 1G machine synthesises 2 for every build). With the compare patched in a scratch copy iBoot reaches its recovery screen (images of epoch 3 rejected against 2). Emulator side, smoke #44."
+  "triage": "ipod-1g-app 09-29: #44 fixed on the emulator side (the SYSIC epoch is read off the staged iBoot: 3 here, 2 for 3A101a-3B48b, pinned by test_iboot_literals.py for all six 1.x iBoots), so miu_init passes. iBoot-204.3.16 then stops in its NAND driver (FIL C003): '[WMR:ERR] read only version (1, 0)', 'no signature or no production format', 'NAND failed initialisation', 'root filesystem mount failed', and enters recovery mode; the 'lit' here is the recovery (iTunes) screen and the USB device iBoot's recovery interface 05ac:1280. N45NAND writes the C002-era format 3A101a's WMR wants (smoke #49). Serial is silent unless the NOR nvram has debug-uarts."
  },
  "k48ap-9B206": {
   "version": "5.1.1",
