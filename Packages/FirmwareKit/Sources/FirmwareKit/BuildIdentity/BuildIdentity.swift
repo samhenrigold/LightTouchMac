@@ -118,11 +118,14 @@ public struct RestoreInfo: Sendable, Equatable {
         guard let p = try PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any],
               let type = p["ProductType"] as? String, let build = p["ProductBuildVersion"] as? String,
               let version = p["ProductVersion"] as? String,
-              let map = (p["DeviceMap"] as? [[String: Any]])?.first,
+              let maps = p["DeviceMap"] as? [[String: Any]],
+              // 1.x lists the platform's DFU-only "s5l8900xall" first; the device's own board follows
+              let map = maps.first(where: { !($0["BoardConfig"] as? String ?? "").hasSuffix("xall") }) ?? maps.first,
               let board = map["BoardConfig"] as? String else {
             throw FirmwareError(.unsupported, "Restore.plist lacks ProductType/ProductBuildVersion/DeviceMap")
         }
         kernelCache = ((p["KernelCachesByPlatform"] as? [String: Any])?[map["Platform"] as? String ?? ""] as? [String: Any])?["Release"] as? String
+            ?? (p["RestoreKernelCaches"] as? [String: Any])?["Release"] as? String   // 1.x
         systemImage = (p["SystemRestoreImages"] as? [String: Any])?["User"] as? String
         restoreRamDisk = (p["RestoreRamDisks"] as? [String: Any])?["User"] as? String
         updateRamDisk = (p["RestoreRamDisks"] as? [String: Any])?["Update"] as? String
@@ -147,7 +150,8 @@ public enum BuildComponents {
         if names.contains("BuildManifest.plist") {
             return try fromBuildManifest(ipsw.read("BuildManifest.plist"))
         }
-        let comp = try fromRestore(RestoreInfo(ipsw))
+        let r = try RestoreInfo(ipsw), af = "Firmware/all_flash/all_flash.\(r.boardConfig).production/"
+        let comp = try fromRestore(r, img2: names.contains(af + "iBoot.\(r.boardConfig).RELEASE.img2"))
         let missing = comp.values.filter { !names.contains($0) }.sorted()
         guard missing.isEmpty else {
             throw FirmwareError(.unsupported, "no BuildManifest.plist, and Restore.plist-derived paths are missing: \(missing)")
@@ -169,16 +173,18 @@ public enum BuildComponents {
         return comp
     }
 
-    /// 2.x: Restore.plist names the kernelcache, rootfs and ramdisks; the rest follow the board's names.
-    public static func fromRestore(_ r: RestoreInfo) throws -> [String: String] {
+    /// 1.x/2.x: Restore.plist names the kernelcache, rootfs and ramdisks; the rest follow the board's names
+    /// (1.x: `.img2` all_flash members, and the logo carries no platform).
+    public static func fromRestore(_ r: RestoreInfo, img2: Bool = false) throws -> [String: String] {
         let board = r.boardConfig, plat = r.platform
         let af = "Firmware/all_flash/all_flash.\(board).production/"
         guard let kc = r.kernelCache, let os = r.systemImage, let user = r.restoreRamDisk, let update = r.updateRamDisk else {
             throw FirmwareError(.unsupported, "no BuildManifest.plist, and Restore.plist lacks the 2.x component keys")
         }
+        let x = img2 ? "img2" : "img3"
         return ["iBSS": "Firmware/dfu/iBSS.\(board).RELEASE.dfu", "iBEC": "Firmware/dfu/iBEC.\(board).RELEASE.dfu",
-                "iBoot": af + "iBoot.\(board).RELEASE.img3", "LLB": af + "LLB.\(board).RELEASE.img3",
-                "DeviceTree": af + "DeviceTree.\(board).img3", "AppleLogo": af + "applelogo.\(plat).img3",
+                "iBoot": af + "iBoot.\(board).RELEASE.\(x)", "LLB": af + "LLB.\(board).RELEASE.\(x)",
+                "DeviceTree": af + "DeviceTree.\(board).\(x)", "AppleLogo": af + (img2 ? "applelogo.img2" : "applelogo.\(plat).img3"),
                 "KernelCache": kc, "OS": os, "RestoreRamDisk": user, "UpdateRamDisk": update]
     }
 }
