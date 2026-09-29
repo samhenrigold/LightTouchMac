@@ -164,9 +164,25 @@ public enum SystemEdits {
                 try put(Data(pac.utf8), at(pacPath))
                 rootOwned += ["usr/local", "usr/local/share", "usr/local/share/ltm", pacPath]
             }
+            // GL first: a firmware whose dispatch layout no shim fits (a new GLI table) boots the stock engine with
+            // software CoreAnimation, as the iPod recipe does, rather than refusing the build (docs/matrix.md).
+            var caOGL = o.caOGL
+            if caOGL {
+                do {
+                    let (engine, gld, overridden) = try installGL(m, helpers: helpers, gliDispatch: gliDispatch, log: log)
+                    result.engine = engine
+                    rootOwned.append(glEngine)
+                    if overridden { rootOwned.append(dyldOverride) }
+                    if gld { rootOwned += [(gldPath as NSString).deletingLastPathComponent, gldPath] }
+                } catch let e as FirmwareError where e.code == .unsupported {
+                    caOGL = false
+                    result.notes.append("Stock GL engine, software CoreAnimation: \(e.message)")
+                    log("warning: " + result.notes.last!)
+                }
+            }
             try rewritePlist(at(springBoardJob)) { d in
                 guard d["Label"] as? String == "com.apple.SpringBoard" else { throw FirmwareError(.unsupported, "\(springBoardJob): not SpringBoard's job") }
-                dict(d, "EnvironmentVariables").addEntries(from: o.caOGL ? sbEnvCAOGL : sbEnv)
+                dict(d, "EnvironmentVariables").addEntries(from: caOGL ? sbEnvCAOGL : sbEnv)
                 d["StandardOutPath"] = "/dev/console"; d["StandardErrorPath"] = "/dev/console"
             }
             if o.appsync {
@@ -176,14 +192,6 @@ public enum SystemEdits {
                 log(try AppSyncCachePatch.patchCache(at: at(dyldCache)))
                 rootOwned.append(appsyncPath)
             }
-            if o.caOGL {
-                let (engine, gld, overridden) = try installGL(m, helpers: helpers, gliDispatch: gliDispatch, log: log)
-                result.engine = engine
-                rootOwned.append(glEngine)
-                if overridden { rootOwned.append(dyldOverride) }
-                if gld { rootOwned += [(gldPath as NSString).deletingLastPathComponent, gldPath] }
-            }
-
             // bake
             for rel in retired where (try? fm.destinationOfSymbolicLink(atPath: at(rel).path)) != nil || fm.fileExists(atPath: at(rel).path) {
                 try fm.removeItem(at: at(rel))

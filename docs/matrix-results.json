@@ -206,8 +206,7 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/driver.jsonl",
-  "triage": "(b)/(c) no armv6 iOS 4 package (mkpkg n72-ios4 is a stub): guest tools are the baked legacy set, the app shows Legacy. Package work, not a matrix blocker."
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/driver.jsonl"
  },
  "n72ap-5F138": {
   "version": "2.1.1",
@@ -238,8 +237,7 @@
    "check": "prepare",
    "why": "unsupported: n72ap-5F138: no n72 recipe for storage none",
    "excerpt": "firmwarekit: unsupported: n72ap-5F138: no n72 recipe for storage none"
-  },
-  "triage": "(c) 2.x: no n72 recipe path yet (STATUS 'iPod 2.1.1 in the app'); the emulator boots 2.1.1 from a Python-built device. Estimate 1 d (C7 in docs/sweep/PLAN.md)."
+  }
  },
  "k48ap-7B500": {
   "version": "3.2.2",
@@ -658,8 +656,7 @@
    "check": "lit",
    "why": "ipod never lit",
    "excerpt": ""
-  },
-  "triage": "(c) iOS 3.0: prepare OK after the no-shared-cache appsync path (generic fix, committed), but the boot prints nothing on serial: 3.0 ships iBoot-596.24 and the direct-iboot boot-args literal hook (hw/arm/ipod_touch_2g.c, tuned to iBoot-636.66 = 7E18 and 8C148) picks the same literal (0x0ff10d4c); iBoot never starts. Evidence: matrix-results/n72ap-7A341/triage/qemu.log, empty serial.log, 452 s no-lit. Estimate 0.5-1 d emulator work: version-agnostic literal search (pattern on the restore string as for 7E18/8C148) or boot 3.0 through the NOR chain instead of direct-iboot."
+  }
  },
  "n72ap-7C145": {
   "version": "3.1.1",
@@ -1079,8 +1076,7 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/driver.jsonl",
-  "triage": "(a) fixed: a restore-only IPSW has no Update ramdisk; both recipes now take the Restore ramdisk for the keybag boot. Passes after the fix."
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/driver.jsonl"
  },
  "n72ap-8A400": {
   "version": "4.0.2",
@@ -1184,8 +1180,7 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/driver.jsonl",
-  "triage": "(b) as n72ap-8C148: stub 4.x package; everything else green (an earlier persist FAIL was two runners overlapping, fixed by the runner lock)."
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/driver.jsonl"
  },
  "n72ap-8B117": {
   "version": "4.1",
@@ -1289,8 +1284,7 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/driver.jsonl",
-  "triage": "(b) as n72ap-8C148; the second clean shutdown was not confirmed within 50 s (helper exited): watch on rerun."
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/driver.jsonl"
  },
  "n72ap-5G77a": {
   "version": "2.2",
@@ -1321,8 +1315,7 @@
    "check": "prepare",
    "why": "unsupported: n72ap-5G77a: no n72 recipe for storage none",
    "excerpt": "firmwarekit: unsupported: n72ap-5G77a: no n72 recipe for storage none"
-  },
-  "triage": "(c) same as 5F138: needs the N72 2.x recipe; keys verified 14/14 (2.x DFU stages carry no KBAG)."
+  }
  },
  "n72ap-5H11a": {
   "version": "2.2.1",
@@ -1353,7 +1346,222 @@
    "check": "prepare",
    "why": "unsupported: n72ap-5H11a: no n72 recipe for storage none",
    "excerpt": "firmwarekit: unsupported: n72ap-5H11a: no n72 recipe for storage none"
+  }
+ },
+ "k48ap-8F190": {
+  "version": "4.3",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-29T00:46:13+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
   },
-  "triage": "(c) same as 5F138."
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 5.6,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes"
+   ],
+   "warnings": [],
+   "error": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "last_step": "Building the system and data volumes",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8F190/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "excerpt": "editing the system volume\npatched _MISValidateSignature 80b500af -> 00207047 (VA 0x32af77a4 off 0x2af77a4)\nfirmwarekit: unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at s"
+  }
+ },
+ "k48ap-8G4": {
+  "version": "4.3.1",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-29T00:46:23+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 16,
+   "ok": 16,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 13.0,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes"
+   ],
+   "warnings": [],
+   "error": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "last_step": "Building the system and data volumes",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8G4/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "excerpt": "editing the system volume\npatched _MISValidateSignature 80b500af -> 00207047 (VA 0x30bb47a4 off 0xbb47a4)\nfirmwarekit: unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at s"
+  }
+ },
+ "k48ap-8H7": {
+  "version": "4.3.2",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-29T00:46:44+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 16,
+   "ok": 16,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 4.4,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes"
+   ],
+   "warnings": [],
+   "error": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "last_step": "Building the system and data volumes",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8H7/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "excerpt": "editing the system volume\npatched _MISValidateSignature 80b500af -> 00207047 (VA 0x354f07a4 off 0x54f07a4)\nfirmwarekit: unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at s"
+  }
+ },
+ "k48ap-8J3": {
+  "version": "4.3.3",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-29T00:46:53+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 16,
+   "ok": 16,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 4.4,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes"
+   ],
+   "warnings": [],
+   "error": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "last_step": "Building the system and data volumes",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8J3/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "excerpt": "editing the system volume\npatched _MISValidateSignature 80b500af -> 00207047 (VA 0x30c507a4 off 0xc507a4)\nfirmwarekit: unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at s"
+  }
+ },
+ "k48ap-8K2": {
+  "version": "4.3.4",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-29T00:47:02+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 16,
+   "ok": 16,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 5.0,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes"
+   ],
+   "warnings": [],
+   "error": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "last_step": "Building the system and data volumes",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8K2/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "excerpt": "editing the system volume\npatched _MISValidateSignature 80b500af -> 00207047 (VA 0x309a37a4 off 0x9a37a4)\nfirmwarekit: unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at s"
+  }
+ },
+ "k48ap-8L1": {
+  "version": "4.3.5",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-29T00:47:12+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 16,
+   "ok": 16,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 6.5,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes"
+   ],
+   "warnings": [],
+   "error": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "last_step": "Building the system and data volumes",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8L1/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
+   "excerpt": "editing the system volume\npatched _MISValidateSignature 80b500af -> 00207047 (VA 0x35d217a4 off 0x5d217a4)\nfirmwarekit: unsupported: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at s"
+  }
  }
 }
