@@ -39,13 +39,12 @@ public enum Preparer {
         public var seed: String?, helper: URL?, cache: URL?
         /// The flat guest-helpers directory SystemEdits reads (+ it_keybag).
         public var guestTools: URL
-        /// A decrypted restore ramdisk to boot for the keybag one-shot instead of this IPSW's own: a sibling build's
-        /// (same iOS major) when the wiki has no ramdisk keys for this one (iPad 4.3.1–4.3.5).
-        public var keybagRamdisk: URL?
+        /// The entry named by recipe.keybag_ramdisk_from and its IPSW: its restore ramdisk boots the keybag one-shot.
+        public var sibling: (entry: FirmwareEntry, ipsw: URL)?
         public init(entry: FirmwareEntry, ipsw: URL, out: URL, seed: String? = nil, helper: URL?,
-                    guestTools: URL, cache: URL? = nil, keybagRamdisk: URL? = nil) {
+                    guestTools: URL, cache: URL? = nil, sibling: (entry: FirmwareEntry, ipsw: URL)? = nil) {
             self.entry = entry; self.ipsw = ipsw; self.out = out; self.seed = seed
-            self.helper = helper; self.guestTools = guestTools; self.cache = cache; self.keybagRamdisk = keybagRamdisk
+            self.helper = helper; self.guestTools = guestTools; self.cache = cache; self.sibling = sibling
         }
     }
 
@@ -193,10 +192,13 @@ public enum Preparer {
             guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no ramdisk") }
             ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
             var rd = decFile(ramdisk!)
-            if let sibling = o.keybagRamdisk {   // no ramdisk keys for this build: a sibling build's decrypted ramdisk
-                log("keybag ramdisk: \(sibling.path) instead of \(ramdisk!)")
-                ramdisk = sibling.path
-                rd = sibling
+            if let from = recipe.keybagRamdiskFrom {   // no ramdisk keys for this build: a sibling build's ramdisk
+                guard let sib = o.sibling, sib.entry.id == from else {
+                    throw FirmwareError(.unsupported, "\(e.id): the keybag ramdisk comes from \(from); pass --sibling-entry/--sibling-ipsw for it")
+                }
+                rd = try siblingRamdisk(sib.entry, ipsw: sib.ipsw, work: work)
+                ramdisk = "\(from):\(rd.lastPathComponent)"
+                log("keybag ramdisk: \(ramdisk!) (this build has no ramdisk key)")
             }
             try keybag(store: nand, nor: norURL, ramdisk: rd, dec: dec, identity: ident, dieID: dieID,
                        helper: helper, tools: o.guestTools, work: work, emit: emit, log: log)
@@ -387,6 +389,20 @@ public enum Preparer {
         }
         guard try Data(contentsOf: nor) != norBefore else { throw FirmwareError(.oneshotFailed, "keybag boot: effaceable was not written to the NOR") }
         for u in [pre, rd, kboot] { try? fm.removeItem(at: u) }
+    }
+
+    /// The sibling entry's restore ramdisk (Update, else Restore), decrypted with that entry's key into `work`.
+    static func siblingRamdisk(_ sib: FirmwareEntry, ipsw url: URL, work: URL) throws -> URL {
+        let ipsw = IPSWArchive(url)
+        let comp = try BuildComponents.load(ipsw)
+        guard let path = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(sib.id): no ramdisk") }
+        let k = try sib.key(forPath: path)
+        guard let ivHex = k.iv, let iv = Data(hex: ivHex), let key = Data(hex: k.key) else {
+            throw FirmwareError(.keyMissing, "\(sib.id): no IV/key for \(k.file)")
+        }
+        let out = work.appendingPathComponent("sibling-" + String(path.split(separator: "/").last!.dropLast(4)) + "-ramdisk.dmg")
+        try IMG3.decrypt(try ipsw.read(path), iv: iv, key: key).write(to: out)
+        return out
     }
 
     /// ipad1_keybag.ramdisk_with_helper: a private copy of the restore ramdisk, 1 MiB larger, with `helper` as
