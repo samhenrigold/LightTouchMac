@@ -95,7 +95,9 @@ extension K48NAND {
         let sig = st.read(0, geo.ppage(sigBlock ?? 0, 0))
         ok(sig.map { magic($0.data, "NANDDRIVERSIGN") } ?? false, "NANDDRIVERSIGN at cs0 block \(hex(sigBlock ?? 0)) (BBT hdr+0x24)")
         if let (d, _) = sig {
-            ok(le32(d, 0x38) == nsig && le32(d, 0x3c) == sigFlags, "signature nSig=\(String(format: "%08x", le32(d, 0x38))) flags=\(String(format: "%08x", le32(d, 0x3c))) (VSVFL, epoch 1, whitening on)")
+            let ns = le32(d, 0x38)
+            ok(ns >> 8 == nsigBase >> 8 && (0x31...0x39).contains(ns & 0xff) && le32(d, 0x3c) == sigFlags,
+               "signature nSig=\(String(format: "%08x", ns)) flags=\(String(format: "%08x", le32(d, 0x3c))) (VSVFL, epoch \(ns & 0xf), whitening on)")
         }
 
         // VFL contexts

@@ -48,9 +48,13 @@ public struct FirmwareEntry: Codable, Sendable, Equatable {
         /// The k48 boot chain: "iboot" (SecureROM -> LLB -> iBoot -> kernel; default when absent) or "kboot"
         /// (direct-kernel, for debugging). Ignored by n72ap.
         public var boot: String?
+        /// A sibling entry (same iOS major, ramdisk keys known) whose restore ramdisk boots the data-protection
+        /// keybag one-shot when this build has no public ramdisk keys (iPad 4.3.1-4.3.5 -> k48ap-8F190). The caller
+        /// supplies that entry and its IPSW (firmwarekit create --sibling-entry/--sibling-ipsw).
+        public var keybagRamdiskFrom: String?
         enum CodingKeys: String, CodingKey {
             case name, version, storage, options, guest, boot
-            case systemMiB = "system_mib", dataSize = "data_size", gliDispatch = "gli_dispatch"
+            case systemMiB = "system_mib", dataSize = "data_size", gliDispatch = "gli_dispatch", keybagRamdiskFrom = "keybag_ramdisk_from"
         }
     }
 

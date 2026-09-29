@@ -231,8 +231,17 @@ import Cocoa
         }.reduce(0, +)
         do { try IPSWStore.checkSpace(entry.estimates.peakBytes + others, at: Bundled.stateDirectory) }
         catch { return fail(entry, error) }
+        var sibling: (entry: FirmwareCatalog.Entry, ipsw: URL)?
+        if let from = entry.recipe?.keybagRamdiskFrom {
+            // ponytail: the sibling IPSW must already be in the store; queueing its download first is the upgrade
+            guard let sib = catalog.entry(id: from), let sha1 = sib.source.sha1 else { return fail(entry, FirmwareError.failed("catalog names no \(from)")) }
+            guard let sibIPSW = store.existing(sha1) else {
+                return fail(entry, FirmwareError.failed("needs the \(sib.profile?.displayName ?? sib.productType) iOS \(sib.version) firmware downloaded first (its restore ramdisk creates this build's keybag)"))
+            }
+            sibling = (sib, sibIPSW)
+        }
         let request = PreparationJob.Request(
-            entry: entry, ipsw: ipsw, state: Bundled.stateDirectory, preparer: preparer, helper: Self.helper,
+            entry: entry, ipsw: ipsw, sibling: sibling, state: Bundled.stateDirectory, preparer: preparer, helper: Self.helper,
             cache: IPSWStore.cachesDirectory.appendingPathComponent("Decrypted", isDirectory: true),
             log: Bundled.logsDirectory.appendingPathComponent("Preparing/\(entry.id).log"))
         let job = PreparationJob(request) { event in

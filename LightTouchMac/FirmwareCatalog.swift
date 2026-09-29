@@ -44,9 +44,11 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
             var options: [String: Bool]
             var gliDispatch: String?
             var guest: Guest?
+            /// The entry whose restore ramdisk boots the keybag one-shot (no public ramdisk keys for this build).
+            var keybagRamdiskFrom: String?
             enum CodingKeys: String, CodingKey {
                 case name, version, storage, options, guest
-                case systemMiB = "system_mib", dataSize = "data_size", gliDispatch = "gli_dispatch"
+                case systemMiB = "system_mib", dataSize = "data_size", gliDispatch = "gli_dispatch", keybagRamdiskFrom = "keybag_ramdisk_from"
             }
         }
 
