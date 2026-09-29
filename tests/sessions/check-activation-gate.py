@@ -34,12 +34,12 @@ TEXT = "This iPod isn’t activated. Choose Erase All Content and Settings, then
 
 
 def offline():
-    s = (ROOT / "LightTouchMac/EmulatorController.swift").read_text()
+    s = (ROOT / "LightTouchMac/Device/EmulatorController.swift").read_text()
     a = s.index("    func reportConnectionFailure(_ error: Error, operation: String) {")
     report = s[a:s.index("    private var connectionFailures =", a)]
     a = s.index("    // MARK: - Activation (verified per boot")
-    activation = s[a:s.index("    func uninstall(_ bundleID: String)", a)]
-    instance = (ROOT / "LightTouchMac/DeviceInstance.swift").read_text()
+    activation = s[a:s.index("    func launchApp(_ bundleID: String)", a)]
+    instance = (ROOT / "LightTouchMac/Library/DeviceInstance.swift").read_text()
     a = instance.index("    static func lockLacksActivation(_ lock: URL) -> Bool {")
     lock = instance[a:instance.index("\n    }", a) + 6]
     source = r'''import Foundation
@@ -59,6 +59,7 @@ nonisolated func logEvent(_ message: String) {}
  func activationState() async -> String? { asked += 1; return answers.isEmpty ? nil : answers.removeFirst() }
  var servicesAnswer = false, probed = 0
  func installProxyReady() async -> Bool { probed += 1; return servicesAnswer }
+ var services: Controller { get throws { self } }  // EmulatorController.services: lockdown's answers
  var connectionIssue: DeviceConnectionIssue?
  var deviceReachable: Bool? {
   didSet {
@@ -144,8 +145,8 @@ enum Lock {
     with tempfile.TemporaryDirectory(prefix="ltm-activation-") as d:
         p = Path(d) / "check.swift"
         p.write_text(source)
-        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/DeviceProfile.swift"),
-                        str(ROOT / "LightTouchMac/DeviceConnectionIssue.swift"), str(ROOT / "LightTouchMac/DeviceExecution.swift"), str(p), "-o", d + "/check"], check=True)
+        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/DeviceProfile.swift"),
+                        str(ROOT / "LightTouchMac/Device/DeviceConnectionIssue.swift"), str(ROOT / "LightTouchMac/Transport/DeviceExecution.swift"), str(p), "-o", d + "/check"], check=True)
         subprocess.run([d + "/check"], check=True, timeout=60)
 
 

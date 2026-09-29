@@ -1,43 +1,17 @@
 #!/usr/bin/env python3
-"""The install queue is per device: discarding, pausing and busy checks on device A leave device B alone."""
+"""The install queue is per device: discarding, pausing and busy checks on device A leave device B alone.
+Compiles Features/AppInstaller.swift whole (with InstallationQueue, DeviceExecution and DeviceProfile) against
+tests/fixtures/app-installer*.swift and a scripted EmulatorController."""
 from pathlib import Path
 import subprocess, tempfile
 
 root = Path(__file__).resolve().parents[2]
-source = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
-
-
-def block(start, end):
-    a = source.index(start)
-    return source[a:source.index(end, a)]
-
-
-job = block('extension Notification.Name {', '/// Shared install flow')
-state = block('    static var hasPendingWork:', '    @discardableResult\n    static func start(')
-media = block('    @discardableResult\n    static func startMedia(', '    /// A Legacy Store copy:')
-finish = block('    private static func finish(', '    /// Queue when bytes are ready,')
-remove = block('    static func remove(_ apps:', '    /// Every queued mutation of one device')
-pause = block('    private static func pauseIfNeeded(', '    @MainActor\n    static func presentError(')
+app = root / 'LightTouchMac'
 code = r'''import Cocoa
-enum DeviceError: Error { case timedOut; var shouldPauseInstallQueue: Bool { true } }
-enum DeviceProfile { case iPodTouch2G }
-struct InstalledApp { let id: String }
+nonisolated func logEvent(_ message: String) {}
 struct DeviceInstance { let id = UUID() }
-@MainActor final class AppMetadataCache { static let shared = AppMetadataCache(); func forget(_ id: String) {} }
-@MainActor final class DeviceLibrary { static let shared = DeviceLibrary(); var instances: [DeviceInstance] = [] }
-@MainActor enum IPALibrary {
- static func forget(_ id: String, device: DeviceInstance) {}
- static func retained(_ id: String, by devices: [DeviceInstance]) -> Bool { false }
-}
-@MainActor struct PreparedMedia {
- let directory: URL, title: String, destination: String
- static func prepare(_ source: URL, profile: DeviceProfile) async throws -> PreparedMedia {
-  let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-queue-scope-" + UUID().uuidString)
-  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-  return PreparedMedia(directory: directory, title: source.deletingPathExtension().lastPathComponent, destination: "Photos")
- }
-}
 @MainActor final class EmulatorController {
+ var services: EmulatorController { get throws { self } }  // EmulatorController.services: the uninstall
  let profile = DeviceProfile.iPodTouch2G
  let instance = DeviceInstance()
  var deviceReachable: Bool? = true
@@ -59,9 +33,12 @@ struct DeviceInstance { let id = UUID() }
   let reply = uploads.removeValue(forKey: name)!
   if let error { reply.resume(throwing: error) } else { reply.resume() }
  }
+ // Not reached: this check queues media and removals only.
+ let iosVersion = "3.1.3", guestArch = "armv6"
+ var installPipeline: InstallPipeline { get throws { InstallPipeline() } }
+ func install(_ ipa: URL, placeholderRaised: Bool, progress: @escaping @Sendable (String) -> Void) async throws -> String { "" }
 }
-''' + job + '\n@MainActor enum AppInstaller {\n' + state + media + finish + remove + pause + r'''
- static func presentError(_ error: Error, in window: NSWindow?) {}
+extension AppInstaller {
  static func occupy(_ device: UUID) async throws { try await queue(for: device).acquire() }
  static func release(_ device: UUID) { queue(for: device).release() }
 }
@@ -75,6 +52,7 @@ struct DeviceInstance { let id = UUID() }
     try await Task.sleep(for: .milliseconds(5))
    }
   }
+  AppInstaller.presentError = { _, _ in }
   let changes = Changes()
   let observer = NotificationCenter.default.addObserver(forName: .ltmAppsChanged, object: nil, queue: nil) { note in
    let device = note.object as? UUID
@@ -113,7 +91,7 @@ struct DeviceInstance { let id = UUID() }
   try await until { a.imported == ["Lost A"] }
   let waitA = add("Wait A", to: a), waitB = add("Wait B", to: b)
   try await until { waitA.status == "Waiting for other transfers…" && b.imported == ["On B", "Wait B"] }
-  a.finish("Lost A", error: DeviceError.timedOut)
+  a.finish("Lost A", error: DeviceError.timedOut(operation: "upload"))
   try await until { lostA.isFinished }
   precondition(lostA.failed && AppInstaller.isPaused(a.instance.id) && !AppInstaller.isPaused(b.instance.id))
   precondition(waitA.status == "Paused" && waitB.status == "Copying media…" && a.failures == 1 && b.failures == 0)
@@ -145,6 +123,9 @@ with tempfile.TemporaryDirectory(prefix='ltm-queue-scope-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '6', '-default-isolation', 'MainActor',
-                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/InstallationQueue.swift'),
+                    '-module-cache-path', str(work / 'modules'), *[str(app / f) for f in [
+                        'Features/AppInstaller.swift', 'Features/InstallationQueue.swift', 'Transport/DeviceExecution.swift',
+                        'Device/DeviceProfile.swift']],
+                    str(root / 'tests/fixtures/app-installer.swift'), str(root / 'tests/fixtures/app-installer-library.swift'),
                     str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=25)

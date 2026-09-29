@@ -13,7 +13,7 @@ struct ProxyConfig: Decodable {
     /// A firmwarekit base; empty for an iPod: the shipping image (config.ipodNAND).
     var base: String
     var itwebproxy: String
-    /// The app's armv6.itpack: ittrust for a guest whose package lacks it (DeviceTools.bundledGuestTool).
+    /// The app's armv6.itpack: ittrust for a guest whose package lacks it (WebProxySetup.bundledGuestTool).
     var itpack: String
     /// contrib/it-proxy/httpget, built for armv6; optional.
     var httpget: String?

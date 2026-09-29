@@ -4,7 +4,7 @@
 The test-only HTTP adapter stands in for the helper's DeviceLink: it carries the
 app's own agent wire (GuestAgent, typed ops or a v1 agent's exec) to the QMP agent
 of an isolated CLI guest. Production MediaSong, DeviceServices, IMobileDevice,
-GuestServices and the DeviceTools media methods are compiled unchanged. No user
+GuestServices and MediaImport are compiled unchanged. No user
 app is launched.
 """
 import argparse
@@ -21,7 +21,7 @@ import threading
 import time
 import unicodedata
 from types import SimpleNamespace
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 
 parser = argparse.ArgumentParser(description=__doc__)
 mode = parser.add_mutually_exclusive_group()
@@ -49,8 +49,6 @@ cfg = SimpleNamespace(out=str(out),files=files,base_nand=files+'/nand-current',
     usbmuxd=str(sources.path('usbmuxd')/'src/usbmuxd'),usbmuxd_ok=True,
     usb_port=r.free_port(1520,1539),mux_port=r.free_port(27400,27419),
     qmp_port=r.free_port(28200,28219),wifi=False,cpu=None,mem='128M',kernel_console=True)
-text = (APP/'LightTouchMac/DeviceTools.swift').read_text()
-methods = text[text.index('    // MARK: - Music import'):text.index('    // MARK: - Install')]
 swift = r"""
 import Foundation
 nonisolated func logEvent(_ message: String) { NSLog("%@", message) }
@@ -82,16 +80,6 @@ final class DeviceLink: Sendable {
         return .agent(String(decoding: data, as: UTF8.self))
     }
 }
-struct DeviceTools: Sendable {
-    let clientSocket: String
-    var agent: DeviceLink? = DeviceLink()
-    var agentCache = GuestAgentCache()
-    var packaged = false
-    private var services: DeviceServices { DeviceServices(clientSocket: clientSocket) }
-    var guestAgent: GuestAgent { GuestAgent(link: agent, cache: agentCache) }
-    private var guest: GuestServices { GuestServices(agent: guestAgent, packaged: packaged) }
-""" + methods + r"""
-}
 final class Progress: @unchecked Sendable {
     private let lock = NSLock()
     private var last = 0.0
@@ -121,12 +109,13 @@ final class Progress: @unchecked Sendable {
         let prepared = URL(fileURLWithPath:CommandLine.arguments[6]).deletingLastPathComponent()
             .appendingPathComponent("prepared." + file.pathExtension)
         try FileManager.default.copyItem(at:file,to:prepared)
-        let device = DeviceTools(clientSocket:CommandLine.arguments[3])
+        let device = MediaImport(services: DeviceServices(clientSocket: CommandLine.arguments[3]),
+                                 guest: GuestServices(agent: GuestAgent(link: DeviceLink(), cache: GuestAgentCache())))
         let progress = Progress()
-        try await device.stageMedia(media) { progress.update($0) }
+        try await device.stage(media) { progress.update($0) }
         precondition(progress.complete())
-        try await device.commitMedia(media)
-        try await device.commitMedia(media) // Reconcile an uncertain reply.
+        try await device.commit(media)
+        try await device.commit(media) // Reconcile an uncertain reply.
         let repeated = try await prepare()
         defer { try? FileManager.default.removeItem(at: repeated.directory) }
         let secondID: String
@@ -136,8 +125,8 @@ final class Progress: @unchecked Sendable {
         case .video(let video): secondID = video.id
         }
         precondition(secondID == id)
-        try await device.stageMedia(repeated) { _ in }
-        try await device.commitMedia(repeated)
+        try await device.stage(repeated) { _ in }
+        try await device.commit(repeated)
         if case .song = media {
         // A mismatched candidate must never truncate the already imported file.
         let badDirectory = media.directory.appendingPathComponent("mismatch")
@@ -151,9 +140,9 @@ final class Progress: @unchecked Sendable {
         case .photo(let photo): bad = .photo(MediaPhoto(id: photo.id, directory: badDirectory, image: badFile, title: photo.title))
         case .video(let video): bad = .video(MediaVideo(id: video.id, directory: badDirectory, video: badFile, metadata: video.metadata, title: video.title))
         }
-        do { try await device.stageMedia(bad) { _ in }; fatalError("overwrote an existing media file") }
+        do { try await device.stage(bad) { _ in }; fatalError("overwrote an existing media file") }
         catch {}
-        try await device.stageMedia(media) { _ in } // Original bytes still match.
+        try await device.stage(media) { _ in } // Original bytes still match.
         }
         // A late startup sweep sees both abandoned and current-session uploads.
         let services = DeviceServices(clientSocket: CommandLine.arguments[3])
@@ -163,7 +152,7 @@ final class Progress: @unchecked Sendable {
         let directory = "/var/mobile/Media/LightTouch/" + id
         let orphan = directory + "/image.jpg.upload-" + UUID().uuidString
         let keep = directory + "/image.jpg.upload-not-a-valid-id"
-        let agent = device.guestAgent
+        let agent = device.guest.agent
         for (path, text) in [("/var/mobile/Media/PublicStaging/old-test.ipa", "old"), (orphan, "old"), (keep, "keep")] {
             try await agent.put(path, mode: 0o644, Data(text.utf8))
         }
@@ -187,10 +176,10 @@ driver.write_text(swift)
 executable = out/'driver'
 subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
     '-module-cache-path',str(out/'modules'),
-    str(APP/'LightTouchMac/MediaIdentity.swift'),str(APP/'LightTouchMac/MediaSong.swift'),str(APP/'LightTouchMac/DeviceServices.swift'),str(APP/'LightTouchMac/DeviceExecution.swift'),
-    str(APP/'LightTouchMac/IMobileDevice.swift'),str(APP/'LightTouchMac/MediaPhoto.swift'),
-    str(APP/'LightTouchMac/MediaVideo.swift'),str(APP/'LightTouchMac/PreparedMedia.swift'),
-    str(APP/'LightTouchMac/GuestServices.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
+    str(APP/'LightTouchMac/Features/MediaIdentity.swift'),str(APP/'LightTouchMac/Features/MediaSong.swift'),str(APP/'LightTouchMac/Services/DeviceServices.swift'),str(APP/'LightTouchMac/Services/AFC.swift'),str(APP/'LightTouchMac/Transport/DeviceExecution.swift'),
+    str(APP/'LightTouchMac/Transport/IMobileDevice.swift'),str(APP/'LightTouchMac/Features/MediaPhoto.swift'),
+    str(APP/'LightTouchMac/Features/MediaVideo.swift'),str(APP/'LightTouchMac/Features/PreparedMedia.swift'),
+    str(APP/'LightTouchMac/Guest/GuestServices.swift'),str(APP/'LightTouchMac/Features/MediaImport.swift'),str(APP/'LightTouchMac/Guest/GuestAgent.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
 if args.photo:
     from PIL import Image,ImageDraw
     source = out/"Photo 'quoted' $title — été.png"
@@ -213,7 +202,7 @@ else:
 if args.recording:
     recorder = out/'recorder'
     subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
-        str(APP/'LightTouchMac/ScreenMovieWriter.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(APP/'tests/fixtures/guest-audio-pump.swift'),str(APP/'tests/fixtures/recording-native.swift'),
+        str(APP/'LightTouchMac/Features/ScreenMovieWriter.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(APP/'tests/fixtures/guest-audio-pump.swift'),str(APP/'tests/fixtures/recording-native.swift'),
         '-o',str(recorder)],check=True)
     class Embedded(r.Procs):
         def spawn(self,argv,logpath,env=None):

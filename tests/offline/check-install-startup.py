@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
-"""Bound installation setup without abandoning a started guest mutation."""
+"""Bound installation setup without abandoning a started guest mutation. Compiles Services/InstallationProxy.swift
+and Transport/DeviceExecution.swift whole against a fake libimobiledevice, with two pause points patched in
+(after openBeforeDeadline stores the connection for the deadline's loser, and after it is handed to the install) so the races
+run deterministically; no production deadline, cancellation or cleanup is replaced."""
 from pathlib import Path
 import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-source = (root / "LightTouchMac/DeviceServices.swift").read_text()
-install = source[source.index("    // MARK: - Install (instproxy_install"):source.index("    /// lockdownd's ActivationState:")]
-support = (root / "LightTouchMac/DeviceExecution.swift").read_text()
-# Pause at the two ownership boundaries to deterministically exercise races,
-# without replacing any production deadline, cancellation or cleanup behavior.
-install = install.replace("let connection = try await Self.installConnection(socket: socket)",
-                          "let connection = try await Self.installConnection(socket: socket)\n                await Fixture.shared.afterConnection()")
-install = install.replace("pending.store(try openInstallConnection(socket: socket))",
-                          "pending.store(try openInstallConnection(socket: socket))\n                Fixture.shared.afterStore()")
+app = root / "LightTouchMac"
+
+
+def patched(text, old, new):
+    assert text.count(old) == 1, old
+    return text.replace(old, new)
+
+
+install = patched((app / "Services/InstallationProxy.swift").read_text(),
+                  "let connection = try await Self.installConnection(socket: socket)",
+                  "let connection = try await Self.installConnection(socket: socket)\n                await Fixture.shared.afterConnection()")
+# openBeforeDeadline is the install connection's only user in this build.
+execution = patched((app / "Transport/DeviceExecution.swift").read_text(),
+                    "if let opened = try open() { late.store(opened) }",
+                    "if let opened = try open() { late.store(opened); Fixture.shared.afterStore() }")
 fixture = r'''
 import Foundation
 import Dispatch
@@ -114,6 +123,21 @@ nonisolated enum IMobileDevice {
         output.pointee = strdup(status == OpaquePointer(bitPattern: 2) ? "Complete" : "Installing")
     }
     static let instproxy_status_get_percent_complete: StatusPercent? = { _, output in output.pointee = 50 }
+    // The list and uninstall halves of the file, not exercised here.
+    static let instproxy_uninstall: Install? = nil
+    typealias Browse = @convention(c) (OpaquePointer?, OpaquePointer?, UnsafeMutablePointer<OpaquePointer?>) -> Int32
+    typealias PlistFree = @convention(c) (OpaquePointer?) -> Void
+    static let instproxy_browse: Browse? = nil
+    static let plist_free: PlistFree? = nil
+    static func encode(_ value: Any) -> OpaquePointer? { nil }
+    static func decode(_ node: OpaquePointer) -> Any? { nil }
+}
+struct DeviceServices: Sendable {
+    let clientSocket: String
+    func run<T: Sendable>(_ seconds: Double, _ label: String,
+                          _ body: @escaping @Sendable (IMobileDevice.Type, OpaquePointer) throws -> T) async throws -> T {
+        fatalError("not exercised")
+    }
 }
 '''
 main = r'''
@@ -125,7 +149,7 @@ main = r'''
     }
     @MainActor static func launch() -> Task<Void, Error> {
         Task {
-            try await Services(clientSocket: "127.0.0.1:1").install(stagedPath: "PublicStaging/test.ipa") { _, _ in
+            try await DeviceServices(clientSocket: "127.0.0.1:1").install(stagedPath: "PublicStaging/test.ipa") { _, _ in
                 Fixture.shared.lock.withLock { Fixture.shared.progress += 1 }
             }
         }
@@ -229,9 +253,12 @@ main = r'''
 with tempfile.TemporaryDirectory(prefix="ltm-install-startup-") as directory:
     path = Path(directory)
     swift = path / "check.swift"
-    swift.write_text(fixture + "\nstruct Services: Sendable { let clientSocket: String\n" + install + "\n}\n" + support + main)
+    swift.write_text(fixture + main)
+    (path / "InstallationProxy.swift").write_text(install)
+    (path / "DeviceExecution.swift").write_text(execution)
     binary = path / "check"
     subprocess.run(["xcrun", "swiftc", "-parse-as-library", "-swift-version", "6",
                     "-default-isolation", "MainActor", "-module-cache-path", str(path / "modules"),
+                    str(path / "InstallationProxy.swift"), str(path / "DeviceExecution.swift"),
                     str(swift), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=15)

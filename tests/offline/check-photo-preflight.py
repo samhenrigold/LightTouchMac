@@ -47,7 +47,7 @@ enum DeviceToolsError: Error { case failed(String) }
 """
     (work/'check.swift').write_text(swift)
     subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
-        '-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/MediaPhoto.swift'),str(root/'LightTouchMac/MediaIdentity.swift'),
+        '-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/Features/MediaPhoto.swift'),str(root/'LightTouchMac/Features/MediaIdentity.swift'),
         str(work/'check.swift'),'-o',str(work/'check')],check=True)
     subprocess.run([str(work/'check'),str(work)],check=True)
     with Image.open(work/'rotated.jpg.prepared.jpg') as image:

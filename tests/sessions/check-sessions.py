@@ -2,7 +2,7 @@
 """Two devices at once, each in its own LightTouchDevice, through the app's session code.
 
 tests/drivers/session-driver stands in for the app. It compiles the app's own DeviceProcess and
-BootRecipe (the "Helper process" section of DeviceSession.swift), DeviceServices,
+BootRecipe, DeviceServices,
 IMobileDevice and the one app-wide DeviceGate, NativeLogging's log and serial captures,
 DeviceStateStorage.writableNOR, and W1's DeviceLink, and runs:
 
@@ -60,10 +60,10 @@ HOME = Path.home()
 sys.path.insert(0, str(ROOT / "scripts"))
 import sources  # the pinned checkouts (build-support/sources.json)
 TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
-APP_SOURCES = ["DeviceServices", "DeviceExecution", "BootRecipe", "DeviceFiles", "IMobileDevice", "DeviceProfile", "DeviceProfile+Display",
-               "NativeLogging", "StorageLocations", "DeviceStateStorage", "GuestServices", "GuestPackage",
-               "DeviceInstance", "FirmwareCatalog", "MediaPhoto", "MediaIdentity", "DeviceConnectionIssue",
-               "WebProxyConfiguration"]
+APP_SOURCES = ["Services/DeviceServices", "Device/DeviceProcess", "Transport/DeviceExecution", "Device/BootRecipe", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
+               "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestAgent", "Guest/GuestPackage",
+               "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
+               "Device/WebProxyConfiguration"]
 
 
 def tree(root):
@@ -117,14 +117,11 @@ def guest_checks(find, check, events):
 
 
 def build(args, out):
-    source = (ROOT / "LightTouchMac/DeviceSession.swift").read_text()
-    section = source[source.index("// MARK: - Helper process"):source.index("// MARK: - Sessions")]
-    (out / "DeviceProcess.swift").write_text("import Foundation\nimport IOSurface\n" + section)
     subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)
     subprocess.run(["xcrun", "swiftc", "-swift-version", "5", "-default-isolation", "MainActor", "-module-cache-path", out / "modules",
                     "-I", ROOT / "Shared/CLink", out / "ltm_link.o", *sorted((ROOT / "Shared").glob("*.swift")),
                     ROOT / "LightTouchDevice/FrameTools.swift", *[ROOT / f"LightTouchMac/{n}.swift" for n in APP_SOURCES],
-                    out / "DeviceProcess.swift", ROOT / "tests/drivers/session-driver/main.swift", ROOT / "tests/drivers/session-driver/guest.swift",
+                    ROOT / "tests/drivers/session-driver/main.swift", ROOT / "tests/drivers/session-driver/guest.swift",
                     ROOT / "tests/drivers/session-driver/single.swift", ROOT / "tests/drivers/session-driver/activation.swift",
                     ROOT / "tests/drivers/session-driver/deadline.swift", ROOT / "tests/drivers/session-driver/proxy.swift",
                     "-o", out / "session-driver"],
@@ -188,7 +185,7 @@ def main():
         cfg["ipadItpack"] = str(args.ipad_itpack)
     if args.guest:
         tz = work / "lockdown-tz"
-        # The app's Debug build compiles the same source (DeviceTools.developmentHelper).
+        # The app's Debug build compiles the same source (LockdownTools: DeviceServices.developmentHelper).
         r = subprocess.run(["/bin/sh", "-c", 'PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; cc -O2 -o "$1" "$2" '
                             '$(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)', "sh", str(tz),
                             str(ROOT / "scripts/lockdown-tz.c")])
@@ -310,8 +307,11 @@ def main():
               f"iPad agent through GuestServices: foreground {ag.get('home')!r}, locked {ag.get('locked')}, "
               f"launch -> {ag.get('launched')!r}")
     killed = (find("killed") or [{}])[0]
-    check(killed.get("noticed") and killed.get("seconds", 9) < 1 and "signal 9" in killed.get("reason", ""),
-          f"kill -9 iPad: noticed in {killed.get('seconds', -1) * 1000:.0f} ms: {killed.get('reason')}")
+    # The user sees "stopped unexpectedly"; the signal goes to the log (DeviceSession.terminated, ee84c89).
+    signaled = any(f"helper {killed.get('pid')}: signaled(9)" in e.get("message", "") for e in find("log"))
+    check(killed.get("noticed") and killed.get("seconds", 9) < 1 and signaled
+          and "stopped unexpectedly" in killed.get("reason", ""),
+          f"kill -9 iPad: noticed in {killed.get('seconds', -1) * 1000:.0f} ms, signaled(9) logged: {killed.get('reason')}")
     surv = (find("survivor") or [{}])[0]
     check(not surv.get("dead", True) and surv.get("heartbeat", 0) > 20 and surv.get("frames", 0) > 0 and surv.get("productType") == "iPod2,1",
           f"the iPod kept running: +{surv.get('heartbeat')} heartbeats, +{surv.get('frames')} frames, USB {surv.get('productType')}")

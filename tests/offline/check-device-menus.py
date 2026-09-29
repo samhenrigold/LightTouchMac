@@ -3,17 +3,18 @@
 from pathlib import Path
 import re,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]/'LightTouchMac'
-menu=(root/'MainMenu.swift').read_text()
-controller=(root/'MainWindowController.swift').read_text()
+menu=(root/'App/MainMenu.swift').read_text()
+controller=(root/'UI/MainWindowController.swift').read_text()
 a=controller.index('        case #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:))')
 b=controller.index('        case #selector(configureWebProxy(_:)):',a)
 validation=controller[a:b]
 a=controller.index('    @objc func toggleDevicePause(')
 b=controller.index('    @objc func devicePause(',a)
 toggle=controller[a:b]
-a=controller.index('    private var canTakeScreenshot:')
-b=controller.index('    private let fileStatus',a)
-captureAvailability=controller[a:b].replace('private var','var')
+capture=(root/'Features/CaptureController.swift').read_text()
+a=capture.index('    var canTakeScreenshot: Bool {')
+b=capture.index('    init(preferences:',a)
+captureAvailability=capture[a:b]
 selectors=set(re.findall(r'#selector\(MainWindowController\.(\w+)\(',menu))
 selectors.update(re.findall(r'#selector\((\w+)\(',validation))
 selectors.discard('toggleDevicePause')
@@ -50,6 +51,7 @@ struct Instance { let id=UUID() }
 @MainActor final class MainWindowController:NSWindowController {
  let emulator:Emulator?=Emulator(),recording=Recording()
  var screenshotBusy=false
+ var capture:MainWindowController { self }   // CaptureController's availability, below
 '''+stubs+'\n'+toggle+'\n'+captureAvailability+r'''
  func validateMenuItem(_ menuItem:NSMenuItem)->Bool {
  guard let emulator else {return false}
@@ -188,5 +190,5 @@ struct Instance { let id=UUID() }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-menu-check-') as tmp:
     tmp=Path(tmp);(tmp/'check.swift').write_text(source)
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'MainMenu.swift'),str(root/'DeviceProfile.swift'),str(root/'RotationControlAction.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'App/MainMenu.swift'),str(root/'Device/DeviceProfile.swift'),str(root/'UI/RotationControlAction.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
     subprocess.run([str(tmp/'check')],check=True)

@@ -1,0 +1,19 @@
+# IOP second core, phase 1 (2026-09-28): ledger, iOS 5 spike, v3 instrument, the core
+
+## Final report (whole assignment)
+
+### Piece 0: ledger + iOS 5 spike (delivered earlier, merged)
+- `docs/fidelity-ledger.md` on LightTouchMac (`fidelity-ledger` → merged): K48 60 rows (R 24 / H 10 / P 6 / S 20), N72 56 rows (R 20 / H 6 / P 8 / S 22), 42 guest-side P rows (8 boot-args, 29 injected components/image edits, 5 synthesised-state), per-build assumptions, ranked make-it-faithful list, iOS 5 spike verdicts. The GPU is stated plainly as absent (SGX535/MBX: 120+ d) — the one item that keeps every guest non-stock.
+- `docs/ipad1/ios5.md` + `manifests/ipad1-9B206.json` (qemu-ios `ios5-spike` → merged as e0b2c0708e): static diff 4.2.1/4.3.5/5.0.1/5.1.1; predicted-vs-actual table. Generic fixes: boot_args.Version read off the kernel (2→3 at 4.3), mkpkg no-family seed, cache-only GLEngine, sgx=none on the iBoot NOR DT, 8C148 appsync=true. Gates: fresh-device 7B500 + 8C148 PASS.
+
+### Piece 1: `iop-v3` (merged as 9a81b9a2ae)
+EmbeddedIOP-20/33 mailbox instrument, class H: ring table at +0x10, IOP DRAM window 0xc0000000, 64-byte ring entries, FMI args +0x18. 4.3.5 kboot went from "startup ping failed" to VFL init; 4.2.1 gate PASS.
+
+### Piece 2: `iop-core` (worktree /Users/shg/Developer/qemu-ios-iop-core, tip 3d6f321444, 4 commits on ipad1 1778d22b84, not merged)
+The IOP as a real second core (QEMU arm946 + 8 cp15 overrides) running Apple's EmbeddedIOP firmware; `-machine ipad1,iop-core=on`; HLE stays default; `IPAD1_MACHINE_EXTRA=iop-core=on` for boot-smoke/fresh-device.
+- **Milestones 1-4 reached on 4.2.1**: peripheral map (static+dynamic, in the file header and my milestone messages); ping; NAND reads and writes through the register-level H2FMI driven by the firmware (per-CE latches, FIFO backpressure in firmware order, cache-program 0x11/0x81, sticky ECC results; CDMA: inline AES on device-FIFO channels, IV descriptors on write chains, room-paced pushes, completion when the FMI takes the page, IRQ re-evaluation on enable, reentrancy guard off); **gate green**: 8C148 device via iBoot, boot 1 lit 33.6 s, clean power-off 16.8 s, boot 2 lit 3.1 s, no FTL rescan — HLE off throughout.
+- **4.3.5 (matrix-8L1 device, untouched)**: firmware runs, FTL open, root mount 3 s, launchd 5.6 s, 26 context programs; then fsck_hfs SIGFPE, safe fsck MODIFIED, remount EIO, reboot → EmbeddedIOP-20 'slep' path panic "timed out waiting for workloop to process completed command" (the firmware never writes 'done' — it is the AP workloop's marker; the AP-side ring-0 completion on the reboot path is what fails, same as the matrix saw with the HLE). Ruled out per page against the HLE on the same store: meta identical on 10,258 common pages, data identical on 8,955 (two mismatches found and fixed by strict transfer ordering), write rows correct for all programs, blank verdicts only on real holes, no whitening difference. The next instrument is at the FTL/kext boundary (which lpns fsck asks for and what the FTL returns) — not reached.
+- **Not done**: 4.3 clean-shutdown gate (behind the fsck gap), 5.1.1 on the core (its FMI kext waits for ring-1 endpoint-activation messages, which the real firmware produces), SDHCI model for the SDIO task (Wi-Fi off with the core: "SDIO In Reset"), retired-HLE deletion, ledger updates. Estimate: 1-2 d fsck gap + shutdown, 1 d 5.1.1 boot, 1-2 d SDHCI.
+
+### Housekeeping
+Scratch cleaned (367 GB free); `~/Developer/qemu-ios-files/ios5-spike/` keeps IPSWs, keys, decrypted components, IOP firmware images and tools (3.8 GB); matrix-8L1 untouched; no emulator of mine running; every commit carries the Claude-Session trailer.

@@ -85,5 +85,5 @@ with tempfile.TemporaryDirectory(prefix='ltm-logs-') as tmp:
  }
 }
 """)
- subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'LightTouchMac/WindowRestorationPolicy.swift'),str(root/'LightTouchMac/LogWindowController.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+ subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'LightTouchMac/App/WindowRestorationPolicy.swift'),str(root/'LightTouchMac/UI/LogWindowController.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
  subprocess.run([str(tmp/'check'),str(tmp/'serial.log')],check=True)

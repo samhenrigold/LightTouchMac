@@ -1,36 +1,48 @@
 #!/usr/bin/env python3
-"""Real connection probes preserve errors and abandon queued reads safely."""
+"""Real connection probes preserve errors and abandon queued reads safely: Services/DeviceServices.swift
+(checkAttachment) and Transport/DeviceExecution.swift compiled whole against a fake attachment check, plus the
+inspector's read-suppression predicate (one declaration, looked up by name)."""
 from pathlib import Path
 import subprocess, tempfile
 
 root = Path(__file__).resolve().parents[2]
-execution = (root/'LightTouchMac/DeviceExecution.swift').read_text()
-controller = (root/'LightTouchMac/EmulatorController.swift').read_text()
-probe = controller[controller.index('    func deviceReady()'):controller.index('    func installedApps()')]
-inspector = (root/'LightTouchMac/AppsInspectorViewController.swift').read_text()
+app = root / 'LightTouchMac'
+inspector = (app / 'UI/AppsInspectorViewController.swift').read_text()
 suppression = next(line for line in inspector.splitlines() if 'private var readsSuppressed:' in line).replace('private ', '')
 
 source = r'''
 import Foundation
 nonisolated func logEvent(_ message: String) {}
 nonisolated enum IMobileDevice {
+ static let success: Int32 = 0, isAvailable = true
+ typealias NewDevice = @convention(c) (UnsafeMutablePointer<OpaquePointer?>, UnsafePointer<CChar>?) -> Int32
+ typealias Free = @convention(c) (OpaquePointer?) -> Int32
+ static let idevice_new: NewDevice? = nil, idevice_free: Free? = nil   // the run kernel, not exercised here
  static let lock = NSLock()
  nonisolated(unsafe) static var failure: DeviceError?
  static func setFailure(_ error: DeviceError?) { lock.withLock { failure = error } }
  static func checkAttachment(socket: String) throws {
+  precondition(socket == "fixture")
   try lock.withLock { if let failure { throw failure } }
  }
 }
-@MainActor final class Controller {
- struct Session { let clientSocket = "fixture" }
- struct Mux { var session: Session? = Session() }
- var usbmux = Mux()
- var usbConnected = true, isPoweredOff = false, shuttingDown = false
- var hasFileTransfer = false, isReconnecting = false, preparingDevice = false
-''' + probe + r'''
+/// Resumes one waiter once, whichever side comes first.
+nonisolated final class Signal: @unchecked Sendable {
+ private let lock = NSLock()
+ private var fired = false, waiter: CheckedContinuation<Void, Never>?
+ func fire() {
+  let w: CheckedContinuation<Void, Never>? = lock.withLock { fired = true; defer { waiter = nil }; return waiter }
+  w?.resume()
+ }
+ func wait() async {
+  await withCheckedContinuation { c in
+   if lock.withLock({ if fired { return true }; waiter = c; return false }) { c.resume() }
+  }
+ }
 }
 @MainActor final class Inspector {
- let emulator = Controller()
+ final class Emulator { var hasFileTransfer = false, isReconnecting = false, preparingDevice = false }
+ let emulator = Emulator()
  var installing = false
  var uninstalling: Set<String> = []
 ''' + suppression + r'''
@@ -38,39 +50,37 @@ nonisolated enum IMobileDevice {
 @main struct Check {
  @MainActor static func main() async throws {
   Timeouts.serviceProbe = 0.015
-  let c = Controller()
-  let ready = await c.deviceReady(); precondition(ready)
+  let device = DeviceServices(clientSocket: "fixture")
+  try await device.checkAttachment()
   IMobileDevice.setFailure(.unavailable)
-  do { try await c.checkDeviceConnection(); preconditionFailure() }
+  do { try await device.checkAttachment(); preconditionFailure() }
   catch DeviceError.unavailable {} catch { throw error }
   IMobileDevice.setFailure(.notAttached)
-  do { try await c.checkDeviceConnection(); preconditionFailure() }
+  do { try await device.checkAttachment(); preconditionFailure() }
   catch DeviceError.notAttached {} catch { throw error }
   IMobileDevice.setFailure(nil)
 
   // A probe waiting behind a long write must time out, leave the gate queue,
   // and retain a USB-specific cause instead of resetting app services.
-  let held = ResumeOnce<Void>(), entered = ResumeOnce<Void>()
+  let held = Signal(), entered = Signal()
   let owner = Task {
    try await DeviceGate.shared.serialized {
-    entered.resume(.success(()))
-    try await withCheckedThrowingContinuation { held.attach($0) }
+    entered.fire()
+    await held.wait()
    }
   }
-  try await withCheckedThrowingContinuation { entered.attach($0) }
-  do { try await c.checkDeviceConnection(); preconditionFailure() }
+  await entered.wait()
+  do { try await device.checkAttachment(); preconditionFailure() }
   catch DeviceError.timedOut(let operation) { precondition(operation == "USB connection") }
   catch { throw error }
   precondition(AbandonedWork.count == 0, "waiting is not a blocked C request")
-  held.resume(.success(())); try await owner.value
-  try await c.checkDeviceConnection()
+  held.fire(); try await owner.value
+  try await device.checkAttachment()
 
-  let cancelled = Task { try await c.checkDeviceConnection() }
+  let cancelled = Task { try await device.checkAttachment() }
   cancelled.cancel()
   do { try await cancelled.value; preconditionFailure() }
   catch is CancellationError {} catch { throw error }
-  c.shuttingDown = true
-  let ending = await c.deviceReady(); precondition(!ending)
 
   let inspector = Inspector()
   inspector.uninstalling = ["queued-behind-paused-install"]
@@ -82,11 +92,13 @@ nonisolated enum IMobileDevice {
   precondition(inspector.readsSuppressed)
   inspector.emulator.isReconnecting = false; inspector.emulator.preparingDevice = true
   precondition(inspector.readsSuppressed, "boot preparation owns device services too")
-  print("PASS: typed health failures, bounded queued probes, cancellation, shutdown, and health reads during paused removals")
+  print("PASS: typed health failures, bounded queued probes, cancellation, and health reads during paused removals")
  }
 }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-health-') as d:
-    p = Path(d)/'check.swift'; p.write_text(execution + source)
-    subprocess.run(['swiftc', '-swift-version', '6', '-parse-as-library', '-module-cache-path', d+'/modules', str(p), '-o', d+'/check'], check=True)
+    p = Path(d)/'check.swift'; p.write_text(source)
+    subprocess.run(['swiftc', '-swift-version', '6', '-parse-as-library', '-module-cache-path', d+'/modules',
+                    str(app / 'Services/DeviceServices.swift'), str(app / 'Transport/DeviceExecution.swift'), str(p),
+                    '-o', d+'/check'], check=True)
     subprocess.run([d+'/check'], check=True, timeout=10)

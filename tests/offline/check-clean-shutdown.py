@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-s = (root / 'LightTouchMac/EmulatorController.swift').read_text()
+s = (root / 'LightTouchMac/Device/EmulatorController.swift').read_text()
 a = s.index('    static let haltBudget:'); b = s.index('    /// Stop the guest and its helper, erase this device', a)
 halt = s[a:b].replace('haltBudget: TimeInterval = 10', 'haltBudget: TimeInterval = 0.3')
 source = r'''import Foundation

@@ -64,4 +64,23 @@ nonisolated enum StorageLocations {
     }
 
     static func posixError() -> POSIXError { POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+
+    /// AppMetadataCache's names and icons: disposable metadata, not device
+    /// storage, so the system caches; an isolated run keeps even its cache under
+    /// LTM_STATE_DIR.
+    static func appMetadataDirectory(state: URL, caches: URL, isolated: Bool) -> URL {
+        let root = isolated ? state.appendingPathComponent("Caches", isDirectory: true)
+            : caches.appendingPathComponent(bundleIdentifier, isDirectory: true)
+        let directory = root.appendingPathComponent("AppMetadata", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    /// macOS can remove disposable cache files while the app is running.
+    /// Recreate the parent for each write, then publish complete bytes together.
+    static func writeCacheData(_ data: Data, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
 }

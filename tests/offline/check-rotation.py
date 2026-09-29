@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess, tempfile
 root=Path(__file__).resolve().parents[2]
-s=(root/'LightTouchMac/DisplayView.swift').read_text()
+s=(root/'LightTouchMac/UI/DisplayView.swift').read_text()
 transform=next(line.strip() for line in s.splitlines() if 'contentLayer.transform = CATransform3DMakeRotation' in line)
 a=s.index('    private func setShellAngle('); b=s.index('    /// Is a mouse-driven touch',a)
 methods=s[a:b].replace('private func','func')

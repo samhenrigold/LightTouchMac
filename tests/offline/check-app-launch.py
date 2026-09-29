@@ -5,40 +5,42 @@ The guest side (the agent's launch, and lockstatus telling a locked refusal apar
 tests/offline/check-agent-transport.py; this checks the controller and the inspector around it."""
 from pathlib import Path
 import subprocess, tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[2]
 def method(source, signature):
     start = source.index(signature)
     return source[start:source.index('\n    }', start) + 6]
-tools = (root / 'LightTouchMac/GuestServices.swift').read_text()
-controller = (root / 'LightTouchMac/EmulatorController.swift').read_text()
-inspector = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
-error = tools[tools.index('enum AppLaunchError:'):tools.index('enum DeviceToolsError:')]
+tools = (root / 'LightTouchMac/Guest/GuestServices.swift').read_text()
+controller = (root / 'LightTouchMac/Device/EmulatorController.swift').read_text()
+inspector = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
+error = tools[tools.index('enum AppLaunchError:'):tools.index("/// The app's guest operations")]
 code = r'''import Cocoa
 ''' + error + r'''
 enum DeviceToolsError: LocalizedError { case failed(String); var errorDescription: String? { switch self { case .failed(let text): text } } }
 func logEvent(_ message: String) { }
 @MainActor var displaySleeping = false
-@MainActor final class DeviceTools {
+@MainActor final class FakeGuest {
  var failure: Error?
  var commands: [String] = []
- func launchApp(_ bundleID: String) async throws {
+ func launch(_ bundleID: String) async throws {
   commands.append(bundleID)
   if let failure { throw failure }
  }
 }
+struct Agent { let isAlive = true }
 @MainActor final class EmulatorController {
  let profile = DeviceProfile.iPodTouch2G
  var acceptsInput = true, isSleeping = false
  var wakes = 0
- let deviceTools = DeviceTools()
- func tools() throws -> DeviceTools { deviceTools }
+ let deviceTools = FakeGuest()
+ var guest: FakeGuest { deviceTools }        // GuestServices
+ let guestAgent = Agent()
+ var services: Void { get throws {} }          // EmulatorController.services: USB is up
  func pressHome() { wakes += 1; displaySleeping = false }
  var status: (displaySleeping: Bool, Void)? { (displaySleeping, ()) }  // the helper's status block
 ''' + method(controller, '    func launchApp(_ bundleID: String) async throws {') + r'''
 }
 struct InstalledApp { let id: String; let name: String }
-extension Notification.Name { static let ltmAppLaunched = Notification.Name("Launched") }
 @MainActor final class LaunchFixture: NSViewController {
  let emulator = EmulatorController()
  var busyWithDevice = false, uninstalling = Set<String>()

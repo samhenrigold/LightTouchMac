@@ -1,36 +1,16 @@
 #!/usr/bin/env python3
-"""Run the production removal flow behind an install, through cancellation and failure."""
+"""Run the production removal flow behind an install, through cancellation and failure. Compiles
+Features/AppInstaller.swift whole (with InstallationQueue, DeviceExecution and DeviceProfile) against
+tests/fixtures/app-installer*.swift and a scripted EmulatorController."""
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-source = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
-def block(start, end):
-    return source[source.index(start):source.index(end, source.index(start))]
-state = block('    static var hasPendingWork:', '    static func resume(_ device')
-remove = block('    static func remove(_ apps:', '    @MainActor\n    static func presentError(')
-code = r'''import Foundation
-final class NSWindow {}
-struct InstalledApp { let id: String }
-final class InstallJob { let deviceID = UUID(); var isCancellable = true; var downloadProgress: Double?; var status = "Waiting"; var task: Task<Void, Never>?; var dismissed = false; func cancel() {} }
-enum DeviceError: Error { case timedOut; var shouldPauseInstallQueue: Bool { true } }
-extension Notification.Name {
- static let ltmAppsChanged = Notification.Name("changed")
- static let ltmInstallProgress = Notification.Name("progress")
-}
-@MainActor final class AppMetadataCache {
- static let shared = AppMetadataCache(); var forgotten: [String] = []
- func forget(_ id: String) { forgotten.append(id) }
-}
+app = root / 'LightTouchMac'
+code = r'''import Cocoa
+nonisolated func logEvent(_ message: String) {}
 struct DeviceInstance { let id = UUID() }
-@MainActor final class DeviceLibrary { static let shared = DeviceLibrary(); var instances: [DeviceInstance] = [] }
-@MainActor enum IPALibrary {
- static var forgotten: [String] = []
- static func forget(_ id: String, device: DeviceInstance) { forgotten.append(id) }
- /// Another device still keeps the app: its icon stays.
- static var elsewhere: Set<String> = []
- static func retained(_ id: String, by devices: [DeviceInstance]) -> Bool { elsewhere.contains(id) }
-}
 @MainActor final class EmulatorController {
+ var services: EmulatorController { get throws { self } }  // EmulatorController.services: the uninstall
  let instance = DeviceInstance()
  var deviceReachable: Bool? = true
  func reportConnectionFailure(_ error: Error, operation: String) { deviceReachable = false }
@@ -44,11 +24,14 @@ struct DeviceInstance { let id = UUID() }
   let continuation = pending.removeValue(forKey: id)!
   if let error { continuation.resume(throwing: error) } else { continuation.resume() }
  }
+ // Not reached: this check queues removals only.
+ let profile = DeviceProfile.iPodTouch2G, iosVersion = "3.1.3", guestArch = "armv6"
+ var installPipeline: InstallPipeline { get throws { InstallPipeline() } }
+ func install(_ ipa: URL, placeholderRaised: Bool, progress: @escaping @Sendable (String) -> Void) async throws -> String { "" }
+ func importMedia(_ media: PreparedMedia, progress: @escaping @Sendable (Double) -> Void, willCommit: () -> Void) async throws {}
 }
-@MainActor enum AppInstaller {
-''' + state + remove + r'''
+extension AppInstaller {
  static var errors = 0
- static func presentError(_ error: Error, in window: NSWindow?) { errors += 1 }
  static var device = UUID()
  static func takeDevice() async throws { try await queue(for: device).acquire() }
  static func releaseDevice() { queue(for: device).release() }
@@ -66,6 +49,7 @@ struct DeviceInstance { let id = UUID() }
     try await Task.sleep(for: .milliseconds(5))
    }
   }
+  AppInstaller.presentError = { _, _ in AppInstaller.errors += 1 }
   let emulator = EmulatorController()
   AppInstaller.device = emulator.instance.id
   var started: [String] = [], removed: [String] = [], finished = 0
@@ -131,7 +115,7 @@ struct DeviceInstance { let id = UUID() }
   try await until { started.contains("lost") }
   remove(["after-recovery"])
   await Task.yield()
-  emulator.finish("lost", error: DeviceError.timedOut)
+  emulator.finish("lost", error: DeviceError.timedOut(operation: "uninstall"))
   try await until { finished == 5 }
   precondition(AppInstaller.isPaused && !AppInstaller.isUsingDevice && AppInstaller.hasPendingWork)
   precondition(emulator.deviceReachable == false && !started.contains("after-recovery"))
@@ -146,7 +130,7 @@ struct DeviceInstance { let id = UUID() }
   remove(["quit-active"])
   try await until { started.contains("quit-active") }
   AppInstaller.cancelPendingWork()
-  emulator.finish("quit-active", error: DeviceError.timedOut)
+  emulator.finish("quit-active", error: DeviceError.timedOut(operation: "uninstall"))
   try await until { finished == 7 }
   precondition(AppInstaller.errors == 2 && !AppInstaller.isPaused && !AppInstaller.hasPendingWork)
 
@@ -165,6 +149,9 @@ with tempfile.TemporaryDirectory(prefix='ltm-uninstall-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '6', '-default-isolation', 'MainActor',
-                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/InstallationQueue.swift'),
+                    '-module-cache-path', str(work / 'modules'), *[str(app / f) for f in [
+                        'Features/AppInstaller.swift', 'Features/InstallationQueue.swift', 'Transport/DeviceExecution.swift',
+                        'Device/DeviceProfile.swift']],
+                    str(root / 'tests/fixtures/app-installer.swift'), str(root / 'tests/fixtures/app-installer-library.swift'),
                     str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=20)

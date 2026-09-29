@@ -4,7 +4,7 @@ the app); a stopped device just erases; failures stay visible."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
-s=(root/'LightTouchMac/EmulatorController.swift').read_text()
+s=(root/'LightTouchMac/Device/EmulatorController.swift').read_text()
 a=s.index('    func requestFactoryReset()');b=s.index('    // MARK: - App management',a)
 reset=s[a:b].replace('.seconds(15)','.milliseconds(30)').replace('.milliseconds(100)','.milliseconds(5)')
 source=r'''import Foundation
@@ -82,5 +82,5 @@ nonisolated func logEvent(_ s:String){}
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-erase-') as d:
  p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc','-module-cache-path',d+'/modules',str(root/'LightTouchMac/DeviceStateStorage.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc','-module-cache-path',d+'/modules',str(root/'LightTouchMac/Library/DeviceStateStorage.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=10)

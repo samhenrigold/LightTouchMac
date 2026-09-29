@@ -54,15 +54,15 @@ with tempfile.TemporaryDirectory(prefix='ltm-window-restoration-') as directory:
  work = Path(directory)
  (work/'check.swift').write_text(fixture)
  subprocess.run(['swiftc', '-swift-version', '6', '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
-                 str(root/'LightTouchMac/WindowRestorationPolicy.swift'), str(work/'check.swift'), '-o', str(work/'check')], check=True)
+                 str(root/'LightTouchMac/App/WindowRestorationPolicy.swift'), str(work/'check.swift'), '-o', str(work/'check')], check=True)
  subprocess.run([str(work/'check')], check=True, timeout=15)
 # These construction paths must opt out before displaying a window. The native
 # check above validates the shared policy; guard against an accidental bypass.
-for path in ['AppDelegate.swift', 'MainWindowController.swift', 'DeviceFilesWindowController.swift', 'LogWindowController.swift']:
+for path in ['App/AppDelegate.swift', 'UI/MainWindowController.swift', 'UI/DeviceFilesWindowController.swift', 'UI/LogWindowController.swift']:
  text = (root/'LightTouchMac'/path).read_text()
  assert 'WindowRestorationPolicy.configure(' in text, path
  assert 'setFrameAutosaveName(' not in text and 'setFrameUsingName(' not in text, path
-main = (root/'LightTouchMac/main.swift').read_text()
+main = (root/'LightTouchMac/App/main.swift').read_text()
 assert main.index('WindowRestorationPolicy.configureDefaults()') < main.index('LightTouchApplication.shared')
 assert main.index('LightTouchApplication.shared') < main.index('NSApplicationMain(')
 project = (root/'LightTouchMac.xcodeproj/project.pbxproj').read_text()

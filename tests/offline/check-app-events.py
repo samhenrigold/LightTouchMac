@@ -3,7 +3,7 @@
 from pathlib import Path
 import os, subprocess, tempfile
 root=Path(__file__).resolve().parents[2]
-controller=(root/'LightTouchMac/EmulatorController.swift').read_text()
+controller=(root/'LightTouchMac/Device/EmulatorController.swift').read_text()
 notice=controller[controller.index('    enum NoticeOperation:'):controller.index('    private var foregroundTask:')].replace('UserDefaults.standard','defaults')
 with tempfile.TemporaryDirectory(prefix='ltm-events-') as temp:
  p=Path(temp)
@@ -54,5 +54,5 @@ with tempfile.TemporaryDirectory(prefix='ltm-events-') as temp:
  }
 }
 ''')
- subprocess.run(['xcrun','swiftc','-swift-version','6','-default-isolation','MainActor','-module-cache-path',str(p/'modules'),str(root/'LightTouchMac/AppEventLog.swift'),str(root/'LightTouchMac/Bundled.swift'), str(root/'LightTouchMac/StorageLocations.swift'), str(root/'LightTouchMac/NativeLogging.swift'),str(p/'check.swift'),'-o',str(p/'check')],check=True)
+ subprocess.run(['xcrun','swiftc','-swift-version','6','-default-isolation','MainActor','-module-cache-path',str(p/'modules'),str(root/'LightTouchMac/Transport/AppEventLog.swift'),str(root/'LightTouchMac/Library/Bundled.swift'), str(root/'LightTouchMac/Library/StorageLocations.swift'), str(root/'LightTouchMac/Transport/NativeLogging.swift'),str(p/'check.swift'),'-o',str(p/'check')],check=True)
  subprocess.run([str(p/'check'),str(p/'events')],env=dict(os.environ,LTM_STATE_DIR=str(p/'state')),check=True)
