@@ -98,7 +98,7 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - Finder native device recognition: deferred, needs Apple's USB host-controller entitlement (don't raise unless Sam does).
 
 ### Debts
-- ipad1 tip bd8d6b1363 (gl-runtime + iop-core + gl-421 merges) is being re-gated after a report of a stalled 7B500 seal boot with h2fmi/cdma trace output on the default path (`ipad1-gate-fix`); the pinned dev dylib build-w1-native is rebuilt from the clean tip at the end.
+- The tree's iPod MBXGLEngine (355 KB since gl-runtime) exceeds the agent's 256 KiB request limit, so `--stage-gles-shim` fails; needs a chunked put or a larger IT_AGENT_REQUEST_MAX. The shipping image's baked shim is older, so the iPod gles gate reads the image, not the tree, until the image swap.
 - The `iboot=` path synthesises POWER_ID's security epoch as 1; iBoot-1072+ (4.3.5, iOS 5) wants 2 and loops in miu_init. Generic fix: read SEPO off the image like the iPod's `it_iboot_find_epoch`, or boot from the ROM so LLB sets it (qemu-ios docs/ipad1/ios5.md). Until then 8L1/9B206 recipes must use `boot: kboot`.
 - App: when a recipe names `keybag_ramdisk_from`, queue the sibling IPSW download instead of failing with a message.
 - The pinned dev dylib (`build-w1-native`) predates the `gid-blobs` machine property; rebuild it from the pinned commit (dev-only; releases build their own).

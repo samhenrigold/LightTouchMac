@@ -27,6 +27,7 @@ real-hardware behaviour. New entries are added by whoever ships a workaround; no
 | 16 | iPod 1G | `tvout-workaround=<paddr>` machine property (devos50's per-build zero-word overlay), off by default | The build that needed it read a TVOut register the model does not answer; our TVOut is shared and stubbed | S | Answer the register in the TVOut model when a build needs it; delete the property |
 
 Closed:
+- iPad seal boot hung at FPart Init after the iop-core merge: iBoot's read-modify-write of FMI control bit 7 was counted as a second page transfer; a FIFO flush had hidden the phantom pages for months; transfer rule now matches iBoot and EmbeddedIOP; drain no longer re-queues (R). 2026-09-29.
 - iPod 4.2.1 "No Wi-Fi": card reported chip number 0 → real chip id word (R). 2026-09-28.
 - iPod 4.2.1 screen only dims: PMU regulator-enable bit now honoured (R). 2026-09-28.
 - iPad 4.3 DSI assert at display-off: StopStateClk semantics corrected (R). 2026-09-28.
