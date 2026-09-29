@@ -143,19 +143,42 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
     }
 
-    /// The placeholder's lines under the bar: the step, what it is doing, and percent with time left.
-    var progressLines: [String] {
-        let percent = progress.map { "\(Int(($0 * 100).rounded(.down)))%" }
-        switch state {
-        case let .downloading(_, remaining, files):
-            return [files > 1 ? "\(files) IPSWs" : nil,
-                    [percent, remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")].compactMap { $0 }
-        case let .preparing(p) where p.steps > 0:
-            return ["Step \(p.step) of \(p.steps): \(p.name)", p.detail,
-                    [percent, p.remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")].compactMap { $0 }
-        case let .preparing(p): return [p.name]
-        default: return []
+    /// The placeholder's one line under the bar: percent and time left ("34% · About 1 min remaining").
+    var progressLine: String? {
+        let remaining: TimeInterval? = switch state {
+        case let .downloading(_, remaining, _): remaining
+        case let .preparing(p): p.remaining
+        default: nil
         }
+        let parts = [progress.map { "\(Int(($0 * 100).rounded(.down)))%" }, remaining.map(Self.remainingText)].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// What the job is doing inside, for the bar's tooltip only: the preparer's step and its words, or the IPSW count.
+    var progressDetail: [String] {
+        switch state {
+        case let .downloading(_, _, files): files > 1 ? ["\(files) IPSWs"] : []
+        case let .preparing(p) where p.steps > 0: ["Step \(p.step) of \(p.steps): \(p.name)", p.detail].compactMap { $0 }
+        case let .preparing(p): [p.name]
+        default: []
+        }
+    }
+
+    /// The placeholder's info popover: "Untested." or "Experimental." and the catalog's note (source, keys).
+    var catalogNote: String? {
+        let tag = entry.status == .untested ? "Untested." : isExperimental ? "Experimental." : nil
+        let note = tag != nil || entry.prerelease != nil ? entry.statusNote : nil
+        let text = [tag, note].compactMap { $0 }.joined(separator: " ")
+        return text.isEmpty ? nil : text
+    }
+
+    /// Before a download or preparation, when `available` bytes can't hold it: the copy's words; nil when there is room.
+    func spaceShortage(available: Int64) -> String? {
+        let download: Int64 = if case let .notDownloaded(bytes) = state { bytes ?? 0 } else { 0 }
+        let needed = download + entry.estimates.peakBytes
+        guard [.downloaded, .bundled].contains(state) || download > 0, needed > available else { return nil }
+        let format = { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
+        return "Not enough disk space: this needs \(format(needed)), and \(format(available)) is available."
     }
 
     static func remainingText(_ seconds: TimeInterval) -> String {

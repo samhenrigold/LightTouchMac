@@ -17,8 +17,10 @@ final class DevicePlaceholderViewController: NSViewController {
     private let reason = NSTextField(wrappingLabelWithString: "")
     private let showLog = NSButton(title: "Show Log", target: nil, action: nil)
     private let primary = NSButton(title: "", target: nil, action: nil)
-    private let sizes = NSTextField(labelWithString: "")
-    private let note = NSTextField(wrappingLabelWithString: "")
+    private let space = NSTextField(wrappingLabelWithString: "")
+    /// The build's catalog note (untested, experimental, where a beta came from), in a popover.
+    private let info = NSButton(image: NSImage(systemSymbolName: "info.circle", accessibilityDescription: "About This Build")!,
+                                target: nil, action: nil)
     private var row: DeviceRow?
 
     override func loadView() {
@@ -34,16 +36,18 @@ final class DevicePlaceholderViewController: NSViewController {
         model.font = .systemFont(ofSize: NSFont.systemFontSize * 1.7, weight: .semibold)
         version.textColor = .secondaryLabelColor
         version.isSelectable = true
-        for label in [status, step, reason, note] {
+        for label in [status, step, reason, space] {
             label.alignment = .center
             label.preferredMaxLayoutWidth = 320
         }
         status.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
         reason.textColor = .secondaryLabelColor
-        note.textColor = .systemOrange
-        note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        sizes.textColor = .secondaryLabelColor
-        sizes.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        space.textColor = .secondaryLabelColor
+        space.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        info.isBordered = false
+        info.contentTintColor = .secondaryLabelColor
+        info.target = self
+        info.action = #selector(infoClicked(_:))
         progress.style = .bar
         progress.isIndeterminate = false   // NSProgressIndicator starts indeterminate: a bar that never fills
         progress.minValue = 0
@@ -60,7 +64,9 @@ final class DevicePlaceholderViewController: NSViewController {
         primary.target = self
         primary.action = #selector(primaryClicked(_:))
 
-        let stack = NSStackView(views: [art, model, version, status, progress, step, reason, showLog, primary, sizes, note])
+        let versionLine = NSStackView(views: [version, info])
+        versionLine.spacing = 4
+        let stack = NSStackView(views: [art, model, versionLine, status, progress, step, reason, showLog, primary, space])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 8
@@ -88,17 +94,20 @@ final class DevicePlaceholderViewController: NSViewController {
         let profile = entry.profile
         art.image = profile.flatMap { NSImage(named: $0.shellImageName) }
         model.stringValue = profile?.marketingName ?? entry.productType
-        version.stringValue = "iOS \(entry.version) (\(entry.build))"
+        version.stringValue = "iOS \(entry.version)" + (row.badge.map { " \($0)" } ?? "") + " (\(entry.build))"
+        info.isHidden = row.catalogNote == nil
+        info.toolTip = row.catalogNote
 
         progress.isHidden = true
         progress.stopAnimation(nil)
         step.isHidden = true
         reason.isHidden = true
         showLog.isHidden = true
+        status.isHidden = false
         switch row.state {
-        case .bundled: status.stringValue = "Built in"
-        case .notDownloaded, .downloaded:
-            status.stringValue = row.state == .downloaded ? "Downloaded" : "Not downloaded"
+        // The button says it: Prepare, or Download & Prepare.
+        case .bundled, .notDownloaded, .downloaded:
+            status.isHidden = true
             if !canDownload, let why = FirmwareJobs.shared.unavailableReason { reason.stringValue = why; reason.isHidden = false }
         case .downloading:
             status.stringValue = "Downloading…"
@@ -127,27 +136,43 @@ final class DevicePlaceholderViewController: NSViewController {
             primary.isHidden = true
         }
 
-        var parts: [String] = []
-        let format = { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
-        if entry.source.url != nil, let bytes = entry.source.bytes, bytes > 0 { parts.append("Download \(format(bytes))") }
-        if entry.estimates.preparedBytes > 0 { parts.append("\(format(entry.estimates.preparedBytes)) on disk") }
-        if entry.estimates.peakBytes > 0 { parts.append("\(format(entry.estimates.peakBytes)) free space to prepare") }
-        sizes.stringValue = parts.joined(separator: " · ")
-        sizes.isHidden = parts.isEmpty || row.isStartable
-        // "Untested." first for a build the matrix hasn't run; a developer build's note (source, keys); an experimental release's note.
-        let catalogNote = entry.prerelease != nil || entry.status == .untested ? entry.statusNote : row.isExperimental ? entry.statusNote ?? "Experimental" : nil
-        let text = [entry.status == .untested ? "Untested." : nil, catalogNote].compactMap { $0 }.joined(separator: " ")
-        note.stringValue = text
-        note.isHidden = text.isEmpty
+        // Disk numbers only when they stop a download or preparation.
+        // (spaceShortage(available: 0) is nil for a row that needs no space: skip the volume query on every progress tick.)
+        let shortage = row.spaceShortage(available: 0) == nil ? nil
+            : (try? IPSWStore.availableSpace(at: Bundled.stateDirectory)).flatMap(row.spaceShortage(available:))
+        space.stringValue = shortage ?? ""
+        space.isHidden = shortage == nil
     }
 
-    /// The bar (moving without a fraction yet) and the row's progress lines.
+    /// The bar (moving without a fraction yet), percent and time left; the preparer's step is the bar's tooltip.
     private func show(_ row: DeviceRow) {
         progress.isIndeterminate = row.progress == nil
         if let value = row.progress { progress.doubleValue = value } else { progress.startAnimation(nil) }
         progress.isHidden = false
-        step.stringValue = row.progressLines.joined(separator: "\n")
+        progress.toolTip = row.progressDetail.isEmpty ? nil : row.progressDetail.joined(separator: "\n")
+        step.stringValue = row.progressLine ?? ""
         step.isHidden = step.stringValue.isEmpty
+    }
+
+    @objc private func infoClicked(_ sender: NSButton) {
+        guard let text = row?.catalogNote else { return }
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.preferredMaxLayoutWidth = 280
+        label.translatesAutoresizingMaskIntoConstraints = false
+        let content = NSViewController()
+        content.view = NSView()
+        content.view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: content.view.topAnchor, constant: 12),
+            label.bottomAnchor.constraint(equalTo: content.view.bottomAnchor, constant: -12),
+            label.leadingAnchor.constraint(equalTo: content.view.leadingAnchor, constant: 14),
+            label.trailingAnchor.constraint(equalTo: content.view.trailingAnchor, constant: -14),
+            label.widthAnchor.constraint(lessThanOrEqualToConstant: 280),
+        ])
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = content
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
     }
 
     @objc private func primaryClicked(_ sender: Any?) {

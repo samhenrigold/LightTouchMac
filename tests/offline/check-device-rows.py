@@ -75,12 +75,12 @@ import Foundation
         r = row(iPad32, job: .downloading(fraction: 0.425))
         precondition(r.state == .downloading(fraction: 0.425) && r.stateDescription == "Downloading, 42%", r.stateDescription)
         precondition(r.primaryTitle == "Cancel" && allowed(r) == ["cancel"], "\(allowed(r))")
-        precondition(r.progress == 0.425 && r.progressLines == ["42%"], "\(r.progressLines)")
+        precondition(r.progress == 0.425 && r.progressLine == "42%" && r.progressDetail.isEmpty, "\(r.progressDetail)")
         r = row(iPad32, job: .downloading(fraction: 0.5, remaining: 125))
-        precondition(r.progressLines == ["50% · About 2 min remaining"] && r.progressSummary == "50%", "\(r.progressLines)")
+        precondition(r.progressLine == "50% · About 2 min remaining" && r.progressSummary == "50%", r.progressLine ?? "nil")
         // A build that boots its sibling's ramdisk: one job, both IPSWs, one bar.
         r = row(iPad32, job: .downloading(fraction: 0.25, files: 2))
-        precondition(r.progressSummary == "2 IPSWs · 25%" && r.progressLines == ["2 IPSWs", "25%"] && r.progress == 0.25, "\(r.progressLines)")
+        precondition(r.progressSummary == "2 IPSWs · 25%" && r.progressLine == "25%" && r.progressDetail == ["2 IPSWs"] && r.progress == 0.25, "\(r.progressDetail)")
         precondition(r.stateDescription == "Downloading, 2 IPSWs · 25%" && r.primaryTitle == "Cancel", r.stateDescription)
         r = row(iPad32, job: .preparing(.init(step: 2, steps: 5, name: "Decrypting")))
         precondition(r.stateDescription == "Preparing, Step 2 of 5 · 20%" && allowed(r, canDownload: true) == ["cancel"], r.stateDescription)
@@ -94,12 +94,13 @@ import Foundation
         p.remaining = 45
         r = row(iPad32, job: .preparing(p))
         precondition(r.progressSummary == "Step 6 of 7 · 60%", r.progressSummary ?? "nil")
-        precondition(r.progressLines == ["Step 6 of 7: Sealing the NAND", "Booting to seal the flash — 42 s", "60% · About 50 s remaining"],
-                     "\(r.progressLines)")
+        // The placeholder shows one plain line; the preparer's step and its words are the bar's tooltip.
+        precondition(r.progressLine == "60% · About 50 s remaining", r.progressLine ?? "nil")
+        precondition(r.progressDetail == ["Step 6 of 7: Sealing the NAND", "Booting to seal the flash — 42 s"], "\(r.progressDetail)")
         p.step = 7; p.fraction = 1
         precondition(p.overall == 1)
         r = row(iPad32, job: .preparing(.init(name: "Checking the IPSW")))
-        precondition(r.progress == nil && r.progressLines == ["Checking the IPSW"] && r.stateDescription == "Preparing, Checking the IPSW")
+        precondition(r.progress == nil && r.progressLine == nil && r.progressDetail == ["Checking the IPSW"] && r.stateDescription == "Preparing, Checking the IPSW")
 
         // Time remaining: nothing for the first 5 s or 2 %, then the rate so far.
         precondition(estimatedRemaining(elapsed: 4, from: 0, to: 0.5) == nil && estimatedRemaining(elapsed: 60, from: 0.3, to: 0.31) == nil)
@@ -157,6 +158,15 @@ import Foundation
         }
         precondition(row(beta1).badge == "Beta 1" && row(entry("n72ap-8B117")).badge == nil, "the badge stays on an offered beta")
         precondition(row(iPad).note == nil && row(iPod4).note == nil, "tested builds carry no note")
+        // The prepare screen: the catalog note (untested, experimental, a beta's source) is one popover's text,
+        // and disk numbers appear only when the volume can't hold the download and the preparation.
+        precondition(row(beta1).catalogNote?.hasPrefix("Untested. ") == true && row(iPad).catalogNote == nil, row(beta1).catalogNote ?? "nil")
+        precondition(row(iPod4).catalogNote?.hasPrefix("Experimental.") == true, row(iPod4).catalogNote ?? "nil")
+        let needed = 479001595 + iPad.estimates.peakBytes
+        precondition(needed > 479001595 && row(iPad).spaceShortage(available: needed) == nil)
+        precondition(row(iPad).spaceShortage(available: needed - 1)?.hasPrefix("Not enough disk space: this needs ") == true)
+        precondition(row(iPad, instance: id).spaceShortage(available: 0) == nil, "a prepared device needs no space")
+        precondition(row(iPad32, job: .downloading(fraction: 0.5)).spaceShortage(available: 0) == nil, "nor does one already downloading")
         print("PASS: row states, accessories, primary buttons and commands for every catalog status")
     }
 }
