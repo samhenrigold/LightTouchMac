@@ -11,7 +11,7 @@
 // version, and each op it lacks falls back here to its `exec` with the same
 // command a shell would have run. No SSH anywhere.
 //
-// Foundation only, so tests/session-driver compiles it as the app does.
+// Foundation only, so tests/drivers/session-driver compiles it as the app does.
 
 import Foundation
 

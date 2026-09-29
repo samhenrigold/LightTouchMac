@@ -5,7 +5,7 @@
 // the device runs (those fired the notice on every boot and proxy toggle). The
 // helper keeps running on the unlinked inodes and the guest never notices; the
 // app says so, and Stop skips flushing into a dead inode. Foundation only:
-// tests/helper-driver compiles it.
+// tests/drivers/helper-driver compiles it.
 
 import Foundation
 

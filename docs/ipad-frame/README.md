@@ -12,7 +12,7 @@ kept for reference:
 - `homeOriginX`/`homeOriginY` (412, 9, bottom-left origin) and the 29x31 `home.png` give the
   Home circle: diameter 31, bottom inset 9.
 
-These numbers live in `DeviceProfile+Display.swift`. `tests/check-ipad-frame.py [panel.png]` checks
+These numbers live in `DeviceProfile+Display.swift`. `tests/offline/check-ipad-frame.py [panel.png]` checks
 them against the asset and optionally writes `composite-check.png`: the frame with a qemu-ios panel
 dump turned upright into the cutout, the way `DisplayView` draws it. `composite-settings.png` and
 `composite-landscape.png` are the same with Settings, portrait and after rotating to orientation 3.

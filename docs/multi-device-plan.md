@@ -105,7 +105,7 @@ link.frontSurface() // (surface: IOSurface, serial: UInt64, isNew: Bool)?, for o
 link.info, link.pid, link.terminate() /* SIGTERM: clean shutdown */, link.kill()
 ```
 
-Callbacks run on `queue`. Pending requests fail with `.closed` when the link goes, and with `.timedOut` after their timeout. `tests/check-helper-boot.py` drives this through `tests/helper-driver`.
+Callbacks run on `queue`. Pending requests fail with `.closed` when the link goes, and with `.timedOut` after their timeout. `tests/sessions/check-helper-boot.py` drives this through `tests/drivers/helper-driver`.
 
 ### How each C call crosses
 
@@ -179,7 +179,7 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 **The old layout is erased once, not migrated** (C6, 2026-09-28, `LegacyState.swift`; the adoption of it in place, `LegacyAdoption`, is gone with `LaunchOptions` and every non-prepared boot path).
 - Found at launch: `State/device`, `nandrw-*`, `snapshot-*`, `.reset-*`, `State/IPAs`, `AppCache`, the old logs, records whose `base.kind` is not `prepared`, and the pre-library root `Application Support/LightTouchMac`.
 - One prompt: "Light Touch's built-in iPod has changed format. Erase it and continue (apps you've saved are kept), or quit." Erase & Continue keeps every `.ipa` (into the library) and the host pairing (`work/usbmuxd-conf`, seeded into the built-in device when it is published), removes the rest. Quit changes nothing.
-- Test: `tests/check-bundled-prepared.py` (fresh state → the built-in iPod published as `.prepared`; old layout → erased, IPAs kept, pairing copied).
+- Test: `tests/offline/check-bundled-prepared.py` (fresh state → the built-in iPod published as `.prepared`; old layout → erased, IPAs kept, pairing copied).
 
 ### Storage policy (2026-09-28, `storage-fixes`)
 
@@ -232,8 +232,8 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 - *Recordings.* A take that can't be played after launch recovery is deleted, and the log says so.
 - *Settings > Storage* shows each device's allocated base, data (overlay + NOR) and snapshot sizes, the
   downloaded and imported IPSWs, the decrypt cache and logs, with Remove IPSW, Clear Caches and Delete Device.
-- Tests: `tests/check-firmware-jobs.py` (removal guard, Delete with a read-only base, atomic publish, decrypt
-  cache, SHA mismatch, sweeps), `tests/device-state-storage.swift` (erase GC), `tests/check-helper-boot.py
+- Tests: `tests/offline/check-firmware-jobs.py` (removal guard, Delete with a read-only base, atomic publish, decrypt
+  cache, SHA mismatch, sweeps), `tests/fixtures/device-state-storage.swift` (erase GC), `tests/sessions/check-helper-boot.py
   --only lease` (two helpers on one device's lease).
 
 ## C. UI (AppKit)
@@ -378,7 +378,7 @@ What each stage does:
 - **package:** first the built-in iPod (`bundled_base`): the built firmwarekit's `create` of `n72ap-7E18` from `--bundled-ipsw` with the built `ipad-guest-tools` (and the built helper), packed by `scripts/pack-base.py` into `bundled/n72ap-7E18.itbase` with `bundled.json` (inputs, the lock's hashes) beside it, skipped when its inputs are unchanged; then a fresh copy of the product, `build-inputs.json` and package.sh (`LTM_BASE_BLOB`). Notarization is not done here.
 - **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
 - **staple.**
-- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then, for each of k48ap-7B500 (`--verify-ipsw`), k48ap-8C148, n72ap-7E18 and n72ap-8C148 (`VERIFY_ENTRIES`: the IPSWs in `~/Downloads` and `~/Developer/ipod2g-re/OldSDK`), the bundled `firmwarekit create` prepares it with its default `--guest-tools` and the bundled `LightTouchDevice` into `prepare-check/` (it must end with `done`), and `tests/check-sessions.py --single` boots the result through the bundle's helper, dylib, usbmuxd, Frameworks and bootrom: lit, lockdown over its own usbmuxd, AFC round trips of 16384/16385/65536/1048583 bytes (no restore), an IPA install, a clean shutdown. The output is deleted; the frames stay in `verify-frames/<entry>/`. One entry per run, so rerun `--stage verify` until every entry is current. Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
+- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then, for each of k48ap-7B500 (`--verify-ipsw`), k48ap-8C148, n72ap-7E18 and n72ap-8C148 (`VERIFY_ENTRIES`: the IPSWs in `~/Downloads` and `~/Developer/ipod2g-re/OldSDK`), the bundled `firmwarekit create` prepares it with its default `--guest-tools` and the bundled `LightTouchDevice` into `prepare-check/` (it must end with `done`), and `tests/sessions/check-sessions.py --single` boots the result through the bundle's helper, dylib, usbmuxd, Frameworks and bootrom: lit, lockdown over its own usbmuxd, AFC round trips of 16384/16385/65536/1048583 bytes (no restore), an IPA install, a clean shutdown. The output is deleted; the frames stay in `verify-frames/<entry>/`. One entry per run, so rerun `--stage verify` until every entry is current. Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
 
 After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source-revisions.json` and the release notes are made by hand, and nothing here publishes.
 
@@ -401,7 +401,7 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 - W1 and W3 go first, publishing their APIs on day 1; W2 and W4 code against them.
 - **Gate:**
   - Release signed and notarized.
-  - A headless helper boots both devices (`tests/check-helper-boot.py`).
+  - A headless helper boots both devices (`tests/sessions/check-helper-boot.py`).
   - The adoption test passes.
 - **Sam tests:**
   1. The existing iPod state is intact.
@@ -450,6 +450,8 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 
 ## Corrections from implementation
 
+- **Tests (E4, 2026-09-28):** `tests/` is three tiers, `offline/` (no emulator), `sessions/` (helper + images) and `release/` (packaging), with `drivers/` (helper-driver, session-driver) and `fixtures/`; `tests/run.py {offline|sessions|release}` runs a tier (parallel through one shared module cache for offline and release, one emulator at a time for sessions) and `scripts/gate.sh` wraps it. Checks compile whole production files: `DeviceExecution.swift` (the deadline race, serial gate, errors and timeouts, out of DeviceServices), `BootRecipe.swift` and `DeviceRow.swift` (out of DeviceSession) and `DiagnosticsExport.swift` (out of MainWindowController) exist so they can. `tests/SLICED.md` lists the checks that still cut a section out of a hub file and the extraction that retires each.
+
 **W3, 2026-09-28** (`b63d910`, `a731de4`):
 - `device.json` has two more fields: `format` and `storage.key` (the image identity; it pins the overlay). C6 removed `storage.resetMarker` and `legacy {filesRoot, nand, pointer?}` with the adoption they served.
 - **Runtime files are per instance.** That covers the usbmuxd pid, the lease and logs, under `Devices/<uuid>/work/` and `~/Library/Logs/<bundle>/Devices/<uuid>/`. `session.env` is gone (nothing read it).
@@ -466,10 +468,10 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 - **`BootConfig` has no `serialLog`**: the argv carries `-serial` (the app's FIFO works across processes). The one-shot config has one.
 - **`LinkEvent.audioEnded(generation, failed)`** tells the recorder the drain after `audioStop` finished. `hello` takes a `machine` for `deviceInfo`. `HelperInfo` adds `pid`.
 - **The orphan shutdown on the iPod is the agent halt** (1.3 s to a confirmed power-off), then powerdown. The iPad powerdown confirmed in 15.6 s.
-- **Packaging:** Xcode embeds the helper in `Contents/MacOS` (an "Embed Device Helper" copy phase). Its embedded Info.plist identifier is `gold.samhenri.LightTouchMac.LightTouchDevice`. `CODE_SIGN_ENTITLEMENTS` is `$(QEMU_IOS_DIR)/contrib/macos-app/entitlements.plist`, and `OTHER_LDFLAGS` is empty (no qemu link). `package.sh` checks the helper, drops its absolute rpaths and signs it with those entitlements after the frameworks and tools and before the app. `scripts/test-package.py APP` checks the signature, entitlements, closure and a `--probe` that loads `Frameworks/libqemu-arm.dylib`.
+- **Packaging:** Xcode embeds the helper in `Contents/MacOS` (an "Embed Device Helper" copy phase). Its embedded Info.plist identifier is `gold.samhenri.LightTouchMac.LightTouchDevice`. `CODE_SIGN_ENTITLEMENTS` is `$(QEMU_IOS_DIR)/contrib/macos-app/entitlements.plist`, and `OTHER_LDFLAGS` is empty (no qemu link). `package.sh` checks the helper, drops its absolute rpaths and signs it with those entitlements after the frameworks and tools and before the app. `tests/release/test-package.py APP` checks the signature, entitlements, closure and a `--probe` that loads `Frameworks/libqemu-arm.dylib`.
 - **A Release build with the helper was notarized** (Accepted, stapled, `spctl`: Notarized Developer ID). It was `package.sh` with `LTM_ASSETS=none`, not `build-release.py`. `build-release.py` can't run end to end under a 10-minute step limit: its fresh native build is one long script, and `--native-build` would relink the prior release's native dir, which is configured for `~/Developer/qemu-ios`. That dir's ipod-branch dylib also lacks the iPad exports the app links (`qemu_ios_ui_compass`, `usb_charger`, `orientation`). **A multidevice release needs a native build from `qemu-ios-ipad1`.** The one used here was `qemu-ios-ipad1/build-w1-native`: the native recipe's QEMU configure, over the 09-26 release's prefix and static deps.
 - **Tests boot with `-audio driver=none`**; the app keeps its own audio arguments.
-- **`tests/check-helper-boot.py`: 22/22** (reject, iPod, iPad, restore, iPad orphan, one-shot, headless). The PNG dumps and driver logs are in `~/Developer/qemu-ios-files/w1-helper/dumps/`.
+- **`tests/sessions/check-helper-boot.py`: 22/22** (reject, iPod, iPad, restore, iPad orphan, one-shot, headless). The PNG dumps and driver logs are in `~/Developer/qemu-ios-files/w1-helper/dumps/`.
 
 ## Preparer contract (Sam, 2026-09-28: no Python bridge; the app runs the Swift preparer only)
 
@@ -545,7 +547,7 @@ The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for
 - **No MachOSigner in FirmwareKit.** Guest helpers are signed once when the app is built (`build-release.py` on the dev Mac), so FirmwareKit never signs at run time.
 **W2, 2026-09-28** (link conversion, sessions):
 - **The app no longer links `libqemu-arm.dylib`** (app target `OTHER_LDFLAGS = ""`, no qemu headers in the bridging header); `otool -L` and `nm -u` show nothing of it. Every former `qemu_ios_*` call goes through `DeviceLink` as the section A table says.
-- **`DeviceProcess`** (DeviceSession.swift, Foundation only) owns one helper: its `native.log` (`ProcessLogCapture`), the hello check (a board mismatch is logged, not fatal), the boot, and one death with a reason ("killed (signal 9)", "exited unexpectedly (code n)", a start failure). **`BootRecipe`** builds both boards' argv from paths, and the prepared-base first boot (`preparedFiles`). tests/check-sessions.py compiles that section as the app does.
+- **`DeviceProcess`** (DeviceSession.swift, Foundation only) owns one helper: its `native.log` (`ProcessLogCapture`), the hello check (a board mismatch is logged, not fatal), the boot, and one death with a reason ("killed (signal 9)", "exited unexpectedly (code n)", a start failure). **`BootRecipe`** builds both boards' argv from paths, and the prepared-base first boot (`preparedFiles`). tests/sessions/check-sessions.py compiles that section as the app does.
 - **The boot is built after the hello**, not before the spawn: snapshot identity needs the helper's build id, and usbmuxd still starts before the guest's USB.
 - **EmulatorController polls the status block on its own 30 Hz timer** (liveness, storage failure, power-off, sleep), so a hidden device with no display link still flips booting → running. DisplayView only draws: `layer.contents` is the front IOSurface; the 3D model and captures make a CGImage from it under a use count.
 - **The helper forces the alpha byte opaque** when it copies a frame (`FrameRingWriter.copy`, vImage): iBoot and the iPod framebuffer leave it 0, and a layer showing the surface directly would honour it.
