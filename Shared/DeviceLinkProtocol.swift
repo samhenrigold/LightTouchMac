@@ -58,6 +58,9 @@ nonisolated enum LinkCommand: Codable, Sendable, Equatable {
     case snapshotResume
     case agentCancel(id: String)
     case audioStop(generation: UInt64)
+    /// qemu_ios_ui_net_restrict on the wifi0 user netdev: flip slirp's restrict
+    /// flag in place (false opens outbound networking after Setup, no link event).
+    case netRestrict(Bool)
 }
 
 nonisolated enum LinkRequest: Codable, Sendable, Equatable {

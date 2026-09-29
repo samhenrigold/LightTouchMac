@@ -155,6 +155,7 @@ final class DeviceHost: @unchecked Sendable {
         case .snapshotResume: qemu.snapshotResume()
         case let .agentCancel(id): agents.cancel(id)
         case let .audioStop(generation): audio.stop(generation)
+        case let .netRestrict(on): "wifi0".withCString { p in qemu.netRestrict?(p, on) }
         }
     }
 

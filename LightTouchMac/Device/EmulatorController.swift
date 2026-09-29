@@ -83,6 +83,9 @@ final class EmulatorController {
     }
 
     private var foregroundTask: Task<Void, Never>?
+    /// This boot came up with slirp restrict=on (5.x, so Setup takes its no-network
+    /// path); the foreground watch flips it off once SpringBoard is frontmost.
+    private var networkRestrictPending = false
     private var bootGeneration = 0
     var isPoweredOff: Bool { state == .poweredOff }
 
@@ -389,7 +392,12 @@ final class EmulatorController {
         // The web proxy, as on the iPod: the helper's WebProxy behind a slirp guestfwd at 10.0.2.100:3128.
         // This explicit wifi0 replaces the machine's own. The image's Wi-Fi service carries a PAC that
         // uses the proxy and falls back to DIRECT, so Proxy off is purely host-side (the "off" mode).
-        let netdev = network ? proxyForward().map { "user,id=wifi0" + $0 } : nil
+        // 5.x boots restricted (Setup's no-network path); the foreground watch lifts restrict in place
+        // once Setup finishes. restrict=on blocks only guest-direct outbound -- the proxy guestfwd, a
+        // host-side chardev, keeps working in both states. Past-Setup reuse just flips within one poll.
+        let restrict = network && setupPhonesHome
+        let netdev = network ? proxyForward().map { "user,id=wifi0" + $0 + (restrict ? ",restrict=on" : "") } : nil
+        networkRestrictPending = netdev != nil && restrict
         return BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: instance.identity?.dieID,
                                      writableNOR: files.writableNOR?.path,
                                      gidBlobs: strategy == "iboot" ? instance.paths.base.appendingPathComponent("gid-blobs.bin").path : nil,
@@ -1434,10 +1442,19 @@ final class EmulatorController {
                         }
                     }
                     do {
-                        let name = self.guestAgent.isAlive ? try await self.guest.foregroundAppName() : nil
+                        let fg = self.guestAgent.isAlive ? try await self.guest.foreground() : nil
                         try Task.checkCancellation()
                         guard generation == self.bootGeneration else { return }
-                        self.foregroundAppName = name
+                        self.foregroundAppName = fg?.name
+                        // Setup finished (SpringBoard owns the screen, purplebuddy gone):
+                        // open networking once, seamlessly. Restrict=on carried Setup down
+                        // its no-network path; the in-place flip keeps the Wi-Fi association
+                        // and DHCP lease (no reboot, no re-join).
+                        if self.networkRestrictPending, fg?.bundleID == "com.apple.springboard" {
+                            self.networkRestrictPending = false
+                            self.link?.send(.netRestrict(false))
+                            logEvent("networking: Setup finished, lifting slirp restrict on wifi0")
+                        }
                     } catch {
                         if Task.isCancelled { return }
                         self.foregroundAppName = nil
@@ -1643,6 +1660,12 @@ final class EmulatorController {
     /// iOS and architecture are checked against.
     private var catalogEntry: FirmwareCatalog.Entry? { FirmwareCatalog.bundled.entry(id: instance.firmware) }
     var iosVersion: String { catalogEntry?.version ?? "3.1.3" }
+    /// 5.x Setup phones home: with live internet it fetches the software-update
+    /// catalog and then its Apple-ID page ignores "Skip This Step" for minutes
+    /// (guest idle). Boot these with slirp restrict=on so Setup takes its
+    /// no-network path; networking opens once Setup finishes. 3.x/4.x Setup has
+    /// no Apple-ID page and doesn't stall, so they boot unrestricted.
+    var setupPhonesHome: Bool { iosVersion.compare("5.0", options: .numeric) != .orderedAscending }
     /// "iPod2,1": the model Legacy Store judges apps for, with iosVersion.
     var productType: String? { catalogEntry?.productType }
     var guestArch: String { catalogEntry?.recipe?.guest?.arch ?? GuestPackage.arch(board: instance.board) ?? "armv6" }

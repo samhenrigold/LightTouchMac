@@ -178,4 +178,13 @@ nonisolated struct GuestServices: Sendable {
         let name = try await agent.frontmost().name.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : String(name.prefix(200))
     }
+
+    /// Foreground bundle id and display name in one round-trip. The bundle id
+    /// tells Setup (com.apple.purplebuddy) from the home screen/lock screen
+    /// (com.apple.springboard); the name is the trimmed display name (nil when empty).
+    func foreground() async throws -> (bundleID: String, name: String?) {
+        let f = try await agent.frontmost()
+        let name = f.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (f.bundleID, name.isEmpty ? nil : String(name.prefix(200)))
+    }
 }
