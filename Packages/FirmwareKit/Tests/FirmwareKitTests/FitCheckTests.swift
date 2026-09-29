@@ -158,4 +158,39 @@ enum FitFixture {
             #expect(log.fits.contains { $0.piece == "it_pbd" && $0.fits })
         }
     }
+
+    /// it_msmquiet fits where the mounter raises the notice it hides: 3.2.2 (UNSUPPORTED_FAILURE through
+    /// CFUserNotificationDisplayNotice), 4.2.1 (UNSUPPORTED_FAILURE_BODY through CFUserNotificationCreate); not 5.1.1,
+    /// whose MobileStorageMounter names neither key (its strings file still has them).
+    @Test func msmQuietFitsWhereTheMounterRaisesTheNotice() throws {
+        guard let quiet = try FitFixture.payload("armv7", "k48-ios4/hooks/it_msmquiet.dylib") else { return }
+        for (id, fits, key) in [("k48ap-7B500", true, "UNSUPPORTED_FAILURE through CFUserNotificationDisplayNotice"),
+                                ("k48ap-8C148", true, "UNSUPPORTED_FAILURE_BODY"), ("k48ap-9B206", false, "names neither")] {
+            try Oracle.withTemp { dir in
+                guard let v = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter], in: dir) else { return }
+                let f = FitCheck.msmQuiet(FitCheck.Firmware(root: v, arch: "armv7"), program: "/" + FitFixture.mounter, dylib: quiet)
+                #expect(f.fits == fits && f.proof.contains(key), "\(id): \(f.proof)")
+            }
+        }
+    }
+
+    /// The whole K48 bake on 5.1.1 (9B206), where it_msmquiet does not fit: SystemEdits.buildK48 leaves the dylib out,
+    /// leaves storage_mounter's job as shipped, seeds no hook for it, and records the misfit in `fit`.
+    @Test func k48BakeLeavesOutWhatDoesNotFit() throws {
+        guard let dmg = FitFixture.dmgs["k48ap-9B206"], Oracle.exists(dmg), let helpers = K48Oracle.guestTools else { return }
+        try Oracle.withTemp { dir in
+            let recipe = try #require(try Oracle.entry("k48ap-9B206").recipe), log = FitCheck.Log()
+            let parts = K48NAND.partitions(mbr: [UInt8](try K48NAND.makeMBR(systemMiB: recipe.systemMiB)))
+            let r = try SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: parts[0].count * 4096, dataBytes: Int64(parts[1].count) * 4096,
+                                             options: .init(recipe: recipe), helpers: helpers, fit: log)
+            let sv = try HFSPlusVolume(r.system)
+            #expect((try? sv.record(at: SystemEdits.Helpers.tools[3].path)) == nil)
+            let job = try #require(PropertyListSerialization.propertyList(from: sv.contents(sv.record(at: SystemEdits.msmJob)), format: nil) as? [String: Any])
+            #expect((job["EnvironmentVariables"] as? [String: Any])?["DYLD_INSERT_LIBRARIES"] == nil)
+            #expect(r.guestPackage.map { !$0.hooks.contains("/" + SystemEdits.Helpers.tools[3].path) } == true)
+            #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet") && !$0.fits })
+            Self.k48Bake9B206 = log.fits
+        }
+    }
+    nonisolated(unsafe) static var k48Bake9B206: [FitCheck.Fit] = []
 }

@@ -164,9 +164,13 @@ public enum SystemEdits {
             // every baked helper proven to load on this firmware (FitCheck.loads), read before any edit
             let fw = FitCheck.Firmware(root: m, arch: "armv7")
             _ = fw.precedent
-            for t in tools {
-                let host = t.name == Helpers.tools[3].name ? try stockProgram(m, msmJob, label: "com.apple.mobile.storage_mounter") : nil
-                try fit.check(FitCheck.loads(t.name, Data(contentsOf: try helper(t.name)), on: fw, host: host), required: true)
+            // it_msmquiet only where the mounter raises the notice it recognises; else left out, job untouched
+            let msm = Helpers.tools[3]
+            let quiet = try fit.check(FitCheck.msmQuiet(fw, program: try stockProgram(m, msmJob, label: "com.apple.mobile.storage_mounter"),
+                                                        dylib: Data(contentsOf: try helper(msm.name))), required: false)
+            if !quiet { tools.removeAll { $0.name == msm.name } }
+            for t in tools where t.name != msm.name {
+                try fit.check(FitCheck.loads(t.name, Data(contentsOf: try helper(t.name)), on: fw), required: true)
             }
             if let kernelcache {   // real-iBoot fsboot: the raw IPSW img3 kernelcache in the system volume
                 try mkdirs(at(kernelcachePath).deletingLastPathComponent())
@@ -207,9 +211,11 @@ public enum SystemEdits {
                 try put(Data(contentsOf: try helper(t.name)), at(t.path), mode: t.mode)
             }
             for j in jobs { try put(Data(contentsOf: try helper(j)), at(daemons + "/" + j), mode: 0o644) }
-            try rewritePlist(at(msmJob)) { d in
-                guard d["Label"] as? String == "com.apple.mobile.storage_mounter" else { throw FirmwareError(.unsupported, "\(msmJob): not storage_mounter's job") }
-                dict(d, "EnvironmentVariables")["DYLD_INSERT_LIBRARIES"] = "/" + Helpers.tools[3].path
+            if quiet {
+                try rewritePlist(at(msmJob)) { d in
+                    guard d["Label"] as? String == "com.apple.mobile.storage_mounter" else { throw FirmwareError(.unsupported, "\(msmJob): not storage_mounter's job") }
+                    dict(d, "EnvironmentVariables")["DYLD_INSERT_LIBRARIES"] = "/" + msm.path
+                }
             }
             try rewritePlist(at(btJob)) { $0["Disabled"] = true }
             result.activation = try activate(m, log: log)
@@ -217,7 +223,7 @@ public enum SystemEdits {
             let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gles: result.engine != nil, fit: fit, log: log)
             result.guestPackage = record
             rootOwned += seeded
-            rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"] + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
+            rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"].filter { fm.fileExists(atPath: at($0).path) } + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
 
             // /private/var skeleton for the data volume
             try copyTree(at("private/var"), skeleton)
