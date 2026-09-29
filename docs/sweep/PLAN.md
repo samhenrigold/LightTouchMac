@@ -65,6 +65,14 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 | C8 Disk images without `hdiutil` (deprecated in macOS 27, replaced by `diskutil image`): one `DiskImage` abstraction in FirmwareKit (attach/detach/convert/resize) with a `diskutil image` backend when present and `hdiutil` otherwise, tested on both; then move the prepare-time volume edits to the native HFSPlus module (it already does catalog, owners, normalize, journal) so preparation never mounts; mounting stays only for the user-facing Mount/Export feature | 2 + 3 | swift test; both backends on macOS 26/27; fresh-device on all entries |
 | C7 iPod 2.1.1 in the app (N72 recipe 2.x path, keys, catalog) | 1 | in-bundle prepare + boot |
 
+## Track F: fewer lines we own (Sam, 2026-09-28: "the best line of code is the line we never wrote")
+
+| Item | Effort | Gate |
+|---|---|---|
+| F1 Host GL executor on ANGLE (GLES on Metal) instead of deprecated legacy CGL: keep the wire decoder + surface/present plumbing, delete the ES→desktop translation, extension shims and GLSL 1.00 handling; after C1 lands | 5–8 | regress gles/shadow both boards; app-compat 49 with zero refusals |
+| F2 VideoToolbox boundary spike: can the H.264 model collect a full access unit and hand it to VTDecompressionSession (and the AMC model use AudioToolbox for AAC)? If yes, ffmpeg leaves the bundle | 1 (spike) | test_h264_* / test_amc_* vs libavcodec output |
+| F3 Web proxy in the app on URLSession (system trust store, HTTP/2, cache); guest keeps the PAC redirect only | 2 | check-web-proxy-forwarding; Proxy-compatibility set |
+
 ## Track D: emulator consolidation (after gl-coverage and usb-alert merge; ~10 d)
 
 | Item | Effort | Gate |
