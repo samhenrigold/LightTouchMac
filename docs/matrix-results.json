@@ -4712,7 +4712,7 @@
    "why": "internal: iBoot32Patcher failed (exit 255):\nmain: Starting...\nmain: iBoot-1219 inputted.\npatch_boot_args: Entering...\npatch_boot_args: Default boot-args string is at 0x25ff2\npatch_boot_args: boot-args xref is at 0x11f22\npatch_boot_args: Relocating boot-args string...\npatch_boot_args: \"Reliance on this certificate\" string found at 0x2a5f8\npatch_boot_args: Pointing default boot-args xref to 0x5ff2a5f8...\npatch_boot_args: Applying custom boot-args \"serial=3 debug=0x8 amfi_allow_any_signature=1 cs_enforcement_disable=1 enable-hsic=1\"\nfind_next_LDR_insn_with_value: Unable to resolve to LDR insn from xref 0x128019f22!\npatch_boot_args: Error locating LDR Rx, =boot_args!\nmain: Error doing patch_boot_args()!\n",
    "excerpt": "patch_boot_args: Pointing default boot-args xref to 0x5ff2a5f8...\npatch_boot_args: Error locating LDR Rx, =boot_args!\nmain: Error doing patch_boot_args()!"
   },
-  "triage": "(a) pipeline tool: iBoot32Patcher -b takes an unaligned false match of the default boot-args string's address (0x11f22, two pool words' halves) before the real literal at 0x11f24, then cannot find the LDR (smoke #43). Needs an aligned xref search, in the patcher or a native K48IBoot boot-args patch."
+  "triage": "(a) pipeline tool: iBoot32Patcher -b takes an unaligned false match of the default boot-args string's address (0x11f22, two pool words' halves) before the real literal at 0x11f24, then cannot find the LDR (smoke #48). Needs an aligned xref search, in the patcher or a native K48IBoot boot-args patch."
  },
  "k48ap-9A5288d": {
   "version": "5.0",
