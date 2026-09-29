@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "comment": "The source checkouts the app builds against, by commit. scripts/sources.py resolves them (QEMU_IOS_DIR, USBMUXD_SOURCE_DIR, QEMU_BUILD_DIR override the paths); build-release.py records pinned vs actual and refuses a Developer ID build from another commit unless --allow-unpinned. The emulator and usbmuxd ship together (usb-zlp <-> qemu-zlp): bump both lines in one commit.",
+  "qemu-ios": {
+    "repository": "https://github.com/samhenrigold/qemu-ios",
+    "branch": "ipad1",
+    "commit": "1778d22b84a3696338f962dcc0c0a598fff26902",
+    "path": "~/Developer/qemu-ios-ipad1",
+    "build_dir": "build-w1-native",
+    "provides": "contrib/export-guest-artifacts.sh (guest tools, tables, entitlements, headers, dylib); build_dir is the development build (the helper's dylib for Xcode and the checks), never the release's --qemu-build"
+  },
+  "usbmuxd": {
+    "repository": "https://github.com/samhenrigold/usbmuxd",
+    "branch": "idle-poll",
+    "commit": "33728aee156750d75a424ecc5a7bdcfcce1ce0c9",
+    "path": "~/Developer/usbmuxd-qemu/usbmuxd",
+    "provides": "the usbmuxd the bundle ships (qemu-zlp 41631a7: real ZLPs after max-packet-multiple writes, wMaxPacketSize 512; idle-poll: 50 ms polling once idle for 1 s)"
+  },
+  "iBoot32Patcher": {
+    "pinned_in": "build-support/dependencies.json",
+    "group": "tools"
+  }
+}

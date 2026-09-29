@@ -189,30 +189,6 @@
       "checksum_source": "https://api.github.com/repos/libimobiledevice/libtatsu/releases/tags/1.0.5 (assets[].digest, verified 2026-09-11)"
     },
     {
-      "name": "libzip",
-      "version": "1.11.4",
-      "groups": [
-        "static"
-      ],
-      "archive": "libzip-1.11.4.tar.xz",
-      "directory": "libzip-1.11.4",
-      "url": "https://libzip.org/download/libzip-1.11.4.tar.xz",
-      "sha256": "8a247f57d1e3e6f6d11413b12a6f28a9d388de110adc0ec608d893180ed7097b",
-      "checksum_source": "SHA-256 calculated from this official HTTPS archive on 2026-09-11."
-    },
-    {
-      "name": "ideviceinstaller",
-      "version": "1.2.0",
-      "groups": [
-        "static"
-      ],
-      "archive": "ideviceinstaller-1.2.0.tar.bz2",
-      "directory": "ideviceinstaller-1.2.0",
-      "url": "https://github.com/libimobiledevice/ideviceinstaller/releases/download/1.2.0/ideviceinstaller-1.2.0.tar.bz2",
-      "sha256": "26115288e50d003bbb7d23c05441c54ea69b255974303bfd44fef6943e042f94",
-      "checksum_source": "https://api.github.com/repos/libimobiledevice/ideviceinstaller/releases/tags/1.2.0 (assets[].digest, verified 2026-09-11)"
-    },
-    {
       "name": "iBoot32Patcher",
       "version": "1ff9bd14648efae691ed23ae0abb55a4635111e3",
       "groups": [

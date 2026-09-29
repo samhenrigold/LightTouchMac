@@ -350,7 +350,7 @@ private final class DeviceRowCell: NSTableCellView {
         case let .notDownloaded(bytes):
             show(bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) })
         case .downloaded: show("Downloaded")
-        case .bundled: show("Built In")
+        case .bundled: show("Built in")
         case .downloading, .preparing:
             spin(fraction: row.progress)
             show(row.progressSummary)
@@ -358,9 +358,9 @@ private final class DeviceRowCell: NSTableCellView {
         case .running: show(symbol: "circle.fill", color: .systemGreen, size: 8)
         case .stopping: spin(fraction: nil)
         case .error: show(symbol: "exclamationmark.triangle.fill", color: .systemYellow, size: 12)
-        case .unavailable(.comingSoon): show("Coming Soon")
+        case .unavailable(.comingSoon): show("Coming soon")
         case .unavailable(.untested): show("Untested")
-        case .unavailable(.requiresIPSW): show("Requires IPSW")
+        case .unavailable(.requiresIPSW): show("Requires an IPSW")
         }
         if let note = row.note, detail.isHidden { show(note) }
         // One element per row for VoiceOver: "iOS 3.2.2, Experimental, Running".

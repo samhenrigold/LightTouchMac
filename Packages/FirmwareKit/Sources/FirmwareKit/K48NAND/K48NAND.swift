@@ -9,7 +9,10 @@ import Foundation
 
 public enum K48NAND {
     static let meta = 12
-    static let nsig: UInt32 = 0x43313131, sigFlags: UInt32 = 0x00010005
+    /// NANDDRIVERSIGN nSig: "C11" + the epoch digit in the low byte (the FIL reads it as '0' + epoch); epoch 1 for
+    /// IOFlashStorage up to 410.3 (iOS 4.3.0), 2 from 410.4 (4.3.5), see signatureEpoch(kernelcache:).
+    static let nsigBase: UInt32 = 0x43313130, sigFlags: UInt32 = 0x00010005
+    static func nsig(epoch: UInt8) -> UInt32 { nsigBase + UInt32(epoch) }
     static let tIndex: UInt8 = 0x4, tClosed: UInt8 = 0x8, tUser: UInt8 = 0x10, tVFL: UInt8 = 0x80
     static let unmapped: UInt32 = 0xFFFFFFFF
 
@@ -224,7 +227,7 @@ public enum K48NAND {
         return c
     }
 
-    static func writeMetadata(_ st: Store, _ geo: Geometry, kernelVersion: [UInt8]) throws {
+    static func writeMetadata(_ st: Store, _ geo: Geometry, kernelVersion: [UInt8], epoch: UInt8) throws {
         for cs in 0..<geo.numCS {
             let pg = specialPage(geo, "DEVICEINFOBBT", 4, geo.cand[cs], bbtBitmap(geo, cs))
             for blk in geo.cand[cs].prefix(2) {
@@ -236,7 +239,7 @@ public enum K48NAND {
             for p in 0..<8 { try st.write(cs, geo.ppage(geo.vflBlocks[0], p), ctx, m) }
         }
         var payload = [UInt8](repeating: 0, count: 8 + 0x100)
-        put32(&payload, 0, nsig); put32(&payload, 4, sigFlags)
+        put32(&payload, 0, nsig(epoch: epoch)); put32(&payload, 4, sigFlags)
         payload.replaceSubrange(8..<8 + kernelVersion.count, with: kernelVersion)
         let sig = specialPage(geo, "NANDDRIVERSIGN", 0, [Int](repeating: 0, count: 8), payload)
         for p in 0..<geo.pagesPerBlock { try st.write(0, geo.ppage(geo.cand[0][4], p), sig.data, sig.meta, raw: true) }
@@ -332,6 +335,31 @@ public enum K48NAND {
         return Array(d[r.lowerBound..<end].prefix(0xff))
     }
 
+    /// The NAND-signature epoch this kernel's FIL wants (nSig's low byte, '0' + epoch). IOFlashStorage-410.4 (4.3.5)
+    /// wants 2 and parks a '1' store in "AppleNANDLegacyFTL: epoch roll wait" until a restore rolls it; 410.3
+    /// (4.3.0) and earlier have no such getter and take '1'. Read off the getter's own shape in the FIL,
+    /// `ldr r3, [pc, #imm]; blx r3; adds r0, #0x30; uxtb r0, r0; pop {r7, pc}`, whose literal names `movs r0, #N;
+    /// bx lr` (8F190 -> 1, 8L1 -> 2; the iOS 5 kernels have another shape and get 1).
+    public static func signatureEpoch(kernelcache: URL) throws -> UInt8 {
+        let d = try Data(contentsOf: kernelcache, options: .alwaysMapped)
+        let m = try MachO(d)
+        let shape = Data([0x30, 0x30, 0xC0, 0xB2, 0x80, 0xBD])
+        var from = 0
+        while let r = d.range(of: shape, in: from..<d.count) {
+            let i = r.lowerBound
+            from = i + 1
+            guard i >= 4, d[i - 3] == 0x4B, d[i - 2] == 0x98, d[i - 1] == 0x47 else { continue }   // ldr r3, [pc, #imm]; blx r3
+            let pool = ((i - 4) & ~3) + 4 + Int(d[i - 4]) * 4
+            guard pool + 4 <= d.count else { continue }
+            let target = MachO.u32(d, pool) & ~1
+            guard let seg = m.segments.first(where: { $0.vmaddr <= target && target < $0.vmaddr + $0.vmsize }) else { continue }
+            let o = Int(seg.fileoff + (target - seg.vmaddr))
+            guard o + 2 <= d.count, d[o + 1] == 0x20 else { continue }   // movs r0, #N
+            return d[o]
+        }
+        return 1
+    }
+
     /// A page-granular reader over a (possibly sparse) raw image, with in-place byte patches.
     final class FilePages {
         let fd: Int32, size: Int, page: Int, pages: Int
@@ -410,7 +438,7 @@ public enum K48NAND {
 
     /// ipad1_nand.py build: the store for `system` (+ `s3` + the data volume) at the MBR's partitions, into `out`.
     @discardableResult
-    public static func build(geometry geo: Geometry = .k48_16g, mbr: URL, kernelVersion: [UInt8], system: URL, s3: URL? = nil,
+    public static func build(geometry geo: Geometry = .k48_16g, mbr: URL, kernelVersion: [UInt8], epoch: UInt8 = 1, system: URL, s3: URL? = nil,
                              data: DataVolume, out: URL, force: Bool = false, log: (String) -> Void = { _ in }) throws -> BuildResult {
         let fm = FileManager.default
         if fm.fileExists(atPath: out.appendingPathComponent("geometry.json").path) && !force {
@@ -454,7 +482,7 @@ public enum K48NAND {
         }
 
         let st = try Store(create: out, geo: geo)
-        try writeMetadata(st, geo, kernelVersion: kernelVersion)
+        try writeMetadata(st, geo, kernelVersion: kernelVersion, epoch: epoch)
         let ftl = FTLWriter(st, geo)
         // LPN == 4 KiB LBA, segments in ascending LBA order
         for n in 0..<min(p1.lba, head.count / ps) {

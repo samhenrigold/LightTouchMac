@@ -105,7 +105,7 @@ link.frontSurface() // (surface: IOSurface, serial: UInt64, isNew: Bool)?, for o
 link.info, link.pid, link.terminate() /* SIGTERM: clean shutdown */, link.kill()
 ```
 
-Callbacks run on `queue`. Pending requests fail with `.closed` when the link goes, and with `.timedOut` after their timeout. `tests/check-helper-boot.py` drives this through `tests/helper-driver`.
+Callbacks run on `queue`. Pending requests fail with `.closed` when the link goes, and with `.timedOut` after their timeout. `tests/sessions/check-helper-boot.py` drives this through `tests/drivers/helper-driver`.
 
 ### How each C call crosses
 
@@ -179,7 +179,7 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 **The old layout is erased once, not migrated** (C6, 2026-09-28, `LegacyState.swift`; the adoption of it in place, `LegacyAdoption`, is gone with `LaunchOptions` and every non-prepared boot path).
 - Found at launch: `State/device`, `nandrw-*`, `snapshot-*`, `.reset-*`, `State/IPAs`, `AppCache`, the old logs, records whose `base.kind` is not `prepared`, and the pre-library root `Application Support/LightTouchMac`.
 - One prompt: "Light Touch's built-in iPod has changed format. Erase it and continue (apps you've saved are kept), or quit." Erase & Continue keeps every `.ipa` (into the library) and the host pairing (`work/usbmuxd-conf`, seeded into the built-in device when it is published), removes the rest. Quit changes nothing.
-- Test: `tests/check-bundled-prepared.py` (fresh state → the built-in iPod published as `.prepared`; old layout → erased, IPAs kept, pairing copied).
+- Test: `tests/offline/check-bundled-prepared.py` (fresh state → the built-in iPod published as `.prepared`; old layout → erased, IPAs kept, pairing copied).
 
 ### Storage policy (2026-09-28, `storage-fixes`)
 
@@ -232,8 +232,8 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 - *Recordings.* A take that can't be played after launch recovery is deleted, and the log says so.
 - *Settings > Storage* shows each device's allocated base, data (overlay + NOR) and snapshot sizes, the
   downloaded and imported IPSWs, the decrypt cache and logs, with Remove IPSW, Clear Caches and Delete Device.
-- Tests: `tests/check-firmware-jobs.py` (removal guard, Delete with a read-only base, atomic publish, decrypt
-  cache, SHA mismatch, sweeps), `tests/device-state-storage.swift` (erase GC), `tests/check-helper-boot.py
+- Tests: `tests/offline/check-firmware-jobs.py` (removal guard, Delete with a read-only base, atomic publish, decrypt
+  cache, SHA mismatch, sweeps), `tests/fixtures/device-state-storage.swift` (erase GC), `tests/sessions/check-helper-boot.py
   --only lease` (two helpers on one device's lease).
 
 ## C. UI (AppKit)
@@ -347,19 +347,22 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 
 ### Multi-device release build
 
-`scripts/build-release.py --stage …` runs the release as resumable stages. Each stage takes under 10 minutes and skips work that is already current, so run them one at a time (or `--stage all`). Without `--stage`, the one-step iPod build from `~/Developer/qemu-ios` is unchanged.
+`scripts/build-release.py --stage …` runs the release as resumable stages. Each stage takes under 10 minutes and skips work that is already current, so run them one at a time (or `--stage all`). Without `--stage`, the one-step build runs everything (including `build-package-native.sh`) from the same pinned sources.
+
+**The pin.** `build-support/sources.json` names the qemu-ios commit (branch `ipad1`), its expected checkout path and development build directory, and the usbmuxd commit; `scripts/sources.py` resolves it for every script and check, and `sources.py check` prints pinned vs actual. `--qemu-source` and `--usbmuxd-source` default to the pin's paths. The build records pinned vs actual commits (`build-inputs.json` → `pin`) and refuses a Developer ID build whose qemu-ios checkout (and, one-step, usbmuxd) is not at the pinned commit, unless `--allow-unpinned`; ad-hoc builds only record. A new emulator or usbmuxd is a pin bump in this repository, and the two move together (usb-zlp needs qemu-zlp).
 
 It needs these trees and SDKs:
-- `~/Developer/qemu-ios-ipad1` (the `ipad1` branch) as `--qemu-ios`, with a private `--qemu-build` dir inside it. The default is `build-release-native`; the 09-28 build reused `build-w1-native`. Never use `build/`.
+- The pinned qemu-ios checkout (`~/Developer/qemu-ios-ipad1`, the `ipad1` branch, at the pinned commit) as `--qemu-ios`, with a private `--qemu-build` dir inside it. The default is `build-release-native`; the 09-28 build reused `build-w1-native`. Never use `build/`.
 - A native root to reuse as `--native-deps`, e.g. `~/Developer/LightTouchMac/.build/releases/release-20260926/native`. Its prefix and static deps take longer than 10 minutes to build, so a fresh one comes from a one-step build.
-- `~/Developer/usbmuxd-qemu/usbmuxd` as `--usbmuxd-source`. The native stage rebuilds usbmuxd over the reused prefix from `USBMUXD_COMMIT` (41631a7, branch `qemu-zlp`) through a temporary worktree, records it as `usbmuxd_commit`, and fails unless libslirp (the iPad's USB Ethernet) was found. The emulator and usbmuxd ship together: from qemu-ios `ipad1` abb1a1b817 the emulator invents no USB ZLPs, so usbmuxd must send them.
+- The pinned usbmuxd checkout (`~/Developer/usbmuxd-qemu/usbmuxd`) as `--usbmuxd-source`. The native stage rebuilds usbmuxd over the reused prefix from the pinned commit (`idle-poll` 33728ae on `qemu-zlp` 41631a7) through a temporary worktree, records it as `usbmuxd_commit`, and fails unless libslirp (the iPad's USB Ethernet) was found. The emulator and usbmuxd ship together: from qemu-ios `ipad1` abb1a1b817 the emulator invents no USB ZLPs, so usbmuxd must send them.
 - iBoot32Patcher, which firmwarekit runs for the iPad's real-iBoot chain, is pinned in `build-support/dependencies.json` (group `tools`: LukeZGD's fork at `1ff9bd14648efae691ed23ae0abb55a4635111e3`, the build Legacy-iOS-Kit ships; archive sha256; license GPL-3.0). Both native paths (`build-package-native.sh` and `--stage native`) fetch that archive and build it with `scripts/build-iboot32patcher.sh` into `native/build/iBoot32Patcher` (arm64, macOS 14; `build.json` records commit, license and sha256). package.sh ships it as `Contents/MacOS/iBoot32Patcher`, signed with the other tools, with `LICENSE` and `SOURCE.txt` under `Resources/licenses/iBoot32Patcher/`. `K48IBootTests.patcherMatchesReference` (with `FIRMWAREKIT_IBOOT_PATCHER` pointing at a built copy) checks its output on the 7B500, 8C148 and 7B367 iBoots byte-for-byte against the Legacy-iOS-Kit v25.09.01 binary. Because the manifest and this script are native recipes, adding the patcher invalidated every earlier native root: the first `--native-deps` with it came from a one-step `build-package-native.sh` (`.build/native-iboot-ship`, 2026-09-28).
 - `--sdk ~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk` and `ldid` for the guest tools. `--assets` (`~/Developer/qemu-ios-files`) supplies only `bootrom_240_4` now; `--bundled-ipsw` (default `~/Developer/ipod2g-re/OldSDK/iPod2,1_3.1.3_7E18_Restore.ipsw`) is what the built firmwarekit prepares as the built-in iPod.
 - Xcode, and the Developer ID identity plus the `ltm-notary` profile.
 
 ```
+python3 scripts/sources.py check      # both checkouts at the pinned commits, clean
 R=(scripts/build-release.py --output .build/releases/multidevice-YYYYMMDD
-   --qemu-ios ~/Developer/qemu-ios-ipad1 --qemu-build ~/Developer/qemu-ios-ipad1/build-w1-native
+   --qemu-build ~/Developer/qemu-ios-ipad1/build-w1-native
    --native-deps ~/Developer/LightTouchMac/.build/releases/release-20260926/native
    --sdk ~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk
    --sign-id "Developer ID Application: Sam Gold (SM75355Y6R)" --notary-profile ltm-notary)
@@ -370,12 +373,12 @@ What each stage does:
 - **native:** usbmuxd and iBoot32Patcher.
 - **qemu:** configure once, then ninja.
 - **dylib:** `make-dylib-macos.sh`.
-- **guest:** the armv6 helpers, and (from a checkout with `contrib/ipad1-guest`) the iPad helpers firmwarekit reads, built by `contrib/ipad1-guest`, `contrib/appsync` and `contrib/ipad1-gles` `build.sh` from a source copy into `guest/ipad-guest-tools` (ldid-signed; `IPAD_SDK` picks the 3.2 SDK). package.sh ships them flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without them. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed. The guest packages (`armv6.itpack`, `armv7.itpack`, qemu-ios `contrib/guest-package/build.sh`) join that directory; the app composes each boot's offer from them (guest-package-bootstrap.md, P5).
+- **guest:** qemu-ios `contrib/export-guest-artifacts.sh` (through `scripts/build-guest-tools.sh`): every guest component built by its own `build.sh` from a source copy (`contrib/guest-package/build.sh`), staged as `guest/guest-tools` (the iPod set the app uploads) and `guest/ipad-guest-tools` (the flat directory firmwarekit reads: the iPad helpers, AppSync, the GL engines with their `gli-dispatch-*.tsv`, the n72 recipe's inputs, `armv6.itpack` and `armv7.itpack` at `contrib/guest-package/VERSION`'s serial; ldid-signed; `IPAD_SDK` picks the 3.2 SDK), plus the helper entitlements and headers, with `guest/manifest.json` (source commit, dirty flag, sha256 per input and per file). `validate_guest` checks the directories against the manifest, the required names (`GUEST_PAYLOADS`, `IPAD_GUEST_PAYLOADS`, the catalog's `gli_dispatch` tables) and that the checkout's HEAD and the recorded inputs are unchanged. package.sh ships the iPad set flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without it. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed. The app composes each boot's offer from the packages (guest-package-bootstrap.md, P5).
 - **app:** xcodebuild Release (it embeds `LightTouchDevice` and `firmware-catalog.json`), and `swift build -c release` for `Packages/FirmwareKit`; package.sh ships it as `Contents/MacOS/firmwarekit` (hardened runtime, no entitlements). It must build: the built-in iPod needs it.
 - **package:** first the built-in iPod (`bundled_base`): the built firmwarekit's `create` of `n72ap-7E18` from `--bundled-ipsw` with the built `ipad-guest-tools` (and the built helper), packed by `scripts/pack-base.py` into `bundled/n72ap-7E18.itbase` with `bundled.json` (inputs, the lock's hashes) beside it, skipped when its inputs are unchanged; then a fresh copy of the product, `build-inputs.json` and package.sh (`LTM_BASE_BLOB`). Notarization is not done here.
 - **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
 - **staple.**
-- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then, for each of k48ap-7B500 (`--verify-ipsw`), k48ap-8C148, n72ap-7E18 and n72ap-8C148 (`VERIFY_ENTRIES`: the IPSWs in `~/Downloads` and `~/Developer/ipod2g-re/OldSDK`), the bundled `firmwarekit create` prepares it with its default `--guest-tools` and the bundled `LightTouchDevice` into `prepare-check/` (it must end with `done`), and `tests/check-sessions.py --single` boots the result through the bundle's helper, dylib, usbmuxd, Frameworks and bootrom: lit, lockdown over its own usbmuxd, AFC round trips of 16384/16385/65536/1048583 bytes (no restore), an IPA install, a clean shutdown. The output is deleted; the frames stay in `verify-frames/<entry>/`. One entry per run, so rerun `--stage verify` until every entry is current. Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
+- **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then, for each of k48ap-7B500 (`--verify-ipsw`), k48ap-8C148, n72ap-7E18 and n72ap-8C148 (`VERIFY_ENTRIES`: the IPSWs in `~/Downloads` and `~/Developer/ipod2g-re/OldSDK`), the bundled `firmwarekit create` prepares it with its default `--guest-tools` and the bundled `LightTouchDevice` into `prepare-check/` (it must end with `done`), and `tests/sessions/check-sessions.py --single` boots the result through the bundle's helper, dylib, usbmuxd, Frameworks and bootrom: lit, lockdown over its own usbmuxd, AFC round trips of 16384/16385/65536/1048583 bytes (no restore), an IPA install, a clean shutdown. The output is deleted; the frames stay in `verify-frames/<entry>/`. One entry per run, so rerun `--stage verify` until every entry is current. Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
 
 After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source-revisions.json` and the release notes are made by hand, and nothing here publishes.
 
@@ -398,7 +401,7 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 - W1 and W3 go first, publishing their APIs on day 1; W2 and W4 code against them.
 - **Gate:**
   - Release signed and notarized.
-  - A headless helper boots both devices (`tests/check-helper-boot.py`).
+  - A headless helper boots both devices (`tests/sessions/check-helper-boot.py`).
   - The adoption test passes.
 - **Sam tests:**
   1. The existing iPod state is intact.
@@ -447,6 +450,8 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 
 ## Corrections from implementation
 
+- **Tests (E4, 2026-09-28):** `tests/` is three tiers, `offline/` (no emulator), `sessions/` (helper + images) and `release/` (packaging), with `drivers/` (helper-driver, session-driver) and `fixtures/`; `tests/run.py {offline|sessions|release}` runs a tier (parallel through one shared module cache for offline and release, one emulator at a time for sessions) and `scripts/gate.sh` wraps it. Checks compile whole production files: `DeviceExecution.swift` (the deadline race, serial gate, errors and timeouts, out of DeviceServices), `BootRecipe.swift` and `DeviceRow.swift` (out of DeviceSession) and `DiagnosticsExport.swift` (out of MainWindowController) exist so they can. `tests/SLICED.md` lists the checks that still cut a section out of a hub file and the extraction that retires each.
+
 **W3, 2026-09-28** (`b63d910`, `a731de4`):
 - `device.json` has two more fields: `format` and `storage.key` (the image identity; it pins the overlay). C6 removed `storage.resetMarker` and `legacy {filesRoot, nand, pointer?}` with the adoption they served.
 - **Runtime files are per instance.** That covers the usbmuxd pid, the lease and logs, under `Devices/<uuid>/work/` and `~/Library/Logs/<bundle>/Devices/<uuid>/`. `session.env` is gone (nothing read it).
@@ -463,10 +468,10 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 - **`BootConfig` has no `serialLog`**: the argv carries `-serial` (the app's FIFO works across processes). The one-shot config has one.
 - **`LinkEvent.audioEnded(generation, failed)`** tells the recorder the drain after `audioStop` finished. `hello` takes a `machine` for `deviceInfo`. `HelperInfo` adds `pid`.
 - **The orphan shutdown on the iPod is the agent halt** (1.3 s to a confirmed power-off), then powerdown. The iPad powerdown confirmed in 15.6 s.
-- **Packaging:** Xcode embeds the helper in `Contents/MacOS` (an "Embed Device Helper" copy phase). Its embedded Info.plist identifier is `gold.samhenri.LightTouchMac.LightTouchDevice`. `CODE_SIGN_ENTITLEMENTS` is `$(QEMU_IOS_DIR)/contrib/macos-app/entitlements.plist`, and `OTHER_LDFLAGS` is empty (no qemu link). `package.sh` checks the helper, drops its absolute rpaths and signs it with those entitlements after the frameworks and tools and before the app. `scripts/test-package.py APP` checks the signature, entitlements, closure and a `--probe` that loads `Frameworks/libqemu-arm.dylib`.
+- **Packaging:** Xcode embeds the helper in `Contents/MacOS` (an "Embed Device Helper" copy phase). Its embedded Info.plist identifier is `gold.samhenri.LightTouchMac.LightTouchDevice`. `CODE_SIGN_ENTITLEMENTS` is `$(QEMU_IOS_DIR)/contrib/macos-app/entitlements.plist`, and `OTHER_LDFLAGS` is empty (no qemu link). `package.sh` checks the helper, drops its absolute rpaths and signs it with those entitlements after the frameworks and tools and before the app. `tests/release/test-package.py APP` checks the signature, entitlements, closure and a `--probe` that loads `Frameworks/libqemu-arm.dylib`.
 - **A Release build with the helper was notarized** (Accepted, stapled, `spctl`: Notarized Developer ID). It was `package.sh` with `LTM_ASSETS=none`, not `build-release.py`. `build-release.py` can't run end to end under a 10-minute step limit: its fresh native build is one long script, and `--native-build` would relink the prior release's native dir, which is configured for `~/Developer/qemu-ios`. That dir's ipod-branch dylib also lacks the iPad exports the app links (`qemu_ios_ui_compass`, `usb_charger`, `orientation`). **A multidevice release needs a native build from `qemu-ios-ipad1`.** The one used here was `qemu-ios-ipad1/build-w1-native`: the native recipe's QEMU configure, over the 09-26 release's prefix and static deps.
 - **Tests boot with `-audio driver=none`**; the app keeps its own audio arguments.
-- **`tests/check-helper-boot.py`: 22/22** (reject, iPod, iPad, restore, iPad orphan, one-shot, headless). The PNG dumps and driver logs are in `~/Developer/qemu-ios-files/w1-helper/dumps/`.
+- **`tests/sessions/check-helper-boot.py`: 22/22** (reject, iPod, iPad, restore, iPad orphan, one-shot, headless). The PNG dumps and driver logs are in `~/Developer/qemu-ios-files/w1-helper/dumps/`.
 
 ## Preparer contract (Sam, 2026-09-28: no Python bridge; the app runs the Swift preparer only)
 
@@ -577,7 +582,7 @@ The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for
 - **No MachOSigner in FirmwareKit.** Guest helpers are signed once when the app is built (`build-release.py` on the dev Mac), so FirmwareKit never signs at run time.
 **W2, 2026-09-28** (link conversion, sessions):
 - **The app no longer links `libqemu-arm.dylib`** (app target `OTHER_LDFLAGS = ""`, no qemu headers in the bridging header); `otool -L` and `nm -u` show nothing of it. Every former `qemu_ios_*` call goes through `DeviceLink` as the section A table says.
-- **`DeviceProcess`** (DeviceSession.swift, Foundation only) owns one helper: its `native.log` (`ProcessLogCapture`), the hello check (a board mismatch is logged, not fatal), the boot, and one death with a reason ("killed (signal 9)", "exited unexpectedly (code n)", a start failure). **`BootRecipe`** builds both boards' argv from paths, and the prepared-base first boot (`preparedFiles`). tests/check-sessions.py compiles that section as the app does.
+- **`DeviceProcess`** (DeviceSession.swift, Foundation only) owns one helper: its `native.log` (`ProcessLogCapture`), the hello check (a board mismatch is logged, not fatal), the boot, and one death with a reason ("killed (signal 9)", "exited unexpectedly (code n)", a start failure). **`BootRecipe`** builds both boards' argv from paths, and the prepared-base first boot (`preparedFiles`). tests/sessions/check-sessions.py compiles that section as the app does.
 - **The boot is built after the hello**, not before the spawn: snapshot identity needs the helper's build id, and usbmuxd still starts before the guest's USB.
 - **EmulatorController polls the status block on its own 30 Hz timer** (liveness, storage failure, power-off, sleep), so a hidden device with no display link still flips booting → running. DisplayView only draws: `layer.contents` is the front IOSurface; the 3D model and captures make a CGImage from it under a use count.
 - **The helper forces the alpha byte opaque** when it copies a frame (`FrameRingWriter.copy`, vImage): iBoot and the iPod framebuffer leave it 0, and a layer showing the surface directly would honour it.
@@ -598,8 +603,11 @@ The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for
   guest tools the loader keeps current.)
 - The SSH transport, the script installer, itorient-over-SSH and Open Terminal are gone; package.sh no
   longer ships it-ssh-terminal.sh, sbdlicon, ithalt, itstatus, itproxy, ittrust or itorient. The web
-  proxy on both boards is the image's PAC plus the MCInstall profile. A legacy image without a baked PAC
-  keeps whatever proxy settings itproxy last wrote.
+  proxy on both boards is the image's PAC plus the CA trusted silently through the guest agent
+  (GuestServices.trustCertificate: the package's ittrust, or the app's copy out of the armv6 itpack, so no
+  "Install Profile" screen); the MCInstall profile is the fallback for a guest without an agent, offered
+  once (lockdown-mcinstall --installed) and named in the proxy settings ("Tap Install on the device…").
+  A legacy image without a baked PAC keeps whatever proxy settings itproxy last wrote.
 - The helper's SIGTERM path no longer resumes a VM whose guest already powered off (a quit after Power
   Off or after the app's halt aborted QEMU: "invalid runstate transition: 'shutdown' -> 'running'").
 

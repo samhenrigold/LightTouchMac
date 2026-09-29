@@ -34,7 +34,7 @@ struct MediaVideo: Sendable {
             defer { try? input.close() }
             guard FileManager.default.createFile(atPath: snapshot.path, contents: nil,
                                                   attributes: [.posixPermissions: 0o600]) else {
-                throw DeviceToolsError.failed("Could not prepare the video.")
+                throw DeviceToolsError.failed("Couldn’t prepare the video.")
             }
             let copy = try FileHandle(forWritingTo: snapshot)
             defer { try? copy.close() }
@@ -105,7 +105,7 @@ struct MediaVideo: Sendable {
                 try FileManager.default.copyItem(at: output, to: publishing)
                 if renamex_np(publishing.path, cached.path, UInt32(RENAME_EXCL)) != 0 {
                     guard errno == EEXIST else {
-                        throw DeviceToolsError.failed("Could not save the converted video (\(String(cString: strerror(errno)))).")
+                        throw DeviceToolsError.failed("Couldn’t save the converted video (\(String(cString: strerror(errno)))).")
                     }
                     try FileManager.default.removeItem(at: output)
                     try FileManager.default.copyItem(at: cached, to: output)

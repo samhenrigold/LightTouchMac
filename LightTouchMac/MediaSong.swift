@@ -33,7 +33,7 @@ struct MediaSong: Sendable {
             defer { if !complete { try? FileManager.default.removeItem(at: directory) } }
             var audio = directory.appendingPathComponent("audio." + ext)
             guard FileManager.default.createFile(atPath: audio.path, contents: nil) else {
-                throw DeviceToolsError.failed("Could not prepare the audio file.")
+                throw DeviceToolsError.failed("Couldn’t prepare the audio file.")
             }
             let input = try FileHandle(forReadingFrom: source)
             defer { try? input.close() }

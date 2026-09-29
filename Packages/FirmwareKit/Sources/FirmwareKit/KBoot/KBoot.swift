@@ -189,11 +189,12 @@ public enum KBoot {
         try fillDT(&dt, memoryMap: memoryMap, identity: identity, iboot: iboot, rootMatching: ramdisk == nil ? rootMatching : "")
         image.replaceSubrange(dtVA - vbase..<dtVA - vbase + dt.data.count, with: dt.data)
 
-        // boot_args rev 1 / version 2. Video: base, display (0 = text console for -v/-s), rowbytes, w, h, depth.
+        // boot_args rev 1 / the version the kernel checks for (2, or 3 from xnu-1735.47). Video: base, display
+        // (0 = text console for -v/-s), rowbytes, w, h, depth.
         let verbose = args.split(separator: " ").contains { $0 == "-v" || $0 == "-s" }
         let cmdline = Array(args.utf8)
         guard cmdline.count < 256 else { throw FirmwareError(.unsupported, "boot-args longer than BOOT_LINE_LENGTH") }
-        var ba = Data([1, 0, 2, 0])
+        var ba = Data([1, 0, m.bootArgsVersion(), 0])
         ba += DeviceTree.Value.le([UInt32(vbase), physBase, memSize, topOfKernel,
                                    vramPA, verbose ? 0 : 1, UInt32(fbWidth * fbDepth / 8), UInt32(fbWidth), UInt32(fbHeight), UInt32(fbDepth),
                                    0, UInt32(dtVA), UInt32(dtLen)])
@@ -254,6 +255,25 @@ public struct MachO: Sendable {
             off += size
         }
         segments = segs
+    }
+
+    /// The boot_args.Version pe_identify_machine demands, read off the kernel's own check (imgtools/ipad1_kboot.py
+    /// boot_args_version): the Thumb pair `ldrh rN, [r0, #2]` (0x8840|N) … `cmp rN, #V` (0x28|N<<8|V) just before the
+    /// literal naming "pe_identify_machine: Epoch Mismatch". 2 when the shape is not found (3.2.x, 4.2.1 and 4.3.0
+    /// boot with 2); 4.3.5's xnu-1735.47 and iOS 5's xnu-1878 say 3.
+    public func bootArgsVersion() -> UInt8 {
+        guard let so = data.range(of: Data("pe_identify_machine: Epoch Mismatch".utf8))?.lowerBound,
+              let seg = segments.first(where: { Int($0.fileoff) <= so - data.startIndex && so - data.startIndex < Int($0.fileoff + $0.filesize) })
+        else { return 2 }
+        let sva = seg.vmaddr + UInt32(so - data.startIndex) - seg.fileoff
+        guard let lit = data.range(of: Data(DeviceTree.Value.le([sva])))?.lowerBound else { return 2 }
+        let window = [UInt8](data[max(data.startIndex, lit - 0x400)..<lit])
+        for n in 0..<8 {
+            guard window.count > 2, let i = (0..<(window.count - 1)).reversed().first(where: { window[$0] == 0x40 | UInt8(n) && window[$0 + 1] == 0x88 })
+            else { continue }
+            for j in (i + 2)..<min(i + 10, window.count) where window[j] == 0x28 | UInt8(n) { return window[j - 1] }
+        }
+        return 2
     }
 
     /// LC_UNIXTHREAD's ARM_THREAD_STATE pc (r15).

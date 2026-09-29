@@ -131,8 +131,7 @@ struct DeviceTools: Sendable {
         // multi-minute upload, for a file that was never installable.
         guard await AppMetadataCache.bundleID(of: ipa) != nil else {
             throw DeviceError.preflight(
-                "“\(ipa.lastPathComponent)” doesn't look like an iPhone app archive — "
-                + "it has no Payload/…app/Info.plist inside.")
+                "“\(ipa.lastPathComponent)” isn’t an app archive (IPA).")
         }
 
         do {
@@ -269,7 +268,7 @@ struct DeviceTools: Sendable {
             output: .discarded, error: .string(limit: 1 << 16))
         guard result.terminationStatus.isSuccess, FileManager.default.fileExists(atPath: out.path) else {
             logEvent("install: executable repair failed: \(result.standardError)")
-            throw DeviceError.preflight("Could not repair the IPA's executable permissions.")
+            throw DeviceError.preflight("Couldn’t prepare the app’s files for install.")
         }
         succeeded = true
         logEvent("install: \(member) archived non-executable — repacked 0755")
@@ -335,32 +334,59 @@ struct DeviceTools: Sendable {
     }
 
     /// Both boards, no guest helper: routing is the image's PAC (always the proxy, DIRECT as fallback) and
-    /// the host's itwebproxy mode, so only trust needs the device. Turning the proxy on offers a
-    /// configuration profile with this device's CA through lockdown's stock MCInstall service
-    /// (lockdown-mcinstall, a child process like lockdown-tz); the user taps Install once in Settings.
-    /// ponytail: turning it off leaves the profile installed (the CA is this device's own and its key
-    /// never leaves the Mac); remove it in Settings > General > Profiles, or add RemoveProfile if asked.
-    func configureWebProxy(enabled: Bool) async throws {
-        guard enabled else { return }
+    /// the host's itwebproxy mode, so only trust needs the device. Turning the proxy on trusts this
+    /// device's CA in the guest silently through the agent (GuestServices.trustCertificate, the store
+    /// keeps it); only a guest without an agent gets the configuration profile through lockdown's stock
+    /// MCInstall service (lockdown-mcinstall, a child process like lockdown-tz), once: an installed
+    /// profile is never offered again, and the UI says to tap Install (`.needsTap`).
+    /// ponytail: turning it off leaves the trust in place (the CA is this device's own and its key
+    /// never leaves the Mac); add `ittrust remove` / RemoveProfile if asked.
+    func configureWebProxy(enabled: Bool) async throws -> WebProxyStatus {
+        guard enabled else { return .ready }
         guard let host = Bundled.resolve("itwebproxy", fallbacks: [
             "\(Bundled.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
         ]) else { throw DeviceToolsError.toolMissing("itwebproxy") }
-        // Packaged apps bundle it (package.sh); dev builds find it on the usual PATH directories.
-        guard let tool = Bundled.resolve("lockdown-mcinstall", fallbacks: Bundled.binarySearchPaths.map { "\($0)/lockdown-mcinstall" })
-        else { throw DeviceToolsError.toolMissing("lockdown-mcinstall") }
         let prepared = try await run(.path(FilePath(host)), arguments: ["--init-ca", proxyFile],
                                      output: .discarded, error: .string(limit: 1 << 16))
         guard prepared.terminationStatus.isSuccess else {
             logEvent("proxy: certificate preparation failed: \(prepared.standardError)")
-            throw DeviceToolsError.failed("Could not prepare this device’s HTTP proxy certificate.")
+            throw DeviceToolsError.failed("Couldn’t prepare the proxy certificate.")
         }
+        let der = try Data(contentsOf: URL(fileURLWithPath: proxyFile + ".ca.der"))
+        // The agent claims its channel shortly after lockdown answers; give it a moment before falling back.
+        if await guestAgent.waitAlive(seconds: 15) {
+            do {
+                try await guest.trustCertificate(der) { try Self.bundledGuestTool("ittrust") }
+                logEvent("proxy: certificate trusted through the guest agent")
+                return .ready
+            } catch is CancellationError { throw CancellationError() }
+            catch { logEvent("proxy: agent trust failed, offering the profile instead: \(error.localizedDescription)") }
+        }
+        // Packaged apps bundle it (package.sh); dev builds find it on the usual PATH directories.
+        guard let tool = Bundled.resolve("lockdown-mcinstall", fallbacks: Bundled.binarySearchPaths.map { "\($0)/lockdown-mcinstall" })
+        else { throw DeviceToolsError.toolMissing("lockdown-mcinstall") }
+        let installed = try await run(.path(FilePath(tool)), arguments: ["--installed"], environment: toolEnvironment,
+                                      output: .string(limit: 1 << 10), error: .string(limit: 1 << 10))
+        if installed.terminationStatus.isSuccess { return .ready }
         let offered = try await run(.path(FilePath(tool)), arguments: [proxyFile + ".ca.der"],
                                     environment: toolEnvironment,
                                     output: .string(limit: 1 << 10), error: .string(limit: 1 << 10))
         guard offered.terminationStatus.isSuccess else {
-            throw DeviceToolsError.failed("Could not offer the proxy certificate to the device. \(offered.standardError)")
+            logEvent("proxy: offering the certificate profile failed: \(offered.standardError)")
+            throw DeviceToolsError.failed("Couldn’t offer the proxy certificate to the device.")
         }
-        logEvent("proxy: certificate profile offered; confirm Install in the device's Settings")
+        logEvent("proxy: no guest agent; certificate profile offered, confirm Install on the device")
+        return .needsTap
+    }
+
+    /// A guest binary out of the bundled iPod package (armv6; ittrust runs on the iPad too), for a
+    /// guest whose package lacks it.
+    static func bundledGuestTool(_ name: String) throws -> Data {
+        guard let pack = GuestPackage.bundledPack(arch: "armv6", filesRoot: Bundled.filesRoot),
+              let tool = try GuestPackage.package(in: pack, board: "n72ap", build: "7E18")?.1["bin/\(name)"] else {
+            throw DeviceToolsError.toolMissing(name)
+        }
+        return tool
     }
 
     /// Push the guest's dirty buffers to flash.

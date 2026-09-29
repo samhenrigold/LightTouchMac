@@ -201,6 +201,22 @@ public enum Recipe {
         return out
     }
 
+    /// The ramdisk the keybag one-shot boots: the build's own Update (else Restore) ramdisk out of the decrypt cache,
+    /// or, for a build without ramdisk keys (recipe.keybag_ramdisk_from), the sibling entry's, decrypted into work.
+    /// Returns (its URL, the lock's name for it).
+    static func keybagRamdisk(_ c: Context) throws -> (URL, String) {
+        let comp = try BuildComponents.load(c.ipsw)   // a restore-only build ships just the Restore ramdisk
+        guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(c.e.id): no ramdisk") }
+        let name = String(update.dropLast(4)) + "-ramdisk.dmg"
+        guard let from = c.recipe.keybagRamdiskFrom else { return (c.decFile(name), name) }
+        guard let sib = c.o.sibling, sib.entry.id == from else {
+            throw FirmwareError(.unsupported, "\(c.e.id): the keybag ramdisk comes from \(from); pass --sibling-entry/--sibling-ipsw for it")
+        }
+        let rd = try Preparer.siblingRamdisk(sib.entry, ipsw: sib.ipsw, work: c.work)
+        c.log("keybag ramdisk: \(from):\(rd.lastPathComponent) (this build has no ramdisk key)")
+        return (rd, "\(from):\(rd.lastPathComponent)")
+    }
+
     /// The path a lock's sha256 record names: {"path": n, "sha256": ...}.
     static func fileRecord(_ c: Context, _ n: String) throws -> [String: String] {
         ["path": n, "sha256": try Preparer.digest(c.file(n), SHA256())]

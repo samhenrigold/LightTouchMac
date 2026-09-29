@@ -1361,11 +1361,11 @@
   "version": "4.3",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T00:48:10+00:00",
+  "when": "2026-09-29T02:22:11+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-acb86d65823cd73b2/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-matrix43/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix43-guest/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -1374,7 +1374,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 30.2,
+   "seconds": 349.8,
    "ok": false,
    "steps": [
     "Verifying the IPSW",
@@ -1382,34 +1382,33 @@
     "Writing the identity and boot chain",
     "Building the system and data volumes",
     "Writing the NAND",
-    "Creating the data-protection keybag"
+    "Creating the data-protection keybag",
+    "Sealing the NAND"
    ],
    "warnings": [
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
-    "keybag boot attempt 1/3 failed after 6 s: panic(cpu 0 caller 0x80996535): \"IOP: startup ping failed\"@/SourceCache/EmbeddedIOP/EmbeddedIOP-20.4/EmbeddedIOP.cpp:221; retrying",
-    "keybag boot attempt 2/3 failed after 6 s: panic(cpu 0 caller 0x80996535): \"IOP: startup ping failed\"@/SourceCache/EmbeddedIOP/EmbeddedIOP-20.4/EmbeddedIOP.cpp:221; retrying"
+    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
    ],
-   "error": "oneshot_failed: keybag boot: panic(cpu 0 caller 0x80996535): \"IOP: startup ping failed\"@/SourceCache/EmbeddedIOP/EmbeddedIOP-20.4/EmbeddedIOP.cpp:221",
-   "last_step": "Creating the data-protection keybag",
+   "error": "oneshot_failed: seal boot: no clean halt after 300 s",
+   "last_step": "Sealing the NAND",
    "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8F190/firmwarekit.log"
   },
   "first_failure": {
    "check": "prepare",
-   "why": "oneshot_failed: keybag boot: panic(cpu 0 caller 0x80996535): \"IOP: startup ping failed\"@/SourceCache/EmbeddedIOP/EmbeddedIOP-20.4/EmbeddedIOP.cpp:221",
-   "excerpt": "firmwarekit: oneshot_failed: keybag boot: panic(cpu 0 caller 0x80996535): \"IOP: startup ping failed\"@/SourceCache/EmbeddedIOP/EmbeddedIOP-20.4/EmbeddedIOP.cpp:221"
+   "why": "oneshot_failed: seal boot: no clean halt after 300 s",
+   "excerpt": "one-shot: timed out after 300 s (exit 0)\nfirmwarekit: oneshot_failed: seal boot: no clean halt after 300 s"
   },
-  "triage": "(c) iOS 4.3: prepare gets past the GL layout (stock engine fallback, generic fix committed: the 4.3.x GLI table has 870 slots, none of the shipped shims fit -> a GLEngine-8F190 build or the runtime shim of PLAN C1 is the per-build data debt), then the keybag one-shot boot of the 4.3 kernel (xnu-1735, EmbeddedIOP-20.4) panics 'IOP: startup ping failed' (EmbeddedIOP.cpp:221) three times: the s5l8930 IOP HLE answers the 4.2.1 handshake, not 4.3's. Evidence: matrix-results/k48ap-8F190/firmwarekit.log. Estimate 1-2 d emulator work (hw/arm/s5l8930_iop.c: the 4.3 startup ping / mailbox protocol), then re-check the GL table. Blocks iOS 4.3.x and, very likely, iOS 5."
+  "triage": "(c) iOS 4.3 boots: IOP v3 handshake, VFL/FTL, root, launchd, lockdownd, SpringBoard all come up on the real iBoot chain (qemu-ios dsi-stopstate branch ba740d27^ on ipad1 9a81b9a2ae + this tree). Three emulator findings on the way, each fixed generically: (1) DSIM STATUS bit 8 (StopStateClk) was pinned on; AppleS5L8720X-91's DSI driver snapshots STATUS at start and takes it as 'link down', so the first display-off (auto-lock, the halt) panicked 'enableInterface redundant disable request' (8638f9f095); kboot= additionally starts the link the way iBoot leaves it (85bf5a7ed7); (2) EmbeddedIOP-20 control messages complete with 'done' over the opcode, else 'timed out waiting for workloop to process completed command' at shutdown (d848e1ae47). Keybag one-shot then passes (the 4.3.0 FIL, IOFlashStorage-410.3, has no epoch check; the 'epoch roll wait' is 410.4/4.3.5's, see 8L1). Remaining blocker, class H (the iop-v3 instrument): at shutdown, after the IOP sleep control message, the driver's diagnostic watchdog ping fails to send (kIOReturnNoResources, before any doorbell) and panics 'IOP watchdog: unexpected diagnostic state' (EmbeddedIOP.cpp:929); keeping the HLE awake changes nothing (ba740d2748, reverted), so it is the AP-side state machine around the real firmware's sleep/stop: the IOP core's to answer. Evidence: matrix-results/k48ap-8F190/{seal.log,keybag-1.log,firmwarekit.log}. Also seen: AppleD1815PMU::_readADCGated(3) 'ADC read bad state: 1' x10 during shutdown (PMU ADC mux 3 model gap, harmless so far)."
  },
  "k48ap-8G4": {
   "version": "4.3.1",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T00:49:25+00:00",
+  "when": "2026-09-29T02:59:18+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-acb86d65823cd73b2/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-matrix43/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix43-guest/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1418,7 +1417,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 12.1,
+   "seconds": 320.8,
    "ok": false,
    "steps": [
     "Verifying the IPSW",
@@ -1426,22 +1425,23 @@
     "Writing the identity and boot chain",
     "Building the system and data volumes",
     "Writing the NAND",
-    "Creating the data-protection keybag"
+    "Creating the data-protection keybag",
+    "Sealing the NAND"
    ],
    "warnings": [
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
     "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
    ],
-   "error": "internal: The file \u201c038-0894-005-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
-   "last_step": "Creating the data-protection keybag",
+   "error": "oneshot_failed: seal boot: no clean halt after 300 s",
+   "last_step": "Sealing the NAND",
    "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8G4/firmwarekit.log"
   },
   "first_failure": {
    "check": "prepare",
-   "why": "internal: The file \u201c038-0894-005-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file \u201c038-0894-005-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "why": "oneshot_failed: seal boot: no clean halt after 300 s",
+   "excerpt": "one-shot: timed out after 300 s (exit 0)\nfirmwarekit: oneshot_failed: seal boot: no clean halt after 300 s"
   },
-  "triage": "(no keys) 4.3.1: The Apple Wiki has no Restore/Update ramdisk keys, so the data-protection keybag step has no ramdisk to boot (the decryptor skips keyless components with a warning). Would then hit 8F190's IOP panic. Needs the ramdisk keys from another public source or the keybag built another way."
+  "triage": "(pipeline done) 4.3.1: no public ramdisk keys (wiki Keys page has no RestoreRamdisk/UpdateRamdisk rows; MediaWiki API 2026-09-28). recipe.keybag_ramdisk_from = k48ap-8F190: firmwarekit decrypts 8F190's Update ramdisk (038-0707-006) with that entry's key, the 4.3.1 kernel boots it as md0, it_keybag formats effaceable and writes the system keybag, the one-shot halts cleanly (6 s). The seal boot then reaches FTL_Open, disk0s1, SpringBoard and stops in the 4.3 IOP shutdown watchdog, as 8F190 (class H, iop-v3 instrument). Same field on 8H7/8J3/8K2/8L1 (8L1 verified by hand: NAND signature epoch 2, boot_args 3, keybag ok, SpringBoard; ~/Developer/qemu-ios-files/ipad1/repro/matrix-8L1). Evidence: matrix-results/k48ap-8G4/{keybag-1.log,seal.log,firmwarekit.log}."
  },
  "k48ap-8H7": {
   "version": "4.3.2",

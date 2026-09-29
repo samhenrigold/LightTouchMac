@@ -39,7 +39,7 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
         scroll.documentView = text
         let controls = NSStackView(views: [picker, pause])
         controls.spacing = 12
-        let hint = NSTextField(labelWithString: "Latest 64 KB. Select text to pause updates while copying. Use Find to search.")
+        let hint = NSTextField(labelWithString: "Latest 64 KB. Selecting text pauses updates.")
         hint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         hint.textColor = .secondaryLabelColor
         let content = window.contentView!

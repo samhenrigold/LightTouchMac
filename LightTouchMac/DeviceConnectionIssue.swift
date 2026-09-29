@@ -18,9 +18,11 @@ nonisolated struct DeviceConnectionIssue: Equatable, Sendable {
                               detail: detail, blocksCommands: true, reconnectManagement: false, persistent: true)
     }
 
-    /// nil for "Activated"/"FactoryActivated" (and for an unknown state: nothing to say).
+    /// nil for every activated state lockdown reports (Activated, FactoryActivated,
+    /// WildcardActivated, …: anything naming "Activated" that isn't "Unactivated")
+    /// and for an unknown state (nothing to say).
     static func activation(state: String?, profile: DeviceProfile) -> DeviceConnectionIssue? {
-        guard let state, state != "Activated", state != "FactoryActivated" else { return nil }
+        guard let state, state == "Unactivated" || !state.contains("Activated") else { return nil }
         return unactivated(profile: profile, detail: "ActivationState: \(state)")
     }
 

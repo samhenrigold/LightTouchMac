@@ -1,14 +1,14 @@
 #!/bin/bash
 # Build the macOS 14 closure in a disposable directory; never rewrite Homebrew.
-# Requires Xcode, meson, ninja, pkg-config, cmake and autotools.
+# Requires Xcode, meson, ninja, pkg-config and autotools.
 # Usage: build-package-native.sh NEW-WORK-DIRECTORY
 # Builds static dependencies from pinned sources unless LTM_STATIC_DEPS is explicit.
 set -euo pipefail
 ROOT="${1:?usage: build-package-native.sh new-work-directory}"
 [ ! -e "$ROOT" ] || { echo "use a new build directory: $ROOT" >&2; exit 1; }
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-QEMU="${QEMU_IOS_DIR:-$SRC/../qemu-ios}"
-USB="${USBMUXD_SOURCE_DIR:-${USBMUXD_QEMU:-$SRC/../usbmuxd-qemu}/usbmuxd}"
+QEMU="$(python3 "$SRC/scripts/sources.py" qemu-ios)"    # the pin; QEMU_IOS_DIR overrides
+USB="$(python3 "$SRC/scripts/sources.py" usbmuxd)"      # USBMUXD_SOURCE_DIR overrides
 MESON="${MESON:-meson}"
 JOBS="${LTM_JOBS:-$(sysctl -n hw.ncpu)}"
 [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || { echo 'LTM_JOBS must be a positive integer' >&2; exit 1; }
@@ -41,9 +41,6 @@ export PKG_CONFIG_LIBDIR="$P/lib/pkgconfig" PKG_CONFIG_PATH=
 # broken partial-link fallback (which loses private symbols).
 export lt_cv_sys_max_cmd_len=131072
 unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
-for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair idevice_id; do
-    python3 "$SRC/scripts/check-macho.py" --no-weak-imports "$STATIC/bin/$tool"
-done
 [ -f "$STATIC/lib/libcrypto.a" ] || { echo "missing static prefix: $STATIC" >&2; exit 1; }
 fetch_group() {   # GROUP: its pinned archives into src/, from the caches when they have them
     local args=(fetch --group "$1" --destination "$ROOT/src")
@@ -78,13 +75,14 @@ cp glib-2.88.3/COPYING "$SRC/build-support/patches/glib-pipe2-availability.patch
 ninja -C pixman-out -j"$JOBS" && ninja -C pixman-out install
 "$MESON" setup slirp-out libslirp-v4.9.4 --prefix="$P" --buildtype=release -Ddefault_library=static --wrap-mode=nofallback
 ninja -C slirp-out -j"$JOBS" && ninja -C slirp-out install
+# libusb: only the usbmuxd fork's configure.ac asks for it (PKG_CHECK_MODULES, no flag); its QEMU backend
+# compiles no libusb code and the static archive contributes no symbol, so nothing of it ships.
 (cd libusb-1.0.30 && ./configure --prefix="$P" --disable-shared --enable-static && make -j"$JOBS" && make install)
 # Shared exports are required by IMobileDevice.swift's dlopen/dlsym API; the
 # corresponding static archives intentionally hide these public symbols.
 export PKG_CONFIG_LIBDIR="$P/lib/pkgconfig:$STATIC/lib/pkgconfig"
 (cd libplist-2.7.0 && ./configure --prefix="$P" --enable-shared --disable-static --without-cython && make -j"$JOBS" && make install)
 (cd libimobiledevice-1.4.0 && LDFLAGS="$LDFLAGS -framework SystemConfiguration -framework CoreFoundation" ./configure --prefix="$P" --enable-shared --disable-static --without-cython && make -j"$JOBS" && make install)
-for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair idevice_id; do cp "$STATIC/bin/$tool" "$P/bin/"; done
 (cd usbmuxd && glibtoolize --copy --force && autoreconf -fi)
 (cd usbmuxd && LDFLAGS="$LDFLAGS -framework IOKit -framework CoreFoundation -framework Security" ./configure --prefix="$P" --without-systemd && make -j"$JOBS")
 # iBoot32Patcher (GPL-3.0, the "tools" group of the manifest): firmwarekit runs it for the k48 real-iBoot

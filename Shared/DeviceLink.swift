@@ -319,6 +319,8 @@ nonisolated final class DeviceLink: @unchecked Sendable {
         // Zero the pid now: a late terminate() or kill() must not signal a reused one.
         lock.withLock { exitSource?.cancel(); exitSource = nil; _pid = 0 }
         DeviceRendezvousServer.shared.unregister(p)
+        // Its last messages (qemuExited) may still be unread: deliver them before the close.
+        lock.withLock { channel }?.drainIncoming()
         invalidate(.closed("helper exited"), kill: false)
         queue.async { [self] in onTerminated?(termination) }
     }

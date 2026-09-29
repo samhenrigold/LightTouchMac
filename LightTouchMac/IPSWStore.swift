@@ -16,11 +16,11 @@ nonisolated enum FirmwareError: LocalizedError, Equatable {
     var errorDescription: String? {
         let format = { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
         return switch self {
-        case .corrupted: "Download corrupted."
+        case .corrupted: "The download is damaged. Try again."
         case let .notEnoughSpace(required, available):
             "Not enough disk space: this needs \(format(required)), and \(format(available)) is available."
         case let .wrongFile(model, version): "This isn’t the IPSW Light Touch knows for \(model) iOS \(version)."
-        case .unsupported: "Not a supported firmware."
+        case .unsupported: "This IPSW isn’t supported."
         case let .failed(message): message
         }
     }

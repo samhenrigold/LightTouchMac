@@ -133,7 +133,7 @@ final class CaptureNotifications: NSObject, UNUserNotificationCenterDelegate {
             NSWorkspace.shared.activateFileViewerSelecting([file])
         } catch {
             let alert = NSAlert()
-            alert.messageText = "Recording Not Found"
+            alert.messageText = "Recording not found"
             alert.informativeText = "The recording may have been moved or deleted."
             alert.addButton(withTitle: "OK")
             if let window = NSApp.mainWindow { alert.beginSheetModal(for: window) }

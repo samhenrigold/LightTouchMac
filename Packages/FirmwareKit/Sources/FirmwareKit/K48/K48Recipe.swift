@@ -93,8 +93,10 @@ final class K48Board: Board {
     }
 
     func store(_ c: Recipe.Context) throws {
+        let epoch = try K48NAND.signatureEpoch(kernelcache: c.decFile("kernelcache.mach"))
+        c.log("NAND signature epoch \(epoch) (this kernel's FIL)")
         try K48NAND.build(geometry: .k48_16g, mbr: mbr, kernelVersion: K48NAND.kernelVersion(kernelcache: c.decFile("kernelcache.mach")),
-                          system: vols.system, data: .image(vols.data), out: c.nand, log: c.log)
+                          epoch: epoch, system: vols.system, data: .image(vols.data), out: c.nand, log: c.log)
         try? FileManager.default.removeItem(at: vols.system); try? FileManager.default.removeItem(at: vols.data)
     }
 
@@ -106,11 +108,10 @@ final class K48Board: Board {
     func keybag(_ c: Recipe.Context) throws {
         let fm = FileManager.default, nor = norURL(c)!
         if !iboot { try Data(repeating: 0xFF, count: 1 << 20).write(to: nor) }   // iboot already built the packed NOR
-        let comp = try BuildComponents.load(c.ipsw)   // a restore-only build ships just the Restore ramdisk (N72Board)
-        guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(c.e.id): no ramdisk") }
-        ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
+        let (source, name) = try Recipe.keybagRamdisk(c)
+        ramdisk = name
         let work = c.work, store = c.nand
-        let rd = try Preparer.ramdiskWithHelper(c.decFile(ramdisk!), helper: c.o.guestTools.appendingPathComponent(SystemEdits.Helpers.name("it_keybag", arch)), work: work)
+        let rd = try Preparer.ramdiskWithHelper(source, helper: c.o.guestTools.appendingPathComponent(SystemEdits.Helpers.name("it_keybag", arch)), work: work)
         let kboot = work.appendingPathComponent("kboot-restore.bin")
         try KBoot.write(decrypted: c.dec, to: kboot, identity: ident, ramdisk: rd)
         let norBefore = try Data(contentsOf: nor)

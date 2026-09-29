@@ -17,6 +17,8 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     struct Request: Sendable {
         var entry: FirmwareCatalog.Entry
         var ipsw: URL
+        /// recipe.keybag_ramdisk_from: that entry and its IPSW (its ramdisk boots the keybag one-shot).
+        var sibling: (entry: FirmwareCatalog.Entry, ipsw: URL)?
         /// The state directory (Preparing/ and Devices/ are under it).
         var state: URL
         var preparer: URL
@@ -71,9 +73,9 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     /// What the row says for an error event.
     static func message(code: String, detail: String) -> String {
         switch code {
-        case "key_missing": "This firmware’s keys are missing."
+        case "key_missing": "Light Touch doesn’t have the keys for this firmware."
         case "sha_mismatch": "This IPSW doesn’t match the one Light Touch knows."
-        case "unsupported": "Not a supported firmware."
+        case "unsupported": "This IPSW isn’t supported."
         case "activation_failed", "hook_failed": "Couldn’t activate this device."
         case "oneshot_failed": "The device’s first boot didn’t finish."
         case "disk_full": "Not enough disk space to prepare this device."
@@ -92,6 +94,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
 
     var staging: URL { Self.preparing(request.state).appendingPathComponent(id.uuidString, isDirectory: true) }
     private var entryFile: URL { Self.preparing(request.state).appendingPathComponent("\(id.uuidString).entry.json") }
+    private var siblingFile: URL { Self.preparing(request.state).appendingPathComponent("\(id.uuidString).sibling.json") }
     static func preparing(_ state: URL) -> URL { state.appendingPathComponent("Preparing", isDirectory: true) }
 
     /// Events arrive on a background queue, `.published`, `.failed` or `.cancelled` last.
@@ -110,6 +113,10 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             process.executableURL = request.preparer
             process.arguments = ["create", "--entry", entryFile.path, "--ipsw", request.ipsw.path, "--out", staging.path,
                                  "--seed", id.uuidString, "--helper", request.helper.path, "--cache", request.cache.path]
+            if let sibling = request.sibling {
+                try JSONEncoder().encode(sibling.entry).write(to: siblingFile)
+                process.arguments! += ["--sibling-entry", siblingFile.path, "--sibling-ipsw", sibling.ipsw.path]
+            }
             let stdout = Pipe()
             process.standardOutput = stdout
             process.standardError = try FileHandle(forWritingTo: request.log)
@@ -118,7 +125,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             if lock.withLock({ cancelled }) { cancel() }
             Thread.detachNewThread { [self] in read(stdout.fileHandleForReading) }
         } catch {
-            finish(.failed("Couldn’t start the preparer: \(error.localizedDescription)"))
+            finish(.failed("Couldn’t start preparing the device: \(error.localizedDescription)"))
         }
     }
 
@@ -155,7 +162,9 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             // A cached or imported IPSW that fails its SHA is never used again.
             if code == "sha_mismatch" { try? FileManager.default.removeItem(at: request.ipsw) }
             finish(.failed(Self.message(code: code, detail: detail)))
-        default: finish(.failed("The preparer stopped unexpectedly (exit \(status))."))
+        default:
+            logEvent("firmware: firmwarekit exited \(status) without a result")
+            finish(.failed("Preparation stopped unexpectedly. Show the log for details."))
         }
     }
 
@@ -238,7 +247,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         let boot = profile.preparedBoot(strategy: BootRecipe.bootStrategy(lockURL))
         for name in [boot.boot, "nand", "identity.json", lockName] + boot.files
             where !fm.fileExists(atPath: staging.appendingPathComponent(name).path) {
-            throw FirmwareError.failed("The preparer’s output has no \(name).")
+            throw FirmwareError.failed("The prepared device is incomplete (\(name) is missing).")
         }
         let lockData = try Data(contentsOf: lockURL)
         let identity = identity(identityJSON: try? Data(contentsOf: staging.appendingPathComponent("identity.json")),

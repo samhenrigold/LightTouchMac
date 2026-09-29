@@ -5,7 +5,7 @@
 // Frames and status never cross it: they live in IOSurfaces (SharedStatus.swift)
 // whose Mach ports arrive in the rendezvous hello (DeviceRendezvous.swift).
 //
-// Compiled into both targets and into tests/helper-driver.
+// Compiled into both targets and into tests/drivers/helper-driver.
 
 import Foundation
 
@@ -13,6 +13,8 @@ nonisolated enum DeviceLinkWire {
     /// Bumped on any incompatible change to the messages below, the status block
     /// layout or the Mach hello. The helper refuses a hello with another version.
     static let protocolVersion = 1
+    /// The helper's hello refusal when another helper holds the device's lease; the app shows it as is.
+    static let leaseRefusal = "This device is in use by another copy of Light Touch."
     /// Upper bound on one framed message, either direction. An agent request is
     /// at most ~350 KB of base64 and an audio event ~22 KB; anything bigger is
     /// a bug or an attack, and closes the link.
@@ -168,6 +170,7 @@ nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @
          onClose: @escaping (Error?) -> Void) {
         self.fd = fd
         self.queue = queue
+        self.onMessage = onMessage
         writeQueue = DispatchQueue(label: "LightTouch.link.write.\(fd)")
         var size: Int32 = 1 << 20
         setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, socklen_t(MemoryLayout<Int32>.size))
@@ -181,15 +184,7 @@ nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @
             if n < 0, errno == EAGAIN || errno == EINTR { return }
             if n <= 0 { finish(n == 0 ? nil : POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)); return }
             buffer.append(contentsOf: chunk[0..<n])
-            do {
-                while let body = try Self.takeFrame(&buffer) {
-                    let message = try JSONDecoder().decode(Incoming.self, from: body)
-                    onMessage(message)
-                    if closed { return }
-                }
-            } catch {
-                finish(error)
-            }
+            deliverFrames()
         }
         onCloseHandler = onClose
         source.setCancelHandler { Darwin.close(fd) }
@@ -197,6 +192,34 @@ nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @
     }
 
     private var onCloseHandler: ((Error?) -> Void)?
+    private let onMessage: (Incoming) -> Void
+
+    private func deliverFrames() {
+        do {
+            while let body = try Self.takeFrame(&buffer) {
+                let message = try JSONDecoder().decode(Incoming.self, from: body)
+                onMessage(message)
+                if closed { return }
+            }
+        } catch {
+            finish(error)
+        }
+    }
+
+    /// The peer is gone: deliver what it wrote before exiting (its last messages may
+    /// still sit in the socket, the read source not yet run) so they land before the
+    /// channel closes. On `queue`; never blocks (reads only what poll reports ready).
+    func drainIncoming() {
+        var chunk = [UInt8](repeating: 0, count: 65536)
+        while !closed {
+            var ready = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            guard poll(&ready, 1, 0) > 0, ready.revents & Int16(POLLIN | POLLHUP) != 0 else { return }
+            let n = read(fd, &chunk, chunk.count)
+            guard n > 0 else { return }
+            buffer.append(contentsOf: chunk[0..<n])
+            deliverFrames()
+        }
+    }
 
     private func finish(_ error: Error?) {
         guard !closed else { return }

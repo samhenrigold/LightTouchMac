@@ -220,8 +220,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let captureStatus = CaptureStatusView()
     private let startupStatus = CaptureStatusView()
     private var startupTask: Task<Void, Never>?
-    private var startupBegan = Date()
-    private var wasStarting = false
     private var quitAfterRecording = false
     private var closeAfterRecording = false
 
@@ -481,15 +479,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func updateStartupStatus() {
         defer { deviceVC?.updateStatusVisibility() }
-        guard let emulator, emulator.isErasing || emulator.state == .booting || emulator.preparingDevice else {
-            wasStarting = false
+        guard let emulator, emulator.isStartingUp else {
             startupTask?.cancel()
             startupTask = nil
             startupStatus.isHidden = true
             return
         }
-        if !wasStarting { startupBegan = Date(); wasStarting = true }
-        let elapsed = Int(Date().timeIntervalSince(startupBegan))
+        let elapsed = Int(Date().timeIntervalSince(emulator.startupBegan))
         startupStatus.update(title: emulator.isErasing ? "Erasing \(emulator.profile.shortName)…" : emulator.preparationStatus,
                              detail: elapsed >= 90 ? "Check Device Logs." : "\(elapsed)s",
                              busy: true, primary: elapsed >= 90 ? "Device Logs" : nil)
@@ -548,8 +544,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // the device in a fresh helper (the app and other devices keep running).
         let refused = emulator.baseImageMismatch
         let label = NSTextField(wrappingLabelWithString: refused
-            ? "This \(emulator.profile.shortName)'s data was made with an older system image. Erase it to start fresh."
-            : emulator.deathReason ?? "The emulator stopped.")
+            ? "This \(emulator.profile.shortName)’s data was made with an older system image. Erase it to start fresh."
+            : emulator.deathReason ?? emulator.profile.stoppedReason)
         label.font = .systemFont(ofSize: 15, weight: .medium)
         label.textColor = .white
         label.alignment = .center
@@ -919,9 +915,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // Confirmed, because a restart cuts the guest off mid-write much the way
         // a force quit does, and it sits one row above Erase in the same menu.
         let alert = NSAlert()
-        alert.messageText = "Restart the device?"
-        alert.informativeText = "LightTouchMac will flush the device's filesystem first, "
-            + "but anything it hasn't finished writing may still be lost."
+        alert.messageText = "Restart the \(emulator.profile.shortName)?"
+        alert.informativeText = "Anything it hasn’t finished saving may be lost."
         alert.addButton(withTitle: "Restart")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -1054,7 +1049,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             do {
                 let image = try await captureImage()
                 guard let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
-                    throw CaptureError.failed("Could not create the screenshot.")
+                    throw CaptureError.failed("Couldn’t create the screenshot.")
                 }
                 let nsImage = NSImage(cgImage: image, size: .zero)
                 var savedURL: URL?
@@ -1108,7 +1103,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func copyImage(_ image: NSImage) throws {
         NSPasteboard.general.clearContents()
-        guard NSPasteboard.general.writeObjects([image]) else { throw CaptureError.failed("Could not copy the screenshot.") }
+        guard NSPasteboard.general.writeObjects([image]) else { throw CaptureError.failed("Couldn’t copy the screenshot.") }
     }
 
     private func showCopyConfirmation() {
@@ -1497,80 +1492,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 }
 
-// MARK: - Diagnostics storage
-
-/// Each export owns its scratch and publishes one complete archive. Kept apart
-/// from the window so the failure/cancellation paths can run without a device.
-nonisolated enum DiagnosticsExport {
-    @concurrent
-    static func write(to destination: URL, logs: [URL], info: String,
-                      temporaryRoot: URL = FileManager.default.temporaryDirectory,
-                      archiver: URL = URL(fileURLWithPath: "/usr/bin/ditto")) async throws {
-        try Task.checkCancellation()
-        let fm = FileManager.default
-        let scratch = temporaryRoot.appendingPathComponent("LightTouch-diagnostics-" + UUID().uuidString,
-                                                          isDirectory: true)
-        try fm.createDirectory(at: scratch, withIntermediateDirectories: false,
-                               attributes: [.posixPermissions: 0o700])
-        defer { try? fm.removeItem(at: scratch) }
-        let staging = scratch.appendingPathComponent("LightTouchMac-diagnostics", isDirectory: true)
-        try fm.createDirectory(at: staging, withIntermediateDirectories: false)
-        for source in logs where fm.fileExists(atPath: source.path) {
-            try Task.checkCancellation()
-            try fm.copyItem(at: source, to: staging.appendingPathComponent(source.lastPathComponent))
-        }
-        try info.write(to: staging.appendingPathComponent("info.txt"), atomically: true, encoding: .utf8)
-
-        // Keep the final rename on the destination volume. Failure or cancellation
-        // leaves an existing user-selected archive untouched.
-        let archive = destination.deletingLastPathComponent()
-            .appendingPathComponent(".LightTouch-diagnostics-" + UUID().uuidString + ".zip")
-        defer { try? fm.removeItem(at: archive) }
-        try await runArchiver(archiver, staging: staging, archive: archive)
-        let attributes = try fm.attributesOfItem(atPath: archive.path)
-        guard attributes[.type] as? FileAttributeType == .typeRegular,
-              (attributes[.size] as? NSNumber)?.uint64Value ?? 0 > 0 else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        try Task.checkCancellation()
-        guard rename(archive.path, destination.path) == 0 else {
-            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
-        }
-    }
-
-    private static func runArchiver(_ executable: URL, staging: URL, archive: URL) async throws {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", staging.path, archive.path]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        let status: Int32 = try await withTaskCancellationHandler {
-            try Task.checkCancellation()
-            return try await withCheckedThrowingContinuation { continuation in
-                process.terminationHandler = { child in
-                    continuation.resume(returning: child.terminationStatus)
-                }
-                do {
-                    try process.run()
-                    // Cancellation may have arrived before the process was live.
-                    if Task.isCancelled, process.isRunning { process.terminate() }
-                } catch {
-                    process.terminationHandler = nil
-                    continuation.resume(throwing: error)
-                }
-            }
-        } onCancel: {
-            if process.isRunning { process.terminate() }
-        }
-        try Task.checkCancellation()
-        guard status == 0 else {
-            throw NSError(domain: "LightTouch.Diagnostics", code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Could not create the diagnostics archive (exit \(status))."
-            ])
-        }
-    }
-}
-
 // MARK: - Toolbar item validation (same command model as the menus)
 
 extension MainWindowController: NSToolbarItemValidation {
@@ -1723,7 +1644,7 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleHighPowerUSB(_:)):
             menuItem.state = emulator.highPowerUSB ? .on : .off
             menuItem.toolTip = emulator.canChooseUSBCharger ? nil
-                : "The Mac's USB connection always grants high power, as a real Mac does."
+                : "A Mac’s USB port always supplies high power."
             return emulator.acceptsInput && emulator.canChooseUSBCharger
         case #selector(setCompassHeading(_:)):
             menuItem.state = menuItem.tag == emulator.compassHeading ? .on : .off

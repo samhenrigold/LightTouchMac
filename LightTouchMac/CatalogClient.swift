@@ -102,7 +102,7 @@ enum CatalogClient {
         struct Envelope: Decodable { let apps: [CatalogApp] }
         let result: Envelope = try await get(url.url!)
         guard result.apps.count == 1, let app = result.apps.first, app.ipaID == id else {
-            throw CatalogError.invalidCopy("This copy is no longer available for the emulator.")
+            throw CatalogError.invalidCopy("This copy is no longer available.")
         }
         return app
     }

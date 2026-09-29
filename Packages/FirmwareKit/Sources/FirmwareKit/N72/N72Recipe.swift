@@ -163,12 +163,10 @@ final class N72Board: Board {
     /// 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk (a restore-only build such
     /// as 8A293 ships just the Restore one; restored_external runs first on either).
     func keybag(_ c: Recipe.Context) throws {
-        let comp = try BuildComponents.load(c.ipsw)
-        guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(c.e.id): no ramdisk") }
-        let ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
-        _ = try N72Keybag.run(out: c.o.out, dec: c.dec, ramdisk: ramdisk, itKeybag: c.o.guestTools.appendingPathComponent(itKeybag),
-                              bootrom: bootrom!, helper: helper!, work: c.work, log: c.log)
-        derived["keybag_ramdisk"] = ramdisk
+        let (source, name) = try Recipe.keybagRamdisk(c)
+        _ = try N72Keybag.run(out: c.o.out, dec: c.dec, ramdisk: source,
+                              itKeybag: c.o.guestTools.appendingPathComponent(itKeybag), bootrom: bootrom!, helper: helper!, work: c.work, log: c.log)
+        derived["keybag_ramdisk"] = name
     }
 
     func lock(_ c: Recipe.Context) throws -> [String: Any] {

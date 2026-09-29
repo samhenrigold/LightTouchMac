@@ -193,21 +193,21 @@ stdout/stderr tracing is bounded by `native.log`.
 - [USB daemon state](../LightTouchMac/USBMux.swift),
   [proxy settings](../LightTouchMac/WebProxyConfiguration.swift),
   [helper environment](../LightTouchMac/DeviceTools.swift).
-- [Focused storage lifecycle check](../tests/check-storage-lifecycle.py) compiles
+- [Focused storage lifecycle check](../tests/offline/check-storage-lifecycle.py) compiles
   production helpers under Swift 6 with MainActor defaults. It covers cache
   isolation and recovery after a purge, the built-in base's unpack (modes kept;
   a truncated blob and an escaping name refused), real ZIP contents, concurrent
   exports, cancellation and child teardown, preservation of existing
   destinations, and cleanup of owned staging. It creates only isolated fixtures
   and does not launch QEMU or inspect private user state.
-- [The built-in device and the old layout](../tests/check-bundled-prepared.py):
+- [The built-in device and the old layout](../tests/offline/check-bundled-prepared.py):
   a fresh state publishes the packed base as a `.prepared` record whose base
   has the boot files `BootRecipe` wants; the old layout is found, erased with
   its IPAs kept in the library and the pairing seeded into the new device.
-- [Storage-location check](../tests/check-storage-locations.py) exercises the
+- [Storage-location check](../tests/offline/check-storage-locations.py) exercises the
   layout with isolated Library fixtures: private state and log directories,
   override isolation, a blocked root refused, sustained log volume, EOF
   teardown, safe FIFO unlink with an open writer and immediate cleanup.
-  [App-event tests](../tests/check-app-events.py) cover concurrent formatting,
+  [App-event tests](../tests/offline/check-app-events.py) cover concurrent formatting,
   permissions, rotation, bounded messages and file-write failure. No check
   touches the user's actual Application Support directory.
