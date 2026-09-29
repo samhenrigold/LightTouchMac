@@ -73,6 +73,15 @@ final class N45Board: Board {
         volume = c.work.appendingPathComponent("volume.img")
         try UDIF.extractRootfs(dmg: c.decFile("rootfs.dmg"), to: volume)
         try VolumeMount.grow(volume, toBytes: bytes)
+        // Modern HFS checks reject the stock 1.x catalog's legacy folder counts.
+        // Normalize the private working volume before mounting/editing it, then verify it.
+        let device = try VolumeMount.attach(volume)
+        do {
+            defer { VolumeMount.detach(device) }
+            c.log(try VolumeMount.run("/sbin/fsck_hfs", ["-fy", device]))
+            let check = VolumeMount.check(device)
+            guard check.ok else { throw FirmwareError(.internal, "1.x root filesystem repair failed: \(check.output)") }
+        }
         let newest: UInt32
         do {
             let v = try HFSPlusVolume(volume)
@@ -93,6 +102,12 @@ final class N45Board: Board {
                 try SystemEdits.mkdirs(at(Self.rootLibrary + d))
                 owners.append((0, Self.rootLibrary + d))
             }
+            // An iPod's first iTunes handshake clears BrickState independently of activation.
+            // The 1G has no host USB transport yet. Seed the same persistent boolean on its fresh
+            // data volume; lockdownd owns the rest of this dictionary and preserves it on reboot.
+            let ark = Self.rootLibrary + "/Lockdown/data_ark.plist"
+            try SystemEdits.put(try PropertyListSerialization.data(fromPropertyList: ["-BrickState": false], format: .xml, options: 0), at(ark), mode: 0o600)
+            owners.append((0, ark))
             let (report, record, owned) = try Self.bake(m, helpers: c.o.guestTools, gles: recipe.options["gles_shim"] ?? true, log: c.log)
             for (k, v) in report { derived[k] = v }
             c.guestPackage = record

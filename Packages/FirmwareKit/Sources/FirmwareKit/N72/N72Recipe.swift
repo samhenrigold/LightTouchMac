@@ -328,8 +328,9 @@ final class N72Board: Board {
         }
         if opt["appsync"] == true {   // patch-appsync-dylib.sh
             let (line, job) = try SystemEdits.installAppSync(m, helper: helpers.appendingPathComponent(SystemEdits.Helpers.appsync), cache: cache, log: c.log)
-            report["appsync"] = [line, "installd (\(job)) DYLD_INSERT_LIBRARIES += /\(SystemEdits.appsyncPath)"]
+            report["appsync"] = [line, "installation service (\(job)) DYLD_INSERT_LIBRARIES += /\(SystemEdits.appsyncPath)"]
             owners.append((0, SystemEdits.appsyncPath))
+            if FileManager.default.fileExists(atPath: m.appendingPathComponent(SystemEdits.appsyncLauncherPath).path) { owners.append((0, SystemEdits.appsyncLauncherPath)) }
         }
         if tools {   // ipod2g_device.PREFS: the iPad's it_prefs, SpringBoard tip only (contrib/it-prefs/build-ipod.sh)
             try SystemEdits.put(helper(SystemEdits.Helpers.name("it_prefs", arch)), at("usr/local/bin/it_prefs"), mode: 0o755)

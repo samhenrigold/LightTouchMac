@@ -59,7 +59,7 @@ public enum SystemEdits {
         public static func name(_ base: String, _ arch: String) -> String { arch == "armv7" ? base : base + "-" + arch }
         public static let sealJob = "com.qemu.it-seal.plist", glTestJob = "com.qemu.it-gltest.plist"
         /// The fat armv6+armv7 AppSync dylib.
-        public static let appsync = "libappsync.dylib"
+        public static let appsync = "libappsync.dylib", appsyncLauncher = "appsync-launch"
         /// The GL shims, one per arch (they read the firmware's dispatch layout at load), and the name table
         /// they speak (a reference artifact: the install logs which of the firmware's fields it lacks).
         public static let glEngine = "GLEngine", mbxEngine = "MBXGLEngine", glesNames = "gles-names.h"
@@ -85,7 +85,7 @@ public enum SystemEdits {
     static let msmJob = daemons + "/com.apple.mobile.storage_mounter.plist"
     static let btJob = daemons + "/com.apple.BTServer.plist"
     static let installdJob = daemons + "/com.apple.mobile.installd.plist"
-    static let appsyncPath = "usr/lib/libappsync.dylib"
+    static let appsyncPath = "usr/lib/libappsync.dylib", appsyncLauncherPath = "usr/libexec/appsync-launch"
     static let glEngine = "System/Library/Frameworks/OpenGLES.framework/GLEngine.bundle/GLEngine"
     static let gldPath = "System/Library/Frameworks/OpenGLES.framework/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU"
     static func dyldCache(_ arch: String) -> String { "System/Library/Caches/com.apple.dyld/dyld_shared_cache_" + arch }
@@ -267,22 +267,40 @@ public enum SystemEdits {
         return owned + [pacPath]
     }
 
-    /// AppSync: MISValidateSignature patched in the shared cache `cache` (a warning when the firmware has none: 2.x
-    /// and 3.0 keep libmis as its own dylib, so amfid and SpringBoard's gate stay stock), libappsync.dylib as
-    /// /usr/lib/libappsync.dylib (root-owned by the caller) injected into installd's job. Returns the patch's status
-    /// line and the job's file name.
+    /// Patch cached signature validation where available, then inject the
+    /// helper into the firmware's installation service (installd or mobile_installation_proxy).
     static func installAppSync(_ m: URL, helper: URL, cache: String, log: (String) -> Void) throws -> (status: String, job: String) {
         let fm = FileManager.default
-        let line = fm.fileExists(atPath: m.appendingPathComponent(cache).path) ? try AppSyncCachePatch.patchCache(at: m.appendingPathComponent(cache))
-            : "warning: no dyld shared cache: MISValidateSignature unpatched (installd interposer only)"
+        let cached = fm.fileExists(atPath: m.appendingPathComponent(cache).path)
+        if !cached, let why = MachOSignature.earlyARMProblem(helper) {
+            throw FirmwareError(.unsupported, "AppSync: \(why)")
+        }
+        let line = cached ? try AppSyncCachePatch.patchCache(at: m.appendingPathComponent(cache))
+            : "standalone libmis retained; installation-service interposition"
         log(line)
         try mkdirs(m.appendingPathComponent(appsyncPath).deletingLastPathComponent())
         try put(Data(contentsOf: helper), m.appendingPathComponent(appsyncPath), mode: 0o644)
         let job = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map { m.appendingPathComponent(daemons + "/" + $0) }
             .first { fm.fileExists(atPath: $0.path) }
-        guard let job else { throw FirmwareError(.unsupported, "no installd launchd plist") }
-        try rewritePlist(job) { dyldInsert($0, "/" + appsyncPath) }
-        return (line, job.lastPathComponent)
+        if let job {
+            try rewritePlist(job) { dyldInsert($0, "/" + appsyncPath) }
+            return (line, job.lastPathComponent)
+        }
+        // 2.x installs in the Lockdown-launched mobile_installation_proxy, before installd existed.
+        let services = m.appendingPathComponent("System/Library/Lockdown/Services.plist")
+        try rewritePlist(services) { root in
+            guard let service = root["com.apple.mobile.installation_proxy"] as? NSMutableDictionary,
+                  let arguments = service["ProgramArguments"] as? [String], arguments.first == "/usr/libexec/mobile_installation_proxy" else {
+                throw FirmwareError(.unsupported, "no supported installation service")
+            }
+            let launcher = helper.deletingLastPathComponent().appendingPathComponent(Helpers.appsyncLauncher)
+            if let why = MachOSignature.earlyARMProblem(launcher) {
+                throw FirmwareError(.unsupported, "AppSync launcher: \(why)")
+            }
+            try put(Data(contentsOf: launcher), m.appendingPathComponent(appsyncLauncherPath), mode: 0o755)
+            service["ProgramArguments"] = ["/" + appsyncLauncherPath] + arguments
+        }
+        return (line, "Services.plist:com.apple.mobile.installation_proxy")
     }
 
     /// SpringBoard's launchd job, checked by label: `edit` gets its EnvironmentVariables and the job.

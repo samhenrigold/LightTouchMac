@@ -134,7 +134,7 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 ### Sam's calls
 - Rotation flicker on the iPad: describe what you see (see the iPad iOS 4 row) — not reproducible by proof on either side.
 - Activation UX.
-- 1.x activation: the hook refuses iPhone OS 1.x lockdownd ("unsupported legacy activation strategy") and `Activation.signed` rejects unsigned binaries; without a decision `firmwarekit create n45ap` can't finish and the 1G stays out of the app.
-- AppSync on iOS 2.x/3.0 (App Store games there need it).
+- 1.x activation is automatic: recognized 1.x lockdownd stays unsigned, 3A101a/4B1 no-record layouts are recognized, and the n45 recipe initializes the independent first-iTunes-connect BrickState. Fresh native 3A101a preparation and Home verified; broader 1.x boot coverage and the app's 1G integration remain separate. A hard-reset reboot still hit the existing 1G storage panic in the test emulator.
+- AppSync on 2.x/3.0 is built and verified: legacy-linked armv6 helper; 2.x Lockbot argument launcher; 3.0 installd injection; standalone libmis stays stock. Ad-hoc app install and visible launch pass on 5F138 and 7A341. The 2.x catalog defaults are enabled; rebuilt qemu-ios guest artifacts are required. See docs/legacy-activation-appsync.md.
 - Merge into `main` and push a scrubbed `ipad1` (the bundled iPod is now built from this tree by every release build; no image swap).
 - Post the drafted replies to GitHub #12 and #15.

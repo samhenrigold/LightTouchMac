@@ -27,8 +27,24 @@ public enum Activation {
         guard success != 0 else {
             throw ActivationFailure(error.map { String(cString: $0) } ?? "Unsupported activation path")
         }
-        after = try signed(after)
+        // 1.x ships unsigned lockdownd and predates mandatory code signing. Only
+        // the positively recognized 1.x path may remain unsigned; later paths
+        // still require a valid signature allocation. Existing signatures are refreshed.
+        if success != 2 || MachOSignature.codeSignature(in: after) != nil {
+            after = try signed(after)
+        }
         // Preserve the HFS catalog record and its metadata; this file is on a disposable staging volume.
+        let metadata = open(file.path, O_RDONLY | O_NOFOLLOW)
+        guard metadata >= 0 else { throw ActivationFailure("Cannot open activation target") }
+        var original = stat()
+        guard fstat(metadata, &original) == 0, original.st_mode & S_IFMT == S_IFREG else {
+            close(metadata)
+            throw ActivationFailure("Activation target is not a regular file")
+        }
+        defer { _ = fchmod(metadata, original.st_mode & 0o7777); close(metadata) }
+        guard fchmod(metadata, original.st_mode & 0o7777 | 0o200) == 0 else {
+            throw ActivationFailure("Cannot make activation target writable")
+        }
         let out = open(file.path, O_WRONLY | O_NOFOLLOW)
         guard out >= 0 else { throw ActivationFailure("Cannot open activation target") }
         defer { close(out) }
@@ -137,6 +153,25 @@ enum MachOSignature {
             return "slice \(i) (cpu \(s.header.layout.cputype)/\(s.header.layout.cpusubtype)) is not ldid-signed"
         }
         return slices.contains { $0.header.layout.cputype == armCPU && $0.header.layout.cpusubtype == armv7 } ? nil : "no armv7 slice"
+    }
+
+    /// 2.x/3.0 dyld needs classic relocations and an ARMv6 slice; fail before baking a modern helper.
+    static func earlyARMProblem(_ url: URL) -> String? {
+        guard let file = try? MachOKit.loadFromFile(url: url) else { return "not a Mach-O" }
+        let images: [MachOFile]
+        switch file {
+        case .machO(let image): images = [image]
+        case .fat(let fat): guard let slices = try? fat.machOFiles() else { return "unreadable slices" }; images = slices
+        }
+        guard let image = images.first(where: { $0.header.layout.cputype == armCPU && $0.header.layout.cpusubtype == 6 }) else { return "no armv6 slice" }
+        for command in image.loadCommands {
+            switch command {
+            case .dyldInfoOnly, .main, .versionMinIphoneos, .buildVersion:
+                return "requires a newer dyld; rebuild with LEGACY_LINK=1"
+            default: continue
+            }
+        }
+        return codeSignature(image.loadCommands) == nil ? "unsigned armv6 slice" : nil
     }
 
     /// LC_CODE_SIGNATURE's (dataoff, datasize) of a thin 32-bit Mach-O in memory (Activation.signed patches the buffer).
