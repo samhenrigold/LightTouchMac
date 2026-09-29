@@ -79,8 +79,11 @@ import Testing
 
             let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
             guard Oracle.exists(itpack) else { return }
+            // the firmware the seed's load checks read (5F138's own executables and libSystem)
+            guard let base = try FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138"), in: dir) else { return }
             func volume(_ name: String) throws -> URL {
                 let m = dir.appendingPathComponent(name), sv = m.appendingPathComponent(GuestPackage.systemVersion)
+                try FileManager.default.copyItem(at: base, to: m)
                 try SystemEdits.mkdirs(m.appendingPathComponent(N72Board.openGLES).deletingLastPathComponent())
                 try SystemEdits.put(Data(contentsOf: stock), m.appendingPathComponent(N72Board.openGLES), mode: 0o755)
                 try SystemEdits.mkdirs(sv.deletingLastPathComponent())

@@ -162,6 +162,8 @@ import Testing
             do {
                 let v = try HFSPlusVolume(raw)
                 for p in [N72Board.openGLES, SystemEdits.springBoardJob, GuestPackage.systemVersion] { stock[p] = try v.contents(v.record(at: p)) }
+                // what the seed's load checks read: 1.x's own executables and libSystem
+                for p in FitCheck.Firmware.precedentBinaries + ["usr/lib/libSystem.B.dylib"] { stock[p] = try? v.contents(v.record(at: p)) }
             }
             for u in [enc, dmg, raw] { try fm.removeItem(at: u) }
             let stockGL = stock[N72Board.openGLES]!, gl = dir.appendingPathComponent("OpenGLES")
@@ -189,7 +191,7 @@ import Testing
                     let m = dir.appendingPathComponent("\(name)-\(gles)")
                     for (p, d) in stock {
                         try SystemEdits.mkdirs(m.appendingPathComponent(p).deletingLastPathComponent())
-                        try SystemEdits.put(d, m.appendingPathComponent(p), mode: p == N72Board.openGLES ? 0o755 : 0o644)
+                        try SystemEdits.put(d, m.appendingPathComponent(p), mode: p.hasSuffix(".plist") ? 0o644 : 0o755)
                     }
                     return m
                 }

@@ -62,6 +62,8 @@ public enum Recipe {
         /// Filled by the store and lock steps.
         var built = "", nandHashes: [String: String] = [:], listing = ""
         var progress: StepProgress!
+        /// Every fit check the steps ran (the lock's "fit"); an optional piece that does not fit is a warning event.
+        lazy var fit = FitCheck.Log { [unowned self] in self.warn($0) }
 
         init(_ o: Preparer.Options, recipe: FirmwareEntry.Recipe, emit: @escaping (PrepareEvent) -> Void) {
             self.o = o; e = o.entry; self.recipe = recipe; self.emit = emit
@@ -169,6 +171,7 @@ public enum Recipe {
             "identity": ["seed": c.seed, "udid": c.ident.udid ?? "", "sha256": try Preparer.digest(c.file("identity.json"), SHA256())],
             "outputs": ["nand": ["path": "nand", "listing_sha256": c.listing, "built_listing_sha256": c.built]],
             "guest_package": opt(c.guestPackage?.object),
+            "fit": c.fit.object,
         ]
         let lock = merged(shared, try board.lock(c))
         try fm.removeItem(at: c.work)

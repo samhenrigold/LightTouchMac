@@ -353,7 +353,7 @@ final class N72Board: Board {
         // the baked copies it provides are removed. Owners after it, for only what is left.
         // On 2.x the package carries only the OpenGLES front-end hook.
         if tools || front {
-            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles || front, log: c.log)
+            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles || front, fit: c.fit, log: c.log)
             if front, !record.hooks.contains("/" + Self.openGLES) {
                 // CA_ENABLE_OGL=1 over the stock driver drives the unemulated MBX: fail rather than wedge
                 throw FirmwareError(.internal, "\(SystemEdits.Helpers.itpack(arch)) has no OpenGLES hook for this build; rebuild the guest package")

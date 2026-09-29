@@ -111,7 +111,7 @@ final class N45Board: Board {
             let ark = Self.rootLibrary + "/Lockdown/data_ark.plist"
             try SystemEdits.put(try PropertyListSerialization.data(fromPropertyList: ["-BrickState": false], format: .xml, options: 0), at(ark), mode: 0o600)
             owners.append((0, ark))
-            let (report, record, owned) = try Self.bake(m, helpers: c.o.guestTools, gles: recipe.options["gles_shim"] ?? true, log: c.log)
+            let (report, record, owned) = try Self.bake(m, helpers: c.o.guestTools, gles: recipe.options["gles_shim"] ?? true, fit: c.fit, log: c.log)
             for (k, v) in report { derived[k] = v }
             c.guestPackage = record
             owners += owned.map { (0, $0) }
@@ -133,7 +133,7 @@ final class N45Board: Board {
     /// opengles-1x.exports (and `gles`), the seed package (GuestPackage.seed of armv6.itpack: the loader and n45-ios1),
     /// SpringBoard's LK_* environment. Returns (the lock's derived gles/gles_engine, the guest_package record, the
     /// volume-relative paths to make root-owned).
-    static func bake(_ m: URL, helpers: URL, gles: Bool, log: (String) -> Void) throws -> ([String: Any], GuestPackage.Record, [String]) {
+    static func bake(_ m: URL, helpers: URL, gles: Bool, fit: FitCheck.Log = FitCheck.Log(), log: (String) -> Void) throws -> ([String: Any], GuestPackage.Record, [String]) {
         var front = false, report: [String: Any] = [:]
         if gles {
             let (ok, line) = try N72Board.frontEnd(m.appendingPathComponent(N72Board.openGLES), exports: helpers.appendingPathComponent(openGLESExports))
@@ -142,7 +142,7 @@ final class N45Board: Board {
         } else {
             report["gles"] = "gles off; software LayerKit"
         }
-        let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: "armv6", gles: front, log: log)
+        let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: "armv6", gles: front, fit: fit, log: log)
         if front, !record.hooks.contains("/" + N72Board.openGLES) {
             // LK_ENABLE_OGL=1 over the stock IMG driver drives the unemulated MBX: fail rather than wedge
             throw FirmwareError(.internal, "\(SystemEdits.Helpers.itpack("armv6")) has no OpenGLES hook for this build; rebuild the guest package")

@@ -116,7 +116,7 @@ public enum SystemEdits {
     public static let kernelcachePath = "System/Library/Caches/com.apple.kernelcaches/kernelcache"
 
     public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
-                                kernelcache: Data? = nil, dataVolumeUUID: [UInt8]? = nil,
+                                kernelcache: Data? = nil, dataVolumeUUID: [UInt8]? = nil, fit: FitCheck.Log = FitCheck.Log(),
                                 log: (String) -> Void = { _ in }) throws -> Result {
         let fm = FileManager.default
         let system = work.appendingPathComponent("system.img"), data = work.appendingPathComponent("data.img")
@@ -207,7 +207,7 @@ public enum SystemEdits {
             try rewritePlist(at(btJob)) { $0["Disabled"] = true }
             result.activation = try activate(m, log: log)
             rootOwned.append(lockdownd)
-            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gles: result.engine != nil, log: log)
+            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gles: result.engine != nil, fit: fit, log: log)
             result.guestPackage = record
             rootOwned += seeded
             rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"] + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
@@ -318,8 +318,8 @@ public enum SystemEdits {
     }
 
     /// The guest-package loader and the arch's seed package (GuestPackage.seed of <arch>.itpack).
-    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gles: Bool, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
-        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gles: gles)
+    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gles: Bool, fit: FitCheck.Log, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
+        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gles: gles, fit: fit)
         log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
         return (seeded, record)
     }

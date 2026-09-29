@@ -86,8 +86,14 @@ enum K48Oracle {
         let itpack = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
         guard Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py")) else { return }
         try Oracle.withTemp { dir in
+            // the firmware the seed's load checks read: its executables, libSystem, cache, and the mounter's job
+            // inserting it_msmquiet as the bake leaves it
+            let id = "k48ap-" + build
+            guard let stock = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter, SystemEdits.msmJob], in: dir) else { return }
+            try FitFixture.insert("/usr/local/lib/it_msmquiet.dylib", into: SystemEdits.msmJob, at: stock)
             func volume(_ name: String) throws -> URL {
                 let v = dir.appendingPathComponent(name), sv = v.appendingPathComponent(GuestPackage.systemVersion)
+                try FileManager.default.copyItem(at: stock, to: v)
                 for rel in [SystemEdits.glEngine, SystemEdits.gldPath, "usr/local/lib/it_msmquiet.dylib"] {
                     try SystemEdits.mkdirs(v.appendingPathComponent(rel).deletingLastPathComponent())
                     try SystemEdits.put(Data("stock".utf8), v.appendingPathComponent(rel), mode: 0o755)

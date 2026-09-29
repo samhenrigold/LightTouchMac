@@ -34,6 +34,7 @@ if command == "mount" || command == "export" || command == "unmount" {
     volumeCommand(command!, Array(args))
 }
 if command == "verify-keys" { verifyKeysCommand(Array(args)) }
+if command == "fit" { fitCommand(Array(args)) }
 guard command == "create" else {
     FileHandle.standardError.write(Data("""
         firmwarekit \(FirmwareKit.version)
@@ -43,6 +44,7 @@ guard command == "create" else {
                firmwarekit mount|export --device DIR [--volume system|data|all] [--out DIR]
                firmwarekit unmount --out DIR
                firmwarekit verify-keys --entry ENTRY.json --ipsw IPSW
+               firmwarekit fit --root MOUNTED_SYSTEM_VOLUME [--arch armv6|armv7] MACHO...
 
         """.utf8))
     exit(64)
