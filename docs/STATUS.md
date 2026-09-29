@@ -59,7 +59,7 @@ Last update: 2026-09-28, `ipa-library` merged (IPA library; iBoot shipped; Track
 
 | GL bridge rejection audit | qemu-ios `gl-coverage` | every reject/unimplemented path counted + logged, magenta fallback under `gles-debug`, produced-vs-rejected list from the firmwares' own frameworks, cheap formats implemented |
 | iPod touch 1G, milestone 0 | qemu-ios `ipod-1g` | devos50's S5L8900 machine on our tree with shared models + properties; boot 3A101a from his public images (docs/sweep/ipod-1g.md) |
-| IOP v3 instrument, then the IOP second core | qemu-ios `iop-v3`, `iop-core` | v3 config-block table (class H, temporary) so the matrix passes the 4.3+ ping; then Apple's EmbeddedIOP firmware on a modelled second core + register-level H2FMI (Sam's call 09-28) |
+| IOP second core | qemu-ios `iop-core` | Apple's EmbeddedIOP firmware on a modelled second core + register-level H2FMI (Sam's call 09-28); the v3 instrument is merged and gets 4.3.5 to VFL init |
 | One recipe + packages + DiskImage | `one-recipe` | C4/C8: shared bake, ZIPFoundation, MachOKit, `diskutil image`/hdiutil abstraction, native HFS+ edits |
 | Repo pin + guest-artifact export | `repo-pin`, qemu-ios `export-artifacts` | E1: build-support/sources.json; contrib/export-guest-artifacts.sh |
 | Runtime GL dispatch | qemu-ios `gl-runtime` | one shim per arch, dispatch discovered at load, name-keyed wire |

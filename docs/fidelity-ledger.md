@@ -286,3 +286,5 @@ Full evidence: qemu-ios `docs/ipad1/ios5.md` (branch `ios5-spike`). iOS 5.1.1 (9
 So the ranking above holds: the IOP (H) is the single component that gates every 4.3+ build, and the
 boot chain's own state (epoch) is the second; both are exactly "getting along by happenstance" with
 the iBoot-817/931 generation.
+
+> 2026-09-28 `iop-v3` (qemu-ios): the HLE now also speaks the EmbeddedIOP-20/33 layout (ring table at +0x10, IOP DRAM window 0xc0000000, 64-byte ring entries, FMI args +0x18): an H-class instrument to be deleted when the IOP core lands. 4.3.5 reaches VFL init (then waits on a NAND epoch notification the blank effaceable NOR never gives); 5.1.1 needs the IOP→AP message ring (endpoint activation events), which only the real firmware defines.
