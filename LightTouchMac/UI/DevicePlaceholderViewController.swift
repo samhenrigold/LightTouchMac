@@ -115,7 +115,6 @@ final class DevicePlaceholderViewController: NSViewController {
             reason.isHidden = false
             showLog.isHidden = false
         case .unavailable(.comingSoon): status.stringValue = "Coming soon"
-        case .unavailable(.untested): status.stringValue = "Untested"
         case .unavailable(.requiresIPSW): status.stringValue = "Requires an IPSW"
         }
 
@@ -135,10 +134,11 @@ final class DevicePlaceholderViewController: NSViewController {
         if entry.estimates.peakBytes > 0 { parts.append("\(format(entry.estimates.peakBytes)) free space to prepare") }
         sizes.stringValue = parts.joined(separator: " · ")
         sizes.isHidden = parts.isEmpty || row.isStartable
-        // A developer build's note (source, keys); an experimental release's note.
-        let text = entry.prerelease != nil ? entry.statusNote : row.isExperimental ? entry.statusNote ?? "Experimental" : nil
-        note.stringValue = text ?? ""
-        note.isHidden = text == nil
+        // "Untested." first for a build the matrix hasn't run; a developer build's note (source, keys); an experimental release's note.
+        let catalogNote = entry.prerelease != nil || entry.status == .untested ? entry.statusNote : row.isExperimental ? entry.statusNote ?? "Experimental" : nil
+        let text = [entry.status == .untested ? "Untested." : nil, catalogNote].compactMap { $0 }.joined(separator: " ")
+        note.stringValue = text
+        note.isHidden = text.isEmpty
     }
 
     /// The bar (moving without a fraction yet) and the row's progress lines.

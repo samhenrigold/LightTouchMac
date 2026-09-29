@@ -3,7 +3,7 @@
 (docs/multi-device-plan.md, "Preparer contract") without touching firmware.
 
     fake-firmwarekit.py create --entry ENTRY.json --ipsw IPSW --out STAGING [--seed S]
-                               [--helper PATH] [--cache DIR]
+                               [--helper PATH] [--cache DIR] [--sibling-entry JSON --sibling-ipsw IPSW]
 
 FAKE_MODE picks the run: ok (default), error, sha (a sha_mismatch error), crash, incomplete,
 slow (waits for SIGTERM after step 2, with a read-only nand/ like the real one). FAKE_ARGV, if set, gets argv as JSON.
@@ -19,7 +19,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("cmd", choices=["create"])
 for flag in ("--entry", "--ipsw", "--out"):
     ap.add_argument(flag, required=True)
-for flag in ("--seed", "--helper", "--cache"):
+for flag in ("--seed", "--helper", "--cache", "--sibling-entry", "--sibling-ipsw"):
     ap.add_argument(flag)
 a = ap.parse_args()
 entry = json.load(open(a.entry))

@@ -82,7 +82,11 @@ Third-party: Apple never hosted the betas (8C134b and the iPod 8C134 GM it still
 archive for all of them so one source answers). Keys from The Apple Wiki's `Keys:` pages (the *Vail codenames),
 verified with `firmwarekit verify-keys`. Release dates from the wiki's Beta Firmware tables.
 
-Catalog: `prerelease` (`beta`/`gm`) with `prerelease_number` gives the sidebar its badge ("Beta 3", "GM 2").
+Catalog: `prerelease` (`beta`/`gm`) with `prerelease_number` gives the sidebar its badge, always numbered ("Beta 1",
+"Beta 3", "GM 2"; a missing number is 1). Every entry carries `released` (a release's Apple date, a developer build's
+from this table), the listings' primary order: 4.1 beta 1–3, then 4.1; the iPad's 5.0 beta 1 (2011-06-07) between
+4.3.3 and 4.3.4. Untested entries, betas included, download from `source.url` and prepare like any other, with an
+"Untested" note (Sam, 0928d); only `coming_soon` stays shut.
 Beta expiry was never observed on iOS 4 betas with the Mac's date (every 4.0/4.1/4.2 beta booted to its home screen
 in 2026, no "This version of iOS has expired"); if an iOS 5 beta refuses to run past its expiry, a per-entry clock
 pin is the planned fix (lockdown-tz already takes an optional epoch; the app would set it instead of the Mac's clock

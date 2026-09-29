@@ -149,7 +149,7 @@ extension DeviceInstance {
   try fm.createDirectory(at: shared, withIntermediateDirectories: true)
   try legacyBytes.write(to: shared.appendingPathComponent("legacy.app.ipa"))
   IPALibrary.sweep(devices: [a, b, c])
-  IPALibrary.adopt(copies: shared)
+  await IPALibrary.adopt(copies: shared)
   let handSha = hex(SHA256.hash(data: handBytes)), legacySha = hex(SHA256.hash(data: legacyBytes))
   check(blobs() == ["\(otherSha).ipa", "\(handSha).ipa", "\(legacySha).ipa"].sorted(), "the hand-made and legacy copies are blobs: \(blobs())")
   check(IPALibrary.index[handSha]?.bundleID == "hand.made" && IPALibrary.index[handSha]?.size == Int64(handBytes.count)

@@ -350,7 +350,8 @@ private final class DeviceRowCell: NSTableCellView {
         symbol.isHidden = true
         switch row.state {
         case let .notDownloaded(bytes):
-            show(bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) })
+            // An untested build says so here; its size is on the placeholder.
+            show(row.note ?? bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) })
         case .downloaded: show("Downloaded")
         case .bundled: show("Built in")
         case .downloading, .preparing:
@@ -361,7 +362,6 @@ private final class DeviceRowCell: NSTableCellView {
         case .stopping: spin(fraction: nil)
         case .error: show(symbol: "exclamationmark.triangle.fill", color: .systemYellow, size: 12)
         case .unavailable(.comingSoon): show("Coming soon")
-        case .unavailable(.untested): show("Untested")
         case .unavailable(.requiresIPSW): show("Requires an IPSW")
         }
         if let note = row.note, detail.isHidden { show(note) }
