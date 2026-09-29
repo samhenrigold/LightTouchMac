@@ -43,9 +43,9 @@ struct ProxyConfig: Decodable {
     d.netdevExtra = WebProxyConfiguration.guestForward(helper: p.itwebproxy, directory: proxyDir)
     let cache = GuestAgentCache()
     var agent: GuestAgent { GuestAgent(link: d.process.link, cache: cache) }
-    func localTool() throws -> Data {
-        guard let tool = try GuestPackage.package(in: URL(fileURLWithPath: p.itpack), board: "n72ap", build: "7E18")?.1["bin/ittrust"] else {
-            throw DeviceToolsError.toolMissing("ittrust")
+    func localTool(_ name: String) throws -> Data {
+        guard let tool = try GuestPackage.package(in: URL(fileURLWithPath: p.itpack), board: "n72ap", build: "7E18")?.1["bin/\(name)"] else {
+            throw DeviceToolsError.toolMissing(name)
         }
         return tool
     }
@@ -95,6 +95,7 @@ struct ProxyConfig: Decodable {
         let guest = GuestServices(agent: agent, packaged: packaged)
         let start = Date()
         do {
+            try await guest.routeThroughProxy(localTool: localTool)
             try await guest.trustCertificate(der, localTool: localTool)
             emit("trust", ["device": d.name, "generation": generation, "ok": true, "packaged": packaged, "seconds": Date().timeIntervalSince(start)])
         } catch { emit("trust", ["device": d.name, "generation": generation, "ok": false, "packaged": packaged, "error": "\(error)"]) }
@@ -109,6 +110,13 @@ struct ProxyConfig: Decodable {
     }
 
     await boot(1)
+    // Routing first (the app does it in the same step as the trust), so the untrusted fetch below reaches
+    // the proxy: without it an image lacking the PAC goes straight to the origin, and its -1200 is only
+    // 3.1.3's TLS against a modern server, not the proxy's certificate.
+    do {
+        try await GuestServices(agent: agent, packaged: d.process.status?.guestPackage != nil).routeThroughProxy(localTool: localTool)
+        emit("route", ["device": d.name, "ok": true])
+    } catch { emit("route", ["device": d.name, "ok": false, "error": "\(error)"]) }
     // Plain HTTP through the proxy first: whether the guest has a network at all (no certificate involved).
     await fetch("http", url: p.url.replacingOccurrences(of: "https://", with: "http://"))
     await fetch("untrusted")

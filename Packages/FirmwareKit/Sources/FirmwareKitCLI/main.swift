@@ -2,7 +2,7 @@
 //
 //   firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 //                      [--seed SEED] [--helper PATH_TO_LightTouchDevice]
-//                      [--cache DIR] [--guest-tools DIR]
+//                      [--cache DIR] [--guest-tools DIR] [--sibling-entry ENTRY.json --sibling-ipsw IPSW]
 //
 // stdout is JSON Lines only; diagnostics go to stderr. Exit 0 after done, 1 after an error event; SIGTERM,
 // or the parent (the app) exiting, cancels (children stopped, images under STAGING_DIR detached, exit 143)
@@ -39,6 +39,7 @@ guard command == "create" else {
         firmwarekit \(FirmwareKit.version)
         usage: firmwarekit create --entry ENTRY.json --ipsw IPSW --out DIR [--seed S]
                                   [--helper PATH] [--cache DIR] [--guest-tools DIR]
+                                  [--sibling-entry ENTRY.json --sibling-ipsw IPSW]   (recipe.keybag_ramdisk_from)
                firmwarekit mount|export --device DIR [--volume system|data|all] [--out DIR]
                firmwarekit unmount --out DIR
                firmwarekit verify-keys --entry ENTRY.json --ipsw IPSW
@@ -47,7 +48,7 @@ guard command == "create" else {
     exit(64)
 }
 var flags: [String: String] = [:]
-let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools"]
+let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools", "--sibling-entry", "--sibling-ipsw"]
 while let a = args.popFirst() {
     guard known.contains(a), let v = args.popFirst() else { emit(.error(code: "internal", message: "bad argument \(a)")); exit(1) }
     flags[a] = v
@@ -89,7 +90,8 @@ do {
         .appendingPathComponent("../Resources/guest-tools").standardizedFileURL
     options = .init(entry: try FirmwareEntry.load(from: url(entryPath)), ipsw: url(ipsw), out: staging, seed: flags["--seed"],
                     helper: flags["--helper"].map(url),
-                    guestTools: flags["--guest-tools"].map(url) ?? bundled, cache: flags["--cache"].map(url))
+                    guestTools: flags["--guest-tools"].map(url) ?? bundled, cache: flags["--cache"].map(url),
+                    sibling: try flags["--sibling-entry"].map { (try FirmwareEntry.load(from: url($0)), url(flags["--sibling-ipsw"] ?? "")) })
 } catch { fail(error) }
 
 Thread.detachNewThread { [options] in

@@ -17,6 +17,8 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     struct Request: Sendable {
         var entry: FirmwareCatalog.Entry
         var ipsw: URL
+        /// recipe.keybag_ramdisk_from: that entry and its IPSW (its ramdisk boots the keybag one-shot).
+        var sibling: (entry: FirmwareCatalog.Entry, ipsw: URL)?
         /// The state directory (Preparing/ and Devices/ are under it).
         var state: URL
         var preparer: URL
@@ -92,6 +94,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
 
     var staging: URL { Self.preparing(request.state).appendingPathComponent(id.uuidString, isDirectory: true) }
     private var entryFile: URL { Self.preparing(request.state).appendingPathComponent("\(id.uuidString).entry.json") }
+    private var siblingFile: URL { Self.preparing(request.state).appendingPathComponent("\(id.uuidString).sibling.json") }
     static func preparing(_ state: URL) -> URL { state.appendingPathComponent("Preparing", isDirectory: true) }
 
     /// Events arrive on a background queue, `.published`, `.failed` or `.cancelled` last.
@@ -110,6 +113,10 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             process.executableURL = request.preparer
             process.arguments = ["create", "--entry", entryFile.path, "--ipsw", request.ipsw.path, "--out", staging.path,
                                  "--seed", id.uuidString, "--helper", request.helper.path, "--cache", request.cache.path]
+            if let sibling = request.sibling {
+                try JSONEncoder().encode(sibling.entry).write(to: siblingFile)
+                process.arguments! += ["--sibling-entry", siblingFile.path, "--sibling-ipsw", sibling.ipsw.path]
+            }
             let stdout = Pipe()
             process.standardOutput = stdout
             process.standardError = try FileHandle(forWritingTo: request.log)

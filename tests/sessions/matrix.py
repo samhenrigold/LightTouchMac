@@ -108,6 +108,14 @@ def prepare(entry, entry_file, ipsw, out, a, helper, env):
            "--helper", helper, "--cache", a.scratch / "cache", "--guest-tools", a.guest_tools]
     if a.activation_hook:   # opt-in, forwarded verbatim
         cmd += ["--activation-hook", a.activation_hook]
+    if sibling := (entry.get("recipe") or {}).get("keybag_ramdisk_from"):   # its restore ramdisk boots the keybag one-shot
+        sib = next(e for e in a.catalog["entries"] if e["id"] == sibling)
+        sib_ipsw, why = fetch_ipsw(sib, a.ipsw_cache, a.seeds)
+        if not sib_ipsw:
+            raise RuntimeError(f"keybag_ramdisk_from {sibling}: {why}")
+        sib_file = out.parent / "sibling.json"
+        sib_file.write_text(json.dumps(sib))
+        cmd += ["--sibling-entry", sib_file, "--sibling-ipsw", sib_ipsw]
     out.mkdir(parents=True, exist_ok=True)
     (a.scratch / "cache").mkdir(parents=True, exist_ok=True)
     stderr = out.parent / "firmwarekit.log"
@@ -361,7 +369,7 @@ def main():
         ap.error("--dylib PATH (or LTM_QEMU_DYLIB) is required")
     if a.restore and not (a.restore_rom and a.restore_libirecovery):
         ap.error("--restore needs --restore-rom and --restore-libirecovery")
-    catalog = json.loads(CATALOG.read_text())
+    catalog = a.catalog = json.loads(CATALOG.read_text())
     results = json.loads(RESULTS_JSON.read_text()) if RESULTS_JSON.exists() else {}
     # One runner at a time: two would share the scratch tools and the results file, and boot two emulators.
     a.scratch.mkdir(parents=True, exist_ok=True)
@@ -383,7 +391,7 @@ def main():
     if a.build_only:
         return log(f"built: {helper}")
 
-    seeds = {}
+    seeds = a.seeds = {}
     for f in a.seed_ipsws:
         seeds[sha1(f)] = f
         log(f"seed {f.name}: {list(seeds)[-1]}")
@@ -423,6 +431,8 @@ def main():
                 rec["first_failure"] = {"check": "prepare", "why": rec["prepare"]["error"], "excerpt": excerpt(fklog)}
                 shots.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(fklog, shots / "firmwarekit.log")
+                for l in (base / "work").glob("*.log"):   # the one-shots' serial logs (keybag-N, seal, check)
+                    shutil.copyfile(l, shots / l.name)
                 continue
             base_before = check_sessions.tree(base)
             drive = work / "boot"
