@@ -818,7 +818,7 @@
   "version": "1.1",
   "build": "3A101a",
   "released": "2007-09-14",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-3882.20070910.N8uyT/iPod1,1_1.1_3A101a_Restore.ipsw", "sha1": "9b0d83c7f8b4328174a3f31e0e93f60e591ae143", "bytes": 157890186},
   "keys": {
    "rootfs": {"file": "022-3601-4.dmg", "key": "6f021b478cc21ff77f775850c0efc2e66fd015f6a6894be079ee1351dce9af069f915f3d"}

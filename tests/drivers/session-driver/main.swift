@@ -156,14 +156,14 @@ extension String {
                                      serial: serial!.argument, audio: ["-audio", "driver=none"],
                                      netdev: netdevExtra.map { "user,id=wifi0" + $0 }, restore: [])
         } else if profile == .iPodTouch1G {
-            // As EmulatorController.iPod1GBoot: the base's iBoot.bin, nand/ and a private writable NOR; no USB link.
+            // As EmulatorController.iPod1GBoot: the base's iBoot.bin, nand/, a private writable NOR and the mux.
             let base = URL(fileURLWithPath: ipod!.nand).deletingLastPathComponent()
             let boot = profile.preparedBoot(strategy: nil)
             let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: dir.appendingPathComponent("nor.bin"),
                                                      boot: boot.boot, also: boot.files)
             config = BootRecipe.iPod1G(.init(bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Self.files), iBoot: files.boot.path,
                                              nand: files.nand.path, writableNOR: files.writableNOR!.path, overlay: overlay.path,
-                                             guestPackage: guestPackage, machineOptions: ipod!.machine),
+                                             usbAddress: mux.guestAddress, guestPackage: guestPackage, machineOptions: ipod!.machine),
                                        serial: serial!.argument, audio: ["-audio", "driver=none"])
         } else {
             let files = ipod ?? IPodFiles(nand: Self.ipodNAND, nor: Self.files + "/ios3/nor_7E18.bin", iBoot: Self.files + "/ios3/iBoot.bin")

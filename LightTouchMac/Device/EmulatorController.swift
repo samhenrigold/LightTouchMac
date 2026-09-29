@@ -331,8 +331,8 @@ final class EmulatorController {
     }
 
     /// The iPod touch 1G boots its base/ (firmwarekit's n45 recipe): the S5L8900 bootrom, iBoot.bin, nand/ under
-    /// this device's overlay and a private writable NOR. No usbmuxd: the machine has no USB link yet
-    /// (DeviceProfile.hasUSBLink), so a lit screen is the boot's end (bootFinished) and Stop is the only halt.
+    /// this device's overlay and a private writable NOR, USB to the device's usbmuxd (1.x lockdown is SSLv3:
+    /// the bundled libimobiledevice's libimobiledevice-sslv3-ios1.patch).
     private func iPod1GBoot() -> BootConfig? {
         let overlay = overlayURL
         let base = instance.paths.base
@@ -343,10 +343,11 @@ final class EmulatorController {
                                                  boot: boot.boot, also: boot.files)
             guard let nor = files.writableNOR else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
             guard try pinOverlay(overlay) else { return nil }
+            let usbSession = usbmux.start(paths: instance.paths)
             openSerialLog()
             return BootRecipe.iPod1G(.init(bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Bundled.filesRoot),
                                            iBoot: files.boot.path, nand: files.nand.path, writableNOR: nor.path, overlay: overlay.path,
-                                           guestPackage: composeGuestOffer(), machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
+                                           usbAddress: usbSession?.guestAddress, guestPackage: composeGuestOffer(), machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
                                      serial: serialCapture?.argument ?? "null", audio: ["-audio", "driver=coreaudio,out.buffer-count=16"])
         } catch {
             failBoot(error)
@@ -533,7 +534,6 @@ final class EmulatorController {
     /// screen answers: lockdown, then SpringBoard.
     private func startReadinessWatch() {
         guard !shuttingDown else { return }
-        guard profile.hasUSBLink else { preparingDevice = false; return }   // nothing to wait for: lit is up
         readinessTask?.cancel()
         preparingDevice = true
         preparationStatus = "Starting iOS…"

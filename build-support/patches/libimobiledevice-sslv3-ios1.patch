@@ -1,0 +1,14 @@
+diff -ru a/libimobiledevice-1.4.0/src/idevice.c b/libimobiledevice-1.4.0/src/idevice.c
+--- a/src/idevice.c	2025-09-16 04:00:09
++++ b/src/idevice.c	2026-09-29 16:54:57
+@@ -1274,6 +1274,10 @@
+ 					or up to the highest version supported by the library, respectively.
+ 			*/
+ 			SSL_CTX_set_min_proto_version(ssl_ctx, 0);
++		} else if (connection->device->version < IDEVICE_DEVICE_VERSION(2,0,0)) {
++			/* iPhone OS 1.x lockdownd speaks SSLv3 only (needs an OpenSSL built enable-ssl3 enable-ssl3-method) */
++			SSL_CTX_set_min_proto_version(ssl_ctx, SSL3_VERSION);
++			SSL_CTX_set_max_proto_version(ssl_ctx, SSL3_VERSION);
+ 		}
+ 	}
+ #endif

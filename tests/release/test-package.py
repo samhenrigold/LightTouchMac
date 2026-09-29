@@ -109,6 +109,10 @@ def check_helper(app):
     assert probe.returncode == 0, probe.stderr
     loaded = json.loads(probe.stdout)['dylibPath']
     assert pathlib.Path(loaded).resolve() == dylib.resolve(), f'helper loaded {loaded}, not the bundled {dylib}'
+    # iPhone OS 1.x lockdownd is SSLv3 only: the bundled OpenSSL must be built enable-ssl3 enable-ssl3-method
+    # (build-static-deps.sh); without it libimobiledevice-sslv3-ios1.patch asks for a protocol the library lacks.
+    imd = app / 'Contents/Frameworks/libimobiledevice-1.0.dylib'
+    assert '_SSLv3_client_method' in run('nm', '-gU', imd).stdout, f'{imd.name} links an OpenSSL without SSLv3'
     device = app / 'Contents/Resources/device'
     blob = device / 'n72ap-7E18.itbase'
     assets = ('bootrom_240_4', 'bootrom_s5l8900', 'n72ap-7E18.itbase')  # the 2G's and 1G's SecureROMs, the built-in iPod
@@ -118,7 +122,7 @@ def check_helper(app):
     assert not stray, f'unexpected device assets (raw pages, the old NAND or iBoot?): {stray[:5]}'
     catalog = json.loads((app / 'Contents/Resources/firmware-catalog.json').read_text())
     assert [e['id'] for e in catalog['entries'] if e.get('bundled')] == ['n72ap-7E18']
-    print(f'PASS: {helper.name} signed (runtime, QEMU entitlements, minos {info}), closure in-bundle, loads {dylib.name} from Frameworks; built-in iPod packed')
+    print(f'PASS: {helper.name} signed (runtime, QEMU entitlements, minos {info}), closure in-bundle, loads {dylib.name} from Frameworks; SSLv3 in {imd.name}; built-in iPod packed')
 
 
 if len(sys.argv) > 1:

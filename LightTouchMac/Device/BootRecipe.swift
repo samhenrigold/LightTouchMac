@@ -47,13 +47,14 @@ nonisolated enum BootRecipe {
 
     /// The iPod touch 1G (qemu-ios `-M iPod-Touch-1G`): the S5L8900 bootrom and the base's iBoot-204 (IMG2 payload),
     /// the base's NAND under a page overlay, and the NOR as a pflash drive on the private writable copy (iBoot and
-    /// the kernel write it). No USB link, Wi-Fi or GID blobs on this machine yet (DeviceProfile.hasUSBLink).
+    /// the kernel write it). No Wi-Fi or GID blobs on this machine yet.
     struct IPod1G {
         var bootrom: String
         var iBoot: String
         var nand: String
         var writableNOR: String
         var overlay: String
+        var usbAddress: String? = nil
         /// This boot's guest-package offer directory (GuestPackage; n45-ios1 has it_boot since qemu-ios ff2f139cf9).
         var guestPackage: String? = nil
         var machineOptions: [String: String] = [:]
@@ -116,6 +117,7 @@ nonisolated enum BootRecipe {
     static func iPod1G(_ d: IPod1G, serial: String, audio: [String]) -> BootConfig {
         let machine = "iPod-Touch-1G,bootrom=\(escape(d.bootrom)),iboot=\(escape(d.iBoot))"
             + ",nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
+            + (d.usbAddress.map { ",usb-tcp-addr=\($0)" } ?? "")
             + (d.guestPackage.map { ",guest-package=\(escape($0))" } ?? "") + options(d.machineOptions)
         let argv = ["LightTouchMac", "-M", machine, "-drive", "if=pflash,format=raw,file=\(escape(d.writableNOR))",
                     "-display", "none", "-no-shutdown"] + audio + ["-serial", serial]

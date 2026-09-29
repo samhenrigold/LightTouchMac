@@ -94,7 +94,8 @@ Last update: 2026-09-28, `ipa-library` merged (IPA library; iBoot shipped; Track
 | iPod 4.2.1 (8C148) | experimental | added 2026-09-28 |
 | iPod 2.1.1 / 2.2 / 2.2.1 (5F138, 5G77a, 5H11a) | experimental | AppSync on; install + launch gated 09-29 (`legacy-gate`) |
 | iPod 3.0 (7A341) | untested | lights since the iBoot epoch fix; AppSync install + launch; GL through the legacy-linked engine on qemu-ios `gles-30` (Labyrinth 2 Lite renders; not merged, FirmwareKit N72 to mirror); second boot flake not reproduced there (#46) |
-| iPod touch 1G 1.1–1.1.5 (3A101a … 4B1) | untested | added 09-29 (`legacy-gate`); all six build + boot (4A93/4A102/4B1 need the C003 NAND signature, `n45-c003`); buttons and Shut Down in the app (`ipod-1g-app`); lockdown needs host SSLv3 (smoke #51); 1.1.3+ stop at iBoot's NAND (#49) |
+| iPod touch 1G 1.1 (3A101a) | experimental | `ssl3-1g` (09-29): USB link, SSLv3 lockdown through the bundled libimobiledevice, Activated, AFC 4/4, persist, Shut Down; needs qemu-ios `ipod-1g-sigill` (OTG OUT transfers, smoke #51) |
+| iPod touch 1G 1.1.1–1.1.5 (3A110a … 4B1) | untested | added 09-29 (`legacy-gate`); all six build + boot (4A93/4A102/4B1 need the C003 NAND signature, `n45-c003`); buttons and Shut Down in the app (`ipod-1g-app`); lockdown needs host SSLv3 (smoke #51); 1.1.3+ stop at iBoot's NAND (#49) |
 | iPad 3.2.2 (7B500) | available | |
 | iPad 3.2 (7B367) | available | |
 | iPad 4.2.1 (8C148) | experimental | keyboard fixed 09-28; devices prepared before need re-preparing |
@@ -116,7 +117,7 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 ## Left
 
 ### Firmware coverage
-- iPod touch 1G: merge qemu-ios `ipod-1g-app` (USB link, device-info row, buttons, powerdown, epoch); SSLv3 in the bundled OpenSSL/libimobiledevice (#51), then hasUSBLink true + usb-tcp-addr in BootRecipe.iPod1G and the rows again for `experimental`; N45NAND's C003 format for 1.1.3+ (#52); ship bootrom_s5l8900 in the release (package.sh, test-package's asset list).
+- iPod touch 1G: 3A101a experimental (SSLv3 lockdown + the OTG OUT fix, #51 closed); 1.1.1–1.1.5 still to take through the matrix on that pin; in-app 1G readiness flow (lockdown wait, activation check) not yet exercised in the app; the stub cluster (#13/#14/#16/#21/#22/#33) and identity bits (#53).
 - iPod 3.0: GL through the legacy-linked engine merged (`gles-30`, #47 closed) with the `n72-ios30` package + loader; mirror it in FirmwareKit's N72Recipe (no-cache → MBXGLEngine-30, seed, CA_ENABLE_OGL=1); the second-boot lit flake (#46) still open; 2.x/3.0 Edit Home Screen tip baked (#45 closed).
 - iPod 2.1.1 in the app: N72 recipe for 2.x (legacy-linked loader), catalog keys, in-app check.
 - More point releases (2.2.1, 3.0, 3.1.x, 4.0–4.1): each needs a manifest, catalog keys and a check. Designed to be routine; none tried.

@@ -57,7 +57,9 @@ untar openssl-3.6.3.tar.gz
 echo 'Building OpenSSL 3.6.3'
 (
     cd "$ROOT/build/openssl-3.6.3"
-    ./Configure darwin64-arm64-cc no-shared no-tests no-docs \
+    # SSLv3 for iPhone OS 1.x lockdownd (libimobiledevice-sslv3-ios1.patch picks it below 2.0 only; OpenSSL
+    # still refuses it above security level 0, which only libimobiledevice's contexts set).
+    ./Configure darwin64-arm64-cc no-shared no-tests no-docs enable-ssl3 enable-ssl3-method \
         --prefix="$PREFIX" --openssldir=/private/etc/ssl "$MIN" > "$LOG/openssl.configure.log" 2>&1
     make -j"$JOBS" > "$LOG/openssl.build.log" 2>&1
     make install_sw > "$LOG/openssl.install.log" 2>&1

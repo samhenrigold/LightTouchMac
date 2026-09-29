@@ -118,7 +118,11 @@ def offline_checks():
     checks.append([TESTS / 'sessions/check-activation-gate.py', '--offline'])
     checks.append([TESTS / 'sessions/check-boot-deadline.py', '--offline'])
     skips = []
-    if display_asleep():
+    # Opt-in (Sam, 09-29): these put the 3D device model on screen. LTM_DISPLAY_CHECKS=1 runs them.
+    if os.environ.get('LTM_DISPLAY_CHECKS') != '1':
+        skips = [(f'offline/{c}', 'opens windows on screen; LTM_DISPLAY_CHECKS=1 runs it') for c in NEEDS_DISPLAY]
+        checks = [c for c in checks if c[0].name not in NEEDS_DISPLAY]
+    elif display_asleep():
         skips = [(f'offline/{c}', 'the main display is asleep; Metal presents and ScreenCaptureKit capture nothing') for c in NEEDS_DISPLAY]
         checks = [c for c in checks if c[0].name not in NEEDS_DISPLAY]
     return checks, skips
