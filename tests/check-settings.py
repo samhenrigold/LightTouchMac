@@ -10,7 +10,7 @@ actions=source[a:b]
 fixture=r'''import Cocoa
 @MainActor enum NetworkAccessPreference { static let key="guestNetworkEnabled" }
 @MainActor final class EmulatorController {
- struct Options { var network = true }; var options = Options()
+ var network = true
  static let autoRotateDefaultsKey="autoRotateWithGuest"
  static var autoRotateEnabled:Bool { UserDefaults.standard.object(forKey:autoRotateDefaultsKey) as? Bool ?? true }
  var autoRotateEnabled:Bool { Self.autoRotateEnabled }
@@ -38,7 +38,7 @@ fixture=r'''import Cocoa
   precondition(delegate.validateMenuItem(network) && network.state == .off && network.title.contains("After Reopening"))
   delegate.toggleInternetAccess(nil)
   precondition(delegate.validateMenuItem(network) && network.state == .on && !network.title.contains("After Reopening"))
-  delegate.emulator!.options.network=false
+  delegate.emulator!.network=false
   defaults.removeObject(forKey:NetworkAccessPreference.key)
   precondition(delegate.validateMenuItem(network) && network.state == .off && !network.title.contains("After Reopening"))
   print("PASS: menu preferences apply rotation immediately and show pending internet changes")

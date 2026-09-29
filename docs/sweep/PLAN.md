@@ -61,7 +61,7 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 | C3 Catalog is the manifest; delete qemu-ios manifests/; tests take an entry JSON | 0.5 | fresh-device with --entry |
 | C4 One Recipe with board plug-ins (verify/decrypt/identity/lock/keybag/bake shared) | 2 | swift test; lock diff empty on all entries |
 | C5 Retire Python: port real-iBoot (done in C0) and `--gl-test`; golden-lock oracle; delete ~4,500 lines; `research/` keeps the probes | 4 | fresh-device on all 6 entries via firmwarekit; one-time cross-check against the last Python locks |
-| C6 Bundled iPod as a prepared device (S2); delete LegacyAdoption, LaunchOptions, the legacy branches | 2.5 | check-firmware-jobs publish; check-sessions --single ipod; legacy-tree → prompt check |
+| C6 Bundled iPod as a prepared device (S2); delete LegacyAdoption, LaunchOptions, the legacy branches — **done 2026-09-28 (`bundled-prepared`)**: `Resources/device/n72ap-7E18.itbase` (a packed `firmwarekit create`), published at first launch; one Erase & Continue / Quit prompt for the old layout; `LTM_DEV_BASE` for development | 2.5 | check-bundled-prepared (fresh → `.prepared`; old layout → prompt path); check-firmware-jobs publish (XFAIL retired); check-sessions --single ipod on the unpacked blob; test-release, test-package |
 | C7 iPod 2.1.1 in the app (N72 recipe 2.x path, keys, catalog) | 1 | in-bundle prepare + boot |
 
 ## Track D: emulator consolidation (after gl-coverage and usb-alert merge; ~10 d)

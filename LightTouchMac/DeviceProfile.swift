@@ -1,10 +1,8 @@
 // Which board an emulated device is.
 //
-// Each EmulatorController holds its own (docs/multi-device-plan.md moves each
-// device into its own helper later); the app picks it at startup from
-// LIGHTTOUCH_DEVICE=ipad1, defaulting to the iPod. Screen geometry and art
-// live in DeviceProfile+Display.swift; this file needs nothing else, so any
-// source that only needs the name can use it.
+// Each EmulatorController holds its own, from its device record's board.
+// Screen geometry and art live in DeviceProfile+Display.swift; this file
+// needs nothing else, so any source that only needs the name can use it.
 
 import Foundation
 

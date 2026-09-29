@@ -161,8 +161,8 @@ extension Notification.Name {
   check(blobs() == ["\(otherSha).ipa"] && IPALibrary.index.keys.sorted() == [otherSha], "the referenced blob stays, the other is gone")
   check(bytes(IPALibrary.url(for: "test.other", device: a)!) == otherBytes, "A's copy is untouched")
 
-  // The launch sweep: a device copy from before the store is hashed in once; a shared State/IPAs from
-  // before per-device copies is cloned into every device, then removed. Running it again reads nothing.
+  // The launch sweep: a device copy from before the store is hashed in once; a directory of copies from
+  // the old layout (LegacyState) is adopted the same way. Running the sweep again reads nothing.
   let handBytes = Data(String(repeating: "hand-made copy\n", count: 500).utf8)
   let legacyBytes = Data(String(repeating: "legacy shared copy\n", count: 500).utf8)
   try StorageLocations.privateDirectory(c.paths.ipas)
@@ -171,12 +171,11 @@ extension Notification.Name {
   try fm.createDirectory(at: shared, withIntermediateDirectories: true)
   try legacyBytes.write(to: shared.appendingPathComponent("legacy.app.ipa"))
   IPALibrary.sweep(devices: [a, b, c])
+  IPALibrary.adopt(copies: shared)
   let handSha = hex(SHA256.hash(data: handBytes)), legacySha = hex(SHA256.hash(data: legacyBytes))
   check(blobs() == ["\(otherSha).ipa", "\(handSha).ipa", "\(legacySha).ipa"].sorted(), "the hand-made and legacy copies are blobs: \(blobs())")
   check(IPALibrary.index[handSha]?.bundleID == "hand.made" && IPALibrary.index[handSha]?.size == Int64(handBytes.count)
         && IPALibrary.index[legacySha]?.bundleID == "legacy.app", "indexed by their file names")
-  check(!fm.fileExists(atPath: shared.path) && [a, b, c].allSatisfy { bytes(IPALibrary.url(for: "legacy.app", device: $0)!) == legacyBytes },
-        "the shared directory went into every device")
   check(bytes(c.paths.ipas.appendingPathComponent("hand.made.ipa")) == handBytes, "C's copy is untouched")
   let before = try fm.attributesOfItem(atPath: IPALibrary.directory.appendingPathComponent("index.json").path)[.modificationDate] as? Date
   let indexBefore = IPALibrary.index

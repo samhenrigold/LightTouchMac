@@ -30,7 +30,7 @@ nonisolated enum IMobileDevice {
  struct Mux { var session: Session? = Session() }
  var usbmux = Mux()
  var usbConnected = true, isPoweredOff = false, shuttingDown = false
- var hasFileTransfer = false, isReconnecting = false, preparingMedia = false
+ var hasFileTransfer = false, isReconnecting = false, preparingDevice = false
 ''' + probe + r'''
 }
 @MainActor final class Inspector {
@@ -83,7 +83,7 @@ nonisolated enum IMobileDevice {
   precondition(inspector.readsSuppressed)
   inspector.emulator.hasFileTransfer = false; inspector.emulator.isReconnecting = true
   precondition(inspector.readsSuppressed)
-  inspector.emulator.isReconnecting = false; inspector.emulator.preparingMedia = true
+  inspector.emulator.isReconnecting = false; inspector.emulator.preparingDevice = true
   precondition(inspector.readsSuppressed, "boot preparation owns device services too")
   print("PASS: typed health failures, bounded queued probes, cancellation, shutdown, and health reads during paused removals")
  }

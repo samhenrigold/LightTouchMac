@@ -350,6 +350,7 @@ private final class DeviceRowCell: NSTableCellView {
         case let .notDownloaded(bytes):
             show(bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) })
         case .downloaded: show("Downloaded")
+        case .bundled: show("Built In")
         case .downloading, .preparing:
             spin(fraction: row.progress)
             show(row.progressSummary)

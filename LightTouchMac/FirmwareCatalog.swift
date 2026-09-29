@@ -12,14 +12,12 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         enum Status: String, Codable, Sendable { case available, experimental, comingSoon = "coming_soon", userIPSW = "user_ipsw" }
 
         struct Source: Codable, Sendable, Equatable {
-            enum Kind: String, Codable, Sendable { case ipsw, bundled }
+            enum Kind: String, Codable, Sendable { case ipsw }
             var kind: Kind
-            /// kind ipsw. A user_ipsw entry pins sha1 without a URL.
+            /// A user_ipsw entry pins sha1 without a URL.
             var url: URL?
             var sha1: String?
             var bytes: Int64?
-            /// kind bundled: a path under the app's Resources.
-            var resource: String?
         }
 
         /// An img3's IV/key, or a root filesystem's VFDecrypt key (no IV).
@@ -69,6 +67,9 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var status: Status
         var statusNote: String?
         var source: Source
+        /// The built-in device: a prepared base packed under the app's Resources
+        /// (scripts/pack-base.py), published on first launch (FirmwareJobs.prepareBundled).
+        var bundled: String?
         var keys: [String: Key]
         var recipe: Recipe?
         /// "none" or "optional": whether a user-configured hook may run.
@@ -76,7 +77,7 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var estimates: Estimates
 
         enum CodingKeys: String, CodingKey {
-            case id, board, version, build, status, source, keys, recipe, emulator, estimates
+            case id, board, version, build, status, source, bundled, keys, recipe, emulator, estimates
             case productType = "product_type", statusNote = "status_note"
         }
 
@@ -101,9 +102,8 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
 
     func entry(id: String) -> Entry? { entries.first { $0.id == id } }
 
-    /// Catalog ids the legacy devices are adopted as.
-    static let legacyIPodID = "n72ap-7E18"
-    static let developmentIPadID = "k48ap-7B500"
+    /// The entry the app ships a prepared base for (the iPod 3.1.3), if any.
+    var bundledEntry: Entry? { entries.first { $0.bundled != nil } }
 }
 
 nonisolated extension DeviceProfile {

@@ -78,7 +78,7 @@ final class DisplayView: NSView {
     func updatePowerPresentation() {
         guard let emulator else { return }
         let next: PowerPresentation = emulator.isPoweredOff ? .poweredOff
-            : emulator.shuttingDown ? .shuttingDown : (emulator.isSleeping && !emulator.preparingMedia && !isShowingLiveText) ? .sleeping : .awake
+            : emulator.shuttingDown ? .shuttingDown : (emulator.isSleeping && !emulator.preparingDevice && !isShowingLiveText) ? .sleeping : .awake
         guard next != powerPresentation else { return }
         powerPresentation = next
         powerBadge?.removeFromSuperview()

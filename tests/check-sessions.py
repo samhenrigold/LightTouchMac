@@ -38,7 +38,6 @@ each through the app's GuestServices/GuestAgent, DeviceServices, lockdown-tz and
   agent      capabilities from the agent's ping (a v1 agent falls back to its exec)
   report     the loader's report and the verdict: the fresh device installs the bundled
              package and judges it good; the shipping image has no loader (legacy tools)
-  components the legacy image's in-place upgrade over the agent, no SSH (none when packaged)
   install    an IPA through installation_proxy, then launch it through the agent
   respring   launchd restarts SpringBoard (a new pid) and it answers again
   timezone   lockdown SetValue through the lockdown-tz child process
@@ -84,9 +83,8 @@ def guest_checks(find, check, events):
         check(one("supported", d).get("guestPackage"), f"{d}: the helper's dylib serves guest-package offers")
         caps = one("capabilities", d)
         check(caps.get("version", 0) >= 1, f"{d}: agent v{caps.get('version')} ({len(caps.get('ops', []))} ops)")
-        comp = one("components", d)
-        check(comp.get("version") == 2, f"{d}: after the component step the agent is v{comp.get('version')} "
-              f"(changed {comp.get('changed')}, packaged {comp.get('packaged')})")
+        comp = one("agent", d)
+        check(comp.get("version", 0) >= 2, f"{d}: agent v{comp.get('version')} (packaged {comp.get('packaged')})")
         check(one("unlocked", d).get("locked") is False, f"{d}: unlocked")
         inst = one("installed", d)
         check(inst.get("has"), f"{d}: IPA installed ({inst.get('seconds', 0):.0f} s)")
@@ -105,8 +103,7 @@ def guest_checks(find, check, events):
     # A bundled serial newer than the seed is installed (1) or switched to (2); the seed itself stays (0).
     check(fresh.get("serial") == one("offer", "fresh").get("bundled") and fresh.get("result") in (0, 1, 2) and fresh.get("verdict", "").startswith("good"),
           f"fresh: the loader runs the bundled serial {fresh.get('serial')} (result {fresh.get('result')}), judged {fresh.get('verdict')}")
-    check(one("components", "fresh").get("packaged") and one("components", "fresh").get("changed") is False,
-          "fresh: packaged image, the app leaves its components to the loader")
+    check(one("agent", "fresh").get("packaged"), "fresh: a packaged image, the loader's")
     if fresh.get("result") == 0:
         print("  note: the bundled package is the seed; no rollback to test (use an itpack with a newer serial)")
     else:

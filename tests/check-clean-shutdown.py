@@ -23,7 +23,7 @@ nonisolated func logEvent(_ s: String) {}
  enum State { case notStarted, booting, running, paused, poweredOff }
  var state = State.booting, isDead = false, isErasing = false, shuttingDown = false, halting = false
  var isPoweredOff: Bool { state == .poweredOff }
- var connectionRecoveryTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, mediaPreparationTask: Task<Void, Never>?, haltTask: Task<Void, Never>?, bootWatchTask: Task<Void, Never>?
+ var connectionRecoveryTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, readinessTask: Task<Void, Never>?, haltTask: Task<Void, Never>?, bootWatchTask: Task<Void, Never>?
  var haltCompletions: [(Bool) -> Void] = []
  var process: FakeProcess? = FakeProcess()
  var filesMeddled = false
@@ -33,14 +33,14 @@ nonisolated func logEvent(_ s: String) {}
 @main struct Main {
  @MainActor static func main() async throws {
   // Mid-boot (never lit, no guest services): Stop still halts, and requests join.
-  let c = Controller(); c.mediaPreparationTask = Task { try? await Task.sleep(for: .seconds(60)) }
+  let c = Controller(); c.readinessTask = Task { try? await Task.sleep(for: .seconds(60)) }
   precondition(c.canStop)
   var results: [Bool] = []
   let started = Date()
   await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
    c.halt { results.append($0); if results.count == 2 { done.resume() } }
    c.halt { results.append($0); if results.count == 2 { done.resume() } }
-   precondition(c.shuttingDown && !c.canStop && c.mediaPreparationTask!.isCancelled)
+   precondition(c.shuttingDown && !c.canStop && c.readinessTask!.isCancelled)
   }
   precondition(results == [true, true] && c.process!.terms == 1 && c.process!.kills == 0 && !c.shuttingDown)
   precondition(Date().timeIntervalSince(started) < 1, "a halt waited on the guest")

@@ -177,53 +177,44 @@ enum IPALibrary {
 
     /// Launch, under the app lock: every device copy is in the store once.
     /// Builds before per-device copies kept one State/IPAs for every device;
-    /// those are cloned into each device first, then the shared directory
-    /// goes. Idempotent, and cheap after the first run: a device copy whose
-    /// bundle id and size the index lists is not read again.
+    /// Idempotent, and cheap after the first run: a device copy whose bundle
+    /// id and size the index lists is not read again.
     static func sweep(devices: [DeviceInstance]) {
-        let fm = FileManager.default
-        let shared = Bundled.stateDirectory.appendingPathComponent("IPAs", isDirectory: true)
-        if !devices.isEmpty, let names = try? fm.contentsOfDirectory(atPath: shared.path) {
-            var complete = true
-            for device in devices {
-                for name in names where name.hasSuffix(".ipa") && !name.hasPrefix(".") {
-                    let destination = device.paths.ipas.appendingPathComponent(name)
-                    guard !fm.fileExists(atPath: destination.path) else { continue }
-                    do { try clone(shared.appendingPathComponent(name), to: destination) }
-                    catch {
-                        complete = false
-                        logEvent("library: could not move \(name) to \(device.id.uuidString): \(error.localizedDescription)")
-                    }
-                }
-            }
-            if complete {
-                try? fm.removeItem(at: shared)
-                logEvent("library: IPA copies are per device now (\(names.count) moved)")
-            }
-        }
         // An entry whose blob went (removed by hand) says nothing true any more.
-        var index = index.filter { fm.fileExists(atPath: blob($0.key).path) }
-        var stored = 0
-        for device in devices {
-            let dir = device.paths.ipas
-            for name in (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
-            where name.hasSuffix(".ipa") && !name.hasPrefix(".") {
-                let copy = dir.appendingPathComponent(name)
-                let bundleID = String(name.dropLast(4))
-                guard let size = size(of: copy),
-                      !index.values.contains(where: { $0.bundleID == bundleID && $0.size == size }) else { continue }
-                do {
-                    let digests = try digests(of: copy)
-                    if !fm.fileExists(atPath: blob(digests.sha256).path) { try clone(copy, to: blob(digests.sha256)) }
-                    index[digests.sha256] = Entry(bundleID: bundleID, size: digests.size, md5: digests.md5)
-                    stored += 1
-                } catch {
-                    logEvent("library: could not store \(name) of \(device.id.uuidString): \(error.localizedDescription)")
-                }
-            }
-        }
+        var index = index.filter { FileManager.default.fileExists(atPath: blob($0.key).path) }
+        let stored = devices.reduce(0) { $0 + store(copies: $1.paths.ipas, into: &index) }
         if stored > 0 { logEvent("library: \(stored) device copies stored") }
         if index != self.index { save(index) }
+    }
+
+    /// The <bundle-id>.ipa files of a device from the old layout (LegacyState).
+    static func adopt(copies directory: URL) {
+        var index = index
+        let stored = store(copies: directory, into: &index)
+        if stored > 0 { logEvent("library: \(stored) copies kept from \(directory.path)") }
+        if index != self.index { save(index) }
+    }
+
+    /// Every <bundle-id>.ipa in `directory` the index doesn't list, into the store; how many.
+    private static func store(copies directory: URL, into index: inout [String: Entry]) -> Int {
+        let fm = FileManager.default
+        var stored = 0
+        for name in (try? fm.contentsOfDirectory(atPath: directory.path)) ?? []
+        where name.hasSuffix(".ipa") && !name.hasPrefix(".") {
+            let copy = directory.appendingPathComponent(name)
+            let bundleID = String(name.dropLast(4))
+            guard let size = size(of: copy),
+                  !index.values.contains(where: { $0.bundleID == bundleID && $0.size == size }) else { continue }
+            do {
+                let digests = try digests(of: copy)
+                if !fm.fileExists(atPath: blob(digests.sha256).path) { try clone(copy, to: blob(digests.sha256)) }
+                index[digests.sha256] = Entry(bundleID: bundleID, size: digests.size, md5: digests.md5)
+                stored += 1
+            } catch {
+                logEvent("library: could not store \(name) from \(directory.path): \(error.localizedDescription)")
+            }
+        }
+        return stored
     }
 
     // MARK: - Files

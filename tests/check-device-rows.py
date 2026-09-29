@@ -30,11 +30,13 @@ import Foundation
             Set(DeviceAction.allCases.filter { r.allows($0, canDownload: canDownload) }.map { "\($0)" })
         }
 
-        // iPod 3.1.3 is a user_ipsw entry: the shipping image is its adopted device (LegacyAdoption, at
-        // launch); without a record it is built from the user's IPSW.
+        // iPod 3.1.3 is the built-in device (a packed prepared base in the bundle, unpacked at first
+        // launch); with no record its Prepare needs no preparer. It is also a user_ipsw entry.
         var r = row(iPod)
-        precondition(r.state == .unavailable(.requiresIPSW) && r.primaryTitle == "Import IPSW…")
-        precondition(allowed(r, canDownload: true) == ["importIPSW"], "\(allowed(r))")
+        precondition(iPod.bundled == "device/n72ap-7E18.itbase" && r.state == .bundled && r.primaryTitle == "Prepare")
+        precondition(r.stateDescription == "Built In" && !r.isStartable)
+        precondition(allowed(r) == ["importIPSW", "downloadAndPrepare"], "\(allowed(r))")
+        precondition(iPod4.bundled == nil && row(iPod4).state != .bundled)
         r = row(iPod, instance: id)
         precondition(r.state == .ready && r.isStartable && r.primaryTitle == "Start")
         precondition(allowed(r) == ["start", "erase", "showInFinder", "delete"], "\(allowed(r))")
