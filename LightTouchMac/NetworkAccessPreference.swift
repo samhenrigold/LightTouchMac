@@ -5,21 +5,20 @@ import Cocoa
 enum NetworkAccessPreference {
     static let key = "guestNetworkEnabled"
 
-    static func configure(_ options: inout LaunchOptions, profile: DeviceProfile) {
+    /// Whether the device about to start gets the Mac's network: `--network`/`--no-network`
+    /// on the command line (a choice that is not remembered), else the saved answer, else a prompt.
+    static func resolve(profile: DeviceProfile) -> Bool {
         let arguments = CommandLine.arguments
-        // Command-line launches already express a choice and do not change the
-        // preference used for subsequent Finder launches.
-        if arguments.contains("--network") || arguments.contains("--no-network") { return }
-        if let enabled = UserDefaults.standard.object(forKey: key) as? Bool {
-            options.network = enabled
-            return
-        }
+        if arguments.contains("--no-network") { return false }
+        if arguments.contains("--network") { return true }
+        if let enabled = UserDefaults.standard.object(forKey: key) as? Bool { return enabled }
         let alert = NSAlert()
         alert.messageText = "Connect your \(profile.shortName) to the internet?"
         alert.informativeText = "Your \(profile.shortName) can use your Mac’s internet connection. macOS may ask for Local Network access.\n\nOffline mode still lets you install apps and capture the screen. Change this later in the Device menu."
         alert.addButton(withTitle: "Connect")
         alert.addButton(withTitle: "Use Offline")
-        options.network = alert.runModal() == .alertFirstButtonReturn
-        UserDefaults.standard.set(options.network, forKey: key)
+        let enabled = alert.runModal() == .alertFirstButtonReturn
+        UserDefaults.standard.set(enabled, forKey: key)
+        return enabled
     }
 }

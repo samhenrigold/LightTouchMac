@@ -64,6 +64,8 @@ nonisolated enum DeviceRowState: Equatable, Sendable {
     case notDownloaded(bytes: Int64?)
     /// Its IPSW is in a store (downloaded or imported), not yet prepared.
     case downloaded
+    /// The app ships its prepared base (`entry.bundled`), not yet unpacked.
+    case bundled
     case downloading(fraction: Double, remaining: TimeInterval? = nil)
     case preparing(Preparation)
     case ready, running, stopping
@@ -88,7 +90,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         self.instanceID = instanceID
         self.preparedWithoutActivation = preparedWithoutActivation
         hasSession = session != nil
-        state = Self.state(entry: entry, startable: instanceID != nil || entry.source.kind == .bundled,
+        state = Self.state(entry: entry, startable: instanceID != nil,
                            session: session, job: job, failure: failure, downloaded: downloaded)
     }
 
@@ -113,14 +115,14 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
         if let failure { return .error(failure) }
         if startable { return .ready }
+        if entry.bundled != nil { return .bundled }
         if downloaded { return .downloaded }
         return entry.status == .userIPSW ? .unavailable(.requiresIPSW) : .notDownloaded(bytes: entry.source.bytes)
     }
 
     var title: String { "iOS \(entry.version)" }
     var isExperimental: Bool { entry.status == .experimental }
-    /// A device exists, or one can be made without a download (the bundled iPod).
-    var isStartable: Bool { instanceID != nil || entry.source.kind == .bundled }
+    var isStartable: Bool { instanceID != nil }
     var isDimmed: Bool { if case .unavailable = state { true } else { false } }
     var isError: Bool { if case .error = state { true } else { false } }
     /// A download's or preparation's overall progress; nil while it has no steps yet.
@@ -172,10 +174,11 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         // A dead session's Start is a restart (DeviceSessionHost.restart).
         case .start: return isStartable && (state == .ready || isError)
         case .stop: return state == .running
+        // The built-in device needs no preparer to unpack.
         case .downloadAndPrepare:
-            return canDownload && !isStartable && entry.source.kind == .ipsw && !working && !isDimmed
+            return (canDownload || state == .bundled) && !isStartable && !working && !isDimmed
         case .importIPSW:
-            return !isStartable && entry.source.kind == .ipsw && entry.status != .comingSoon && entry.status != .untested && !working
+            return !isStartable && entry.status != .comingSoon && entry.status != .untested && !working
         case .cancel: return !hasSession && working
         case .erase: return instanceID != nil && !working
         case .showInFinder: return instanceID != nil
@@ -187,7 +190,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     var primaryAction: DeviceAction? {
         switch state {
         case .ready: .start
-        case .notDownloaded, .downloaded: .downloadAndPrepare
+        case .notDownloaded, .downloaded, .bundled: .downloadAndPrepare
         case .downloading, .preparing: .cancel
         case .error: isStartable ? .start : entry.status == .userIPSW ? .importIPSW : .downloadAndPrepare
         case .unavailable(.requiresIPSW): .importIPSW
@@ -199,7 +202,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         if isError { return "Try Again" }
         return switch primaryAction {
         case .start: "Start"
-        case .downloadAndPrepare: state == .downloaded ? "Prepare" : "Download & Prepare"
+        case .downloadAndPrepare: state == .downloaded || state == .bundled ? "Prepare" : "Download & Prepare"
         case .importIPSW: "Import IPSW…"
         case .cancel: "Cancel"
         default: nil
@@ -215,6 +218,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case let .notDownloaded(bytes):
             bytes.map { "Not Downloaded, " + ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Not Downloaded"
         case .downloaded: "Downloaded"
+        case .bundled: "Built In"
         case .downloading: "Downloading, " + (progressSummary ?? "")
         case .preparing: "Preparing, " + (progressSummary ?? "")
         case .ready: "Ready"
@@ -372,7 +376,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
 }
 
 /// argv and environment for one boot, from paths alone. EmulatorController
-/// fills it from the device record and launch options; tests from fixtures.
+/// fills it from the device record; tests from fixtures.
 nonisolated enum BootRecipe {
     static func escape(_ value: String) -> String { value.replacingOccurrences(of: ",", with: ",,") }
 
@@ -564,30 +568,29 @@ nonisolated enum BootRecipe {
     static let didChangeNotification = Notification.Name("DeviceSessionHostDidChange")
     private static let lastDeviceKey = "lastDevice"
 
-    /// This launch's options; each device's are derived from them.
-    let options: LaunchOptions
     let library: DeviceLibrary
     let catalog: FirmwareCatalog
     private(set) var sessions: [DeviceSession] = []
     /// Why a device last failed to start, by catalog entry id.
     private var failures: [String: String] = [:]
 
-    init(options: LaunchOptions) {
-        self.options = options
+    /// The one host this process runs (AppDelegate's), for the places that
+    /// need every running device rather than their own: "Install on ▸".
+    private(set) static weak var shared: DeviceSessionHost?
+
+    init() {
         library = .shared
         catalog = .bundled
+        Self.shared = self
     }
 
     func session(for entry: FirmwareCatalog.Entry) -> DeviceSession? {
         sessions.first { $0.instance.firmware == entry.id }
     }
 
-    /// The device a row runs: its session's, else the record this launch's
-    /// files root adopted, else the newest. One per entry for now.
+    /// The device a row runs: its session's, else the newest record. One per entry for now.
     func instance(for entry: FirmwareCatalog.Entry) -> DeviceInstance? {
-        if let session = session(for: entry) { return session.instance }
-        let records = library.instances(firmware: entry.id)
-        return records.last { $0.legacy?.filesRoot == options.filesRoot } ?? records.last
+        session(for: entry)?.instance ?? library.instances(firmware: entry.id).last
     }
 
     func row(for entry: FirmwareCatalog.Entry) -> DeviceRow {
@@ -602,8 +605,7 @@ nonisolated enum BootRecipe {
     private var activationless: [UUID: Bool] = [:]
     private func lacksActivation(_ instance: DeviceInstance) -> Bool {
         if let known = activationless[instance.id] { return known }
-        let lacks = instance.base.kind == .prepared
-            && DeviceInstance.lockLacksActivation(instance.paths.base.appendingPathComponent("device.lock.json"))
+        let lacks = DeviceInstance.lockLacksActivation(instance.paths.base.appendingPathComponent("device.lock.json"))
         activationless[instance.id] = lacks
         return lacks
     }
@@ -616,24 +618,8 @@ nonisolated enum BootRecipe {
         set { UserDefaults.standard.set(newValue?.id, forKey: Self.lastDeviceKey) }
     }
 
-    /// Today's single-device behavior is the default: LIGHTTOUCH_DEVICE picks
-    /// the board, else the last selection, else the iPod.
-    var launchSelection: FirmwareCatalog.Entry? {
-        switch LaunchOptions.deviceOverride {
-        case .iPad1?: catalog.entry(id: FirmwareCatalog.developmentIPadID)
-        case .iPodTouch2G?: catalog.entry(id: FirmwareCatalog.legacyIPodID)
-        case nil: lastSelection ?? catalog.entry(id: FirmwareCatalog.legacyIPodID)
-        }
-    }
-
-    /// Adopts the pre-library state on first run, and under LIGHTTOUCH_DEVICE
-    /// the development device that LTM_FILES names, so its row can start.
-    func adoptLegacyDevices() {
-        let profile = LaunchOptions.deviceOverride
-        guard profile != nil || library.instances.isEmpty else { return }
-        do { _ = try library.resolve(options.adoptionInputs, profile: profile ?? .iPodTouch2G) }
-        catch { logEvent("adoption: \(error.localizedDescription)") }
-    }
+    /// The last selection, else the built-in device.
+    var launchSelection: FirmwareCatalog.Entry? { lastSelection ?? catalog.bundledEntry }
 
     // MARK: Starting
 
@@ -642,20 +628,10 @@ nonisolated enum BootRecipe {
     @discardableResult
     func start(_ entry: FirmwareCatalog.Entry) -> DeviceSession? {
         if let session = session(for: entry) { return session }
-        guard row(for: entry).isStartable, let profile = entry.profile else { return nil }
-        let chosen = instance(for: entry)
-        var options = options(for: chosen, profile: profile)
-        // A prepared device boots its own base (EmulatorController checks it), never LTM_FILES.
-        let missing = chosen?.base.kind == .prepared ? [] : options.missingAssets(for: profile)
-        guard missing.isEmpty else {
-            return fail(entry, "These device files are missing: " + missing.joined(separator: ", "))
-        }
-        let resolution: LegacyAdoption.Resolution
-        do { resolution = try self.resolution(for: entry, options: options, profile: profile) }
-        catch { return fail(entry, "Couldn’t open this device’s storage. \(error.localizedDescription)") }
-        NetworkAccessPreference.configure(&options, profile: profile)
-        let session = DeviceSession(instance: resolution.instance,
-                                    emulator: EmulatorController(options: options, profile: profile, resolution: resolution))
+        guard let instance = instance(for: entry), let profile = entry.profile else { return nil }
+        let network = NetworkAccessPreference.resolve(profile: profile)
+        let session = DeviceSession(instance: instance,
+                                    emulator: EmulatorController(instance: instance, profile: profile, network: network))
         sessions.append(session)
         failures[entry.id] = nil
         session.emulator.onRestartRequested = { [weak self, weak session] in
@@ -666,34 +642,6 @@ nonisolated enum BootRecipe {
         session.emulator.start()
         NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
         return session
-    }
-
-    /// A development device boots the files it was adopted from, not
-    /// whatever LTM_FILES says today, so an overlay never meets another image.
-    func options(for instance: DeviceInstance?, profile: DeviceProfile) -> LaunchOptions {
-        var options = options
-        if let instance, instance.base.kind == .development, let legacy = instance.legacy {
-            options.filesRoot = legacy.filesRoot
-            if profile == .iPodTouch2G { options.nand = legacy.nand }
-        }
-        return options
-    }
-
-    /// Resolving is what keeps the packaged iPod on its active base pointer
-    /// (and adopts it when it has no record yet). A record resolution doesn't
-    /// return is used as it stands.
-    func resolution(for entry: FirmwareCatalog.Entry, options: LaunchOptions,
-                    profile: DeviceProfile) throws -> LegacyAdoption.Resolution {
-        let chosen = instance(for: entry)
-        if chosen == nil || chosen?.legacy != nil {
-            let resolved = try library.resolve(options.adoptionInputs, profile: profile)
-            if chosen == nil || resolved.instance.id == chosen?.id { return resolved }
-        }
-        guard let chosen else { throw CocoaError(.fileNoSuchFile) }
-        return LegacyAdoption.Resolution(
-            instance: chosen,
-            packedImage: chosen.base.kind == .legacyBundled
-                ? .init(key: chosen.storage.key, directory: chosen.base.path) : nil)
     }
 
     /// Replaces a session with a fresh helper: the dead overlay's Restart, a
@@ -723,10 +671,8 @@ nonisolated enum BootRecipe {
     /// A controller for a device that isn't running, which never starts: the
     /// erase it runs is the one a running device gets.
     func stoppedController(for entry: FirmwareCatalog.Entry) -> EmulatorController? {
-        guard session(for: entry) == nil, instance(for: entry) != nil, let profile = entry.profile else { return nil }
-        let options = options(for: instance(for: entry), profile: profile)
-        guard let resolution = try? resolution(for: entry, options: options, profile: profile) else { return nil }
-        return EmulatorController(options: options, profile: profile, resolution: resolution)
+        guard session(for: entry) == nil, let instance = instance(for: entry), let profile = entry.profile else { return nil }
+        return EmulatorController(instance: instance, profile: profile)
     }
 
     private func fail(_ entry: FirmwareCatalog.Entry, _ reason: String) -> DeviceSession? {
@@ -738,18 +684,11 @@ nonisolated enum BootRecipe {
 
     // MARK: Deleting
 
-    /// Removes a stopped device's record and the state it lives on (overlay,
-    /// snapshots). Its base image and pairing are left alone: the base may be
-    /// the bundled one, and an adopted device's conf may be the shared legacy one.
+    /// Removes a stopped device: its directory (record, base, overlay, pairing), its logs and its settings.
     func delete(_ instance: DeviceInstance) throws {
         precondition(!sessions.contains { $0.instance.id == instance.id })
-        let paths = instance.paths
-        try DeviceStateStorage.erase(overlay: paths.overlay,
-                                     snapshots: [paths.snapshot, paths.snapshotTmp, paths.snapshotBad],
-                                     legacyMarker: paths.resetMarker, state: library.state, owner: instance.id)
         try library.remove(id: instance.id)
-        // Its logs and per-device settings go with it.
-        try? DeviceStateStorage.removeTree(paths.logs)
-        for name in LegacyAdoption.perDeviceDefaults { UserDefaults.standard.removeObject(forKey: instance.defaultsKey(name)) }
+        try? DeviceStateStorage.removeTree(instance.paths.logs)
+        for name in DeviceInstance.perDeviceDefaults { UserDefaults.standard.removeObject(forKey: instance.defaultsKey(name)) }
     }
 }

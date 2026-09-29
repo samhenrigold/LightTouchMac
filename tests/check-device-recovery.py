@@ -26,7 +26,7 @@ struct Instance { let id=UUID() }
 @MainActor final class Controller {
  let profile = DeviceProfile.iPodTouch2G
  let instance=Instance()
- var isRunning=true,isInstalling=false,hasFileTransfer=false,preparingMedia=false
+ var isRunning=true,isInstalling=false,hasFileTransfer=false,preparingDevice=false
  var usbConnected=true
  var link:FakeLink?=FakeLink()
  let agentCache=0
@@ -58,9 +58,9 @@ struct Instance { let id=UUID() }
   c.lastConnectionRecovery = .distantPast;AppInstaller.isUsingDevice=true
   c.deviceReachable=false;c.deviceReachable=false
   try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"must not interrupt install")
-  AppInstaller.isUsingDevice=false;c.preparingMedia=true;c.deviceReachable=false
+  AppInstaller.isUsingDevice=false;c.preparingDevice=true;c.deviceReachable=false
   try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"must not interrupt boot preparation")
-  c.preparingMedia=false;c.hasFileTransfer=true;c.deviceReachable=false
+  c.preparingDevice=false;c.hasFileTransfer=true;c.deviceReachable=false
   try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"must not interrupt file transfer")
   c.hasFileTransfer=false;agentReady=0;c.deviceReachable=false
   try await Task.sleep(for:.milliseconds(10));precondition(DeviceTools.recoveries==1,"no independent channel")

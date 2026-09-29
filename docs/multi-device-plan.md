@@ -151,19 +151,19 @@ EC stays in the app: every `qemu_ios_*` call becomes a `link.…` call. `NativeL
 ```
 
 - `status` is one of `available`, `experimental`, `coming_soon` or `user_ipsw`.
-- `source.kind` is `ipsw`, or `bundled` for the legacy iPod image: `{"kind":"bundled","resource":"device/nand.itnand"}`.
+- `source.kind` is always `ipsw`. The entry the app ships a prepared base for carries `"bundled": "device/n72ap-7E18.itbase"` (C6, 2026-09-28): a `firmwarekit create` of that entry packed as one blob (`scripts/pack-base.py`, the .itpack format), unpacked into `Preparing/<id>/` and published like any preparation on first launch (`FirmwareJobs.prepareBundled`). The entry stays `user_ipsw`, so a user can re-prepare it from their own IPSW after deleting the built-in device.
 
 Status column:
 
 | Entry | Status |
 |---|---|
-| iPod 3.1.3 | available, bundled |
+| iPod 3.1.3 | user_ipsw, bundled (the built-in device) |
 | iPad 3.2.2, 3.2 | available |
 | iPad 4.2.1 | experimental |
 | iPod 3.1.3 from IPSW, iPod 4.2.1, iPod 2.x | coming_soon |
 | Betas | user_ipsw: pinned sha1, no URL |
 
-**`DeviceInstance` (`Devices/<uuid>/device.json`):** `id, name, board, firmware, created, base {kind: prepared|legacyBundled|development, path}, storage {overlay, writableNOR, snapshot, usbmuxConf}, identity {seed, udid, die_id}, provenance {lock, sha256}, lastEmulatorBuild`. There is one instance per catalog entry for now; the model doesn't prevent duplicates.
+**`DeviceInstance` (`Devices/<uuid>/device.json`):** `id, name, board, firmware, created, base {kind: prepared, path}, storage {key, overlay, writableNOR, snapshot, usbmuxConf}, identity {seed, udid, die_id}, provenance {lock, sha256}, guest`. `base.kind` is only ever `prepared` (C6); a development base (`LTM_DEV_BASE`) has an absolute path and is never locked. There is one instance per catalog entry for now; the model doesn't prevent duplicates.
 
 **Layout.** State = `~/Library/Application Support/gold.samhenri.LightTouchMac`.
 
@@ -176,12 +176,10 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 ~/Library/Logs/<bundle>/Devices/<uuid>/{serial,usbmuxd,native}.log
 ```
 
-**Migration adopts state in place and never moves it** (`LegacyAdoption.swift`, run once when `Devices/` is absent).
-- The key code moves verbatim: `legacyImageKey`, `imageKey`, `migrateStateNames`, `DeviceStateStorage.packedImage`.
-- It writes one `device.json` per existing device, pointing at the legacy names (`nandrw-<key>`, `snapshot-<key>`, `work/usbmuxd-conf`, `device/<nand>-<digest>` + `active-<nand>.json`). The iPod gets `legacyBundled`; the iPad in dev gets `development`.
-- Nothing is renamed, and keys are frozen in the record.
-- UserDefaults `deviceNotice` and `motionPose` gain a `.<uuid>` suffix; the legacy value is read for the adopted iPod.
-- Test: `tests/check-legacy-adoption.py`, with a fixture copy of a 1.0-release state tree. The overlay inode and paths must be unchanged.
+**The old layout is erased once, not migrated** (C6, 2026-09-28, `LegacyState.swift`; the adoption of it in place, `LegacyAdoption`, is gone with `LaunchOptions` and every non-prepared boot path).
+- Found at launch: `State/device`, `nandrw-*`, `snapshot-*`, `.reset-*`, `State/IPAs`, `AppCache`, the old logs, records whose `base.kind` is not `prepared`, and the pre-library root `Application Support/LightTouchMac`.
+- One prompt: "Light Touch's built-in iPod has changed format. Erase it and continue (apps you've saved are kept), or quit." Erase & Continue keeps every `.ipa` (into the library) and the host pairing (`work/usbmuxd-conf`, seeded into the built-in device when it is published), removes the rest. Quit changes nothing.
+- Test: `tests/check-bundled-prepared.py` (fresh state → the built-in iPod published as `.prepared`; old layout → erased, IPAs kept, pairing copied).
 
 ### Storage policy (2026-09-28, `storage-fixes`)
 
@@ -194,13 +192,13 @@ State/Devices/<uuid>/device.json                 the record; its directory is th
                      overlay/, nor.bin           user data (kept in backups)
                      snapshot{,.meta,.tmp,.bad}  saved RAM (excluded from backups)
                      usbmuxd-conf/               pairing: 0700, plists 0600
-                     IPAs/<bundle-id>.ipa        retained copies of apps installed on this device
+                     IPAs/<bundle-id>.ipa        the apps installed on this device: APFS clones of Library blobs
                      work/                       lease, usbmuxd.pid, session.env (excluded from backups)
+State/Library/IPAs/<sha256>.ipa, index.json      every installed archive once (IPALibrary); Store dedupe, "Install on ▸"
 State/Devices/.deleting-<uuid>/                  a delete in progress; finished by the launch sweep
 State/Preparing/<job>/, <job>.publish/           staging (excluded from backups); never a device
 State/IPSW/<sha1>.ipsw                           imports (excluded from backups)
 State/Recordings/                                takes in progress (excluded while recording)
-State/device/<nand>-<digest>, nandrw-<key>, …    the adopted iPod's legacy names, in place
 Caches/<bundle>/IPSW/<sha1>.ipsw(.resume)        downloads; Caches/<bundle>/Decrypted/<sha1>
 Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 ```
@@ -208,9 +206,8 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 **Rules.**
 - *One writer per device.* The app holds `State/.app-lock` from startup (a second copy says "Light Touch is
   already running with this library" and quits). Each helper holds `Devices/<uuid>/work/lease` before it
-  answers hello and refuses otherwise, which also covers a helper still flushing after its app died. The
-  adopted iPod's lease is under its own `Devices/<uuid>/work` too. Only the lock holder runs launch sweeps, and
-  usbmuxd is only reaped as an orphan (ppid 1).
+  answers hello and refuses otherwise, which also covers a helper still flushing after its app died. Only the
+  lock holder runs launch sweeps, and usbmuxd is only reaped as an orphan (ppid 1).
 - *One device per catalog entry.* An IPSW for an entry that has a device (a drop, an import, a download) is
   refused, not prepared again.
 - *Publish is one rename.* The preparer's output becomes `Preparing/<id>.publish/{base, device.json}`, which is
@@ -218,9 +215,7 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 - *Removal stays in bounds.* Erase and Delete only remove paths strictly inside the state root that are not the
   root, `Devices/`, or inside another record's directory (`DeviceStateStorage.checkRemovable`). Delete renames
   `Devices/<uuid>` to `.deleting-<uuid>`, then removes it with read-only directories made writable; it also
-  removes the device's logs and its `deviceNotice.<uuid>`/`motionPose.<uuid>` defaults. Erasing the packaged
-  iPod repoints `active-<nand>.json`, then removes every `device/<nand>*` base (a torn `.partial` included)
-  that no pointer and no other record names.
+  removes the device's logs and its `deviceNotice.<uuid>`/`motionPose.<uuid>` defaults.
 - *Scratch always goes.* Each prepare ends (published, failed or cancelled) by deleting `Decrypted/<sha1>` and
   `<sha1>.tmp`. Quit cancels every preparation; firmwarekit and the one-shot helper also watch their parent
   and cancel on its exit (images detached). The launch sweep detaches images left under `Preparing/`, then
@@ -230,7 +225,7 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
   Remove IPSW deletes its `.resume` too; only a failed download keeps resume data.
 - *Disk space.* Downloading needs the IPSW's bytes plus the entry's prepare peak plus the peaks of every
   download and preparation under way; preparing needs its peak plus the others'. An import from another volume
-  checks the copy's size first, and the packaged iPod checks before unpacking. Below 2 GB free, booting and
+  checks the copy's size first, and the built-in iPod checks its entry's `prepared_bytes` before unpacking. Below 2 GB free, booting and
   starting a recording show a notice but go ahead. Every message gives the amounts needed and available.
 - *Backups.* Recreatable or in-flight data is excluded (above); bases and overlays stay in backups until
   prepared bases are proven reproducible from the IPSW.
@@ -344,7 +339,7 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 - The app target stops linking the dylib: the bridging header drops the qemu headers.
 - `Resources/firmware-catalog.json` and `Resources/gli/*.tsv`.
 - **New per-build armv7 guest payloads go into one opaque blob per arch** (`Resources/guest/armv7.itpack`, in nandpack format). Unsigned nested `.bundle`s and raw payloads trip codesign and the notary.
-- The legacy iPod `nand.itnand` stays until iPod-from-IPSW ships. Without it the app is roughly 100–150 MB.
+- The built-in iPod ships as `Resources/device/n72ap-7E18.itbase` (about 250 MB: a `firmwarekit create` of 7E18 packed by `scripts/pack-base.py` in the .itpack format), beside `bootrom_240_4`. The old `nand.itnand`, `ios3/iBoot.bin` and `nor_7E18.bin` are gone: a prepared base carries its own iBoot and NOR.
 - **Signing order:** frameworks, then `MacOS/*` (each with its own entitlements), then the app.
 - **`test-package.py` must check:** no raw NAND, no tarballs, and no `*.ipsw` or img3 magic outside `.itnand`/`.itpack`.
 - The Python bridge is `#if DEBUG` only, and `test-release.py` checks for it.
@@ -358,7 +353,8 @@ It needs these trees and SDKs:
 - `~/Developer/qemu-ios-ipad1` (the `ipad1` branch) as `--qemu-ios`, with a private `--qemu-build` dir inside it. The default is `build-release-native`; the 09-28 build reused `build-w1-native`. Never use `build/`.
 - A native root to reuse as `--native-deps`, e.g. `~/Developer/LightTouchMac/.build/releases/release-20260926/native`. Its prefix and static deps take longer than 10 minutes to build, so a fresh one comes from a one-step build.
 - `~/Developer/usbmuxd-qemu/usbmuxd` as `--usbmuxd-source`. The native stage rebuilds usbmuxd over the reused prefix from `USBMUXD_COMMIT` (41631a7, branch `qemu-zlp`) through a temporary worktree, records it as `usbmuxd_commit`, and fails unless libslirp (the iPad's USB Ethernet) was found. The emulator and usbmuxd ship together: from qemu-ios `ipad1` abb1a1b817 the emulator invents no USB ZLPs, so usbmuxd must send them.
-- `--sdk ~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk` and `ldid` for the guest tools. Also the assets in `~/Developer/qemu-ios-files`: the iPod `nand-current` still ships as `nand.itnand`.
+- iBoot32Patcher, which firmwarekit runs for the iPad's real-iBoot chain, is pinned in `build-support/dependencies.json` (group `tools`: LukeZGD's fork at `1ff9bd14648efae691ed23ae0abb55a4635111e3`, the build Legacy-iOS-Kit ships; archive sha256; license GPL-3.0). Both native paths (`build-package-native.sh` and `--stage native`) fetch that archive and build it with `scripts/build-iboot32patcher.sh` into `native/build/iBoot32Patcher` (arm64, macOS 14; `build.json` records commit, license and sha256). package.sh ships it as `Contents/MacOS/iBoot32Patcher`, signed with the other tools, with `LICENSE` and `SOURCE.txt` under `Resources/licenses/iBoot32Patcher/`. `K48IBootTests.patcherMatchesReference` (with `FIRMWAREKIT_IBOOT_PATCHER` pointing at a built copy) checks its output on the 7B500, 8C148 and 7B367 iBoots byte-for-byte against the Legacy-iOS-Kit v25.09.01 binary. Because the manifest and this script are native recipes, adding the patcher invalidated every earlier native root: the first `--native-deps` with it came from a one-step `build-package-native.sh` (`.build/native-iboot-ship`, 2026-09-28).
+- `--sdk ~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk` and `ldid` for the guest tools. `--assets` (`~/Developer/qemu-ios-files`) supplies only `bootrom_240_4` now; `--bundled-ipsw` (default `~/Developer/ipod2g-re/OldSDK/iPod2,1_3.1.3_7E18_Restore.ipsw`) is what the built firmwarekit prepares as the built-in iPod.
 - Xcode, and the Developer ID identity plus the `ltm-notary` profile.
 
 ```
@@ -371,12 +367,12 @@ for s in native qemu dylib guest app package notarize staple verify; do python3 
 ```
 
 What each stage does:
-- **native:** usbmuxd.
+- **native:** usbmuxd and iBoot32Patcher.
 - **qemu:** configure once, then ninja.
 - **dylib:** `make-dylib-macos.sh`.
 - **guest:** the armv6 helpers, and (from a checkout with `contrib/ipad1-guest`) the iPad helpers firmwarekit reads, built by `contrib/ipad1-guest`, `contrib/appsync` and `contrib/ipad1-gles` `build.sh` from a source copy into `guest/ipad-guest-tools` (ldid-signed; `IPAD_SDK` picks the 3.2 SDK). package.sh ships them flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without them. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed. The guest packages (`armv6.itpack`, `armv7.itpack`, qemu-ios `contrib/guest-package/build.sh`) join that directory; the app composes each boot's offer from them (guest-package-bootstrap.md, P5).
-- **app:** xcodebuild Release (it embeds `LightTouchDevice` and `firmware-catalog.json`). This stage also runs `swift build -c release` for `Packages/FirmwareKit`. If that builds, package.sh ships it as `Contents/MacOS/firmwarekit` (hardened runtime, no entitlements); if not, the app ships without it.
-- **package:** a fresh copy of the product, `build-inputs.json` and package.sh. Notarization is not done here.
+- **app:** xcodebuild Release (it embeds `LightTouchDevice` and `firmware-catalog.json`), and `swift build -c release` for `Packages/FirmwareKit`; package.sh ships it as `Contents/MacOS/firmwarekit` (hardened runtime, no entitlements). It must build: the built-in iPod needs it.
+- **package:** first the built-in iPod (`bundled_base`): the built firmwarekit's `create` of `n72ap-7E18` from `--bundled-ipsw` with the built `ipad-guest-tools` (and the built helper), packed by `scripts/pack-base.py` into `bundled/n72ap-7E18.itbase` with `bundled.json` (inputs, the lock's hashes) beside it, skipped when its inputs are unchanged; then a fresh copy of the product, `build-inputs.json` and package.sh (`LTM_BASE_BLOB`). Notarization is not done here.
 - **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
 - **staple.**
 - **verify:** `test-package.py` (including `LightTouchDevice --probe ipad1`), `codesign --deep --strict`, stapler, and `spctl` must report "Notarized Developer ID". Then, for each of k48ap-7B500 (`--verify-ipsw`), k48ap-8C148, n72ap-7E18 and n72ap-8C148 (`VERIFY_ENTRIES`: the IPSWs in `~/Downloads` and `~/Developer/ipod2g-re/OldSDK`), the bundled `firmwarekit create` prepares it with its default `--guest-tools` and the bundled `LightTouchDevice` into `prepare-check/` (it must end with `done`), and `tests/check-sessions.py --single` boots the result through the bundle's helper, dylib, usbmuxd, Frameworks and bootrom: lit, lockdown over its own usbmuxd, AFC round trips of 16384/16385/65536/1048583 bytes (no restore), an IPA install, a clean shutdown. The output is deleted; the frames stay in `verify-frames/<entry>/`. One entry per run, so rerun `--stage verify` until every entry is current. Then it writes `LightTouchMac.zip`, `SHA256SUMS` and `bundle-inventory.json`.
@@ -396,7 +392,7 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 |---|---|
 | W1 Helper | `LightTouchDevice/*`, `Shared/DeviceLink.swift`, `Shared/SharedStatus.swift`, `Shared/NativeLogging.swift`, **project.pbxproj (sole owner)**, scripts/package.sh, build-release.py, test-package.py |
 | W2 Link conversion | EmulatorController.swift, DisplayView.swift, ScreenMovieWriter.swift, GuestNotifications.swift, DeviceTools.swift (agent paths), Shim bridging header, app-side DeviceLink.swift |
-| W3 Library + migration | DeviceInstance.swift, DeviceLibrary.swift, LegacyAdoption.swift, FirmwareCatalog.swift, Resources/firmware-catalog.json, LaunchOptions, Bundled, StorageLocations, DeviceStateStorage, USBMux (per-instance), tests/check-legacy-adoption.py |
+| W3 Library + migration | DeviceInstance.swift, DeviceLibrary.swift, LegacyAdoption.swift (gone in C6), FirmwareCatalog.swift, Resources/firmware-catalog.json, LaunchOptions (gone in C6), Bundled, StorageLocations, DeviceStateStorage, USBMux (per-instance), tests/check-legacy-adoption.py (now check-bundled-prepared.py) |
 | W4 UI | MainWindowController, AppDelegate, MainMenu, DeviceViewController, DeviceLibraryViewController, DevicePlaceholderViewController, DeviceSession.swift |
 
 - W1 and W3 go first, publishing their APIs on day 1; W2 and W4 code against them.
@@ -452,10 +448,9 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 ## Corrections from implementation
 
 **W3, 2026-09-28** (`b63d910`, `a731de4`):
-- `device.json` has four more fields: `format`, `storage.key` (the image identity; it pins the overlay), `storage.resetMarker`, and `legacy {filesRoot, nand, pointer?}`, used to match development launches and the active pointer.
-- **Runtime files are per instance, including for adopted devices.** That covers the usbmuxd pid, `session.env` and logs, now under `Devices/<uuid>/work/` and `~/Library/Logs/<bundle>/Devices/<uuid>/`. Only durable state (overlay, snapshot, base, conf) stays at its legacy path.
-- **Pairing conf:** the first adopted device keeps `work/usbmuxd-conf`. Later devices get a copy in `Devices/<uuid>/usbmuxd-conf`, so two daemons never share one.
-- **The packaged iPod's key is not frozen.** Erase moves it to the newly bundled base, and the active pointer stays authoritative for it.
+- `device.json` has two more fields: `format` and `storage.key` (the image identity; it pins the overlay). C6 removed `storage.resetMarker` and `legacy {filesRoot, nand, pointer?}` with the adoption they served.
+- **Runtime files are per instance.** That covers the usbmuxd pid, the lease and logs, under `Devices/<uuid>/work/` and `~/Library/Logs/<bundle>/Devices/<uuid>/`. `session.env` is gone (nothing read it).
+- **Pairing conf:** each device has its own `Devices/<uuid>/usbmuxd-conf`; the built-in iPod inherits the pre-library `work/usbmuxd-conf` once (LegacyState).
 - **The iPod 3.1.3 IPSW isn't on api.ipsw.me**, so a future from-IPSW entry needs another source.
 - **Still open for W4:** Export Diagnostics and the log window still read the global `serial.log`, `usbmuxd.log` and `session.env`.
 - **Still open for W2/W4:** EC still resolves its own instance in `init(options:profile:)`. It should receive one chosen from the library.
@@ -490,6 +485,7 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 - `--helper` runs the seal and keybag one-shots (`LightTouchDevice --oneshot`).
 - `--cache` holds decrypted components by IPSW sha1. It's recreatable.
 - `--guest-tools` is a flat directory of the prebuilt, signed guest helpers (tools, launchd jobs, GLEngine-*, gli-dispatch-*.tsv, the gld plugin, libappsync.dylib, it_keybag), by file name. It defaults to `../Resources/guest-tools` next to the executable, the app bundle's copy.
+- The k48 `iboot` recipe runs `iBoot32Patcher` (a separate process, `--rsa --debug -b <boot-args>`). `K48IBoot.patcher` takes the bundled copy first (`Contents/MacOS/iBoot32Patcher`, next to firmwarekit or the helper), then `FIRMWAREKIT_IBOOT_PATCHER` / `IBOOT32PATCHER` for development runs, then the bare name on PATH. The lock records the copy it used (`tool.iboot32patcher`: path, sha256).
 
 **stdout is JSON Lines only, one object per line.** Diagnostics go to stderr.
 ```
@@ -522,7 +518,11 @@ STAGING_DIR exists and is empty when firmwarekit starts; the app creates it.
 - `identity.json` (mode 600);
 - `device.lock.json`: the inputs and their hashes, the tool version, the UDID, the activation input/output hashes, the product version, and — for k48 — `boot_strategy` (`iboot`/`kboot`), `gid_components`, `iboot_signature_checks`, and `outputs.nand.listing_sha256`.
 
-The app publishes STAGING_DIR by rename.
+**Reproducible stores (2026-09-28, `iboot-ship`):** `outputs.nand.built_listing_sha256` (both boards) is the listing of the store as built from the volumes, before any boot writes into it. It is the same for the same entry, seed, IPSW and guest tools: the host mount's traces are normalized after the unmount (`HFSPlusVolume.normalize`: every date the recipe touched becomes the IPSW's newest file date, macOS's "date added" is cleared, B-tree slack is zeroed, the data volume's identifier derives from the seed; `VolumeMount.withMounted` puts a journaled volume's empty journal back as it was). `listing_sha256` stays the identity of the shipped store; for k48 it differs run to run by design, because the keybag (4.x) and seal boots write the guest's first-boot state (SpringBoard, lockdownd, guest-clock timestamps) into the store, and for n72 8C148 the keybag boot folds guest pages in. Golden-lock tests compare `built_listing_sha256` (and `iboot`/`nor`/`gid_blobs`), never `listing_sha256`. `SystemEditsTests.volumesAreReproducible` builds the k48 volumes and store twice and names any differing page.
+
+The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for the built-in iPod's unpacked blob and, kept in place, an `LTM_DEV_BASE` development base).
+
+**The built-in iPod (C6, 2026-09-28).** The release build runs the same `firmwarekit create` for `n72ap-7E18` (built firmwarekit, built guest tools, the 7E18 IPSW) and packs STAGING_DIR with `scripts/pack-base.py` into `Resources/device/n72ap-7E18.itbase`: the .itpack format ("ITPACK01", a JSON index of the files in stream order, one zlib stream), which the notary does not open. The app (`BundledBase.unpack`) streams it into `Preparing/<id>/` and publishes it as above; nothing in the app boots anything but a prepared base. Development runs: `LTM_DEV_BASE=<firmwarekit create output>` writes a `.prepared` record naming that directory once (absolute path, never locked), for the entry its lock names.
 
 **W5/W6, 2026-09-28 (`b4d14f4`):**
 - **Resumed downloads return HTTP 206.** Any 2xx is accepted; the size and SHA1 checks guarantee integrity.
@@ -535,7 +535,7 @@ The app publishes STAGING_DIR by rename.
   - iPad, by the lock's `boot_strategy` (`BootRecipe.bootStrategy`): `iboot` (default) → `iboot=<base>/iBoot.bin,gid-blobs=<base>/gid-blobs.bin,nor-rw=<clone of base/nor.bin>`; `kboot` (absent strategy = the two older records) → `kboot=<base>/kboot.bin`. Both add `nand=<base>/nand`, `nand-overlay=<paths.overlay>` and die id from `instance.identity.dieID`.
   - Clone `base/nor.bin` to `storage.writableNOR` on first boot (`cp -c`, then `chmod u+w`) and pass it as the writable NOR — always for iboot (iBoot writes NVRAM/effaceable there), and for 4.x kboot data protection.
   - Create the overlay and usbmuxd-conf directories on first boot.
-  - Never write inside `base/`, and skip `missingAssets` and the legacy development paths.
+  - Never write inside `base/`. (C6: there are no other paths; every device is a prepared base.)
 
 **FirmwareKit wave A2, 2026-09-28** (`2907d45`, `45fdbdd`, `2dbe750`):
 - **GL dispatch tables are generated at prepare time from the IPSW's shared cache.** They use one shipped base table (`gli-dispatch-7B500.tsv`) for the per-function columns. The catalog's `gli_dispatch` field is unused and can be dropped.
@@ -558,8 +558,9 @@ The app publishes STAGING_DIR by rename.
 **Guest services without SSH (qemu-ios guest-services-plan P2), 2026-09-28** (`7f73aad`):
 - Every guest command is an agent op (`GuestServices.swift`): spawn with no shell, put/get/chown/unlink,
   sync, launch/frontmost/lockstatus, orientation, dlicon, halt. Capabilities come from the v2 ping; a v1
-  agent (images with freeze's shell) gets the missing ops through its `exec`, and its image is upgraded to
-  the bundled v2 agent by `updateMediaComponents` (no SSH).
+  agent (images with freeze's shell) gets the missing ops through its `exec`. (The in-place component
+  upgrade of a legacy image, `updateMediaComponents`, went with C6: every image is a prepared base whose
+  guest tools the loader keeps current.)
 - The SSH transport, the script installer, itorient-over-SSH and Open Terminal are gone; package.sh no
   longer ships it-ssh-terminal.sh, sbdlicon, ithalt, itstatus, itproxy, ittrust or itorient. The web
   proxy on both boards is the image's PAC plus the MCInstall profile. A legacy image without a baked PAC
@@ -570,8 +571,8 @@ The app publishes STAGING_DIR by rename.
 **Integration, 2026-09-28** (fk-n72, gpkg-p4, prep-ux, finder-f0, automatic-activation):
 - **Activation is built in for both recipes** (automatic-activation): `firmwarekit create` has no `--activation-hook` (an unknown argument now), the lock records `inputs.activation {input_sha256, output_sha256}`, and a failure is `activation_failed`.
 - **Prepared iPods boot** (`base.kind == .prepared`, n72ap): `direct-iboot=<base>/iBoot.bin`, `nor=<base>/nor.bin` with `nor-rw=` the private copy (`storage.writableNOR`, cloned on first boot, removed by Erase with the overlay), `gid-blobs=<base>/gid-blobs.bin`, `nand=<base>/nand`, and the overlay pinned to `storage.key`. The n72 machine has no `die-id`: the identity is in nor.bin.
-- **Lock `machine` options**: every boot of a prepared base appends its device.lock.json `"machine"` (sorted, escaped) to `-M`. N72Recipe always writes `{"aes-uid": "engine"}`, as ipod2g_device.py does; the shipping and adopted images keep the legacy default.
-- **iPod 3.1.3 is a `user_ipsw` entry** (pinned `5f4f5c01…`, the IPSW docs/ipod/from-ipsw.md names; no URL) with recipe n72 (8g, system_mib 7168, gles_shim/appsync/web_proxy, gli-dispatch-7E18.tsv). The shipping image is unchanged: LegacyAdoption still adopts it at first launch, so the row is Ready with it; with no record the row offers Import IPSW….
+- **Lock `machine` options**: every boot of a prepared base appends its device.lock.json `"machine"` (sorted, escaped) to `-M`. N72Recipe always writes `{"aes-uid": "engine"}`, as ipod2g_device.py does.
+- **iPod 3.1.3 is a `user_ipsw` entry** (pinned `5f4f5c01…`, the IPSW docs/ipod/from-ipsw.md names; no URL) with recipe n72 (8g, system_mib 7168, gles_shim/appsync/web_proxy, gli-dispatch-7E18.tsv), and the built-in device (`bundled`, C6): the row is Ready once its packed base is published at first launch; after a Delete it offers Prepare (the blob again) and Import IPSW….
 - **The seal's check boot matches `FTL_Open\s*\[OK\]` over the log with its newlines removed** (the helper's `--oneshot` `stopPattern`), as ipad1_seal.py now does.
 - **`build-guest-tools.sh` stages the n72 inputs** into the firmwarekit directory: MBXGLEngine, sblaunch, sbdlicon, it_agent, it_typein.dylib, com.qemu.it-agent.plist and gli-dispatch-7E18.tsv (libappsync.dylib is the fat one already there).
 

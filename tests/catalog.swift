@@ -36,7 +36,7 @@ import Foundation
             ["binary": ["install_status": "encrypted", "architectures": ["armv6"]]],
             ["binary": ["install_status": "installable", "architectures": ["armv7"]]],
             ["binary": ["install_status": "installable", "architectures": ["armv6"], "macho_min_os": "4.0"]],
-            ["binary": ["install_status": "installable", "architectures": ["armv6"], "device_family_macho": ["2"]]]] {
+            ["binary": ["install_status": "installable", "architectures": ["armv6"], "device_family_macho": ["3"]]]] {
             precondition(try! copy(changes).unavailableReason(minimumOS: "2.0") != nil)
         }
         for changes: [String: Any] in [["size": 4], ["md5": String(repeating: "0", count: 32)], ["md5": "bad"]] {
@@ -51,14 +51,7 @@ import Foundation
             let versions = try JSONDecoder().decode(Versions.self, from: Data(contentsOf: URL(fileURLWithPath: "/tmp/ltm-live-versions.json")))
             precondition(!versions.data.isEmpty)
         }
-        // Failed replacement and adopting a library file itself preserve bytes.
-        await IPALibrary.adopt(file, for: "test.catalog")
-        let saved = IPALibrary.url(for: "test.catalog")!
-        await IPALibrary.adopt(file.appendingPathExtension("missing"), for: "test.catalog")
-        precondition(try! Data(contentsOf: saved) == data)
-        await IPALibrary.adopt(saved, for: "test.catalog")
-        precondition(try! Data(contentsOf: saved) == data)
-        IPALibrary.forget("test.catalog")
-        print("PASS: catalog schema, exact OS/architecture/encryption checks, file integrity and atomic IPA replacement")
+        // The retained copies are tests/check-ipa-library.py's.
+        print("PASS: catalog schema, exact OS/architecture/encryption checks and file integrity")
     }
 }

@@ -142,7 +142,7 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     download = commands.add_parser('fetch', help='verify archives before exposing them to a build')
     download.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
-    download.add_argument('--group', choices=['native', 'static'], required=True)
+    download.add_argument('--group', choices=['native', 'static', 'tools'], required=True)
     download.add_argument('--destination', type=Path, required=True)
     download.add_argument('--cache', type=Path, action='append', default=[])
     download.add_argument('--offline', action='store_true')

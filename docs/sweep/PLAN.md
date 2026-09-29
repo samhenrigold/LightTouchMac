@@ -40,11 +40,17 @@ that hurt the user may be suppressed.
 | A8 usbmuxd idle poll interval (3 ms → 50 ms after 1 s idle, back on the first packet) — **done** on the fork's `idle-poll` branch (off `qemu-zlp` 41631a7, not pushed, not pinned) | 0.25 | 3 idle iPods: 6.3% → 0.3% of a core (usbmuxd CPU time over 30 s) |
 | A9 Quit-with-resume snapshot code deleted (S3) — **done**; helper snapshot ops kept | 0.5 | app/helper/firmwarekit build; check-clean-shutdown, check-termination, check-helper-boot restore |
 
-## Track B: IPA library (after A3; ~2 d)
+## Track B: IPA library (done 2026-09-28 on `ipa-library`; to merge)
 
-Content-addressed `State/Library/IPAs/<sha256>.ipa` + `index.json`; per-device copies become APFS clones; Store downloads
-dedupe by hash; "Install on ▸"; sidebar-row drops; launch sweep hashes existing copies. Gate: new offline check (same IPA on two
-records → one blob; uninstall on A keeps B), check-uninstall-queue, check-sessions install step.
+Content-addressed `State/Library/IPAs/<sha256>.ipa` + `index.json`; per-device copies are APFS clones of the blob; Store
+downloads dedupe by the catalog copy's md5 (hashed alongside sha256 at store time); "Install on ▸ <running device>"; `.ipa`
+drops on running sidebar rows; the launch sweep stores existing device copies once (the `State/IPAs` move folded in);
+Settings ▸ Storage "Library" line + Remove Unused. Uninstall keeps the app-wide icon while another device has the app.
+Gate: `tests/check-ipa-library.py` (two records → one blob, two clones, one entry; uninstall on A keeps B's copy and icon;
+Remove Unused spares referenced blobs; Store dedupe with the fixture's IPA route disabled; sweep idempotent),
+check-uninstall-queue, check-install-queue-scope, check-media-queue, check-storage-lifecycle, gate --quick, check-sessions
+--ipad-device. Skipped: a per-device `installed.json` (the clone is the reference); hashing device copies to decide
+"unused" (bundle id + size instead, which only ever keeps a blob longer).
 
 ## Track C: pipeline, Swift only (after S1; ~10 d)
 
@@ -55,7 +61,8 @@ records → one blob; uninstall on A keeps B), check-uninstall-queue, check-sess
 | C3 Catalog is the manifest; delete qemu-ios manifests/; tests take an entry JSON | 0.5 | fresh-device with --entry |
 | C4 One Recipe with board plug-ins (verify/decrypt/identity/lock/keybag/bake shared) | 2 | swift test; lock diff empty on all entries |
 | C5 Retire Python: port real-iBoot (done in C0) and `--gl-test`; golden-lock oracle; delete ~4,500 lines; `research/` keeps the probes | 4 | fresh-device on all 6 entries via firmwarekit; one-time cross-check against the last Python locks |
-| C6 Bundled iPod as a prepared device (S2); delete LegacyAdoption, LaunchOptions, the legacy branches | 2.5 | check-firmware-jobs publish; check-sessions --single ipod; legacy-tree → prompt check |
+| C6 Bundled iPod as a prepared device (S2); delete LegacyAdoption, LaunchOptions, the legacy branches — **done 2026-09-28 (`bundled-prepared`)**: `Resources/device/n72ap-7E18.itbase` (a packed `firmwarekit create`), published at first launch; one Erase & Continue / Quit prompt for the old layout; `LTM_DEV_BASE` for development | 2.5 | check-bundled-prepared (fresh → `.prepared`; old layout → prompt path); check-firmware-jobs publish (XFAIL retired); check-sessions --single ipod on the unpacked blob; test-release, test-package |
+| C8 Disk images without `hdiutil` (deprecated in macOS 27, replaced by `diskutil image`): one `DiskImage` abstraction in FirmwareKit (attach/detach/convert/resize) with a `diskutil image` backend when present and `hdiutil` otherwise, tested on both; then move the prepare-time volume edits to the native HFSPlus module (it already does catalog, owners, normalize, journal) so preparation never mounts; mounting stays only for the user-facing Mount/Export feature | 2 + 3 | swift test; both backends on macOS 26/27; fresh-device on all entries |
 | C7 iPod 2.1.1 in the app (N72 recipe 2.x path, keys, catalog) | 1 | in-bundle prepare + boot |
 
 ## Track D: emulator consolidation (after gl-coverage and usb-alert merge; ~10 d)

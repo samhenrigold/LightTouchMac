@@ -5,7 +5,6 @@ import subprocess,tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 root=Path(__file__).resolve().parents[1]
 fixture=r'''import Cocoa
-struct LaunchOptions { var network = true }
 @main struct Check {
  @MainActor static func main() {
   _=NSApplication.shared
@@ -14,10 +13,8 @@ struct LaunchOptions { var network = true }
   let explicit=CommandLine.arguments.contains("--network") || CommandLine.arguments.contains("--no-network")
   for saved in [true,false] {
    defaults.set(saved,forKey:NetworkAccessPreference.key)
-   var options=LaunchOptions(network:!CommandLine.arguments.contains("--no-network"))
-   let initial=options.network
-   NetworkAccessPreference.configure(&options, profile: .iPodTouch2G)
-   precondition(options.network == (explicit ? initial : saved))
+   let network=NetworkAccessPreference.resolve(profile: .iPodTouch2G)
+   precondition(network == (explicit ? !CommandLine.arguments.contains("--no-network") : saved))
    precondition(defaults.bool(forKey:NetworkAccessPreference.key)==saved)
   }
   print("PASS: remembered guest-network choice and explicit command-line override")

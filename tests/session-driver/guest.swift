@@ -24,8 +24,7 @@ struct GuestConfig: Decodable {
     var devices: [GuestDeviceConfig]
     var itpack: String
     var lockdownTZ: String
-    /// The app's guest binaries by name: itphoto, and the components a legacy
-    /// image is upgraded to (it_agent, it_typein.dylib, MBXGLEngine).
+    /// The app's guest binaries by name (itphoto).
     var tools: [String: String]
     var timeZone: String
 }
@@ -146,15 +145,8 @@ struct GuestConfig: Decodable {
         // P5: the loader's report and this boot's verdict (legacy when there is no loader).
         emitVerdict("boot", await judge(budget: .seconds(90)))
 
-        // P2: the component upgrade (a legacy image's agent may go v1 -> v2), no SSH.
-        let tool = { (name: String) in URL(fileURLWithPath: self.guest.tools[name] ?? "/nonexistent/\(name)") }
-        let parts = GuestServices.Components(engine: tool("MBXGLEngine"), agent: tool("it_agent"), typing: tool("it_typein.dylib"))
-        let changed = await step("update components") { try await services.updateComponents(parts) }
-        cache.reset()
-        await waitAgent(60)
-        let after = await step("ping after update") { try await agent.capabilities() }
-        _ = await waitFrontmost(nil, 45)   // SpringBoard answers again after a reload
-        emit("components", ["device": name, "changed": changed, "version": after.version, "packaged": services.packaged])
+        _ = await waitFrontmost(nil, 45)   // SpringBoard answers
+        emit("agent", ["device": name, "version": caps.version, "packaged": services.packaged])
 
         await unlock()
         device.screenshot("\(name)-home")
@@ -186,6 +178,7 @@ struct GuestConfig: Decodable {
         let shot = device.dir.appendingPathComponent("\(name)-home.png")
         let photo = await step("photo prepare") { try await MediaPhoto.prepare(shot) }
         await step("photo stage") { try await device.services.stagePhoto(photo) { _ in } }
+        let tool = { (name: String) in URL(fileURLWithPath: self.guest.tools[name] ?? "/nonexistent/\(name)") }
         let imported = await step("photo commit") {
             try await services.commitMedia(id: photo.id, helper: "itphoto",
                                            localHelper: { tool("itphoto") }, metadata: nil)

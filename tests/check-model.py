@@ -176,7 +176,7 @@ enum PreparedMedia { static let extensions: Set<String> = [] }
  enum Pose { case flat, upright }
  var motionPose=Pose.upright, rotationDegrees=0, acceptsInput=true, canQueueInstall=true
  var keyboardInputEnabled=true, keyboardTiltRate=90.0, isSleeping=false, isPoweredOff=false, shuttingDown=false
- var preparingMedia=false
+ var preparingDevice=false
  var shakeGeneration: UInt64=0, homeCount=0, lockCount=0
  let link: FakeLink? = FakeLink()
  func pressLock() { lockCount += 1 };func powerOn() {}
@@ -241,13 +241,13 @@ enum PreparedMedia { static let extensions: Set<String> = [] }
     windowNumber: window.windowNumber, context: nil, characters: " ", charactersIgnoringModifiers: " ", isARepeat: false, keyCode: 49)!
   display.keyDown(with: space); display.keyDown(with: space)
   precondition(e.lockCount==1, "Space wakes once without toggling back to sleep")
-  e.preparingMedia=true; display.updatePowerPresentation()
+  e.preparingDevice=true; display.updatePowerPresentation()
   func labels(_ view: NSView) -> [String] {
     (view as? NSTextField).map { [$0.stringValue] } ?? view.subviews.flatMap { labels($0) }
   }
   precondition(!labels(display).contains("Finishing device setup…"))
   precondition(!display.subviews.contains { $0 is NSStackView }, "Setup must leave the boot screen visible")
-  e.preparingMedia=false;e.isSleeping=false;display.updatePowerPresentation()
+  e.preparingDevice=false;e.isSleeping=false;display.updatePowerPresentation()
   precondition(!labels(display).contains("Finishing device setup…"))
   window.orderOut(nil);window.contentView=nil
   print("PASS: integrated 3D screen input in all orientations; sleeping touch suppression")

@@ -32,6 +32,17 @@ nonisolated enum Bundled {
     /// Dylibs shipped with the app, where package.sh repoints @rpath.
     static let frameworksDirectory = Bundle.main.privateFrameworksPath
 
+    /// The device assets (the iPod bootrom, the packed built-in device): LTM_FILES,
+    /// then the bundle's Resources/device, then the dev checkout's qemu-ios-files.
+    static let filesRoot: String = {
+        if let env = ProcessInfo.processInfo.environment["LTM_FILES"] { return env }
+        if let bundled = Bundle.main.resourceURL?.appendingPathComponent("device").path,
+           FileManager.default.fileExists(atPath: bundled) {
+            return bundled
+        }
+        return "\(NSHomeDirectory())/Developer/qemu-ios-files"
+    }()
+
     /// Prepare once before the app constructs controllers or opens any device
     /// files. On error the caller must stop startup instead of creating a new
     /// device next to inaccessible or conflicting existing data.
@@ -84,8 +95,8 @@ nonisolated enum Bundled {
             .appendingPathComponent("Logs/\(StorageLocations.bundleIdentifier)", isDirectory: true)
     }
 
-    /// Daemon pairing identity and session control files live here. This is
-    /// persistent support data, not a disposable temporary-directory tree.
+    /// Legacy Store download scratch (and, in Debug, the development lockdown
+    /// helpers). Each device's own daemon files are under Devices/<uuid>/work.
     static var workDirectory: URL {
         let url = stateDirectory.appendingPathComponent("work", isDirectory: true)
         if case .success = layout { try? StorageLocations.privateDirectory(url) }
@@ -111,12 +122,6 @@ nonisolated enum Bundled {
     /// The first of `candidates` that exists, bundle copy first.
     static func resolve(_ name: String, fallbacks candidates: [String]) -> String? {
         tool(name) ?? candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
-    }
-
-    /// Guest data and libraries are read for upload, not executed by the host.
-    static func resolveResource(_ name: String, fallbacks candidates: [String]) -> String? {
-        let paths = [toolsDirectory.map { "\($0)/\(name)" }].compactMap { $0 } + candidates
-        return paths.first { FileManager.default.isReadableFile(atPath: $0) }
     }
 
     /// Directories to search for command-line tools, ours before anyone's.

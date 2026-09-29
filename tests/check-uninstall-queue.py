@@ -22,7 +22,14 @@ extension Notification.Name {
  func forget(_ id: String) { forgotten.append(id) }
 }
 struct DeviceInstance { let id = UUID() }
-@MainActor enum IPALibrary { static var forgotten: [String] = []; static func forget(_ id: String, device: DeviceInstance) { forgotten.append(id) } }
+@MainActor final class DeviceLibrary { static let shared = DeviceLibrary(); var instances: [DeviceInstance] = [] }
+@MainActor enum IPALibrary {
+ static var forgotten: [String] = []
+ static func forget(_ id: String, device: DeviceInstance) { forgotten.append(id) }
+ /// Another device still keeps the app: its icon stays.
+ static var elsewhere: Set<String> = []
+ static func retained(_ id: String, by devices: [DeviceInstance]) -> Bool { elsewhere.contains(id) }
+}
 @MainActor final class EmulatorController {
  let instance = DeviceInstance()
  var deviceReachable: Bool? = true
@@ -142,7 +149,15 @@ struct DeviceInstance { let id = UUID() }
   emulator.finish("quit-active", error: DeviceError.timedOut)
   try await until { finished == 7 }
   precondition(AppInstaller.errors == 2 && !AppInstaller.isPaused && !AppInstaller.hasPendingWork)
-  print("PASS: confirmed removal queues behind installs, serializes later installs, survives active cancellation, cancels waiting work, pauses on device failure and resumes queued work")
+
+  // Another device still has the app: its copy here goes, the app-wide name and icon stay.
+  IPALibrary.elsewhere = ["shared"]
+  remove(["shared"])
+  try await until { started.contains("shared") }
+  emulator.finish("shared")
+  try await until { finished == 8 }
+  precondition(IPALibrary.forgotten.contains("shared") && !AppMetadataCache.shared.forgotten.contains("shared"))
+  print("PASS: confirmed removal queues behind installs, serializes later installs, survives active cancellation, cancels waiting work, pauses on device failure, resumes queued work and keeps an icon another device still uses")
  }
 }
 '''

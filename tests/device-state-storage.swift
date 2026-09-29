@@ -44,70 +44,20 @@ struct Check {
         } catch {}
         let remainingNORFiles = try fm.contentsOfDirectory(atPath: norOverlay.path)
         precondition(remainingNORFiles.isEmpty)
-        let overlay = root.appendingPathComponent("overlay")
-        let chip = overlay.appendingPathComponent("cs0")
-        try fm.createDirectory(at: chip, withIntermediateDirectories: true)
-        let page = chip.appendingPathComponent("page")
-        try Data("old".utf8).write(to: page)
-        let imageBefore = try DeviceStateStorage.developmentImageIdentity(at: overlay, key: "base")
-        try Data("changed".utf8).write(to: page, options: .atomic)
-        let imageAfter = try DeviceStateStorage.developmentImageIdentity(at: overlay, key: "base")
-        precondition(imageBefore != imageAfter)
-        let manifest = root.appendingPathComponent("nand.itnand.sha256")
-        let first = String(repeating: "a", count: 64)
-        let second = String(repeating: "b", count: 64)
-        try (first + "\n").write(to: manifest, atomically: true, encoding: .utf8)
-        let legacy = root.appendingPathComponent("device/nand")
-        try fm.createDirectory(at: legacy, withIntermediateDirectories: true)
-        func select() throws -> (image: DeviceStateStorage.PackedImage, retained: Bool) {
-            try DeviceStateStorage.packedImage(state: root, nand: "nand", legacyKey: "nand-oldroot", manifest: manifest)
-        }
-        let pinned = try select()
-        precondition(pinned.retained && pinned.image.directory == "device/nand")
-        // App update still uses the original base, and preserves user state.
-        try second.write(to: manifest, atomically: true, encoding: .utf8)
-        let stillPinned = try select()
-        precondition(stillPinned.image == pinned.image)
-        try Data().write(to: root.appendingPathComponent(".reset-nand-oldroot"))
-        // A legacy marker must never erase or change the device on launch.
-        let unchanged = try select()
-        precondition(unchanged.image == pinned.image)
-        // Erase repoints, then removes the bases nothing names any more: the
-        // old one, a torn .partial unpack. A base another record names stays.
-        let torn = root.appendingPathComponent("device/nand-\(second).partial")
-        let keptBase = root.appendingPathComponent("device/nand-kept")
-        try fm.createDirectory(at: torn, withIntermediateDirectories: true)
-        try fm.createDirectory(at: keptBase, withIntermediateDirectories: true)
-        let other = root.appendingPathComponent("Devices/\(UUID().uuidString)")
-        try fm.createDirectory(at: other, withIntermediateDirectories: true)
-        try Data(#"{"base":{"kind":"legacyBundled","path":"device/nand-kept"}}"#.utf8).write(to: other.appendingPathComponent("device.json"))
-        try DeviceStateStorage.adoptBundledImageAfterErase(state: root, nand: "nand", manifest: manifest, owner: UUID())
-        let reset = try select()
-        precondition(!reset.retained && reset.image.key == "nand-\(second)")
-        precondition(!fm.fileExists(atPath: legacy.path) && !fm.fileExists(atPath: torn.path) && fm.fileExists(atPath: keptBase.path))
-        try fm.removeItem(at: other)
-        precondition(!fm.fileExists(atPath: root.appendingPathComponent(".reset-nand-\(second)").path))
-        // A freshly extracted content image remains pinned across app updates
-        // and installation-path changes.
-        try fm.createDirectory(at: root.appendingPathComponent(reset.image.directory), withIntermediateDirectories: true)
-        try first.write(to: manifest, atomically: true, encoding: .utf8)
-        let moved = try DeviceStateStorage.packedImage(state: root, nand: "nand", legacyKey: "different-root", manifest: manifest)
-        precondition(moved.retained && moved.image == reset.image)
         let eraseRoot = root.appendingPathComponent("erase-device")
         let eraseOverlay = eraseRoot.appendingPathComponent("nandrw")
         let eraseSnapshot = eraseRoot.appendingPathComponent("snapshot")
-        let eraseMarker = eraseRoot.appendingPathComponent(".reset")
         try fm.createDirectory(at: eraseOverlay, withIntermediateDirectories: true)
         for url in [eraseOverlay.appendingPathComponent("nor.bin"), eraseSnapshot,
-                    eraseSnapshot.appendingPathExtension("meta"), eraseMarker] {
+                    eraseSnapshot.appendingPathExtension("meta")] {
             try Data("device".utf8).write(to: url)
         }
         let base = eraseRoot.appendingPathComponent("base-image")
         try Data("base".utf8).write(to: base)
-        try DeviceStateStorage.erase(overlay: eraseOverlay, snapshots: [eraseSnapshot], legacyMarker: eraseMarker, state: root, owner: nil)
+        try DeviceStateStorage.erase(overlay: eraseOverlay, snapshots: [eraseSnapshot], state: root, owner: nil)
         precondition(!fm.fileExists(atPath: eraseOverlay.path) && !fm.fileExists(atPath: eraseSnapshot.path))
-        precondition(!fm.fileExists(atPath: eraseMarker.path) && tryData(base)=="base")
-        try DeviceStateStorage.erase(overlay: eraseOverlay, snapshots: [eraseSnapshot], legacyMarker: eraseMarker, state: root, owner: nil)
+        precondition(tryData(base)=="base")
+        try DeviceStateStorage.erase(overlay: eraseOverlay, snapshots: [eraseSnapshot], state: root, owner: nil)
         print("device state checks passed")
     }
     static func tryData(_ url: URL) -> String { try! String(contentsOf: url, encoding: .utf8) }

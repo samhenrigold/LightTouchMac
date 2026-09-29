@@ -15,7 +15,7 @@
 #
 # Build compatible dependencies with scripts/build-package-native.sh first; it
 # prints the QEMU_BUILD_DIR/LTM_DEPS_PREFIX/USBMUXD_BIN settings to use here.
-# Device assets are embedded below unless LTM_ASSETS=none (development only).
+# Device assets (the bootrom and LTM_BASE_BLOB, the packed built-in iPod) are embedded below unless LTM_ASSETS=none (development only).
 set -euo pipefail
 
 APP="${1:?usage: package.sh path/to/Light Touch.app (or use scripts/build-release.py)}"
@@ -182,6 +182,12 @@ OPENSSL_PREFIX="$STATIC" CFLAGS="-mmacosx-version-min=$MINOS" \
     bash "$WORK/it-webproxy/build.sh"
 copy_tool "$WORK/it-webproxy/itwebproxy"
 copy_tool "${USBMUXD_BIN:-$QEMU/build-native14/build/usbmuxd/src/usbmuxd}"
+# iBoot32Patcher (GPL-3.0, built by build-iboot32patcher.sh next to usbmuxd): firmwarekit's k48
+# real-iBoot recipe runs it from Contents/MacOS, where K48IBoot.patcher looks first.
+PATCHER="${IBOOT32PATCHER_BIN:-$(dirname "$DEPS")/build/iBoot32Patcher/iBoot32Patcher}"
+copy_tool "$PATCHER"
+mkdir -p "$APP/Contents/Resources/licenses/iBoot32Patcher"
+cp "$(dirname "$PATCHER")/LICENSE" "$(dirname "$PATCHER")/SOURCE.txt" "$APP/Contents/Resources/licenses/iBoot32Patcher/"
 
 # NOTE: usbmuxd's -C directory is writable state (it stores SystemConfiguration
 # and a pairing record per device). The app copies the bundled seed out to
@@ -241,30 +247,24 @@ PLIST
 
 # -------------------------------------------------------------- device assets
 #
-# The guest firmware and NAND, read from Resources/device (see
-# LaunchOptions.defaultFilesRoot). The packed NAND is extracted on first boot;
-# all writable device state stays in Application Support. Import is future work.
+# Resources/device (Bundled.filesRoot): the iPod bootrom, and the built-in
+# iPod as ONE opaque blob (LTM_BASE_BLOB: a `firmwarekit create` of
+# n72ap-7E18 packed by scripts/pack-base.py, which build-release.py makes).
+# Never raw pages: the notary walks every file in the bundle and rejects the
+# armv6 Mach-Os an iOS filesystem contains, and it opens tarballs too. The app
+# unpacks it into a device on first launch; all writable state stays in
+# Application Support.
 FILES="${LTM_ASSETS:-$SRC/../qemu-ios-files}"
-# nand-current names the shipping image; resolve it so provenance records the real one.
-NAND_NAME="${LTM_NAND:-$(basename "$(readlink "$FILES/nand-current" 2>/dev/null)")}"
 DEVICE="$APP/Contents/Resources/device"
 rm -rf "$DEVICE"
 if [ "$FILES" != none ]; then
-    for f in "$FILES/bootrom_240_4" "$FILES/ios3/iBoot.bin" \
-             "$FILES/ios3/nor_7E18.bin" "$FILES/$NAND_NAME"; do
-        [ -e "$f" ] || { echo "missing device asset: $f (LTM_ASSETS=none to skip)" >&2; exit 1; }
-    done
-    echo "embedding device assets ($NAND_NAME, packed)…"
-    mkdir -p "$DEVICE/ios3"
+    [ -e "$FILES/bootrom_240_4" ] || { echo "missing device asset: $FILES/bootrom_240_4 (LTM_ASSETS=none to skip)" >&2; exit 1; }
+    [ -f "${LTM_BASE_BLOB:-}" ] || { echo "LTM_BASE_BLOB must name the packed built-in iPod (scripts/pack-base.py pack <firmwarekit create output> n72ap-7E18.itbase)" >&2; exit 1; }
+    [ "$(head -c 8 "$LTM_BASE_BLOB")" = ITPACK01 ] || { echo "$LTM_BASE_BLOB is not a packed device" >&2; exit 1; }
+    echo "embedding device assets (bootrom, $(basename "$LTM_BASE_BLOB"))…"
+    mkdir -p "$DEVICE"
     cp "$FILES/bootrom_240_4" "$DEVICE/"
-    cp "$FILES/ios3/iBoot.bin" "$FILES/ios3/nor_7E18.bin" "$DEVICE/ios3/"
-    # The NAND goes in as ONE opaque blob, never raw pages: the notary walks
-    # every file in the bundle and rejects the armv6 Mach-Os a raw iOS
-    # filesystem contains — and it opens tarballs too, so only a format it
-    # cannot recognise works (see qemu-ios contrib/macos-app/nandpack.py).
-    # The app unpacks it into Application Support on first boot.
-    python3 "$QEMU/contrib/macos-app/nandpack.py" pack "$FILES/$NAND_NAME" "$DEVICE/nand.itnand"
-    shasum -a 256 "$DEVICE/nand.itnand" | awk '{print $1}' > "$DEVICE/nand.itnand.sha256"
+    cp "$LTM_BASE_BLOB" "$DEVICE/n72ap-7E18.itbase"
 fi
 
 mkdir -p "$APP/Contents/Resources/licenses/qemu"

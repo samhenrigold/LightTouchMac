@@ -140,11 +140,11 @@ current tree.
 
 | Path | What |
 |---|---|
-| `LightTouchMac/` | The app: sidebar, device windows, install queue, IPSW store, `Resources/firmware-catalog.json` |
+| `LightTouchMac/` | The app: sidebar, device windows, install queue, IPSW store, `Resources/firmware-catalog.json` (the built-in iPod is its `bundled` entry, shipped as `Resources/device/n72ap-7E18.itbase`) |
 | `LightTouchDevice/` | The per-device helper: one QEMU instance, frames over IOSurface, control over the `Shared/` link |
 | `Shared/` | The app–helper link (`DeviceLink`, `DeviceLinkProtocol`, `DeviceRendezvous`, the `CLink` module) |
 | `Packages/FirmwareKit/` | `FirmwareKit` (IPSW → device), the `firmwarekit` CLI (`Sources/FirmwareKitCLI`), `CActivation` |
-| `scripts/` | `build-release.py` and its stages, `build-guest-tools.sh`, `package.sh`, `regress-app.sh`, `test-*.py`, lockdown C helpers |
+| `scripts/` | `build-release.py` and its stages, `build-guest-tools.sh`, `pack-base.py` (the built-in iPod's blob), `package.sh`, `regress-app.sh`, `test-*.py`, lockdown C helpers |
 | `tests/` | `check-*.py`, `run-catalog-checks.py`, the Swift drivers (`helper-driver`, `session-driver`), `fake-firmwarekit.py`, the volume-rebuild oracle |
 | `build-support/` | `dependencies.json` (pinned archives) and build patches |
 | `Configuration/` | `Shared.xcconfig` |

@@ -23,6 +23,9 @@ public enum VolumeMount {
     /// reports bogus damage); it is force-detached and the call throws. When `body` throws, its error wins.
     public static func withMounted<T>(_ image: URL, at mountPoint: URL, _ body: (URL) throws -> T) throws -> T {
         try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
+        // A journaled volume gets its (empty) journal back as it was: the mount fills it with transactions
+        // and moves its header, run-to-run noise in the image (HFSPlusVolume.journalSnapshot).
+        let journal = (try? HFSPlusVolume(image).journalSnapshot()) ?? nil
         let dev = try attach(image)
         let result: Result<T, Error>
         do {
@@ -46,6 +49,7 @@ public enum VolumeMount {
         guard fsck.ok else {
             throw FirmwareError(.internal, "fsck_hfs is not happy with \(image.lastPathComponent): \(fsck.output.suffix(600))")
         }
+        if let journal { try HFSPlusVolume(image, writable: true).restore(journal) }
         return value
     }
 

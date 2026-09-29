@@ -1,16 +1,14 @@
 import Foundation
 import Darwin
-import CryptoKit
 
 /// Disk operations shared by the controller and the device-free regression check.
 nonisolated enum DeviceStateStorage {
     /// Only call after the native VM has exited and released its files.
     /// `snapshots`: saved-state files older builds wrote (and their .meta), swept with the overlay.
     /// `owner` is the device being erased; every path must pass checkRemovable.
-    static func erase(overlay: URL, snapshots: [URL], legacyMarker: URL, state: URL, owner: UUID?) throws {
+    static func erase(overlay: URL, snapshots: [URL], state: URL, owner: UUID?) throws {
         let fm = FileManager.default
-        let paths = snapshots.flatMap { [$0, $0.appendingPathExtension("meta")] }
-            + [overlay, legacyMarker]
+        let paths = snapshots.flatMap { [$0, $0.appendingPathExtension("meta")] } + [overlay]
         for path in paths { try checkRemovable(path, state: state, owner: owner) }
         for path in paths where fm.fileExists(atPath: path.path) {
             try fm.removeItem(at: path)
@@ -144,31 +142,6 @@ nonisolated enum DeviceStateStorage {
         return destination
     }
 
-    /// Packed images use their content manifest. Development images also record
-    /// every page's identity/mtime so rebaking a directory invalidates old RAM.
-    static func developmentImageIdentity(at root: URL, key: String) throws -> String {
-        let fm = FileManager.default
-        var failure: Error?
-        guard let files = fm.enumerator(at: root, includingPropertiesForKeys: nil,
-                                       errorHandler: { _, error in failure = error; return false }) else {
-            throw CocoaError(.fileReadUnknown)
-        }
-        var records = [key]
-        for case let url as URL in files {
-            let attributes = try fm.attributesOfItem(atPath: url.path)
-            guard let date = attributes[.modificationDate] as? Date,
-                  let inode = attributes[.systemFileNumber] as? NSNumber,
-                  let size = attributes[.size] as? NSNumber else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
-            records.append("\(url.path.dropFirst(root.path.count))\t\(inode)\t\(size)\t\(date.timeIntervalSince1970)")
-        }
-        if let failure { throw failure }
-        guard records.count > 1 else { throw CocoaError(.fileReadCorruptFile) }
-        return SHA256.hash(data: Data(records.sorted().joined(separator: "\n").utf8))
-            .map { String(format: "%02x", $0) }.joined()
-    }
-
     /// A copy-on-write overlay is only valid over the exact base it was made
     /// from: over a rebuilt base its dirty pages mix with different clean ones
     /// (seen as an unactivated iPad after a golden rebuild). The overlay
@@ -186,109 +159,4 @@ nonisolated enum DeviceStateStorage {
         }
         return (try? String(contentsOf: stamp, encoding: .utf8)) == identity
     }
-
-    struct PackedImage: Codable, Equatable {
-        let key: String
-        let directory: String
-    }
-
-    /// Keep an existing device on its original base until an explicit reset.
-    /// The active pointer is independent of the app's installation path.
-    static func packedImage(state: URL, nand: String, legacyKey: String,
-                            manifest: URL) throws -> (image: PackedImage, retained: Bool) {
-        let fm = FileManager.default
-        let latest = try bundledImage(nand: nand, manifest: manifest)
-        let pointer = state.appendingPathComponent("device/active-\(nand).json")
-        var active: PackedImage
-        var recorded: PackedImage?
-        if fm.fileExists(atPath: pointer.path) {
-            active = try JSONDecoder().decode(PackedImage.self, from: Data(contentsOf: pointer))
-            recorded = active
-        } else if fm.fileExists(atPath: state.appendingPathComponent("device/\(nand)").path) {
-            let names = try fm.contentsOfDirectory(atPath: state.path)
-            let candidates = names.filter { $0 == "nandrw-\(nand)" || $0.hasPrefix("nandrw-\(nand)-") }
-            let key: String
-            if candidates.contains("nandrw-\(legacyKey)") {
-                key = legacyKey
-            } else if candidates.count == 1 {
-                key = String(candidates[0].dropFirst("nandrw-".count))
-            } else if candidates.isEmpty {
-                key = legacyKey
-            } else {
-                // Multiple historical roots cannot be attributed to this base.
-                throw CocoaError(.fileReadCorruptFile)
-            }
-            active = PackedImage(key: key, directory: "device/\(nand)")
-        } else {
-            // Never silently abandon an overlay whose original base is missing.
-            for key in [legacyKey, nand] where fm.fileExists(atPath: state.appendingPathComponent("nandrw-\(key)").path) {
-                throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey:
-                    "The existing device overlay has no extracted base image. Restore its device/\(nand) directory before launching."])
-            }
-            active = latest
-        }
-        if active != latest, !fm.fileExists(atPath: state.appendingPathComponent(active.directory).path) {
-            throw CocoaError(.fileNoSuchFile)
-        }
-        // Rewriting an unchanged pointer only churns its inode.
-        if recorded != active {
-            try fm.createDirectory(at: pointer.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(active).write(to: pointer, options: .atomic)
-        }
-        return (active, active != latest)
-    }
-    private static func bundledImage(nand: String, manifest: URL) throws -> PackedImage {
-        let digest = try String(contentsOf: manifest, encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard digest.count == 64, digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        return PackedImage(key: "\(nand)-\(digest)", directory: "device/\(nand)-\(digest)")
-    }
-
-    /// Explicit erase adopts the current bundled base only after removing any
-    /// user overlay previously associated with it. Startup never consumes an
-    /// erase marker or silently switches an existing device to a new base.
-    /// `owner` is the erased device: its record follows the pointer on its
-    /// next resolve, so the base it names now doesn't keep that base alive.
-    static func adoptBundledImageAfterErase(state: URL, nand: String, manifest: URL, owner: UUID?) throws {
-        let latest = try bundledImage(nand: nand, manifest: manifest)
-        let snapshot = state.appendingPathComponent("snapshot-\(latest.key)")
-        try erase(overlay: state.appendingPathComponent("nandrw-\(latest.key)"),
-                  snapshots: [snapshot, snapshot.appendingPathExtension("tmp"), snapshot.appendingPathExtension("bad")],
-                  legacyMarker: state.appendingPathComponent(".reset-\(latest.key)"), state: state, owner: owner)
-        let pointer = state.appendingPathComponent("device/active-\(nand).json")
-        try FileManager.default.createDirectory(at: pointer.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(latest).write(to: pointer, options: .atomic)
-        try removeUnreferencedBases(state: state, nand: nand, except: owner)
-    }
-
-    /// device/<nand>* (older bases, a torn .partial unpack) that neither an
-    /// active-*.json pointer nor a record other than `except` names.
-    static func removeUnreferencedBases(state: URL, nand: String, except: UUID?) throws {
-        let fm = FileManager.default
-        let device = state.appendingPathComponent("device", isDirectory: true)
-        let names = (try? fm.contentsOfDirectory(atPath: device.path)) ?? []
-        var referenced = Set<String>()
-        for name in names where name.hasPrefix("active-") && name.hasSuffix(".json") {
-            guard let data = try? Data(contentsOf: device.appendingPathComponent(name)),
-                  let image = try? JSONDecoder().decode(PackedImage.self, from: data) else {
-                return   // an unreadable pointer: keep every base rather than guess
-            }
-            referenced.insert(image.directory)
-        }
-        let devices = state.appendingPathComponent("Devices", isDirectory: true)
-        for name in (try? fm.contentsOfDirectory(atPath: devices.path)) ?? [] where UUID(uuidString: name) != nil && UUID(uuidString: name) != except {
-            guard let data = try? Data(contentsOf: devices.appendingPathComponent("\(name)/device.json")) else { continue }
-            guard let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let path = (record["base"] as? [String: Any])?["path"] as? String else { return }
-            referenced.insert(path.hasPrefix(state.path + "/") ? String(path.dropFirst(state.path.count + 1)) : path)
-        }
-        for name in names where (name == nand || name.hasPrefix(nand + "-") || name.hasPrefix(nand + ".")) && !referenced.contains("device/\(name)") {
-            let base = device.appendingPathComponent(name)
-            try checkRemovable(base, state: state, owner: except)
-            try removeTree(base)
-        }
-    }
-
 }

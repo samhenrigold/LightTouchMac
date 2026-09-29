@@ -293,8 +293,7 @@ case "unit":
     try DeviceStateStorage.checkRemovable(mine.appendingPathComponent("overlay"), state: state, owner: device.id)
     try DeviceStateStorage.checkRemovable(state.appendingPathComponent("nandrw-legacy"), state: state, owner: device.id)
     do {
-        try DeviceStateStorage.erase(overlay: otherDevice, snapshots: [mine.appendingPathComponent("snapshot")],
-                                     legacyMarker: state.appendingPathComponent(".reset"), state: state, owner: device.id)
+        try DeviceStateStorage.erase(overlay: otherDevice, snapshots: [mine.appendingPathComponent("snapshot")], state: state, owner: device.id)
         expect(false, "erase reached another record")
     } catch {}
     expect(fm.fileExists(atPath: otherDevice.appendingPathComponent("device.json").path) && fm.fileExists(atPath: outside.path), "nothing was removed")
@@ -395,10 +394,13 @@ default: fatalError(args[1])
 
 
 def build(tmp):
-    (tmp / 'stubs.swift').write_text(STUBS)
+    session = (APP / 'DeviceSession.swift').read_text()
+    recipe = session[session.index('nonisolated enum BootRecipe {'):session.index('// MARK: - Sessions')]
+    (tmp / 'stubs.swift').write_text(STUBS + recipe)
     (tmp / 'main.swift').write_text(CHECK)
     subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
-                    *[str(APP / s) for s in SOURCES], str(tmp / 'stubs.swift'), str(tmp / 'main.swift'),
+                    *[str(APP / s) for s in SOURCES], str(ROOT / 'Shared/DeviceLinkProtocol.swift'),
+                    str(tmp / 'stubs.swift'), str(tmp / 'main.swift'),
                     '-o', str(tmp / 'check')], check=True)
     return tmp / 'check'
 

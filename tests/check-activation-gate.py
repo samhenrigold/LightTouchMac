@@ -41,8 +41,8 @@ nonisolated enum AbandonedWork { static let count = 0 }
  var usbConnected = true, liveAgentStatus = 1, connectionFailures = 0
  var onStatusChange: (() -> Void)?
  var bootGeneration = 0
- var preparingMedia = true
- var mediaPreparationTask: Task<Void, Never>? = Task { try? await Task.sleep(for: .seconds(60)) }
+ var preparingDevice = true
+ var readinessTask: Task<Void, Never>? = Task { try? await Task.sleep(for: .seconds(60)) }
  var notices: [String] = [], resolved: [String] = []
  enum NoticeOperation { case activation }
  func reportDeviceNotice(_ text: String, for operation: NoticeOperation) { notices.append(text) }
@@ -68,7 +68,7 @@ enum Lock {
   c.deviceReachable = true; await settle()
   precondition(c.asked == 1 && c.connectionIssue?.summary == TEXT && c.connectionIssue?.persistent == true)
   precondition(c.connectionIssue?.blocksCommands == true && c.connectionIssue?.reconnectManagement == false)
-  precondition(c.deviceReachable == false && !c.preparingMedia && c.mediaPreparationTask!.isCancelled && c.notices == [TEXT])
+  precondition(c.deviceReachable == false && !c.preparingDevice && c.readinessTask!.isCancelled && c.notices == [TEXT])
   // Later answers and transient failures leave it; -34 maps to it.
   c.deviceReachable = true; await settle(); precondition(c.asked == 1 && c.connectionIssue?.persistent == true)
   c.reportConnectionFailure(DeviceError.lockdown(-8), operation: "Refreshing apps")
@@ -82,7 +82,7 @@ enum Lock {
   // Activated: nothing asked twice; an unanswered question is asked again on the next answer.
   let ok = Controller(); ok.answers = [nil, "Activated"]
   ok.deviceReachable = true; await settle(); precondition(ok.asked == 1 && ok.connectionIssue == nil)
-  ok.deviceReachable = true; await settle(); precondition(ok.asked == 2 && ok.connectionIssue == nil && ok.preparingMedia)
+  ok.deviceReachable = true; await settle(); precondition(ok.asked == 2 && ok.connectionIssue == nil && ok.preparingDevice)
   ok.deviceReachable = true; await settle(); precondition(ok.asked == 2)
   // A fresh -34 with no prior issue is the same persistent issue.
   let refused = Controller()

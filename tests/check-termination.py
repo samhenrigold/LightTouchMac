@@ -29,7 +29,6 @@ source=r'''import AppKit
  static let stopBudget=0.25
  let isInstalling=false,isDead=false,isPoweredOff=false,isErasing=false
  var requests=0
- func cancelFactoryReset(){}
  func halt(completion:@escaping(Bool)->Void){
   requests+=1;logEvent("shutdown-started")
   if mode=="backstop"{return}

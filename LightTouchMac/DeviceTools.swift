@@ -20,7 +20,6 @@ struct InstalledApp: Identifiable, Sendable {
 /// facade the UI calls.
 struct DeviceTools: Sendable {
     let clientSocket: String
-    let filesRoot: String
     /// This device's web-proxy files (WebProxyConfiguration.directory).
     let proxyDirectory: URL
     /// The device's helper, for the guest agent (DeviceLink `.agent` requests).
@@ -65,15 +64,15 @@ struct DeviceTools: Sendable {
     }
 
     private func commitLibraryMedia(id: String, metadata: URL, destination: String) async throws {
-        guard try await guest.commitMedia(id: id, helper: "itmedia", localHelper: { try Self.guestTool("itmedia", filesRoot) },
+        guard try await guest.commitMedia(id: id, helper: "itmedia", localHelper: { try Self.guestTool("itmedia") },
                                           metadata: metadata) else {
             throw DeviceToolsError.failed("\(destination) did not confirm the import. The copied media has been retained.")
         }
     }
 
     /// The app's copy of a guest helper for images whose loader package lacks it.
-    private static func guestTool(_ name: String, _ filesRoot: String) throws -> URL {
-        guard let path = Bundled.resolve(name, fallbacks: ["\(filesRoot)/../qemu-ios/contrib/it-media/\(name)"]) else {
+    private static func guestTool(_ name: String) throws -> URL {
+        guard let path = Bundled.resolve(name, fallbacks: ["\(Bundled.filesRoot)/../qemu-ios/contrib/it-media/\(name)"]) else {
             throw DeviceToolsError.toolMissing(name)
         }
         return URL(fileURLWithPath: path)
@@ -98,7 +97,7 @@ struct DeviceTools: Sendable {
     }
 
     func commitPhoto(_ photo: MediaPhoto) async throws {
-        guard try await guest.commitMedia(id: photo.id, helper: "itphoto", localHelper: { try Self.guestTool("itphoto", filesRoot) },
+        guard try await guest.commitMedia(id: photo.id, helper: "itphoto", localHelper: { try Self.guestTool("itphoto") },
                                           metadata: nil) else {
             throw DeviceToolsError.failed("Photos did not confirm the import. Check Saved Photos before importing it again.")
         }
@@ -323,21 +322,6 @@ struct DeviceTools: Sendable {
     /// the install path does behind your back.
     func restartSpringBoard() async throws { try await guest.respring() }
 
-    /// Upgrade an image without the guest-package loader in place (the
-    /// agent, typein, the GL engine, SpringBoard's environment, old lock
-    /// preferences). Reloads SpringBoard after changes; the caller waits for
-    /// it to answer. A packaged image is the loader's (GuestServices).
-    func updateMediaComponents() async throws -> Bool {
-        let checkout = "\(filesRoot)/../qemu-ios/contrib"
-        guard let engine = Bundled.resolve("MBXGLEngine", fallbacks: ["\(checkout)/it-gles/MBXGLEngine"]),
-              let agent = Bundled.resolve("it_agent", fallbacks: ["\(checkout)/it-agent/it_agent"]),
-              let typing = Bundled.resolveResource("it_typein.dylib", fallbacks: ["\(checkout)/it-agent/it_typein.dylib"]) else {
-            throw DeviceToolsError.toolMissing("guest agent components")
-        }
-        return try await guest.updateComponents(.init(engine: URL(fileURLWithPath: engine), agent: URL(fileURLWithPath: agent),
-                                                      typing: URL(fileURLWithPath: typing)))
-    }
-
     /// Nil means this image has no agent; failures must not start a second transport.
     func guestOrientation() async throws -> Int? {
         guard guestAgent.status != 0 else { return nil }
@@ -359,7 +343,7 @@ struct DeviceTools: Sendable {
     func configureWebProxy(enabled: Bool) async throws {
         guard enabled else { return }
         guard let host = Bundled.resolve("itwebproxy", fallbacks: [
-            "\(filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
+            "\(Bundled.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"
         ]) else { throw DeviceToolsError.toolMissing("itwebproxy") }
         // Packaged apps bundle it (package.sh); dev builds find it on the usual PATH directories.
         guard let tool = Bundled.resolve("lockdown-mcinstall", fallbacks: Bundled.binarySearchPaths.map { "\($0)/lockdown-mcinstall" })

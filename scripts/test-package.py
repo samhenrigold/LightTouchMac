@@ -109,7 +109,15 @@ def check_helper(app):
     assert probe.returncode == 0, probe.stderr
     loaded = json.loads(probe.stdout)['dylibPath']
     assert pathlib.Path(loaded).resolve() == dylib.resolve(), f'helper loaded {loaded}, not the bundled {dylib}'
-    print(f'PASS: {helper.name} signed (runtime, QEMU entitlements, minos {info}), closure in-bundle, loads {dylib.name} from Frameworks')
+    device = app / 'Contents/Resources/device'
+    blob = device / 'n72ap-7E18.itbase'
+    assert (device / 'bootrom_240_4').is_file() and blob.is_file(), f'missing device assets under {device}'
+    assert blob.read_bytes()[:8] == b'ITPACK01', f'{blob} is not a packed device'
+    stray = [p for p in device.rglob('*') if p.is_file() and p.name not in ('bootrom_240_4', 'n72ap-7E18.itbase')]
+    assert not stray, f'unexpected device assets (raw pages, the old NAND or iBoot?): {stray[:5]}'
+    catalog = json.loads((app / 'Contents/Resources/firmware-catalog.json').read_text())
+    assert [e['id'] for e in catalog['entries'] if e.get('bundled')] == ['n72ap-7E18']
+    print(f'PASS: {helper.name} signed (runtime, QEMU entitlements, minos {info}), closure in-bundle, loads {dylib.name} from Frameworks; built-in iPod packed')
 
 
 if len(sys.argv) > 1:

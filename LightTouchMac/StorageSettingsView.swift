@@ -14,6 +14,8 @@ final class StorageSettingsView: NSView {
         var ipsws: [(entry: String, url: URL, bytes: Int64)] = []
         var decrypted: Int64 = 0
         var logs: Int64 = 0
+        /// The IPA store's blobs (the device copies are clones of them).
+        var library: Int64 = 0
     }
 
     private let catalog: FirmwareCatalog
@@ -94,6 +96,7 @@ final class StorageSettingsView: NSView {
         }
         usage.decrypted = allocated(IPSWStore.cachesDirectory.appendingPathComponent("Decrypted", isDirectory: true))
         usage.logs = allocated(Bundled.logsDirectory)
+        usage.library = allocated(IPALibrary.directory)
         return usage
     }
 
@@ -153,6 +156,15 @@ final class StorageSettingsView: NSView {
              button("Clear Caches", enabled: usage.decrypted > 0 && !preparing) { [weak self] in self?.clearCaches() }],
             [NSTextField(labelWithString: "Logs"), detail(size(usage.logs)), NSView()],
         ]))
+
+        stack.addArrangedSubview(heading("Apps"))
+        let unused = IPALibrary.unused(devices: DeviceLibrary.shared.instances)
+        let unusedBytes = unused.values.reduce(0) { $0 + $1.size }
+        stack.addArrangedSubview(grid([
+            [NSTextField(labelWithString: "Library"),
+             detail("\(IPALibrary.index.count) IPAs · \(size(usage.library))" + (unused.isEmpty ? "" : " · \(size(unusedBytes)) on no device")),
+             button("Remove Unused", enabled: !unused.isEmpty) { [weak self] in self?.removeUnusedIPAs() }],
+        ]))
         layoutSubtreeIfNeeded()
         onResize?()
     }
@@ -164,6 +176,14 @@ final class StorageSettingsView: NSView {
             let sha1 = url.deletingPathExtension().lastPathComponent
             try IPSWStore.shared.remove(sha1)
             logEvent("storage: removed IPSW \(sha1)")
+        } catch { NSApp.presentError(error) }
+        reload()
+    }
+
+    private func removeUnusedIPAs() {
+        do {
+            try IPALibrary.removeUnused(devices: DeviceLibrary.shared.instances)
+            logEvent("storage: removed the IPAs no device has")
         } catch { NSApp.presentError(error) }
         reload()
     }

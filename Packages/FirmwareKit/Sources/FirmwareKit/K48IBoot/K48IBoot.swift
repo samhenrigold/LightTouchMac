@@ -184,16 +184,16 @@ public enum K48IBoot {
 
     // MARK: iBoot patching
 
-    /// Locate iBoot32Patcher: FIRMWAREKIT_IBOOT_PATCHER, then next to the helper (the bundle), then IBOOT32PATCHER,
-    /// then a bare name on PATH.
+    /// Locate iBoot32Patcher: the bundled copy first (next to firmwarekit itself, then next to the helper; both are
+    /// the app's Contents/MacOS, where package.sh ships it), then FIRMWAREKIT_IBOOT_PATCHER / IBOOT32PATCHER
+    /// (development runs), then a bare name on PATH.
     public static func patcher(helper: URL?) -> URL {
+        for dir in [Bundle.main.executableURL, helper].compactMap({ $0?.resolvingSymlinksInPath().deletingLastPathComponent() }) {
+            let u = dir.appendingPathComponent("iBoot32Patcher")
+            if FileManager.default.isExecutableFile(atPath: u.path) { return u }
+        }
         let env = ProcessInfo.processInfo.environment
         if let p = env["FIRMWAREKIT_IBOOT_PATCHER"] ?? env["IBOOT32PATCHER"] { return URL(fileURLWithPath: p) }
-        if let dir = helper?.resolvingSymlinksInPath().deletingLastPathComponent() {
-            for u in [dir.appendingPathComponent("iBoot32Patcher"), dir.appendingPathComponent("../Resources/iBoot32Patcher").standardizedFileURL] {
-                if FileManager.default.isExecutableFile(atPath: u.path) { return u }
-            }
-        }
         return URL(fileURLWithPath: "iBoot32Patcher")
     }
 

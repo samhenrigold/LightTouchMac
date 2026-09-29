@@ -134,8 +134,10 @@ enum CatalogClient {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    /// Revalidate each selection, then let URLSession stream the transfer to disk.
-    /// A failed or cancelled transfer owns no permanent scratch directory.
+    /// Revalidate each selection, then let URLSession stream the transfer to
+    /// disk — unless the library already holds the copy (its checksum), in
+    /// which case the file is a clone of that, with no transfer. A failed or
+    /// cancelled transfer owns no permanent scratch directory.
     static func download(_ app: CatalogApp, deviceOS: String = "3.1.3", arch: String = "armv6",
                          progress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> URL {
         let current = try await compatibleCopy(app.ipaID)
@@ -146,22 +148,26 @@ enum CatalogClient {
         if let reason = details.unavailableReason(minimumOS: current.minOS, deviceOS: deviceOS, arch: arch) {
             throw CatalogError.invalidCopy(reason)
         }
-        let delegate = CatalogDownloadProgress(report: progress)
-        let (temporary, response) = try await URLSession.shared.download(for: request(current.downloadURL),
-                                                                        delegate: delegate)
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
-            throw CatalogError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
-        }
-        try await details.verifyDownload(temporary)
-        try Task.checkCancellation()
         let dir = Bundled.workDirectory.appendingPathComponent("catalog-\(app.ipaID)-\(UUID().uuidString)",
                                                                isDirectory: true)
+        let safeName = String(app.name.map { "/:\0".contains($0) ? "-" : $0 }.prefix(120))
+        let file = dir.appendingPathComponent("\(safeName.isEmpty ? "App" : safeName).ipa")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         do {
-            let safeName = String(app.name.map { "/:\0".contains($0) ? "-" : $0 }.prefix(120))
-            let file = dir.appendingPathComponent("\(safeName.isEmpty ? "App" : safeName).ipa")
-            try FileManager.default.moveItem(at: temporary, to: file)
+            if let stored = details.md5.flatMap(IPALibrary.stored(md5:)) {
+                try IPALibrary.clone(stored, to: file)
+            } else {
+                let delegate = CatalogDownloadProgress(report: progress)
+                let (temporary, response) = try await URLSession.shared.download(for: request(current.downloadURL),
+                                                                                delegate: delegate)
+                defer { try? FileManager.default.removeItem(at: temporary) }
+                guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
+                    throw CatalogError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+                }
+                try await details.verifyDownload(temporary)
+                try Task.checkCancellation()
+                try FileManager.default.moveItem(at: temporary, to: file)
+            }
             progress(1)
             return file
         } catch {

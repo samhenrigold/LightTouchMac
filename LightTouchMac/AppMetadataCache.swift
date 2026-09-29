@@ -43,28 +43,12 @@ final class AppMetadataCache {
     }
 
     /// Icons and names are disposable metadata, not device storage. An isolated
-    /// run keeps even its cache under LTM_STATE_DIR. Move only the old cache when
-    /// the new location is absent; an existing current cache always wins.
+    /// run keeps even its cache under LTM_STATE_DIR.
     nonisolated static func prepareDirectory(state: URL, caches: URL, isolated: Bool) -> URL {
-        let fm = FileManager.default
         let root = isolated ? state.appendingPathComponent("Caches", isDirectory: true)
             : caches.appendingPathComponent("gold.samhenri.LightTouchMac", isDirectory: true)
         let directory = root.appendingPathComponent("AppMetadata", isDirectory: true)
-        let legacy = state.appendingPathComponent("AppCache", isDirectory: true)
-        if !fm.fileExists(atPath: directory.path) {
-            try? fm.createDirectory(at: root, withIntermediateDirectories: true)
-            if fm.fileExists(atPath: legacy.path) {
-                // These locations normally share a volume. An atomic move
-                // leaves no duplicate and preserves the original on failure.
-                // Do not fall back to copying/deleting across volumes.
-                guard rename(legacy.path, directory.path) == 0 else {
-                    logEvent("metadata: cache migration failed; retaining %@: %@",
-                             legacy.path, String(cString: strerror(errno)))
-                    return legacy
-                }
-            }
-        }
-        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
 
@@ -211,27 +195,26 @@ final class AppMetadataCache {
         return root + exe
     }
 
-    /// The SDK the .ipa was built against (e.g. "iphoneos6.1"), for the
-    /// too-new-to-launch check. Reuses the same Info.plist read as learn().
-    func sdkName(from ipa: URL) async -> String? {
+    /// The app's Info.plist, the same read learn() does; nil for an archive
+    /// with no single root app.
+    static func info(of ipa: URL) async -> [String: Any]? {
         let members = await Self.members(ipa)
         guard let root = Self.appRoot(members),
-              let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
-              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        else { return nil }
-        return info["DTSDKName"] as? String
+              let data = try? await Self.unzip(ipa, member: root + "Info.plist") else { return nil }
+        return try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+    }
+
+    /// The SDK the .ipa was built against (e.g. "iphoneos6.1"), for the
+    /// too-new-to-launch check.
+    func sdkName(from ipa: URL) async -> String? {
+        await Self.info(of: ipa)?["DTSDKName"] as? String
     }
 
     /// The lowest OS the app declares it will run on (Info.plist
     /// MinimumOSVersion). This — not the SDK it was built against — is what
     /// iPhone OS actually enforces at launch.
     func minimumOS(from ipa: URL) async -> String? {
-        let members = await Self.members(ipa)
-        guard let root = Self.appRoot(members),
-              let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
-              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        else { return nil }
-        return info["MinimumOSVersion"] as? String
+        await Self.info(of: ipa)?["MinimumOSVersion"] as? String
     }
 
     private func save() {

@@ -24,7 +24,11 @@ enum DeviceProfile { case iPodTouch2G }
 struct InstalledApp { let id: String }
 struct DeviceInstance { let id = UUID() }
 @MainActor final class AppMetadataCache { static let shared = AppMetadataCache(); func forget(_ id: String) {} }
-@MainActor enum IPALibrary { static func forget(_ id: String, device: DeviceInstance) {} }
+@MainActor final class DeviceLibrary { static let shared = DeviceLibrary(); var instances: [DeviceInstance] = [] }
+@MainActor enum IPALibrary {
+ static func forget(_ id: String, device: DeviceInstance) {}
+ static func retained(_ id: String, by devices: [DeviceInstance]) -> Bool { false }
+}
 @MainActor struct PreparedMedia {
  let directory: URL, title: String, destination: String
  static func prepare(_ source: URL, profile: DeviceProfile) async throws -> PreparedMedia {

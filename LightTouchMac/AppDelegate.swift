@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func toggleAutomaticRotation(_ sender: Any?) { emulator?.toggleAutoRotate() }
     @objc func toggleInternetAccess(_ sender: Any?) {
-        let current = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.options.network ?? true
+        let current = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.network ?? true
         UserDefaults.standard.set(!current, forKey: NetworkAccessPreference.key)
     }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
@@ -45,9 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.state = emulator?.autoRotateEnabled ?? true ? .on : .off
             return emulator != nil
         } else if item.action == #selector(toggleInternetAccess(_:)) {
-            let desired = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.options.network ?? true
+            let desired = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.network ?? true
             item.state = desired ? .on : .off
-            item.title = "Connect to the Internet" + (desired != emulator?.options.network ? " (After Reopening)" : "")
+            item.title = "Connect to the Internet" + (desired != emulator?.network ? " (After Reopening)" : "")
         }
         return true
     }
@@ -107,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSWindow.allowsAutomaticWindowTabbing = false
         NSApp.disableRelaunchOnLogin()
 
-        MainMenuBuilder.install(profile: LaunchOptions.deviceOverride ?? .iPodTouch2G)
+        MainMenuBuilder.install(profile: .iPodTouch2G)
         #if DEBUG
         SpringBoardIcons.selfCheck()
         #endif
@@ -131,11 +131,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         do { try NativeLogging.start() }
         catch { logEvent("logging: native output capture unavailable: \(error.localizedDescription)") }
-        // Missing device files, and the network question, belong to the
-        // device being started (DeviceSessionHost.start), not to the app.
-        let host = DeviceSessionHost(options: LaunchOptions.resolved())
-        host.adoptLegacyDevices()
+        // State from before the built-in iPod was a prepared device: erased once, or the app quits.
+        if let legacy = LegacyState.find(state: Bundled.stateDirectory, applicationSupport: ProcessInfo.processInfo.environment["LTM_STATE_DIR"] == nil
+                                            ? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0] : nil) {
+            let alert = NSAlert()
+            alert.messageText = LegacyState.message
+            alert.informativeText = LegacyState.detail
+            alert.addButton(withTitle: "Erase & Continue")
+            alert.addButton(withTitle: "Quit")
+            alert.buttons.first?.hasDestructiveAction = true
+            guard alert.runModal() == .alertFirstButtonReturn else { Self.requestTermination(); return }
+            do { try legacy.erase() } catch {
+                NSAlert(error: error).runModal()
+                Self.requestTermination()
+                return
+            }
+        }
+        // The network question belongs to the device being started (DeviceSessionHost.start), not to the app.
+        let host = DeviceSessionHost()
         Self.sweepStorage()
+        Self.adoptDevelopmentBase(catalog: host.catalog)
+        // The built-in device, unpacked on first launch (and again after a Delete, on Prepare).
+        if let entry = host.catalog.bundledEntry, FirmwareJobs.bundledBlob(entry) != nil,
+           host.library.instances(firmware: entry.id).isEmpty {
+            FirmwareJobs.shared.prepareBundled(entry)
+        }
         let profile = host.launchSelection?.profile ?? .iPodTouch2G
         MainMenuBuilder.install(profile: profile)
         let controller = MainWindowController(host: host, profile: profile)
@@ -145,6 +165,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         controller.selectLaunchDevice()
     }
 
+    /// Development runs: LTM_DEV_BASE names a `firmwarekit create` output directory to run as a
+    /// device; a record naming it (kept in place, never locked) is written once, for the entry its
+    /// lock names. The app has no other way to boot anything but a prepared base.
+    private static func adoptDevelopmentBase(catalog: FirmwareCatalog) {
+        guard let path = ProcessInfo.processInfo.environment["LTM_DEV_BASE"] else { return }
+        let base = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        let state = Bundled.stateDirectory
+        guard !DeviceInstance.all(state: state).contains(where: { DeviceInstance.url($0.base.path, state: state).standardizedFileURL == base }) else { return }
+        guard let data = try? Data(contentsOf: base.appendingPathComponent("device.lock.json")),
+              let lock = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = (lock["entry"] as? [String: Any])?["id"] as? String, let entry = catalog.entry(id: id) else {
+            return logEvent("LTM_DEV_BASE: \(path) has no device.lock.json naming a catalog entry")
+        }
+        do {
+            let instance = try PreparationJob.publish(staging: base, entry: entry, id: UUID(), state: state, keep: true)
+            DeviceLibrary.shared.reload()
+            logEvent("LTM_DEV_BASE: \(path) is device \(instance.id.uuidString) (\(entry.id))")
+        } catch { logEvent("LTM_DEV_BASE: \(error.localizedDescription)") }
+    }
+
     /// Launch, with the library's lock held: finish what a crash or an older
     /// build left. FirmwareJobs' own init sweeps Preparing/ and the IPSW stores.
     private static func sweepStorage() {
@@ -152,10 +192,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let records = DeviceInstance.all(state: state)
         _ = FirmwareJobs.shared
         DeviceStateStorage.sweepDeleting(state: state)
-        IPALibrary.migrateShared(state: state, devices: records)
+        IPALibrary.sweep(devices: records)
         for record in records { USBMux.secure(DeviceInstance.url(record.storage.usbmuxConf, state: state)) }
-        // Bases published by earlier builds become immutable too.
-        for record in records where record.base.kind == .prepared {
+        // Bases published by earlier builds become immutable too (a development base, outside State, is left alone).
+        for record in records where !record.base.path.hasPrefix("/") {
             DeviceStateStorage.lockBase(DeviceInstance.url(record.base.path, state: state))
         }
         // Logs of devices that no longer exist, and the single-device logs
@@ -199,10 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             alert.addButton(withTitle: "Quit Anyway")
             alert.addButton(withTitle: "Cancel")
             alert.buttons.first?.hasDestructiveAction = true
-            guard alert.runModal() == .alertFirstButtonReturn else {
-                emulators.forEach { $0.cancelFactoryReset() }   // this quit was the erase; call it off
-                return .terminateCancel
-            }
+            guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
             AppInstaller.cancelPendingWork()
             windowController?.cancelFileTransfer()
             // Falls through to the SAME shutdown as any other quit. It used to
