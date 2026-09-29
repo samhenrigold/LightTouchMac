@@ -30,7 +30,7 @@ final class AppMetadataCache {
     private let iconMemo = NSCache<NSString, NSImage>()
     
     private init() {
-        dir = Self.prepareDirectory(
+        dir = StorageLocations.appMetadataDirectory(
             state: Bundled.stateDirectory,
             caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0],
             isolated: ProcessInfo.processInfo.environment["LTM_STATE_DIR"] != nil)
@@ -40,24 +40,6 @@ final class AppMetadataCache {
         #if DEBUG
         Self.selfCheck()
         #endif
-    }
-
-    /// Icons and names are disposable metadata, not device storage. An isolated
-    /// run keeps even its cache under LTM_STATE_DIR.
-    nonisolated static func prepareDirectory(state: URL, caches: URL, isolated: Bool) -> URL {
-        let root = isolated ? state.appendingPathComponent("Caches", isDirectory: true)
-            : caches.appendingPathComponent("gold.samhenri.LightTouchMac", isDirectory: true)
-        let directory = root.appendingPathComponent("AppMetadata", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
-    }
-
-    /// macOS can remove disposable cache files while the app is running.
-    /// Recreate the parent for each write, then publish complete bytes together.
-    nonisolated static func writeCacheData(_ data: Data, to url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
-                                                withIntermediateDirectories: true)
-        try data.write(to: url, options: .atomic)
     }
 
     #if DEBUG
@@ -160,7 +142,7 @@ final class AppMetadataCache {
         var hasIcon = false
         if let member = Self.iconMember(members, root: root, info: info),
            let data = try? await Self.unzip(ipa, member: member) {
-            hasIcon = (try? Self.writeCacheData(data, to: iconURL(bundleID))) != nil
+            hasIcon = (try? StorageLocations.writeCacheData(data, to: iconURL(bundleID))) != nil
             // A reinstall may ship a new icon; drop any decoded copy of the old.
             iconMemo.removeObject(forKey: bundleID as NSString)
         }
@@ -213,7 +195,7 @@ final class AppMetadataCache {
 
     private func save() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
-        try? Self.writeCacheData(data, to: indexURL)
+        try? StorageLocations.writeCacheData(data, to: indexURL)
     }
     
     // MARK: - .ipa reading (Payload/<something>.app is the app bundle)

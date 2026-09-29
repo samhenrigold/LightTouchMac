@@ -9,24 +9,11 @@ import tempfile
 root = Path(__file__).resolve().parents[2]
 
 
-def section(file, start, end):
-    text = (root / "LightTouchMac" / file).read_text()
-    return text[text.index(start):text.index(end, text.index(start))]
-
-
-metadata = section("Library/AppMetadataCache.swift", "    nonisolated static func prepareDirectory", "    #if DEBUG")
-metadata_save = section("Library/AppMetadataCache.swift", "    private func save()", "    // MARK: - .ipa reading")
-diagnostics = (root / "LightTouchMac/Features/DiagnosticsExport.swift").read_text()
 
 source = r'''
 import Foundation
 import Darwin
 nonisolated func logEvent(_ format: String, _ arguments: CVarArg...) {}
-struct Metadata {
-    var entries: [String: String] = [:]
-    let dir: URL
-    var indexURL: URL { dir.appendingPathComponent("index.json") }
-''' + metadata + metadata_save.replace("private func", "func") + "}\n" + diagnostics + r'''
 
 @main struct Check {
     static func main() async throws {
@@ -39,28 +26,28 @@ struct Metadata {
         let state = root.appendingPathComponent("state", isDirectory: true)
         let caches = root.appendingPathComponent("system caches", isDirectory: true)
         try fm.createDirectory(at: caches, withIntermediateDirectories: true)
-        let cache = Metadata.prepareDirectory(state: state, caches: caches, isolated: true)
+        let cache = StorageLocations.appMetadataDirectory(state: state, caches: caches, isolated: true)
         precondition(cache == state.appendingPathComponent("Caches/AppMetadata", isDirectory: true) && exists(cache))
         precondition(try children(caches).isEmpty, "isolated run wrote global cache")
         let normal = root.appendingPathComponent("normal state", isDirectory: true)
-        let normalCache = Metadata.prepareDirectory(state: normal, caches: caches, isolated: false)
+        let normalCache = StorageLocations.appMetadataDirectory(state: normal, caches: caches, isolated: false)
         precondition(normalCache == caches.appendingPathComponent("gold.samhenri.LightTouchMac/AppMetadata", isDirectory: true) && exists(normalCache))
-        // A running cache must recover after its directory is purged. Exercise
-        // production save() as well as the icon writer, without reinitializing.
-        var running = Metadata(dir: normalCache)
-        running.entries["com.example.app"] = "original"
-        running.save()
+        // A running cache must recover after its directory is purged: the index
+        // and the icon writer (AppMetadataCache.save and learn) both publish
+        // through writeCacheData, without reinitializing.
+        let metadataIndex = normalCache.appendingPathComponent("index.json")
+        var entries = ["com.example.app": "original"]
+        try StorageLocations.writeCacheData(JSONEncoder().encode(entries), to: metadataIndex)
         try fm.removeItem(at: normalCache)
-        running.entries["com.example.new"] = "after purge"
-        running.save()
-        let recovered = try JSONDecoder().decode([String: String].self,
-            from: Data(contentsOf: running.indexURL))
-        precondition(recovered == running.entries)
+        entries["com.example.new"] = "after purge"
+        try StorageLocations.writeCacheData(JSONEncoder().encode(entries), to: metadataIndex)
+        let recovered = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: metadataIndex))
+        precondition(recovered == entries)
         try fm.removeItem(at: normalCache)
         let icon = normalCache.appendingPathComponent("com.example.new.png")
-        try Metadata.writeCacheData(Data("rebuilt icon".utf8), to: icon)
+        try StorageLocations.writeCacheData(Data("rebuilt icon".utf8), to: icon)
         precondition(try text(icon) == "rebuilt icon")
-        try Metadata.writeCacheData(Data("replacement icon".utf8), to: icon)
+        try StorageLocations.writeCacheData(Data("replacement icon".utf8), to: icon)
         precondition(try text(icon) == "replacement icon")
         precondition(try children(normalCache).map(\.lastPathComponent) == ["com.example.new.png"])
         // The built-in device's blob (scripts/pack-base.py's format): unpacked as a stream, modes
@@ -169,7 +156,8 @@ exit 1
     executable = work / "check"
     subprocess.run(["xcrun", "swiftc", "-swift-version", "6", "-default-isolation", "MainActor",
                     "-parse-as-library", "-module-cache-path", str(work / "modules"),
-                    str(root / "LightTouchMac/Library/BundledBase.swift"), str(check), "-o", str(executable)], check=True)
+                    str(root / "LightTouchMac/Library/BundledBase.swift"), str(root / "LightTouchMac/Library/StorageLocations.swift"),
+                    str(root / "LightTouchMac/Features/DiagnosticsExport.swift"), str(check), "-o", str(executable)], check=True)
     subprocess.run([str(executable), str(work), str(blob)], check=True, timeout=45,
                    env=dict(os.environ, LTM_TEST_ARCHIVER=str(archiver)))
     for name, info in [("success.zip", "real ditto archive"), ("concurrent.zip", "concurrent real archive")]:
