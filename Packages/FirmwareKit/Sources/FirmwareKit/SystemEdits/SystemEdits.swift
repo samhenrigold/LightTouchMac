@@ -161,6 +161,13 @@ public enum SystemEdits {
         var rootOwned: [String] = []
         try VolumeMount.withMounted(system, at: work.appendingPathComponent("mnt-system")) { m in
             let at = { (rel: String) in m.appendingPathComponent(rel) }
+            // every baked helper proven to load on this firmware (FitCheck.loads), read before any edit
+            let fw = FitCheck.Firmware(root: m, arch: "armv7")
+            _ = fw.precedent
+            for t in tools {
+                let host = t.name == Helpers.tools[3].name ? try stockProgram(m, msmJob, label: "com.apple.mobile.storage_mounter") : nil
+                try fit.check(FitCheck.loads(t.name, Data(contentsOf: try helper(t.name)), on: fw, host: host), required: true)
+            }
             if let kernelcache {   // real-iBoot fsboot: the raw IPSW img3 kernelcache in the system volume
                 try mkdirs(at(kernelcachePath).deletingLastPathComponent())
                 try put(kernelcache, at(kernelcachePath), mode: 0o644)
@@ -301,6 +308,15 @@ public enum SystemEdits {
             service["ProgramArguments"] = ["/" + appsyncLauncherPath] + arguments
         }
         return (line, "Services.plist:com.apple.mobile.installation_proxy")
+    }
+
+    /// The program of the stock job `job` (volume-relative), checked by label.
+    static func stockProgram(_ m: URL, _ job: String, label: String) throws -> String {
+        guard let d = NSDictionary(contentsOf: m.appendingPathComponent(job)), d["Label"] as? String == label,
+              let program = (d["ProgramArguments"] as? [String])?.first ?? d["Program"] as? String else {
+            throw FirmwareError(.unsupported, "\(job): not \(label)'s job")
+        }
+        return program
     }
 
     /// SpringBoard's launchd job, checked by label: `edit` gets its EnvironmentVariables and the job.

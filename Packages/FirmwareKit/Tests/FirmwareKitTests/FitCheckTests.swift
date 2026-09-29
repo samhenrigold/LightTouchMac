@@ -46,6 +46,24 @@ enum FitFixture {
         try SystemEdits.rewritePlist(v.appendingPathComponent(job)) { SystemEdits.dyldInsert($0, dylib) }
     }
 
+    /// A copy of the flat guest-tools directory (FIRMWAREKIT_GUEST_TOOLS) with `name` replaced by `bytes`.
+    static func helpers(in dir: URL, replacing name: String, with bytes: (Data) -> Data) throws -> URL? {
+        guard let src = K48Oracle.guestTools else { return nil }
+        let h = dir.appendingPathComponent("helpers")
+        try FileManager.default.copyItem(at: src, to: h)
+        let u = h.appendingPathComponent(name), d = bytes(try Data(contentsOf: u))
+        try FileManager.default.removeItem(at: u)
+        try SystemEdits.put(d, u, mode: 0o755)
+        return h
+    }
+
+    /// `bin` with the string-table symbol `from` renamed to `to` (the same length): an import no firmware exports.
+    static func renaming(_ bin: Data, _ from: String, _ to: String) -> Data {
+        var b = [UInt8](bin)
+        if let at = b.firstRange(of: Array("\0\(from)\0".utf8)) { b.replaceSubrange(at, with: Array("\0\(to)\0".utf8)) }
+        return Data(b)
+    }
+
     /// The itpack's entry `name` (armv6 or armv7 .itpack from the guest-package build or FIRMWAREKIT_GUEST_TOOLS).
     static func payload(_ arch: String, _ name: String) throws -> Data? {
         let itpack = Oracle.guestPackages.appendingPathComponent(arch + ".itpack")
@@ -85,10 +103,9 @@ enum FitFixture {
                 let fw = FitCheck.Firmware(root: v, arch: "armv7")
                 #expect(FitCheck.loads("it_agent", agent, on: fw).fits, "\(id)")
                 // the string table's _write -> _wrizz: same length, so the table stays valid; no image exports it
-                var broken = [UInt8](agent)
-                let at = try #require(broken.firstRange(of: Array("\0_write\0".utf8)))
-                broken.replaceSubrange(at, with: Array("\0_wrizz\0".utf8))
-                let f = FitCheck.loads("it_agent", Data(broken), on: fw)
+                let broken = FitFixture.renaming(agent, "_write", "_wrizz")
+                #expect(broken != agent)
+                let f = FitCheck.loads("it_agent", broken, on: fw)
                 #expect(!f.fits && f.proof.contains("_wrizz"), "\(id): \(f.proof)")
                 let alone = FitCheck.loads("it_msmquiet", quiet, on: fw)
                 #expect(!alone.fits && alone.proof.contains("_CFUserNotificationCreate"), "\(id): \(alone.proof)")
@@ -119,6 +136,26 @@ enum FitFixture {
             let good = FitCheck.Log()
             _ = try GuestPackage.seed(volume: v, itpack: itpack, gles: true, fit: good)
             #expect(good.fits.first.map { $0.fits && $0.piece.hasPrefix("it_boot") } == true, "\(good.fits)")
+        }
+    }
+
+    /// The K48 bake proves every baked helper before it writes one: a helpers directory whose it_ethlink imports a
+    /// name 3.2.2 does not export fails SystemEdits.buildK48 on 7B500 with that helper's misfit recorded.
+    @Test func k48BakeChecksItsHelpers() throws {
+        let fw = Oracle.firmware("k48ap-7B500")
+        guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { return }
+        try Oracle.withTemp { dir in
+            guard let helpers = try FitFixture.helpers(in: dir, replacing: "it_ethlink", with: { FitFixture.renaming($0, "_dlopen", "_dlopex") }) else { return }
+            let recipe = try #require(try Oracle.entry(fw.entryID).recipe), log = FitCheck.Log()
+            let work = dir.appendingPathComponent("work")
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            #expect(throws: FirmwareError.self) {
+                try SystemEdits.buildK48(rootfs: dmg, work: work, systemBytes: 1_500_000_000, dataBytes: 1 << 30, options: .init(recipe: recipe),
+                                         helpers: helpers, fit: log)
+            }
+            let f = log.fits.first { $0.piece == "it_ethlink" }
+            #expect(f.map { !$0.fits && $0.proof.contains("_dlopex") } == true, "\(log.fits)")
+            #expect(log.fits.contains { $0.piece == "it_pbd" && $0.fits })
         }
     }
 }
