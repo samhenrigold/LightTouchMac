@@ -201,7 +201,12 @@ final class DeviceHost: @unchecked Sendable {
         }
         guard proceed else { return }
         helperLog("halt: \(reason)")
-        guard booted, !hasExited else { helperLog("halt: no VM running"); exit(0) }
+        guard booted else { helperLog("halt: no VM running"); exit(0) }
+        // QEMU's own SIGTERM handler (os_setup_signal_handlers overrides our SIG_IGN) may
+        // have returned its main loop already: onExit is queued and reports qemuExited
+        // before exiting. An exit here would lose that event (the app then can't tell a
+        // stop from a crash).
+        if hasExited { helperLog("halt: QEMU already returned"); return }
         Thread.detachNewThread { [self] in
             let start = Date()
             // Still in qemu_init: nothing can be scheduled on the VM yet, and nothing is written.

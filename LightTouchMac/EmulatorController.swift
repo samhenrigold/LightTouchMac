@@ -20,7 +20,11 @@ final class EmulatorController {
     private var started = false
     private var serialCapture: SerialLogCapture?
     private var haltTask: Task<Void, Never>?
-    private(set) var isErasing = false { didSet { onStatusChange?() } }
+    private(set) var isErasing = false { didSet { trackStartup(was: oldValue || state == .booting || preparingDevice); onStatusChange?() } }
+    /// When the current startup (erase, boot, readiness) began: the toast's counter, per device, not per window.
+    private(set) var startupBegan = Date()
+    var isStartingUp: Bool { isErasing || state == .booting || preparingDevice }
+    private func trackStartup(was: Bool) { if isStartingUp, !was { startupBegan = Date() } }
     private var haltCompletions: [(Bool) -> Void] = []
     /// Stop asked the helper to halt: its exit is Stopped, not a crash.
     private var halting = false
@@ -86,7 +90,7 @@ final class EmulatorController {
     private var readinessTask: Task<Void, Never>?
     /// From the boot until SpringBoard answers over lockdown (startReadinessWatch); the status line says where it is.
     private(set) var preparingDevice = false {
-        didSet { onStatusChange?() }
+        didSet { trackStartup(was: isErasing || state == .booting || oldValue); onStatusChange?() }
     }
     private(set) var preparationStatus = "Starting iOS…" { didSet { onStatusChange?() } }
     private var readinessFailure: String?
@@ -100,7 +104,7 @@ final class EmulatorController {
         case dead(exitCode: Int32?)
     }
     private(set) var state: VMState = .notStarted {
-        didSet { if oldValue != state { onStatusChange?() } }
+        didSet { trackStartup(was: isErasing || oldValue == .booting || preparingDevice); if oldValue != state { onStatusChange?() } }
     }
 
     /// Fired on any health-relevant change — a state transition, usbmuxd dying,
@@ -111,7 +115,11 @@ final class EmulatorController {
     /// Set by the inspector's poll: nil = never checked, true/false = last read.
     var deviceReachable: Bool? {
         didSet {
-            if deviceReachable == true, connectionIssue?.persistent != true { connectionIssue = nil }
+            // A service answered: nothing blocks commands any more, not even a stale activation issue.
+            if deviceReachable == true, let issue = connectionIssue {
+                if issue.persistent { logEvent("device connection: services answer; clearing \"\(issue.summary)\""); resolveDeviceNotice(for: .activation) }
+                connectionIssue = nil
+            }
             if deviceReachable == true, reachableSince == nil {
                 reachableSince = Date()
                 startFileWatch()   // iOS is up: every file the helper depends on exists now
@@ -374,7 +382,9 @@ final class EmulatorController {
     private func startFileWatch() {
         guard fileWatch == nil, !filesMeddled else { return }
         let paths = instance.paths
-        fileWatch = DeviceFileWatch(directories: [paths.directory, paths.overlay], base: paths.base) { [weak self] path in
+        // Guest-owned files only; the app's own writes under Devices/<uuid> must not fire this.
+        let nor = [paths.writableNOR].compactMap { $0 }.filter { !$0.path.hasPrefix(paths.overlay.path + "/") }
+        fileWatch = DeviceFileWatch(directories: [paths.overlay], files: nor, base: paths.base) { [weak self] path in
             Task { @MainActor in self?.filesChanged(path) }
         }
     }
@@ -1323,12 +1333,12 @@ final class EmulatorController {
                             self.onStatusChange?()
                         }
                         do {
-                            try await self.tools().configureWebProxy(enabled: self.webProxy.mode != .off)
+                            let trust = try await self.tools().configureWebProxy(enabled: self.webProxy.mode != .off)
                             try Task.checkCancellation()
                             guard generation == self.bootGeneration else { return }
                             if revision == self.proxyRevision {
                                 appliedProxyRevision = revision
-                                self.webProxyStatus = .ready
+                                self.webProxyStatus = trust
                                 self.onStatusChange?()
                             }
                         } catch {
@@ -1579,27 +1589,55 @@ final class EmulatorController {
         return await DeviceServices(clientSocket: socket).activationState()
     }
 
-    // MARK: - Activation (verified once per boot; activating is the preparer's job)
+    /// installation_proxy answers right now (a lockdown that serves is activated enough).
+    func installProxyReady() async -> Bool {
+        guard let socket = usbmux.session?.clientSocket else { return false }
+        return await DeviceServices(clientSocket: socket).installProxyReady()
+    }
+
+    // MARK: - Activation (verified per boot; activating is the preparer's job)
 
     private var activationCheckedGeneration: Int?
+    private var activationTask: Task<Void, Never>?
+    /// Between the three answers a verdict needs (the check shortens it).
+    static var activationRetryDelay: Duration = .seconds(10)
 
-    /// On the first lockdown answer of a boot, ask ActivationState once. Anything
-    /// but Activated is a persistent issue: commands stay blocked, nothing
-    /// retries, the notice offers Erase. An activated guest clears an old notice.
+    /// On the first lockdown answer of a boot, ask ActivationState: up to three
+    /// times over 20 s, so a failed or transient answer never decides. Anything
+    /// but an activated state is a persistent issue when lockdown's services
+    /// refuse too: commands stay blocked, the notice offers Erase. Services
+    /// that answer win over the string (the built-in iPod reports Unactivated
+    /// and works), and a service answering later clears a standing issue
+    /// (deviceReachable's didSet).
     private func checkActivationIfNeeded() {
-        guard deviceReachable == true, activationCheckedGeneration != bootGeneration else { return }
+        guard deviceReachable == true, activationTask == nil, activationCheckedGeneration != bootGeneration else { return }
         activationCheckedGeneration = bootGeneration
         let generation = bootGeneration
-        Task { [weak self] in
-            guard let self else { return }
-            let state = await activationState()
-            guard generation == bootGeneration else { return }
+        activationTask = Task { [weak self] in
+            defer { self?.activationTask = nil }
+            var state: String?
+            for attempt in 0..<3 {
+                if attempt > 0 { try? await Task.sleep(for: Self.activationRetryDelay) }
+                guard let self, generation == self.bootGeneration else { return }
+                if let answer = await self.activationState() {
+                    state = answer
+                    if DeviceConnectionIssue.activation(state: answer, profile: self.profile) == nil { break }
+                }
+            }
+            guard let self, generation == bootGeneration else { return }
             guard let state else { activationCheckedGeneration = nil; return }   // couldn't ask: again on the next answer
             logEvent("activation: lockdown reports \(state)")
             guard let issue = DeviceConnectionIssue.activation(state: state, profile: profile) else {
                 resolveDeviceNotice(for: .activation)
                 return
             }
+            if await installProxyReady() {
+                guard generation == bootGeneration else { return }
+                logEvent("activation: services answer; not blocking on \(state)")
+                resolveDeviceNotice(for: .activation)
+                return
+            }
+            guard generation == bootGeneration else { return }
             connectionIssue = issue
             deviceReachable = false
             readinessTask?.cancel()

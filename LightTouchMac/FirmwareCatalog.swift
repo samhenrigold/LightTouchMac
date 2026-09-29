@@ -90,7 +90,23 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         guard catalog.format == 1, Set(catalog.entries.map(\.id)).count == catalog.entries.count else {
             throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: url.path])
         }
-        return catalog
+        return catalog.sortedByVersion()
+    }
+
+    /// Boards in the order the file introduces them; each board's entries by version ascending
+    /// (2.1.1, 3.1.3, 4.2.1), build as the tiebreak. Every listing (sidebar, settings) shows this order.
+    func sortedByVersion() -> FirmwareCatalog {
+        var boards: [String] = []
+        for entry in entries where !boards.contains(entry.board) { boards.append(entry.board) }
+        func key(_ e: Entry) -> ([Int], String) { (e.version.split(separator: ".").map { Int($0) ?? 0 }, e.build) }
+        var sorted = self
+        sorted.entries = entries.sorted {
+            let (a, b) = (boards.firstIndex(of: $0.board)!, boards.firstIndex(of: $1.board)!)
+            if a != b { return a < b }
+            let (ka, kb) = (key($0), key($1))
+            return ka.0 != kb.0 ? ka.0.lexicographicallyPrecedes(kb.0) : ka.1 < kb.1
+        }
+        return sorted
     }
 
     /// The catalog this build ships. A build without it is broken, not empty.

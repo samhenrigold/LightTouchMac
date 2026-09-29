@@ -100,7 +100,7 @@ device dir (`nand/` or `base/`, plus `overlay/`).
 - **iPad:** a YaFTL walk over base + overlay (the `.dirty` bitmap picks the source). For each LPN, the highest
   (USN, vpn) wins; MBR partitions 1 and 2 go to `system` and `data`, with only mapped pages written.
 
-**U1 retired, for these cases.** `tests/volume-rebuild-oracle.py` boots a disposable overlay; then
+**U1 retired, for these cases.** `tests/sessions/volume-rebuild-oracle.py` boots a disposable overlay; then
 `FK_U1=OUT swift test --filter guestOracle` compares the rebuild with what the guest reported.
 
 | Device | Guest writes | Stop | Result |

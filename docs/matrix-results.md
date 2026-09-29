@@ -1,7 +1,7 @@
 # Matrix results
 
 Produced by `tests/matrix.py` (docs/matrix.md has the builds). Prepare = `firmwarekit create` as the app runs it; lit,
-lockdown, AFC, install, package, persist and shutdown come from tests/session-driver `--single` with a second boot on
+lockdown, AFC, install, package, persist and shutdown come from tests/drivers/session-driver `--single` with a second boot on
 the same overlay. Screenshots and logs per entry are outside the repo (`screenshots` in matrix-results.json).
 GL counters are skipped until qemu-ios gl-coverage merges. Last write 2026-09-29 02:43 UTC.
 

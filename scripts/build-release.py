@@ -14,23 +14,24 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'scripts'
+sys.path.insert(0, str(SCRIPTS))
+import sources as pins  # noqa: E402  (build-support/sources.json: the pinned qemu-ios and usbmuxd)
+
+# The guest tools come from qemu-ios contrib/export-guest-artifacts.sh (build-guest-tools.sh calls it) with a
+# manifest naming every staged file; these are the names the app and firmwarekit need to find in it, whatever
+# else the export stages. The catalog's gli_dispatch tables join the iPad set (validate_guest).
 GUEST_PAYLOADS = frozenset(('MBXGLEngine', 'sbdlicon', 'ithalt', 'it_agent', 'it_typein.dylib',
                           'com.qemu.it-agent.plist', 'itstatus', 'itmedia', 'itphoto',
                           'itproxy', 'ittrust', 'itorient'))
-GUEST_COMPONENTS = ('armv6-toolchain', 'it-gles', 'it-instprogress', 'it-halt', 'it-agent',
-                    'it-status', 'it-media', 'it-proxy', 'it-orientation')
-# firmwarekit's --guest-tools set (SystemEdits.Helpers + it_keybag), from checkouts with the iPad helpers.
+# firmwarekit's --guest-tools set (SystemEdits.Helpers + it_keybag) and the n72 recipe's inputs (N72Recipe).
 IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquiet.dylib', 'it_seal', 'it_keybag',
                                  'libappsync.dylib', 'com.qemu.it-pbd.plist', 'com.qemu.it-ethlink.plist',
                                  'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'GLEngine-7B500',
-                                 'gli-dispatch-7B500.tsv', 'GLEngine-8C148', 'gli-dispatch-8C148.tsv',
-                                 'GLRendererFloatQEMU', 'armv6.itpack', 'armv7.itpack',
-                                 # the n72 recipe's (N72Recipe)
+                                 'GLEngine-8C148', 'GLRendererFloatQEMU', 'armv6.itpack', 'armv7.itpack',
                                  'MBXGLEngine', 'sblaunch', 'sbdlicon', 'it_agent', 'it_typein.dylib',
-                                 'com.qemu.it-agent.plist', 'gli-dispatch-7E18.tsv', 'MBXGLEngine-7E18',
-                                 'MBXGLEngine-8C148', 'it_keybag-armv6', 'it_prefs-armv6'))
-IPAD_GUEST_COMPONENTS = ('ipad1-guest', 'appsync', 'ipad1-gles', 'it-pasteboard', 'it-ethlink', 'it-seal', 'it-prefs',
-                         'it-keybag', 'it-heading', 'it-cctest', 'it-gltest', 'it-msmquiet', 'it-boot', 'guest-package')
+                                 'com.qemu.it-agent.plist', 'MBXGLEngine-7E18', 'MBXGLEngine-8C148',
+                                 'it_keybag-armv6', 'it_prefs-armv6'))
+CATALOG = ROOT / 'LightTouchMac/Resources/firmware-catalog.json'
 SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS_Store'}
 NATIVE_RECIPES = frozenset(('scripts/build-package-native.sh', 'scripts/build-static-deps.sh',
                            'scripts/dependency-sources.py', 'build-support/dependencies.json',
@@ -43,10 +44,10 @@ STAGES = ('native', 'qemu', 'dylib', 'guest', 'app', 'package', 'notarize', 'sta
 # built guest tools, packed by scripts/pack-base.py (Resources/device/<entry>.itbase) during package.
 BUNDLED_ENTRY = 'n72ap-7E18'
 BUNDLED_IPSW = Path.home() / 'Developer/ipod2g-re/OldSDK/iPod2,1_3.1.3_7E18_Restore.ipsw'
-# The emulator and usbmuxd ship together. The staged native stage builds usbmuxd from this commit of
-# --usbmuxd-source (branch qemu-zlp: the host sends the real ZLP after a max-packet-multiple write, and
-# wMaxPacketSize is 512), through a temporary worktree; qemu-ios ipad1 abb1a1b817 and later invent no ZLPs.
-USBMUXD_COMMIT = '41631a7a604f0f99b52fe670689f8c9a1bad0c50'
+# The emulator and usbmuxd ship together (both pinned in build-support/sources.json). The staged native stage
+# builds usbmuxd from the pinned commit of --usbmuxd-source through a temporary worktree, whatever that
+# checkout's HEAD is; the one-step build takes the checkout's working tree.
+USBMUXD_COMMIT = pins.commit('usbmuxd')
 # iBoot32Patcher (firmwarekit's k48 real-iBoot recipe runs it) is pinned by commit, archive sha256 and license
 # in build-support/dependencies.json ("tools" group; LukeZGD's fork, GPL-3.0). Both native paths build it with
 # scripts/build-iboot32patcher.sh into build/iBoot32Patcher, and package.sh ships it in Contents/MacOS.
@@ -147,51 +148,44 @@ def verify_hashes(root, expected, description):
             raise ValueError(f'{description} differs from its build record: {path}')
 
 
-def has_ipad_guest(qemu):
-    return (qemu / 'contrib/ipad1-guest/build.sh').is_file()
+def manifest_hashes(entries, description):
+    """The export manifest's {path: sha256} maps, checked."""
+    return hashes([{'path': name, 'sha256': checksum} for name, checksum in (entries or {}).items()], description)
 
 
-def guest_source_hashes(qemu):
-    selected = {}
-    ipad = IPAD_GUEST_COMPONENTS if has_ipad_guest(qemu) else ()
-    for component in (*GUEST_COMPONENTS, *ipad):
-        directory = qemu / 'contrib' / component
-        require(directory, f'guest source component {component}', directory=True)
-        for path in directory.iterdir():
-            if (path.is_file() and path.name not in ('gles_stubs.h', 'gli_fwd.h')
-                    and path.suffix in ('.c', '.h', '.sh', '.py', '.xml', '.plist', '.entitlements', '.txt')):
-                selected[str(path.relative_to(qemu))] = digest(path)
-    if ipad:
-        for path in [*(qemu / 'docs/ipad1').glob('gli-dispatch-*.tsv'), *(qemu / 'docs/ipod').glob('gli-dispatch-*.tsv')]:
-            selected[str(path.relative_to(qemu))] = digest(path)
-    return selected
+def catalog_tables():
+    """The gli-dispatch tables the catalog's recipes name: they must be in the iPad guest set."""
+    catalog = json.loads(CATALOG.read_text()) if CATALOG.is_file() else {'entries': []}
+    return {e['recipe']['gli_dispatch'] for e in catalog['entries'] if e.get('recipe', {}).get('gli_dispatch')}
 
 
 def validate_guest(args, guest):
-    record = read_record(guest.parent / 'guest-tools.json', 'schema')
-    if record.get('builder', {}).get('sha256') != digest(SCRIPTS / 'build-guest-tools.sh'):
-        raise ValueError('Guest build recipe has changed; rebuild guest tools')
-    if Path(record.get('qemu_source', '')).resolve() != args.qemu_source:
+    """The export's manifest is the record: every staged file at its hash, the required names present, and the
+    sources it read (commit and input hashes) unchanged in the checkout."""
+    manifest = read_record(guest.parent / 'manifest.json', 'schema')
+    source = manifest.get('source', {})
+    if Path(source.get('path', '')).resolve() != args.qemu_source:
         raise ValueError('Guest tools were built from a different QEMU checkout')
-    expected = hashes(record.get('outputs'), 'guest payload')
-    if set(expected) != GUEST_PAYLOADS:
-        raise ValueError('Guest build record must declare exactly the 12 required payloads')
-    require(guest, 'guest tools directory', directory=True)
-    if {path.name for path in guest.iterdir()} != GUEST_PAYLOADS:
-        raise ValueError('Guest tools directory must contain exactly the 12 required payloads')
-    verify_hashes(guest, expected, 'Guest payload')
-    ipad = guest.parent / 'ipad-guest-tools'
-    if has_ipad_guest(args.qemu_source):
-        expected = hashes(record.get('ipad_outputs'), 'iPad guest payload')
-        require(ipad, 'iPad guest tools directory', directory=True)
-        if set(expected) != IPAD_GUEST_PAYLOADS or {path.name for path in ipad.iterdir()} != IPAD_GUEST_PAYLOADS:
-            raise ValueError(f'iPad guest tools must be exactly: {", ".join(sorted(IPAD_GUEST_PAYLOADS))}')
-        verify_hashes(ipad, expected, 'iPad guest payload')
-    elif ipad.exists():
-        raise ValueError('iPad guest tools built from a checkout without contrib/ipad1-guest')
-    if hashes(record.get('source_inputs'), 'guest source') != guest_source_hashes(args.qemu_source):
-        raise ValueError('Guest source inputs have changed; rebuild guest tools')
-    return record
+    files = manifest_hashes(manifest.get('files'), 'guest artifact')
+    for directory, required, description in ((guest, GUEST_PAYLOADS, 'Guest payload'),
+                                             (guest.parent / 'ipad-guest-tools', IPAD_GUEST_PAYLOADS | catalog_tables(),
+                                              'iPad guest payload')):
+        staged = {Path(name).name: checksum for name, checksum in files.items()
+                  if Path(name).parent == Path(directory.name)}
+        missing = required - set(staged)
+        if missing:
+            raise ValueError(f'{description}s missing from the export manifest: {", ".join(sorted(missing))}')
+        require(directory, f'{description.lower()} directory', directory=True)
+        if {path.name for path in directory.iterdir()} != set(staged):
+            raise ValueError(f'{description} directory differs from the export manifest: {directory}')
+        verify_hashes(directory, staged, description)
+    if source.get('commit') != pins.head(args.qemu_source)[0]:
+        raise ValueError(f'Guest tools were built from qemu-ios {source.get("commit")}, not the checkout\'s HEAD; rebuild guest tools')
+    for name, checksum in manifest_hashes(manifest.get('inputs'), 'guest source').items():
+        path = args.qemu_source / name
+        if not path.is_file() or digest(path) != checksum:
+            raise ValueError(f'Guest source inputs have changed ({name}); rebuild guest tools')
+    return manifest
 
 
 def tracked_usbmuxd(source):
@@ -280,7 +274,7 @@ def validate_output(args):
 
 def copy_provenance(output, native_record, guest_record):
     copies = {}
-    for name, source in (('native-build.json', native_record), ('guest-tools.json', guest_record)):
+    for name, source in (('native-build.json', native_record), ('guest-manifest.json', guest_record)):
         destination = output / name
         shutil.copyfile(source, destination)
         copies[name] = digest(destination)
@@ -306,8 +300,12 @@ def require(path, description, directory=False):
 def parse(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, type=Path, help='New output directory; existing directories are never overwritten')
-    parser.add_argument('--qemu-source', '--qemu-ios', type=Path, default=Path(os.environ.get('QEMU_IOS_DIR', ROOT.parent / 'qemu-ios')))
-    parser.add_argument('--usbmuxd-source', type=Path, default=Path(os.environ.get('USBMUXD_SOURCE_DIR', ROOT.parent / 'usbmuxd-qemu/usbmuxd')))
+    parser.add_argument('--qemu-source', '--qemu-ios', type=Path, default=pins.path('qemu-ios'),
+                        help='The qemu-ios checkout (default: the pin, build-support/sources.json; QEMU_IOS_DIR overrides)')
+    parser.add_argument('--usbmuxd-source', type=Path, default=pins.path('usbmuxd'),
+                        help='The usbmuxd fork checkout (default: the pin; USBMUXD_SOURCE_DIR overrides)')
+    parser.add_argument('--allow-unpinned', action='store_true',
+                        help='Sign a build whose qemu-ios (or, one-step, usbmuxd) checkout is not at the pinned commit')
     parser.add_argument('--assets', type=Path, default=Path(os.environ.get('LTM_ASSETS', ROOT.parent / 'qemu-ios-files')))
     parser.add_argument('--bundled-ipsw', type=Path, default=BUNDLED_IPSW,
                         help=f'The {BUNDLED_ENTRY} IPSW the built firmwarekit prepares as the built-in iPod')
@@ -350,9 +348,25 @@ def parse(argv=None):
     return args
 
 
+def pin_status(args):
+    """Pinned vs actual commit of each source checkout (build-support/sources.json). A Developer ID build is a
+    release: it must come from the pins (the staged native stage builds usbmuxd from its pin regardless, so
+    only qemu-ios is checked there) unless --allow-unpinned. An ad-hoc build only records the difference."""
+    status = pins.status({'qemu-ios': args.qemu_source, 'usbmuxd': args.usbmuxd_source})
+    checked = ('qemu-ios',) if args.stage else ('qemu-ios', 'usbmuxd')
+    off = [f'{name} pinned {status[name]["pinned"][:10]}, {status[name]["path"]} at '
+           f'{(status[name]["actual"] or "no git")[:10]}{" (dirty)" if status[name]["dirty"] else ""}'
+           for name in checked if not status[name]['matches']]
+    if off and args.sign_id != '-' and not args.allow_unpinned:
+        raise ValueError('Not built from the pin (build-support/sources.json): ' + '; '.join(off)
+                         + '. Check out the pinned commits, bump the pin, or pass --allow-unpinned')
+    return status
+
+
 def validate(args):
     require(args.qemu_source / 'configure', 'QEMU checkout')
     require(args.usbmuxd_source / 'configure.ac', 'usbmuxd source checkout')
+    pin_status(args)
     require(args.assets / 'bootrom_240_4', 'bundled firmware input')
     require(args.bundled_ipsw, f'{BUNDLED_ENTRY} IPSW for the built-in iPod (--bundled-ipsw)')
     validate_output(args)
@@ -410,15 +424,16 @@ def build_firmwarekit(args, log):
 
 
 def write_build_record(args, sources, native_root, qemu_build, guest):
-    provenance = copy_provenance(args.output, native_root / 'native-build.json', guest.parent / 'guest-tools.json')
+    provenance = copy_provenance(args.output, native_root / 'native-build.json', guest.parent / 'manifest.json')
     record = {
         'schema_version': 1, 'sources': sources, 'host_architecture': 'arm64',
+        'pin': pin_status(args),
         'firmware': {'bootrom_sha256': digest(args.assets / 'bootrom_240_4'),
                      'bundled': json.loads((args.output / 'bundled/bundled.json').read_text())},
         'native_build_record_sha256': provenance['native-build.json'],
         'native_build_reused': bool(args.native_build or args.native_deps),
         'qemu_rebuilt_from_sources': sources['qemu'],
-        'guest_build_record_sha256': provenance['guest-tools.json'],
+        'guest_build_record_sha256': provenance['guest-manifest.json'],
         'provenance_records': provenance,
         'qemu_build': str(qemu_build),
         'native_artifacts': {
@@ -537,7 +552,7 @@ def notarize(args, env, log, state, app):
 
 PREPARE_ENTRY = 'k48ap-7B500'
 # verify: each entry is prepared by the bundled firmwarekit, then booted headless through the bundled helper,
-# dylib and usbmuxd (tests/check-sessions.py --single): lit, lockdown, AFC round trips past 16 KiB, an IPA
+# dylib and usbmuxd (tests/sessions/check-sessions.py --single): lit, lockdown, AFC round trips past 16 KiB, an IPA
 # install, a clean shutdown. One entry per run; rerun --stage verify until every entry is current.
 VERIFY_ENTRIES = {
     'k48ap-7B500': ('ipad', None),   # --verify-ipsw
@@ -599,7 +614,7 @@ def check_prepare(args, log, state, app):
         if bundled not in json.dumps(lock):
             raise RuntimeError(f'Prepare did not use the bundled guest tools {bundled}')
         prepared = int(subprocess.check_output(['du', '-sk', work / 'out'], text=True).split()[0]) * 1024
-        boot = [sys.executable, ROOT / 'tests/check-sessions.py', '--single', work / 'out', '--board', board,
+        boot = [sys.executable, ROOT / 'tests/sessions/check-sessions.py', '--single', work / 'out', '--board', board,
                 '--helper', app / 'Contents/MacOS/LightTouchDevice', '--dylib', app / 'Contents/Frameworks/libqemu-arm.dylib',
                 '--usbmuxd', app / 'Contents/MacOS/usbmuxd', '--frameworks', app / 'Contents/Frameworks',
                 '--files', app / 'Contents/Resources/device', '--work', frames]
@@ -806,8 +821,9 @@ def main(argv=None):
     args = parse(argv)
     validate(args)
     if args.plan:
-        print(json.dumps({key: str(value) if isinstance(value, Path) else value
-                          for key, value in vars(args).items() if key not in ('sign_id', 'notary_profile')}, indent=2))
+        print(json.dumps({**{key: str(value) if isinstance(value, Path) else value
+                             for key, value in vars(args).items() if key not in ('sign_id', 'notary_profile')},
+                          'pin': pin_status(args)}, indent=2))
         return 0
     if sys.platform != 'darwin':
         raise ValueError('The product build requires macOS and Xcode')

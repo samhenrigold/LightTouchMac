@@ -11,7 +11,7 @@
 // version, and each op it lacks falls back here to its `exec` with the same
 // command a shell would have run. No SSH anywhere.
 //
-// Foundation only, so tests/session-driver compiles it as the app does.
+// Foundation only, so tests/drivers/session-driver compiles it as the app does.
 
 import Foundation
 
@@ -279,6 +279,41 @@ nonisolated struct GuestServices: Sendable {
             }
             for path in temporary { try? await agent.unlink(path) }
             return String(decoding: output ?? Data(), as: UTF8.self).hasSuffix("imported\n")
+        } catch {
+            for path in temporary { try? await agent.unlink(path) }
+            throw error
+        }
+    }
+
+    // MARK: Trust
+
+    /// Trust a CA in the guest's own trust store the way a profile install
+    /// does, through securityd's API (ittrust: SecTrustStoreSetTrustSettings
+    /// in the user domain), with no screen on the device. The package's copy,
+    /// or the app's uploaded to /tmp for the one run. Idempotent; the store
+    /// keeps it across boots, so nothing asks twice. ittrust adapts at runtime
+    /// (dlopen), one source for both arches.
+    func trustCertificate(_ der: Data, localTool: () throws -> Data) async throws {
+        let id = UUID().uuidString
+        let cert = "/tmp/ltm-ca-\(id).der"
+        var temporary = [cert]
+        do {
+            try await agent.put(cert, mode: 0o644, der)
+            var output: Data?
+            if packaged {
+                do { output = try await agent.spawn(["\(Self.packageBin)/ittrust", "add", cert]) }
+                catch let error as GuestAgentError where error.status == GuestAgentError.notFound { output = nil }
+            }
+            if output == nil {
+                let executable = "/tmp/ltm-ittrust-\(id)"
+                try await agent.put(executable, mode: 0o755, try localTool())
+                temporary.append(executable)
+                output = try await agent.spawn([executable, "add", cert])
+            }
+            for path in temporary { try? await agent.unlink(path) }
+            guard String(decoding: output ?? Data(), as: UTF8.self).contains("Guest trust add: 0") else {
+                throw DeviceToolsError.failed("The device did not accept the certificate: \(String(decoding: output ?? Data(), as: UTF8.self))")
+            }
         } catch {
             for path in temporary { try? await agent.unlink(path) }
             throw error
