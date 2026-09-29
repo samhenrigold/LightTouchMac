@@ -143,7 +143,7 @@ nonisolated enum IMobileDevice {
     static let instproxy_status_get_percent_complete = symbol("instproxy_status_get_percent_complete", StatusGetPercent.self)
     static let instproxy_status_get_error = symbol("instproxy_status_get_error", StatusGetError.self)
 
-    static let afc_client_start_service = symbol("afc_client_start_service", StartService2.self)
+    static let afc_client_new = symbol("afc_client_new", NewServiceClient.self)
     static let afc_client_free = symbol("afc_client_free", FreeHandle.self)
     static let afc_file_open = symbol("afc_file_open", AfcOpen.self)
     static let afc_file_read = symbol("afc_file_read", AfcRead.self)
@@ -165,19 +165,21 @@ nonisolated enum IMobileDevice {
     /// AFC_FOPEN_WRONLY: w — O_WRONLY | O_CREAT | O_TRUNC.
     static let afcWriteMode: UInt32 = 3
 
-    // MARK: - Installation service connection
+    // MARK: - Service connections
 
-    /// The library's convenience factory loses handshake/start-service errors,
-    /// returning installation_proxy's generic -256 instead. Keep those errors
-    /// in their original domain so a locked guest or unavailable service is not
-    /// mistaken for an unresponsive device. The caller owns the returned client.
-    static func startInstallationProxy(device: OpaquePointer) throws -> OpaquePointer {
+    /// The library's convenience factories (instproxy_/afc_client_start_service)
+    /// lose handshake/start-service errors: installation_proxy's comes back as
+    /// its generic -256, AFC's as "unknown error" (1) — smoke.md #5's opaque
+    /// code 1 could have been any of the three steps. Keep each failure in its
+    /// own domain so a locked guest or unavailable service is not mistaken for
+    /// an unresponsive device. The caller owns the returned client.
+    static func startService(_ name: String, device: OpaquePointer, newClient: NewServiceClient?, freeClient: FreeHandle?,
+                             connectError: (Int32) -> Error) throws -> OpaquePointer {
         guard let handshake = lockdownd_client_new_with_handshake,
               let startService = lockdownd_start_service,
               let freeLockdown = lockdownd_client_free,
               let freeDescriptor = lockdownd_service_descriptor_free,
-              let newClient = instproxy_client_new,
-              let freeClient = instproxy_client_free else { throw DeviceError.unavailable }
+              let newClient, let freeClient else { throw DeviceError.unavailable }
 
         var lockdown: OpaquePointer?
         let handshakeResult = handshake(device, &lockdown, "LightTouchMac")
@@ -187,7 +189,7 @@ nonisolated enum IMobileDevice {
         }
 
         var descriptor: OpaquePointer?
-        let serviceResult = startService(lockdown, "com.apple.mobile.installation_proxy", &descriptor)
+        let serviceResult = startService(lockdown, name, &descriptor)
         // Match service_client_factory_start_service: close the temporary
         // lockdown session before connecting to the service's own socket.
         _ = freeLockdown(lockdown)
@@ -200,10 +202,16 @@ nonisolated enum IMobileDevice {
         let clientResult = newClient(device, descriptor, &client)
         guard clientResult == success, let client else {
             if let client { _ = freeClient(client) }
-            throw DeviceError.instproxy(.init(code: clientResult == success ? -256 : clientResult),
-                                       phase: "connect")
+            throw connectError(clientResult == success ? -256 : clientResult)
         }
         return client
+    }
+
+    static func startInstallationProxy(device: OpaquePointer) throws -> OpaquePointer {
+        try startService("com.apple.mobile.installation_proxy", device: device,
+                         newClient: instproxy_client_new, freeClient: instproxy_client_free) {
+            DeviceError.instproxy(.init(code: $0), phase: "connect")
+        }
     }
 
     // MARK: - plist ↔ Foundation (via the XML both sides speak)

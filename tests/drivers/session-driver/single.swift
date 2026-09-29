@@ -18,6 +18,9 @@ struct SingleConfig: Decodable {
     var itpack: String?
     /// A second boot on the same overlay after the clean shutdown, with the persist check.
     var reboot: Bool?
+    /// smoke.md #5: this many boots, each starting AFC at lockdown's first answer, then the app's Stop.
+    var raceBoots: Int?
+    var raceDirty: Bool?
 }
 
 @MainActor func runSingle(_ s: SingleConfig) async {
@@ -71,6 +74,45 @@ struct SingleConfig: Decodable {
         let exited = await d.process.waitForExit(timeout: 30)
         emit("quit", ["device": d.name, "generation": generation, "confirmed": confirmed, "exited": exited, "reason": d.process.deathReason ?? ""])
         d.mux.stop()
+    }
+
+    // smoke.md #5: AFC (the app's listing: StartService, connect, stat of each entry) at lockdown's first
+    // answer, polled at 100 ms from power-on; then the app's Stop. raceDirty first installs, uploads a file and
+    // starts the agent halt, stopping 20-45 s into the shutdown (the sequence that preceded the one code 1).
+    if let n = s.raceBoots {
+        for g in 1...n {
+            do { try d.boot(generation: g, guestPackage: offer) } catch { fail("boot \(g): \(error)") }
+            let start = Date()
+            while await d.productType() == nil {
+                if d.process.isDead || Date().timeIntervalSince(start) > 300 { fail("boot \(g): lockdown never answered") }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            let answered = Date()
+            var race: [String: Any] = ["device": d.name, "generation": g, "lockdown": answered.timeIntervalSince(start)]
+            do { race["entries"] = try await d.services.files(in: "").count } catch { race["error"] = "\(error)" }
+            race["seconds"] = Date().timeIntervalSince(answered)
+            emit("race", race)
+            if s.raceDirty == true {
+                await install(d)
+                let local = d.dir.appendingPathComponent("race-\(g).bin")
+                try? Data(count: 65_536).write(to: local)
+                var stop: [String: Any] = ["device": d.name, "generation": g]
+                do { try await d.services.uploadFile(local, into: "") { _ in } } catch { stop["uploadError"] = "\(error)" }
+                _ = try? await d.process.link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5)
+                let wait = [20.0, 25, 30, 35, 40, 45][g % 6]
+                try? await Task.sleep(for: .seconds(wait))
+                stop["afterHalt"] = wait
+                stop["confirmed"] = d.process.status?.shutdownConfirmed == true
+                emit("raceStop", stop)
+            }
+            d.process.terminate()
+            _ = await d.process.waitForExit(timeout: 30)
+            d.mux.stop()
+            d.serial?.removeEndpoints()
+        }
+        d.serial?.finish()
+        emit("done")
+        exit(0)
     }
 
     await boot(1)

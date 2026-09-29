@@ -26,7 +26,11 @@ final class State: @unchecked Sendable {
 }
 nonisolated enum IMobileDevice {
  static let state = State(), success: Int32 = 0, afcWriteMode: UInt64 = 3
- static let afc_client_start_service: ((OpaquePointer, inout OpaquePointer?, String)->Int32)? = { _, c, _ in c = OpaquePointer(bitPattern: 1); return 0 }
+ static func startService(_ name: String, device: OpaquePointer, newClient: Int?, freeClient: ((OpaquePointer)->Int32)?,
+                          connectError: (Int32) -> Error) throws -> OpaquePointer {
+  precondition(name == "com.apple.afc"); return OpaquePointer(bitPattern: 1)!
+ }
+ static let afc_client_new: Int? = 0
  static let afc_make_directory: ((OpaquePointer, UnsafePointer<CChar>)->Int32)? = { _,p in state.directories.append(String(cString:p)); return 0 }
  static let afc_file_open: ((OpaquePointer, UnsafePointer<CChar>, UInt64, inout UInt64)->Int32)? = { _,p,mode,h in
   if mode == 1 { guard state.existing != nil else{return 8};state.readOffset=0;h=2;return 0 }
