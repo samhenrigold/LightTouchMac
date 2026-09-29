@@ -797,7 +797,7 @@ def staged(args, env, log):
             raise RuntimeError('Source files changed since --stage package; rerun from package')
         require(app / 'Contents/Resources/firmware-catalog.json', 'bundled firmware catalog')
         require(app / 'Contents/MacOS/firmwarekit', 'bundled firmwarekit')
-        run([sys.executable, SCRIPTS / 'test-package.py', app], env, log)
+        run([sys.executable, ROOT / 'tests/release/test-package.py', app], env, log)
         run(['codesign', '--verify', '--deep', '--strict', app], env, log)
         if args.notary_profile:
             run(['xcrun', 'stapler', 'validate', app], env, log)

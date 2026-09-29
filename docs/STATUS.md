@@ -4,7 +4,7 @@ The one place that says what is done, what is running and what is left. Updated 
 `multidevice` (this repo) or `ipad1` (qemu-ios). Every "done" line names how it was checked. Answer
 status questions from this file, after checking it against the commits it cites.
 
-Build for Sam: `multidevice-20260928c` — ~/Desktop/LightTouch-20260928c/LightTouchMac.zip (sha256 add4b62a…; app 1827a68 + qemu-ios 082b45e77d; notarized d5f47093…, stapled; verified in-bundle 11/11 on all five entries; check-sessions 18/18, kill -9 noticed in 51 ms; package serial 3; iPads on the real iBoot chain). Not in it: C6 bundled-iPod conversion, the matrix catalog, gl-coverage, usb-alert package changes beyond serial 3, runtime GL.
+Build for Sam: `multidevice-20260928d` — ~/Desktop/LightTouch-20260928d/LightTouchMac.zip (sha256 33f1af1f…; app 094ebe5 = a4ebca8 + a verify-path fix; qemu-ios 1778d22b84; usbmuxd idle-poll; notarized 4af5b753…, stapled). In-bundle verify 11/11 on 7B500, 8C148, 7B367, 7E18, iPod 8C148 and the bundled-7E18 unpack path; iPads on the real iBoot chain; sessions 18/18 (kill -9 in 45 ms); proxy trust 17/17; no USB alert, no profile screen. Includes: bundled iPod as a prepared device, Sam's feedback fixes, copy pass, IPA library, 46-entry catalog with betas, repo pin, tiered tests, trust fix. Not in it: one-recipe, runtime GL (emulator + FirmwareKit follow-up), iop-core, service layering.
 
 Last update: 2026-09-28, `ipa-library` merged (IPA library; iBoot shipped; Track A), qemu-ios ipad1 `082b45e77d`.
 

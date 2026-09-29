@@ -307,8 +307,11 @@ def main():
               f"iPad agent through GuestServices: foreground {ag.get('home')!r}, locked {ag.get('locked')}, "
               f"launch -> {ag.get('launched')!r}")
     killed = (find("killed") or [{}])[0]
-    check(killed.get("noticed") and killed.get("seconds", 9) < 1 and "signal 9" in killed.get("reason", ""),
-          f"kill -9 iPad: noticed in {killed.get('seconds', -1) * 1000:.0f} ms: {killed.get('reason')}")
+    # The user sees "stopped unexpectedly"; the signal goes to the log (DeviceSession.terminated, ee84c89).
+    signaled = any(f"helper {killed.get('pid')}: signaled(9)" in e.get("message", "") for e in find("log"))
+    check(killed.get("noticed") and killed.get("seconds", 9) < 1 and signaled
+          and "stopped unexpectedly" in killed.get("reason", ""),
+          f"kill -9 iPad: noticed in {killed.get('seconds', -1) * 1000:.0f} ms, signaled(9) logged: {killed.get('reason')}")
     surv = (find("survivor") or [{}])[0]
     check(not surv.get("dead", True) and surv.get("heartbeat", 0) > 20 and surv.get("frames", 0) > 0 and surv.get("productType") == "iPod2,1",
           f"the iPod kept running: +{surv.get('heartbeat')} heartbeats, +{surv.get('frames')} frames, USB {surv.get('productType')}")
