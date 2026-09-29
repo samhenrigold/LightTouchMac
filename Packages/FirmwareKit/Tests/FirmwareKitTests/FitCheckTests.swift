@@ -210,4 +210,39 @@ enum FitFixture {
             }
         }
     }
+
+    /// The iPod's guest tools go in only where they load: they fit 3.1.3 and 4.2.1, not 3.0 or 2.1.1 (no firmware
+    /// executable there carries LC_DYLD_INFO_ONLY); and the bake follows the proof, not the shared cache: 7E18 baked
+    /// with an it_agent that imports a name 3.1.3 lacks leaves every tool out with a warning, the cache notwithstanding.
+    @Test func iPodToolsOnlyWhereTheyLoad() throws {
+        guard let helpers = K48Oracle.guestTools else { return }
+        for (id, fits) in [("n72ap-7E18", true), ("n72ap-8C148", true), ("n72ap-7A341", false), ("n72ap-5F138", false)] {
+            try Oracle.withTemp { dir in
+                guard let v = try FitFixture.volume(id, FitFixture.stock(id), in: dir) else { return }
+                let f = try N72Board.guestToolsFit(FitCheck.Firmware(root: v, arch: "armv6"), helpers: helpers)
+                #expect(f.fits == fits && f.piece.contains("it_typein.dylib"), "\(id): \(f.proof)")
+                if !fits { #expect(f.proof.contains("it_agent: load command 0x80000022")) }
+            }
+        }
+        guard let dmg = FitFixture.dmgs["n72ap-7E18"], Oracle.exists(dmg) else { return }
+        try Oracle.withTemp { dir in
+            guard let bad = try FitFixture.helpers(in: dir, replacing: "it_agent", with: { FitFixture.renaming($0, "_reboot2", "_rebooz2") }) else { return }
+            let entry = try Oracle.entry("n72ap-7E18"), o = Preparer.Options(entry: entry, ipsw: dir, out: dir, helper: nil, guestTools: bad)
+            final class Events: @unchecked Sendable { var warnings: [String] = [] }
+            let events = Events()
+            let c = Recipe.Context(o, recipe: try #require(entry.recipe)) { if case .warning(let w) = $0 { events.warnings.append(w) } }
+            let raw = dir.appendingPathComponent("volume.img")
+            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            try VolumeMount.grow(raw, toBytes: try #require(entry.recipe).systemMiB << 20)
+            var owners: [(UInt32, String)] = []
+            let report = try VolumeMount.withMounted(raw, at: dir.appendingPathComponent("mnt")) { m -> [String: Any] in
+                let r = try N72Board(o).bake(m, c, owners: &owners)
+                #expect(!FileManager.default.fileExists(atPath: m.appendingPathComponent("usr/local/bin/it_agent").path))
+                return r
+            }
+            #expect((report["guest_tools"] as? String)?.hasPrefix("omitted: it_agent") == true, "\(report["guest_tools"] ?? "-")")
+            #expect(events.warnings.contains { $0.hasPrefix("guest tools (") && $0.contains("_rebooz2") }, "\(events.warnings)")
+            #expect(c.fit.fits.contains { $0.piece.hasPrefix("guest tools") && !$0.fits })
+        }
+    }
 }

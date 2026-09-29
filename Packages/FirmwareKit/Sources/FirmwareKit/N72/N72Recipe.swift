@@ -250,18 +250,20 @@ final class N72Board: Board {
         // The guest helpers (it_agent, it_typein DYLD_INSERTed into SpringBoard, sblaunch, it_prefs, the loader and
         // its seed package) are linked for the dyld that ships the shared cache (3.1+); 2.x's and 3.0's refuse
         // LC_DYLD_INFO_ONLY ("dyld: unknown required load command 0x80000022") and SpringBoard never comes up with
-        // it_typein inserted (qemu-ios ipod2g_device.py 4074277e42). Detected from the volume, not the version: a
-        // firmware without the cache gets a stock SpringBoard, no AppSync cache patch and no GL shim.
-        let tools = fm.fileExists(atPath: at(cache).path)
+        // it_typein inserted (qemu-ios ipod2g_device.py 4074277e42). Proven from the volume (guestToolsFit), not
+        // assumed from the version or the cache: where they do not load they are left out with a warning.
+        let cached = fm.fileExists(atPath: at(cache).path)
         func helper(_ n: String) throws -> Data {
             let u = helpers.appendingPathComponent(n)
             guard fm.fileExists(atPath: u.path) else { throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)") }
             return try Data(contentsOf: u)
         }
+        let toolsFit = try Self.guestToolsFit(FitCheck.Firmware(root: m, arch: arch), helpers: helpers)
+        let tools = try c.fit.check(toolsFit, required: false)
         var report: [String: Any] = [:]
         // ipod2g_device.gli_engine: the one MBXGLEngine (it reads the dispatch layout at load) wherever the armv6
         // shared cache exists; the sanity line says what it will find
-        let gles = (opt["gles_shim"] ?? true) && tools
+        let gles = (opt["gles_shim"] ?? true) && cached
         let why = !(opt["gles_shim"] ?? true) ? "options.gles_shim off" : "no dyld shared cache (2.x, 3.0)"
         let info = try gles ? SystemEdits.glesSanity(Data(contentsOf: at(cache), options: .alwaysMapped), helpers: helpers) : ""
         report["gles"] = gles ? "shim MBXGLEngine (\(info))" : "stock engine, software CA: " + why
@@ -275,7 +277,7 @@ final class N72Board: Board {
         }
         report["gles_shim"] = gles || front
         report["gles_engine"] = gles ? "MBXGLEngine" : front ? "OpenGLES" : NSNull() as Any
-        report["guest_tools"] = tools ? "installed" : "omitted: current helpers require the iOS 3.1+ dyld (no shared cache)"
+        report["guest_tools"] = tools ? "installed" : "omitted: " + toolsFit.proof
 
         // bake-guest-tools.sh
         if gles {
@@ -369,6 +371,25 @@ final class N72Board: Board {
 }
 
 extension N72Board {
+    /// The baked guest tools (and it_typein in SpringBoard) that must all load for any to be installed.
+    static let guestTools = ["it_agent", "it_typein.dylib", "sblaunch", "sbdlicon", SystemEdits.Helpers.name("it_prefs", "armv6")]
+
+    /// One Fit for the iPod's baked guest tools: each proven with FitCheck.loads (sbdlicon only if the helpers have it).
+    static func guestToolsFit(_ fw: FitCheck.Firmware, helpers: URL) throws -> FitCheck.Fit {
+        var fits: [FitCheck.Fit] = []
+        for n in guestTools {
+            let u = helpers.appendingPathComponent(n)
+            guard FileManager.default.fileExists(atPath: u.path) else {
+                if n == "sbdlicon" { continue }
+                throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)")
+            }
+            fits.append(FitCheck.loads(n, try Data(contentsOf: u), on: fw, host: n == "it_typein.dylib" ? "/" + springBoard : nil))
+        }
+        let piece = "guest tools (\(fits.map(\.piece).joined(separator: ", ")))", lost = fits.filter { !$0.fits }
+        guard lost.isEmpty else { return FitCheck.Fit(piece, fits: false, lost.map { "\($0.piece): \($0.proof)" }.joined(separator: "; ")) }
+        return FitCheck.Fit(piece, fits: true, "each loads (\(fits[0].piece): \(fits[0].proof))")
+    }
+
     /// SpringBoard's first-run "Edit Home Screen" tip stays down once com.apple.springboard SBDidShowReorderText is true.
     static let reorderTip = "SBDidShowReorderText"
     static let springBoard = "System/Library/CoreServices/SpringBoard.app/SpringBoard"
