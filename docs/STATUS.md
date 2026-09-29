@@ -88,7 +88,7 @@ Last update: 2026-09-28, `ipa-library` merged (IPA library; iBoot shipped; Track
 | iPod 3.1.3 (7E18) | user IPSW, built in | shipped as a packed prepared base (C6) |
 | iPod 4.2.1 (8C148) | experimental | added 2026-09-28 |
 | iPod 2.1.1 / 2.2 / 2.2.1 (5F138, 5G77a, 5H11a) | experimental | AppSync on; install + launch gated 09-29 (`legacy-gate`) |
-| iPod 3.0 (7A341) | untested | lights since the iBoot epoch fix; AppSync install + launch, GL apps draw nothing (smoke #47), second boot flaky (#46) |
+| iPod 3.0 (7A341) | untested | lights since the iBoot epoch fix; AppSync install + launch; GL through the legacy-linked engine on qemu-ios `gles-30` (Labyrinth 2 Lite renders; not merged, FirmwareKit N72 to mirror); second boot flake not reproduced there (#46) |
 | iPod touch 1G 1.1–1.1.5 (3A101a … 4B1) | untested | added 09-29 (`legacy-gate`); boots in the app, no USB link yet (smoke #43); 4B1 needs #44 |
 | iPad 3.2.2 (7B500) | available | |
 | iPad 3.2 (7B367) | available | |
@@ -112,7 +112,7 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 
 ### Firmware coverage
 - iPod touch 1G: qemu-ios `usb-tcp-addr`, device-info row, buttons and powerdown gesture on n45 (smoke #43), the image's security epoch (#44, 4B1 and probably 3A110a–4A102), then the rows again and `experimental`; ship bootrom_s5l8900 in the release (package.sh, test-package's asset list).
-- iPod 3.0: a GL path (#47), a legacy-linked loader (#10), the second-boot lit flake (#46); 2.x/3.0 Edit Home Screen tip (#45).
+- iPod 3.0: merge qemu-ios `gles-30` (GL engine, `n72-ios30` package with the legacy loader) and mirror it in FirmwareKit's N72 bake, then rerun the 7A341 row (GL leg, #46 on boot 2); legacy-linked it_agent (#10).
 - iPod 2.1.1 in the app: N72 recipe for 2.x (legacy-linked loader), catalog keys, in-app check.
 - More point releases (2.2.1, 3.0, 3.1.x, 4.0–4.1): each needs a manifest, catalog keys and a check. Designed to be routine; none tried.
 - iPad iOS 5: not started ("later").

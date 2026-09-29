@@ -76,7 +76,7 @@ Notes:
   qemu-ios `ipod-2x` (the LLB's 0x38100000 block, smoke #18); `experimental` since the merge and pin bump (qemu-ios ipad1, 2026-09-29).
 - iPod2,1 2.x and 3.0 with AppSync (catalog on since `legacy-activation-appsync`): the app's pipeline installs a Legacy
   Store game and it launches — PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) on 5F138, 5G77a and
-  5H11a; on 7A341 Labyrinth 2 Lite (ipa 257098) installs and launches but draws nothing (no GL on 3.0, smoke #47). The install needed an app fix: iPhone OS
+  5H11a; on 7A341 Labyrinth 2 Lite (ipa 257098) installs and launches but draws nothing (no GL on 3.0 in the app yet; qemu-ios `gles-30` gives 3.0 its engine and the game renders there, smoke #47 closed, FirmwareKit N72 to mirror). The install needed an app fix: iPhone OS
   2.x's installation_proxy silently drops an Install without ClientOptions (libimobiledevice omits the key for NULL
   options), so the app now always sends an empty dictionary (`legacy-gate`). Neither 2.x nor 3.0 has
   com.apple.springboardservices (it arrives in 3.1), so the app no longer waits for it at boot and the matrix taps the
