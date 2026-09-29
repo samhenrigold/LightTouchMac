@@ -3,11 +3,11 @@
   "version": "3.1.3",
   "board": "n72ap",
   "status": "user_ipsw",
-  "when": "2026-09-28T23:49:09+00:00",
+  "when": "2026-09-29T00:58:09+00:00",
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest/ipad-guest-tools"
+   "dylib": "/Users/shg/Developer/qemu-ios-matrix/build-matrix-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest3/ipad-guest-tools"
   },
   "keys": {
    "total": 19,
@@ -16,7 +16,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 43.3,
+   "seconds": 30.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -42,11 +42,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 11.1
+    "seconds": 25.6
    },
    "lockdown": {
     "ok": true,
-    "seconds": 7.5,
+    "seconds": 23.8,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -82,15 +82,15 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 21.2,
-     "lockdown": 4.8
+     "lit": 11.8,
+     "lockdown": 8.7
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.7,
+    "seconds": 1.6,
     "reason": "The emulator stopped.",
-    "second": 1.7
+    "second": 1.4
    },
    "base_unchanged": true,
    "driver_exit": 0
@@ -243,11 +243,11 @@
   "version": "3.2.2",
   "board": "k48ap",
   "status": "available",
-  "when": "2026-09-28T23:54:35+00:00",
+  "when": "2026-09-29T01:01:08+00:00",
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest/ipad-guest-tools"
+   "dylib": "/Users/shg/Developer/qemu-ios-matrix/build-matrix-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest3/ipad-guest-tools"
   },
   "keys": {
    "total": 19,
@@ -256,7 +256,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 75.8,
+   "seconds": 81.9,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -283,11 +283,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 24.6
+    "seconds": 27.3
    },
    "lockdown": {
     "ok": true,
-    "seconds": 5.3,
+    "seconds": 5.5,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -306,7 +306,7 @@
    },
    "install": {
     "ok": true,
-    "seconds": 1,
+    "seconds": 2,
     "attempt": 1
    },
    "package": {
@@ -323,15 +323,15 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 20.6,
-     "lockdown": 4.5
+     "lit": 74.7,
+     "lockdown": 1.1
     }
    },
    "shutdown": {
-    "ok": true,
-    "seconds": 15.9,
-    "reason": "The emulator stopped.",
-    "second": 16.0
+    "ok": false,
+    "seconds": 16.1,
+    "reason": "The device helper exited unexpectedly (code 0).",
+    "second": 16.4
    },
    "base_unchanged": true,
    "driver_exit": 0
@@ -343,7 +343,13 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/driver.jsonl",
+  "first_failure": {
+   "check": "shutdown",
+   "why": "The device helper exited unexpectedly (code 0).",
+   "excerpt": "AppleBCMWLAN Joined BSS:     @ 0xc5235000, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\"\n[42.761860000]: AppleBCMWLANNetManager::handleDelayedPowerManagementTimeout(): Timed out waiting for IP address, entering powersave mode: 0\nUSB mux: 260 reads / 0 errors, 183 writes / 0 errors"
+  },
+  "triage": "pass (merged tree 21:05): boot 1's quit was labelled 'helper exited unexpectedly (code 0)' although power-off confirmed in 16 s and the helper exited 0; boot 2 read 'The emulator stopped.' Reason-string race in the new DeviceLink reap path (multidevice a2d4a92), not a boot problem."
  },
  "k48ap-7B367": {
   "version": "3.2",
