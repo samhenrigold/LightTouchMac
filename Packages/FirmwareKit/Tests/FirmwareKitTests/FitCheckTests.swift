@@ -189,8 +189,25 @@ enum FitFixture {
             #expect((job["EnvironmentVariables"] as? [String: Any])?["DYLD_INSERT_LIBRARIES"] == nil)
             #expect(r.guestPackage.map { !$0.hooks.contains("/" + SystemEdits.Helpers.tools[3].path) } == true)
             #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet") && !$0.fits })
-            Self.k48Bake9B206 = log.fits
+            #expect(!log.fits.contains { $0.piece.hasSuffix("(hook)") }, "left out on purpose, so not a dropped hook")
         }
     }
-    nonisolated(unsafe) static var k48Bake9B206: [FitCheck.Fit] = []
+
+    /// A seeded hook whose target the firmware lacks is a recorded misfit, unless the preparer left the target out on
+    /// purpose: armv7.itpack onto 7B500's files without it_msmquiet or libappsync installed records two dropped hooks;
+    /// with both named as omitted it records none.
+    @Test func seedRecordsDroppedHooks() throws {
+        let itpack = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
+        guard Oracle.exists(itpack) else { return }
+        for omitted in [Set<String>(), ["/usr/local/lib/it_msmquiet.dylib", "/" + SystemEdits.appsyncPath]] {
+            try Oracle.withTemp { dir in
+                guard let v = try FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500"), in: dir) else { return }
+                let log = FitCheck.Log()
+                let (_, record) = try GuestPackage.seed(volume: v, itpack: itpack, gles: false, omitted: omitted, fit: log)
+                let drops = log.fits.filter { $0.piece.hasSuffix("(hook)") }
+                #expect(record.hooks.isEmpty)
+                #expect(drops.count == (omitted.isEmpty ? 2 : 0) && drops.allSatisfy { !$0.fits && $0.proof.contains("is not on this firmware") }, "\(drops)")
+            }
+        }
+    }
 }

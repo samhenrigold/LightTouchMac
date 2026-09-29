@@ -88,7 +88,9 @@ public enum GuestPackage {
     /// Every Mach-O it bakes (the loader, the package's binaries and hooks) is first proven to load on this firmware
     /// (FitCheck.loads, recorded in `fit`; one that does not fails the seed), except the GL engines' and AppSync's
     /// hooks, which their own installers check.
-    public static func seed(volume m: URL, itpack: URL, gles: Bool, fit: FitCheck.Log = FitCheck.Log()) throws -> (written: [String], record: Record) {
+    /// A hook whose target is not on the volume is dropped; unless the preparer left that target out on purpose
+    /// (`omitted`) or it is a GL engine's, the drop is a recorded misfit (a warning), never silent.
+    public static func seed(volume m: URL, itpack: URL, gles: Bool, omitted: Set<String> = [], fit: FitCheck.Log = FitCheck.Log()) throws -> (written: [String], record: Record) {
         let fm = FileManager.default
         let entries = try read(itpack)
         let at = { (rel: String) in m.appendingPathComponent(rel) }
@@ -109,6 +111,12 @@ public enum GuestPackage {
             return (gles || !glTargets.contains(target)) && fm.fileExists(atPath: at(String(target.dropFirst())).path)
         }
         let dropped = Set(allHooks.compactMap { $0["file"] as? String }).subtracting(hooks.compactMap { $0["file"] as? String })
+        for h in allHooks where dropped.contains(h["file"] as? String ?? "") {
+            let target = h["target"] as? String ?? ""
+            guard !glTargets.contains(target), !omitted.contains(target) else { continue }
+            try fit.check(FitCheck.Fit("\(families[0].dropLast("/manifest.json".count))/\(h["file"] as? String ?? "") (hook)", fits: false,
+                                       "its target \(target) is not on this firmware: the hook is dropped"), required: false)
+        }
         man["hooks"] = hooks
         man["files"] = (man["files"] as? [[String: Any]] ?? []).filter { !dropped.contains($0["name"] as? String ?? "") }
         let files = man["files"] as! [[String: Any]]

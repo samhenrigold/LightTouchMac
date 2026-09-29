@@ -220,7 +220,9 @@ public enum SystemEdits {
             try rewritePlist(at(btJob)) { $0["Disabled"] = true }
             result.activation = try activate(m, log: log)
             rootOwned.append(lockdownd)
-            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gles: result.engine != nil, fit: fit, log: log)
+            // what this bake left out on purpose: AppSync when off, it_msmquiet where it does not fit
+            let omitted = Set((o.appsync ? [] : ["/" + appsyncPath]) + (quiet ? [] : ["/" + msm.path]))
+            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gles: result.engine != nil, omitted: omitted, fit: fit, log: log)
             result.guestPackage = record
             rootOwned += seeded
             rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"].filter { fm.fileExists(atPath: at($0).path) } + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
@@ -340,8 +342,9 @@ public enum SystemEdits {
     }
 
     /// The guest-package loader and the arch's seed package (GuestPackage.seed of <arch>.itpack).
-    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gles: Bool, fit: FitCheck.Log, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
-        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gles: gles, fit: fit)
+    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gles: Bool, omitted: Set<String> = [], fit: FitCheck.Log, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
+        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gles: gles,
+                                                     omitted: omitted, fit: fit)
         log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
         return (seeded, record)
     }
