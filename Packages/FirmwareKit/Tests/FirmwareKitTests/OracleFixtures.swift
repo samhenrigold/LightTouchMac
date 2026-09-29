@@ -117,9 +117,11 @@ enum Oracle {
                     "018-4177-1-ramdisk.dmg": "05795d76755420f7b5e60cfe0ff777dbc409f6c28d950efc85d1a70d98b6d6b6",
                     "AppleLogo.bin": "3e3d4095a241e83f651ed5c71ad40410bda936ffccb5a2448aa8ef099473b1b5",
                     "DeviceTree.bin": "ffefdaa6f0cfdb433204b9e9314fdbb3dc1d64888d9f2ae54351a4aab3fc0a38",
-                    "iBEC.bin": "96e67a6e0acb2fc85c06dbe6b21a3c7a382817a808a64dd1c8f717cc3c09dd0b",
+                    // 2.x DFU stages carry no KBAG: the payload is copied as-is (Python "decrypted" it with a
+                    // placeholder key into noise); these are the plaintext payloads' hashes (docs/matrix.md).
+                    "iBEC.bin": "b9c74d685bc8c3340ef1e8fe16895d991387f06a478a5497d98d61e1d25ed86b",
                     "iBoot.bin": "4c2ec4ea8b8c9ef93548275bfc0f44b447315b8b9631bfeeb147721a2f834b3d",
-                    "iBSS.bin": "3739989b3daa3a9de01fcaccdb85ad838afc85cec1c1335f74489409c7de5769",
+                    "iBSS.bin": "ffa508c1e88dc353ab331d1af990174ac9ed0543074cc04f6dce302648acda27",
                     "kernelcache.mach": "20fa129653ad4094ce4fd885ddd1477e0ee175137c48898277c8ca7bfc3dd33f",
                     "LLB.bin": "8657a7601ddf867549632b3a2744caab8f154d5c569cc38626cc2fd944d19c61"],
                  rootfsDMG: "e5eea56355c191df9e539fd2957a026325590fca393361c99e551d3fabf5fbd1",

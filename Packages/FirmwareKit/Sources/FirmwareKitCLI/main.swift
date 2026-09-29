@@ -33,6 +33,7 @@ let command = args.popFirst()
 if command == "mount" || command == "export" || command == "unmount" {
     volumeCommand(command!, Array(args))
 }
+if command == "verify-keys" { verifyKeysCommand(Array(args)) }
 guard command == "create" else {
     FileHandle.standardError.write(Data("""
         firmwarekit \(FirmwareKit.version)
@@ -40,6 +41,7 @@ guard command == "create" else {
                                   [--helper PATH] [--cache DIR] [--guest-tools DIR]
                firmwarekit mount|export --device DIR [--volume system|data|all] [--out DIR]
                firmwarekit unmount --out DIR
+               firmwarekit verify-keys --entry ENTRY.json --ipsw IPSW
 
         """.utf8))
     exit(64)
