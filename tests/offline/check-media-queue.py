@@ -1,41 +1,15 @@
 #!/usr/bin/env python3
-"""Production media jobs wait behind installs, report progress, and cancel safely."""
+"""Production media jobs wait behind installs, report progress, and cancel safely. Compiles
+Features/AppInstaller.swift whole (with InstallationQueue, DeviceExecution and DeviceProfile) against
+tests/fixtures/app-installer*.swift and a scripted EmulatorController."""
 from pathlib import Path
 import subprocess, tempfile
 
 root = Path(__file__).resolve().parents[2]
-source = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
-
-
-def block(start, end):
-    a = source.index(start)
-    return source[a:source.index(end, a)]
-
-
-job = block('extension Notification.Name {', '/// Shared install flow')
-state = block('    static var hasPendingWork:', '    @discardableResult\n    static func start(')
-media = block('    @discardableResult\n    static func startMedia(', '    /// A Legacy Store copy:')
-finish = block('    private static func finish(', '    /// Queue when bytes are ready,')
-pause = block('    private static func pauseIfNeeded(', '    @MainActor\n    static func presentError(')
+app = root / 'LightTouchMac'
 code = r'''import Cocoa
-enum DeviceError: Error { case timedOut; var shouldPauseInstallQueue: Bool { true } }
-struct Failure: LocalizedError { var errorDescription: String? { "Unreadable photo" } }
-enum DeviceProfile { case iPodTouch2G }
-@MainActor struct PreparedMedia {
- static var failed = Set<String>()
- static var delayed = Set<String>()
- static var preparation: [String: CheckedContinuation<Void, Error>] = [:]
- let directory: URL, title: String, destination: String
- static func prepare(_ source: URL, profile: DeviceProfile) async throws -> PreparedMedia {
-  let name = source.deletingPathExtension().lastPathComponent
-  if delayed.contains(name) { try await withCheckedThrowingContinuation { preparation[name] = $0 } }
-  try Task.checkCancellation()
-  if failed.contains(name) { throw Failure() }
-  let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-media-queue-" + UUID().uuidString)
-  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-  return PreparedMedia(directory: directory, title: name, destination: source.pathExtension == "mp3" ? "Music" : "Photos")
- }
-}
+nonisolated func logEvent(_ message: String) {}
+typealias Failure = PreparedMedia.Failure
 struct DeviceInstance { let id = UUID() }
 @MainActor final class EmulatorController {
  let profile = DeviceProfile.iPodTouch2G
@@ -58,8 +32,14 @@ struct DeviceInstance { let id = UUID() }
   let reply = uploads.removeValue(forKey: name)!
   if let error { reply.resume(throwing: error) } else { reply.resume() }
  }
+ // Not reached: this check queues media only.
+ let iosVersion = "3.1.3", guestArch = "armv6"
+ var installPipeline: InstallPipeline { get throws { InstallPipeline() } }
+ var services: EmulatorController { get throws { self } }
+ func install(_ ipa: URL, placeholderRaised: Bool, progress: @escaping @Sendable (String) -> Void) async throws -> String { "" }
+ func uninstall(_ id: String) async throws {}
 }
-''' + job + '\n@MainActor enum AppInstaller {\n' + state + media + finish + pause + r'''
+extension AppInstaller {
  static var device = UUID()
  static func occupyDevice() async throws { try await queue(for: device).acquire() }
  static func releaseDevice() { queue(for: device).release() }
@@ -152,7 +132,7 @@ struct DeviceInstance { let id = UUID() }
   try await until { emulator.started.last == "Disconnected" }
   let waiting = add("After reconnect.mp3")
   try await until { waiting.status == "Waiting for other transfers…" }
-  emulator.finish("Disconnected", error: DeviceError.timedOut)
+  emulator.finish("Disconnected", error: DeviceError.timedOut(operation: "upload"))
   try await until { disconnected.isFinished }
   precondition(disconnected.failed && AppInstaller.isPaused && waiting.status == "Paused")
   precondition(!emulator.started.contains("After reconnect") && !waiting.isFinished)
@@ -170,6 +150,9 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-queue-check-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '6', '-default-isolation', 'MainActor',
-                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/Features/InstallationQueue.swift'),
+                    '-module-cache-path', str(work / 'modules'), *[str(app / f) for f in [
+                        'Features/AppInstaller.swift', 'Features/InstallationQueue.swift', 'Transport/DeviceExecution.swift',
+                        'Device/DeviceProfile.swift']],
+                    str(root / 'tests/fixtures/app-installer.swift'), str(root / 'tests/fixtures/app-installer-library.swift'),
                     str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=25)

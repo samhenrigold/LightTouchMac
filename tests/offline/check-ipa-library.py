@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The IPA library: one blob per archive, a clone per device, uninstall per device, Store dedupe with no transfer.
 
-Offline. Compiles the real IPALibrary, CatalogClient and the production removal flow against an isolated
-LTM_STATE_DIR; the Legacy Store is tests/fixtures/catalog-server.py minus its IPA route, so a transfer the library
+Offline. Compiles the real IPALibrary, CatalogClient and Features/AppInstaller.swift (the removal flow; the rest
+of what it reaches is tests/fixtures/app-installer.swift) against an isolated LTM_STATE_DIR; the Legacy Store is tests/fixtures/catalog-server.py minus its IPA route, so a transfer the library
 should have skipped fails loudly.
 """
 from http.server import ThreadingHTTPServer
@@ -24,50 +24,27 @@ class Handler(fixture.Handler):
         super().do_GET()
 
 
-inspector = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
-
-
-def block(start, end):
-    a = inspector.index(start)
-    return inspector[a:inspector.index(end, a)]
-
-
-state = block('    static var hasPendingWork:', '    static func resume(_ device')
-remove = block('    static func remove(_ apps:', '    @MainActor\n    static func presentError(')
 code = r'''import Cocoa
 import CryptoKit
 extension DeviceInstance {
  nonisolated var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) }
 }
-enum DeviceError: Error { case timedOut; var shouldPauseInstallQueue: Bool { true } }
-struct InstalledApp { let id: String }
-@MainActor final class InstallJob {
- let deviceID = UUID(); var isCancellable = true; var downloadProgress: Double?; var status = "Waiting"
- var task: Task<Void, Never>?; var dismissed = false; func cancel() {}
-}
-extension Notification.Name {
- static let ltmAppsChanged = Notification.Name("changed")
- static let ltmInstallProgress = Notification.Name("progress")
-}
-@MainActor final class AppMetadataCache {
- static let shared = AppMetadataCache(); var forgotten: [String] = []
- func forget(_ id: String) { forgotten.append(id) }
-}
-@MainActor final class DeviceLibrary { static let shared = DeviceLibrary(); var instances: [DeviceInstance] = [] }
 @MainActor final class EmulatorController {
- var services: EmulatorController { self }  // the services the installer reaches through the controller
+ var services: EmulatorController { get throws { self } }  // EmulatorController.services: the uninstall
  let instance: DeviceInstance
  init(_ instance: DeviceInstance) { self.instance = instance }
  var removed: [String] = []
  func uninstall(_ id: String) async throws { removed.append(id) }
  func reportConnectionFailure(_ error: Error, operation: String) {}
-}
-@MainActor enum AppInstaller {
-''' + state + remove + r'''
- static func presentError(_ error: Error, in window: NSWindow?) { preconditionFailure("\(error)") }
+ // Not reached: this check queues removals only.
+ let profile = DeviceProfile.iPodTouch2G, iosVersion = "3.1.3", guestArch = "armv6"
+ var installPipeline: InstallPipeline { get throws { InstallPipeline() } }
+ func install(_ ipa: URL, placeholderRaised: Bool, progress: @escaping @Sendable (String) -> Void) async throws -> String { "" }
+ func importMedia(_ media: PreparedMedia, progress: @escaping @Sendable (Double) -> Void, willCommit: () -> Void) async throws {}
 }
 @main struct Check {
  @MainActor static func main() async throws {
+  AppInstaller.presentError = { error, _ in preconditionFailure("\(error)") }
   let fm = FileManager.default
   let state = Bundled.stateDirectory
   func check(_ condition: Bool, _ what: String, line: Int = #line) { precondition(condition, "line \(line): \(what)") }
@@ -199,10 +176,11 @@ with tempfile.TemporaryDirectory(prefix='ltm-ipa-library-') as directory:
     try:
         (work / 'check.swift').write_text(code)
         sources = ['Library/IPALibrary', 'Features/CatalogClient', 'Features/CatalogCopy', 'Library/Bundled', 'Transport/AppEventLog', 'Library/StorageLocations', 'Transport/NativeLogging',
-                   'Library/DeviceInstance', 'Device/DeviceProfile', 'Library/FirmwareCatalog', 'Features/InstallationQueue']
+                   'Library/DeviceInstance', 'Device/DeviceProfile', 'Library/FirmwareCatalog', 'Features/InstallationQueue',
+                   'Features/AppInstaller', 'Transport/DeviceExecution']
         subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
                         '-module-cache-path', str(work / 'modules'), *[str(root / f'LightTouchMac/{s}.swift') for s in sources],
-                        str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
+                        str(root / 'tests/fixtures/app-installer.swift'), str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
         subprocess.run([str(work / 'check'), str(server.server_port)], check=True, timeout=60, env=env)
     finally:
         server.shutdown()

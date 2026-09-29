@@ -1003,7 +1003,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             do {
                 try await emulator.restartSpringBoard()
             } catch {
-                AppInstaller.presentError(error, in: window)
+                AppInstaller.presentError(error, window)
             }
         }
     }
