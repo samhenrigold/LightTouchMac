@@ -37,20 +37,34 @@
 
 /* Match the type the device reports (uint on old lockdownd, real on newer),
  * like idevicedate. */
-static void set_time(lockdownd_client_t cli, time_t now)
+static double get_time(lockdownd_client_t cli, int *is_real)
 {
     plist_t v = NULL;
-    plist_t node = plist_new_uint((uint64_t)now);
+    double t = -1;
     if (lockdownd_get_value(cli, NULL, "TimeIntervalSince1970", &v) == LOCKDOWN_E_SUCCESS && v) {
         if (plist_get_node_type(v) == PLIST_REAL) {
-            plist_free(node);
-            node = plist_new_real((double)now);
+            *is_real = 1;
+            plist_get_real_val(v, &t);
+        } else {
+            uint64_t u = 0;
+            plist_get_uint_val(v, &u);
+            t = (double)u;
         }
         plist_free(v);
     }
+    return t;
+}
+
+/* Returns the time the device holds afterwards (-1 if unreadable). */
+static double set_time(lockdownd_client_t cli, time_t now)
+{
+    int is_real = 0;
+    get_time(cli, &is_real);
+    plist_t node = is_real ? plist_new_real((double)now) : plist_new_uint((uint64_t)now);
     lockdownd_error_t e = lockdownd_set_value(cli, NULL, "TimeIntervalSince1970", node);
     if (e != LOCKDOWN_E_SUCCESS)
         fprintf(stderr, "set time failed: %d\n", e);
+    return get_time(cli, &is_real);
 }
 
 static char *current_zone(lockdownd_client_t cli)
@@ -92,8 +106,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (!keep)
-        set_time(cli, now);
+    if (!keep) {
+        double held = set_time(cli, now);
+        /* A pinned clock is the point of the call: say so when the device did not take it. */
+        if (argc == 3 && (held < 0 || held - (double)now > 300 || (double)now - held > 300)) {
+            fprintf(stderr, "clock not applied: device holds %.0f, wanted %lld\n", held, (long long)now);
+            lockdownd_client_free(cli);
+            idevice_free(dev);
+            return 3;
+        }
+    }
 
     char *zone = current_zone(cli);
     if (!zone || strcmp(zone, argv[1]) != 0) {

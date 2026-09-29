@@ -575,10 +575,15 @@ final class EmulatorController {
         while !Task.isCancelled {
             guard !shuttingDown, !isDead, !isPoweredOff else { return }
             let clock = catalogEntry?.clockEpoch.map { clockPinned ? "keep" : String(Int($0)) }
-            if state == .running, !preparingDevice, canManageApps, await deviceReady(),
-               (try? await tools().setTimeZone(TimeZone.current.identifier, clock: clock)) != nil {
-                if clock != nil { clockPinned = true }
-                return
+            if state == .running, !preparingDevice, canManageApps, await deviceReady() {
+                do {
+                    try await tools().setTimeZone(TimeZone.current.identifier, clock: clock)
+                    if clock != nil { clockPinned = true }
+                    return
+                } catch DeviceToolsError.failed(let why) where why.contains("clock not applied") {
+                    logEvent("clock: \(why)")   // lockdown-tz exit 3: the guest did not take the pin; no point retrying
+                    return
+                } catch {}
             }
             try? await Task.sleep(for: .seconds(5))
         }
