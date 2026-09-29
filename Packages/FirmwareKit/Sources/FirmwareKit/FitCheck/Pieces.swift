@@ -70,4 +70,46 @@ extension FitCheck {
                 : Fit(piece, fits: false, "\(name) does not name \(key): the setting reaches nothing")
         }
     }
+
+    // MARK: SpringBoard's environment
+
+    static let frameworkDirs = ["System/Library/Frameworks", "System/Library/PrivateFrameworks"]
+
+    /// memmem over mapped bytes (the shared cache is hundreds of MB).
+    static func contains(_ d: Data, _ needle: Data) -> Bool {
+        d.withUnsafeBytes { b in needle.withUnsafeBytes { n in
+            guard let base = b.baseAddress, let nb = n.baseAddress, b.count >= n.count else { return false }
+            return memmem(base, b.count, nb, n.count) != nil
+        } }
+    }
+
+    /// Every framework binary on the volume (<dir>/<Name>.framework/<Name>), the shared cache and SpringBoard: the images
+    /// that could read an environment variable SpringBoard's job sets.
+    static func readers(_ fw: Firmware) -> [(String, Data)] {
+        var out: [(String, Data)] = []
+        if let c = fw.cache { out.append(("the shared cache", c.data)) }
+        for dir in frameworkDirs {
+            for f in ((try? FileManager.default.contentsOfDirectory(atPath: fw.root.appendingPathComponent(dir).path)) ?? []).sorted() where f.hasSuffix(".framework") {
+                let rel = dir + "/" + f + "/" + f.dropLast(".framework".count)
+                if let d = fw.data(rel) { out.append(((rel as NSString).lastPathComponent, d)) }
+            }
+        }
+        if let sb = fw.data(itPrefs[0].1) { out.append(("SpringBoard", sb)) }
+        return out
+    }
+
+    /// SpringBoard's environment edits fit when every switch (a name, or the same switch under its CoreAnimation and
+    /// LayerKit names) is read by an image of this firmware (readers) or by a binary the bake injects with it (`also`:
+    /// the GL shim reads GLI_ACCELERATED). A switch nothing reads has no effect: the firmware's default decides.
+    public static func environment(_ fw: Firmware, _ switches: [[String]], also: [(String, Data)] = []) -> Fit {
+        let piece = "SpringBoard environment (\(switches.map { $0.joined(separator: "/") }.joined(separator: ", ")))"
+        let images = readers(fw) + also
+        var read: [String] = [], unread: [String] = []
+        for names in switches {
+            let hits = names.compactMap { n in images.first { contains($0.1, cString(n)) }.map { "\(n) by \($0.0)" } }
+            if let first = hits.first { read.append(first) } else { unread.append(names.joined(separator: "/")) }
+        }
+        guard unread.isEmpty else { return Fit(piece, fits: false, "nothing in this firmware reads \(unread.joined(separator: ", ")): the firmware's default decides") }
+        return Fit(piece, fits: true, "read: " + read.joined(separator: "; "))
+    }
 }

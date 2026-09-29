@@ -147,6 +147,8 @@ final class N45Board: Board {
             // LK_ENABLE_OGL=1 over the stock IMG driver drives the unemulated MBX: fail rather than wedge
             throw FirmwareError(.internal, "\(SystemEdits.Helpers.itpack("armv6")) has no OpenGLES hook for this build; rebuild the guest package")
         }
+        try fit.check(FitCheck.environment(FitCheck.Firmware(root: m, arch: "armv6"), (front ? [["LK_ENABLE_OGL"], ["LK_AUTO_ENABLE_OGL"]] : []) + [["LK_ENABLE_MBX2D"]]),
+                      required: false, outcome: "kept: a switch nothing reads is inert")
         try SystemEdits.editSpringBoardJob(m) { env, _ in
             if front { env["LK_ENABLE_OGL"] = "1"; env["LK_AUTO_ENABLE_OGL"] = "0" } else { env.removeObjects(forKeys: ["LK_ENABLE_OGL", "LK_AUTO_ENABLE_OGL"]) }
             env["LK_ENABLE_MBX2D"] = "0"   // never the unemulated MBX 2D path

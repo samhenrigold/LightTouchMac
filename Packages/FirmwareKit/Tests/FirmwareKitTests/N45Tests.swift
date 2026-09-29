@@ -196,7 +196,11 @@ import Testing
                     return m
                 }
                 let a = try volume("swift"), b = try volume("python"), out = dir.appendingPathComponent("py-\(gles).json")
-                let (report, record, owned) = try N45Board.bake(a, helpers: helpers, gles: gles, log: { _ in })
+                let log = FitCheck.Log()
+                let (report, record, owned) = try N45Board.bake(a, helpers: helpers, gles: gles, fit: log, log: { _ in })
+                // the seed's loader proof and the LayerKit switches' readers are on the record
+                #expect(log.fits.contains { $0.piece.hasPrefix("it_boot") && $0.fits })
+                #expect(log.fits.contains { $0.piece == "SpringBoard environment (\(gles ? "LK_ENABLE_OGL, LK_AUTO_ENABLE_OGL, " : "")LK_ENABLE_MBX2D)" })
                 try K48Oracle.sh(["python3", "-c", """
                     import json, sys; sys.path.insert(0, sys.argv[1]); import ipod1g_device
                     report, owned = ipod1g_device.bake(sys.argv[2], sys.argv[3], sys.argv[4] == "1")

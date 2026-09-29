@@ -196,6 +196,10 @@ public enum SystemEdits {
                     log("warning: " + result.notes.last!)
                 }
             }
+            let env = caOGL ? sbEnvCAOGL : sbEnv
+            try fit.check(FitCheck.environment(fw, env.keys.sorted().map { [$0] },
+                                               also: result.engine != nil ? [(Helpers.glEngine, try Data(contentsOf: helper(Helpers.glEngine)))] : []),
+                          required: false, outcome: "kept: a switch nothing reads is inert")
             try editSpringBoardJob(m) { env, d in
                 env.addEntries(from: caOGL ? sbEnvCAOGL : sbEnv)
                 d["StandardOutPath"] = "/dev/console"; d["StandardErrorPath"] = "/dev/console"

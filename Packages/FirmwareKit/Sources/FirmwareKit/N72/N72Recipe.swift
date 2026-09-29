@@ -300,6 +300,8 @@ final class N72Board: Board {
             try SystemEdits.put(helper("it_agent"), at("usr/local/bin/it_agent"), mode: 0o755)
             try SystemEdits.put(helper("it_typein.dylib"), at("usr/lib/it_typein.dylib"), mode: 0o755)
         }
+        try c.fit.check(FitCheck.environment(fw, Self.sbSwitches, also: gles ? [(SystemEdits.Helpers.mbxEngine, try helper(SystemEdits.Helpers.mbxEngine))] : []),
+                        required: false, outcome: "kept: a switch nothing reads is inert")
         try SystemEdits.editSpringBoardJob(m) { env, _ in
             for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = gles || front ? "1" : "0" }
             for k in ["CA_AUTO_ENABLE_OGL", "LK_AUTO_ENABLE_OGL", "CA_ENABLE_MBX2D", "LK_ENABLE_MBX2D"] { env[k] = "0" }
@@ -374,6 +376,9 @@ final class N72Board: Board {
 }
 
 extension N72Board {
+    /// The switches the bake sets in SpringBoard's job, each under its 3.x+ (CoreAnimation) and 1.x/2.x (LayerKit) name.
+    static let sbSwitches = [["CA_ENABLE_OGL", "LK_ENABLE_OGL"], ["CA_AUTO_ENABLE_OGL", "LK_AUTO_ENABLE_OGL"], ["CA_ENABLE_MBX2D", "LK_ENABLE_MBX2D"]]
+
     /// The baked guest tools (and it_typein in SpringBoard) that must all load for any to be installed.
     static let guestTools = ["it_agent", "it_typein.dylib", "sblaunch", "sbdlicon", SystemEdits.Helpers.name("it_prefs", "armv6")]
 

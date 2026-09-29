@@ -46,6 +46,18 @@ enum FitFixture {
         try SystemEdits.rewritePlist(v.appendingPathComponent(job)) { SystemEdits.dyldInsert($0, dylib) }
     }
 
+    /// The volume's framework binaries (<dir>/<Name>.framework/<Name>), for FitCheck.readers.
+    static func frameworks(_ id: String, in dir: URL) throws -> [String] {
+        guard let dmg = dmgs[id], Oracle.exists(dmg) else { return [] }
+        let raw = dir.appendingPathComponent("list.hfs")
+        try UDIF.extractRootfs(dmg: dmg, to: raw)
+        defer { try? FileManager.default.removeItem(at: raw) }
+        return try HFSPlusVolume(raw).paths().map(\.path).filter { p in
+            let c = p.split(separator: "/")
+            return c.count == 5 && FitCheck.frameworkDirs.contains(c[0..<3].joined(separator: "/")) && c[3] == c[4] + ".framework"
+        }
+    }
+
     /// A copy of the flat guest-tools directory (FIRMWAREKIT_GUEST_TOOLS) with `name` replaced by `bytes`.
     static func helpers(in dir: URL, replacing name: String, with bytes: (Data) -> Data) throws -> URL? {
         guard let src = K48Oracle.guestTools else { return nil }
@@ -186,6 +198,7 @@ enum FitFixture {
                                              options: .init(recipe: recipe), helpers: helpers, kernel: kernel, fit: log)
             #expect(log.fits.contains { $0.piece.hasPrefix("USB Ethernet") && $0.fits }, "\(log.fits.map(\.piece))")
             #expect(log.fits.filter { $0.piece.hasPrefix("it_prefs ") && $0.fits }.count == 3)
+            #expect(log.fits.contains { $0.piece.hasPrefix("SpringBoard environment") && $0.fits })
             let sv = try HFSPlusVolume(r.system)
             #expect((try? sv.record(at: SystemEdits.Helpers.tools[3].path)) == nil)
             let job = try #require(PropertyListSerialization.propertyList(from: sv.contents(sv.record(at: SystemEdits.msmJob)), format: nil) as? [String: Any])
@@ -247,6 +260,7 @@ enum FitFixture {
             #expect(events.warnings.contains { $0.hasPrefix("guest tools (") && $0.contains("_rebooz2") }, "\(events.warnings)")
             #expect(c.fit.fits.contains { $0.piece.hasPrefix("guest tools") && !$0.fits })
             #expect(c.fit.fits.contains { $0.piece == "it_prefs SBDidShowReorderText" && $0.fits })
+            #expect(c.fit.fits.contains { $0.piece.hasPrefix("SpringBoard environment (CA_ENABLE_OGL/LK_ENABLE_OGL") && $0.fits })
         }
     }
 
@@ -280,6 +294,29 @@ enum FitFixture {
                 guard let v = try FitFixture.volume(id, Array(readers), in: dir) else { return }
                 let f = FitCheck.prefs(FitCheck.Firmware(root: v, arch: FitFixture.arch(id)), FitCheck.itPrefs)
                 #expect(f.map(\.fits) == fits, "\(id): \(f.map(\.proof))")
+            }
+        }
+    }
+
+    /// Every switch SpringBoard's job gets has a reader: the iPad's GL set (MBX2D_PAGE_FLIP in the firmware,
+    /// GLI_ACCELERATED only in the GL shim: without the shim it has none) on 3.2.2 and 5.1.1; the iPod's
+    /// CoreAnimation/LayerKit pairs on 2.1.1 (frameworks on disk), 3.1.3 and 4.2.1; not a LayerKit-only switch on
+    /// the iPad's 4.2.1, which reads no LK_ name.
+    @Test func springBoardSwitchesHaveReaders() throws {
+        guard let helpers = K48Oracle.guestTools else { return }
+        let gl = [(SystemEdits.Helpers.glEngine, try Data(contentsOf: helpers.appendingPathComponent(SystemEdits.Helpers.glEngine)))]
+        let ipad = SystemEdits.sbEnvCAOGL.keys.sorted().map { [$0] }
+        let cases: [(String, [[String]], [(String, Data)], Bool)] = [
+            ("k48ap-7B500", ipad, gl, true), ("k48ap-7B500", ipad, [], false), ("k48ap-9B206", ipad, gl, true),
+            ("k48ap-8C148", [["LK_ENABLE_OGL"]], [], false),
+            ("n72ap-5F138", N72Board.sbSwitches, [], true), ("n72ap-7E18", N72Board.sbSwitches, [], true), ("n72ap-8C148", N72Board.sbSwitches, [], true)]
+        for (id, switches, also, fits) in cases {
+            try Oracle.withTemp { dir in
+                let files = FitFixture.stock(id) + [FitCheck.itPrefs[0].1] + (try FitFixture.frameworks(id, in: dir))
+                guard let v = try FitFixture.volume(id, files, in: dir) else { return }
+                let f = FitCheck.environment(FitCheck.Firmware(root: v, arch: FitFixture.arch(id)), switches, also: also)
+                #expect(f.fits == fits, "\(id) \(switches): \(f.proof)")
+                if !fits { #expect(f.proof.contains(switches == ipad ? "GLI_ACCELERATED" : "LK_ENABLE_OGL")) }
             }
         }
     }
