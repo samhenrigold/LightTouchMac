@@ -706,7 +706,7 @@ final class AppsInspectorViewController: NSViewController {
     /// self-heals within one more tick either way.
     private func startInitialLoad() {
         guard emulator.canManageApps else {
-            showInstalledPlaceholder("App management needs a usbmux session. Relaunch with app sync enabled.")
+            showInstalledPlaceholder("Apps can’t be managed without a USB connection.")
             updateButtons()
             return
         }
@@ -1004,7 +1004,7 @@ final class AppsInspectorViewController: NSViewController {
                 if case DeviceError.unavailable = error {
                     // Permanent and host-side: "Waiting" is the wrong frame and
                     // names no remedy.
-                    showInstalledPlaceholder("App services are missing from this copy of Light Touch. Reinstall the app to restore app management.")
+                    showInstalledPlaceholder("App services are missing from this copy of Light Touch. Reinstall Light Touch.")
                 } else {
                     showInstalledPlaceholder(emulator.connectionIssue?.summary ?? "Couldn’t update apps. Retrying…")
                 }

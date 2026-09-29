@@ -6,7 +6,7 @@ status block, frame ring, framed link). Cases:
 
   reject     an ad-hoc re-signed helper is refused by the Team requirement
   lease      two helpers on one device's work/lease (temp state dir): the second is refused
-             ("in use by another Light Touch"), another device's lease is not; after the
+             ("in use by another copy of Light Touch"), another device's lease is not; after the
              holder's parent dies and its helper exits, the lease is taken again. No boot.
   ipod       iPod nand-current: lit, unlock drag, battery request, agent RPC, then the
              parent is SIGKILLed: the helper hard-halts (pause, flush, quit) and exits
@@ -224,7 +224,7 @@ def main():
             a = Driver(args, bin_dir, helper, work, "lease-a", {"steps": ["hold"]}, ["--lease", lease])
             check(a.wait_event("hold", 30), "first helper takes the lease and connects", "lease", results) or print(a.tail())
             b = Driver(args, bin_dir, helper, work, "lease-b", {"steps": []},
-                       ["--lease", lease, "--expect-failure", "in use by another Light Touch"])
+                       ["--lease", lease, "--expect-failure", "in use by another copy of Light Touch"])
             check(b.wait(30) == 0, "second helper on the same device is refused", "lease", results) or print(b.tail())
             o = Driver(args, bin_dir, helper, work, "lease-other", {"steps": []}, ["--lease", other])
             check(o.wait(30) == 0 and o.find("connected"), "another device's helper connects meanwhile", "lease", results)

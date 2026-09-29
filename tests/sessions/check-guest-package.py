@@ -141,11 +141,11 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   check(GuestPackage.status(report: nil, offer: o, record: restored, glesProtocol: 0) == S.outOfDate, "a restored session on older tools")
   restored.bad = [7]
   check(GuestPackage.status(report: nil, offer: o, record: restored, glesProtocol: 0) == S.unknown)
-  check(S.outOfDate.text == "Out of date — restart to update" && S.legacy.text == "Legacy — erase and prepare again to receive updates")
-  check(S.current(serial: 3).text == "Current (serial 3)" && S.builtIn(serial: 1).text == "Built-in (serial 1)")
-  check(S.reverted(serial: 1, why: .revertedBad).text == "Reverted to serial 1 — the newer package was judged bad")
+  check(S.outOfDate.text == "Out of date — restart to update" && S.legacy.text == "Won’t update — erase and prepare again to get updates")
+  check(S.current(serial: 3).text == "Up to date" && S.builtIn(serial: 1).text == "Built in")
+  check(S.reverted(serial: 1, why: .revertedBad).text == "Using an earlier version — the update didn’t work")
   check(S.reverted(serial: 1, why: .revertedTries).text.hasSuffix("kept failing") && S.reverted(serial: 1, why: .refused).text.hasSuffix("was refused"))
-  check(S.unknown.text == "Unknown (no report in 30 s)" && S.notResponding.text == "Not responding" && S.recovery.text == "Recovery" && S.notBooted.text == "Not booted")
+  check(S.unknown.text == "Unknown" && S.notResponding.text == "Not responding" && S.recovery.text == "Unavailable in recovery mode" && S.notBooted.text == "Waiting for iOS")
   // Verdicts.
   typealias V = GuestPackage.Verdict
   let r7 = GuestPackageReport(serial: 7, result: 1)

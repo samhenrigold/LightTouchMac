@@ -131,8 +131,7 @@ struct DeviceTools: Sendable {
         // multi-minute upload, for a file that was never installable.
         guard await AppMetadataCache.bundleID(of: ipa) != nil else {
             throw DeviceError.preflight(
-                "“\(ipa.lastPathComponent)” doesn't look like an iPhone app archive — "
-                + "it has no Payload/…app/Info.plist inside.")
+                "“\(ipa.lastPathComponent)” isn’t an app archive (IPA).")
         }
 
         do {
@@ -269,7 +268,7 @@ struct DeviceTools: Sendable {
             output: .discarded, error: .string(limit: 1 << 16))
         guard result.terminationStatus.isSuccess, FileManager.default.fileExists(atPath: out.path) else {
             logEvent("install: executable repair failed: \(result.standardError)")
-            throw DeviceError.preflight("Could not repair the IPA's executable permissions.")
+            throw DeviceError.preflight("Couldn’t prepare the app’s files for install.")
         }
         succeeded = true
         logEvent("install: \(member) archived non-executable — repacked 0755")
@@ -351,7 +350,7 @@ struct DeviceTools: Sendable {
                                      output: .discarded, error: .string(limit: 1 << 16))
         guard prepared.terminationStatus.isSuccess else {
             logEvent("proxy: certificate preparation failed: \(prepared.standardError)")
-            throw DeviceToolsError.failed("Could not prepare this device’s HTTP proxy certificate.")
+            throw DeviceToolsError.failed("Couldn’t prepare the proxy certificate.")
         }
         let der = try Data(contentsOf: URL(fileURLWithPath: proxyFile + ".ca.der"))
         // The agent claims its channel shortly after lockdown answers; give it a moment before falling back.
@@ -373,7 +372,8 @@ struct DeviceTools: Sendable {
                                     environment: toolEnvironment,
                                     output: .string(limit: 1 << 10), error: .string(limit: 1 << 10))
         guard offered.terminationStatus.isSuccess else {
-            throw DeviceToolsError.failed("Could not offer the proxy certificate to the device. \(offered.standardError)")
+            logEvent("proxy: offering the certificate profile failed: \(offered.standardError)")
+            throw DeviceToolsError.failed("Couldn’t offer the proxy certificate to the device.")
         }
         logEvent("proxy: no guest agent; certificate profile offered, confirm Install on the device")
         return .needsTap

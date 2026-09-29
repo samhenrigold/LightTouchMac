@@ -32,7 +32,7 @@ import Foundation
         // launch); with no record its Prepare needs no preparer. It is also a user_ipsw entry.
         var r = row(iPod)
         precondition(iPod.bundled == "device/n72ap-7E18.itbase" && r.state == .bundled && r.primaryTitle == "Prepare")
-        precondition(r.stateDescription == "Built In" && !r.isStartable)
+        precondition(r.stateDescription == "Built in" && !r.isStartable)
         precondition(allowed(r) == ["importIPSW", "downloadAndPrepare"], "\(allowed(r))")
         precondition(iPod4.bundled == nil && row(iPod4).state != .bundled)
         r = row(iPod, instance: id)
@@ -46,7 +46,7 @@ import Foundation
         precondition(r.primaryAction == .downloadAndPrepare && r.primaryTitle == "Download & Prepare")
         precondition(allowed(r) == ["importIPSW"], "download stays off until W5/W6: \(allowed(r))")
         precondition(allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"])
-        precondition(r.stateDescription.hasPrefix("Not Downloaded, ") && r.stateDescription.contains("MB"))
+        precondition(r.stateDescription.hasPrefix("Not downloaded, ") && r.stateDescription.contains("MB"))
 
         // Its IPSW already in a store: Downloaded, and the button prepares.
         r = DeviceRow(entry: iPad, instanceID: nil, session: nil, job: nil, failure: nil, downloaded: true)
@@ -65,8 +65,8 @@ import Foundation
         precondition(r.state == .stopping && allowed(r) == ["showInFinder"], "\(allowed(r))")
         r = row(iPad, instance: id, session: .stopped)
         precondition(r.state == .ready && allowed(r) == ["start", "erase", "showInFinder"], "powered off starts again: \(allowed(r))")
-        r = row(iPod, instance: id, session: .dead("The emulator stopped."))
-        precondition(r.state == .error("The emulator stopped.") && r.stateDescription == "Error")
+        r = row(iPod, instance: id, session: .dead("The iPod stopped."))
+        precondition(r.state == .error("The iPod stopped.") && r.stateDescription == "Error")
         precondition(r.allows(.start, canDownload: false), "a dead session's Start restarts it")
 
         // Jobs: downloading and preparing, with progress and Cancel.
@@ -100,8 +100,8 @@ import Foundation
         precondition(estimatedRemaining(elapsed: 30, from: 0, to: 0.25) == 90 && estimatedRemaining(elapsed: 10, from: 0.5, to: 0.75) == 10)
         precondition(DeviceRow.remainingText(5) == "Almost done" && DeviceRow.remainingText(41) == "About 50 s remaining"
                      && DeviceRow.remainingText(3000) == "About 50 min remaining" && DeviceRow.remainingText(7200) == "About 2 h remaining")
-        r = row(iPad32, job: .failed("Download corrupted."))
-        precondition(r.state == .error("Download corrupted.") && r.primaryTitle == "Try Again")
+        r = row(iPad32, job: .failed("The download is damaged. Try again."))
+        precondition(r.state == .error("The download is damaged. Try again.") && r.primaryTitle == "Try Again")
         precondition(r.primaryAction == .downloadAndPrepare, "retrying a failed download downloads again")
 
         // A start failure: Try Again starts again.
@@ -112,14 +112,14 @@ import Foundation
         // Unavailable entries are dimmed and offer nothing but their reason.
         r = row(iPod2)
         precondition(r.state == .unavailable(.comingSoon) && r.isDimmed && r.primaryAction == nil)
-        precondition(allowed(r, canDownload: true).isEmpty && r.stateDescription == "Coming Soon")
+        precondition(allowed(r, canDownload: true).isEmpty && r.stateDescription == "Coming soon")
         precondition(row(iPod2, job: .downloading(fraction: 0.5)).state == .unavailable(.comingSoon))
         var beta = iPad
         beta.status = .userIPSW
         beta.source.url = nil
         r = row(beta)
         precondition(r.state == .unavailable(.requiresIPSW) && r.primaryTitle == "Import IPSW…")
-        precondition(allowed(r, canDownload: true) == ["importIPSW"] && r.stateDescription == "Requires IPSW")
+        precondition(allowed(r, canDownload: true) == ["importIPSW"] && r.stateDescription == "Requires an IPSW")
         precondition(row(beta, instance: id).state == .ready, "an imported beta runs like any device")
         precondition(row(beta, failure: "x").primaryAction == .importIPSW, "a failed import offers the import again")
 

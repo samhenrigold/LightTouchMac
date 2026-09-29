@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-events-') as temp:
   device.resolveDeviceNotice(for:.powerOff);precondition(device.deviceNotice != nil)
   device.resolveDeviceNotice(for:.preparation);precondition(NoticeDevice().deviceNotice==nil)
   device.storageFailed=true;device.reportDeviceNotice("Another failure",for:.powerOff)
-  precondition(device.deviceNotice!.hasPrefix("Storage writes failed"))
+  precondition(device.deviceNotice!.hasPrefix("Couldn’t save to disk."))
   device.dismissDeviceNotice();precondition(device.deviceNotice != nil)
   device.storageFailed=false;device.dismissDeviceNotice()
   defaults.removePersistentDomain(forName:domain)

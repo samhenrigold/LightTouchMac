@@ -49,8 +49,8 @@ struct SpringBoardIcons: Sendable {
             // install before a respring.
             guard let from = ids.firstIndex(of: bundleID) else {
                 throw DeviceToolsError.failed(
-                    "SpringBoard doesn't know about this app yet. "
-                    + "Restart the \(profile.shortName), then try reordering it.")
+                    "This app isn’t on the Home screen yet. "
+                    + "Restart the \(profile.shortName), then try moving it again.")
             }
             ids.remove(at: from)
             let to = other.flatMap { ids.firstIndex(of: $0) } ?? ids.count
@@ -148,19 +148,19 @@ struct SpringBoardIcons: Sendable {
             let imd = IMobileDevice.self
             guard let sbservices_get_icon_state = imd.sbservices_get_icon_state,
                   let plist_free = imd.plist_free else {
-                throw DeviceToolsError.failed("libimobiledevice is not installed (brew install libimobiledevice).")
+                throw DeviceToolsError.failed("App services are missing from this copy of Light Touch. Reinstall Light Touch.")
             }
             var raw: OpaquePointer?
             // "2" is the format version SpringBoard has spoken since iOS 3 —
             // the one that reports the dock as its own list.
             guard sbservices_get_icon_state(client, &raw, "2") == imd.success,
                   let raw else {
-                throw DeviceToolsError.failed("SpringBoard would not report its icon layout.")
+                throw DeviceToolsError.failed("The Home screen didn’t report its layout. Try again.")
             }
             defer { plist_free(raw) }
 
             guard let state = try Self.decode(raw) as? [Any] else {
-                throw DeviceToolsError.failed("SpringBoard's icon layout was not a list of pages.")
+                throw DeviceToolsError.failed("The Home screen reported a layout Light Touch can’t read.")
             }
             return try body(state, client)
         }
@@ -172,11 +172,11 @@ struct SpringBoardIcons: Sendable {
     func interfaceOrientation() async throws -> Int {
         try await withClient { client in
             guard let get = IMobileDevice.sbservices_get_interface_orientation else {
-                throw DeviceToolsError.failed("libimobiledevice has no interface orientation call.")
+                throw DeviceToolsError.failed("App services are missing from this copy of Light Touch. Reinstall Light Touch.")
             }
             var orientation: Int32 = 0
             guard get(client, &orientation) == IMobileDevice.success else {
-                throw DeviceToolsError.failed("SpringBoard would not report its orientation.")
+                throw DeviceToolsError.failed("The Home screen didn’t report its orientation. Try again.")
             }
             return Int(orientation)
         }
@@ -195,7 +195,7 @@ struct SpringBoardIcons: Sendable {
                       let lockdownd_start_service = imd.lockdownd_start_service,
                       let sbservices_client_new = imd.sbservices_client_new else {
                     throw DeviceToolsError.failed(
-                        "libimobiledevice is not installed (brew install libimobiledevice).")
+                        "App services are missing from this copy of Light Touch. Reinstall Light Touch.")
                 }
 
                 // libimobiledevice reads this at connect time, and it is what
@@ -212,21 +212,21 @@ struct SpringBoardIcons: Sendable {
                 var lockdown: OpaquePointer?
                 guard lockdownd_client_new_with_handshake(device, &lockdown, "LightTouchMac")
                         == imd.success, let lockdown else {
-                    throw DeviceToolsError.failed("lockdownd would not accept a session.")
+                    throw DeviceToolsError.failed("The device refused the connection. Try again.")
                 }
                 defer { _ = imd.lockdownd_client_free?(lockdown) }
 
                 var service: OpaquePointer?
                 guard lockdownd_start_service(lockdown, "com.apple.springboardservices", &service)
                         == imd.success, let service else {
-                    throw DeviceToolsError.failed("SpringBoard is not answering yet.")
+                    throw DeviceToolsError.failed("The Home screen isn’t responding yet. Try again in a moment.")
                 }
                 defer { _ = imd.lockdownd_service_descriptor_free?(service) }
 
                 var client: OpaquePointer?
                 guard sbservices_client_new(device, service, &client) == imd.success,
                       let client else {
-                    throw DeviceToolsError.failed("Could not talk to SpringBoard.")
+                    throw DeviceToolsError.failed("Couldn’t reach the Home screen. Try again.")
                 }
                 defer { _ = imd.sbservices_client_free?(client) }
                 return try body(client)
@@ -241,7 +241,7 @@ struct SpringBoardIcons: Sendable {
         var xml: UnsafeMutablePointer<CChar>?
         var length: UInt32 = 0
         IMobileDevice.plist_to_xml?(node, &xml, &length)
-        guard let xml else { throw DeviceToolsError.failed("unreadable icon layout") }
+        guard let xml else { throw DeviceToolsError.failed("The Home screen reported a layout Light Touch can’t read.") }
         defer { IMobileDevice.plist_mem_free?(xml) }
         let data = Data(bytes: xml, count: Int(length))
         return try PropertyListSerialization.propertyList(from: data, format: nil)
@@ -257,10 +257,10 @@ struct SpringBoardIcons: Sendable {
             IMobileDevice.plist_from_xml?(buffer.baseAddress?.assumingMemoryBound(to: CChar.self),
                                           UInt32(buffer.count), &node)
         }
-        guard let node else { throw DeviceToolsError.failed("could not encode the icon layout") }
+        guard let node else { throw DeviceToolsError.failed("Couldn’t save the Home screen layout.") }
         defer { IMobileDevice.plist_free?(node) }
         guard IMobileDevice.sbservices_set_icon_state?(client, node) == IMobileDevice.success else {
-            throw DeviceToolsError.failed("SpringBoard refused the new icon layout.")
+            throw DeviceToolsError.failed("The Home screen didn’t accept the new layout.")
         }
     }
 }

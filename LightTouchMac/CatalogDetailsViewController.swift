@@ -38,7 +38,7 @@ final class CatalogDetailsViewController: NSViewController {
         picker.isEnabled = false
         details.isSelectable = true
         let caution = NSTextField(wrappingLabelWithString:
-            "Compatibility checks identify candidates, not tested games. Installing another version replaces the installed app; older versions may not understand its saved data.")
+            "Installing another version replaces the installed app. Older versions may not read its saved data.")
         caution.font = .systemFont(ofSize: 11)
         caution.textColor = .secondaryLabelColor
         let close = NSButton(title: "Close", target: self, action: #selector(closeClicked))

@@ -80,7 +80,7 @@ import Cocoa
 
     /// Why Download & Prepare is off, for the placeholder.
     var unavailableReason: String? {
-        canDownload ? nil : "This build of Light Touch can’t prepare devices: its firmware preparer is missing."
+        canDownload ? nil : "This copy of Light Touch can’t prepare devices because a component is missing. Reinstall Light Touch."
     }
 
     // MARK: - Commands
@@ -171,7 +171,7 @@ import Cocoa
     func prepareBundled(_ entry: FirmwareCatalog.Entry) {
         guard entry.bundled != nil, !unpacking.contains(entry.id), !refuseExisting(entry) else { return }
         guard let blob = Self.bundledBlob(entry) else {
-            return fail(entry, FirmwareError.failed("This build of Light Touch has no built-in \(entry.profile?.shortName ?? "device")."))
+            return fail(entry, FirmwareError.failed("This copy of Light Touch has no built-in \(entry.profile?.shortName ?? "device")."))
         }
         let state = Bundled.stateDirectory
         do { try IPSWStore.checkSpace(entry.estimates.preparedBytes + inFlightPeakBytes, at: state) }

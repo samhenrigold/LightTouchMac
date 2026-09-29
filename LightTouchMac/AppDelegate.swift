@@ -76,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             text.textContainerInset = NSSize(width: 24, height: 20)
             text.font = .systemFont(ofSize: 14)
             text.string = Bundle.main.url(forResource: "Help", withExtension: "txt")
-                .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "Help is missing from this build."
+                .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "Help is missing from this copy of Light Touch."
             text.setAccessibilityLabel("Light Touch Help")
             scroll.documentView = text
             text.sizeToFit()

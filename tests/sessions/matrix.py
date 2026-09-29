@@ -230,7 +230,7 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
                                    "lockdown": round(usb2[1]["seconds"], 1) if len(usb2) > 1 else None}
     quits = find("quit")
     q = quits[0] if quits else {}
-    r["shutdown"] = {"ok": bool(quits) and q.get("confirmed", -1) >= 0 and q.get("exited") and q.get("reason") == "The emulator stopped.",
+    r["shutdown"] = {"ok": bool(quits) and q.get("confirmed", -1) >= 0 and q.get("exited") and str(q.get("reason")).endswith(" stopped."),
                      "seconds": round(q["confirmed"], 1) if q.get("confirmed", -1) >= 0 else None, "reason": q.get("reason"),
                      "second": (round(quits[1]["confirmed"], 1) if len(quits) > 1 and quits[1].get("confirmed", -1) >= 0 else None)}
     r["base_unchanged"] = check_sessions.tree(base) == base_before

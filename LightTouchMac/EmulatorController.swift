@@ -53,7 +53,7 @@ final class EmulatorController {
     private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
         let value = storageFailed
-            ? "Storage writes failed. The device is stopped and recent changes were not saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
+            ? "Couldn’t save to disk. The device stopped and recent changes weren’t saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
             : message
         logEvent(value)
         deviceNotice = value
@@ -284,7 +284,7 @@ final class EmulatorController {
     private func pinOverlay(_ overlay: URL) throws -> Bool {
         guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
             baseImageMismatch = true
-            reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
+            reportDeviceNotice("This \(profile.shortName)’s data was made with an older system image.", for: .erase)
             state = .dead(exitCode: 1)
             return false
         }
@@ -414,7 +414,7 @@ final class EmulatorController {
         if let cocoa = error as? CocoaError, cocoa.code == .fileNoSuchFile, let path = cocoa.userInfo[NSFilePathErrorKey] as? String {
             return "This \(profile.shortName)’s system files are incomplete: \(URL(fileURLWithPath: path).lastPathComponent) is missing. Delete it and prepare it again."
         }
-        return "Could not prepare device storage: \(error.localizedDescription)"
+        return "Couldn’t prepare the \(profile.shortName)’s storage: \(error.localizedDescription)"
     }
 
     /// The boot can't be built: dead with a named reason (the row and the overlay show it).
@@ -516,7 +516,7 @@ final class EmulatorController {
                     try Task.checkCancellation()
                     guard generation == bootGeneration else { return }
                     guard !isDead, !storageFailed, ContinuousClock.now < deadline else {
-                        throw DeviceToolsError.failed("The device did not become ready.")
+                        throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.")
                     }
                     if state == .running, await deviceReady() { break }
                     try await Task.sleep(for: .milliseconds(250))
@@ -714,22 +714,22 @@ final class EmulatorController {
     /// One line for the window's status area.
     var statusLine: String {
         if isErasing { return "Erasing \(profile.shortName)…" }
-        if storageFailed { return "Storage write failed — device stopped; latest changes were not saved" }
+        if storageFailed { return "Couldn’t save to disk — \(profile.shortName) stopped; recent changes weren’t saved" }
         if shuttingDown, !isPoweredOff { return "Stopping…" }
         switch state {
-        case .poweredOff: return "Powered Off"
+        case .poweredOff: return "Powered off"
         case .notStarted: return "Starting…"
-        case .booting:    return "Booting…"
+        case .booting:    return "Starting iOS…"
         case .running:
             if let issue = connectionIssue, issue.persistent { return issue.summary }
             if preparingDevice { return preparationStatus }
             if isSleeping { return "Sleeping" }
-            if restartingSpringBoard { return "Restarting SpringBoard…" }
+            if restartingSpringBoard { return "Restarting the Home screen…" }
             if let readinessFailure { return "Startup failed — \(readinessFailure)" }
             guard canManageApps else { return "Running — USB unavailable" }
             return "Running — " + guestToolsLine
         case .paused:     return "Paused"
-        case .dead:       return "Emulator stopped"
+        case .dead:       return "Stopped"
         }
     }
 
@@ -1676,7 +1676,7 @@ final class EmulatorController {
             if (try? await springBoard().order()) != nil { return }
             try await Task.sleep(for: .seconds(1))
         }
-        throw DeviceToolsError.failed("SpringBoard did not recover. Restart the device to recover; your installed apps are preserved.")
+        throw DeviceToolsError.failed("The Home screen didn’t come back. Restart the \(profile.shortName); your apps are kept.")
     }
 
     /// True while any install is running — the quit guard reads this so ⌘Q

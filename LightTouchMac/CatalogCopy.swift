@@ -41,7 +41,7 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
         guard let binary else { return "This copy has not been analyzed for compatibility." }
         guard binary.install_status == "installable" else {
             return binary.install_status == "encrypted"
-                ? "This copy is FairPlay-encrypted and cannot launch in the emulator."
+                ? "This copy is encrypted and can’t launch in Light Touch."
                 : "This copy has not been classified as installable."
         }
         guard binary.architectures?.contains(arch) == true else {

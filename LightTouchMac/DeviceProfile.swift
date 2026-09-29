@@ -15,6 +15,8 @@ nonisolated enum DeviceProfile: Equatable {
     var displayName: String { self == .iPad1 ? "iPad" : "iPod touch" }
     /// What the device is called in menus, titles and messages ("the iPod").
     var shortName: String { self == .iPad1 ? "iPad" : "iPod" }
+    /// A requested stop's reason (the dead overlay, the session's phase); tests compare it.
+    var stoppedReason: String { "The \(shortName) stopped." }
 
     var boardID: String { self == .iPad1 ? "k48ap" : "n72ap" }
     /// A prepared base's boot file and the other files its boots need besides nand/, by the lock's boot_strategy.
