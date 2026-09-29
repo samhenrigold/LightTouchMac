@@ -497,6 +497,21 @@ public final class HFSPlusVolume {
         }
     }
 
+    /// Hands the journal to the device: zeroes it and sets the info block's kJIJournalNeedInitMask, as newfs_hfs
+    /// leaves it, so the device's kernel writes the header for its own block size at the first mount. A header
+    /// the host wrote says 512-byte blocks, which a kernel that adopts the header's size (iPhone OS 1.x, on
+    /// 2048-byte NAND pages) then fails its I/O with.
+    public func leaveJournalToDevice() throws {
+        guard writable else { throw FirmwareError(.internal, "\(url.lastPathComponent) is open read-only") }
+        var vh = [UInt8](repeating: 0, count: 512)
+        guard let j = try journal(), pread(fd, &vh, 512, 1024) == 512 else { throw FirmwareError(.internal, "\(url.lastPathComponent) has no journal in the volume") }
+        let at = Int(be32(vh, 12)) * blockSize
+        var jib = [UInt8](repeating: 0, count: 4)
+        guard pread(fd, &jib, 4, off_t(at)) == 4 else { throw FirmwareError(.internal, "read the journal info block of \(url.lastPathComponent)") }
+        put32(&jib, 0, be32(jib, 0) | 4)
+        try restore([(j.offset, Data(count: j.size)), (at, Data(jib))])
+    }
+
     public func restore(_ pieces: [(offset: Int, bytes: Data)]) throws {
         guard writable else { throw FirmwareError(.internal, "\(url.lastPathComponent) is open read-only") }
         for p in pieces {
