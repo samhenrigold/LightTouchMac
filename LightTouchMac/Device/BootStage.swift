@@ -56,3 +56,21 @@ nonisolated enum BootStage: Int, Comparable, Sendable {
 
     static func < (a: BootStage, b: BootStage) -> Bool { a.rawValue < b.rawValue }
 }
+
+/// What the board's boot budget does to a device whose USB hasn't answered by then.
+nonisolated enum ReadinessDeadline: Equatable, Sendable {
+    /// iOS is up and showing a picture: keep it running, and say which services wait for USB.
+    case keepRunning
+    /// No picture from iOS (nothing, or only iBoot's logo on a boot that never got further): stop it.
+    case stop
+
+    /// `painted`: the display has shown frames this boot; `stage`: how far the boot has provably got.
+    /// A painted display alone is not enough, because iBoot lights it too.
+    static func verdict(painted: Bool, stage: BootStage) -> ReadinessDeadline {
+        painted && stage >= .system ? .keepRunning : .stop
+    }
+
+    static func notice(shortName: String) -> String {
+        "The \(shortName) is running, but it isn’t connected over USB yet. Installing apps and transferring files aren’t available until it connects."
+    }
+}

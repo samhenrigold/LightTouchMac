@@ -70,7 +70,18 @@ final class Seen: @unchecked Sendable {
         // The iPod touch (1st generation): iBoot-204 prints no banner; the kernel's line is the first sign.
         precondition(BootStage.poweringOn.after(.serial("Darwin Kernel Version")) == .kernel)
 
-        print("PASS: the recorded boot's serial lines, guest tools and USB give the toast's stages in order, only forward")
+        // The readiness deadline: iOS on screen without USB keeps running; no picture, or iBoot's logo alone, stops.
+        precondition(ReadinessDeadline.verdict(painted: true, stage: .system) == .keepRunning, "slide to set up, no USB: keep it")
+        precondition(ReadinessDeadline.verdict(painted: true, stage: .usb) == .keepRunning)
+        precondition(ReadinessDeadline.verdict(painted: false, stage: .system) == .stop, "iOS runs but never shows a picture")
+        precondition(ReadinessDeadline.verdict(painted: false, stage: .poweringOn) == .stop, "nothing at all")
+        precondition(ReadinessDeadline.verdict(painted: true, stage: .loading) == .stop && ReadinessDeadline.verdict(painted: true, stage: .kernel) == .stop,
+                     "iBoot lights the display too: its logo alone is not iOS")
+        precondition(stage == .usb && ReadinessDeadline.verdict(painted: true, stage: recorded.prefix(4).map(BootStage.Event.serial)
+            .reduce(.poweringOn) { $0.after($1) }) == .keepRunning, "the recorded boot, had USB never come: kept")
+        let notice = ReadinessDeadline.notice(shortName: "iPad")
+        precondition(notice.hasPrefix("The iPad is running, but it isn’t connected over USB yet.") && notice.contains("Installing apps and transferring files"))
+        print("PASS: the recorded boot's serial lines, guest tools and USB give the toast's stages in order, only forward; iOS on screen without USB keeps running, no picture stops")
     }
 }
 '''

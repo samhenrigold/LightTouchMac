@@ -80,7 +80,7 @@ The same state has the same words on every surface (sidebar accessory, placehold
 | dead | Stopped (overlay: the stop reason) |
 | a persistent connection issue | the issue's summary |
 
-Stop reasons (`DeviceSession`): "The iPod stopped." (asked for), "The iPod stopped unexpectedly. Open Device Logs for details." (not asked for), "The iPod didn’t start. Open Device Logs for details.", "This device is in use by another copy of Light Touch.", "The iPod didn’t start within N seconds. Open Device Logs for details.", "The iPod entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
+Stop reasons (`DeviceSession`): "The iPod stopped." (asked for), "The iPod stopped unexpectedly. Open Device Logs for details." (not asked for), "The iPod didn’t start. Open Device Logs for details.", "This device is in use by another copy of Light Touch.", "The iPod didn’t start within N seconds. Open Device Logs for details." (only when iOS never showed a picture: `ReadinessDeadline`), "The iPod entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
 
 ### Guest tools (`GuestPackage.Status.text`, after "Guest tools: ")
 
@@ -123,6 +123,7 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | storage writes failed (notice) | Couldn’t save to disk. The device stopped and recent changes weren’t saved. Free disk space, then reopen Light Touch. Open Device Logs for details. |
 | low disk space | Your Mac is almost out of disk space: X is available, and Light Touch needs at least Y to save changes reliably. |
 | not enough space to prepare | Not enough disk space: this needs X, and Y is available. (placeholder: only when the volume is short; no sizes otherwise) |
+| iOS on screen, USB not answering by the boot budget (the device keeps running) | The iPod is running, but it isn’t connected over USB yet. Installing apps and transferring files aren’t available until it connects. |
 | files changed under a running device | Files of this iPod were changed while it was running. Stop and start it again; unsaved changes may be lost. |
 | older data | This iPod’s data was made with an older system image. |
 | legacy erase and the unpack after it (window, then sheet) | Updating the built-in iPod… |

@@ -6,13 +6,14 @@ DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device
 root=Path(__file__).resolve().parents[2]
 s=(root/'LightTouchMac/Device/EmulatorController.swift').read_text()
 a=s.index('    private func startReadinessWatch()');b=s.index('    /// Keep the guest',a)
-method=s[a:b].replace('private func','func',1)
+method=s[a:b].replace('private func','func',1).replace('.seconds(profile.bootBudget)','.milliseconds(budgetMS)')
 a=s.index('    func powerOn()');b=s.index('    private func startForegroundWatch()',a)
 power_on=s[a:b]
 source=r'''import Foundation
 struct DeviceToolsError: Error {static func failed(_ s:String)->Self{Self()}}
 @MainActor var sleeping=false
 @MainActor var queryHook:(()->Void)?
+@MainActor var budgetMS=60_000
 /// The helper's status block (read live) and link (commands go nowhere).
 struct Status { var displaySleeping: Bool; var shutdownConfirmed = false; var guestPackage: Int? = nil }
 struct FakeLink { func send(_ c: LinkCommand) {} }
@@ -42,7 +43,9 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
  var bootStage=BootStage.poweringOn,reportAtBootStart:Int?
  func noteBoot(_ e:BootStage.Event){bootStage=bootStage.after(e)}
  var onReady:(()->Void)?
- func deviceReady() async -> Bool {onReady?();return true}
+ var usbAnswers=true
+ var deadlineVerdict:ReadinessDeadline{ReadinessDeadline.verdict(painted:state == .running,stage:bootStage)}
+ func deviceReady() async -> Bool {onReady?();return usbAnswers}
  var springBoardReady=true
  var springBoardChecks=0
  func waitForSpringBoard() async throws {
@@ -50,8 +53,9 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
   while !springBoardReady { try await Task.sleep(for:.milliseconds(10)) }
  }
  func logEvent(_ s:String){}
- func resolveDeviceNotice(for n:Notice){}
- func reportDeviceNotice(_ s:String,for n:Notice){}
+ var notices:[String]=[]
+ func resolveDeviceNotice(for n:Notice){notices.removeAll()}
+ func reportDeviceNotice(_ s:String,for n:Notice){notices.append(s)}
  func pressHome(){precondition(preparingDevice);homes+=1;sleeping=false}
 '''+method+power_on+r'''}
 @main struct Main {
@@ -80,7 +84,20 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
   precondition(cancelled.homes==0 && !cancelled.preparingDevice)
   let quitting=Controller();quitting.onReady={quitting.shuttingDown=true}
   quitting.startReadinessWatch();await quitting.readinessTask?.value;precondition(quitting.homes==0)
-  print("PASS: one boot wake only for backlight-off; awake/cancelled/new-boot/shutdown sessions unchanged")
+  // The deadline with iOS on screen and no USB: input on, a notice, still waiting; USB later clears it.
+  budgetMS=100;sleeping=false
+  let noUSB=Controller();noUSB.usbAnswers=false;noUSB.startReadinessWatch();noUSB.bootStage = .system
+  try? await Task.sleep(for:.milliseconds(400))
+  precondition(!noUSB.preparingDevice && noUSB.readinessFailure==nil,"kept running, not a startup failure")
+  precondition(noUSB.notices==[ReadinessDeadline.notice(shortName:"iPod")],"\(noUSB.notices)")
+  noUSB.usbAnswers=true;await noUSB.readinessTask?.value
+  precondition(noUSB.deviceReachable==true && noUSB.notices.isEmpty && noUSB.bootStage == .usb,"USB came: ready, notice gone")
+  // No picture from iOS by the deadline: the startup fails as before.
+  let dark=Controller();dark.usbAnswers=false;dark.startReadinessWatch();dark.bootStage = .kernel
+  await dark.readinessTask?.value
+  precondition(dark.readinessFailure != nil && !dark.preparingDevice && dark.notices.count==1 && dark.notices[0] != ReadinessDeadline.notice(shortName:"iPod"))
+  budgetMS=60_000
+  print("PASS: one boot wake only for backlight-off; awake/cancelled/new-boot/shutdown sessions unchanged; the deadline keeps iOS on screen running without USB")
  }
 }
 '''

@@ -4,7 +4,8 @@
 Offline (always): EmulatorController's boot watch, sliced with a fake helper. No uiReady within the
 board's budget halts the helper and the session dies with the deadline reason; iBoot's "Entering
 recovery mode" on the serial log does the same with the recovery reason, at once; a boot whose UI
-came up in time is left alone; a base missing iBoot.bin fails before boot with a reason naming
+came up in time is left alone, and so is one showing iOS (painted, BootStage.system) whose USB never
+answered, while iBoot's picture alone or no picture is still stopped; a base missing iBoot.bin fails before boot with a reason naming
 the file. The serial watch itself (NativeLogging.LogPipeReader) is fed the marker split across
 two writes and must report it exactly once.
 
@@ -64,6 +65,7 @@ struct Serial { func finish() {} }
  var bootGeneration = 0
  var status: Status? = Status()
  var deviceReachable: Bool?
+ var bootStage = BootStage.poweringOn
  var process: FakeProcess? = FakeProcess()
  var deathReason: String?
  var notices: [String] = []
@@ -93,6 +95,18 @@ struct Serial { func finish() {} }
   let quiet = Controller(.iPad1); quiet.status!.uiReady = true
   quiet.startBootWatch(); await settle(600)
   precondition(quiet.isDead, "a lit display without lockdown is not a finished boot")
+  // iBoot's logo on screen (frames painted) but the boot never got past the kernel: still stopped.
+  let logo = Controller(.iPad1); logo.state = .running; logo.bootStage = .kernel
+  logo.startBootWatch(); await settle(600)
+  precondition(logo.isDead && logo.deathReason == Controller.deadlineReason(.iPad1), "iBoot's picture alone is not iOS")
+  // iOS on screen ("slide to set up") with its guest tools reporting, USB never answering: kept running.
+  let setUp = Controller(.iPad1); setUp.state = .running; setUp.bootStage = .system
+  setUp.startBootWatch(); await settle(600)
+  precondition(!setUp.isDead && setUp.process!.terms == 0 && setUp.deathReason == nil, "a device on screen isn't killed for its USB")
+  // The same boot without a picture: stopped.
+  let dark = Controller(.iPad1); dark.bootStage = .system
+  dark.startBootWatch(); await settle(600)
+  precondition(dark.isDead, "no picture by the deadline: stopped")
   let noUSB = Controller(.iPodTouch2G); noUSB.usbmux.session = nil; noUSB.state = .running
   noUSB.startBootWatch(); await settle(600)
   precondition(!noUSB.isDead, "without a USB bridge, painting has to do")
@@ -162,7 +176,8 @@ final class Matches: @unchecked Sendable {
         p.write_text(source)
         if os.environ.get("LTM_DUMP"):
             Path(os.environ["LTM_DUMP"]).write_text(source)
-        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(p), "-o", d + "/check"], check=True)
+        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/BootStage.swift"),
+                        str(p), "-o", d + "/check"], check=True)
         subprocess.run([d + "/check"], check=True, timeout=20)
         w = Path(d) / "watch.swift"
         w.write_text(watch)

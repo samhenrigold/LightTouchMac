@@ -475,15 +475,23 @@ final class EmulatorController {
     /// by iBoot too). Without a USB bridge (--no-appsync) painting has to do.
     private var bootFinished: Bool { deviceReachable == true || (usbmux.session == nil && state == .running) }
 
+    /// The readiness deadline's verdict now (ReadinessDeadline): frames painted, and how far the boot got.
+    private var deadlineVerdict: ReadinessDeadline { ReadinessDeadline.verdict(painted: state == .running, stage: bootStage) }
+
     /// Never "Booting…" forever: no answer within the board's budget ends the
-    /// boot as a named error, with the helper halted. Per boot (also after
-    /// Power On and Restart).
+    /// boot as a named error, with the helper halted, unless iOS is up and
+    /// showing a picture (the readiness watch then says USB isn't there yet).
+    /// Per boot (also after Power On and Restart).
     private func startBootWatch() {
         bootWatchTask?.cancel()
         let generation = bootGeneration
         bootWatchTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(self?.profile.bootBudget ?? 0))
             guard let self, !Task.isCancelled, generation == bootGeneration, !bootFinished else { return }
+            guard deadlineVerdict == .stop else {
+                logEvent("boot: iOS is up (\(bootStage.text)) but USB didn’t answer in \(Int(profile.bootBudget)) s; keeping it running")
+                return
+            }
             abortBoot(Self.deadlineReason(profile))
         }
     }
@@ -559,12 +567,19 @@ final class EmulatorController {
             guard let self else { return }
             defer { if generation == self.bootGeneration { self.preparingDevice = false } }
             do {
-                let deadline = ContinuousClock.now + .seconds(profile.bootBudget)
+                var deadline: ContinuousClock.Instant? = ContinuousClock.now + .seconds(profile.bootBudget)
                 while true {
                     try Task.checkCancellation()
                     guard generation == bootGeneration else { return }
-                    guard !isDead, !storageFailed, ContinuousClock.now < deadline else {
-                        throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.")
+                    guard !isDead, !storageFailed else { throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.") }
+                    if let due = deadline, ContinuousClock.now >= due {
+                        guard deadlineVerdict == .keepRunning else {
+                            throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.")
+                        }
+                        // iOS is on screen without USB: the screen is the user's; keep waiting for USB, quietly.
+                        deadline = nil
+                        preparingDevice = false
+                        reportDeviceNotice(ReadinessDeadline.notice(shortName: profile.shortName), for: .preparation)
                     }
                     if state == .running, await deviceReady() { break }
                     try await Task.sleep(for: .milliseconds(250))
@@ -1073,7 +1088,8 @@ final class EmulatorController {
                 try? await Task.sleep(for: .seconds(3))
                 guard let self else { return }
                 if self.state == .booting { last = nil }   // a restart: adopt again
-                guard self.state == .running, self.canManageApps, !self.isSleeping, !self.isInstalling,
+                // Only once lockdown has answered: before that every try is "not reachable over USB yet", every 3 s in the log.
+                guard self.canReachDevice, !self.isSleeping, !self.isInstalling,
                       let reading = try? await self.services.interfaceOrientation(),
                       let target = Self.iPadDegrees(forInterface: reading) else { continue }
                 if last == nil || (last != reading && self.autoRotateEnabled), target != self.rotationDegrees {
