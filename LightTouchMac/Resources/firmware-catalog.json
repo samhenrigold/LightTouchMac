@@ -575,7 +575,7 @@
    "RecoveryMode": {"file": "recoverymode-768x1024.s5l8930x.img3", "iv": "3c7675a34b01250a183dfe275534bd42", "key": "c1d0032a078d0b3753bd0422a8bc79b43ef8095a2b4b82f788f27cb46d901102"},
    "rootfs": {"file": "038-2178-001.dmg", "key": "aa3f737295c1d7a1e0539b8b1a02310b9ec7503be6ed05b88520e50a1a006f4b270b3e9f"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}, "keybag_ramdisk_from": "k48ap-8F190", "boot": "kboot"},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}, "keybag_ramdisk_from": "k48ap-8F190"},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },
@@ -606,7 +606,7 @@
    "RecoveryMode": {"file": "recoverymode-768x1024.s5l8930x.img3", "iv": "3c7675a34b01250a183dfe275534bd42", "key": "c1d0032a078d0b3753bd0422a8bc79b43ef8095a2b4b82f788f27cb46d901102"},
    "rootfs": {"file": "038-2272-002.dmg", "key": "e002a32650a28f4ecd0793d2e36d8bc93bf4a60bb010dbe9ef2ed41821fc5463b24c791b"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}, "keybag_ramdisk_from": "k48ap-8F190", "boot": "kboot"},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}, "keybag_ramdisk_from": "k48ap-8F190"},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },
