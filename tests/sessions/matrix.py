@@ -164,7 +164,8 @@ def boot(entry, base, a, helper, work, env):
            "bundleID": a.bundle_id, "work": str(work), "files": str(a.files),
            "ipodNAND": str(a.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(base) if board == "ipad" else "", "timeout": a.boot_timeout - 20,
-           "single": {"board": board, "base": str(base), "reboot": True}}
+           "single": {"board": board, "base": str(base), "reboot": True, "lockdownTZ": str(a.lockdown_tz),
+                      "install": (entry.get("recipe") or {}).get("options", {}).get("appsync", False)}}
     if a.frameworks:
         cfg["frameworks"] = str(a.frameworks)
     itpack = a.guest_tools / ("armv7.itpack" if board == "ipad" else "armv6.itpack")
@@ -389,6 +390,7 @@ def main():
     tools.mkdir()
     log(f"building the session driver and helper in {tools}")
     helper = check_sessions.build(argparse.Namespace(helper=str(a.helper) if a.helper else None), tools)
+    a.lockdown_tz = check_sessions.build_lockdown_tz(tools)
     if a.build_only:
         return log(f"built: {helper}")
 

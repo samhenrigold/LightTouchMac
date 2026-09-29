@@ -17,7 +17,7 @@ struct ActivationConfig: Decodable {
     let b = URL(fileURLWithPath: a.base)
     if !ipad, !a.base.isEmpty {
         d.ipod = .init(nand: b.appendingPathComponent("nand").path, nor: b.appendingPathComponent("nor.bin").path,
-                       iBoot: b.appendingPathComponent("iBoot.bin").path, gidBlobs: FileManager.default.fileExists(atPath: b.appendingPathComponent("gid-blobs.bin").path) ? b.appendingPathComponent("gid-blobs.bin").path : nil,
+                       iBoot: BootRecipe.iPodIBoot(base: b), gidBlobs: FileManager.default.fileExists(atPath: b.appendingPathComponent("gid-blobs.bin").path) ? b.appendingPathComponent("gid-blobs.bin").path : nil,
                        machine: BootRecipe.lockMachine(b.appendingPathComponent("device.lock.json")))
     }
     emit("lock", ["lacksActivation": DeviceInstance.lockLacksActivation(b.appendingPathComponent("device.lock.json"))])

@@ -294,7 +294,7 @@ final class EmulatorController {
         return true
     }
 
-    /// The iPod boots its base/ (firmwarekit's n72 recipe): iBoot.bin, nor.bin with a private
+    /// The iPod boots its base/ (firmwarekit's n72 recipe): iBoot.bin (3.x+; 2.x boots the SecureROM), nor.bin with a private
     /// writable copy, gid-blobs.bin (the emulated AES has no GID key) and nand/, with the machine
     /// options its lock names, over the shipped bootrom (Bundled.filesRoot) and this device's
     /// copy-on-write overlay.
@@ -317,7 +317,7 @@ final class EmulatorController {
         let usbSession = usbmux.start(paths: instance.paths)
         openSerialLog()
         let netdev = network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
-        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: files.boot.path, bootrom: "\(Bundled.filesRoot)/bootrom_240_4",
+        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: files.boot.lastPathComponent == "iBoot.bin" ? files.boot.path : "", bootrom: "\(Bundled.filesRoot)/bootrom_240_4",
                                      nand: files.nand.path, nor: base.appendingPathComponent("nor.bin").path,
                                      writableNOR: files.writableNOR!.path, overlay: overlay.path,
                                      usbAddress: usbSession?.guestAddress, wifi: network,

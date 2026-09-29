@@ -10,6 +10,7 @@ nonisolated enum BootRecipe {
 
     struct IPod {
         var bootArgs: String
+        /// The machine's direct-iboot; "" boots the SecureROM -> NOR LLB -> iBoot chain (2.x).
         var iBoot: String
         var bootrom: String
         var nand: String
@@ -58,6 +59,11 @@ nonisolated enum BootRecipe {
         guard let data = try? Data(contentsOf: lock),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return object["boot_strategy"] as? String
+    }
+
+    /// A prepared iPod base's direct-iboot: its iBoot.bin, or "" for a "bootrom" (2.x) lock.
+    static func iPodIBoot(base: URL) -> String {
+        bootStrategy(base.appendingPathComponent("device.lock.json")) == "bootrom" ? "" : base.appendingPathComponent("iBoot.bin").path
     }
 
     static func options(_ machine: [String: String]) -> String {

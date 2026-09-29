@@ -116,6 +116,17 @@ def guest_checks(find, check, events):
         check(len(offers) == 2 and "verdict bad" in offers[-1].get("text", ""), "fresh: the rollback offer carries the bad verdict")
 
 
+def build_lockdown_tz(out):
+    """out/lockdown-tz; the app's Debug build compiles the same source (LockdownTools: DeviceServices.developmentHelper)."""
+    tz = out / "lockdown-tz"
+    r = subprocess.run(["/bin/sh", "-c", 'PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; cc -O2 -o "$1" "$2" '
+                        '$(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)', "sh", str(tz),
+                        str(ROOT / "scripts/lockdown-tz.c")])
+    if r.returncode:
+        sys.exit("FAIL: building lockdown-tz")
+    return tz
+
+
 def build(args, out):
     subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)
     subprocess.run(["xcrun", "swiftc", "-swift-version", "5", "-default-isolation", "MainActor", "-module-cache-path", out / "modules",
@@ -184,13 +195,7 @@ def main():
     if args.ipad_itpack:
         cfg["ipadItpack"] = str(args.ipad_itpack)
     if args.guest:
-        tz = work / "lockdown-tz"
-        # The app's Debug build compiles the same source (LockdownTools: DeviceServices.developmentHelper).
-        r = subprocess.run(["/bin/sh", "-c", 'PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; cc -O2 -o "$1" "$2" '
-                            '$(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)', "sh", str(tz),
-                            str(ROOT / "scripts/lockdown-tz.c")])
-        if r.returncode:
-            sys.exit("FAIL: building lockdown-tz")
+        tz = build_lockdown_tz(work)
         dev = args.ipod_device
         c, g = args.contrib, args.guest_tools
         tools = {n: str(g / n if g else c / sub / n) for n, sub in (("it_agent", "it-agent"), ("it_typein.dylib", "it-agent"),
