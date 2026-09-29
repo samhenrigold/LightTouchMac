@@ -1,0 +1,959 @@
+{
+  "" : {
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Light Touch-primary.dia",
+    "emit-module-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Light Touch-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Light Touch-primary-emit-module.dia",
+    "pch" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Light Touch-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Light Touch-primary.swiftdeps"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/App/AppDelegate.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppDelegate.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppDelegate.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppDelegate.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppDelegate~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/App/MainMenu.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainMenu.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainMenu.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainMenu.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainMenu.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainMenu.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainMenu.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainMenu.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainMenu~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/App/NetworkAccessPreference.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NetworkAccessPreference.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NetworkAccessPreference.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NetworkAccessPreference.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NetworkAccessPreference.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NetworkAccessPreference.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NetworkAccessPreference.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NetworkAccessPreference.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NetworkAccessPreference~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/App/WindowRestorationPolicy.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WindowRestorationPolicy.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WindowRestorationPolicy.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WindowRestorationPolicy.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WindowRestorationPolicy.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WindowRestorationPolicy.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WindowRestorationPolicy.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WindowRestorationPolicy.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WindowRestorationPolicy~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/App/main.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/main.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/main.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/main.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/main.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/main.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/main.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/main.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/main~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/BootRecipe.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BootRecipe.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BootRecipe.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BootRecipe.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BootRecipe.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BootRecipe.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BootRecipe.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BootRecipe.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BootRecipe~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/DeviceConnectionIssue.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceConnectionIssue.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceConnectionIssue.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceConnectionIssue.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceConnectionIssue.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceConnectionIssue.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceConnectionIssue.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceConnectionIssue.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceConnectionIssue~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/DeviceFileWatch.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFileWatch.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFileWatch.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFileWatch.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFileWatch.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFileWatch.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFileWatch.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFileWatch.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFileWatch~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/DeviceProcess.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProcess.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProcess.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProcess.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProcess.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProcess.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProcess.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProcess.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProcess~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/DeviceProfile+Display.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile+Display.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile+Display.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile+Display.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile+Display.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile+Display.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile+Display.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile+Display.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile+Display~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/DeviceProfile.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceProfile~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/DeviceRow.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRow.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRow.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRow.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRow.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRow.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRow.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRow.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRow~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/DeviceSession.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceSession.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceSession.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceSession.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceSession.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceSession.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceSession.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceSession.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceSession~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/EmulatorController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/EmulatorController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/EmulatorController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/EmulatorController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/EmulatorController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/EmulatorController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/EmulatorController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/EmulatorController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/EmulatorController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Device/WebProxyConfiguration.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyConfiguration.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyConfiguration.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyConfiguration.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyConfiguration.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyConfiguration.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyConfiguration.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyConfiguration.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyConfiguration~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/AppInstallPipeline.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstallPipeline.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstallPipeline.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstallPipeline.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstallPipeline.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstallPipeline.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstallPipeline.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstallPipeline.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstallPipeline~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/AppInstaller.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstaller.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstaller.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstaller.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstaller.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstaller.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstaller.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstaller.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppInstaller~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/CanvasCapture.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CanvasCapture.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CanvasCapture.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CanvasCapture.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CanvasCapture.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CanvasCapture.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CanvasCapture.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CanvasCapture.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CanvasCapture~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/CaptureController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/CaptureFileMonitor.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureFileMonitor.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureFileMonitor.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureFileMonitor.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureFileMonitor.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureFileMonitor.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureFileMonitor.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureFileMonitor.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureFileMonitor~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/CaptureNotifications.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureNotifications.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureNotifications.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureNotifications.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureNotifications.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureNotifications.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureNotifications.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureNotifications.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureNotifications~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/CapturePreferences.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CapturePreferences.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CapturePreferences.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CapturePreferences.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CapturePreferences.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CapturePreferences.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CapturePreferences.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CapturePreferences.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CapturePreferences~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/CaptureSound.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureSound.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureSound.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureSound.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureSound.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureSound.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureSound.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureSound.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureSound~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/CatalogClient.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogClient.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogClient.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogClient.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogClient.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogClient.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogClient.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogClient.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogClient~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/CatalogCopy.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogCopy.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogCopy.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogCopy.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogCopy.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogCopy.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogCopy.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogCopy.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogCopy~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/DiagnosticsExport.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DiagnosticsExport.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DiagnosticsExport.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DiagnosticsExport.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DiagnosticsExport.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DiagnosticsExport.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DiagnosticsExport.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DiagnosticsExport.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DiagnosticsExport~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/InstallationQueue.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationQueue.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationQueue.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationQueue.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationQueue.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationQueue.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationQueue.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationQueue.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationQueue~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/MediaIdentity.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaIdentity.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaIdentity.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaIdentity.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaIdentity.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaIdentity.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaIdentity.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaIdentity.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaIdentity~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/MediaImport.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaImport.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaImport.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaImport.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaImport.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaImport.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaImport.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaImport.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaImport~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/MediaPhoto.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaPhoto.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaPhoto.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaPhoto.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaPhoto.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaPhoto.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaPhoto.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaPhoto.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaPhoto~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/MediaSong.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaSong.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaSong.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaSong.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaSong.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaSong.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaSong.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaSong.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaSong~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/MediaVideo.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaVideo.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaVideo.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaVideo.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaVideo.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaVideo.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaVideo.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaVideo.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MediaVideo~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/PreparedMedia.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparedMedia.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparedMedia.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparedMedia.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparedMedia.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparedMedia.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparedMedia.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparedMedia.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparedMedia~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/ScreenMovieWriter.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenMovieWriter.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenMovieWriter.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenMovieWriter.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenMovieWriter.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenMovieWriter.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenMovieWriter.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenMovieWriter.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenMovieWriter~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/ScreenRecordingSession.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenRecordingSession.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenRecordingSession.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenRecordingSession.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenRecordingSession.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenRecordingSession.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenRecordingSession.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenRecordingSession.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ScreenRecordingSession~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Features/WebProxySetup.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxySetup.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxySetup.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxySetup.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxySetup.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxySetup.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxySetup.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxySetup.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxySetup~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Guest/GuestAgent.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestAgent.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestAgent.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestAgent.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestAgent.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestAgent.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestAgent.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestAgent.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestAgent~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Guest/GuestPackage.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestPackage.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestPackage.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestPackage.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestPackage.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestPackage.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestPackage.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestPackage.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestPackage~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Guest/GuestServices.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestServices.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestServices.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestServices.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestServices.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestServices.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestServices.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestServices.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GuestServices~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/AppMetadataCache.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppMetadataCache.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppMetadataCache.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppMetadataCache.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppMetadataCache.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppMetadataCache.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppMetadataCache.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppMetadataCache.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppMetadataCache~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/Bundled.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Bundled.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Bundled.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Bundled.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Bundled.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Bundled.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Bundled.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Bundled.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/Bundled~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/BundledBase.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BundledBase.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BundledBase.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BundledBase.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BundledBase.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BundledBase.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BundledBase.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BundledBase.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/BundledBase~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/DeviceInstance.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceInstance.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceInstance.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceInstance.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceInstance.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceInstance.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceInstance.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceInstance.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceInstance~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/DeviceLibrary.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibrary.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibrary.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibrary.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibrary.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibrary.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibrary.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibrary.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibrary~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/DeviceStateStorage.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceStateStorage.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceStateStorage.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceStateStorage.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceStateStorage.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceStateStorage.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceStateStorage.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceStateStorage.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceStateStorage~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/FirmwareCatalog.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareCatalog.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareCatalog.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareCatalog.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareCatalog.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareCatalog.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareCatalog.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareCatalog.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareCatalog~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/FirmwareDownloads.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareDownloads.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareDownloads.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareDownloads.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareDownloads.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareDownloads.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareDownloads.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareDownloads.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareDownloads~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/FirmwareJobs.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareJobs.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareJobs.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareJobs.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareJobs.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareJobs.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareJobs.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareJobs.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/FirmwareJobs~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/IPALibrary.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPALibrary.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPALibrary.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPALibrary.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPALibrary.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPALibrary.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPALibrary.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPALibrary.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPALibrary~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/IPAMembers.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPAMembers.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPAMembers.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPAMembers.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPAMembers.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPAMembers.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPAMembers.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPAMembers.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPAMembers~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/IPSWStore.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPSWStore.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPSWStore.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPSWStore.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPSWStore.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPSWStore.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPSWStore.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPSWStore.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IPSWStore~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/LegacyState.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LegacyState.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LegacyState.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LegacyState.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LegacyState.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LegacyState.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LegacyState.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LegacyState.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LegacyState~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/PreparationJob.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparationJob.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparationJob.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparationJob.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparationJob.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparationJob.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparationJob.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparationJob.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/PreparationJob~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Library/StorageLocations.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageLocations.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageLocations.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageLocations.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageLocations.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageLocations.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageLocations.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageLocations.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageLocations~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Services/AFC.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AFC.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AFC.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AFC.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AFC.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AFC.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AFC.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AFC.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AFC~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Services/DeviceServices.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceServices.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceServices.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceServices.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceServices.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceServices.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceServices.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceServices.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceServices~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Services/InstallationProxy.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationProxy.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationProxy.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationProxy.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationProxy.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationProxy.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationProxy.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationProxy.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InstallationProxy~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Services/LockdownTools.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LockdownTools.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LockdownTools.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LockdownTools.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LockdownTools.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LockdownTools.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LockdownTools.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LockdownTools.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LockdownTools~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Services/NotificationProxy.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NotificationProxy.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NotificationProxy.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NotificationProxy.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NotificationProxy.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NotificationProxy.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NotificationProxy.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NotificationProxy.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NotificationProxy~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Services/SpringBoardServices.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SpringBoardServices.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SpringBoardServices.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SpringBoardServices.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SpringBoardServices.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SpringBoardServices.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SpringBoardServices.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SpringBoardServices.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SpringBoardServices~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Transport/AppEventLog.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppEventLog.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppEventLog.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppEventLog.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppEventLog.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppEventLog.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppEventLog.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppEventLog.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppEventLog~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Transport/DeviceExecution.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceExecution.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceExecution.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceExecution.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceExecution.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceExecution.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceExecution.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceExecution.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceExecution~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Transport/IMobileDevice.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IMobileDevice.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IMobileDevice.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IMobileDevice.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IMobileDevice.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IMobileDevice.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IMobileDevice.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IMobileDevice.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/IMobileDevice~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Transport/NativeLogging.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NativeLogging.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NativeLogging.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NativeLogging.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NativeLogging.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NativeLogging.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NativeLogging.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NativeLogging.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/NativeLogging~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/Transport/USBMux.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/USBMux.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/USBMux.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/USBMux.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/USBMux.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/USBMux.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/USBMux.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/USBMux.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/USBMux~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/AppsInspectorViewController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppsInspectorViewController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppsInspectorViewController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppsInspectorViewController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppsInspectorViewController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppsInspectorViewController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppsInspectorViewController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppsInspectorViewController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AppsInspectorViewController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/AttitudeIndicatorButton.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AttitudeIndicatorButton.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AttitudeIndicatorButton.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AttitudeIndicatorButton.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AttitudeIndicatorButton.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AttitudeIndicatorButton.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AttitudeIndicatorButton.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AttitudeIndicatorButton.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/AttitudeIndicatorButton~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/CaptureOptionsView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureOptionsView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureOptionsView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureOptionsView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureOptionsView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureOptionsView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureOptionsView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureOptionsView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureOptionsView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/CaptureStatusView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureStatusView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureStatusView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureStatusView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureStatusView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureStatusView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureStatusView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureStatusView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CaptureStatusView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/CatalogDetailsViewController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogDetailsViewController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogDetailsViewController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogDetailsViewController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogDetailsViewController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogDetailsViewController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogDetailsViewController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogDetailsViewController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/CatalogDetailsViewController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DeviceContentView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceContentView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceContentView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceContentView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceContentView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceContentView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceContentView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceContentView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceContentView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DeviceFilesViewController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesViewController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesViewController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesViewController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesViewController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesViewController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesViewController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesViewController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesViewController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DeviceFilesWindowController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesWindowController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesWindowController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesWindowController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesWindowController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesWindowController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesWindowController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesWindowController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceFilesWindowController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DeviceLibraryViewController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibraryViewController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibraryViewController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibraryViewController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibraryViewController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibraryViewController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibraryViewController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibraryViewController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLibraryViewController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DeviceModelView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceModelView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceModelView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceModelView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceModelView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceModelView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceModelView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceModelView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceModelView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DevicePlaceholderViewController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DevicePlaceholderViewController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DevicePlaceholderViewController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DevicePlaceholderViewController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DevicePlaceholderViewController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DevicePlaceholderViewController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DevicePlaceholderViewController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DevicePlaceholderViewController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DevicePlaceholderViewController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DeviceViewController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceViewController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceViewController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceViewController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceViewController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceViewController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceViewController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceViewController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceViewController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DisplayMeasurements.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayMeasurements.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayMeasurements.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayMeasurements.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayMeasurements.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayMeasurements.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayMeasurements.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayMeasurements.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayMeasurements~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DisplayView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DisplayView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/DroppedFiles.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DroppedFiles.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DroppedFiles.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DroppedFiles.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DroppedFiles.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DroppedFiles.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DroppedFiles.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DroppedFiles.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DroppedFiles~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/InlineActionButton.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineActionButton.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineActionButton.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineActionButton.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineActionButton.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineActionButton.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineActionButton.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineActionButton.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineActionButton~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/InlineLiveTextView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineLiveTextView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineLiveTextView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineLiveTextView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineLiveTextView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineLiveTextView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineLiveTextView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineLiveTextView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/InlineLiveTextView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/LogWindowController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LogWindowController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LogWindowController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LogWindowController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LogWindowController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LogWindowController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LogWindowController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LogWindowController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/LogWindowController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/MainWindowController.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainWindowController.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainWindowController.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainWindowController.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainWindowController.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainWindowController.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainWindowController.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainWindowController.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/MainWindowController~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/ProxySettingsView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ProxySettingsView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ProxySettingsView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ProxySettingsView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ProxySettingsView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ProxySettingsView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ProxySettingsView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ProxySettingsView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/ProxySettingsView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/RecordingToolbarButton.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RecordingToolbarButton.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RecordingToolbarButton.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RecordingToolbarButton.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RecordingToolbarButton.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RecordingToolbarButton.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RecordingToolbarButton.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RecordingToolbarButton.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RecordingToolbarButton~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/RotationControlAction.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RotationControlAction.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RotationControlAction.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RotationControlAction.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RotationControlAction.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RotationControlAction.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RotationControlAction.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RotationControlAction.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/RotationControlAction~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/SleepyView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SleepyView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SleepyView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SleepyView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SleepyView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SleepyView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SleepyView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SleepyView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SleepyView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/LightTouchMac/UI/StorageSettingsView.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageSettingsView.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageSettingsView.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageSettingsView.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageSettingsView.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageSettingsView.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageSettingsView.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageSettingsView.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/StorageSettingsView~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/Shared/DeviceLink.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLink.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLink.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLink.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLink.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLink.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLink.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLink.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLink~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/Shared/DeviceLinkProtocol.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLinkProtocol.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLinkProtocol.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLinkProtocol.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLinkProtocol.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLinkProtocol.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLinkProtocol.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLinkProtocol.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceLinkProtocol~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/Shared/DeviceRendezvous.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRendezvous.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRendezvous.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRendezvous.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRendezvous.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRendezvous.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRendezvous.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRendezvous.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/DeviceRendezvous~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/Shared/SharedStatus.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SharedStatus.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SharedStatus.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SharedStatus.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SharedStatus.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SharedStatus.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SharedStatus.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SharedStatus.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/SharedStatus~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/Shared/WebProxyCA.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyCA.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyCA.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyCA.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyCA.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyCA.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyCA.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyCA.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/WebProxyCA~partial.swiftmodule"
+  },
+  "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/shg/Developer/LightTouchMac-multidevice/build/LightTouchMac.build/Debug/Light Touch.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  }
+}
