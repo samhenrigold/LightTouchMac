@@ -174,8 +174,10 @@ public enum Preparer {
 
         step()   // NAND store
         let nand = file("nand")
+        let epoch = try K48NAND.signatureEpoch(kernelcache: decFile("kernelcache.mach"))
+        log("NAND signature epoch \(epoch) (this kernel's FIL)")
         try K48NAND.build(geometry: .k48_16g, mbr: mbr, kernelVersion: K48NAND.kernelVersion(kernelcache: decFile("kernelcache.mach")),
-                          system: vols.system, data: .image(vols.data), out: nand, log: log)
+                          epoch: epoch, system: vols.system, data: .image(vols.data), out: nand, log: log)
         try? fm.removeItem(at: vols.system); try? fm.removeItem(at: vols.data)
         // The store as built, before the keybag and seal boots write the guest's first-boot state into it: the same
         // for the same inputs (the lock's built_listing_sha256), which listing_sha256 of the sealed store cannot be.
