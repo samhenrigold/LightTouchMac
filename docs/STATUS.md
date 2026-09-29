@@ -4,7 +4,7 @@ The one place that says what is done, what is running and what is left. Updated 
 `multidevice` (this repo) or `ipad1` (qemu-ios). Every "done" line names how it was checked. Answer
 status questions from this file, after checking it against the commits it cites.
 
-Build for Sam: `multidevice-20260928c` (rebuilding; 20260928b's directory was deleted by mistake after its verify passed 11/11 on all five entries). 20260928b was (09ad91f + qemu-ios 082b45e77d, notarized adfbf096…, verified in-bundle 11/11 on all five entries; iPads on the real iBoot chain; typing on 4.2.1; package serial 3; no USB alert). Not in it: the DeviceLink.reap fix (a helper killed under load could go unnoticed), the bundled-iPod conversion, runtime GL.
+Build for Sam: `multidevice-20260928c` — ~/Desktop/LightTouch-20260928c/LightTouchMac.zip (sha256 add4b62a…; app 1827a68 + qemu-ios 082b45e77d; notarized d5f47093…, stapled; verified in-bundle 11/11 on all five entries; check-sessions 18/18, kill -9 noticed in 51 ms; package serial 3; iPads on the real iBoot chain). Not in it: C6 bundled-iPod conversion, the matrix catalog, gl-coverage, usb-alert package changes beyond serial 3, runtime GL.
 
 Last update: 2026-09-28, `ipa-library` merged (IPA library; iBoot shipped; Track A), qemu-ios ipad1 `082b45e77d`.
 
