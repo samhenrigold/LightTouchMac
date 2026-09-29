@@ -58,7 +58,18 @@ struct K48IBootTests {
     /// and fails; the aligned search finds the literal at 0x11f24 and patches it.
     @Test func alignedXrefPatches9A5220p() throws {
         guard let mine = Self.mine, let ours = try Self.patched("k48ap-9A5220p", by: mine) else { return }
-        #expect(!ours.isEmpty)
+        // Smoke #50: beta 1's call has no R3 output pointer. Retain the result-slot
+        // initialization, bypass authentication, then resume normal DATA extraction.
+        guard let ipsw = try Self.cachedIPSW("k48ap-9A5220p") else { return }
+        try Oracle.withTemp { dir in
+            _ = try FirmwareDecryptor.decrypt(ipsw: ipsw, entry: try Oracle.entry("k48ap-9A5220p"), into: dir, rootfs: false)
+            let stock = try Data(contentsOf: dir.appendingPathComponent("iBoot.bin"))
+            #expect(Array(ours[0x10ab4..<0x10ab8]) == [0x00, 0x20, 0x00, 0xbf]) // no STR [R3]
+            #expect(ours[0x10ab8..<0x10abc] == stock[0x10ab8..<0x10abc]) // initialize result
+            #expect(Array(ours[0x10abc..<0x10abe]) == [0x14, 0xe1]) // B DATA block at 0x10ce8
+            #expect(ours[0x10ce8..<0x10e98] == stock[0x10ce8..<0x10e98]) // extract/decrypt/cleanup
+            #expect(ours[0x10254..<0x103f4] == stock[0x10254..<0x103f4]) // inner verifier unchanged
+        }
         #expect(throws: FirmwareError.self) { try Self.patched("k48ap-9A5220p", by: Self.reference) }
     }
 
