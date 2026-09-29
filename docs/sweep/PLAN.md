@@ -91,7 +91,7 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 | D3 Merge I2S, SHA-1, ChipID into one model each with variant properties | 2.5 | iPod audio; iPad audio-check; snapshot-check |
 | D4 Delete the GID KBAG table and the kernel banner table (after the nand-current swap) | 1 | test_aes; fresh-device both boards |
 | D5 I2C slaves into their own files; SPI global → property; iBoot literal tricks into it_iboot.c | 2 | regress boot both boards |
-| D6 Delete dead tools and scripts (hidbridge, ssh terminal, kbd-agent, patch_*, probes); it_agent includes it_pbd | 1 | test_agent_ops; boot-smoke paste |
+| D6 Delete dead tools and scripts (hidbridge, ssh terminal, kbd-agent, patch_*, probes); it_agent includes it_pbd | 1 | done 09-29 — test_agent_ops; boot-smoke paste |
 | D7 IT_* env knobs → machine properties (tests and app pass properties) | 1 | regress both boards |
 | D8 Tests by board parameter: tests/lib, boards/, checks/, one regress.py --board | 2 | both regress suites green |
 

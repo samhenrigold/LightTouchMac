@@ -160,7 +160,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 39 | FMSS page I/O | `ipod_touch_fmss.c:1058-1288, 1340-1418` | H | 0xD38 + csgenrc 0xa01/0xa02 decoded in C from descriptors; erase inferred from writes; no ECC. | Execute read/write/erase programs against an FMC + NAND model, 10-15 d |
 | 40 | FMSS store / overlay | `ipod_touch_fmss.c:360-909` | R (backend) | ITNAND01 mmap or directory; copy-on-write overlay. | – |
 | 41 | FMSS generated-image FTL compatibility | `ipod_touch_fmss.c:687-824, 1244-1276` | P | Moves writes to their logical home and rewrites the FTL free pool when cs3 page 255 is read (`FMSS_PHYSICAL` off). | Image builder emitting real VFL/FTL metadata, 5-10 d |
-| 42 | FMSS iBoot RAM patches | `ipod_touch_fmss.c:911-991`, `hw/arm/ipod_touch_firmware.c:92-128` | P | On NAND reads the Bluetooth DT node is renamed uart3→uart1 and a hard-coded boot-args string is written into `gBootArgs.commandLine`. | Root-cause the DT difference, 1-2 d |
+| 42 | FMSS iBoot RAM patches | `ipod_touch_fmss.c` (NAND-read hook), `hw/arm/it_iboot.c` (pattern-found boot-args literal) | P | On NAND reads the Bluetooth DT node is renamed uart3→uart1 and a hard-coded boot-args string is written into `gBootArgs.commandLine`. | Root-cause the DT difference, 1-2 d |
 | 43 | MIPI-DSI + panel | `hw/arm/ipod_touch_mipi_dsi.c:27-40, 50-100` | H | Canned panel-ID reply; handshake bits only in direct boot. | DSIM + panel, 3-5 d |
 | 44 | LCD/CLCD | `hw/arm/ipod_touch_lcd.c:136-258, 377-540` | R (partial) | Window-1 registers kept but scanout fixed 320×480 x8r8g8b8; `lcd-planes` adds BGRA + NV12 planes. | Depth/stride/formats/blending, 5-10 d |
 | 45 | Scaler/CSC | `ipod_touch_2g.c:3398-3406`, `hw/arm/ipod_touch_scaler.c` | S (default) | `create_unimplemented_device`; opt-in NV12→RGB only. | 5-8 d |
@@ -237,7 +237,7 @@ From the consolidation survey (`docs/sweep/emulator.md` (b)), with the iOS 5 spi
 2. `mkpkg.py` FAMILIES keyed on exact build strings. 9B206 matches no family.
 3. iOS-4 gld plugin: discovered by symbol; unchanged.
 4. IOP HLE v1/v2 by firmware string + `cnfg` scan. 8L1 and 9B206 firmware both carry the v2 marker; whether their ABI is still v2 is the spike's first boot question.
-5. Kernel banner table `ipod_touch_firmware.c:7-15`: dead, delete.
+5. Kernel banner table `ipod_touch_firmware.c`: deleted (D6, 2026-09-29).
 6. GID KBAG hex in C (`ipod_touch_aes.c:52-383`): delete after the nand-current swap.
 7. iPod boot-args delivery (DRAM scan, literal redirect, `IT_BOOT_ARGS*`).
 8. Power-off knob coordinates per orientation (`ipad1.c:376-383`, iPod `PWROFF_KNOB_Y`).
