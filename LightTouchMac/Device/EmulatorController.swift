@@ -1021,7 +1021,7 @@ final class EmulatorController {
                 guard let self else { return }
                 if self.state == .booting { last = nil }   // a restart: adopt again
                 guard self.state == .running, self.canManageApps, !self.isSleeping, !self.isInstalling,
-                      let reading = try? await self.springBoard().interfaceOrientation(),
+                      let reading = try? await self.services.interfaceOrientation(),
                       let target = Self.iPadDegrees(forInterface: reading) else { continue }
                 if last == nil || (last != reading && self.autoRotateEnabled), target != self.rotationDegrees {
                     self.rotate(toward: target)
@@ -1041,7 +1041,7 @@ final class EmulatorController {
 
     /// Keeps one reporter alive for as long as the app runs, re-attaching after
     /// a boot, a respring, or a dropped USB session — the same "the guest drops
-    /// its services and comes back" reality GuestNotifications backs off around.
+    /// its services and comes back" reality NotificationProxy backs off around.
     private func startOrientationWatch() {
         orientationTask?.cancel()
         orientationTask = Task { [weak self] in
@@ -1673,7 +1673,7 @@ final class EmulatorController {
         let deadline = ContinuousClock.now + .seconds(45)
         while ContinuousClock.now < deadline {
             try Task.checkCancellation()
-            if (try? await springBoard().order()) != nil { return }
+            if (try? await services.homeScreenOrder()) != nil { return }
             try await Task.sleep(for: .seconds(1))
         }
         throw DeviceToolsError.failed("The Home screen didn’t come back. Restart the \(profile.shortName); your apps are kept.")
@@ -1712,22 +1712,17 @@ final class EmulatorController {
         (try? tools())?.installPlaceholder(action, bundleID: bundleID, after: previous)
     }
 
-    /// The home screen's own icon order, for the sidebar to mirror and reorder.
-    private func springBoard() throws -> SpringBoardIcons {
-        guard let session = usbmux.session else {
-            throw DeviceToolsError.failed("The device is not reachable over USB yet.")
+    /// This device's stock lockdown services (installation_proxy, AFC,
+    /// springboardservices, lockdownd) on its usbmuxd; throws until usbmuxd is up.
+    var services: DeviceServices {
+        get throws {
+            guard let session = usbmux.session else {
+                throw DeviceToolsError.failed("The device is not reachable over USB yet.")
+            }
+            return DeviceServices(clientSocket: session.clientSocket)
         }
-        return SpringBoardIcons(clientSocket: session.clientSocket, profile: profile)
     }
 
-    func homeScreenOrder() async throws -> [String] { try await springBoard().order() }
-    /// Returns the order SpringBoard ACCEPTED, which is not always the one asked
-    /// for — the caller should adopt it rather than assume its own.
-    @discardableResult
-    func moveOnHomeScreen(_ bundleID: String, before other: String?) async throws -> [String] {
-        try await springBoard().move(bundleID, before: other)
-    }
-    
     // MARK: - Boot environment
     
     /// UserDefaults key for Settings ▸ verbose boot.

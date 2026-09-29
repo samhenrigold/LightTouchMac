@@ -104,7 +104,7 @@ extension DeviceServices {
         }
     }
 
-    nonisolated private final class InstallConnection: @unchecked Sendable {
+    nonisolated private final class InstallConnection: OpenedHandles, @unchecked Sendable {
         let device: OpaquePointer
         let client: OpaquePointer
         init(device: OpaquePointer, client: OpaquePointer) {
@@ -116,49 +116,13 @@ extension DeviceServices {
         }
     }
 
-    /// A deadline may win immediately after connection succeeds. Keep handles
-    /// reachable until the caller claims them or the losing worker closes them.
-    nonisolated private final class PendingInstallConnection: @unchecked Sendable {
-        private let lock = NSLock()
-        private var connection: InstallConnection?
-        private var abandoned = false
-        func store(_ opened: InstallConnection) {
-            let discard = lock.withLock {
-                if abandoned { return true }
-                connection = opened
-                return false
-            }
-            if discard { opened.free() }
-        }
-        func take(abandon: Bool = false) -> InstallConnection? {
-            lock.withLock {
-                abandoned = abandon
-                defer { connection = nil }
-                return connection
-            }
-        }
-    }
-
+    /// A deadline may win immediately after connection succeeds; openBeforeDeadline
+    /// frees the late handles then.
     private nonisolated static func installConnection(socket: String) async throws -> InstallConnection {
-        let pending = PendingInstallConnection()
-        do {
-            try await withDeadline(Timeouts.serviceProbe * 2, "install connection") {
-                pending.store(try openInstallConnection(socket: socket))
-            }
-        } catch {
-            if let connection = pending.take(abandon: true) {
-                // The C startup worker has finished; this is a separate cleanup
-                // operation. Run even if the caller's task was cancelled.
-                await Task.detached {
-                    _ = try? await withDeadline(Timeouts.serviceProbe * 2, "install connection cleanup") {
-                        connection.free()
-                    }
-                }.value
-            }
-            throw error
-        }
         // A successful startup always stores before completing the deadline.
-        guard let connection = pending.take() else { throw DeviceError.unavailable }
+        guard let connection = try await openBeforeDeadline(Timeouts.serviceProbe * 2, "install connection", {
+            try openInstallConnection(socket: socket)
+        }) else { throw DeviceError.unavailable }
         return connection
     }
 

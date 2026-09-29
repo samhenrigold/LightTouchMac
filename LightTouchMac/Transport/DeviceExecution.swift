@@ -1,6 +1,6 @@
 // The device-operation kernel every service runs on: the deadline race (withDeadline / withSoftDeadline,
-// abandoned blocked C calls), the one serial gate per process (DeviceGate), the errors and the timeout
-// knobs. Foundation only; the offline checks compile this file whole.
+// abandoned blocked C calls, handles a late open leaves behind), the one serial gate per process
+// (DeviceGate), the errors and the timeout knobs. Foundation only; the offline checks compile this file whole.
 
 import Foundation
 
@@ -137,6 +137,59 @@ nonisolated private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
         pending = result
         lock.unlock()
         return true
+    }
+}
+
+// MARK: - Handles a late open leaves behind
+
+/// What a blocking open hands back (a service client, its callback context);
+/// `free` is safe from any thread.
+nonisolated protocol OpenedHandles: AnyObject, Sendable { func free() }
+
+/// Open under a deadline and hand the handles to the caller. withDeadline
+/// discards the race's loser, so an open that lands after the deadline (or the
+/// caller's cancellation) has nobody to take its handles: they are freed here
+/// instead, never under a live library thread. nil when `open` produced none.
+func openBeforeDeadline<H: OpenedHandles>(_ seconds: Double, _ operation: String,
+                                          _ open: @escaping @Sendable () throws -> H?) async throws -> H? {
+    let late = LateHandles<H>()
+    do {
+        try await withDeadline(seconds, operation) { if let opened = try open() { late.store(opened) } }
+    } catch {
+        if let orphan = late.take(abandon: true) { await freeDetached(orphan, seconds, operation) }
+        throw error
+    }
+    return late.take()
+}
+
+/// Free on a task of its own under a deadline: the C free can block (it joins
+/// the library's reader thread), and it must run even when the caller was cancelled.
+func freeDetached<H: OpenedHandles>(_ handles: H, _ seconds: Double, _ operation: String) async {
+    await Task.detached {
+        _ = try? await withDeadline(seconds, "\(operation) cleanup") { handles.free() }
+    }.value
+}
+
+/// Keeps what an open produced reachable until the caller claims it or the
+/// deadline's loser frees it; an open that lands after the abandon frees itself.
+nonisolated private final class LateHandles<H: OpenedHandles>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handles: H?
+    private var abandoned = false
+    func store(_ opened: H) {
+        let discard = lock.withLock {
+            if abandoned { return true }
+            handles = opened
+            return false
+        }
+        if discard { opened.free() }
+    }
+    func take(abandon: Bool = false) -> H? {
+        lock.withLock {
+            abandoned = abandon
+            defer { handles = nil }
+            return handles
+        }
     }
 }
 

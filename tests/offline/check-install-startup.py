@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bound installation setup without abandoning a started guest mutation. Compiles Services/InstallationProxy.swift
 and Transport/DeviceExecution.swift whole against a fake libimobiledevice, with two pause points patched in
-(after the connection is stored for the deadline's loser, and after it is handed to the install) so the races
+(after openBeforeDeadline stores the connection for the deadline's loser, and after it is handed to the install) so the races
 run deterministically; no production deadline, cancellation or cleanup is replaced."""
 from pathlib import Path
 import subprocess
@@ -19,8 +19,10 @@ def patched(text, old, new):
 install = patched((app / "Services/InstallationProxy.swift").read_text(),
                   "let connection = try await Self.installConnection(socket: socket)",
                   "let connection = try await Self.installConnection(socket: socket)\n                await Fixture.shared.afterConnection()")
-install = patched(install, "pending.store(try openInstallConnection(socket: socket))",
-                  "pending.store(try openInstallConnection(socket: socket))\n                Fixture.shared.afterStore()")
+# openBeforeDeadline is the install connection's only user in this build.
+execution = patched((app / "Transport/DeviceExecution.swift").read_text(),
+                    "if let opened = try open() { late.store(opened) }",
+                    "if let opened = try open() { late.store(opened); Fixture.shared.afterStore() }")
 fixture = r'''
 import Foundation
 import Dispatch
@@ -253,9 +255,10 @@ with tempfile.TemporaryDirectory(prefix="ltm-install-startup-") as directory:
     swift = path / "check.swift"
     swift.write_text(fixture + main)
     (path / "InstallationProxy.swift").write_text(install)
+    (path / "DeviceExecution.swift").write_text(execution)
     binary = path / "check"
     subprocess.run(["xcrun", "swiftc", "-parse-as-library", "-swift-version", "6",
                     "-default-isolation", "MainActor", "-module-cache-path", str(path / "modules"),
-                    str(path / "InstallationProxy.swift"), str(app / "Transport/DeviceExecution.swift"),
+                    str(path / "InstallationProxy.swift"), str(path / "DeviceExecution.swift"),
                     str(swift), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=15)

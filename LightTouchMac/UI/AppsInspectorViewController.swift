@@ -501,7 +501,7 @@ final class AppsInspectorViewController: NSViewController {
     private var isLoading = false
     /// A refresh arrived while one was running; run once more when it finishes.
     private var needsReload = false
-    private var notifications: GuestNotifications?
+    private var notifications: NotificationProxy?
 
     init(emulator: EmulatorController) {
         self.emulator = emulator
@@ -963,7 +963,7 @@ final class AppsInspectorViewController: NSViewController {
             // re-queried it during that window (a layout pass, the
             // active/inactive icon dimming) asked for a row that did not exist
             // — an out-of-range raise, not a glitch.
-            let order = (try? await emulator.homeScreenOrder()) ?? homeOrder
+            let order = (try? await emulator.services.homeScreenOrder()) ?? homeOrder
             // No suspension points from here to reloadData().
             apps = live
             homeOrder = order
@@ -1025,7 +1025,7 @@ final class AppsInspectorViewController: NSViewController {
     /// Subscribe to the guest's own install/uninstall notifications.
     private func startGuestNotifications() {
         guard notifications == nil, let session = emulator.usbmuxSession else { return }
-        let watcher = GuestNotifications(clientSocket: session) { [weak emulator] in emulator?.status?.iconGeneration }
+        let watcher = NotificationProxy(clientSocket: session) { [weak emulator] in emulator?.status?.iconGeneration }
         notifications = watcher
         let emulator = self.emulator
         watcher.start(attachAllowed: {
@@ -1041,7 +1041,7 @@ final class AppsInspectorViewController: NSViewController {
         }
     }
 
-    // GuestNotifications cancels its own loops in its deinit, which is what
+    // NotificationProxy cancels its own loops in its deinit, which is what
     // this releasing it triggers; nothing else here may touch main-actor state.
     deinit { loadTask?.cancel(); searchTask?.cancel() }
 
@@ -1865,7 +1865,7 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
                 // next list read fell back to the pre-drag `homeOrder` and
                 // re-sorted the sidebar back to where it started, while the
                 // device kept the new arrangement.
-                homeOrder = try await emulator.moveOnHomeScreen(id, before: target)
+                homeOrder = try await emulator.services.moveOnHomeScreen(id, before: target, profile: emulator.profile)
             } catch {
                 AppInstaller.presentError(error, in: view.window)
             }
