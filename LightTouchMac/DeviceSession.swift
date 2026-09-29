@@ -256,6 +256,9 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     var status: SharedStatus? { link.status }
     private var qemuExitCode: Int32?
     private var startFailure: String?
+    /// terminate() was asked: an exit 0 is the stop we requested, whether or not
+    /// the qemuExited event made it out before the exit.
+    private var stopRequested = false
     /// The spawned helper's pid, for the log: the link zeroes its own on reap.
     private var helperPID: pid_t = 0
 
@@ -314,7 +317,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
 
     /// SIGTERM: the helper runs its own clean shutdown (bounded) and exits.
     /// Never after its death (the link also zeroes its pid on reap).
-    func terminate() { if !isDead { link.terminate() } }
+    func terminate() { if !isDead { stopRequested = true; link.terminate() } }
     func kill() { if !isDead { link.kill() } }
 
     /// True once the helper is gone, false after `timeout`.
@@ -356,6 +359,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         let reason: String
         if let startFailure { reason = startFailure }
         else if let code = qemuExitCode { reason = code == 0 ? "The emulator stopped." : "The emulator stopped (exit code \(code))." }
+        else if stopRequested, termination == .exited(0) { reason = "The emulator stopped." }
         else {
             switch termination {
             case let .signaled(signal): reason = "The device helper was killed (signal \(signal))."
