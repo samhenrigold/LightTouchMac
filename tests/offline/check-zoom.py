@@ -5,8 +5,8 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2] / "LightTouchMac"
-display = (root / "DisplayView.swift").read_text()
-controller = (root / "MainWindowController.swift").read_text()
+display = (root / "UI/DisplayView.swift").read_text()
+controller = (root / "UI/MainWindowController.swift").read_text()
 
 def block(source, signature):
     start = source.index(signature)

@@ -36,5 +36,5 @@ enum DeviceToolsError:Error { case failed(String) }
  }
 }
 ''')
-    subprocess.run(['xcrun','swiftc','-swift-version','5',str(root/'LightTouchMac/MediaIdentity.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+    subprocess.run(['xcrun','swiftc','-swift-version','5',str(root/'LightTouchMac/Features/MediaIdentity.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
     subprocess.run([str(tmp/'check'),str(tmp/'media.m4a')],check=True)

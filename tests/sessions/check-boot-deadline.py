@@ -25,7 +25,7 @@ DEFAULT_DEVICE = HOME / "Developer/qemu-ios-files/ipod-ipsw/devices/8C148-b"
 
 
 def offline():
-    s = (ROOT / "LightTouchMac/EmulatorController.swift").read_text()
+    s = (ROOT / "LightTouchMac/Device/EmulatorController.swift").read_text()
     a = s.index("    // MARK: - Boot deadline")
     deadline = s[a:s.index("    /// The guestfwd for itwebproxy", a)]
     deadline = deadline.replace("try? await Task.sleep(for: .seconds(self?.profile.bootBudget ?? 0))",
@@ -167,7 +167,7 @@ final class Matches: @unchecked Sendable {
         w = Path(d) / "watch.swift"
         w.write_text(watch)
         subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", *[str(ROOT / "LightTouchMac" / f)
-                        for f in ("NativeLogging.swift", "StorageLocations.swift", "Bundled.swift", "AppEventLog.swift")],
+                        for f in ("Transport/NativeLogging.swift", "Library/StorageLocations.swift", "Library/Bundled.swift", "Transport/AppEventLog.swift")],
                         str(w), "-o", d + "/watch"], check=True)
         subprocess.run([d + "/watch"], check=True, timeout=20, env=dict(os.environ, LTM_STATE_DIR=d + "/state"))
 

@@ -24,8 +24,8 @@ ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / 'LightTouchMac'
 FAKE = ROOT / 'tests/fixtures/fake-firmwarekit.py'
 LOCAL_IPSW = Path.home() / 'Downloads/ipad1-ios32-feasibility/iPad1,1_3.2_7B367_Restore.ipsw'
-SOURCES = ['IPSWStore.swift', 'FirmwareDownloads.swift', 'PreparationJob.swift', 'DeviceInstance.swift',
-           'FirmwareCatalog.swift', 'DeviceProfile.swift', 'StorageLocations.swift', 'DeviceStateStorage.swift']
+SOURCES = ['Library/IPSWStore.swift', 'Library/FirmwareDownloads.swift', 'Library/PreparationJob.swift', 'Library/DeviceInstance.swift',
+           'Library/FirmwareCatalog.swift', 'Device/DeviceProfile.swift', 'Library/StorageLocations.swift', 'Library/DeviceStateStorage.swift']
 
 STUBS = r'''
 import Foundation
@@ -396,7 +396,7 @@ default: fatalError(args[1])
 def build(tmp):
     (tmp / 'stubs.swift').write_text(STUBS)
     (tmp / 'main.swift').write_text(CHECK)
-    subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'), str(APP / 'BootRecipe.swift'),
+    subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'), str(APP / 'Device/BootRecipe.swift'),
                     *[str(APP / s) for s in SOURCES], str(ROOT / 'Shared/DeviceLinkProtocol.swift'),
                     str(tmp / 'stubs.swift'), str(tmp / 'main.swift'),
                     '-o', str(tmp / 'check')], check=True)

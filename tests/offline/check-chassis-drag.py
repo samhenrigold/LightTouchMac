@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-s = (root / 'LightTouchMac/DisplayView.swift').read_text()
+s = (root / 'LightTouchMac/UI/DisplayView.swift').read_text()
 a = s.index('    override func mouseDragged(')
 b = s.index('\n    override func mouseUp(', a)
 methods = s[a:b]

@@ -82,6 +82,6 @@ final class DisplayView:NSView {}
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-status-') as directory:
  work=Path(directory);(work/'check.swift').write_text(fixture)
- sources=[root/'LightTouchMac'/name for name in ['WindowRestorationPolicy.swift','CaptureFileMonitor.swift','CaptureStatusView.swift','DeviceContentView.swift']]
+ sources=[root/'LightTouchMac'/name for name in ['App/WindowRestorationPolicy.swift','Features/CaptureFileMonitor.swift','UI/CaptureStatusView.swift','UI/DeviceContentView.swift']]
  subprocess.run(['swiftc','-default-isolation','MainActor','-module-cache-path',str(work/'modules'),*map(str,sources),str(work/'check.swift'),'-o',str(work/'check')],check=True)
  subprocess.run([str(work/'check')],check=True,timeout=30)

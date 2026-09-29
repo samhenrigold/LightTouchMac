@@ -170,9 +170,8 @@ private final class IPSWDropView: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     private func ipsws(_ sender: NSDraggingInfo) -> [URL] {
-        let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self],
-                                                          options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        return urls.filter { $0.pathExtension.lowercased() == "ipsw" }
+        DroppedFiles.files(sender.draggingPasteboard.readObjects(forClasses: [NSURL.self],
+                                                                 options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [], .ipsw)
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { ipsws(sender).isEmpty ? [] : .copy }

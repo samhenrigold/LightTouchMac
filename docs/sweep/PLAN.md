@@ -104,7 +104,7 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 | E3 `tests/gate.sh --quick|--full` (qemu-ios) and `scripts/gate.sh` (app); fix test_regress mock | 1 | both green |
 | E4 App tests: offline/ sessions/ release/ + run.py; slicers → whole-file compiles with stubs | 2 | run.py offline green before and after |
 | E5 Prune 31 merged worktrees and branches; tag-then-delete the July experiments; drop the duplicate `fork` remote | 0.5 | worktree list |
-| E6 Service layering (Transport/Services/Guest/Features) and big-VC extractions | 4.5 | offline checks after marker updates; check-sessions |
+| E6 Service layering (Transport/Services/Guest/Features) and big-VC extractions — **done 2026-09-29 (`service-layers`)**: layer directories, DeviceTools and the forwarders gone, AppInstaller/CaptureController/DroppedFiles/DeviceProcess/IPAMembers extracted; SLICED 39 → 27 (the rest are controller/view state, tests/SLICED.md) | 4.5 | offline 71/0; release 6; check-sessions 16/16 |
 
 ## Order
 

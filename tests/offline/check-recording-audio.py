@@ -60,7 +60,7 @@ func fixtureAudio() throws -> GuestAudioCapture {
 ''')
     subprocess.run(['clang','-c',str(tmp/'capture.c'),'-o',str(tmp/'capture.o')],check=True)
     subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
-        str(root/'LightTouchMac/ScreenMovieWriter.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(root/'tests/fixtures/guest-audio-pump.swift'),str(tmp/'check.swift'),str(tmp/'capture.o'),
+        str(root/'LightTouchMac/Features/ScreenMovieWriter.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(root/'tests/fixtures/guest-audio-pump.swift'),str(tmp/'check.swift'),str(tmp/'capture.o'),
         '-Xlinker','-export_dynamic','-o',str(tmp/'check')],check=True)
     subprocess.run([str(tmp/'check'),str(tmp/'movie.mov')],check=True)
     subprocess.run(['ffmpeg','-v','error','-i',str(tmp/'movie.mov'),'-af','aresample=async=1:first_pts=0',

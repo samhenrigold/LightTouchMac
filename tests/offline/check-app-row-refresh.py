@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-source = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
+source = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 a = source.index('    private struct RowAppearance:')
 b = source.index('    /// Capture only values', a)
 appearance = source[a:b]

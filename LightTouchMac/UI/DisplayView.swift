@@ -43,6 +43,8 @@ final class DisplayView: NSView {
     weak var emulator: EmulatorController?
     /// Called when an .ipa is dropped on the screen.
     var onDropIPA: ((URL) -> Void)?
+    /// An IPSW from outside: the library's, whatever this device is doing.
+    var onDropIPSW: ((URL) -> Void)?
     var onDropMedia: ((URL) -> Void)?
     var onDropUnsupportedFiles: (([URL]) -> Void)?
     /// Called when a Legacy Store row is dropped on the screen.
@@ -1410,8 +1412,8 @@ final class DisplayView: NSView {
         // and then queued one "The device isn't ready yet" sheet per .ipa to be
         // dismissed one at a time.
         // An IPSW is for the library, not this device: any time, from outside.
-        if sender.draggingSource == nil, !droppedIPSWs(sender).isEmpty {
-            sender.numberOfValidItemsForDrop = droppedIPSWs(sender).count
+        if sender.draggingSource == nil, onDropIPSW != nil, !dropped(sender, .ipsw).isEmpty {
+            sender.numberOfValidItemsForDrop = dropped(sender, .ipsw).count
             return .copy
         }
         guard emulator?.canQueueInstall == true else { return [] }
@@ -1424,8 +1426,8 @@ final class DisplayView: NSView {
         // the Finder as its .ipa), but dropping one back on the device would
         // just reinstall what's already there — only OUTSIDE files install.
         guard sender.draggingSource == nil else { return [] }
-        let count = (onDropIPA == nil ? 0 : droppedIPAs(sender).count)
-            + (onDropMedia == nil ? 0 : droppedMedia(sender).count)
+        let count = (onDropIPA == nil ? 0 : dropped(sender, .ipa).count)
+            + (onDropMedia == nil ? 0 : dropped(sender, .media).count)
         guard count > 0 else { return [] }
         sender.numberOfValidItemsForDrop = count
         return .copy
@@ -1439,9 +1441,9 @@ final class DisplayView: NSView {
         // Readiness can change after the drag entered. Never animate a
         // successful drop when its owner will reject the import.
         guard draggingEntered(sender) == .copy else { return false }
-        let ipsws = droppedIPSWs(sender)
-        if sender.draggingSource == nil, !ipsws.isEmpty {
-            ipsws.forEach { FirmwareJobs.shared.importIPSW($0, for: nil) }   // matched by its SHA1
+        let ipsws = dropped(sender, .ipsw)
+        if sender.draggingSource == nil, let onDropIPSW, !ipsws.isEmpty {
+            ipsws.forEach(onDropIPSW)
             return true
         }
         let catalog = droppedCatalogApps(sender)
@@ -1450,32 +1452,18 @@ final class DisplayView: NSView {
             return true
         }
         guard sender.draggingSource == nil else { return false }
-        let ipas = droppedIPAs(sender)
-        let media = droppedMedia(sender)
+        let ipas = dropped(sender, .ipa)
+        let media = dropped(sender, .media)
         guard !ipas.isEmpty || !media.isEmpty else { return false }
         ipas.forEach { onDropIPA?($0) }   // AppInstaller queues them
         media.forEach { onDropMedia?($0) }
-        let accepted = Set(ipas + media)
-        let omitted = (sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] ?? [])
-            .filter { $0.isFileURL && !accepted.contains($0) }
+        let omitted = dropped(sender, .unsupported)
         if !omitted.isEmpty { onDropUnsupportedFiles?(omitted) }
         return true
     }
 
-    private func droppedIPAs(_ sender: NSDraggingInfo) -> [URL] {
-        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self])
-                as? [URL] else { return [] }
-        return urls.filter { $0.isFileURL && $0.pathExtension.lowercased() == "ipa" }
-    }
-
-    private func droppedIPSWs(_ sender: NSDraggingInfo) -> [URL] {
-        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return [] }
-        return urls.filter { $0.isFileURL && $0.pathExtension.lowercased() == "ipsw" }
-    }
-
-    private func droppedMedia(_ sender: NSDraggingInfo) -> [URL] {
-        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return [] }
-        return urls.filter { $0.isFileURL && PreparedMedia.extensions.contains($0.pathExtension.lowercased()) }
+    private func dropped(_ sender: NSDraggingInfo, _ kind: DroppedFiles) -> [URL] {
+        DroppedFiles.files(sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] ?? [], kind)
     }
 
     /// Store rows dragged from the inspector: decode the private payload.

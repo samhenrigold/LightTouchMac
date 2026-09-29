@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
-source=(root/'LightTouchMac/AppsInspectorViewController.swift').read_text()
+source=(root/'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 def method(signature):
  a=source.index(signature)
  return source[a:source.index('\n    }',a)+6]
@@ -72,5 +72,5 @@ final class Fixture:NSObject {
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-row-layout-') as directory:
  work=Path(directory);(work/'check.swift').write_text(fixture)
- subprocess.run(['swiftc','-default-isolation','MainActor',str(root/'LightTouchMac/InlineActionButton.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
+ subprocess.run(['swiftc','-default-isolation','MainActor',str(root/'LightTouchMac/UI/InlineActionButton.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
  subprocess.run([str(work/'check')],check=True,timeout=20)

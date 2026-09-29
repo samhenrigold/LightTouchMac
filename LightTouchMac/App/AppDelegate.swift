@@ -109,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         MainMenuBuilder.install(profile: .iPodTouch2G)
         #if DEBUG
-        SpringBoardIcons.selfCheck()
+        HomeScreenLayout.selfCheck()
         #endif
     }
     

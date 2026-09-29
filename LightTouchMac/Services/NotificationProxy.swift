@@ -21,7 +21,7 @@ import Foundation
 /// A long-lived notification_proxy session. One per device; `start` is
 /// idempotent and the watcher re-establishes itself if the link drops.
 @MainActor
-final class GuestNotifications {
+final class NotificationProxy {
 
     /// What the guest actually publishes on 3.1.3.
     ///
@@ -64,7 +64,7 @@ final class GuestNotifications {
                 continuation.finish()
                 return
             }
-            if GuestNotifications.observed.contains(String(cString: notification)) {
+            if NotificationProxy.observed.contains(String(cString: notification)) {
                 fire()
             }
         }
@@ -150,27 +150,22 @@ final class GuestNotifications {
         // internally, so it goes through the gate like every other service
         // connect. Its factory then closes lockdown; the lasting subscription
         // uses its own service socket and does not reserve a lockdown session.
-        // The deadline's loser is DISCARDED by withDeadline, so a connect that
-        // lands late still needs its client and retained callback context freed.
-        let landed = LateSession()
+        // A connect that lands after the deadline still has its client and
+        // retained callback context freed (openBeforeDeadline).
         let handles: Session?
         do {
             handles = try await DeviceGate.shared.serialized {
                 // An install may have started while this task waited for the
                 // gate. Do not introduce another handshake between its stages.
                 guard await attachAllowed() else { return nil }
-                return try await withDeadline(Timeouts.serviceProbe * 2, "notification watcher") {
-                    let session = connect(socket: socket, onChange: onChange)
-                    if let session { landed.store(session) }
-                    return session
+                return try await openBeforeDeadline(Timeouts.serviceProbe * 2, "notification watcher") {
+                    connect(socket: socket, onChange: onChange)
                 }
             }
         } catch {
-            await landed.freeIfLate()
             return false
         }
-        guard let handles else { await landed.freeIfLate(); return false }
-        landed.claim()
+        guard let handles else { return false }
 
         // The callback runs on a thread libimobiledevice owns. Wait out here
         // while it does — asynchronously, so no pool thread is parked — and let
@@ -180,20 +175,12 @@ final class GuestNotifications {
         // disconnected notification socket, and an attached USB device is not
         // proof that this reader thread is still alive.
         for await _ in handles.closed { }
-        await close(handles)
-        return true
-    }
-
-    private nonisolated static func close(_ session: Session) async {
         // np_client_free sends Shutdown and joins the C reader. A partial
         // packet can leave that reader blocked; never perform the join on the
         // main actor or release its callback context until the join completes.
         // This independent task must run even when the watcher was cancelled.
-        await Task.detached {
-            _ = try? await withDeadline(Timeouts.serviceProbe * 2, "notification cleanup") {
-                session.free()
-            }
-        }.value
+        await freeDetached(handles, Timeouts.serviceProbe * 2, "notification")
+        return true
     }
 
     /// The blocking half: open the session and arm the callback.
@@ -232,34 +219,9 @@ final class GuestNotifications {
         return Session(client: client, ctx: ctx, closed: sink.closed)
     }
 
-    /// Holds whatever `connect` produced so the deadline's losing side can still
-    /// close it. `claim()` says the caller took ownership; otherwise the session
-    /// is freed the moment we know nobody is waiting for it any more.
-    nonisolated private final class LateSession: @unchecked Sendable {
-        private let lock = NSLock()
-        private var session: Session?
-        private var claimed = false
-
-        func store(_ s: Session) {
-            lock.lock()
-            if claimed { lock.unlock(); s.free(); return }   // already gave up
-            session = s
-            lock.unlock()
-        }
-        func claim() { lock.lock(); claimed = true; session = nil; lock.unlock() }
-        func freeIfLate() async {
-            let s = lock.withLock {
-                claimed = true
-                let s = session; session = nil
-                return s
-            }
-            if let s { await GuestNotifications.close(s) }
-        }
-    }
-
     /// The open session's handles. A box, because OpaquePointer is not Sendable
     /// and these cross the gate's await.
-    nonisolated private final class Session: @unchecked Sendable {
+    nonisolated private final class Session: OpenedHandles, @unchecked Sendable {
         let client: OpaquePointer
         let ctx: UnsafeMutableRawPointer
         let closed: AsyncStream<Void>

@@ -17,6 +17,7 @@ final class DeviceViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
         displayView.emulator = emulator
         displayView.onDropIPA = { [weak self] url in self?.installDropped(url) }
+        displayView.onDropIPSW = { FirmwareJobs.shared.importIPSW($0, for: nil) }   // matched by its SHA1
         // Media import runs through the iPod's guest tools; the iPad has none,
         // so its screen doesn't take media drops (Import Media… is disabled too).
         if emulator.hasGuestTools {

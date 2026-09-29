@@ -119,7 +119,7 @@ Callbacks run on `queue`. Pending requests fail with `.closed` when the link goe
 | `ui_battery/compass/usb_charger/orientation/usb_connection` | `request`, reply `.ok(Bool)` |
 | `ui_pause/resume/reset/powerdown/quit` | `command(.machine)` |
 | `ui_ready`, `ui_storage_failed`, `ui_guest_shutdown_confirmed`, `ui_display_sleeping`, `ui_icon_state_generation`, `agent_status`, `gles_contexts` | Status block |
-| `agent_request/result/free_result`, `agent_cancel` (DeviceTools) | `request(.agent)` (the helper polls and frees within the deadline); `command(.agentCancel)` |
+| `agent_request/result/free_result`, `agent_cancel` (GuestAgent) | `request(.agent)` (the helper polls and frees within the deadline); `command(.agentCancel)` |
 | `build_id` / dladdr provenance | `hello`, cached per session |
 | `snapshot_save2/_status/_resume` | `command` + `request(.snapshotStatus)` polled every 100 ms |
 | `audio_capture_*` (ScreenMovieWriter) | `request(.audioStart)`, then pushed `.audio` events, then `command(.audioStop)` and `.audioEnded` |
@@ -450,6 +450,7 @@ After verify, delete `DerivedData/` and `firmwarekit-build/`. As before, `source
 
 ## Corrections from implementation
 
+- **App layering (E6, 2026-09-29):** `LightTouchMac/` is one directory per layer: `Transport/` (IMobileDevice, USBMux, DeviceExecution, the logs), `Services/` (one device's lockdown services as `DeviceServices` extensions on one `run` kernel: InstallationProxy, AFC with the Files browser, SpringBoardServices, LockdownTools with the lockdown-tz and lockdown-mcinstall children, NotificationProxy), `Guest/` (GuestAgent, GuestServices, GuestPackage), `Library/`, `Device/` (EmulatorController, DeviceSession, DeviceProcess), `Features/` (AppInstaller, AppInstallPipeline, MediaImport, WebProxySetup, CaptureController, DiagnosticsExport) and `UI/`, `App/`. `DeviceTools` is gone: its one-line forwarders and EmulatorController's went with it, callers use `emulator.services`, `emulator.guest` and `emulator.installPipeline`. The gate-plus-deadline-plus-late-handle code SpringBoardIcons, GuestNotifications and the install connection each carried is `DeviceServices.run` and DeviceExecution's `openBeforeDeadline`. `tests/SLICED.md` counts what still slices a hub (27 of E4's 39).
 - **Tests (E4, 2026-09-28):** `tests/` is three tiers, `offline/` (no emulator), `sessions/` (helper + images) and `release/` (packaging), with `drivers/` (helper-driver, session-driver) and `fixtures/`; `tests/run.py {offline|sessions|release}` runs a tier (parallel through one shared module cache for offline and release, one emulator at a time for sessions) and `scripts/gate.sh` wraps it. Checks compile whole production files: `DeviceExecution.swift` (the deadline race, serial gate, errors and timeouts, out of DeviceServices), `BootRecipe.swift` and `DeviceRow.swift` (out of DeviceSession) and `DiagnosticsExport.swift` (out of MainWindowController) exist so they can. `tests/SLICED.md` lists the checks that still cut a section out of a hub file and the extraction that retires each.
 
 **W3, 2026-09-28** (`b63d910`, `a731de4`):

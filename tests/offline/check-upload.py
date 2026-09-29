@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Exercise the production AFC streaming loop with short writes and failures."""
+"""Exercise the production AFC streaming loop with short writes and failures, and the staging names a late
+startup sweep may remove. Compiles Services/AFC.swift and Transport/DeviceExecution.swift whole, against a fake
+libimobiledevice and a DeviceServices whose run kernel calls straight through."""
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-s = (root/'LightTouchMac/DeviceServices.swift').read_text()
-validation = s[s.index("    nonisolated static func validateFilePath"):s.index("    // MARK: - Stage")]
-loop = s[s.index('    func stage('):s.index('    /// A stable device-side filename')]
-errors = (root/'LightTouchMac/DeviceExecution.swift').read_text()
+app = root / 'LightTouchMac'
 source = r'''import Foundation
 nonisolated func logEvent(_ message: String) {}
 struct MediaVideo: Sendable { let id: String; let video: URL }
@@ -54,69 +53,91 @@ nonisolated enum IMobileDevice {
  static let afc_file_close: ((OpaquePointer, UInt64)->Int32)? = { _,_ in state.lock.withLock { state.closeCalls += 1;if state.cancelOnClose { withUnsafeCurrentTask { $0?.cancel() } };return state.closeFailure ? 20 : 0 } }
  static let afc_remove_path: ((OpaquePointer, UnsafePointer<CChar>)->Int32)? = { _,_ in state.lock.withLock { state.removed=true;return 0 } }
  static let afc_client_free: ((OpaquePointer)->Int32)? = { _ in 0 }
+ // Not reached by these uploads (free space, the sweep's and the browser's listings).
+ static let afc_get_device_info_key: ((OpaquePointer, UnsafePointer<CChar>, inout UnsafeMutablePointer<CChar>?)->Int32)? = { _,_,_ in 8 }
+ static let afc_read_directory: ((OpaquePointer, UnsafePointer<CChar>, inout UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?)->Int32)? = { _,_,_ in 8 }
+ static let afc_get_file_info: ((OpaquePointer, UnsafePointer<CChar>, inout UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?)->Int32)? = { _,_,_ in 8 }
+ static let afc_dictionary_free: ((UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>)->Int32)? = { _ in 0 }
 }
-struct Services {
- static let stagingSession=UUID().uuidString
- static func stagingName(_ url: URL) -> String { "fixture.ipa" }
+struct DeviceServices {
  func run<T: Sendable>(_ seconds: Double, _ label: String, _ body: @escaping @Sendable (IMobileDevice.Type, OpaquePointer) throws -> T) async throws -> T {
   try await Task.detached { try body(IMobileDevice.self, OpaquePointer(bitPattern: 1)!) }.value
  }
-''' + validation + loop + '\n}\n' + errors + r'''
+}
+func stagingNames() {
+  let file=URL(fileURLWithPath:"/tmp/Temple Run.ipa")
+  let first=DeviceServices.stagingName(file), second=DeviceServices.stagingName(file)
+  precondition(first != second)
+  let old="Temple_Run-01234567.ipa"
+  // Simulate the directory listing returning after both new uploads started.
+  let removed=[old,first,second,".","..","../escape",""].filter(DeviceServices.isOrphanedStagingName)
+  precondition(removed == [old])
+  precondition(!first.contains("/"))
+  let uuid=UUID().uuidString
+  precondition(DeviceServices.isOrphanedMediaUpload("audio.m4a.upload-"+uuid))
+  precondition(DeviceServices.isOrphanedMediaUpload("image.jpg.upload-"+uuid+"-"+UUID().uuidString))
+  precondition(!DeviceServices.isOrphanedMediaUpload("audio.m4a.upload-"+DeviceServices.stagingSession+"-"+uuid))
+  for name in ["audio.m4a","image.jpg",".photo-receipt","song.json","audio.m4a.upload-invalid","../image.jpg.upload-"+uuid] {
+   precondition(!DeviceServices.isOrphanedMediaUpload(name),name)
+  }
+}
 @main struct Check {
  static func main() async throws {
   let path = URL(fileURLWithPath: CommandLine.arguments[1])
   let expected = Data((0..<200003).map { UInt8($0 % 251) })
   try expected.write(to: path)
   let state = IMobileDevice.state
-  _ = try await Services().stage(path) { _ in }
+  _ = try await DeviceServices().stage(path) { _ in }
   precondition(state.bytes == expected && !state.removed && state.closeCalls == 1)
   state.reset()
   let audio = path.deletingLastPathComponent().appendingPathComponent("audio.m4a")
   try expected.write(to: audio)
   let id = UUID().uuidString
-  try await Services().stageSong(MediaSong(id:id,audio:audio)) { _ in }
+  try await DeviceServices().stageSong(MediaSong(id:id,audio:audio)) { _ in }
   precondition(state.bytes == expected && state.destination == "LightTouch/\(id)/audio.m4a")
   precondition(state.directories == ["LightTouch","LightTouch/\(id)"])
   state.reset();state.existing=expected
-  try await Services().stageSong(MediaSong(id:id,audio:audio)) { _ in }
+  try await DeviceServices().stageSong(MediaSong(id:id,audio:audio)) { _ in }
   precondition(state.bytes.isEmpty && state.closeCalls==1 && state.existing==expected)
   state.reset();state.existing=Data("different".utf8)
-  do { try await Services().stageSong(MediaSong(id:id,audio:audio)) { _ in };fatalError("mismatched media overwritten") }
+  do { try await DeviceServices().stageSong(MediaSong(id:id,audio:audio)) { _ in };fatalError("mismatched media overwritten") }
   catch let error as DeviceError { precondition(!error.shouldPauseInstallQueue) }
   precondition(state.bytes.isEmpty && state.existing==Data("different".utf8) && state.closeCalls==1)
   state.reset()
-  do { try await Services().stageSong(MediaSong(id:"../escape",audio:audio)) { _ in }; fatalError("invalid destination accepted") }
+  do { try await DeviceServices().stageSong(MediaSong(id:"../escape",audio:audio)) { _ in }; fatalError("invalid destination accepted") }
   catch {}
   precondition(state.destination.isEmpty)
   state.reset()
   let video = path.deletingLastPathComponent().appendingPathComponent("video.m4v")
   try expected.write(to: video)
-  try await Services().stageVideo(MediaVideo(id:id,video:video)) { _ in }
+  try await DeviceServices().stageVideo(MediaVideo(id:id,video:video)) { _ in }
   precondition(state.bytes == expected && state.destination == "LightTouch/\(id)/video.m4v")
   state.reset();state.existing=expected
-  try await Services().stageVideo(MediaVideo(id:id,video:video)) { _ in }
+  try await DeviceServices().stageVideo(MediaVideo(id:id,video:video)) { _ in }
   precondition(state.bytes.isEmpty && state.existing == expected)
   state.reset()
-  do { try await Services().stageVideo(MediaVideo(id:id,video:audio)) { _ in };fatalError("invalid movie path accepted") }
+  do { try await DeviceServices().stageVideo(MediaVideo(id:id,video:audio)) { _ in };fatalError("invalid movie path accepted") }
   catch {}
   precondition(state.destination.isEmpty)
   state.reset();state.cancelOnClose=true
-  do { try await Services().stageSong(MediaSong(id:id,audio:audio)) { _ in };fatalError("cancelled upload published") }
+  do { try await DeviceServices().stageSong(MediaSong(id:id,audio:audio)) { _ in };fatalError("cancelled upload published") }
   catch is CancellationError {}
   precondition(state.removed && state.existing == nil && state.closeCalls == 1)
   for kind in 0..<3 {
    state.reset()
    state.failure = kind == 0; state.badCount = kind == 1; state.closeFailure = kind == 2
-   do { _ = try await Services().stage(path) { _ in }; fatalError("failed upload accepted") }
+   do { _ = try await DeviceServices().stage(path) { _ in }; fatalError("failed upload accepted") }
    catch let e as DeviceError { precondition(e.shouldPauseInstallQueue) }
    precondition(state.removed && state.closeCalls == 1)
   }
-  print("PASS: app/media AFC uploads, safe destination validation, short writes and failure cleanup")
+  stagingNames()
+  print("PASS: app/media AFC uploads, safe destination validation, short writes and failure cleanup; late sweeps preserve active uploads, canonical media and receipts")
  }
 }
 '''
 with tempfile.TemporaryDirectory() as work:
     swift=Path(work)/'check.swift'; swift.write_text(source)
     exe=Path(work)/'check'
-    subprocess.run(['swiftc','-parse-as-library','-module-cache-path','/tmp/ltm-module-cache',str(swift),'-o',str(exe)],check=True)
+    subprocess.run(['swiftc','-parse-as-library','-module-cache-path','/tmp/ltm-module-cache',str(app/'Services/AFC.swift'),
+                    str(app/'Transport/DeviceExecution.swift'),str(swift),'-o',str(exe)],check=True)
     subprocess.run([str(exe),str(Path(work)/'fixture.ipa')],check=True)

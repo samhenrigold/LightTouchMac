@@ -1,8 +1,8 @@
 // Created by Sam on 2026-08-05.
 //
 // Installed apps are always files we already have on disk (the .ipa passed to
-// Add). ideviceinstaller's own "list" text is a lossy, format-fragile source
-// of truth for the display name (e.g. it reports Starbucks by bundle ID), so
+// Add). installation_proxy's browse is a lossy source of truth for the
+// display name (e.g. it reports Starbucks by bundle ID), so
 // on install we read the real CFBundleDisplayName/icon straight out of the
 // .ipa via /usr/bin/unzip (shipped with macOS, no new dependency) and cache
 // it to disk keyed by bundle ID. The live device list still drives *which*
@@ -30,7 +30,7 @@ final class AppMetadataCache {
     private let iconMemo = NSCache<NSString, NSImage>()
     
     private init() {
-        dir = Self.prepareDirectory(
+        dir = StorageLocations.appMetadataDirectory(
             state: Bundled.stateDirectory,
             caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0],
             isolated: ProcessInfo.processInfo.environment["LTM_STATE_DIR"] != nil)
@@ -40,24 +40,6 @@ final class AppMetadataCache {
         #if DEBUG
         Self.selfCheck()
         #endif
-    }
-
-    /// Icons and names are disposable metadata, not device storage. An isolated
-    /// run keeps even its cache under LTM_STATE_DIR.
-    nonisolated static func prepareDirectory(state: URL, caches: URL, isolated: Bool) -> URL {
-        let root = isolated ? state.appendingPathComponent("Caches", isDirectory: true)
-            : caches.appendingPathComponent("gold.samhenri.LightTouchMac", isDirectory: true)
-        let directory = root.appendingPathComponent("AppMetadata", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
-    }
-
-    /// macOS can remove disposable cache files while the app is running.
-    /// Recreate the parent for each write, then publish complete bytes together.
-    nonisolated static func writeCacheData(_ data: Data, to url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
-                                                withIntermediateDirectories: true)
-        try data.write(to: url, options: .atomic)
     }
 
     #if DEBUG
@@ -71,11 +53,11 @@ final class AppMetadataCache {
             "Payload/Super Monkey Ball [SEGA].app/Settings.bundle/Nested.app/Info.plist",
             "Payload/Super Monkey Ball [SEGA].app/Frameworks/Foo.framework/Icon.png",
         ]
-        let root = appRoot(members)
+        let root = IPAMembers.appRoot(members)
         assert(root == "Payload/Super Monkey Ball [SEGA].app/", "nested .app won: \(root ?? "nil")")
-        assert(iconMember(members, root: root!, info: [:]) == "\(root!)Icon@2x.png")
-        assert(iconMember(members, root: root!, info: ["CFBundleIconFile": "Icon.png"]) == "\(root!)Icon@2x.png")
-        assert(escapedForUnzip("a [b]*?.png") == "a \\[b\\]\\*\\?.png")
+        assert(IPAMembers.iconMember(members, root: root!, info: [:]) == "\(root!)Icon@2x.png")
+        assert(IPAMembers.iconMember(members, root: root!, info: ["CFBundleIconFile": "Icon.png"]) == "\(root!)Icon@2x.png")
+        assert(IPAMembers.escapedForUnzip("a [b]*?.png") == "a \\[b\\]\\*\\?.png")
     }
     #endif
     
@@ -96,7 +78,7 @@ final class AppMetadataCache {
     /// nil if we never learned this bundle ID.
     ///
     /// Entries used to also carry the version and be discarded when it didn't
-    /// match the live list — but ideviceinstaller reports CFBundleVersion while
+    /// match the live list — but the device list reports CFBundleVersion while
     /// we read CFBundleShortVersionString, so for any app where those differ
     /// (most of them) every entry was rejected on read AND deleted by prune,
     /// which is what made the sidebar fall back to bundle IDs at random. A name
@@ -130,12 +112,12 @@ final class AppMetadataCache {
 
     /// Best-effort: read the display name and icon out of a decrypted .ipa and
     /// cache them, returning the name. Silently does nothing on any failure —
-    /// the sidebar just falls back to whatever ideviceinstaller reports.
+    /// the sidebar just falls back to whatever the device list reports.
     /// The archive's display name without touching the cache — for a row that
     /// is only a proposal until the install succeeds. See learn(from:).
     func preview(of ipa: URL) async -> (name: String, bundleID: String)? {
         let members = await Self.members(ipa)
-        guard let root = Self.appRoot(members),
+        guard let root = IPAMembers.appRoot(members),
               let plist = try? await Self.unzip(ipa, member: root + "Info.plist"),
               let info = try? PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any],
               let bundleID = info["CFBundleIdentifier"] as? String,
@@ -149,7 +131,7 @@ final class AppMetadataCache {
     @discardableResult
     func learn(from ipa: URL) async -> String? {
         let members = await Self.members(ipa)
-        guard let root = Self.appRoot(members),
+        guard let root = IPAMembers.appRoot(members),
               let plist = try? await Self.unzip(ipa, member: root + "Info.plist"),
               let info = try? PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any],
               let bundleID = info["CFBundleIdentifier"] as? String,
@@ -158,9 +140,9 @@ final class AppMetadataCache {
         ?? (info["CFBundleName"] as? String)
         ?? ipa.deletingPathExtension().lastPathComponent
         var hasIcon = false
-        if let member = Self.iconMember(members, root: root, info: info),
+        if let member = IPAMembers.iconMember(members, root: root, info: info),
            let data = try? await Self.unzip(ipa, member: member) {
-            hasIcon = (try? Self.writeCacheData(data, to: iconURL(bundleID))) != nil
+            hasIcon = (try? StorageLocations.writeCacheData(data, to: iconURL(bundleID))) != nil
             // A reinstall may ship a new icon; drop any decoded copy of the old.
             iconMemo.removeObject(forKey: bundleID as NSString)
         }
@@ -175,7 +157,7 @@ final class AppMetadataCache {
     /// named files raised two placeholder icons.
     static func bundleID(of ipa: URL) async -> String? {
         let members = await Self.members(ipa)
-        guard let root = Self.appRoot(members),
+        guard let root = IPAMembers.appRoot(members),
               let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
               let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
         else { return nil }
@@ -188,7 +170,7 @@ final class AppMetadataCache {
     /// know before staging. Same Info.plist read as learn().
     static func executableMember(of ipa: URL) async -> String? {
         let members = await Self.members(ipa)
-        guard let root = Self.appRoot(members),
+        guard let root = IPAMembers.appRoot(members),
               let data = try? await Self.unzip(ipa, member: root + "Info.plist"),
               let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let exe = info["CFBundleExecutable"] as? String else { return nil }
@@ -199,15 +181,9 @@ final class AppMetadataCache {
     /// with no single root app.
     static func info(of ipa: URL) async -> [String: Any]? {
         let members = await Self.members(ipa)
-        guard let root = Self.appRoot(members),
+        guard let root = IPAMembers.appRoot(members),
               let data = try? await Self.unzip(ipa, member: root + "Info.plist") else { return nil }
         return try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-    }
-
-    /// The SDK the .ipa was built against (e.g. "iphoneos6.1"), for the
-    /// too-new-to-launch check.
-    func sdkName(from ipa: URL) async -> String? {
-        await Self.info(of: ipa)?["DTSDKName"] as? String
     }
 
     /// The lowest OS the app declares it will run on (Info.plist
@@ -219,7 +195,7 @@ final class AppMetadataCache {
 
     private func save() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
-        try? Self.writeCacheData(data, to: indexURL)
+        try? StorageLocations.writeCacheData(data, to: indexURL)
     }
     
     // MARK: - .ipa reading (Payload/<something>.app is the app bundle)
@@ -243,55 +219,10 @@ final class AppMetadataCache {
         return text.split(separator: "\n").map(String.init)
     }
 
-    /// Exactly one root Payload app. Nested bundles and ambiguous archives
-    /// cannot supply the identity used by the installer and library.
-    static func appRoot(_ members: [String]) -> String? {
-        let roots = members.filter {
-            let parts = $0.split(separator: "/", omittingEmptySubsequences: false)
-            return parts.count == 3 && parts[0] == "Payload"
-                && parts[1].hasSuffix(".app") && parts[2] == "Info.plist"
-        }
-        guard roots.count == 1 else { return nil }
-        return String(roots[0].dropLast("Info.plist".count))
-    }
-
-    /// The icon PNG to cache: whatever the Info.plist declares, else Icon.png.
-    /// Only PNGs sitting directly in the .app count, so a framework's artwork
-    /// can't win, and @2x is preferred — same picture, twice the resolution.
-    static func iconMember(_ members: [String], root: String, info: [String: Any]) -> String? {
-        var names: [String] = []
-        if let icons = info["CFBundleIcons"] as? [String: Any],
-           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-           let files = primary["CFBundleIconFiles"] as? [String] { names += files }
-        if let files = info["CFBundleIconFiles"] as? [String] { names += files }
-        if let file = info["CFBundleIconFile"] as? String { names.append(file) }
-        names.append("Icon")
-
-        let pngs = members.filter {
-            $0.hasPrefix(root) && $0.hasSuffix(".png") && !$0.dropFirst(root.count).contains("/")
-        }
-        for name in names {
-            let base = root + (name.hasSuffix(".png") ? String(name.dropLast(4)) : name)
-            if let hit = pngs.first(where: { $0 == "\(base)@2x.png" })
-                ?? pngs.first(where: { $0 == "\(base).png" })
-                ?? pngs.first(where: { $0.hasPrefix(base) }) { return hit }
-        }
-        return nil
-    }
-
-    /// unzip reads `*`, `?` and `[]` in a member name as wildcards, so the name
-    /// has to be escaped even though it came from unzip's own listing.
-    static func escapedForUnzip(_ member: String) -> String {
-        member.reduce(into: "") { out, c in
-            if "*?[]\\".contains(c) { out.append("\\") }
-            out.append(c)
-        }
-    }
-
     private static func unzip(_ ipa: URL, member: String) async throws -> Data {
         let result = try await run(
             .path(FilePath("/usr/bin/unzip")),
-            arguments: ["-p", ipa.path, escapedForUnzip(member)],
+            arguments: ["-p", ipa.path, IPAMembers.escapedForUnzip(member)],
             output: .data(limit: 1 << 22), error: .discarded
         )
         guard result.terminationStatus.isSuccess, !result.standardOutput.isEmpty else {

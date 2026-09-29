@@ -237,12 +237,11 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
 
     // MARK: - IPSW and .ipa drops
 
-    private static func files(_ info: NSDraggingInfo, _ pathExtension: String) -> [URL] {
-        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
-                                                        options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        return urls.filter { $0.pathExtension.lowercased() == pathExtension }
+    private static func files(_ info: NSDraggingInfo, _ kind: DroppedFiles) -> [URL] {
+        DroppedFiles.files(info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
+                                                               options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [], kind)
     }
-    private static func ipsws(_ info: NSDraggingInfo) -> [URL] { files(info, "ipsw") }
+    private static func ipsws(_ info: NSDraggingInfo) -> [URL] { files(info, .ipsw) }
 
     /// The running device behind a row that can take an .ipa now.
     private func installTarget(_ item: Any?) -> EmulatorController? {
@@ -254,7 +253,7 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo,
                      proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
         // An .ipa installs on the running device whose row it lands on.
-        if !Self.files(info, "ipa").isEmpty {
+        if !Self.files(info, .ipa).isEmpty {
             guard installTarget(item) != nil else { return [] }
             if index != NSOutlineViewDropOnItemIndex { outlineView.setDropItem(item, dropChildIndex: NSOutlineViewDropOnItemIndex) }
             return .copy
@@ -267,7 +266,7 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
     }
 
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
-        let ipas = Self.files(info, "ipa")
+        let ipas = Self.files(info, .ipa)
         if !ipas.isEmpty {
             guard let emulator = installTarget(item) else { return false }
             ipas.forEach { AppInstaller.start($0, with: emulator, presenting: view.window) }
