@@ -429,7 +429,7 @@
   "version": "4.3",
   "build": "8F190",
   "released": "2011-03-09",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/041-0329.20110311.Cvfre/iPad1,1_4.3_8F190_Restore.ipsw", "sha1": "fc97d5959a1e29d707586871004ea12e95815237", "bytes": 625814678},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "784819173db100367b72cabba1ffba59", "key": "e6cbf51fcade82ccd8e235d39bfaa57fe28137e0f9c1f2ed6853cdf1b1ee40a0"},
@@ -462,7 +462,7 @@
   "version": "4.3.1",
   "build": "8G4",
   "released": "2011-03-25",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/041-0550.20110325.Zsw6y/iPad1,1_4.3.1_8G4_Restore.ipsw", "sha1": "6615b368d665630e80da975232567daf87a042b6", "bytes": 621768387},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "18166dbca005ebfacd51bbca8acb63ec", "key": "68a16c21ea1370a10525f7c6c101a287a9ca9a794d555dfad25b460498ed6b39"},
@@ -493,7 +493,7 @@
   "version": "4.3.2",
   "build": "8H7",
   "released": "2011-04-14",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/041-0661.20110414.W9Q8r/iPad1,1_4.3.2_8H7_Restore.ipsw", "sha1": "2c86c5915a8f9e56776deba22dc048c2f42db8b7", "bytes": 622148907},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "52a5fa0939ce54932c57da817f7b8e1b", "key": "f9b5cf6172f8432c500617f42ae22b2de2412cc14f4306abb739e434a81e6d78"},
@@ -524,7 +524,7 @@
   "version": "4.3.3",
   "build": "8J3",
   "released": "2011-05-04",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/041-1010.20110503.ScEp3/iPad1,1_4.3.3_8J3_Restore.ipsw", "sha1": "e2906ef04d5991663cd6ea8b19548ec190144d46", "bytes": 622048364},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "52a5fa0939ce54932c57da817f7b8e1b", "key": "f9b5cf6172f8432c500617f42ae22b2de2412cc14f4306abb739e434a81e6d78"},
@@ -555,7 +555,7 @@
   "version": "4.3.4",
   "build": "8K2",
   "released": "2011-07-15",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/041-1913.20110715.cvTyu/iPad1,1_4.3.4_8K2_Restore.ipsw", "sha1": "3c38b8c3792141484f6a8cffae0a38c25947ec28", "bytes": 622279895},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "0477086ecaad3fb5677996bbe2b43812", "key": "cd26923d345936f6a9c00fdc31de0444a02fea7f216d8f463d22bba83282c15b"},
@@ -586,7 +586,7 @@
   "version": "4.3.5",
   "build": "8L1",
   "released": "2011-07-25",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/041-1957.20110721.6UHaN/iPad1,1_4.3.5_8L1_Restore.ipsw", "sha1": "66a114630a457dea3565cf99b9285b2fe3d56d62", "bytes": 622255612},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "0477086ecaad3fb5677996bbe2b43812", "key": "cd26923d345936f6a9c00fdc31de0444a02fea7f216d8f463d22bba83282c15b"},
