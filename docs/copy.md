@@ -122,4 +122,14 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | not enough space to prepare | Not enough disk space: this needs X, and Y is available. |
 | files changed under a running device | Files of this iPod were changed while it was running. Stop and start it again; unsaved changes may be lost. |
 | older data | This iPod’s data was made with an older system image. |
+
+### Web proxy (`WebProxyStatus.message`)
+
+| State | Words |
+|---|---|
+| waiting | Waiting for iPod… |
+| applying | Updating proxy… |
+| ready | (nothing) |
+| failed | Couldn’t update the proxy. Try again. |
+| needsTap (no guest agent: the profile was offered) | Tap Install on the iPod to trust the proxy certificate. |
 | Settings ▸ Storage | Devices (Base · Data · Snapshot), IPSWs (Downloaded / Imported IPSW), Caches and logs, Library (N IPAs · size · size on no device) |

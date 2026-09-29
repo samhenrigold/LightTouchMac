@@ -350,7 +350,7 @@ struct DeviceTools: Sendable {
                                      output: .discarded, error: .string(limit: 1 << 16))
         guard prepared.terminationStatus.isSuccess else {
             logEvent("proxy: certificate preparation failed: \(prepared.standardError)")
-            throw DeviceToolsError.failed("Could not prepare this device’s HTTP proxy certificate.")
+            throw DeviceToolsError.failed("Couldn’t prepare the proxy certificate.")
         }
         let der = try Data(contentsOf: URL(fileURLWithPath: proxyFile + ".ca.der"))
         // The agent claims its channel shortly after lockdown answers; give it a moment before falling back.
@@ -372,7 +372,8 @@ struct DeviceTools: Sendable {
                                     environment: toolEnvironment,
                                     output: .string(limit: 1 << 10), error: .string(limit: 1 << 10))
         guard offered.terminationStatus.isSuccess else {
-            throw DeviceToolsError.failed("Could not offer the proxy certificate to the device. \(offered.standardError)")
+            logEvent("proxy: offering the certificate profile failed: \(offered.standardError)")
+            throw DeviceToolsError.failed("Couldn’t offer the proxy certificate to the device.")
         }
         logEvent("proxy: no guest agent; certificate profile offered, confirm Install on the device")
         return .needsTap
