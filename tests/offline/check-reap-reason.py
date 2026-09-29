@@ -4,7 +4,7 @@
 The production terminate/received/terminated/died text runs against a fake link whose exit report arrives one
 reap retry (10 ms, DeviceLink.reap on waitpid == 0) after the helper dies. A requested stop whose qemuExited
 event was lost (the helper exited before sending it: DeviceHost.halt racing QEMU's own SIGTERM handler) is still
-"The emulator stopped."; a crash or kill nobody asked for keeps its unexpected-exit reason."""
+"The iPod stopped."; a crash or kill nobody asked for is "stopped unexpectedly" (the code and signal go to the log)."""
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
@@ -15,7 +15,8 @@ a = s.index('    /// SIGTERM: the helper runs its own clean shutdown'); b = s.in
 c = s.index('    private func received(_ event: LinkEvent)', b); d = s.index('    /// Geometry is DeviceProfile', c)
 e = s.index('    private func terminated(_ termination: DeviceTermination)', d); f = s.index('\n}\n', e) + 1
 methods = s[a:b] + s[c:d] + s[e:f]
-source = 'import Foundation\n' + termination + r'''
+profile = (root / 'LightTouchMac/DeviceProfile.swift').read_text().replace('import Foundation\n', '')
+source = 'import Foundation\n' + termination + profile + r'''
 nonisolated func logEvent(_ s: String) {}
 nonisolated enum LinkEvent { case qemuExited(Int32), audio, audioEnded }
 @MainActor final class FakeLog { func flush() {} }
@@ -33,6 +34,7 @@ nonisolated enum LinkEvent { case qemuExited(Int32), audio, audioEnded }
 }
 @MainActor final class DeviceProcess {
  let link = FakeLink()
+ let profile = DeviceProfile.iPodTouch2G
  let log: FakeLog? = nil
  var onDeath: ((String) -> Void)?
  var onAudio: ((LinkEvent) -> Void)?
@@ -55,24 +57,24 @@ nonisolated enum LinkEvent { case qemuExited(Int32), audio, audioEnded }
    while !p.isDead, Date().timeIntervalSince(start) < 1 { try? await Task.sleep(for: .milliseconds(5)) }
    return p.deathReason ?? "(never died)"
   }
-  let stopped = "The emulator stopped."
+  let stopped = "The iPod stopped.", crashed = "The iPod stopped unexpectedly. Open Device Logs for details."
   let cases: [(String, (DeviceProcess) -> Void)] = [
    // A stop whose helper reported QEMU's exit before dying.
    (stopped, { $0.terminate() }),
    // The race: the helper exited 0 before the qemuExited event went out.
    (stopped, { $0.link.sendsExitEvent = false; $0.terminate() }),
    // Nobody asked: a crash, a kill, an exit 0 keep their own reasons.
-   ("The device helper exited unexpectedly (code 0).", { $0.link.sendsExitEvent = false; $0.link.die(.exited(0)) }),
-   ("The device helper was killed (signal 11).", { $0.link.die(.signaled(11)) }),
-   ("The device helper exited unexpectedly (code 70).", { $0.link.sendsExitEvent = false; $0.link.die(.exited(70)) }),
-   ("The emulator stopped (exit code 1).", { $0.link.die(.exited(1)) }),
-   ("The device helper was killed (signal 9).", { $0.kill() }),
+   (crashed, { $0.link.sendsExitEvent = false; $0.link.die(.exited(0)) }),
+   (crashed, { $0.link.die(.signaled(11)) }),
+   (crashed, { $0.link.sendsExitEvent = false; $0.link.die(.exited(70)) }),
+   (crashed, { $0.link.die(.exited(1)) }),
+   (crashed, { $0.kill() }),
   ]
   for (expected, act) in cases {
    let got = await reason(act)
    precondition(got == expected, "expected '\(expected)', got '\(got)'")
   }
-  print("PASS: a requested stop is 'The emulator stopped.' with or without the qemuExited event; crashes keep their reason")
+  print("PASS: a requested stop is 'The iPod stopped.' with or without the qemuExited event; crashes are 'stopped unexpectedly'")
  }
 }
 '''

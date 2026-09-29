@@ -548,8 +548,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // the device in a fresh helper (the app and other devices keep running).
         let refused = emulator.baseImageMismatch
         let label = NSTextField(wrappingLabelWithString: refused
-            ? "This \(emulator.profile.shortName)'s data was made with an older system image. Erase it to start fresh."
-            : emulator.deathReason ?? "The emulator stopped.")
+            ? "This \(emulator.profile.shortName)’s data was made with an older system image. Erase it to start fresh."
+            : emulator.deathReason ?? emulator.profile.stoppedReason)
         label.font = .systemFont(ofSize: 15, weight: .medium)
         label.textColor = .white
         label.alignment = .center

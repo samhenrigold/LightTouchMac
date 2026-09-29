@@ -113,7 +113,7 @@ final class DisplayView: NSView {
             power.textColor = .white
             symbol = power
         }
-        let title = next == .sleeping ? "Sleeping" : next == .poweredOff ? "Powered Off" : "Stopping…"
+        let title = next == .sleeping ? "Sleeping" : next == .poweredOff ? "Powered off" : "Stopping…"
         let stack = NSStackView(views: [symbol])
         if next == .shuttingDown {
             let label = NSTextField(labelWithString: title)

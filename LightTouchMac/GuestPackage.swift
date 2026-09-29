@@ -266,17 +266,17 @@ nonisolated enum GuestPackage {
 
         var text: String {
             switch self {
-            case .unknown: "Unknown (no report in 30 s)"
-            case .legacy: "Legacy — erase and prepare again to receive updates"
-            case let .current(serial): "Current (serial \(serial))"
-            case let .builtIn(serial): "Built-in (serial \(serial))"
-            case let .reverted(serial, why):
-                "Reverted to serial \(serial) — " + (why == .revertedBad ? "the newer package was judged bad"
-                                                        : why == .revertedTries ? "the newer package kept failing" : "the offer was refused")
+            case .unknown: "Unknown"
+            case .legacy: "Won’t update — erase and prepare again to get updates"
+            case .current: "Up to date"
+            case .builtIn: "Built in"
+            case let .reverted(_, why):
+                "Using an earlier version — " + (why == .revertedBad ? "the update didn’t work"
+                                                  : why == .revertedTries ? "the update kept failing" : "the update was refused")
             case .outOfDate: "Out of date — restart to update"
             case .notResponding: "Not responding"
-            case .recovery: "Recovery"
-            case .notBooted: "Not booted"
+            case .recovery: "Unavailable in recovery mode"
+            case .notBooted: "Waiting for iOS"
             }
         }
     }

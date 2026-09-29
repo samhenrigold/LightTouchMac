@@ -213,18 +213,18 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     var stateDescription: String {
         switch state {
         case let .notDownloaded(bytes):
-            bytes.map { "Not Downloaded, " + ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Not Downloaded"
+            bytes.map { "Not downloaded, " + ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Not downloaded"
         case .downloaded: "Downloaded"
-        case .bundled: "Built In"
+        case .bundled: "Built in"
         case .downloading: "Downloading, " + (progressSummary ?? "")
         case .preparing: "Preparing, " + (progressSummary ?? "")
         case .ready: "Ready"
         case .running: "Running"
         case .stopping: "Stopping"
         case .error: "Error"
-        case .unavailable(.comingSoon): "Coming Soon"
+        case .unavailable(.comingSoon): "Coming soon"
         case .unavailable(.untested): "Untested"
-        case .unavailable(.requiresIPSW): "Requires IPSW"
+        case .unavailable(.requiresIPSW): "Requires an IPSW"
         }
     }
 }

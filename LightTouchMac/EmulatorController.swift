@@ -276,7 +276,7 @@ final class EmulatorController {
     private func pinOverlay(_ overlay: URL) throws -> Bool {
         guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
             baseImageMismatch = true
-            reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
+            reportDeviceNotice("This \(profile.shortName)’s data was made with an older system image.", for: .erase)
             state = .dead(exitCode: 1)
             return false
         }
@@ -704,22 +704,22 @@ final class EmulatorController {
     /// One line for the window's status area.
     var statusLine: String {
         if isErasing { return "Erasing \(profile.shortName)…" }
-        if storageFailed { return "Storage write failed — device stopped; latest changes were not saved" }
+        if storageFailed { return "Couldn’t save to disk — \(profile.shortName) stopped; recent changes weren’t saved" }
         if shuttingDown, !isPoweredOff { return "Stopping…" }
         switch state {
-        case .poweredOff: return "Powered Off"
+        case .poweredOff: return "Powered off"
         case .notStarted: return "Starting…"
-        case .booting:    return "Booting…"
+        case .booting:    return "Starting iOS…"
         case .running:
             if let issue = connectionIssue, issue.persistent { return issue.summary }
             if preparingDevice { return preparationStatus }
             if isSleeping { return "Sleeping" }
-            if restartingSpringBoard { return "Restarting SpringBoard…" }
+            if restartingSpringBoard { return "Restarting the Home screen…" }
             if let readinessFailure { return "Startup failed — \(readinessFailure)" }
             guard canManageApps else { return "Running — USB unavailable" }
             return "Running — " + guestToolsLine
         case .paused:     return "Paused"
-        case .dead:       return "Emulator stopped"
+        case .dead:       return "Stopped"
         }
     }
 

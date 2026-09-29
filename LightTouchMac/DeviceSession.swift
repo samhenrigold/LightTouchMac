@@ -120,8 +120,8 @@ import Cocoa
     }
 
     private func failStart(_ error: DeviceLinkError, _ completion: (Result<HelperInfo, DeviceLinkError>) -> Void) {
-        let reason = "The device didn’t start: \(error)."
-        logEvent("device helper: \(reason)")
+        let reason = "The \(profile.shortName) didn’t start. Open Device Logs for details."
+        logEvent("device helper: didn’t start: \(error)")
         if startFailure == nil { startFailure = reason }
         completion(.failure(error))
         // A spawned helper reports its own end; one that never ran can't.
@@ -131,16 +131,10 @@ import Cocoa
     private func terminated(_ termination: DeviceTermination) {
         let reason: String
         if let startFailure { reason = startFailure }
-        else if let code = qemuExitCode { reason = code == 0 ? "The emulator stopped." : "The emulator stopped (exit code \(code))." }
-        else if stopRequested, termination == .exited(0) { reason = "The emulator stopped." }
-        else {
-            switch termination {
-            case let .signaled(signal): reason = "The device helper was killed (signal \(signal))."
-            case let .exited(code): reason = "The device helper exited unexpectedly (code \(code))."
-            case .unknown: reason = "The device helper stopped."
-            }
-        }
-        logEvent("device helper \(helperPID): \(termination) — \(reason)")
+        // The user sees stopped or stopped unexpectedly; the exit code and signal go to the log.
+        else if qemuExitCode == 0 || (qemuExitCode == nil && stopRequested && termination == .exited(0)) { reason = profile.stoppedReason }
+        else { reason = "The \(profile.shortName) stopped unexpectedly. Open Device Logs for details." }
+        logEvent("device helper \(helperPID): \(termination), QEMU exit \(qemuExitCode.map(String.init) ?? "none") — \(reason)")
         died(reason)
     }
 
@@ -191,7 +185,7 @@ import Cocoa
         if emulator.isDead {
             return .dead(emulator.baseImageMismatch
                 ? "This \(profile.shortName)’s data was made with an older system image."
-                : emulator.deathReason ?? "The emulator stopped.")
+                : emulator.deathReason ?? profile.stoppedReason)
         }
         if emulator.isErasing || (emulator.shuttingDown && !emulator.isPoweredOff) { return .stopping }
         return emulator.isPoweredOff ? .stopped : .running
