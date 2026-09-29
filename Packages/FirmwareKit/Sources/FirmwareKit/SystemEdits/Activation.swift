@@ -155,6 +155,25 @@ enum MachOSignature {
         return slices.contains { $0.header.layout.cputype == armCPU && $0.header.layout.cpusubtype == armv7 } ? nil : "no armv7 slice"
     }
 
+    /// 2.x/3.0 dyld needs classic relocations and an ARMv6 slice; fail before baking a modern helper.
+    static func earlyARMProblem(_ url: URL) -> String? {
+        guard let file = try? MachOKit.loadFromFile(url: url) else { return "not a Mach-O" }
+        let images: [MachOFile]
+        switch file {
+        case .machO(let image): images = [image]
+        case .fat(let fat): guard let slices = try? fat.machOFiles() else { return "unreadable slices" }; images = slices
+        }
+        guard let image = images.first(where: { $0.header.layout.cputype == armCPU && $0.header.layout.cpusubtype == 6 }) else { return "no armv6 slice" }
+        for command in image.loadCommands {
+            switch command {
+            case .dyldInfoOnly, .main, .versionMinIphoneos, .buildVersion:
+                return "requires a newer dyld; rebuild with LEGACY_LINK=1"
+            default: continue
+            }
+        }
+        return codeSignature(image.loadCommands) == nil ? "unsigned armv6 slice" : nil
+    }
+
     /// LC_CODE_SIGNATURE's (dataoff, datasize) of a thin 32-bit Mach-O in memory (Activation.signed patches the buffer).
     static func codeSignature(in data: Data) -> (offset: Int, size: Int)? {
         data.withUnsafeBytes { b -> (Int, Int)? in
