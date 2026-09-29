@@ -44,7 +44,7 @@ Checked 2026-09-28.
 | iPod1,1 | 3.1.1 | 7C145 | mirror (sha1 verified), Apple never hosted | `c6270780c166db4c9f4f0a7fa945754a1f9fe7e8` | 249,755,862 | n/a (1.x: only the rootfs is encrypted) | no board |
 | iPod1,1 | 3.1.2 | 7D11 | mirror (sha1 verified), Apple never hosted | `7367dd9ba58a3b9777307368a0128e696fdfc9a6` | 249,780,497 | n/a (1.x: only the rootfs is encrypted) | no board |
 | iPod1,1 | 3.1.3 | 7E18 | mirror (sha1 verified), Apple never hosted | `5f897990f19d2f093b35e0813d7d77806404fb1f` | 235,678,189 | n/a (1.x: only the rootfs is encrypted) | no board |
-| iPod2,1 | 2.1.1 | 5F138 | hosted | `c3c700be49ad227d1152188e7c1e46b8958fd1e4` | 282,083,944 | 14 keys, wiki lacks iBEC, iBSS | coming_soon |
+| iPod2,1 | 2.1.1 | 5F138 | hosted | `c3c700be49ad227d1152188e7c1e46b8958fd1e4` | 282,083,944 | 14 keys, wiki lacks iBEC, iBSS | experimental |
 | iPod2,1 | 2.2 | 5G77a | hosted | `34a0a489605f34d6cc6c9954edcaaf9a050deedc` | 291,123,491 | 14 keys, wiki lacks iBEC, iBSS | untested |
 | iPod2,1 | 2.2.1 | 5H11a | hosted | `9af5625ea34acdd8abeb6fce71a72651d0c815d5` | 291,140,244 | 14 keys, wiki lacks iBEC, iBSS | untested |
 | iPod2,1 | 3.0 | 7A341 | mirror (sha1 verified), Apple never hosted | `0f7fc76d9b9aa826b5ab14be9821a315d3d9dc42` | 270,315,364 | 19 keys | untested |
@@ -69,7 +69,10 @@ Notes:
   `firmwarekit create --sibling-entry/--sibling-ipsw`; firmwarekit decrypts just that ramdisk with the sibling's key.
   The app needs the sibling IPSW downloaded first (it says so); queueing that download is the follow-up. 8G4 and 8L1
   both get their keybag this way (matrix-results.md).
-- iPod2,1 2.2 / 2.2.1: the wiki has no iBSS/iBEC keys; neither recipe needs those two components.
+- iPod2,1 2.2 / 2.2.1: the wiki has no iBSS/iBEC keys; neither recipe needs those two components. They boot only with
+  qemu-ios `ipod-2x` (the LLB's 0x38100000 block, smoke #18); `experimental` since the merge and pin bump (qemu-ios ipad1, 2026-09-29).
+- iPod2,1 2.x: no guest tools, no AppSync (no shared cache); Hold does nothing and a guest-initiated power-off never
+  confirms (smoke #19). The app's Stop is a flush + halt and persist passes, so 2.1.1 is `experimental`.
 - iPod2,1 4.0 (8A293) and iPad1,1 5.0 (9A334): no Update-ramdisk key on the wiki.
 - iPod1,1: only the root filesystem is encrypted on 1.x; listed for the record, no board is emulated.
 

@@ -28,7 +28,7 @@ struct ProxyConfig: Decodable {
     if !ipad, !p.base.isEmpty {
         let b = URL(fileURLWithPath: p.base)
         d.ipod = .init(nand: b.appendingPathComponent("nand").path, nor: b.appendingPathComponent("nor.bin").path,
-                       iBoot: b.appendingPathComponent("iBoot.bin").path, gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,
+                       iBoot: BootRecipe.iPodIBoot(base: b), gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,
                        machine: BootRecipe.lockMachine(b.appendingPathComponent("device.lock.json")))
     }
     // The proxy's files, as WebProxyConfiguration keeps them per device: routing (direct) and the CA.

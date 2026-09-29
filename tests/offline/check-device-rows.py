@@ -18,7 +18,9 @@ import Foundation
         let catalog = try FirmwareCatalog.load(from: URL(fileURLWithPath: CommandLine.arguments[1]))
         func entry(_ id: String) -> FirmwareCatalog.Entry { catalog.entry(id: id)! }
         let iPod = entry("n72ap-7E18"), iPad = entry("k48ap-7B500"), iPad32 = entry("k48ap-7B367")
-        let iPad4 = entry("k48ap-8C148"), iPod4 = entry("n72ap-8C148"), iPod2 = entry("n72ap-5F138")
+        let iPad4 = entry("k48ap-8C148"), iPod4 = entry("n72ap-8C148")
+        var soon = entry("n72ap-5F138")   // a coming_soon entry (no catalog entry is one today)
+        soon.status = .comingSoon
         let id = UUID()
         func row(_ e: FirmwareCatalog.Entry, instance: UUID? = nil, session: SessionPhase? = nil,
                  job: FirmwareJob? = nil, failure: String? = nil) -> DeviceRow {
@@ -114,10 +116,10 @@ import Foundation
         precondition(r.primaryTitle == "Try Again" && r.allows(.start, canDownload: false))
 
         // Unavailable entries are dimmed and offer nothing but their reason.
-        r = row(iPod2)
+        r = row(soon)
         precondition(r.state == .unavailable(.comingSoon) && r.isDimmed && r.primaryAction == nil)
         precondition(allowed(r, canDownload: true).isEmpty && r.stateDescription == "Coming soon")
-        precondition(row(iPod2, job: .downloading(fraction: 0.5)).state == .unavailable(.comingSoon))
+        precondition(row(soon, job: .downloading(fraction: 0.5)).state == .unavailable(.comingSoon))
         var beta = iPad
         beta.status = .userIPSW
         beta.source.url = nil

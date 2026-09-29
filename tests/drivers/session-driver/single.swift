@@ -21,6 +21,11 @@ struct SingleConfig: Decodable {
     /// smoke.md #5: this many boots, each starting AFC at lockdown's first answer, then the app's Stop.
     var raceBoots: Int?
     var raceDirty: Bool?
+    /// The bundled lockdown-tz: set the zone and the Mac's clock once lockdown answers, as the app does on every
+    /// connect (EmulatorController.syncTimeZoneWhenReady). The clock is what clears a 2.x iPod's BrickState.
+    var lockdownTZ: String?
+    /// false: skip the IPA install (the entry has no AppSync, so the stock installd refuses it).
+    var install: Bool?
 }
 
 @MainActor func runSingle(_ s: SingleConfig) async {
@@ -29,7 +34,7 @@ struct SingleConfig: Decodable {
     let b = URL(fileURLWithPath: s.base)
     if !ipad {
         d.ipod = .init(nand: b.appendingPathComponent("nand").path, nor: b.appendingPathComponent("nor.bin").path,
-                       iBoot: b.appendingPathComponent("iBoot.bin").path, gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,
+                       iBoot: BootRecipe.iPodIBoot(base: b), gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,
                        machine: BootRecipe.lockMachine(b.appendingPathComponent("device.lock.json")))
     }
     var offer: String?
@@ -37,11 +42,22 @@ struct SingleConfig: Decodable {
         do { offer = try d.offer(base: b, board: "n72ap", itpack: itpack) } catch { emit("offerError", ["error": "\(error)"]) }
     }
     let offered = offer != nil || (ipad && config.ipadItpack != nil)
+    // The lock says whether the bake installed it_agent (3.1+); 2.x and 3.0 have none to halt the guest.
+    let lock = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("device.lock.json")))) as? [String: Any]
+    let agent = ((lock?["derived"] as? [String: Any])?["guest_tools"] as? String)?.hasPrefix("installed") ?? true
 
     func boot(_ generation: Int) async {
         do { try d.boot(generation: generation, guestPackage: offer) } catch { fail("boot \(generation): \(error)") }
         await waitLit(d, ipad ? 0.2 : 0.03, 240)
         await waitUSB(d, expecting: ipad ? "iPad1,1" : "iPod2,1", 300)
+        if let tool = s.lockdownTZ {
+            var zone: String?
+            for _ in 0..<12 where zone == nil {   // services come up after lockdown answers; the app retries every 5 s
+                zone = try? await DeviceServices.setTimeZone(TimeZone.current.identifier, tool: tool, socket: d.mux.clientSocket)
+                if zone == nil { try? await Task.sleep(for: .seconds(5)) }
+            }
+            emit("timezone", ["device": d.name, "generation": generation, "zone": zone ?? ""])
+        }
         emit("activation", ["device": d.name, "generation": generation, "state": await d.lockdownValue("ActivationState") ?? ""])
         if offered {   // the loader's report: it_boot reports the serial it ran and R_* (GuestPackage.ReportCode)
             let start = Date()
@@ -64,7 +80,10 @@ struct SingleConfig: Decodable {
     func shutdown(_ generation: Int) async {
         let quit = Date()
         if ipad { d.process.link.send(.machine(.powerdown)) }
-        else { _ = try? await d.process.link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5) }
+        else if agent { _ = try? await d.process.link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5) }
+        else {   // no guest agent (2.x, 3.0): the machine's own hold-power-and-slide sequence
+            d.process.link.send(.machine(.powerdown))
+        }
         var confirmed = -1.0
         while Date().timeIntervalSince(quit) < 50 {
             if d.process.status?.shutdownConfirmed == true { confirmed = Date().timeIntervalSince(quit); break }
@@ -137,7 +156,7 @@ struct SingleConfig: Decodable {
         try? FileManager.default.removeItem(at: local); try? FileManager.default.removeItem(at: back)
     }
 
-    await install(d)
+    if s.install != false { await install(d) }
     try? await Task.sleep(for: .seconds(3))
     d.screenshot("installed")
 

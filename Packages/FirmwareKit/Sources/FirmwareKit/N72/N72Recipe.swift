@@ -112,8 +112,14 @@ final class N72Board: Board {
         let shipped = Set(try manifest.map { try N72NOR.type(of: ipsw.read(prefix + $0)) })
         let norTypes = N72NOR.order.filter(shipped.contains)
         derived["nor_images"] = norTypes
-        derived["wrap_shsh_types"] = major >= 3 ? norTypes : ["ibot"]
-        try N72NOR.build(identity: ident, images: images, types: norTypes, wrapTypes: major >= 3 ? nil : ["ibot"]).write(to: c.file("nor.bin"))
+        // Whose SHSH is wrapped under the emulated UID, as a restore leaves the NOR: 3.x+ every image (the machine
+        // enters iBoot directly). 2.x boots SecureROM -> LLB -> iBoot, and the SecureROM verifies the LLB raw; past
+        // it, the epoch-1 chain (iBoot-385.22, 2.1.1) unwraps only iBoot (its LLB does) and verifies the rest raw,
+        // while the epoch-2 chain (385.49, 2.2/2.2.1) unwraps every image it loads ("load_macho_image: failed to
+        // load device tree" with a raw DeviceTree). The epoch is Restore.plist SCEP, as for the NAND.
+        let wrap = major >= 3 ? norTypes : epoch >= 2 ? norTypes.filter { $0 != "illb" } : ["ibot"]
+        derived["wrap_shsh_types"] = wrap
+        try N72NOR.build(identity: ident, images: images, types: norTypes, wrapTypes: major >= 3 ? nil : wrap).write(to: c.file("nor.bin"))
         let (blobs, blobNames) = try Self.gidBlobs(ipsw, members: img3Members + [kcMember], entry: e)
         derived["gid_blobs"] = blobNames
         try blobs.write(to: c.file("gid-blobs.bin"))
@@ -175,6 +181,9 @@ final class N72Board: Board {
                         "nor": try Recipe.fileRecord(c, "nor.bin"), "iboot": major >= 3 ? try Recipe.fileRecord(c, "iBoot.bin") as Any : NSNull(),
                         "gid_blobs": try Recipe.fileRecord(c, "gid-blobs.bin")],
             "derived": derived,
+            // 3.x+ enters its decrypted iBoot directly (the bootrom rejects a personalised LLB); 2.x runs the real
+            // bootrom -> NOR LLB -> iBoot chain and ships no iBoot.bin (ipod2g_device.py direct_iboot)
+            "boot_strategy": major >= 3 ? "iboot" : "bootrom",
             // machine options the device must boot with (ipod2g_device.py): every device built here uses the
             // engine UID path; adopted and shipping images keep the legacy default
             "machine": Self.machine,
