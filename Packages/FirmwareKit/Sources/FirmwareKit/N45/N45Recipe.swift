@@ -157,8 +157,9 @@ final class N45Board: Board {
     }
 
     func store(_ c: Recipe.Context) throws {
-        let (written, meta) = try N45NAND.write(volume: volume, out: c.nand)
-        c.log("\(written) filesystem pages, \(meta) metadata pages generated")
+        let fil = try N45NAND.filID(iBoot: Data(contentsOf: c.file("iBoot.bin")))
+        let (written, meta) = try N45NAND.write(volume: volume, out: c.nand, filID: fil)
+        c.log("\(written) filesystem pages, \(meta) metadata pages generated (NAND signature 0x\(String(fil, radix: 16)))")
         try FileManager.default.removeItem(at: volume)
     }
 
