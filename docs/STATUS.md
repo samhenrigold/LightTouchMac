@@ -89,6 +89,7 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - Finder native device recognition: deferred, needs Apple's USB host-controller entitlement (don't raise unless Sam does).
 
 ### Debts
+- iPod 3.1.3 shipping image: silent proxy trust reports success but HTTPS through the proxy still fails (-1200); iPad 3.2.2 passes. Bisect on `trust-313`. The C6 bundled 7E18 (firmwarekit-prepared, with package) replaces that image.
 - The pinned dev dylib (`build-w1-native`) predates the `gid-blobs` machine property; rebuild it from the pinned commit (dev-only; releases build their own).
 - iPad 4.3.1–4.3.5: no public ramdisk keys, so the restore-ramdisk keybag one-shot has nothing to boot; needs a sibling-ramdisk or agent-side keybag path (spike after iop-v3).
 - iPod 4.x armv6 guest package family is a stub (legacy tools only).
