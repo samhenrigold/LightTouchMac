@@ -283,7 +283,7 @@ public enum N72Recipe {
         var gli: String?
         let problem: String? = try {
             guard opt["gles_shim"] ?? true else { return "options.gles_shim off" }
-            guard fm.fileExists(atPath: at(armv6Cache).path) else { return "no dyld shared cache (2.x)" }
+            guard fm.fileExists(atPath: at(armv6Cache).path) else { return "no dyld shared cache (2.x, 3.0)" }
             let tsvs = try gliDispatch.map { [helpers.appendingPathComponent($0)] } ?? fm.contentsOfDirectory(at: helpers, includingPropertiesForKeys: nil)
                 .filter { $0.lastPathComponent.wholeMatch(of: /gli-dispatch-\w+\.tsv/) != nil && fm.fileExists(atPath: helpers.appendingPathComponent(engine($0)).path) }
             let (tsv, why) = try GLIDispatch.engine(cache: try Data(contentsOf: at(armv6Cache), options: .alwaysMapped), cachePath: at(armv6Cache).path, tsvs: tsvs)
@@ -346,7 +346,10 @@ public enum N72Recipe {
             if status.contains("overridden") { owners.append((0, SystemEdits.dyldOverride)) }
         }
         if opt["appsync"] == true {   // patch-appsync-dylib.sh
-            let line = try AppSyncCachePatch.patchCache(at: at(armv6Cache))
+            // 2.x and 3.0 have no dyld shared cache (libmis is its own dylib): only installd's interposer then,
+            // so amfid and SpringBoard's launch gate stay stock (docs/matrix.md).
+            let line = fm.fileExists(atPath: at(armv6Cache).path) ? try AppSyncCachePatch.patchCache(at: at(armv6Cache))
+                : "warning: no dyld shared cache: MISValidateSignature unpatched (installd interposer only)"
             log(line)
             try SystemEdits.put(helper(SystemEdits.Helpers.appsync), at(SystemEdits.appsyncPath), mode: 0o644)
             let job = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map { at("System/Library/LaunchDaemons/" + $0) }
