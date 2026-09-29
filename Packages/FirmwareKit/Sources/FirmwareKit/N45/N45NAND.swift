@@ -13,8 +13,10 @@
 // - A VFL context as VFL_Format stores it (vflContext): the context age, the next context page, the reserved
 //   pool and its remap of the BBT block, both checksums; without the next page the VFL's next store programs
 //   page 0 again.
+// - The FIL id (the NAND signature) the build's driver wants, read off its iBoot (filID): generate_nand.c's
+//   C002 is 3A101a-3B48b's; 4A93-4B1's driver is C003 and refuses C002 (docs/smoke.md #52).
 //
-//   try N45NAND.write(volume: img, out: dir)       // (filesystem pages, metadata pages)
+//   try N45NAND.write(volume: img, out: dir, filID: N45NAND.filID(iBoot: ib))   // (filesystem pages, metadata pages)
 //   N45NAND.location(lpn:)                         // (bank, page) of a logical page
 
 import Foundation
@@ -132,12 +134,27 @@ public enum N45NAND {
         return [mbr, hdr, ent]
     }
 
-    /// Every page besides the filesystem's: FIL id, bad block tables, VFL contexts, the FTL context block,
-    /// and LBA 0-2.
-    public static func metadataPages(fsPages: Int) -> [Page: [UInt8]] {
+    /// The NAND signature WMR_Init wants: the driver's own version, the word it prints as "Apple NAND Driver (AND)
+    /// 0x%X" and then looks for as the first word of one of bank 0's first pages ("no signature or no production
+    /// format" without it). 'C00N' little-endian; the one such literal in the iBoot (the kernel's FTL carries the
+    /// same one): C002 in 3A101a-3B48b, C003 in 4A93-4B1.
+    public static func filID(iBoot: Data) throws -> UInt32 {
+        let ids = Set(stride(from: iBoot.startIndex, to: iBoot.endIndex - 3, by: 4).compactMap { o -> UInt32? in
+            let w = UInt32(iBoot[o]) | UInt32(iBoot[o + 1]) << 8 | UInt32(iBoot[o + 2]) << 16 | UInt32(iBoot[o + 3]) << 24
+            return w & 0xFFFF_FFF0 == 0x4330_3030 && w & 0xF <= 9 ? w : nil
+        })
+        guard ids.count == 1, let id = ids.first else {
+            throw FirmwareError(.unsupported, "iBoot: \(ids.count) NAND driver versions ('C00N' literals), wanted one")
+        }
+        return id
+    }
+
+    /// Every page besides the filesystem's: FIL id (the NAND signature `filID`), bad block tables, VFL contexts,
+    /// the FTL context block, and LBA 0-2.
+    public static func metadataPages(fsPages: Int, filID: UInt32) -> [Page: [UInt8]] {
         let zero = [UInt8](repeating: 0, count: spare)
         var fil = [UInt8](repeating: 0, count: page)
-        put(&fil, 0, 0x4330_3032, 4)
+        put(&fil, 0, UInt64(filID), 4)
         var pages: [Page: [UInt8]] = [Page(bank: 0, page: 0): fil + zero]
         let bbt = Array("DEVICEINFOBBT".utf8) + [UInt8](repeating: 0, count: page - 13)
         for b in 0..<banks {
@@ -164,7 +181,7 @@ public enum N45NAND {
     /// programmed as erased, and the FTL fails the read of an erased page it maps (the kernel probes the
     /// volume's last pages, zeros in a fresh image).
     @discardableResult
-    public static func write(volume: URL, out: URL) throws -> (volume: Int, metadata: Int) {
+    public static func write(volume: URL, out: URL, filID: UInt32) throws -> (volume: Int, metadata: Int) {
         let fm = FileManager.default
         let size = try fm.attributesOfItem(atPath: volume.path)[.size] as? Int ?? 0
         let fsPages = (size + page - 1) / page
@@ -173,7 +190,7 @@ public enum N45NAND {
             throw FirmwareError(.unsupported, "a \(size)-byte volume is larger than the NAND's mapped logical blocks")
         }
         for b in 0..<banks { try fm.createDirectory(at: out.appendingPathComponent("bank\(b)"), withIntermediateDirectories: true) }
-        let meta = metadataPages(fsPages: fsPages)
+        let meta = metadataPages(fsPages: fsPages, filID: filID)
         for (p, d) in meta { try Data(d).write(to: path(out, p)) }
         let f = try FileHandle(forReadingFrom: volume)
         defer { try? f.close() }

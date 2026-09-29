@@ -74,7 +74,7 @@ import Testing
         for (i, v) in [(0, 0x48), (2 * ps, 0x11), (fsPages - 1, 0x7F)] { vol.replaceSubrange(i * pp..<i * pp + 4, with: [UInt8](repeating: UInt8(v), count: 4)) }
         let volume = dir.appendingPathComponent("volume.img"), out = dir.appendingPathComponent("nand")
         try vol.write(to: volume)
-        let (written, meta) = try N45NAND.write(volume: volume, out: out)
+        let (written, meta) = try N45NAND.write(volume: volume, out: out, filID: 0x4330_3032)
         #expect(written == 3 * ps - 3 && meta == 1 + 8 + 8 * 8 + 1 + 18 + 1 + 3)
         let file = { (p: N45NAND.Page) in out.appendingPathComponent("bank\(p.bank)/\(p.page).page") }
         let absent = (0..<3 * ps).filter { !fm.fileExists(atPath: file(N45NAND.location(lpn: $0)).path) }
@@ -104,6 +104,20 @@ import Testing
             let allowed = Set(0..<4).union(0x14..<0x22).union([0x688 + 63, 0x7A1]).union(0x7A4..<0x7AC).union(0x7F8..<0x800)
             #expect(diff.isSubset(of: allowed), "bank \(bank): \(diff.subtracting(allowed).sorted().map { String($0, radix: 16) })")
         }
+    }
+
+    /// The NAND signature off each build's iBoot: C002 for 3A101a (so its store is today's), C003 for 4B1 (in the
+    /// app's IPSW cache, smoke #52), and only that word differs between the two stores' metadata.
+    @Test func nandSignatureFromIBoot() throws {
+        let iboot = { (ipsw: URL) in try IMG2.payload(Apple8900.body(IPSWArchive(ipsw).read(Self.prefix + "iBoot.n45ap.RELEASE.img2"))) }
+        let b4B1 = Oracle.path("Library/Caches/gold.samhenri.LightTouchMac/IPSW/1b818911316e4248ee01d3ec67f9d39afc3db240.ipsw")
+        if Self.available { #expect(try N45NAND.filID(iBoot: iboot(Self.ipsw)) == 0x4330_3032) }
+        if Oracle.exists(b4B1) { #expect(try N45NAND.filID(iBoot: iboot(b4B1)) == 0x4330_3033) }
+        #expect(throws: FirmwareError.self) { try N45NAND.filID(iBoot: Data(count: 64)) }
+        let c2 = N45NAND.metadataPages(fsPages: 100, filID: 0x4330_3032), c3 = N45NAND.metadataPages(fsPages: 100, filID: 0x4330_3033)
+        let page0 = N45NAND.Page(bank: 0, page: 0)
+        #expect(c2.keys == c3.keys && c2.filter { $0.key != page0 }.allSatisfy { c3[$0.key] == $0.value })
+        #expect(Array(c2[page0]![0..<4]) == [0x32, 0x30, 0x30, 0x43] && Array(c3[page0]![0..<4]) == [0x33, 0x30, 0x30, 0x43])
     }
 
     /// 3A101a's rootfs vfdecrypt key (022-3601-4.dmg).
