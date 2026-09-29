@@ -91,6 +91,8 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - Finder native device recognition: deferred, needs Apple's USB host-controller entitlement (don't raise unless Sam does).
 
 ### Debts
+- The `iboot=` path synthesises POWER_ID's security epoch as 1; iBoot-1072+ (4.3.5, iOS 5) wants 2 and loops in miu_init. Generic fix: read SEPO off the image like the iPod's `it_iboot_find_epoch`, or boot from the ROM so LLB sets it (qemu-ios docs/ipad1/ios5.md). Until then 8L1/9B206 recipes must use `boot: kboot`.
+- App: when a recipe names `keybag_ramdisk_from`, queue the sibling IPSW download instead of failing with a message.
 - iPod 3.1.3 shipping image: silent proxy trust reports success but HTTPS through the proxy still fails (-1200); iPad 3.2.2 passes. Bisect on `trust-313`. The C6 bundled 7E18 (firmwarekit-prepared, with package) replaces that image.
 - The pinned dev dylib (`build-w1-native`) predates the `gid-blobs` machine property; rebuild it from the pinned commit (dev-only; releases build their own).
 - iPad 4.3.x: clean shutdown panics in EmbeddedIOP-20's sleep/stop watchdog under the v3 instrument; the IOP core is the fix. 4.3.1–4.3.5 use 8F190's ramdisk for the keybag (`recipe.keybag_ramdisk_from`, on `matrix-43`).
