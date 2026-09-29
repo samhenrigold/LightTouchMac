@@ -35,4 +35,21 @@ extension FitCheck {
         guard l.fits else { return l }
         return Fit(piece, fits: true, "\(name) raises \(keys.joined(separator: ", ")) through \(calls.map { String($0.dropFirst()) }.joined(separator: ", ")); \(l.proof)")
     }
+
+    // MARK: USB Ethernet
+
+    /// it_ethlink and the USB Ethernet interface pinned to en1 (usb_net) fit when the kernel has every class the
+    /// pinned IOPathMatch names (it_ethlink's AppleUSBEthernetDevice among them) and names LinkStatus, the property
+    /// it_ethlink sets.
+    public static func usbEthernet(_ fw: Firmware, path: String) -> Fit {
+        let piece = "USB Ethernet (it_ethlink, en1 pinned by IOPathMatch)"
+        guard let k = fw.kernelcache else { return Fit(piece, fits: false, "no decrypted kernelcache to check the classes against") }
+        let classes = path.split(separator: ":", maxSplits: 1).last.map(String.init)?.split(separator: "/")
+            .map { String($0.prefix { $0 != "@" }) }.filter { $0.first?.isUppercase == true } ?? []
+        let missing = classes.filter { k.range(of: cString($0)) == nil }
+        guard !classes.isEmpty else { return Fit(piece, fits: false, "no classes in \(path)") }
+        guard missing.isEmpty else { return Fit(piece, fits: false, "the kernel has no \(missing.joined(separator: ", ")), which the en1 IOPathMatch names") }
+        guard k.range(of: cString("LinkStatus")) != nil else { return Fit(piece, fits: false, "the kernel names no LinkStatus property (it_ethlink raises the link through it)") }
+        return Fit(piece, fits: true, "the kernel has \(classes.joined(separator: ", ")) and names LinkStatus")
+    }
 }

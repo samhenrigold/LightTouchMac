@@ -181,8 +181,10 @@ enum FitFixture {
         try Oracle.withTemp { dir in
             let recipe = try #require(try Oracle.entry("k48ap-9B206").recipe), log = FitCheck.Log()
             let parts = K48NAND.partitions(mbr: [UInt8](try K48NAND.makeMBR(systemMiB: recipe.systemMiB)))
+            let kernel = try Data(contentsOf: dmg.deletingLastPathComponent().appendingPathComponent("kernelcache.mach"), options: .alwaysMapped)
             let r = try SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: parts[0].count * 4096, dataBytes: Int64(parts[1].count) * 4096,
-                                             options: .init(recipe: recipe), helpers: helpers, fit: log)
+                                             options: .init(recipe: recipe), helpers: helpers, kernel: kernel, fit: log)
+            #expect(log.fits.contains { $0.piece.hasPrefix("USB Ethernet") && $0.fits }, "\(log.fits.map(\.piece))")
             let sv = try HFSPlusVolume(r.system)
             #expect((try? sv.record(at: SystemEdits.Helpers.tools[3].path)) == nil)
             let job = try #require(PropertyListSerialization.propertyList(from: sv.contents(sv.record(at: SystemEdits.msmJob)), format: nil) as? [String: Any])
@@ -244,5 +246,25 @@ enum FitFixture {
             #expect(events.warnings.contains { $0.hasPrefix("guest tools (") && $0.contains("_rebooz2") }, "\(events.warnings)")
             #expect(c.fit.fits.contains { $0.piece.hasPrefix("guest tools") && !$0.fits })
         }
+    }
+
+    /// USB Ethernet fits every iPad kernel at hand (3.2 to 5.1.1 have the pinned path's classes and LinkStatus); a
+    /// kernel copy with AppleSynopsysOTGDevice renamed, or no kernel at all, does not fit.
+    @Test func usbEthernetNeedsThePinnedClasses() throws {
+        let caches = ["172e8297af74b91971a802e6ad137c891f553099", "68b613f78581d36eab96aa5a007001dff142baa3",
+                      "8717b3bedc925b587566442ad375aa65d857e79a", "ad9b607439250f2337fe132890dadc4c487beca8"]
+        let root = FileManager.default.temporaryDirectory
+        for sha in caches {
+            let u = Oracle.ipadCache.appendingPathComponent(sha + "/kernelcache.mach")
+            guard Oracle.exists(u) else { continue }
+            let k = try Data(contentsOf: u, options: .alwaysMapped)
+            let f = FitCheck.usbEthernet(FitCheck.Firmware(root: root, arch: "armv7", kernelcache: k), path: SystemEdits.usbEthPath)
+            #expect(f.fits && f.proof.contains("AppleUSBEthernetDevice"), "\(sha): \(f.proof)")
+            var b = [UInt8](k)
+            while let at = b.firstRange(of: Array("\0AppleSynopsysOTGDevice\0".utf8)) { b.replaceSubrange(at, with: Array("\0AppleSynopsysOTGDevicX\0".utf8)) }
+            let broken = FitCheck.usbEthernet(FitCheck.Firmware(root: root, arch: "armv7", kernelcache: Data(b)), path: SystemEdits.usbEthPath)
+            #expect(!broken.fits && broken.proof.contains("AppleSynopsysOTGDevice"), "\(broken.proof)")
+        }
+        #expect(!FitCheck.usbEthernet(FitCheck.Firmware(root: root, arch: "armv7"), path: SystemEdits.usbEthPath).fits)
     }
 }

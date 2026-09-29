@@ -15,8 +15,8 @@ public enum FitCheck {
         public var piece: String, fits: Bool, proof: String
         public init(_ piece: String, fits: Bool, _ proof: String) { self.piece = piece; self.fits = fits; self.proof = proof }
         public var object: [String: Any] { ["piece": piece, "fits": fits, "proof": proof] }
-        /// The warning event's text for a piece left out.
-        public var warning: String { "\(piece) does not fit this firmware, left out: \(proof)" }
+        /// The warning event's text: the misfit and what the preparer did about it.
+        public func warning(_ outcome: String) -> String { "\(piece) does not fit this firmware (\(outcome)): \(proof)" }
     }
 
     /// The prepare's record of every check (the lock's "fit"). A required piece that does not fit throws; an
@@ -26,12 +26,13 @@ public enum FitCheck {
         let warn: (String) -> Void
         public init(warn: @escaping (String) -> Void = { _ in }) { self.warn = warn }
 
+        /// `outcome`: what the preparer does with an optional piece that does not fit ("left out", "kept: ...").
         @discardableResult
-        public func check(_ f: Fit, required: Bool) throws -> Bool {
+        public func check(_ f: Fit, required: Bool, outcome: String = "left out") throws -> Bool {
             fits.append(f)
             if f.fits { return true }
             if required { throw FirmwareError(.unsupported, "\(f.piece) does not fit this firmware: \(f.proof)") }
-            warn(f.warning)
+            warn(f.warning(outcome))
             return false
         }
         public var object: [[String: Any]] { fits.map(\.object) }

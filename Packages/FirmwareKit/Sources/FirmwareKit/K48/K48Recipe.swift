@@ -87,6 +87,7 @@ final class K48Board: Board {
         vols = try SystemEdits.buildK48(rootfs: c.decFile("rootfs.dmg"), work: c.work, systemBytes: parts[0].count * 4096,
                                         dataBytes: Int64(parts[1].count) * 4096, options: .init(recipe: recipe),
                                         helpers: c.o.guestTools, kernelcache: kernelcacheImg3,
+                                        kernel: try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped),
                                         dataVolumeUUID: Array(SHA256.hash(data: Data("k48 data volume \(c.seed)".utf8)).prefix(8)), fit: c.fit, log: c.log)
         for n in vols.notes { c.emit(.warning(n)) }
         c.activation = vols.activation; c.guestPackage = vols.guestPackage; c.engine = vols.engine

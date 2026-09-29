@@ -110,13 +110,13 @@ public enum SystemEdits {
 
     /// The k48 system + data volumes into `work` (system.img, data.img; scratch next to them).
     /// `rootfs` is the decrypted rootfs DMG (or a bare HFS volume); `systemBytes`/`dataBytes` are partition
-    /// 1 and 2 of the MBR in bytes.
+    /// 1 and 2 of the MBR in bytes. `kernel`: the decrypted kernelcache the fit checks read.
     /// The path the K48 iBoot loads the kernel from (fsboot); the raw IPSW img3 kernelcache is installed there
     /// for the real-iBoot chain (ipad1_rootfs.build --kernelcache). kboot omits it (the kernel is in the bundle).
     public static let kernelcachePath = "System/Library/Caches/com.apple.kernelcaches/kernelcache"
 
     public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
-                                kernelcache: Data? = nil, dataVolumeUUID: [UInt8]? = nil, fit: FitCheck.Log = FitCheck.Log(),
+                                kernelcache: Data? = nil, kernel: Data? = nil, dataVolumeUUID: [UInt8]? = nil, fit: FitCheck.Log = FitCheck.Log(),
                                 log: (String) -> Void = { _ in }) throws -> Result {
         let fm = FileManager.default
         let system = work.appendingPathComponent("system.img"), data = work.appendingPathComponent("data.img")
@@ -162,13 +162,14 @@ public enum SystemEdits {
         try VolumeMount.withMounted(system, at: work.appendingPathComponent("mnt-system")) { m in
             let at = { (rel: String) in m.appendingPathComponent(rel) }
             // every baked helper proven to load on this firmware (FitCheck.loads), read before any edit
-            let fw = FitCheck.Firmware(root: m, arch: "armv7")
+            let fw = FitCheck.Firmware(root: m, arch: "armv7", kernelcache: kernel)
             _ = fw.precedent
             // it_msmquiet only where the mounter raises the notice it recognises; else left out, job untouched
             let msm = Helpers.tools[3]
             let quiet = try fit.check(FitCheck.msmQuiet(fw, program: try stockProgram(m, msmJob, label: "com.apple.mobile.storage_mounter"),
                                                         dylib: Data(contentsOf: try helper(msm.name))), required: false)
             if !quiet { tools.removeAll { $0.name == msm.name } }
+            if o.usbNet { try fit.check(FitCheck.usbEthernet(fw, path: usbEthPath), required: false, outcome: "kept: the link stays down and en1 unpinned") }
             for t in tools where t.name != msm.name {
                 try fit.check(FitCheck.loads(t.name, Data(contentsOf: try helper(t.name)), on: fw), required: true)
             }
