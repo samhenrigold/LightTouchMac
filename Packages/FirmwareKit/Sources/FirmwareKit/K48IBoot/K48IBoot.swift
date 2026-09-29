@@ -3,6 +3,7 @@
 // host_usb_devicetree), imgtools/build_nor.py's K48 parts and imgtools/ipad1_iboot.py (nor_base, nvram_bank,
 // the iBoot32Patcher shell-out). iBoot32Patcher is invoked, not reimplemented: byte-equal output is the gate,
 // and its Thumb pattern finders (RSA/debug/boot-args) are >200 lines and fragile to re-derive per iBoot build.
+// The bundled build carries build-support/patches/iBoot32Patcher-ltm.patch (9A5220p boot-args xref, smoke #48).
 //
 //   let (blobs, names) = try K48IBoot.gidBlobs(ipsw, entry: e)                 // AES-256 GID records + gid-blobs.bin
 //   let dt = try K48IBoot.hostUSBDeviceTree(img3: enc, plaintext: plain, gidBlobs: blobs)   // hsic-enabled, re-encrypted

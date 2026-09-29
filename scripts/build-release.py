@@ -41,7 +41,7 @@ CATALOG = ROOT / 'LightTouchMac/Resources/firmware-catalog.json'
 SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS_Store'}
 NATIVE_RECIPES = frozenset(('scripts/build-package-native.sh', 'scripts/build-static-deps.sh',
                            'scripts/dependency-sources.py', 'build-support/dependencies.json',
-                           'build-support/patches/glib-pipe2-availability.patch',
+                           'build-support/patches/glib-pipe2-availability.patch', 'build-support/patches/iBoot32Patcher-ltm.patch',
                            'scripts/test-glib-compat.py', 'scripts/check-macho.py', 'scripts/build-iboot32patcher.sh'))
 FFMPEG_PATCHES = ('h264-chunk-er.patch', 'h264-cavlc-pcm-offset.patch')
 # Resumable pipeline (--stage); each step fits a 10-minute tool limit and skips when current.

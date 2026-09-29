@@ -17,22 +17,49 @@ struct K48IBootTests {
         return nil
     }()
 
-    /// The patcher we build (scripts/build-iboot32patcher.sh from the pinned archive: FIRMWAREKIT_IBOOT_PATCHER, e.g.
-    /// a native root's build/iBoot32Patcher/iBoot32Patcher or the app's Contents/MacOS copy) patches every k48 iBoot
-    /// to the same bytes as the Legacy-iOS-Kit binary. Skipped unless both are present and distinct.
-    @Test(arguments: ["k48ap-7B500", "k48ap-8C148", "k48ap-7B367"]) func patcherMatchesReference(id: String) throws {
-        let fw = Oracle.firmware(id), fm = FileManager.default
-        guard fw.available, let mine = ProcessInfo.processInfo.environment["FIRMWAREKIT_IBOOT_PATCHER"].map({ URL(fileURLWithPath: $0) }),
-              fm.isExecutableFile(atPath: mine.path), fm.isExecutableFile(atPath: Self.reference.path),
-              mine.resolvingSymlinksInPath() != Self.reference.resolvingSymlinksInPath() else { return }
-        try Oracle.withTemp { dir in
-            let dec = dir.appendingPathComponent("dec")
-            _ = try FirmwareDecryptor.decrypt(ipsw: fw.ipsw, entry: try Oracle.entry(id), into: dec, rootfs: false)
-            let iboot = try Data(contentsOf: dec.appendingPathComponent("iBoot.bin"))
-            let ours = try K48IBoot.patchIBoot(iboot, patcher: mine, bootArgs: KBoot.defaultBootArgs, log: { _ in })
-            let theirs = try K48IBoot.patchIBoot(iboot, patcher: Self.reference, bootArgs: KBoot.defaultBootArgs, log: { _ in })
-            #expect(ours == theirs, "\(id): \(mine.path) and the Legacy-iOS-Kit patcher differ")
+    /// The IPSW for a catalog entry in the app's download cache (IPSWStore: <sha1>.ipsw), when it is there.
+    static func cachedIPSW(_ id: String) throws -> URL? {
+        guard let sha1 = try Oracle.entry(id).source.sha1 else { return nil }
+        let u = Oracle.path("Library/Caches/gold.samhenri.LightTouchMac/IPSW/\(sha1).ipsw")
+        return Oracle.exists(u) ? u : nil
+    }
+
+    /// `id`'s decrypted iBoot patched by `tool` (nil when the IPSW is not cached).
+    static func patched(_ id: String, by tool: URL) throws -> Data? {
+        guard let ipsw = try cachedIPSW(id) else { return nil }
+        return try Oracle.withTemp { dir in
+            _ = try FirmwareDecryptor.decrypt(ipsw: ipsw, entry: try Oracle.entry(id), into: dir, rootfs: false)
+            return try K48IBoot.patchIBoot(try Data(contentsOf: dir.appendingPathComponent("iBoot.bin")), patcher: tool,
+                                           bootArgs: KBoot.defaultBootArgs, log: { _ in })
         }
+    }
+
+    /// The patcher we build (scripts/build-iboot32patcher.sh: the pinned archive plus
+    /// build-support/patches/iBoot32Patcher-ltm.patch; FIRMWAREKIT_IBOOT_PATCHER, e.g. a native root's
+    /// build/iBoot32Patcher/iBoot32Patcher or the app's Contents/MacOS copy) patches every k48 iBoot the unpatched
+    /// tool could to the same bytes as the Legacy-iOS-Kit binary. Skipped per build without its cached IPSW.
+    static var mine: URL? {
+        let fm = FileManager.default
+        guard let mine = ProcessInfo.processInfo.environment["FIRMWAREKIT_IBOOT_PATCHER"].map({ URL(fileURLWithPath: $0) }),
+              fm.isExecutableFile(atPath: mine.path), fm.isExecutableFile(atPath: reference.path),
+              mine.resolvingSymlinksInPath() != reference.resolvingSymlinksInPath() else { return nil }
+        return mine
+    }
+
+    @Test(arguments: ["k48ap-7B367", "k48ap-7B500", "k48ap-8C148", "k48ap-8F190", "k48ap-8G4", "k48ap-8H7", "k48ap-8J3",
+                      "k48ap-8K2", "k48ap-8L1", "k48ap-9A334", "k48ap-9A405", "k48ap-9B176", "k48ap-9B206", "k48ap-9A5288d"])
+    func patcherMatchesReference(id: String) throws {
+        guard let mine = Self.mine, let ours = try Self.patched(id, by: mine) else { return }
+        let theirs = try Self.patched(id, by: Self.reference)
+        #expect(ours == theirs, "\(id): \(mine.path) and the Legacy-iOS-Kit patcher differ")
+    }
+
+    /// 9A5220p (smoke #48): the unpatched tool takes the boot-args address at an unaligned 0x11f22 (two pool words)
+    /// and fails; the aligned search finds the literal at 0x11f24 and patches it.
+    @Test func alignedXrefPatches9A5220p() throws {
+        guard let mine = Self.mine, let ours = try Self.patched("k48ap-9A5220p", by: mine) else { return }
+        #expect(!ours.isEmpty)
+        #expect(throws: FirmwareError.self) { try Self.patched("k48ap-9A5220p", by: Self.reference) }
     }
 
     @Test(arguments: ["k48ap-7B500", "k48ap-8C148"]) func iBootChainMatchesPython(id: String) throws {

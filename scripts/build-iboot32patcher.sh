@@ -1,8 +1,10 @@
 #!/bin/bash
 # Build iBoot32Patcher (arm64, macOS 14) from the pinned archive in build-support/dependencies.json's
-# "tools" group, which dependency-sources.py fetched into SRC-DIR. OUT-DIR ends up with the binary, the
-# upstream LICENSE (GPL-3.0), SOURCE.txt and build.json (commit, license, sha256s). Called by
-# build-package-native.sh and build-release.py --stage native; package.sh ships OUT-DIR's three files.
+# "tools" group, which dependency-sources.py fetched into SRC-DIR, with build-support/patches/
+# iBoot32Patcher-ltm.patch applied (xref searches take word-aligned matches only; smoke #48).
+# OUT-DIR ends up with the binary, the upstream LICENSE (GPL-3.0), the patch, SOURCE.txt and build.json
+# (commit, license, sha256s). Called by
+# build-package-native.sh and build-release.py --stage native; package.sh ships OUT-DIR's LICENSE, patch and SOURCE.txt.
 #
 #     build-iboot32patcher.sh SRC-DIR OUT-DIR
 set -euo pipefail
@@ -19,18 +21,22 @@ PY
 rm -rf "$OUT"
 mkdir -p "$OUT"
 tar -xzf "$SRC_DIR/$ARCHIVE" -C "$OUT" --strip-components=1
+PATCH="$HERE/build-support/patches/iBoot32Patcher-ltm.patch"
+(cd "$OUT" && patch -p1 --quiet < "$PATCH")
+cp "$PATCH" "$OUT/"
 (cd "$OUT" && make CC=/usr/bin/clang CFLAGS='-O2 -arch arm64 -mmacosx-version-min=14.0 -Wno-multichar -Wno-int-conversion' > "$OUT/make.log" 2>&1)
 python3 "$HERE/scripts/check-macho.py" --no-weak-imports --minos 14.0 "$OUT/iBoot32Patcher"
 printf '%s\n' "iBoot32Patcher $COMMIT: $URL" "License: $LICENSE (LICENSE alongside)" \
+    "Modified: $(basename "$PATCH") (alongside) applied to that source." \
     "Built by scripts/build-iboot32patcher.sh: make CC=clang CFLAGS='-O2 -arch arm64 -mmacosx-version-min=14.0'" \
     "firmwarekit runs it as a separate process for the iPad's real-iBoot boot chain (--rsa --debug -b boot-args)." \
     > "$OUT/SOURCE.txt"
-python3 - "$OUT" "$COMMIT" "$LICENSE" "$SRC_DIR/$ARCHIVE" <<'PY'
+python3 - "$OUT" "$COMMIT" "$LICENSE" "$SRC_DIR/$ARCHIVE" "$PATCH" <<'PY'
 import hashlib, json, pathlib, sys
-out, commit, license, archive = sys.argv[1:]
+out, commit, license, archive, patch = sys.argv[1:]
 sha = lambda p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
 pathlib.Path(out, 'build.json').write_text(json.dumps({
-    'commit': commit, 'license': license, 'archive_sha256': sha(archive),
+    'commit': commit, 'license': license, 'archive_sha256': sha(archive), 'patch_sha256': sha(patch),
     'binary': str(pathlib.Path(out, 'iBoot32Patcher')), 'sha256': sha(pathlib.Path(out, 'iBoot32Patcher')),
 }, indent=2, sort_keys=True) + '\n')
 PY
