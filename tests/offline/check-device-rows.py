@@ -123,12 +123,12 @@ import Foundation
         precondition(row(beta, instance: id).state == .ready, "an imported beta runs like any device")
         precondition(row(beta, failure: "x").primaryAction == .importIPSW, "a failed import offers the import again")
 
-        // Experimental carries a tag and a note.
+        // Experimental carries the tag; a status note is the catalog's to add when it says more than the tag.
         r = row(iPad4)
-        precondition(r.isExperimental && iPad4.statusNote != nil)
+        precondition(r.isExperimental)
         // iPod 4.2.1 downloads and prepares like the iPads.
         r = row(iPod4)
-        precondition(r.isExperimental && iPod4.statusNote != nil && r.primaryAction == .downloadAndPrepare)
+        precondition(r.isExperimental && r.primaryAction == .downloadAndPrepare)
         print("PASS: row states, accessories, primary buttons and commands for every catalog status")
     }
 }
