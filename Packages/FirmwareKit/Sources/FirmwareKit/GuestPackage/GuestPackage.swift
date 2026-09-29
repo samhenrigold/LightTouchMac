@@ -75,6 +75,13 @@ public enum GuestPackage {
     /// `offer`, `current` -> it, `state` "seed N"); the hooks whose target is on the volume and whose gli id is
     /// nil or `gli`, as target + <target>.baked with the package's bytes; the baked jobs the package provides
     /// removed. Returns (volume-relative paths written, all root-owned; the lock's guest_package record).
+    /// mkpkg's requires.builds: an exact build id, or "<major>*" for every build of that iOS major (2.x = 5*,
+    /// 3.x = 7*, 4.x = 8*).
+    public static func buildMatches(_ builds: [String], _ build: String) -> Bool {
+        let major = build.prefix { $0.isNumber }
+        return builds.contains { $0 == build || ($0.hasSuffix("*") && $0.dropLast() == major) }
+    }
+
     public static func seed(volume m: URL, itpack: URL, gli: String?) throws -> (written: [String], record: Record) {
         let fm = FileManager.default
         let entries = try read(itpack)
@@ -84,7 +91,7 @@ public enum GuestPackage {
         }
         func json(_ n: String) -> [String: Any]? { entries[n].flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } }
         let families = entries.keys.filter { $0.hasSuffix("/manifest.json") }.sorted().filter {
-            ((json($0)?["requires"] as? [String: Any])?["builds"] as? [String])?.contains(build) == true
+            buildMatches(((json($0)?["requires"] as? [String: Any])?["builds"] as? [String]) ?? [], build)
         }
         guard families.count == 1, var man = json(families[0]) else {
             throw FirmwareError(.unsupported, "\(itpack.lastPathComponent): \(families.count) packages for build \(build)")
