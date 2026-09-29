@@ -652,7 +652,7 @@
   "version": "5.0",
   "build": "9A5288d",
   "released": "2011-08-06",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 5,
   "status_note": "iOS 5.0 Beta 5 (9A5288d), 2011-08-06: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it). No public keys for UpdateRamDisk.",
@@ -687,7 +687,7 @@
   "version": "5.0",
   "build": "9A334",
   "released": "2011-10-12",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/041-8357.20111012.DTOrM/iPad1,1_5.0_9A334_Restore.ipsw", "sha1": "c7f6d2d94b1f9f67103343e001f85be7111f6df0", "bytes": 734262118},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "3cb0d3d1eaa914a8cd22d4023de52695", "key": "e92ddbdd6f8f099d74356a6ba9c9ea3a9ca49664f60c549e7f187ee5e1a19456"},
@@ -719,7 +719,7 @@
   "version": "5.0.1",
   "build": "9A405",
   "released": "2011-11-10",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone4/041-3308.20111109.Fvgtr/iPad1,1_5.0.1_9A405_Restore.ipsw", "sha1": "732fc3ca3f5654e6f0df787c817ca16054dfb8da", "bytes": 751358387},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "02b67045fbadfcc9ca4fdb3cbf2ea4fe", "key": "d010d42cd2030c3d6387eb6d24208d3738600d8b0912d27fbeb8939fb19c6a9b"},
@@ -752,7 +752,7 @@
   "version": "5.1",
   "build": "9B176",
   "released": "2012-03-07",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iOS5/041-1536.20120307.XvCtw/iPad1,1_5.1_9B176_Restore.ipsw", "sha1": "f6b19779d2fe4242f87d55701e049291c978e3b3", "bytes": 761232912},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "4237068c8dd229ab98c63c5ef8d229bc", "key": "91ec6f799f12ce876fbe8bbf8de0b998fcf358ca5001af7f3016a7d782576617"},
@@ -785,7 +785,7 @@
   "version": "5.1.1",
   "build": "9B206",
   "released": "2012-05-07",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iOS5.1.1/041-4292.02120427.Tkk0d/iPad1,1_5.1.1_9B206_Restore.ipsw", "sha1": "ad9b607439250f2337fe132890dadc4c487beca8", "bytes": 761323675},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "4237068c8dd229ab98c63c5ef8d229bc", "key": "91ec6f799f12ce876fbe8bbf8de0b998fcf358ca5001af7f3016a7d782576617"},

@@ -91,8 +91,10 @@ Notes:
 - iPad1,1 5.x (`fk-ios5`, 09-29): all six entries carry the k48 recipe with `appsync: false` (Sam's AppSync matcher does
   not know the 5.x shared caches yet) and the default iBoot chain; the keybag comes from the build's own ramdisk
   (`writable_nor`). On first boot the session driver walks the Setup Assistant (9 pages; 8 when Wi-Fi has not joined,
-  which skips the Apple ID page). 9A334/9A405/9B176/9B206 pass everything but the clean shutdown: the 5.x halt with the
-  cable attached restarts (smoke #28). 9A5220p stops at iBoot32Patcher (smoke #48).
+  which skips the Apple ID page). 9A334/9A405/9B176/9B206/9A5288d pass end to end and are `experimental` on qemu-ios
+  `ipad-5x-halt` e2ff7016b4: the 5.x halt with the cable attached restarts into iBoot-1219's power-off simulation, which the
+  D1815 model now keeps (scratch bank across its restart) and confirms as the power-off (smoke #28 closed). 9A5220p stops at
+  iBoot32Patcher (smoke #48).
 
 ## Betas
 
