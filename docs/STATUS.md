@@ -124,7 +124,8 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - iPad iOS 5: not started ("later").
 
 ### Fidelity
-- GPU model, first milestone: the SGX MMU page-table walk (fidelity-ledger K48 #54, roadmap row 11). Retires smoke #24's surface fault-in loop and unblocks #25; the full SGX535 stays the 120+ d row.
+- GL seam: move the iPad from the GLEngine/gld seam (private; changed at 4.3) up to a replacement OpenGLES.framework exporting the public gl* names + EAGL, as gles2x.c does for 1.x/2.x (docs/research/sgx535-feasibility.md "Seam options": 10-20 d; 4.2.1→4.3.5 exports/QuartzCore imports/EAGL selectors unchanged). Retires glishim, gldshim, gfx_gen.h, smoke #41.
+- GPU model (SGX535): phased 150-330 d, low confidence; first phase the MMU walk (ledger K48 #54, may not retire smoke #24 while the shim bypasses the kext's mapping path); go/no-go is a 10 d USSE1 shader-ISA spike.
 
 ### Features
 - Root-FS edit from the Mac: Mount/Export UI with lease and guards (~2 d), then write-back (F2, ~7–10 d). Live Finder volume deferred (guest daemon, 3+ weeks).
