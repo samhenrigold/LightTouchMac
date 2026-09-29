@@ -12,7 +12,7 @@
 // holds MBXGLEngine (one shim for every firmware with the armv6 shared cache) and gles-names.h, sblaunch,
 // sbdlicon (optional), it_agent, it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib, armv6.itpack (the
 // guest-package loader and seed package, as ipod2g_device.py bakes them), it_prefs-armv6 + com.qemu.it-prefs.plist
-// (3.x+: no first-run "Edit Home Screen" tip), it_keybag-armv6 (data protection) and opengles-2x.exports (2.x: the
+// (3.1+: no first-run "Edit Home Screen" tip; 2.x/3.0 get its SBDidShowReorderText baked instead), it_keybag-armv6 (data protection) and opengles-2x.exports (2.x: the
 // stock OpenGLES must export exactly these names before the seed package's n72-ios2 hook, the GL front end, replaces
 // it and SpringBoard gets CA_ENABLE_OGL=1; an itpack without that hook is refused).
 
@@ -337,6 +337,8 @@ final class N72Board: Board {
             try SystemEdits.put(helper("com.qemu.it-prefs.plist"), at(Self.prefsJob), mode: 0o644)
             owners += [(0, "usr/local/bin/it_prefs"), (0, Self.prefsJob)]
             report["prefs"] = "it_prefs: SBDidShowReorderText at first boot"
+        } else {   // 2.x/3.0 get no helpers: the key it_prefs sets, baked into mobile's SpringBoard preferences
+            report["prefs"] = try Self.bakeReorderTip(m)
         }
         if opt["web_proxy"] ?? true {   // install_web_proxy: the PAC, and the Wi-Fi service on the system volume's /private/var
             let sc = "private/var/preferences/SystemConfiguration"
@@ -366,6 +368,19 @@ final class N72Board: Board {
 }
 
 extension N72Board {
+    /// SpringBoard's first-run "Edit Home Screen" tip stays down once com.apple.springboard SBDidShowReorderText is true.
+    static let reorderTip = "SBDidShowReorderText"
+    static let springBoard = "System/Library/CoreServices/SpringBoard.app/SpringBoard"
+
+    /// contrib/it-prefs (IT_PREFS_TIP_ONLY) offline: SBDidShowReorderText = true in mobile's com.apple.springboard.plist,
+    /// only if SpringBoard names the key (it_prefs checks first too); the report line says which.
+    static func bakeReorderTip(_ m: URL) throws -> String {
+        guard let sb = try? Data(contentsOf: m.appendingPathComponent(springBoard), options: .alwaysMapped),
+              sb.range(of: Data(reorderTip.utf8)) != nil else { return "SpringBoard does not name \(reorderTip): left alone" }
+        try SystemEdits.seedPlist(m.appendingPathComponent(prefs + "/com.apple.springboard.plist")) { $0[reorderTip] = true }
+        return "\(reorderTip) baked (no helpers)"
+    }
+
     /// ipod2g_device.gles2x_front_end (ipod1g_device's for 1.x): (true, line) if the stock OpenGLES exports exactly
     /// the names in `exports` (contrib/it-gles/opengles-<1x|2x>.exports), so the package's hook may replace it;
     /// else (false, why), stock kept.

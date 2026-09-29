@@ -39,7 +39,8 @@ class ReleaseTests(unittest.TestCase):
              'recipe': {'name': 'n72'}}]}))
         self.put(self.usb / 'configure.ac')
         self.init_git(self.usb)
-        self.put(self.assets / 'bootrom_240_4')
+        for name in release.BOOTROMS:
+            self.put(self.assets / name)
         self.put(self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw')
         for name in ('usr/lib/libSystem.dylib', 'usr/include/stdio.h'):
             self.put(self.sdk / name)
@@ -131,6 +132,20 @@ class ReleaseTests(unittest.TestCase):
         self.put(self.assets / 'bootrom_240_4')
         (self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw').unlink()
         with self.assertRaisesRegex(ValueError, 'built-in iPod'):
+            release.validate(self.args)
+
+    def test_every_board_bootrom_is_required_and_packaged(self):
+        """Each DeviceProfile.bootromName is a release input, and package.sh copies the same list flat into Resources/device."""
+        repo = Path(__file__).resolve().parents[2]
+        profile = (repo / 'LightTouchMac/Device/DeviceProfile.swift').read_text()
+        self.assertEqual({Path(name).name for name in release.BOOTROMS}, {'bootrom_240_4', 'bootrom_s5l8900'})
+        for name in release.BOOTROMS:
+            self.assertIn(f'"{Path(name).name}"', profile)
+        package = (repo / 'scripts/package.sh').read_text()
+        self.assertIn('BOOTROMS=(' + ' '.join(release.BOOTROMS) + ')', package)
+        self.assertIn('for rom in "${BOOTROMS[@]}"; do cp "$FILES/$rom" "$DEVICE/"; done', package)
+        (self.assets / 'ipod1g/bootrom_s5l8900').unlink()
+        with self.assertRaisesRegex(ValueError, 'bundled firmware input'):
             release.validate(self.args)
 
     def test_bundled_base_is_prepared_packed_and_reused(self):

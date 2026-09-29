@@ -111,9 +111,10 @@ def check_helper(app):
     assert pathlib.Path(loaded).resolve() == dylib.resolve(), f'helper loaded {loaded}, not the bundled {dylib}'
     device = app / 'Contents/Resources/device'
     blob = device / 'n72ap-7E18.itbase'
-    assert (device / 'bootrom_240_4').is_file() and blob.is_file(), f'missing device assets under {device}'
+    assets = ('bootrom_240_4', 'bootrom_s5l8900', 'n72ap-7E18.itbase')  # the 2G's and 1G's SecureROMs, the built-in iPod
+    assert all((device / name).is_file() for name in assets), f'missing device assets under {device}'
     assert blob.read_bytes()[:8] == b'ITPACK01', f'{blob} is not a packed device'
-    stray = [p for p in device.rglob('*') if p.is_file() and p.name not in ('bootrom_240_4', 'n72ap-7E18.itbase')]
+    stray = [p for p in device.rglob('*') if p.is_file() and p.name not in assets]
     assert not stray, f'unexpected device assets (raw pages, the old NAND or iBoot?): {stray[:5]}'
     catalog = json.loads((app / 'Contents/Resources/firmware-catalog.json').read_text())
     assert [e['id'] for e in catalog['entries'] if e.get('bundled')] == ['n72ap-7E18']

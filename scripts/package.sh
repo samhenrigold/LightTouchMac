@@ -240,7 +240,7 @@ PLIST
 
 # -------------------------------------------------------------- device assets
 #
-# Resources/device (Bundled.filesRoot): the iPod bootrom, and the built-in
+# Resources/device (Bundled.filesRoot): the iPod bootroms (flat), and the built-in
 # iPod as ONE opaque blob (LTM_BASE_BLOB: a `firmwarekit create` of
 # n72ap-7E18 packed by scripts/pack-base.py, which build-release.py makes).
 # Never raw pages: the notary walks every file in the bundle and rejects the
@@ -251,12 +251,15 @@ FILES="${LTM_ASSETS:-$SRC/../qemu-ios-files}"
 DEVICE="$APP/Contents/Resources/device"
 rm -rf "$DEVICE"
 if [ "$FILES" != none ]; then
-    [ -e "$FILES/bootrom_240_4" ] || { echo "missing device asset: $FILES/bootrom_240_4 (LTM_ASSETS=none to skip)" >&2; exit 1; }
+    BOOTROMS=(bootrom_240_4 ipod1g/bootrom_s5l8900)   # the 2G's, the 1G's (build-release.py BOOTROMS)
+    for rom in "${BOOTROMS[@]}"; do
+        [ -e "$FILES/$rom" ] || { echo "missing device asset: $FILES/$rom (LTM_ASSETS=none to skip)" >&2; exit 1; }
+    done
     [ -f "${LTM_BASE_BLOB:-}" ] || { echo "LTM_BASE_BLOB must name the packed built-in iPod (scripts/pack-base.py pack <firmwarekit create output> n72ap-7E18.itbase)" >&2; exit 1; }
     [ "$(head -c 8 "$LTM_BASE_BLOB")" = ITPACK01 ] || { echo "$LTM_BASE_BLOB is not a packed device" >&2; exit 1; }
-    echo "embedding device assets (bootrom, $(basename "$LTM_BASE_BLOB"))…"
+    echo "embedding device assets (bootroms, $(basename "$LTM_BASE_BLOB"))…"
     mkdir -p "$DEVICE"
-    cp "$FILES/bootrom_240_4" "$DEVICE/"
+    for rom in "${BOOTROMS[@]}"; do cp "$FILES/$rom" "$DEVICE/"; done
     cp "$LTM_BASE_BLOB" "$DEVICE/n72ap-7E18.itbase"
 fi
 

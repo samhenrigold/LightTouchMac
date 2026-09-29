@@ -21,7 +21,7 @@ before the device library is not migrated; see "The old layout" below.
 
 | Location | Contents and purpose | Lifetime and cleanup |
 | --- | --- | --- |
-| App bundle, `Contents/Resources/device` | `bootrom_240_4` (the iPod's SecureROM) and `n72ap-7E18.itbase`: the built-in iPod, a `firmwarekit create` of iOS 3.1.3 packed as one blob (`scripts/pack-base.py`) | Read-only inputs; never used as writable device storage. |
+| App bundle, `Contents/Resources/device` | `bootrom_240_4` and `bootrom_s5l8900` (the iPod touch 2G's and 1G's SecureROMs) and `n72ap-7E18.itbase`: the built-in iPod, a `firmwarekit create` of iOS 3.1.3 packed as one blob (`scripts/pack-base.py`) | Read-only inputs; never used as writable device storage. |
 | `State/Devices/<uuid>/device.json` | The device record (`DeviceInstance`): board, catalog entry, base, storage paths, identity, provenance | The directory is the device; Delete renames it to `.deleting-<uuid>` and removes it. |
 | `State/Devices/<uuid>/base/` | The prepared base: `iBoot.bin`/`kboot.bin`, `nor.bin`, `gid-blobs.bin`, `nand/`, `identity.json`, `device.lock.json`; immutable (`chflags uchg`). The built-in iPod's is unpacked from the bundle's blob on first launch; every other one is `firmwarekit create` output. | Retained with the device; reproducible from the IPSW (and the bundle). |
 | `State/Devices/<uuid>/overlay/`, `nor.bin` | The device's writes: copy-on-write NAND pages pinned to the base's identity, and its private NOR copy | Durable user device data. Erase removes both; the next boot recreates them from the base. |

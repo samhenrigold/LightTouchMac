@@ -50,6 +50,9 @@ STAGES = ('native', 'qemu', 'dylib', 'guest', 'app', 'package', 'notarize', 'sta
 # built guest tools, packed by scripts/pack-base.py (Resources/device/<entry>.itbase) during package.
 BUNDLED_ENTRY = 'n72ap-7E18'
 BUNDLED_IPSW = Path.home() / 'Developer/ipod2g-re/OldSDK/iPod2,1_3.1.3_7E18_Restore.ipsw'
+# The SecureROMs under --assets that package.sh flattens into Resources/device (DeviceProfile.bootromName):
+# the iPod touch 2G's, and the 1G's from devos50's n45ap set (qemu-ios docs/ipod1g).
+BOOTROMS = ('bootrom_240_4', 'ipod1g/bootrom_s5l8900')
 # The emulator and usbmuxd ship together (both pinned in build-support/sources.json). The staged native stage
 # builds usbmuxd from the pinned commit of --usbmuxd-source through a temporary worktree, whatever that
 # checkout's HEAD is; the one-step build takes the checkout's working tree.
@@ -369,7 +372,8 @@ def validate(args):
     require(args.qemu_source / 'configure', 'QEMU checkout')
     require(args.usbmuxd_source / 'configure.ac', 'usbmuxd source checkout')
     pin_status(args)
-    require(args.assets / 'bootrom_240_4', 'bundled firmware input')
+    for name in BOOTROMS:
+        require(args.assets / name, 'bundled firmware input')
     require(args.bundled_ipsw, f'{BUNDLED_ENTRY} IPSW for the built-in iPod (--bundled-ipsw)')
     validate_output(args)
     if args.guest_tools:
@@ -430,7 +434,7 @@ def write_build_record(args, sources, native_root, qemu_build, guest):
     record = {
         'schema_version': 1, 'sources': sources, 'host_architecture': 'arm64',
         'pin': pin_status(args),
-        'firmware': {'bootrom_sha256': digest(args.assets / 'bootrom_240_4'),
+        'firmware': {'bootroms_sha256': {Path(name).name: digest(args.assets / name) for name in BOOTROMS},
                      'bundled': json.loads((args.output / 'bundled/bundled.json').read_text())},
         'native_build_record_sha256': provenance['native-build.json'],
         'native_build_reused': bool(args.native_build or args.native_deps),
@@ -764,7 +768,7 @@ def staged(args, env, log):
         validate_guest(args, guest)
         blob = bundled_base(args, env, log, firmwarekit, guest, product / 'Contents/MacOS/LightTouchDevice')
         inputs = tree_stamp(product, build / 'libqemu-arm.dylib', guest, guest.parent / 'ipad-guest-tools', firmwarekit, SCRIPTS / 'package.sh',
-                            args.assets / 'bootrom_240_4', blob) + args.sign_id
+                            *(args.assets / name for name in BOOTROMS), blob) + args.sign_id
         if app.is_dir() and state.get('package', {}).get('inputs') == inputs:
             print('package: current')
         else:

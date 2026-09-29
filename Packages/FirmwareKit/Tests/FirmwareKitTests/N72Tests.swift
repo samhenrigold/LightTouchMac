@@ -106,4 +106,32 @@ import Testing
             #expect(try N72Board.exportedSymbols(hooked) == names)   // the front end exports the firmware's own names
         }
     }
+
+    /// Smoke #45: without helpers (2.x/3.0) the bake writes it_prefs' key itself, SBDidShowReorderText = <true/> in
+    /// mobile's com.apple.springboard.plist, keeping the Sounds defaults already there; a SpringBoard that doesn't name
+    /// the key is left alone. With the 5F138 cache at hand, its real SpringBoard names it.
+    @Test func reorderTipBakedWithoutHelpers() throws {
+        try Oracle.withTemp { m in
+            let sb = m.appendingPathComponent(N72Board.springBoard), plist = m.appendingPathComponent(N72Board.prefs + "/com.apple.springboard.plist")
+            try SystemEdits.mkdirs(sb.deletingLastPathComponent())
+            try Data("\0SBDidShowReorderTextX".utf8).write(to: sb)
+            try SystemEdits.seedPlist(plist) { $0["lock-unlock"] = true }
+            #expect(try N72Board.bakeReorderTip(m) == "SBDidShowReorderText baked (no helpers)")
+            let d = try #require(PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as? [String: Any])
+            #expect(d[N72Board.reorderTip] as? Bool == true && d["lock-unlock"] as? Bool == true)
+            #expect(try String(contentsOf: plist, encoding: .utf8).contains("<key>SBDidShowReorderText</key>\n\t<true/>"))
+
+            try FileManager.default.removeItem(at: plist)
+            try Data("SpringBoard".utf8).write(to: sb)
+            #expect(try N72Board.bakeReorderTip(m).hasSuffix("left alone") && !Oracle.exists(plist))
+        }
+        let fw = Oracle.firmware("n72ap-5F138")
+        guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { return }
+        try Oracle.withTemp { dir in
+            let raw = dir.appendingPathComponent("rootfs.hfs")
+            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            let v = try HFSPlusVolume(raw)
+            #expect(try v.contents(v.record(at: N72Board.springBoard)).range(of: Data(N72Board.reorderTip.utf8)) != nil)
+        }
+    }
 }
