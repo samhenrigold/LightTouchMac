@@ -535,11 +535,11 @@
   "version": "4.2.1",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-29T00:01:02+00:00",
+  "when": "2026-09-29T13:37:30+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -548,7 +548,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 83.5,
+   "seconds": 79.3,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -563,7 +563,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8C148/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8C148/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -576,7 +576,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 34.9
+    "seconds": 32.8
    },
    "lockdown": {
     "ok": true,
@@ -604,8 +604,8 @@
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 7,
+    "reported": 7,
     "result": 0
    },
    "gl": {
@@ -616,14 +616,14 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 21.4,
-     "lockdown": 0.2
+     "lit": 22.6,
+     "lockdown": 2.7
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.7,
-    "reason": "The emulator stopped.",
+    "seconds": 15.8,
+    "reason": "The iPad stopped.",
     "second": 16.1
    },
    "base_unchanged": true,
@@ -636,7 +636,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/driver.jsonl",
+  "triage": "Control for the 4.3.x rows (ipad-43x, 09-29): same pin (920a3eeac4), dylib, guest tools and FirmwareKit (one-shots with -no-reboot); passes end to end, AppleUSBCableType USBHost."
  },
  "n72ap-7A341": {
   "version": "3.0",
@@ -1583,11 +1584,11 @@
   "version": "4.3",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T02:22:11+00:00",
+  "when": "2026-09-29T12:51:22+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-acb86d65823cd73b2/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-matrix43/build-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix43-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -1596,8 +1597,8 @@
    "error": null
   },
   "prepare": {
-   "seconds": 349.8,
-   "ok": false,
+   "seconds": 107.6,
+   "ok": true,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
@@ -1605,32 +1606,95 @@
     "Building the system and data volumes",
     "Writing the NAND",
     "Creating the data-protection keybag",
-    "Sealing the NAND"
+    "Sealing the NAND",
+    "Writing the lock"
    ],
    "warnings": [
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
    ],
-   "error": "oneshot_failed: seal boot: no clean halt after 300 s",
-   "last_step": "Sealing the NAND",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8F190/firmwarekit.log"
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8F190/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
   },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 29.8
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": false,
+    "seconds": null,
+    "attempt": null
+   },
+   "package": {
+    "ok": false,
+    "offered": 7,
+    "reported": null,
+    "result": null
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+  },
+  "screenshots": {},
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/driver.jsonl",
   "first_failure": {
-   "check": "prepare",
-   "why": "oneshot_failed: seal boot: no clean halt after 300 s",
-   "excerpt": "one-shot: timed out after 300 s (exit 0)\nfirmwarekit: oneshot_failed: seal boot: no clean halt after 300 s"
+   "check": "lockdown",
+   "why": "ipad: lockdown never answered over its usbmuxd",
+   "excerpt": "AppleBCMWLAN::handleExtDTIMIoVarAsyncCallBack(): Error: cannot set extended dtim to 1 (1): operation was aborted\nAppleBCMWLANNetManager::handleStatUpdates(): WLC_GET_BSS_INFO Failed to get the RSSI, error operation was aborted\nAppleBCMWLAN::getTXPOWER(): qtxpower failed, error operation was aborted"
   },
-  "triage": "(c) iOS 4.3 boots: IOP v3 handshake, VFL/FTL, root, launchd, lockdownd, SpringBoard all come up on the real iBoot chain (qemu-ios dsi-stopstate branch ba740d27^ on ipad1 9a81b9a2ae + this tree). Three emulator findings on the way, each fixed generically: (1) DSIM STATUS bit 8 (StopStateClk) was pinned on; AppleS5L8720X-91's DSI driver snapshots STATUS at start and takes it as 'link down', so the first display-off (auto-lock, the halt) panicked 'enableInterface redundant disable request' (8638f9f095); kboot= additionally starts the link the way iBoot leaves it (85bf5a7ed7); (2) EmbeddedIOP-20 control messages complete with 'done' over the opcode, else 'timed out waiting for workloop to process completed command' at shutdown (d848e1ae47). Keybag one-shot then passes (the 4.3.0 FIL, IOFlashStorage-410.3, has no epoch check; the 'epoch roll wait' is 410.4/4.3.5's, see 8L1). Remaining blocker, class H (the iop-v3 instrument): at shutdown, after the IOP sleep control message, the driver's diagnostic watchdog ping fails to send (kIOReturnNoResources, before any doorbell) and panics 'IOP watchdog: unexpected diagnostic state' (EmbeddedIOP.cpp:929); keeping the HLE awake changes nothing (ba740d2748, reverted), so it is the AP-side state machine around the real firmware's sleep/stop: the IOP core's to answer. Evidence: matrix-results/k48ap-8F190/{seal.log,keybag-1.log,firmwarekit.log}. Also seen: AppleD1815PMU::_readADCGated(3) 'ADC read bad state: 1' x10 during shutdown (PMU ADC mux 3 model gap, harmless so far)."
+  "triage": "(c) 4.3, keys 18/18, own Update ramdisk for the keybag, iBoot chain (SEPO 1). Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8F190/{serial.log,driver.jsonl}."
  },
  "k48ap-8G4": {
   "version": "4.3.1",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T02:59:18+00:00",
+  "when": "2026-09-29T12:58:44+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-acb86d65823cd73b2/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-matrix43/build-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix43-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1639,8 +1703,8 @@
    "error": null
   },
   "prepare": {
-   "seconds": 320.8,
-   "ok": false,
+   "seconds": 99.5,
+   "ok": true,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
@@ -1648,32 +1712,95 @@
     "Building the system and data volumes",
     "Writing the NAND",
     "Creating the data-protection keybag",
-    "Sealing the NAND"
+    "Sealing the NAND",
+    "Writing the lock"
    ],
    "warnings": [
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
    ],
-   "error": "oneshot_failed: seal boot: no clean halt after 300 s",
-   "last_step": "Sealing the NAND",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8G4/firmwarekit.log"
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8G4/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
   },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 31.3
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": false,
+    "seconds": null,
+    "attempt": null
+   },
+   "package": {
+    "ok": false,
+    "offered": 7,
+    "reported": null,
+    "result": null
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+  },
+  "screenshots": {},
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/driver.jsonl",
   "first_failure": {
-   "check": "prepare",
-   "why": "oneshot_failed: seal boot: no clean halt after 300 s",
-   "excerpt": "one-shot: timed out after 300 s (exit 0)\nfirmwarekit: oneshot_failed: seal boot: no clean halt after 300 s"
+   "check": "lockdown",
+   "why": "ipad: lockdown never answered over its usbmuxd",
+   "excerpt": "en0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1).\nAppleBCMWLAN Joined BSS:     @ 0x85b82800, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\""
   },
-  "triage": "(pipeline done) 4.3.1: no public ramdisk keys (wiki Keys page has no RestoreRamdisk/UpdateRamdisk rows; MediaWiki API 2026-09-28). recipe.keybag_ramdisk_from = k48ap-8F190: firmwarekit decrypts 8F190's Update ramdisk (038-0707-006) with that entry's key, the 4.3.1 kernel boots it as md0, it_keybag formats effaceable and writes the system keybag, the one-shot halts cleanly (6 s). The seal boot then reaches FTL_Open, disk0s1, SpringBoard and stops in the 4.3 IOP shutdown watchdog, as 8F190 (class H, iop-v3 instrument). Same field on 8H7/8J3/8K2/8L1 (8L1 verified by hand: NAND signature epoch 2, boot_args 3, keybag ok, SpringBoard; ~/Developer/qemu-ios-files/ipad1/repro/matrix-8L1). Evidence: matrix-results/k48ap-8G4/{keybag-1.log,seal.log,firmwarekit.log}."
+  "triage": "(c) 4.3.1, keys 16/16 (wiki still has no ramdisk rows, 09-29), keybag from 8F190's Update ramdisk (recipe.keybag_ramdisk_from), iBoot chain (SEPO 1). Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8G4/."
  },
  "k48ap-8H7": {
   "version": "4.3.2",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T00:49:42+00:00",
+  "when": "2026-09-29T13:05:57+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1682,40 +1809,104 @@
    "error": null
   },
   "prepare": {
-   "seconds": 9.3,
-   "ok": false,
+   "seconds": 136.2,
+   "ok": true,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
     "Writing the identity and boot chain",
     "Building the system and data volumes",
     "Writing the NAND",
-    "Creating the data-protection keybag"
+    "Creating the data-protection keybag",
+    "Sealing the NAND",
+    "Writing the lock"
    ],
    "warnings": [
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
    ],
-   "error": "internal: The file “038-1031-007-ramdisk.dmg” couldn’t be opened because there is no such file.",
-   "last_step": "Creating the data-protection keybag",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8H7/firmwarekit.log"
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8H7/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
   },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 69.4
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": false,
+    "seconds": null,
+    "attempt": null
+   },
+   "package": {
+    "ok": false,
+    "offered": 7,
+    "reported": null,
+    "result": null
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+  },
+  "screenshots": {},
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/driver.jsonl",
   "first_failure": {
-   "check": "prepare",
-   "why": "internal: The file “038-1031-007-ramdisk.dmg” couldn’t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file “038-1031-007-ramdisk.dmg” couldn’t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "check": "lockdown",
+   "why": "ipad: lockdown never answered over its usbmuxd",
+   "excerpt": "en0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1).\nAppleBCMWLAN Joined BSS:     @ 0x84638800, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\""
   },
-  "triage": "(no keys) as 8G4."
+  "triage": "(c) 4.3.2, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). The 09-28 'ramdisk.dmg no such file' predated recipe.keybag_ramdisk_from. Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8H7/."
  },
  "k48ap-8J3": {
   "version": "4.3.3",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T00:49:58+00:00",
+  "when": "2026-09-29T13:14:26+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1724,40 +1915,104 @@
    "error": null
   },
   "prepare": {
-   "seconds": 11.9,
-   "ok": false,
+   "seconds": 115.0,
+   "ok": true,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
     "Writing the identity and boot chain",
     "Building the system and data volumes",
     "Writing the NAND",
-    "Creating the data-protection keybag"
+    "Creating the data-protection keybag",
+    "Sealing the NAND",
+    "Writing the lock"
    ],
    "warnings": [
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
    ],
-   "error": "internal: The file “038-1437-004-ramdisk.dmg” couldn’t be opened because there is no such file.",
-   "last_step": "Creating the data-protection keybag",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8J3/firmwarekit.log"
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8J3/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
   },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 37.2
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": false,
+    "seconds": null,
+    "attempt": null
+   },
+   "package": {
+    "ok": false,
+    "offered": 7,
+    "reported": null,
+    "result": null
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+  },
+  "screenshots": {},
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/driver.jsonl",
   "first_failure": {
-   "check": "prepare",
-   "why": "internal: The file “038-1437-004-ramdisk.dmg” couldn’t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file “038-1437-004-ramdisk.dmg” couldn’t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "check": "lockdown",
+   "why": "ipad: lockdown never answered over its usbmuxd",
+   "excerpt": "en0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1).\nAppleBCMWLAN Joined BSS:     @ 0x87faf000, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\""
   },
-  "triage": "(no keys) as 8G4."
+  "triage": "(c) 4.3.3, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). The 09-28 'ramdisk.dmg no such file' predated recipe.keybag_ramdisk_from. Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8J3/."
  },
  "k48ap-8K2": {
   "version": "4.3.4",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T00:50:14+00:00",
+  "when": "2026-09-29T13:22:01+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1766,40 +2021,104 @@
    "error": null
   },
   "prepare": {
-   "seconds": 16.9,
-   "ok": false,
+   "seconds": 95.8,
+   "ok": true,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
-    "Writing the identity and boot chain",
+    "Writing the identity and boot image",
     "Building the system and data volumes",
     "Writing the NAND",
-    "Creating the data-protection keybag"
+    "Creating the data-protection keybag",
+    "Sealing the NAND",
+    "Writing the lock"
    ],
    "warnings": [
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
    ],
-   "error": "internal: The file “038-2175-001-ramdisk.dmg” couldn’t be opened because there is no such file.",
-   "last_step": "Creating the data-protection keybag",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8K2/firmwarekit.log"
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8K2/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "kboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
   },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 31.5
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": false,
+    "seconds": null,
+    "attempt": null
+   },
+   "package": {
+    "ok": false,
+    "offered": 7,
+    "reported": null,
+    "result": null
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+  },
+  "screenshots": {},
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8K2/driver.jsonl",
   "first_failure": {
-   "check": "prepare",
-   "why": "internal: The file “038-2175-001-ramdisk.dmg” couldn’t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file “038-2175-001-ramdisk.dmg” couldn’t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "check": "lockdown",
+   "why": "ipad: lockdown never answered over its usbmuxd",
+   "excerpt": "en0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1).\nAppleBCMWLAN Joined BSS:     @ 0x8827b000, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\""
   },
-  "triage": "(no keys) as 8G4."
+  "triage": "(c) 4.3.4, keys 16/16, keybag from 8F190's ramdisk; recipe.boot kboot: its iBoot-1072 is SEPO 2 and the iboot= path's POWER_ID epoch is 1 (smoke #7; the iboot seal printed nothing in 300 s). The 09-28 'ramdisk.dmg no such file' predated recipe.keybag_ramdisk_from. Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8K2/."
  },
  "k48ap-8L1": {
   "version": "4.3.5",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T00:50:36+00:00",
+  "when": "2026-09-29T13:29:10+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1808,30 +2127,94 @@
    "error": null
   },
   "prepare": {
-   "seconds": 14.4,
-   "ok": false,
+   "seconds": 98.0,
+   "ok": true,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
-    "Writing the identity and boot chain",
+    "Writing the identity and boot image",
     "Building the system and data volumes",
     "Writing the NAND",
-    "Creating the data-protection keybag"
+    "Creating the data-protection keybag",
+    "Sealing the NAND",
+    "Writing the lock"
    ],
    "warnings": [
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)",
-    "Stock GL engine, software CoreAnimation: GLI shim does not fit this firmware: dispatch table differs from gli-dispatch-7B500.tsv at slot 764 (870 vs 826 slots); dispatch table differs from gli-dispatch-7E18.tsv at slot 441 (870 vs 822 slots); dispatch table differs from gli-dispatch-8C148.tsv at slot 773 (870 vs 841 slots)"
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
+    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
    ],
-   "error": "internal: The file “038-2268-002-ramdisk.dmg” couldn’t be opened because there is no such file.",
-   "last_step": "Creating the data-protection keybag",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-8L1/firmwarekit.log"
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8L1/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "kboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
   },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 36.4
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": false,
+    "seconds": null,
+    "attempt": null
+   },
+   "package": {
+    "ok": false,
+    "offered": 7,
+    "reported": null,
+    "result": null
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+  },
+  "screenshots": {},
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8L1/driver.jsonl",
   "first_failure": {
-   "check": "prepare",
-   "why": "internal: The file “038-2268-002-ramdisk.dmg” couldn’t be opened because there is no such file.",
-   "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file “038-2268-002-ramdisk.dmg” couldn’t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
+   "check": "lockdown",
+   "why": "ipad: lockdown never answered over its usbmuxd",
+   "excerpt": "AppleBCMWLAN::handleExtDTIMIoVarAsyncCallBack(): Error: cannot set extended dtim to 1 (1): operation was aborted\nAppleBCMWLANNetManager::handleStatUpdates(): WLC_GET_BSS_INFO Failed to get the RSSI, error operation was aborted\nAppleBCMWLAN::setAllMulticast(): allmulti() failed, error operation was aborted"
   },
-  "triage": "(no keys) as 8G4."
+  "triage": "(c) 4.3.5, keys 16/16, keybag from 8F190's ramdisk; recipe.boot kboot (SEPO 2, smoke #7: the iboot seal boot printed nothing in 300 s). The 09-28 'ramdisk.dmg no such file' predated recipe.keybag_ramdisk_from. Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8L1/."
  },
  "n72ap-8A230m": {
   "version": "4.0",

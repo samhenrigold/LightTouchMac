@@ -92,10 +92,13 @@ public enum Preparer {
 
     /// One `LightTouchDevice --oneshot` boot of the ipad1 machine; `boot` is the boot-source option ("kboot=…" or
     /// "iboot=…,gid-blobs=…") and `machine` the rest (nand=…, die-id=…, nor-rw=…).
+    /// -no-reboot: the one-shot ends when the guest shuts down, and a restart is a shutdown too (4.3's launchd turns
+    /// it_seal's reboot(RB_HALT) into its own clean reboot(RB_AUTOBOOT); 5.x's halt restarts through the PMU),
+    /// as qemu-ios imgtools/ipad1_seal.py (8edc395979).
     static func oneshot(_ helper: URL, boot: String, machine: String, serial: URL, stop: String?, stopPattern: String? = nil, timeout: Double,
                         work: URL, log: (String) -> Void) throws -> (OneShot, String) {
         let argv = ["LightTouchDevice", "-machine", "ipad1,\(boot),\(machine)", "-display", "none", "-audio", "driver=none",
-                    "-monitor", "none", "-serial", "file:\(serial.path)"]
+                    "-monitor", "none", "-serial", "file:\(serial.path)", "-no-reboot"]
         return try oneshot(helper, argv: argv, machine: "ipad1", serial: serial, stop: stop, stopPattern: stopPattern, timeout: timeout,
                            work: work, log: log)
     }
