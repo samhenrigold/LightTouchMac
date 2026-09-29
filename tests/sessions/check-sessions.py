@@ -25,6 +25,10 @@ DeviceStateStorage.writableNOR, and W1's DeviceLink, and runs:
     tests/sessions/check-sessions.py --guest --ipod-device DIR --itpack ARMV6.itpack [...]
     tests/sessions/check-sessions.py --single DIR --board ipod|ipad [--frameworks DIR] [...]
 
+--single --afc-race N (smoke.md #5) instead boots the base N times, lists the Media root over AFC the moment lockdown
+first answers (polled every 100 ms), and Stops; --afc-race-dirty adds an IPA install, an upload and the agent halt,
+stopping 20-45 s into the shutdown.
+
 --single boots one prepared base (firmwarekit create output) as the app does: lit, lockdown over its own
 usbmuxd, AFC upload + download round trips of 16384, 16385, 65536 and 1048583 bytes (no restore), an IPA
 install, and a clean shutdown; screenshots lock/home/installed in --work/<board>/. build-release.py's verify
@@ -156,6 +160,8 @@ def main():
     ap.add_argument("--work", type=Path)
     ap.add_argument("--single", type=Path, help="one prepared base (firmwarekit create output)")
     ap.add_argument("--board", choices=("ipod", "ipad"), help="--single: the base's board")
+    ap.add_argument("--afc-race", type=int, metavar="N", help="--single: N boots, AFC at lockdown's first answer, then Stop (smoke.md #5)")
+    ap.add_argument("--afc-race-dirty", action="store_true", help="--afc-race: install, upload and halt first, stopping mid-shutdown")
     ap.add_argument("--frameworks", help="where libimobiledevice is loaded from (default Homebrew's)")
     ap.add_argument("--ipad-itpack", type=Path, help="boot the iPad with the app's offer from this armv7.itpack and check "
                     "the loader's report and the agent (foreground app, lock state, launch)")
@@ -181,6 +187,9 @@ def main():
         cfg["frameworks"] = args.frameworks
     if args.single:
         cfg["single"] = {"board": args.board, "base": str(args.single)}
+        if args.afc_race:
+            cfg["single"] |= {"raceBoots": args.afc_race, "raceDirty": args.afc_race_dirty}
+            cfg["timeout"] = 200 * args.afc_race
     if args.ipad_itpack:
         cfg["ipadItpack"] = str(args.ipad_itpack)
     if args.guest:
@@ -207,7 +216,7 @@ def main():
     events = []
     try:
         try:
-            driver.wait(timeout=570)
+            driver.wait(timeout=cfg.get("timeout", 560) + 10)
         except subprocess.TimeoutExpired:
             driver.kill()
             driver.wait()
@@ -237,6 +246,17 @@ def main():
         results.append(bool(ok))
         print(f"  {'ok ' if ok else 'FAIL'} {what}", flush=True)
 
+    if args.afc_race:
+        d = args.board
+        for r in find("race", device=d):
+            check("error" not in r, f"{d} boot {r['generation']}: AFC {r.get('seconds', 0):.1f} s after lockdown's first answer "
+                  f"({r['lockdown']:.1f} s after power-on): " + (r.get("error") or f"{r['entries']} entries"))
+        for r in find("raceStop", device=d):
+            check("uploadError" not in r, f"{d} boot {r['generation']}: installed, uploaded, Stop {r['afterHalt']:.0f} s into the halt "
+                  f"(power-off {'confirmed' if r['confirmed'] else 'not yet confirmed'})" + (f": {r['uploadError']}" if "uploadError" in r else ""))
+        check(len(find("race", device=d)) == args.afc_race and find("done"), f"{d}: {len(find('race', device=d))}/{args.afc_race} boots ran")
+        print(f"\n{sum(results)}/{len(results)} passed; events {work}/driver.jsonl")
+        sys.exit(0 if all(results) else 1)
     if args.single:
         d = args.board
         lit = (find("lit", device=d) or [{}])[0]

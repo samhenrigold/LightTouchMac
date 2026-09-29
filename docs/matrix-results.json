@@ -1827,7 +1827,7 @@
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/home2.png"
   },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/driver.jsonl",
-  "triage": "pass on the rerun (persist ok, shutdown confirmed 29 s on both boots): the first run's boot-2 'afc(unknown AFC error (code 1))' came 0.3 s after lockdown answered, the AFC-too-early race, not the build. (a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
+  "triage": "pass on the rerun (persist ok, shutdown confirmed 29 s on both boots): the first run's boot-2 'afc(unknown AFC error (code 1))' came 8+ s after lockdown answered (0.3 s is boot 2's lockdown-after-lit) and followed boot 1's shutdown missing the 50 s budget, so a Stop mid-shutdown; not an AFC readiness race (smoke.md #5). (a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
  },
  "n72ap-8A260b": {
   "version": "4.0",

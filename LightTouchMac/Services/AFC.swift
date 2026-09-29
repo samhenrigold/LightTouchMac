@@ -4,6 +4,15 @@
 
 import Foundation
 
+extension IMobileDevice {
+    /// AFC through lockdown's StartService, each step's error kept (IMobileDevice.startService).
+    nonisolated static func startAFC(device: OpaquePointer) throws -> OpaquePointer {
+        try startService("com.apple.afc", device: device, newClient: afc_client_new, freeClient: afc_client_free) {
+            DeviceError.afc(.init(code: $0))
+        }
+    }
+}
+
 extension DeviceServices {
     // MARK: - Free space
 
@@ -11,13 +20,8 @@ extension DeviceServices {
     /// full device before installd fails opaquely with PackageExtractionFailed.
     func freeSpaceBytes() async throws -> Int64 {
         try await run(Timeouts.query, "free space") { imd, device in
-            guard let start = imd.afc_client_start_service,
-                  let infoKey = imd.afc_get_device_info_key else { throw DeviceError.unavailable }
-            var client: OpaquePointer?
-            let rc = start(device, &client, "LightTouchMac")
-            guard rc == imd.success, let client else {
-                throw DeviceError.afc(.init(code: rc))
-            }
+            guard let infoKey = imd.afc_get_device_info_key else { throw DeviceError.unavailable }
+            let client = try imd.startAFC(device: device)
             defer { _ = imd.afc_client_free?(client) }
             var value: UnsafeMutablePointer<CChar>?
             let fr = "FSFreeBytes".withCString { infoKey(client, $0, &value) }
@@ -87,14 +91,11 @@ extension DeviceServices {
             let total = try input.seekToEnd()
             try input.seek(toOffset: 0)
             guard total > 0 || allowEmpty else { throw DeviceError.preflight("The file is empty.") }
-            guard let start = imd.afc_client_start_service,
-                  let mkdir = imd.afc_make_directory,
+            guard let mkdir = imd.afc_make_directory,
                   let open = imd.afc_file_open,
                   let write = imd.afc_file_write,
                   let close = imd.afc_file_close else { throw DeviceError.unavailable }
-            var client: OpaquePointer?
-            let rc = start(device, &client, "LightTouchMac")
-            guard rc == imd.success, let client else { throw DeviceError.afc(.init(code: rc)) }
+            let client = try imd.startAFC(device: device)
             defer { _ = imd.afc_client_free?(client) }
             if reuseIdentical {
                 guard let read = imd.afc_file_read, imd.afc_rename_path != nil else { throw DeviceError.unavailable }
@@ -217,12 +218,10 @@ extension DeviceServices {
 
     func sweepStaging() async {
         _ = try? await run(Timeouts.query, "staging sweep") { imd, device in
-            guard let start = imd.afc_client_start_service,
-                  let readDir = imd.afc_read_directory,
+            guard let readDir = imd.afc_read_directory,
                   let remove = imd.afc_remove_path,
                   let dictFree = imd.afc_dictionary_free else { return }
-            var client: OpaquePointer?
-            guard start(device, &client, "LightTouchMac") == imd.success, let client else { return }
+            guard let client = try? imd.startAFC(device: device) else { return }
             defer { _ = imd.afc_client_free?(client) }
 
             func entries(_ path: String) -> [String] {
@@ -254,10 +253,8 @@ extension DeviceServices {
     /// Best-effort cleanup of a staged upload.
     func removeStaged(_ path: String) async {
         _ = try? await run(Timeouts.query, "cleanup") { imd, device in
-            guard let start = imd.afc_client_start_service,
-                  let remove = imd.afc_remove_path else { return }
-            var client: OpaquePointer?
-            guard start(device, &client, "LightTouchMac") == imd.success, let client else { return }
+            guard let remove = imd.afc_remove_path else { return }
+            guard let client = try? imd.startAFC(device: device) else { return }
             defer { _ = imd.afc_client_free?(client) }
             _ = path.withCString { remove(client, $0) }
         }
@@ -276,13 +273,10 @@ extension DeviceServices {
     func files(in path: String) async throws -> [DeviceFile] {
         try Self.validateFilePath(path)
         return try await run(Timeouts.browse, "browse files") { imd, device in
-            guard let start = imd.afc_client_start_service,
-                  let read = imd.afc_read_directory,
+            guard let read = imd.afc_read_directory,
                   let info = imd.afc_get_file_info,
                   let free = imd.afc_dictionary_free else { throw DeviceError.unavailable }
-            var client: OpaquePointer?
-            let rc = start(device, &client, "LightTouchMac")
-            guard rc == imd.success, let client else { throw DeviceError.afc(.init(code: rc)) }
+            let client = try imd.startAFC(device: device)
             defer { _ = imd.afc_client_free?(client) }
             var names: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
             let result = (path.isEmpty ? "/" : path).withCString { read(client, $0, &names) }
@@ -332,12 +326,9 @@ extension DeviceServices {
             throw DeviceError.preflight("Select a regular file to export.")
         }
         try await run(Timeouts.stage, "export file") { imd, device in
-            guard let start = imd.afc_client_start_service,
-                  let open = imd.afc_file_open, let read = imd.afc_file_read,
+            guard let open = imd.afc_file_open, let read = imd.afc_file_read,
                   let close = imd.afc_file_close else { throw DeviceError.unavailable }
-            var client: OpaquePointer?
-            let rc = start(device, &client, "LightTouchMac")
-            guard rc == imd.success, let client else { throw DeviceError.afc(.init(code: rc)) }
+            let client = try imd.startAFC(device: device)
             defer { _ = imd.afc_client_free?(client) }
             var handle: UInt64 = 0
             let opened = file.path.withCString { open(client, $0, 1, &handle) }
