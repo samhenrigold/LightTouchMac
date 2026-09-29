@@ -9,13 +9,6 @@ import Foundation
 import Subprocess
 import System
 
-struct InstalledApp: Identifiable, Sendable {
-    /// The `CFBundleIdentifier`
-    let id: String
-    let name: String
-    let version: String
-}
-
 /// Talks to one running device, identified by its usbmuxd client socket. The
 /// facade the UI calls.
 struct DeviceTools: Sendable {
@@ -208,40 +201,9 @@ struct DeviceTools: Sendable {
     }
 
     /// If the .ipa stores its main binary without the exec bit, a copy repacked
-    /// 0755 (via the bundled ipod-helper, the same tool install-ipa.sh uses);
+    /// 0755 (via the bundled ipod-helper);
     /// nil if no repair is needed or anything is unreadable — callers fall back
     /// to the original, which is exactly today's behaviour.
-    /// A development build has no bundled lockdown helpers (package.sh builds
-    /// them), so the time zone was never synced when running from Xcode.
-    /// Debug builds compile scripts/<name>.c against Homebrew's
-    /// libimobiledevice into the work directory, once per source change.
-    static func developmentHelper(_ name: String) -> String? {
-        #if DEBUG
-        let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("scripts/\(name).c")
-        let binary = Bundled.workDirectory.appendingPathComponent("dev-tools/\(name)")
-        let fm = FileManager.default
-        guard let sourceDate = (try? fm.attributesOfItem(atPath: source.path))?[.modificationDate] as? Date else { return nil }
-        if let built = (try? fm.attributesOfItem(atPath: binary.path))?[.modificationDate] as? Date,
-           built >= sourceDate, fm.isExecutableFile(atPath: binary.path) { return binary.path }
-        try? fm.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let build = Process()
-        build.executableURL = URL(fileURLWithPath: "/bin/sh")
-        build.arguments = ["-c", "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; "
-            + "cc -O2 -o \"$1\" \"$2\" $(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)",
-            "sh", binary.path, source.path]
-        do { try build.run() } catch { return nil }
-        build.waitUntilExit()
-        guard build.terminationStatus == 0 else {
-            logEvent("\(name): could not build the development helper")
-            return nil
-        }
-        return binary.path
-        #else
-        return nil
-        #endif
-    }
-
     private static func execBitRepaired(_ ipa: URL) async throws -> URL? {
         guard let member = await AppMetadataCache.executableMember(of: ipa),
               let helper = Bundled.tool("ipod-helper") else { return nil }
@@ -448,19 +410,5 @@ struct DeviceTools: Sendable {
 
     // MARK: - Timezone
 
-    /// Sync the guest's timezone through the bundled lockdown-tz helper — a
-    /// child process ON PURPOSE. lockdownd_set_value called in-process against
-    /// 3.1.3's lockdownd corrupts the heap: the app died ~20 s later in
-    /// unrelated Swift runtime code, reproducibly, while the identical call
-    /// from a child process is clean (scripts/lockdown-tz.c). The tool reads
-    /// first, sets only on mismatch, and prints the zone in effect. Dev builds
-    /// without the bundled tool skip quietly — the zone is cosmetic.
-    func setTimeZone(_ identifier: String) async throws {
-        guard let tool = Bundled.tool("lockdown-tz") ?? Self.developmentHelper("lockdown-tz") else {
-            logEvent("timezone: no bundled lockdown-tz (dev build) — leaving the guest's zone alone")
-            return
-        }
-        let zone = try await GuestServices.setTimeZone(identifier, tool: tool, socket: clientSocket)
-        logEvent("timezone: guest zone now \(zone)")
-    }
+    func setTimeZone(_ identifier: String) async throws { try await services.setTimeZone(identifier) }
 }

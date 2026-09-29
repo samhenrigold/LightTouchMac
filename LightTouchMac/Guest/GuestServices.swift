@@ -4,7 +4,7 @@
 // typed v2 ops (contrib/it-agent/README.md): spawn with no shell, put/get,
 // chown/unlink, sync, launch, frontmost, lockstatus, orientation, dlicon,
 // halt. Stock lockdown services (installs, AFC, the time zone through the
-// lockdown-tz child process) stay in DeviceServices and DeviceTools.
+// lockdown-tz child process) are DeviceServices (Services/).
 //
 // Capabilities come from the agent's ping: a v2 agent lists its ops; a v1
 // agent (older images, which still carry freeze's /bin/sh) answers only its
@@ -342,32 +342,5 @@ nonisolated struct GuestServices: Sendable {
     func foregroundAppName() async throws -> String? {
         let name = try await agent.frontmost().name.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : String(name.prefix(200))
-    }
-
-    // MARK: Stock lockdown
-
-    /// The guest's time zone through the lockdown-tz child process — a child ON
-    /// PURPOSE: lockdownd_set_value in-process corrupts the app's heap against
-    /// 3.1.3's lockdownd (memory lockdown-setvalue-trap). The tool reads first,
-    /// sets only on a mismatch and prints the zone in effect.
-    static func setTimeZone(_ identifier: String, tool: String, socket: String) async throws -> String {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: tool)
-        task.arguments = [identifier]
-        task.environment = ProcessInfo.processInfo.environment.merging(["USBMUXD_SOCKET_ADDRESS": socket]) { $1 }
-        let output = Pipe(), error = Pipe()
-        task.standardOutput = output
-        task.standardError = error
-        task.standardInput = FileHandle.nullDevice
-        let status: Int32 = try await withCheckedThrowingContinuation { done in
-            task.terminationHandler = { done.resume(returning: $0.terminationStatus) }
-            do { try task.run() } catch { task.terminationHandler = nil; done.resume(throwing: error) }
-        }
-        let out = String(decoding: output.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
-        guard status == 0 else {
-            let err = String(decoding: error.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
-            throw DeviceToolsError.failed("Couldn’t set the device timezone. \(err)")
-        }
-        return out.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

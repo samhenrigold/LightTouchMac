@@ -1,6 +1,6 @@
 // Created by Sam on 2026-08-05.
 //
-// The handful of libimobiledevice entry points SpringBoardIcons needs, looked
+// The libimobiledevice entry points the stock services (Services/) need, looked
 // up at runtime instead of linked.
 //
 // Linking them would be less code, and that is how this started — but Homebrew
@@ -74,7 +74,7 @@ nonisolated enum IMobileDevice {
     // NO lockdownd_set_value here, deliberately: called in-process against
     // 3.1.3's lockdownd it corrupts the heap (the app died ~20 s later in
     // unrelated Swift runtime code, reproducibly). Writes go through the
-    // bundled lockdown-tz tool — see DeviceTools.setTimeZone.
+    // bundled lockdown-tz tool — see LockdownTools (DeviceServices.setTimeZone).
     typealias PlistFree = @convention(c) (OpaquePointer?) -> Void
     typealias MemFree = @convention(c) (UnsafeMutableRawPointer?) -> Void
 
