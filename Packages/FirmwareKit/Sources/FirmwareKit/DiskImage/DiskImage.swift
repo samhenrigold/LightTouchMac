@@ -56,15 +56,15 @@ public enum DiskImage {
         }
     }
 
-    /// hdiutil grows an 8 KiB-block HFS+ volume to one 4 KiB sector short of the size (the file too; VolumeMount.grow
-    /// pads it and moves the alternate header); diskutil fills the size. Asking diskutil for 4 KiB less on such a
-    /// volume gives hdiutil's bytes exactly (measured on the 7B500 system volume; 4 KiB blocks fill either way),
-    /// which keeps a store's built_listing_sha256 the same on every macOS.
-    /// ponytail: measured for 4 KiB and 8 KiB blocks only, the two iOS uses; a 16 KiB volume needs a new measurement.
-    static func resizeCommand(_ image: URL, bytes: Int, blockSize: Int, backend: Backend) -> [String] {
+    /// hdiutil grows a volume to the size rounded down to whole allocation blocks, less one block when the image
+    /// file's end is not block-aligned (the iPad IPSW system volumes: 8 KiB blocks, the file 4 KiB past the last
+    /// block); diskutil fills whatever size it is asked for, so it is asked for size - (slack mod block size). Both
+    /// then give the same bytes (DiskImageTests.backendsAgree, measured for 4 KiB and 8 KiB blocks with 0-12 KiB of
+    /// slack), which keeps a store's built_listing_sha256 the same on every macOS.
+    static func resizeCommand(_ image: URL, bytes: Int, slack: Int, backend: Backend) -> [String] {
         switch backend {
         case .hdiutil: return ["/usr/bin/hdiutil", "resize", "-sectors", String(bytes / 512)] + raw + [image.path]
-        case .diskutil: return ["/usr/sbin/diskutil", "image", "resize", "--size", String(bytes - (blockSize > 4096 ? 4096 : 0)), image.path]
+        case .diskutil: return ["/usr/sbin/diskutil", "image", "resize", "--size", String(bytes - slack), image.path]
         }
     }
 
@@ -108,8 +108,12 @@ public enum DiskImage {
 
     /// Grows the image file and its HFS+ volume to `bytes` (a multiple of 4096) the way hdiutil does (see resizeCommand).
     public static func resize(_ image: URL, toBytes bytes: Int, backend: Backend = backend) throws {
-        let blockSize = backend == .diskutil ? (try? HFSPlusVolume(image).blockSize) ?? 4096 : 4096
-        try run(resizeCommand(image, bytes: bytes, blockSize: blockSize, backend: backend))
+        var slack = 0
+        if backend == .diskutil, let v = try? HFSPlusVolume(image),
+           let size = (try? FileManager.default.attributesOfItem(atPath: image.path)[.size] as? Int) {
+            slack = max(0, size - v.totalBlocks * v.blockSize) % v.blockSize
+        }
+        try run(resizeCommand(image, bytes: bytes, slack: slack, backend: backend))
     }
 
     /// The raw disk (partition map and all) of a UDIF image, at `out`.

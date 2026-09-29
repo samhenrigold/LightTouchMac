@@ -22,9 +22,9 @@ import Testing
         #expect(DiskImage.detachCommand("/dev/disk9", force: true, backend: .hdiutil) == ["/usr/bin/hdiutil", "detach", "/dev/disk9", "-force"])
         #expect(DiskImage.detachCommand("/dev/disk9", force: false, backend: .diskutil) == ["/usr/sbin/diskutil", "eject", "/dev/disk9"])
         #expect(DiskImage.detachCommand("/dev/disk9", force: true, backend: .diskutil) == ["/usr/sbin/diskutil", "unmountDisk", "force", "/dev/disk9"])
-        #expect(DiskImage.resizeCommand(img, bytes: 1 << 30, blockSize: 8192, backend: .hdiutil) == ["/usr/bin/hdiutil", "resize", "-sectors", "2097152"] + raw + ["/tmp/v.img"])
-        #expect(DiskImage.resizeCommand(img, bytes: 1 << 30, blockSize: 4096, backend: .diskutil) == ["/usr/sbin/diskutil", "image", "resize", "--size", "1073741824", "/tmp/v.img"])
-        #expect(DiskImage.resizeCommand(img, bytes: 1 << 30, blockSize: 8192, backend: .diskutil) == ["/usr/sbin/diskutil", "image", "resize", "--size", "1073737728", "/tmp/v.img"])
+        #expect(DiskImage.resizeCommand(img, bytes: 1 << 30, slack: 4096, backend: .hdiutil) == ["/usr/bin/hdiutil", "resize", "-sectors", "2097152"] + raw + ["/tmp/v.img"])
+        #expect(DiskImage.resizeCommand(img, bytes: 1 << 30, slack: 0, backend: .diskutil) == ["/usr/sbin/diskutil", "image", "resize", "--size", "1073741824", "/tmp/v.img"])
+        #expect(DiskImage.resizeCommand(img, bytes: 1 << 30, slack: 4096, backend: .diskutil) == ["/usr/sbin/diskutil", "image", "resize", "--size", "1073737728", "/tmp/v.img"])
         let dmg = URL(fileURLWithPath: "/tmp/a.dmg"), out = URL(fileURLWithPath: "/tmp/w/raw")
         #expect(DiskImage.convertCommand(dmg, raw: out, backend: .hdiutil) == ["/usr/bin/hdiutil", "convert", "/tmp/a.dmg", "-format", "UDTO", "-quiet", "-o", "/tmp/w/raw"])
         #expect(DiskImage.convertCommand(dmg, raw: out, backend: .diskutil) == ["/usr/sbin/diskutil", "image", "create", "from", "--format", "RAW", "/tmp/a.dmg", "/tmp/w/raw.raw"])
@@ -49,14 +49,17 @@ import Testing
     }
 
     /// Each backend this host has: attach/detach a raw volume (listed while attached, gone after), grow it, and the
-    /// grown volumes of both backends are byte-identical, for 4 KiB and 8 KiB allocation blocks (iOS's two sizes).
-    @Test(arguments: [4096, 8192]) func backendsAgree(blockSize: Int) throws {
+    /// grown volumes of both backends are byte-identical, for 4 KiB and 8 KiB allocation blocks (iOS's two sizes)
+    /// with 0, 4 and 8 KiB of file slack past the volume (the iPad IPSW volumes carry 4 KiB; hdiutil then stops a
+    /// block short).
+    @Test(arguments: [(4096, 0), (8192, 0), (8192, 4096), (4096, 4096), (8192, 8192)]) func backendsAgree(blockSize: Int, slack: Int) throws {
         try Oracle.withTemp { dir in
             let base = dir.appendingPathComponent("base.img")
             #expect(FileManager.default.createFile(atPath: base.path, contents: nil) && truncate(base.path, 32 << 20) == 0)
             let dev0 = try DiskImage.attach(base)
             try DiskImage.run(["/sbin/newfs_hfs", "-s", "-J", "-b", String(blockSize), "-v", "Data", dev0.device])
             DiskImage.detach(dev0.device)
+            #expect(truncate(base.path, off_t((32 << 20) + slack)) == 0)
             var grown: [DiskImage.Backend: Data] = [:]
             for b in Self.backends {
                 let img = dir.appendingPathComponent("\(b.rawValue).img")
@@ -66,10 +69,9 @@ import Testing
                 #expect(DiskImage.attachedImages().contains { $0.image == img.path && $0.device == a.device }, "\(b): listed while attached")
                 DiskImage.detach(a.device, backend: b)
                 #expect(!DiskImage.attachedImages().contains { $0.image == img.path }, "\(b): gone after detach")
-                try DiskImage.resize(img, toBytes: 64 << 20, backend: b)
-                try VolumeMount.grow(img, toBytes: 64 << 20)   // the pad + alternate header move (a no-op when already grown)
+                try VolumeMount.grow(img, toBytes: 64 << 20, backend: b)   // resize, then the pad + alternate header move
                 let v = try HFSPlusVolume(img)
-                #expect(v.blockSize == blockSize && v.totalBlocks * v.blockSize <= 64 << 20, "\(b): \(v.totalBlocks) x \(v.blockSize)")
+                #expect(v.blockSize == blockSize && v.totalBlocks == ((64 << 20) - slack % blockSize) / blockSize, "\(b): \(v.totalBlocks) x \(v.blockSize)")
                 let dev = try DiskImage.attach(img, backend: b).device
                 let fsck = VolumeMount.check(dev)
                 DiskImage.detach(dev, backend: b)

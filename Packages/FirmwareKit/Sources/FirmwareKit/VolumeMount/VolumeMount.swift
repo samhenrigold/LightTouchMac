@@ -79,11 +79,12 @@ public enum VolumeMount {
     }
 
     /// Grows the volume in `image` to `bytes` (a multiple of 4096). The resize grows the file and the file
-    /// system, but with 8 KiB HFS blocks hdiutil stops one 4 KiB sector short; pad the file and move the
-    /// alternate volume header to the new end - 1024, where fsck_hfs and the kernel look for it.
-    public static func grow(_ image: URL, toBytes bytes: Int) throws {
+    /// system, but keeps the file's slack past the volume (the iPad IPSW volumes: one 4 KiB sector), so the file
+    /// system stops that short; pad the file and move the alternate volume header to the new end - 1024, where
+    /// fsck_hfs and the kernel look for it.
+    public static func grow(_ image: URL, toBytes bytes: Int, backend: DiskImage.Backend = DiskImage.backend) throws {
         guard try size(image) != bytes else { return }
-        try DiskImage.resize(image, toBytes: bytes)
+        try DiskImage.resize(image, toBytes: bytes, backend: backend)
         let old = try size(image)
         guard old <= bytes else { throw FirmwareError(.internal, "resize overshot \(bytes) bytes (\(old))") }
         let f = try FileHandle(forUpdating: image)
