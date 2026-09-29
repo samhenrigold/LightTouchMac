@@ -33,6 +33,9 @@ struct ActivationTests {
                     #expect(patch.original == Data([0x3f, 0xf4, 0x71, 0xaf]))
                     #expect(patch.replacement == Data([0, 0xbf, 0, 0xbf]))
                 }
+                if name.contains("9A5220p") {   // a pointer load (LDR immediate) between the log arguments
+                    #expect(patch.offset == 35502 && patch.original == Data([0x81, 0xd0]) && patch.replacement == Data([0, 0xbf]))
+                }
                 #expect((try FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)?.intValue == 0o751)
                 if name.contains("4B1") {
                     #expect(MachOSignature.codeSignature(in: Data(after)) == nil)

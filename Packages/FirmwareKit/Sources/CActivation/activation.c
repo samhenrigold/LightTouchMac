@@ -232,6 +232,10 @@ static bool log_block(const Image *m, uint32_t pc, bool thumb, uint32_t *after) 
                 regs[rd] = val;
                 known |= 1u << rd;
                 pc += 4;
+            } else if ((ins & 0xf800) == 0x6800) { /* LDR immediate T1 (9A5220p loads a pointer
+                                                    * between the arguments): never evidence */
+                known &= ~(1u << (ins & 7));
+                pc += 2;
             } else if ((ins & 0xff00) == 0x4400) { /* ADD high register, PC */
                 rd = (ins & 7) | ((ins >> 4) & 8);
                 unsigned rm = (ins >> 3) & 15;
