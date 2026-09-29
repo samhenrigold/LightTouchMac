@@ -535,11 +535,11 @@
   "version": "4.2.1",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-29T13:37:30+00:00",
+  "when": "2026-09-29T16:35:06+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -548,7 +548,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 79.3,
+   "seconds": 85.9,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -563,7 +563,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8C148/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8C148/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -576,11 +576,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 32.8
+    "seconds": 26.8
    },
    "lockdown": {
     "ok": true,
-    "seconds": 0.9,
+    "seconds": 0.6,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -599,7 +599,7 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
+    "seconds": 1,
     "attempt": 1
    },
    "package": {
@@ -616,15 +616,15 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 22.6,
-     "lockdown": 2.7
+     "lit": 25.5,
+     "lockdown": 1.2
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.8,
+    "seconds": 15.1,
     "reason": "The iPad stopped.",
-    "second": 16.1
+    "second": 15.0
    },
    "base_unchanged": true,
    "driver_exit": 0
@@ -637,7 +637,7 @@
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/home2.png"
   },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/driver.jsonl",
-  "triage": "Control for the 4.3.x rows (ipad-43x, 09-29): same pin (920a3eeac4), dylib, guest tools and FirmwareKit (one-shots with -no-reboot); passes end to end, AppleUSBCableType USBHost."
+  "triage": "(a) control for the 4.3.x rows on qemu-ios aec1594bf7: unchanged, end to end (it read the same 2.5 V brick ID before and still said USBHost, only because 4.2.1's 1 A window also wants D+ <= 2340 mV; now 0 V). Evidence: matrix-results/k48ap-8C148/."
  },
  "n72ap-7A341": {
   "version": "3.0",
@@ -1584,11 +1584,11 @@
   "version": "4.3",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T12:51:22+00:00",
+  "when": "2026-09-29T16:38:36+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -1597,7 +1597,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 107.6,
+   "seconds": 89.3,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1609,13 +1609,10 @@
     "Sealing the NAND",
     "Writing the lock"
    ],
-   "warnings": [
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
-   ],
+   "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8F190/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8F190/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -1628,73 +1625,78 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 29.8
+    "seconds": 36.2
    },
    "lockdown": {
-    "ok": false,
-    "seconds": null,
-    "productType": null
+    "ok": true,
+    "seconds": 1.2,
+    "productType": "iPad1,1"
    },
    "activation": {
-    "ok": false,
-    "state": null
+    "ok": true,
+    "state": "Activated"
    },
    "afc": {
-    "ok": false,
-    "sizes": [],
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
     "error": null
    },
    "install": {
-    "ok": false,
-    "seconds": null,
-    "attempt": null
+    "ok": true,
+    "seconds": 2,
+    "attempt": 1
    },
    "package": {
-    "ok": false,
+    "ok": true,
     "offered": 7,
-    "reported": null,
-    "result": null
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": null,
     "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
-    "ok": false,
+    "ok": true,
     "error": null,
     "second_boot": {
-     "lit": null,
-     "lockdown": null
+     "lit": 30.0,
+     "lockdown": 0.7
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": null,
-    "second": null
+    "ok": true,
+    "seconds": 15.5,
+    "reason": "The iPad stopped.",
+    "second": 15.2
    },
    "base_unchanged": true,
-   "driver_exit": 1,
-   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+   "driver_exit": 0
   },
-  "screenshots": {},
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/home2.png"
+  },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/driver.jsonl",
-  "first_failure": {
-   "check": "lockdown",
-   "why": "ipad: lockdown never answered over its usbmuxd",
-   "excerpt": "AppleBCMWLAN::handleExtDTIMIoVarAsyncCallBack(): Error: cannot set extended dtim to 1 (1): operation was aborted\nAppleBCMWLANNetManager::handleStatUpdates(): WLC_GET_BSS_INFO Failed to get the RSSI, error operation was aborted\nAppleBCMWLAN::getTXPOWER(): qtxpower failed, error operation was aborted"
-  },
-  "triage": "(c) 4.3, keys 18/18, own Update ramdisk for the keybag, iBoot chain (SEPO 1). Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8F190/{serial.log,driver.jsonl}."
+  "triage": "(c) 4.3, keys 18/18, own Update ramdisk for the keybag, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). An earlier run at host load 100-300 panicked once in the network stack ('m_free: freeing an already freed mbuf', right after Wi-Fi configured) and never lit: smoke #37. Evidence: matrix-results/k48ap-8F190/."
  },
  "k48ap-8G4": {
   "version": "4.3.1",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T12:58:44+00:00",
+  "when": "2026-09-29T16:42:26+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1703,7 +1705,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 99.5,
+   "seconds": 79.7,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1715,13 +1717,10 @@
     "Sealing the NAND",
     "Writing the lock"
    ],
-   "warnings": [
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
-   ],
+   "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8G4/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8G4/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -1734,73 +1733,78 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 31.3
+    "seconds": 33.7
    },
    "lockdown": {
-    "ok": false,
-    "seconds": null,
-    "productType": null
+    "ok": true,
+    "seconds": 1.0,
+    "productType": "iPad1,1"
    },
    "activation": {
-    "ok": false,
-    "state": null
+    "ok": true,
+    "state": "Activated"
    },
    "afc": {
-    "ok": false,
-    "sizes": [],
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
     "error": null
    },
    "install": {
-    "ok": false,
-    "seconds": null,
-    "attempt": null
+    "ok": true,
+    "seconds": 2,
+    "attempt": 1
    },
    "package": {
-    "ok": false,
+    "ok": true,
     "offered": 7,
-    "reported": null,
-    "result": null
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": null,
     "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
-    "ok": false,
+    "ok": true,
     "error": null,
     "second_boot": {
-     "lit": null,
-     "lockdown": null
+     "lit": 28.1,
+     "lockdown": 1.7
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": null,
-    "second": null
+    "ok": true,
+    "seconds": 15.6,
+    "reason": "The iPad stopped.",
+    "second": 17.4
    },
    "base_unchanged": true,
-   "driver_exit": 1,
-   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+   "driver_exit": 0
   },
-  "screenshots": {},
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/home2.png"
+  },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/driver.jsonl",
-  "first_failure": {
-   "check": "lockdown",
-   "why": "ipad: lockdown never answered over its usbmuxd",
-   "excerpt": "en0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1).\nAppleBCMWLAN Joined BSS:     @ 0x85b82800, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\""
-  },
-  "triage": "(c) 4.3.1, keys 16/16 (wiki still has no ramdisk rows, 09-29), keybag from 8F190's Update ramdisk (recipe.keybag_ramdisk_from), iBoot chain (SEPO 1). Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8G4/."
+  "triage": "(c) 4.3.1, keys 16/16, keybag from 8F190's Update ramdisk (recipe.keybag_ramdisk_from), iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8G4/."
  },
  "k48ap-8H7": {
   "version": "4.3.2",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T13:05:57+00:00",
+  "when": "2026-09-29T16:45:59+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1809,7 +1813,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 136.2,
+   "seconds": 85.9,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1821,13 +1825,10 @@
     "Sealing the NAND",
     "Writing the lock"
    ],
-   "warnings": [
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
-   ],
+   "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8H7/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8H7/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -1840,73 +1841,78 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 69.4
+    "seconds": 43.5
    },
    "lockdown": {
-    "ok": false,
-    "seconds": null,
-    "productType": null
+    "ok": true,
+    "seconds": 2.6,
+    "productType": "iPad1,1"
    },
    "activation": {
-    "ok": false,
-    "state": null
+    "ok": true,
+    "state": "Activated"
    },
    "afc": {
-    "ok": false,
-    "sizes": [],
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
     "error": null
    },
    "install": {
-    "ok": false,
-    "seconds": null,
-    "attempt": null
+    "ok": true,
+    "seconds": 2,
+    "attempt": 1
    },
    "package": {
-    "ok": false,
+    "ok": true,
     "offered": 7,
-    "reported": null,
-    "result": null
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": null,
     "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
-    "ok": false,
+    "ok": true,
     "error": null,
     "second_boot": {
-     "lit": null,
-     "lockdown": null
+     "lit": 38.0,
+     "lockdown": 1.2
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": null,
-    "second": null
+    "ok": true,
+    "seconds": 14.4,
+    "reason": "The iPad stopped.",
+    "second": 24.2
    },
    "base_unchanged": true,
-   "driver_exit": 1,
-   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+   "driver_exit": 0
   },
-  "screenshots": {},
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/home2.png"
+  },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/driver.jsonl",
-  "first_failure": {
-   "check": "lockdown",
-   "why": "ipad: lockdown never answered over its usbmuxd",
-   "excerpt": "en0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1).\nAppleBCMWLAN Joined BSS:     @ 0x84638800, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\""
-  },
-  "triage": "(c) 4.3.2, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). The 09-28 'ramdisk.dmg no such file' predated recipe.keybag_ramdisk_from. Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8H7/."
+  "triage": "(c) 4.3.2, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8H7/."
  },
  "k48ap-8J3": {
   "version": "4.3.3",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T13:14:26+00:00",
+  "when": "2026-09-29T16:50:12+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1915,7 +1921,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 115.0,
+   "seconds": 131.7,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1927,13 +1933,10 @@
     "Sealing the NAND",
     "Writing the lock"
    ],
-   "warnings": [
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
-   ],
+   "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8J3/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8J3/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -1946,73 +1949,78 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 37.2
+    "seconds": 45.4
    },
    "lockdown": {
-    "ok": false,
-    "seconds": null,
-    "productType": null
+    "ok": true,
+    "seconds": 4.5,
+    "productType": "iPad1,1"
    },
    "activation": {
-    "ok": false,
-    "state": null
+    "ok": true,
+    "state": "Activated"
    },
    "afc": {
-    "ok": false,
-    "sizes": [],
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
     "error": null
    },
    "install": {
-    "ok": false,
-    "seconds": null,
-    "attempt": null
+    "ok": true,
+    "seconds": 6,
+    "attempt": 1
    },
    "package": {
-    "ok": false,
+    "ok": true,
     "offered": 7,
-    "reported": null,
-    "result": null
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": null,
     "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
-    "ok": false,
+    "ok": true,
     "error": null,
     "second_boot": {
-     "lit": null,
-     "lockdown": null
+     "lit": 31.5,
+     "lockdown": 0.8
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": null,
-    "second": null
+    "ok": true,
+    "seconds": 15.8,
+    "reason": "The iPad stopped.",
+    "second": 15.4
    },
    "base_unchanged": true,
-   "driver_exit": 1,
-   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+   "driver_exit": 0
   },
-  "screenshots": {},
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/home2.png"
+  },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/driver.jsonl",
-  "first_failure": {
-   "check": "lockdown",
-   "why": "ipad: lockdown never answered over its usbmuxd",
-   "excerpt": "en0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1).\nAppleBCMWLAN Joined BSS:     @ 0x87faf000, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\""
-  },
-  "triage": "(c) 4.3.3, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). The 09-28 'ramdisk.dmg no such file' predated recipe.keybag_ramdisk_from. Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8J3/."
+  "triage": "(c) 4.3.3, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8J3/."
  },
  "k48ap-8K2": {
   "version": "4.3.4",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T13:22:01+00:00",
+  "when": "2026-09-29T16:55:16+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -2021,7 +2029,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 95.8,
+   "seconds": 137.7,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -2033,13 +2041,10 @@
     "Sealing the NAND",
     "Writing the lock"
    ],
-   "warnings": [
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
-   ],
+   "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8K2/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8K2/firmwarekit.log",
    "lock": {
     "boot_strategy": "kboot",
     "gles": null,
@@ -2055,70 +2060,75 @@
     "seconds": 31.5
    },
    "lockdown": {
-    "ok": false,
-    "seconds": null,
-    "productType": null
+    "ok": true,
+    "seconds": 1.7,
+    "productType": "iPad1,1"
    },
    "activation": {
-    "ok": false,
-    "state": null
+    "ok": true,
+    "state": "Activated"
    },
    "afc": {
-    "ok": false,
-    "sizes": [],
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
     "error": null
    },
    "install": {
-    "ok": false,
-    "seconds": null,
-    "attempt": null
+    "ok": true,
+    "seconds": 2,
+    "attempt": 1
    },
    "package": {
-    "ok": false,
+    "ok": true,
     "offered": 7,
-    "reported": null,
-    "result": null
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": null,
     "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
-    "ok": false,
+    "ok": true,
     "error": null,
     "second_boot": {
-     "lit": null,
-     "lockdown": null
+     "lit": 30.4,
+     "lockdown": 0.9
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": null,
-    "second": null
+    "ok": true,
+    "seconds": 15.1,
+    "reason": "The iPad stopped.",
+    "second": 15.3
    },
    "base_unchanged": true,
-   "driver_exit": 1,
-   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+   "driver_exit": 0
   },
-  "screenshots": {},
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8K2/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8K2/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8K2/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8K2/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8K2/home2.png"
+  },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8K2/driver.jsonl",
-  "first_failure": {
-   "check": "lockdown",
-   "why": "ipad: lockdown never answered over its usbmuxd",
-   "excerpt": "en0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1).\nAppleBCMWLAN Joined BSS:     @ 0x8827b000, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\""
-  },
-  "triage": "(c) 4.3.4, keys 16/16, keybag from 8F190's ramdisk; recipe.boot kboot: its iBoot-1072 is SEPO 2 and the iboot= path's POWER_ID epoch is 1 (smoke #7; the iboot seal printed nothing in 300 s). The 09-28 'ramdisk.dmg no such file' predated recipe.keybag_ramdisk_from. Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8K2/."
+  "triage": "(c) 4.3.4, keys 16/16, keybag from 8F190's ramdisk; recipe.boot kboot (iBoot-1072 SEPO 2, smoke #7; qemu-ios 2760108041 now reads the epoch off the image, so the iboot= chain can be retried). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8K2/."
  },
  "k48ap-8L1": {
   "version": "4.3.5",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T13:29:10+00:00",
+  "when": "2026-09-29T16:59:49+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43x/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad43x/guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -2127,7 +2137,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 98.0,
+   "seconds": 77.9,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -2139,13 +2149,10 @@
     "Sealing the NAND",
     "Writing the lock"
    ],
-   "warnings": [
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler",
-    "Stock GL engine, software CoreAnimation: gld plugin does not fit this firmware: gldshim lacks gldUpdateReadFramebuffer, gldCopyBufferSubData, gldCreateSampler, gldDestroySampler"
-   ],
+   "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad43x/scratch/k48ap-8L1/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8L1/firmwarekit.log",
    "lock": {
     "boot_strategy": "kboot",
     "gles": null,
@@ -2158,63 +2165,68 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 36.4
+    "seconds": 24.6
    },
    "lockdown": {
-    "ok": false,
-    "seconds": null,
-    "productType": null
+    "ok": true,
+    "seconds": 1.2,
+    "productType": "iPad1,1"
    },
    "activation": {
-    "ok": false,
-    "state": null
+    "ok": true,
+    "state": "Activated"
    },
    "afc": {
-    "ok": false,
-    "sizes": [],
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
     "error": null
    },
    "install": {
-    "ok": false,
-    "seconds": null,
-    "attempt": null
+    "ok": true,
+    "seconds": 3,
+    "attempt": 1
    },
    "package": {
-    "ok": false,
+    "ok": true,
     "offered": 7,
-    "reported": null,
-    "result": null
+    "reported": 7,
+    "result": 0
    },
    "gl": {
     "ok": null,
     "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
-    "ok": false,
+    "ok": true,
     "error": null,
     "second_boot": {
-     "lit": null,
-     "lockdown": null
+     "lit": 56.0,
+     "lockdown": 1.0
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": null,
+    "ok": true,
+    "seconds": 16.1,
+    "reason": "The iPad stopped.",
     "second": null
    },
    "base_unchanged": true,
-   "driver_exit": 1,
-   "driver_fail": "ipad: lockdown never answered over its usbmuxd"
+   "driver_exit": 0
   },
-  "screenshots": {},
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8L1/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8L1/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8L1/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8L1/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8L1/home2.png"
+  },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8L1/driver.jsonl",
-  "first_failure": {
-   "check": "lockdown",
-   "why": "ipad: lockdown never answered over its usbmuxd",
-   "excerpt": "AppleBCMWLAN::handleExtDTIMIoVarAsyncCallBack(): Error: cannot set extended dtim to 1 (1): operation was aborted\nAppleBCMWLANNetManager::handleStatUpdates(): WLC_GET_BSS_INFO Failed to get the RSSI, error operation was aborted\nAppleBCMWLAN::setAllMulticast(): allmulti() failed, error operation was aborted"
-  },
-  "triage": "(c) 4.3.5, keys 16/16, keybag from 8F190's ramdisk; recipe.boot kboot (SEPO 2, smoke #7: the iboot seal boot printed nothing in 300 s). The 09-28 'ramdisk.dmg no such file' predated recipe.keybag_ramdisk_from. Prepare through the app's path is green (ipad-43x, qemu-ios 920a3eeac4, IOP core): the sealing boot now ends on launchd's reboot (4.3 turns it_seal's RB_HALT into reboot(RB_AUTOBOOT); FirmwareKit one-shots pass -no-reboot like ipad1_seal.py, smoke #28) and waits out SpringBoard's 20 s exit timeout first (#27); the check boot opens the FTL. Boot lights, then lockdown never answers: the guest reports AppleUSBCableType Detached (4.2.1 on the same pin and tools: USBHost, and its row passes end to end), so the OTG gadget never connects (smoke #35, emulator side). Lockdown, activation, AFC, install, package, persist and shutdown are consequences of that (the driver ends the boot at the lockdown deadline, so no shutdown path ran; #27's slider stall not exercised). Evidence: matrix-results/k48ap-8L1/."
+  "triage": "(c) 4.3.5, keys 16/16, keybag from 8F190's ramdisk; recipe.boot kboot (SEPO 2, smoke #7; see 8K2). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Boot 2's power-off (not judged) was unconfirmed in the driver's 50 s: the panel went off, launchd never reached reboot(RB_HALT), and glishim logged 'libGFXShared registered no gldshim device' ~800 times (4.3.5 runs software CoreAnimation: the gld plugin lacks 4.3.5's entry points); smoke #37. An earlier run at host load ~150 panicked on boot 2 in the Wi-Fi stack (kernel abort, IO80211/IOSDIO, after the 60 s firmware-download watchdog): smoke #37. Evidence: matrix-results/k48ap-8L1/."
  },
  "n72ap-8A230m": {
   "version": "4.0",
