@@ -34,7 +34,7 @@ struct DeviceInstance { let id = UUID() }
   if let error { reply.resume(throwing: error) } else { reply.resume() }
  }
  // Not reached: this check queues media and removals only.
- let iosVersion = "3.1.3", guestArch = "armv6"
+ let iosVersion = "3.1.3", guestArch = "armv6", productType: String? = "iPod2,1"
  var installPipeline: InstallPipeline { get throws { InstallPipeline() } }
  func install(_ ipa: URL, placeholderRaised: Bool, progress: @escaping @Sendable (String) -> Void) async throws -> String { "" }
 }

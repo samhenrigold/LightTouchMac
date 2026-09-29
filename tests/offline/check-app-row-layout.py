@@ -8,7 +8,7 @@ def method(signature):
  a=source.index(signature)
  return source[a:source.index('\n    }',a)+6]
 fixture=r'''import Cocoa
-struct CatalogApp {var name:String; var bundleID:String?="test";var ipaID=1;var version:String?="1.0";var subtitle="Example Developer · 5 MB"}
+struct CatalogApp {var name:String; var bundleID:String?="test";var ipaID=1;var version:String?="1.0";var subtitle="Example Developer · 5 MB";var incompatibility:String?=nil}
 final class InstallJob {
  let deviceID=UUID()
  var failed=false,dismissed=false,isCancellable=true

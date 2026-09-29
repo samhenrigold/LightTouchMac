@@ -932,7 +932,8 @@ final class AppsInspectorViewController: NSViewController {
                     && self.searchField.stringValue.trimmingCharacters(in: .whitespaces) == query
             }
             do {
-                let results = try await CatalogClient.search(query)
+                let results = try await CatalogClient.search(query, device: self.emulator.productType,
+                                                             os: self.emulator.iosVersion)
                 guard !Task.isCancelled, current() else { return }
                 self.catalogResults = results
                 self.reloadTablePreservingSelection()
@@ -994,6 +995,7 @@ final class AppsInspectorViewController: NSViewController {
             return .installing
         }
         if let id = app.bundleID, apps.contains(where: { $0.id == id }) { return .installed }
+        if app.incompatibility != nil { return .unavailable }   // greyed, with the server's reason
         // Busy with our own install means the device is fine, just serialized —
         // more jobs may queue behind it. (The poll deliberately parks
         // deviceReachable at nil while device work runs, so canReachDevice
@@ -1067,7 +1069,7 @@ final class AppsInspectorViewController: NSViewController {
             guard let self else { return false }
             return self.emulator.canQueueInstall && self.catalogJob(for: app)?.isFinished != false
         }
-        let sheet = CatalogDetailsViewController(app: app, deviceOS: emulator.iosVersion, arch: emulator.guestArch,
+        let sheet = CatalogDetailsViewController(app: app, device: emulator.productType, deviceOS: emulator.iosVersion, arch: emulator.guestArch,
                                                  canInstall: canInstall) { [weak self] copy in
             guard let self, canInstall() else { return }
             AppInstaller.startCatalog(copy, with: self.emulator, presenting: self.view.window)
@@ -1347,7 +1349,7 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
             let app = catalogResults[row]
             let item = NSPasteboardItem()
             if let url = app.appURL { item.setString(url.absoluteString, forType: .URL) }
-            if let payload = try? JSONEncoder().encode(app) {
+            if app.incompatibility == nil, let payload = try? JSONEncoder().encode(app) {
                 item.setData(payload, forType: .ltmCatalogApp)
             }
             return item
@@ -1536,9 +1538,14 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         text.cell?.wraps = false
         text.allowsExpansionToolTips = true
         text.translatesAutoresizingMaskIntoConstraints = false
+        let incompatible = app.incompatibility != nil
+        if incompatible {
+            text.textColor = .secondaryLabelColor
+            image.alphaValue = 0.5
+        }
 
         let subtitle = NSTextField(labelWithString: app.subtitle)
-        subtitle.textColor = .secondaryLabelColor
+        subtitle.textColor = incompatible ? .tertiaryLabelColor : .secondaryLabelColor
         subtitle.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         subtitle.lineBreakMode = .byTruncatingTail
         subtitle.translatesAutoresizingMaskIntoConstraints = false

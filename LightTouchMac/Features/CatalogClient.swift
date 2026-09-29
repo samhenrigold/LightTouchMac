@@ -2,9 +2,12 @@
 //
 // The Legacy Store catalog (legacystore.app): search for apps the emulator can
 // run and download an archived copy to install. The server owns the
-// compatibility policy (armv6 slice, min-OS ≤ 3, installable, not
-// quarantined) — /api/emulator/apps only returns copies that should run here,
-// so this client is deliberately dumb: search, decode, download.
+// compatibility policy: every request names the device (`device`/`os`, API
+// 2.1) and /api/emulator/apps judges copies for it — slices, ARMv7 code under
+// an armv6 label, min OS, device family, capabilities. A server before 2.1
+// ignores the target and judges for an iPod touch 2G on 3.1.3, so the copy
+// check before a download stays. This client is deliberately dumb: search,
+// decode, download.
 //
 // Downloads follow the site's own posture: legacystore is a link, not a proxy.
 // download_url 302s to archive.org, which asks for politeness — an identifying
@@ -30,17 +33,49 @@ struct CatalogApp: Codable, Sendable {
     let iconURL: URL?
     let downloadURL: URL
     let appURL: URL?
+    /// API 2.1: the .ipa's own md5 (the archive's, the one IPALibrary keeps),
+    /// and the server's verdict for the requested device. Absent before 2.1.
+    var md5: String? = nil
+    var compat: Compat? = nil
+
+    struct Compat: Codable, Sendable {
+        let compatible: Bool
+        let reasons: [String]
+    }
 
     enum CodingKeys: String, CodingKey {
         case bundleID = "bundle_id", name, developer, version, minOS = "min_os"
         case size, ipaID = "ipa_id", iconURL = "icon_url"
-        case downloadURL = "download_url", appURL = "app_url"
+        case downloadURL = "download_url", appURL = "app_url", md5, compat
     }
 
-    /// "SEGA · 66 MB" — whichever parts the catalog knows. The min-OS stayed
-    /// out on purpose: the server already filtered to what runs here, so it
-    /// was noise on every row.
+    /// Why the server excluded this app for the device, in user words; nil
+    /// when it runs or the server didn't say. The first reason is the one shown.
+    var incompatibility: String? {
+        guard let compat, !compat.compatible else { return nil }
+        guard let reason = compat.reasons.first else { return "Not compatible with this device" }
+        if reason == "armv6_slice_contains_armv7_code" || (reason.hasPrefix("no_") && reason.hasSuffix("_slice")) {
+            return "Needs a newer processor"
+        }
+        if reason.hasPrefix("requires_ios_") { return "Requires iOS \(reason.dropFirst("requires_ios_".count))" }
+        if reason.hasPrefix("capability:!") || reason.hasSuffix("device_family") || reason == "family_not_requested" {
+            return "Not made for this device"
+        }
+        if reason.hasPrefix("capability:") { return "Needs hardware this device doesn’t have" }
+        return switch reason {
+        case "encrypted": "Encrypted — can’t open in Light Touch"
+        case "unavailable": "Download no longer available"
+        case "not_analyzed": "Not checked for compatibility yet"
+        default: "Not compatible with this device"
+        }
+    }
+
+    /// "SEGA · 66 MB" — whichever parts the catalog knows; for an app the
+    /// server excluded, its reason instead. The min-OS stayed out on purpose:
+    /// the server already filtered to what runs here, so it was noise on
+    /// every row.
     var subtitle: String {
+        if let incompatibility { return incompatibility }
         var parts: [String] = []
         if let developer { parts.append(developer) }
         if let size {
@@ -79,14 +114,27 @@ enum CatalogClient {
         return req
     }
 
-    /// Compatible apps matching `query`, best copy each, server-ranked. An
-    /// empty query is the storefront's default view: the server's suggested
-    /// (most-archived compatible) list.
-    static func search(_ query: String) async throws -> [CatalogApp] {
+    /// The device the server judges copies for: its model identifier
+    /// (catalog `product_type`) and iOS version. No device, no target: the
+    /// server's default (iPod touch 2G, 3.1.3). An iPad asks for no `family`,
+    /// so it sees iPhone and iPad apps alike.
+    private static func target(device: String?, os: String) -> [URLQueryItem] {
+        guard let device else { return [] }
+        return [URLQueryItem(name: "device", value: device), URLQueryItem(name: "os", value: os)]
+    }
+
+    /// Apps matching `query` for this device, best copy each, server-ranked.
+    /// An empty query is the storefront's default view: the server's
+    /// suggested (most-archived compatible) list, compatible apps only. A
+    /// query also lists the apps the device can't run (API 2.1), greyed with
+    /// the reason, so searching for one says why instead of nothing.
+    static func search(_ query: String, device: String? = nil, os: String = "3.1.3") async throws -> [CatalogApp] {
         var components = URLComponents(url: baseURL.appendingPathComponent("api/emulator/apps"),
                                        resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "limit", value: "50")]
-            + (query.isEmpty ? [] : [URLQueryItem(name: "q", value: query)])
+            + (query.isEmpty ? [] : [URLQueryItem(name: "q", value: query),
+                                     URLQueryItem(name: "incompatible", value: "include")])
+            + target(device: device, os: os)
         let (data, response) = try await URLSession.shared.data(for: request(components.url!))
         if let code = (response as? HTTPURLResponse)?.statusCode, code != 200 {
             throw CatalogError.badStatus(code)
@@ -95,13 +143,15 @@ enum CatalogClient {
         return try JSONDecoder().decode(Envelope.self, from: data).apps
     }
 
-    static func compatibleCopy(_ id: Int) async throws -> CatalogApp {
+    /// The copy, if it runs on this device (a 2.1 server 404s it otherwise).
+    static func compatibleCopy(_ id: Int, device: String? = nil, os: String = "3.1.3") async throws -> CatalogApp {
         var url = URLComponents(url: baseURL.appendingPathComponent("api/emulator/apps"),
                                 resolvingAgainstBaseURL: false)!
-        url.queryItems = [URLQueryItem(name: "ipa_id", value: String(id))]
+        url.queryItems = [URLQueryItem(name: "ipa_id", value: String(id))] + target(device: device, os: os)
         struct Envelope: Decodable { let apps: [CatalogApp] }
         let result: Envelope = try await get(url.url!)
-        guard result.apps.count == 1, let app = result.apps.first, app.ipaID == id else {
+        guard result.apps.count == 1, let app = result.apps.first, app.ipaID == id,
+              app.compat?.compatible != false else {
             throw CatalogError.invalidCopy("This copy is no longer available.")
         }
         return app
@@ -138,15 +188,26 @@ enum CatalogClient {
     /// disk — unless the library already holds the copy (its checksum), in
     /// which case the file is a clone of that, with no transfer. A failed or
     /// cancelled transfer owns no permanent scratch directory.
-    static func download(_ app: CatalogApp, deviceOS: String = "3.1.3", arch: String = "armv6",
+    static func download(_ app: CatalogApp, device: String? = nil, deviceOS: String = "3.1.3", arch: String = "armv6",
                          progress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> URL {
-        let current = try await compatibleCopy(app.ipaID)
-        let details = try await copyDetails(app.ipaID)
-        guard current.bundleID == app.bundleID, details.bundle_id == current.bundleID else {
+        let current = try await compatibleCopy(app.ipaID, device: device, os: deviceOS)
+        guard current.bundleID == app.bundleID else {
             throw CatalogError.invalidCopy("The archived copy no longer matches this app.")
         }
-        if let reason = details.unavailableReason(minimumOS: current.minOS, deviceOS: deviceOS, arch: arch) {
-            throw CatalogError.invalidCopy(reason)
+        // A 2.1 server judged this copy for this device and named its bytes:
+        // a copy the library already holds needs no second request. Otherwise
+        // the copy record is checked here, against this device.
+        let known = current.compat?.compatible == true ? current.md5.flatMap(IPALibrary.stored(md5:)) : nil
+        var details: CatalogCopy?
+        if known == nil {
+            let copy = try await copyDetails(app.ipaID)
+            guard copy.bundle_id == current.bundleID else {
+                throw CatalogError.invalidCopy("The archived copy no longer matches this app.")
+            }
+            if let reason = copy.unavailableReason(minimumOS: current.minOS, deviceOS: deviceOS, arch: arch) {
+                throw CatalogError.invalidCopy(reason)
+            }
+            details = copy
         }
         let dir = Bundled.workDirectory.appendingPathComponent("catalog-\(app.ipaID)-\(UUID().uuidString)",
                                                                isDirectory: true)
@@ -154,9 +215,9 @@ enum CatalogClient {
         let file = dir.appendingPathComponent("\(safeName.isEmpty ? "App" : safeName).ipa")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         do {
-            if let stored = details.md5.flatMap(IPALibrary.stored(md5:)) {
+            if let stored = known ?? details?.md5.flatMap(IPALibrary.stored(md5:)) {
                 try IPALibrary.clone(stored, to: file)
-            } else {
+            } else if let details {
                 let delegate = CatalogDownloadProgress(report: progress)
                 let (temporary, response) = try await URLSession.shared.download(for: request(current.downloadURL),
                                                                                 delegate: delegate)

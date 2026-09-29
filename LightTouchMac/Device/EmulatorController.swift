@@ -1593,6 +1593,8 @@ final class EmulatorController {
     /// iOS and architecture are checked against.
     private var catalogEntry: FirmwareCatalog.Entry? { FirmwareCatalog.bundled.entry(id: instance.firmware) }
     var iosVersion: String { catalogEntry?.version ?? "3.1.3" }
+    /// "iPod2,1": the model Legacy Store judges apps for, with iosVersion.
+    var productType: String? { catalogEntry?.productType }
     var guestArch: String { catalogEntry?.recipe?.guest?.arch ?? GuestPackage.arch(board: instance.board) ?? "armv6" }
     
     /// Cheap in-process check that the USB bridge sees the guest (bounded and

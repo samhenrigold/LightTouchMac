@@ -26,8 +26,8 @@ import Foundation
         try await copy().verifyDownload(file)
         precondition(try! copy().unavailableReason(minimumOS: "3.0") == nil)
         precondition(try! copy().unavailableReason(minimumOS: "3.2") != nil)
-        // An armv6-only copy is no good to an armv7 iPad; an armv7 copy is, and its version is the iPad's.
-        precondition(try! copy().unavailableReason(minimumOS: "3.0", deviceOS: "3.2.2", arch: "armv7") != nil)
+        // The iPad's armv7 CPU runs an armv6-only copy and an armv7 one; its version is the iPad's.
+        precondition(try! copy().unavailableReason(minimumOS: "3.0", deviceOS: "3.2.2", arch: "armv7") == nil)
         let armv7: [String: Any] = ["binary": ["install_status": "installable", "architectures": ["armv7"], "macho_min_os": "3.2", "device_family_macho": ["2"]]]
         precondition(try! copy(armv7).unavailableReason(minimumOS: "3.2", deviceOS: "3.2.2", arch: "armv7") == nil)
         precondition(try! copy(armv7).unavailableReason(minimumOS: "4.0", deviceOS: "3.2.2", arch: "armv7") != nil)

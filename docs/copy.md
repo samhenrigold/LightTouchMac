@@ -135,3 +135,18 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | failed | Couldn’t update the proxy. Try again. |
 | needsTap (no guest agent: the profile was offered) | Tap Install on the iPod to trust the proxy certificate. |
 | Settings ▸ Storage | Devices (Base · Data · Snapshot), IPSWs (Downloaded / Imported IPSW), Caches and logs, Library (N IPAs · size · size on no device) |
+
+### Store rows the device can't run (`CatalogApp.incompatibility`, Legacy Store `compat.reasons`)
+
+A search lists them greyed, with the first reason as the subtitle and no Install; the suggested list leaves them out.
+
+| Reason | Words |
+|---|---|
+| no runnable slice, or an armv6 slice that is ARMv7 code | Needs a newer processor (copy check: This copy needs a newer processor than this device has.) |
+| requires_ios_x.y | Requires iOS x.y |
+| device family, capability:!key | Not made for this device |
+| capability:key | Needs hardware this device doesn’t have |
+| encrypted | Encrypted — can’t open in Light Touch |
+| unavailable | Download no longer available |
+| not_analyzed | Not checked for compatibility yet |
+| anything else | Not compatible with this device |

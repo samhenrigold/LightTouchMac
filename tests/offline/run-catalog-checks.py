@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
  let browseButton=NSButton(), installButton=NSButton(), retryButton=NSButton(), resumeButton=NSButton()
  let emptyActions=NSStackView(), banner=NSTextField(labelWithString:"")
  var bannerHeight:NSLayoutConstraint?
- final class Emulator { var canReachDevice = true, canQueueInstall = true, isPaused = false }
+ final class Emulator { var canReachDevice = true, canQueueInstall = true, isPaused = false, productType: String? = "iPod2,1", iosVersion = "3.1.3" }
  let emulator = Emulator()
  var selectedApps: [App] { searching ? [] : tableView.selectedRowIndexes.compactMap { visibleApps.indices.contains($0) ? visibleApps[$0] : nil } }
  var apps: [App] { visibleApps }

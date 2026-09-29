@@ -37,7 +37,7 @@ extension DeviceInstance {
  func uninstall(_ id: String) async throws { removed.append(id) }
  func reportConnectionFailure(_ error: Error, operation: String) {}
  // Not reached: this check queues removals only.
- let profile = DeviceProfile.iPodTouch2G, iosVersion = "3.1.3", guestArch = "armv6"
+ let profile = DeviceProfile.iPodTouch2G, iosVersion = "3.1.3", guestArch = "armv6", productType: String? = "iPod2,1"
  var installPipeline: InstallPipeline { get throws { InstallPipeline() } }
  func install(_ ipa: URL, placeholderRaised: Bool, progress: @escaping @Sendable (String) -> Void) async throws -> String { "" }
  func importMedia(_ media: PreparedMedia, progress: @escaping @Sendable (Double) -> Void, willCommit: () -> Void) async throws {}

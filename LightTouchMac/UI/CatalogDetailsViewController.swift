@@ -4,8 +4,8 @@ import Cocoa
 /// rechecked by the emulator endpoint when the user chooses a copy.
 final class CatalogDetailsViewController: NSViewController {
     private let app: CatalogApp
-    /// The device's iOS version and executable slice (its catalog entry).
-    private let deviceOS: String, arch: String
+    /// The device's model, iOS version and executable slice (its catalog entry).
+    private let device: String?, deviceOS: String, arch: String
     private let install: (CatalogApp) -> Void
     private let canInstall: () -> Bool
     private let picker = NSPopUpButton()
@@ -16,9 +16,10 @@ final class CatalogDetailsViewController: NSViewController {
     private var selectionTask: Task<Void, Never>?
     private var selected: CatalogApp?
 
-    init(app: CatalogApp, deviceOS: String = "3.1.3", arch: String = "armv6",
+    init(app: CatalogApp, device: String? = nil, deviceOS: String = "3.1.3", arch: String = "armv6",
          canInstall: @escaping () -> Bool, install: @escaping (CatalogApp) -> Void) {
         self.app = app
+        self.device = device
         self.deviceOS = deviceOS
         self.arch = arch
         self.canInstall = canInstall
@@ -76,7 +77,7 @@ final class CatalogDetailsViewController: NSViewController {
                 versions = records.flatMap { version in
                     version.copies.filter { copy in
                         copy.ipa_id == String(self.app.ipaID) || (
-                            copy.install_status == "installable" && copy.architectures?.contains(self.arch) == true
+                            copy.install_status == "installable" && CatalogCopy.runs(copy.architectures, on: self.arch)
                             && CatalogCopy.osIssue(version.minimum_os_version, deviceOS: self.deviceOS) == nil
                             && CatalogCopy.osIssue(copy.macho_min_os, deviceOS: self.deviceOS) == nil)
                     }.map { (version, $0) }
@@ -129,7 +130,7 @@ final class CatalogDetailsViewController: NSViewController {
                     issue ?? "\(arch.uppercased()) candidate for iOS \(deviceOS); not runtime-tested."
                 ].joined(separator: "\n")
                 guard issue == nil else { return }
-                let candidate = try await CatalogClient.compatibleCopy(id)
+                let candidate = try await CatalogClient.compatibleCopy(id, device: device, os: deviceOS)
                 try Task.checkCancellation()
                 guard candidate.bundleID == app.bundleID else {
                     throw CatalogError.invalidCopy("This copy belongs to a different app.")

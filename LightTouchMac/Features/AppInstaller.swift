@@ -280,7 +280,7 @@ enum AppInstaller {
                 }
             }
             do {
-                let ipa = try await CatalogClient.download(app, deviceOS: emulator.iosVersion, arch: emulator.guestArch) { fraction in
+                let ipa = try await CatalogClient.download(app, device: emulator.productType, deviceOS: emulator.iosVersion, arch: emulator.guestArch) { fraction in
                     guard !job.isFinished, !job.isCancelled, job.downloadProgress != nil else { return }
                     let percent = fraction < 0 ? -1 : Int(fraction * 100)
                     let previousPercent = job.downloadProgress.map { $0 < 0 ? -1 : Int($0 * 100) }

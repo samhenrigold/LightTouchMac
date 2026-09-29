@@ -16,6 +16,9 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
         let architectures: [String]?
         let macho_min_os: String?
         let device_family_macho: [String]?
+        /// API 2.1: the armv6 slice's instructions are really ARMv7 (a
+        /// cracked release that relabelled its armv7 slice); nil = not scanned.
+        let armv7_code: Bool?
     }
 
     /// `deviceOS`: the device's iOS version (its catalog entry).
@@ -35,7 +38,13 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
             ? "Requires iOS \(value); this device runs iOS \(deviceOS)." : nil
     }
 
-    /// `arch`: the device's executable slice (armv6 on the iPod touch 2G, armv7 on the iPad).
+    /// Whether a device whose CPU is `arch` has a slice here it can execute:
+    /// an armv7 CPU (the iPad) runs armv6 slices too, as Legacy Store judges.
+    static func runs(_ architectures: [String]?, on arch: String) -> Bool {
+        architectures?.contains { $0 == arch || (arch == "armv7" && $0 == "armv6") } == true
+    }
+
+    /// `arch`: the device's CPU (armv6 on the iPod touch 1G/2G, armv7 on the iPad).
     func unavailableReason(minimumOS: String?, deviceOS: String = "3.1.3", arch: String = "armv6") -> String? {
         guard available else { return "This archived download is no longer available." }
         guard let binary else { return "This copy has not been analyzed for compatibility." }
@@ -44,8 +53,10 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
                 ? "This copy is encrypted and can’t launch in Light Touch."
                 : "This copy has not been classified as installable."
         }
-        guard binary.architectures?.contains(arch) == true else {
-            return "This copy has no \(arch.uppercased()) executable for this device."
+        // Also an armv6 slice that is really ARMv7 code (API 2.1's scan): an
+        // armv7 CPU runs it, an armv6 one can't.
+        guard Self.runs(binary.architectures, on: arch), arch != "armv6" || binary.armv7_code != true else {
+            return "This copy needs a newer processor than this device has."
         }
         if let family = binary.device_family_macho, !family.isEmpty, !family.contains("1"), !family.contains("2") {
             return "This copy does not support iPhone, iPod touch or iPad."

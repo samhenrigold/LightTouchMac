@@ -18,7 +18,7 @@ import Foundation
 struct CatalogApp { let bundleID: String?, name: String, ipaID: Int, iconURL: URL?, size: Int64? }
 enum CatalogError: Error { case invalidCopy(String) }
 enum CatalogClient {
-    static func download(_ app: CatalogApp, deviceOS: String, arch: String,
+    static func download(_ app: CatalogApp, device: String?, deviceOS: String, arch: String,
                          progress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> URL {
         throw CatalogError.invalidCopy("offline")
     }
