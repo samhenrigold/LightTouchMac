@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Preserve Safari's request and the origin's status through the native proxy."""
 from pathlib import Path
-import http.server, subprocess, tempfile, threading
+import http.server, subprocess, sys, tempfile, threading
 root = Path(__file__).resolve().parents[1]
-source = root.parent / 'qemu-ios/contrib/it-webproxy/itwebproxy.c'
+sys.path.insert(0, str(root / 'scripts'))
+import sources  # the pinned checkouts (build-support/sources.json)
+source = sources.path('qemu-ios') / 'contrib/it-webproxy/itwebproxy.c'
 legacy_agent = ('Mozilla/5.0 (iPod; U; CPU iPhone OS 3_1_3 like Mac OS X; en-us) '
                 'AppleWebKit/528.18 (KHTML, like Gecko) Version/4.0 Mobile/7E18 Safari/528.16')
 requests = []

@@ -57,6 +57,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path.home()
+sys.path.insert(0, str(ROOT / "scripts"))
+import sources  # the pinned checkouts (build-support/sources.json)
 TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
 APP_SOURCES = ["DeviceServices", "DeviceFiles", "IMobileDevice", "DeviceProfile", "DeviceProfile+Display",
                "NativeLogging", "StorageLocations", "DeviceStateStorage", "GuestServices", "GuestPackage",
@@ -128,7 +130,7 @@ def build(args, out):
                    check=True, stdout=open(out / "swiftc.log", "w"), stderr=subprocess.STDOUT)
     if args.helper:
         return Path(args.helper)
-    qemu = os.environ.get("QEMU_IOS_DIR", str(HOME / "Developer/qemu-ios-ipad1"))
+    qemu = sources.path("qemu-ios")
     r = subprocess.run(["xcodebuild", "-project", ROOT / "LightTouchMac.xcodeproj", "-target", "LightTouchDevice",
                         "-configuration", "Debug", f"SYMROOT={out}/xcode", f"QEMU_IOS_DIR={qemu}", "build"],
                        stdout=open(out / "xcodebuild.log", "w"), stderr=subprocess.STDOUT)
@@ -142,17 +144,16 @@ def main():
     ap.add_argument("--ipad-device", type=Path)
     ap.add_argument("--guest", action="store_true", help="the no-shell guest-services scenario on two iPods")
     ap.add_argument("--ipod-device", type=Path, help="--guest: a fresh device.py iPod (nand/, nor.bin, iBoot.bin, gid-blobs.bin)")
-    ap.add_argument("--itpack", type=Path, default=HOME / "Developer/qemu-ios-ipad1/build/guest-package/armv6.itpack")
+    ap.add_argument("--itpack", type=Path, default=sources.path("qemu-ios") / "build/guest-package/armv6.itpack")
     ap.add_argument("--guest-tools", type=Path, help="--guest: a flat build-guest-tools.sh guest-tools directory "
                     "(it_agent, it_typein.dylib, MBXGLEngine, itphoto); default: the qemu-ios checkout's contrib binaries")
-    ap.add_argument("--contrib", type=Path, default=HOME / "Developer/qemu-ios-ipad1/contrib")
+    ap.add_argument("--contrib", type=Path, default=sources.path("qemu-ios") / "contrib")
     ap.add_argument("--time-zone", default="Asia/Tokyo")
     ap.add_argument("--helper")
-    ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB",
-                                                      str(HOME / "Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib")))
+    ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(sources.qemu_build() / "libqemu-arm.dylib")))
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
-    ap.add_argument("--usbmuxd", default=str(HOME / "Developer/usbmuxd-qemu/usbmuxd/src/usbmuxd"))
-    ap.add_argument("--ipa", type=Path, default=HOME / "Developer/qemu-ios-ipad1/contrib/it-harness/build/Harness.ipa")
+    ap.add_argument("--usbmuxd", default=str(sources.path("usbmuxd") / "src/usbmuxd"))
+    ap.add_argument("--ipa", type=Path, default=sources.path("qemu-ios") / "contrib/it-harness/build/Harness.ipa")
     ap.add_argument("--bundle-id", default="com.qemuios.harness")
     ap.add_argument("--work", type=Path)
     ap.add_argument("--single", type=Path, help="one prepared base (firmwarekit create output)")

@@ -10,10 +10,10 @@
 #                             scripts/regress-app.sh
 #
 # Inputs, resolved here once and otherwise the checks' own defaults:
-#   QEMU_IOS_DIR     the qemu-ios checkout (default ~/Developer/qemu-ios-ipad1, what the newer checks use);
+#   QEMU_IOS_DIR     the qemu-ios checkout (default: the pin, scripts/sources.py qemu-ios);
 #                    also FIRMWAREKIT_QEMU_IOS for swift test and --qemu-ios for check-guest-package
 #   LTM_QEMU_DYLIB   the emulator dylib the helper is linked against (default
-#                    $QEMU_IOS_DIR/build-native14/qemu-build/libqemu-arm.dylib, Shared.xcconfig's QEMU_BUILD_DIR)
+#                    $(scripts/sources.py qemu-build)/libqemu-arm.dylib, Shared.xcconfig's QEMU_BUILD_DIR)
 #   LTM_IPAD_DEVICE  a device.py iPad (default ~/Developer/qemu-ios-files/ipad1/repro/default-iboot, the
 #                    qemu-ios harness's default device)
 #   LTM_IPOD_DEVICE  --guest: a fresh device.py 7E18 iPod with a baked seed package (no default; make one with
@@ -30,9 +30,9 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TIER="${1:---quick}"
 case "$TIER" in --quick|--full) ;; *) sed -n '2,31p' "$0"; exit 2 ;; esac
-export QEMU_IOS_DIR="${QEMU_IOS_DIR:-$HOME/Developer/qemu-ios-ipad1}"
+export QEMU_IOS_DIR="${QEMU_IOS_DIR:-$(python3 "$ROOT/scripts/sources.py" qemu-ios)}"
 export FIRMWAREKIT_QEMU_IOS="${FIRMWAREKIT_QEMU_IOS:-$QEMU_IOS_DIR}"
-LTM_QEMU_DYLIB="${LTM_QEMU_DYLIB:-$QEMU_IOS_DIR/build-native14/qemu-build/libqemu-arm.dylib}"
+LTM_QEMU_DYLIB="${LTM_QEMU_DYLIB:-$(python3 "$ROOT/scripts/sources.py" qemu-build)/libqemu-arm.dylib}"
 LTM_IPAD_DEVICE="${LTM_IPAD_DEVICE:-$HOME/Developer/qemu-ios-files/ipad1/repro/default-iboot}"
 LTM_IPOD_DEVICE="${LTM_IPOD_DEVICE:-}"
 LTM_ITPACK="${LTM_ITPACK:-$QEMU_IOS_DIR/build/guest-package/armv6.itpack}"

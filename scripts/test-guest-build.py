@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Check guest build isolation and failure publication with a fixture toolchain."""
-import hashlib
+"""build-guest-tools.sh is a thin caller of qemu-ios contrib/export-guest-artifacts.sh: it resolves the pinned
+checkout (QEMU_IOS_DIR overrides), checks the SDK, refuses an existing output directory and a checkout without
+the export, hands the directory to the export, and publishes nothing itself. A fixture export stands in for
+the real one (which needs the armv6 toolchain and both SDKs; the release build runs it)."""
 import json
 import os
 from pathlib import Path
@@ -9,71 +11,33 @@ import tempfile
 
 
 SCRIPT = Path(__file__).with_name("build-guest-tools.sh")
-PAYLOADS = {
-    "it-gles": ["MBXGLEngine"],
-    "it-instprogress": ["sbdlicon"],
-    "it-halt": ["ithalt"],
-    "it-agent": ["it_agent", "it_typein.dylib", "com.qemu.it-agent.plist"],
-    "it-status": ["itstatus"],
-    "it-media": ["itmedia", "itphoto"],
-    "it-proxy": ["itproxy", "ittrust"],
-    "it-orientation": ["itorient"],
-}
-
-
-def snapshot(directory):
-    return {
-        str(path.relative_to(directory)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in directory.rglob("*") if path.is_file()
-    }
+FIXTURE_EXPORT = r'''#!/bin/bash
+set -eu
+OUT="$1"
+[ ! -e "$OUT" ] || { echo "use a new output directory" >&2; exit 1; }
+[ -n "${ARMV6_SDK:-}" ] || { echo "no ARMV6_SDK" >&2; exit 1; }
+[ "$#" -eq 1 ] || { echo "unexpected arguments: $*" >&2; exit 1; }
+if [ "${EXPORT_FAIL:-}" = 1 ]; then echo "intentional failure" >&2; exit 7; fi
+mkdir -p "$OUT/guest-tools" "$OUT/ipad-guest-tools"
+printf rebuilt > "$OUT/guest-tools/it_agent"
+printf rebuilt > "$OUT/ipad-guest-tools/it_pbd"
+printf '{"schema": 1, "files": {"guest-tools/it_agent": "x", "ipad-guest-tools/it_pbd": "x"}}\n' > "$OUT/manifest.json"
+'''
 
 
 with tempfile.TemporaryDirectory(prefix="lighttouch guest test ") as directory:
     root = Path(directory)
     qemu = root / "qemu source"
+    (qemu / "contrib").mkdir(parents=True)
+    export = qemu / "contrib/export-guest-artifacts.sh"
+    export.write_text(FIXTURE_EXPORT)
     sdk = root / "old sdk"
-    for name in ("usr/include/stdio.h", "usr/lib/libSystem.dylib"):
-        path = sdk / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("fixture\n")
-    tools = root / "bin"
-    tools.mkdir()
-    for tool in ("xcrun", "ldid"):
-        path = tools / tool
-        path.write_text("#!/bin/sh\nexit 0\n")
-        path.chmod(0o755)
-    toolchain = qemu / "contrib/armv6-toolchain"
-    toolchain.mkdir(parents=True)
-    fixture_toolchain = '''cc6() {
-    if grep -q 'intentional failure' "$1"; then
-        echo 'intentional failure' >&2
-        return 7
-    fi
-    printf 'object\\n' > "$2"
-}
-link6() { printf 'rebuilt\\n' > "$2"; }
-'''
-    (toolchain / "armv6.sh").write_text(fixture_toolchain)
-    for component, names in PAYLOADS.items():
-        source = qemu / "contrib" / component
-        source.mkdir()
-        for name in names:
-            if name.endswith(".plist"):
-                (source / name).write_text("fixture plist\n")
-                continue
-            stem = {"MBXGLEngine": "mbxshim", "it_typein.dylib": "it_typein"}.get(name, name)
-            (source / f"{stem}.c").write_text("fixture source\n")
-            (source / name).write_text("stale binary\n")
-        (source / "build.sh").write_text("echo 'development probes should not run' >&2\nexit 8\n")
-    (qemu / "contrib/it-gles/genstubs.py").write_text(
-        "from pathlib import Path\nimport sys\nPath(sys.argv[1]).write_text('generated')\n")
-    before = snapshot(qemu)
-    environment = dict(os.environ, QEMU_IOS_DIR=str(qemu), ARMV6_SDK=str(sdk),
-                       LDID=str(tools / "ldid"), PATH=f"{tools}:{os.environ['PATH']}")
+    (sdk / "usr/lib").mkdir(parents=True)
+    (sdk / "usr/lib/libSystem.dylib").write_text("fixture\n")
+    environment = dict(os.environ, QEMU_IOS_DIR=str(qemu), ARMV6_SDK=str(sdk))
 
     def build(work, *, error=None, env=None):
-        result = subprocess.run(["bash", str(SCRIPT), str(work)],
-                                env=env or environment, capture_output=True, text=True)
+        result = subprocess.run(["bash", str(SCRIPT), str(work)], env=env or environment, capture_output=True, text=True)
         if error:
             assert result.returncode != 0 and error in result.stderr, result
         else:
@@ -81,46 +45,22 @@ link6() { printf 'rebuilt\\n' > "$2"; }
         return result
 
     output = root / "build output"
-    build(output)
-    expected = {name for names in PAYLOADS.values() for name in names}
-    assert {path.name for path in (output / "guest-tools").iterdir()} == expected
-    assert all(path.read_text() == ("fixture plist\n" if path.suffix == ".plist" else "rebuilt\n")
-               for path in (output / "guest-tools").iterdir())
-    record = json.loads((output / "guest-tools.json").read_text())
-    assert {entry["path"] for entry in record["outputs"]} == expected
-    for entry in record["outputs"]:
-        assert entry["sha256"] == hashlib.sha256((output / "guest-tools" / entry["path"]).read_bytes()).hexdigest()
-    assert record["builder"]["sha256"] == hashlib.sha256(SCRIPT.read_bytes()).hexdigest()
-    assert snapshot(qemu) == before, "build changed its source checkout"
+    result = build(output)
+    assert (output / "guest-tools/it_agent").read_text() == "rebuilt"
+    assert (output / "ipad-guest-tools/it_pbd").read_text() == "rebuilt"
+    assert json.loads((output / "manifest.json").read_text())["schema"] == 1
+    assert f"LTM_GUEST_TOOLS_DIR={output}/guest-tools".replace(" ", "\\ ") in result.stdout, result.stdout
     build(output, error="use a new build directory")
-    assert snapshot(qemu) == before
 
-    # A compile failure must retain logs, publish no usable output directory, and
-    # leave the source checkout (including its old outputs) untouched.
     failed = root / "failed build"
-    media_source = qemu / "contrib/it-media/itmedia.c"
-    media_source.write_text("intentional failure\n")
-    before_failure = snapshot(qemu)
-    build(failed, error="intentional failure")
+    build(failed, error="intentional failure", env=dict(environment, EXPORT_FAIL="1"))
     assert not (failed / "guest-tools").exists()
-    assert (failed / "logs/it-media.log").exists()
-    assert snapshot(qemu) == before_failure
 
-    # Even a successful recipe that forgets an output cannot reuse a stale
-    # tracked binary from the checkout.
-    media_source.write_text("fixture source\n")
-    (toolchain / "armv6.sh").write_text(fixture_toolchain + '''
-link6() {
-    [ "${2##*/}" = ithalt ] && return 0
-    printf 'rebuilt\\n' > "$2"
-}
-''')
-    missing = root / "missing payload"
-    build(missing, error="build did not produce required payload")
-    assert not (missing / "guest-tools").exists()
+    build(root / "no sdk", error="set ARMV6_SDK", env=dict(environment, ARMV6_SDK=""))
+    build(root / "bad sdk", error="missing SDK input", env=dict(environment, ARMV6_SDK=str(root)))
+    export.unlink()
+    build(root / "no export", error="no contrib/export-guest-artifacts.sh")
+    for name in ("no sdk", "bad sdk", "no export"):
+        assert not (root / name).exists(), f"preflight failure created {name}"
 
-    no_sdk = root / "missing sdk build"
-    build(no_sdk, error="set ARMV6_SDK", env=dict(environment, ARMV6_SDK=""))
-    assert not no_sdk.exists(), "preflight failure created a build directory"
-
-print("PASS: payloads and provenance, source isolation, fresh output guard, failure publication, stale output rejection, explicit SDK")
+print("PASS: the thin caller resolves the checkout and SDK, hands a fresh directory to the export, and publishes nothing on failure")

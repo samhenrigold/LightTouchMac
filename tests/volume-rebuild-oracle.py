@@ -19,6 +19,8 @@ Runs in the foreground; everything it starts is stopped before it returns.
 import argparse, hashlib, importlib.util, json, os, random, shutil, signal, subprocess, sys, time, zipfile
 
 HOME = os.path.expanduser("~")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import sources  # the pinned checkouts (build-support/sources.json)
 
 
 def sha256(p):
@@ -76,8 +78,8 @@ def main():
     ap.add_argument("--ipa", action="append", default=[])
     ap.add_argument("--kill", action="store_true", help="SIGKILL QEMU instead of a clean shutdown")
     ap.add_argument("--walk-only", action="store_true", help="boot OUT's overlay again: no pushes (--ipa still installs)")
-    ap.add_argument("--qemu-ios", default=f"{HOME}/Developer/qemu-ios-ipad1")
-    ap.add_argument("--usbmuxd", default=f"{HOME}/Developer/usbmuxd-qemu-ipad1-net/src/usbmuxd")
+    ap.add_argument("--qemu-ios", default=str(sources.path("qemu-ios")))
+    ap.add_argument("--usbmuxd", default=str(sources.path("usbmuxd") / "src/usbmuxd"))
     a = ap.parse_args()
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)

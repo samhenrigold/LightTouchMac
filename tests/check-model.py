@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Native N72 rendering and production DisplayView input. Uses a disposable app, no QEMU."""
 from pathlib import Path
-import os, subprocess, tempfile
+import os, subprocess, sys, tempfile
 root=Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root/"scripts"))
+import sources as pins  # the pinned checkouts (build-support/sources.json)
 model_source = r'''import AppKit
 import RealityKit
 func - (a:CGPoint,b:CGPoint)->CGPoint { CGPoint(x:a.x-b.x,y:a.y-b.y) }
@@ -263,7 +265,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
     (app/"Resources/N72.usdz").symlink_to(asset)
     (app/"Resources/N72Studio.realityenv").symlink_to(root/"LightTouchMac/N72Studio.realityenv")
     sources=root/"LightTouchMac"
-    qemu=Path(os.environ.get("QEMU_SRC", str(root.parent/"qemu-ios")))
+    qemu=Path(os.environ["QEMU_SRC"]) if os.environ.get("QEMU_SRC") else pins.path("qemu-ios")
     attitude_header=qemu/"include/hw/arm/ipod-attitude.h"
     if not attitude_header.is_file():
         raise SystemExit("Set QEMU_SRC to the QEMU source tree for the production accelerometer comparison")
