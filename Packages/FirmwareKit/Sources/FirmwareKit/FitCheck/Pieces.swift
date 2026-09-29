@@ -52,4 +52,22 @@ extension FitCheck {
         guard k.range(of: cString("LinkStatus")) != nil else { return Fit(piece, fits: false, "the kernel names no LinkStatus property (it_ethlink raises the link through it)") }
         return Fit(piece, fits: true, "the kernel has \(classes.joined(separator: ", ")) and names LinkStatus")
     }
+
+    // MARK: it_prefs
+
+    /// it_prefs' settings (contrib/it-prefs SETTINGS): the key and the binary that reads it. The iPod build
+    /// (IT_PREFS_TIP_ONLY), and the bake that stands in for it on 2.x/3.0, set only the first.
+    public static let itPrefs = [("SBDidShowReorderText", "System/Library/CoreServices/SpringBoard.app/SpringBoard"),
+                                 ("AppleLocationServer", "usr/libexec/locationd"), ("AppleLocationServerRequiresCert", "usr/libexec/locationd")]
+
+    /// One Fit per setting: the reader names the key, by it_prefs' own rule (the key and its NUL anywhere in the
+    /// file), so the prepare knows what it_prefs will set at boot instead of finding out on the guest console.
+    public static func prefs(_ fw: Firmware, _ settings: [(String, String)]) -> [Fit] {
+        settings.map { key, reader in
+            let piece = "it_prefs \(key)", name = (reader as NSString).lastPathComponent
+            guard fw.resolve(reader) != nil else { return Fit(piece, fits: false, "no \(reader) on this firmware") }
+            return fw.file(reader, contains: Data((key + "\0").utf8)) ? Fit(piece, fits: true, "\(name) names \(key)")
+                : Fit(piece, fits: false, "\(name) does not name \(key): the setting reaches nothing")
+        }
+    }
 }

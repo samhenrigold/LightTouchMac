@@ -169,6 +169,7 @@ public enum SystemEdits {
             let quiet = try fit.check(FitCheck.msmQuiet(fw, program: try stockProgram(m, msmJob, label: "com.apple.mobile.storage_mounter"),
                                                         dylib: Data(contentsOf: try helper(msm.name))), required: false)
             if !quiet { tools.removeAll { $0.name == msm.name } }
+            for f in FitCheck.prefs(fw, FitCheck.itPrefs) { try fit.check(f, required: false, outcome: "kept: it_prefs skips the key at boot") }
             if o.usbNet { try fit.check(FitCheck.usbEthernet(fw, path: usbEthPath), required: false, outcome: "kept: the link stays down and en1 unpinned") }
             for t in tools where t.name != msm.name {
                 try fit.check(FitCheck.loads(t.name, Data(contentsOf: try helper(t.name)), on: fw), required: true)

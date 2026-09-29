@@ -258,8 +258,11 @@ final class N72Board: Board {
             guard fm.fileExists(atPath: u.path) else { throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)") }
             return try Data(contentsOf: u)
         }
-        let toolsFit = try Self.guestToolsFit(FitCheck.Firmware(root: m, arch: arch), helpers: helpers)
+        let fw = FitCheck.Firmware(root: m, arch: arch)
+        let toolsFit = try Self.guestToolsFit(fw, helpers: helpers)
         let tools = try c.fit.check(toolsFit, required: false)
+        // the reorder tip's key: set by it_prefs at boot (tools) or baked below; either way only if SpringBoard reads it
+        try c.fit.check(FitCheck.prefs(fw, [FitCheck.itPrefs[0]])[0], required: false, outcome: tools ? "kept: it_prefs skips the key at boot" : "not baked")
         var report: [String: Any] = [:]
         // ipod2g_device.gli_engine: the one MBXGLEngine (it reads the dispatch layout at load) wherever the armv6
         // shared cache exists; the sanity line says what it will find

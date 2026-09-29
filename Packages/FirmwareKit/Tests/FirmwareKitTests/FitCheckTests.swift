@@ -185,6 +185,7 @@ enum FitFixture {
             let r = try SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: parts[0].count * 4096, dataBytes: Int64(parts[1].count) * 4096,
                                              options: .init(recipe: recipe), helpers: helpers, kernel: kernel, fit: log)
             #expect(log.fits.contains { $0.piece.hasPrefix("USB Ethernet") && $0.fits }, "\(log.fits.map(\.piece))")
+            #expect(log.fits.filter { $0.piece.hasPrefix("it_prefs ") && $0.fits }.count == 3)
             let sv = try HFSPlusVolume(r.system)
             #expect((try? sv.record(at: SystemEdits.Helpers.tools[3].path)) == nil)
             let job = try #require(PropertyListSerialization.propertyList(from: sv.contents(sv.record(at: SystemEdits.msmJob)), format: nil) as? [String: Any])
@@ -245,6 +246,7 @@ enum FitFixture {
             #expect((report["guest_tools"] as? String)?.hasPrefix("omitted: it_agent") == true, "\(report["guest_tools"] ?? "-")")
             #expect(events.warnings.contains { $0.hasPrefix("guest tools (") && $0.contains("_rebooz2") }, "\(events.warnings)")
             #expect(c.fit.fits.contains { $0.piece.hasPrefix("guest tools") && !$0.fits })
+            #expect(c.fit.fits.contains { $0.piece == "it_prefs SBDidShowReorderText" && $0.fits })
         }
     }
 
@@ -266,5 +268,19 @@ enum FitFixture {
             #expect(!broken.fits && broken.proof.contains("AppleSynopsysOTGDevice"), "\(broken.proof)")
         }
         #expect(!FitCheck.usbEthernet(FitCheck.Firmware(root: root, arch: "armv7"), path: SystemEdits.usbEthPath).fits)
+    }
+
+    /// it_prefs' keys are named by their readers on the iPad (3.2.2 to 5.1.1: all three) and the reorder tip on every
+    /// iPod build at hand; 2.1.1 and 3.1.3 locationd name neither location key, 4.2.1 both (the iPod sets only the tip).
+    @Test func prefsKeysNamedByTheirReaders() throws {
+        let readers = Set(FitCheck.itPrefs.map(\.1))
+        for (id, fits) in [("k48ap-7B500", [true, true, true]), ("k48ap-8C148", [true, true, true]), ("k48ap-9B206", [true, true, true]),
+                           ("n72ap-5F138", [true, false, false]), ("n72ap-7E18", [true, false, false]), ("n72ap-8C148", [true, true, true])] {
+            try Oracle.withTemp { dir in
+                guard let v = try FitFixture.volume(id, Array(readers), in: dir) else { return }
+                let f = FitCheck.prefs(FitCheck.Firmware(root: v, arch: FitFixture.arch(id)), FitCheck.itPrefs)
+                #expect(f.map(\.fits) == fits, "\(id): \(f.map(\.proof))")
+            }
+        }
     }
 }
