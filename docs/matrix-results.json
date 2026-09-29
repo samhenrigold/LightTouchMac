@@ -565,11 +565,11 @@
   "version": "4.2.1",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-29T21:42:43+00:00",
+  "when": "2026-09-29T23:09:38+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ssl3-1g/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-1g-sigill/build/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-5x-halt-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-5x-halt/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/export-1/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -578,7 +578,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 135.1,
+   "seconds": 103.2,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -593,7 +593,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/tmp/ssl3-1g/mscratch/k48ap-8C148/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mscratch/k48ap-8C148/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -606,11 +606,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 58.1
+    "seconds": 29.1
    },
    "lockdown": {
     "ok": true,
-    "seconds": 2.4,
+    "seconds": 0.8,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -629,7 +629,7 @@
    },
    "install": {
     "ok": true,
-    "seconds": 4,
+    "seconds": 2,
     "attempt": 1,
     "apps": [
      "com.qemuios.harness"
@@ -649,31 +649,32 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 44.5,
-     "lockdown": 2.1
+     "lit": 50.2,
+     "lockdown": 0.9
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 11.7,
+    "seconds": 16.3,
     "reason": "The iPad stopped.",
-    "second": 15.5
+    "second": 16.5
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/ssl3-1g/results/k48ap-8C148/lock.png",
-   "home": "/tmp/ssl3-1g/results/k48ap-8C148/home.png",
-   "installed": "/tmp/ssl3-1g/results/k48ap-8C148/installed.png",
-   "powerdown1-7s": "/tmp/ssl3-1g/results/k48ap-8C148/powerdown1-7s.png",
-   "lock2": "/tmp/ssl3-1g/results/k48ap-8C148/lock2.png",
-   "home2": "/tmp/ssl3-1g/results/k48ap-8C148/home2.png",
-   "powerdown2-7s": "/tmp/ssl3-1g/results/k48ap-8C148/powerdown2-7s.png",
-   "powerdown2-12s": "/tmp/ssl3-1g/results/k48ap-8C148/powerdown2-12s.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/powerdown2-12s.png"
   },
-  "events": "/tmp/ssl3-1g/results/k48ap-8C148/driver.jsonl",
-  "triage": "ssl3-1g 09-29 rerun (qemu-ios ipod-1g-sigill OTG OUT fix; the bundled libimobiledevice with the SSLv3 patch via --frameworks): every check passes. Before: (a) control for the 4.3.x rows on qemu-ios aec1594bf7: unchanged, end to end (it read the same 2.5 V brick ID before and still said USBHost, only because 4.2.1's 1 A window also wants D+ <= 2340 mV; now 0 V). Evidence: matrix-results/k48ap-8C148/."
+  "events": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8C148/driver.jsonl",
+  "triage": "(a) control for the 4.3.x rows on qemu-ios aec1594bf7: unchanged, end to end (it read the same 2.5 V brick ID before and still said USBHost, only because 4.2.1's 1 A window also wants D+ <= 2340 mV; now 0 V). Evidence: matrix-results/k48ap-8C148/. Rerun 09-29 as the control for qemu-ios ipad-5x-halt e2ff7016b4: unchanged, 4.x's halt reads no VBUS in STATUS A and ends in 'pmu go stdby' (8L1: boot 2's gesture missed under host load 125-176, no RB_HALT; the run before, at f8a30f60da, confirmed both boots in 15 s)."
  },
  "n72ap-7A341": {
   "version": "3.0",
@@ -2233,11 +2234,11 @@
   "version": "4.3.5",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-29T17:36:46+00:00",
+  "when": "2026-09-29T23:14:00+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-iboot/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-5x-halt-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-5x-halt/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/export-1/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -2246,7 +2247,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 89.5,
+   "seconds": 98.3,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -2261,7 +2262,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/scratch/k48ap-8L1/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mscratch/k48ap-8L1/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -2274,11 +2275,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 72.3
+    "seconds": 127.4
    },
    "lockdown": {
     "ok": true,
-    "seconds": 11.2,
+    "seconds": 2.8,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -2297,13 +2298,16 @@
    },
    "install": {
     "ok": true,
-    "seconds": 3,
-    "attempt": 1
+    "seconds": 26,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
@@ -2314,28 +2318,32 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 53.3,
-     "lockdown": 1.2
+     "lit": 176.7,
+     "lockdown": 19.9
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 18.3,
+    "seconds": 19.5,
     "reason": "The iPad stopped.",
-    "second": 16.1
+    "second": null
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/driver.jsonl",
-  "triage": "(c) 4.3.5, keys 16/16, keybag from 8F190's ramdisk. Real iBoot chain (recipe.boot default iboot; the kboot workaround is gone): iBoot-1072 epoch 2 read off the image (smoke #7 closed). Serial: BUILD_TAG iBoot-1072.61, 'Loading kernel cache at 0x43000000' on both boots, no kboot. Passes end to end on qemu-ios ipad1 5d5b70d6c7 (build-w1-native; IOP core; guest tools package serial 7), as it did on kboot. Boot 1 lit 72.3 s / lockdown 11.2 s (kboot: 24.6 s / 1.2 s); boot 2 lit 53.3 s (kboot 56.0 s). Evidence: qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/."
+  "events": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-8L1/driver.jsonl",
+  "triage": "(c) 4.3.5, keys 16/16, keybag from 8F190's ramdisk. Real iBoot chain (recipe.boot default iboot; the kboot workaround is gone): iBoot-1072 epoch 2 read off the image (smoke #7 closed). Serial: BUILD_TAG iBoot-1072.61, 'Loading kernel cache at 0x43000000' on both boots, no kboot. Passes end to end on qemu-ios ipad1 5d5b70d6c7 (build-w1-native; IOP core; guest tools package serial 7), as it did on kboot. Boot 1 lit 72.3 s / lockdown 11.2 s (kboot: 24.6 s / 1.2 s); boot 2 lit 53.3 s (kboot 56.0 s). Evidence: qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/. Rerun 09-29 as the control for qemu-ios ipad-5x-halt e2ff7016b4: unchanged, 4.x's halt reads no VBUS in STATUS A and ends in 'pmu go stdby' (8L1: boot 2's gesture missed under host load 125-176, no RB_HALT; the run before, at f8a30f60da, confirmed both boots in 15 s)."
  },
  "n72ap-8A230m": {
   "version": "4.0",
@@ -4293,11 +4301,11 @@
   "version": "5.1.1",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T19:52:42+00:00",
+  "when": "2026-09-29T23:03:25+00:00",
   "tools": {
-   "firmwarekit": "Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/fk-ios5/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-5x-halt-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-5x-halt/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/export-1/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4306,7 +4314,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 120.3,
+   "seconds": 95.3,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4321,7 +4329,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/fk-ios5/scratch/k48ap-9B206/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mscratch/k48ap-9B206/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -4334,143 +4342,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 64.7,
-    "setup": {
-     "ok": true,
-     "detail": "walked language, country, location, wi-fi, set up, apple id, terms, diagnostics, thank you",
-     "frontmost": "com.apple.springboard"
-    }
-   },
-   "lockdown": {
-    "ok": true,
-    "seconds": 6.0,
-    "productType": "iPad1,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
-    ],
-    "error": null
-   },
-   "install": {
-    "ok": null,
-    "note": "appsync off"
-   },
-   "package": {
-    "ok": true,
-    "offered": 8,
-    "reported": 8,
-    "result": 0
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 46.4,
-     "lockdown": 8.5
-    }
-   },
-   "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": "The iPad stopped.",
-    "second": null
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/lock.png",
-   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-language-0.png",
-   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-country-0.png",
-   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-country-1.png",
-   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-location-0.png",
-   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-location-1.png",
-   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-location-2.png",
-   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-wi-fi-0.png",
-   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-set-up-0.png",
-   "setup-apple-id-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-apple-id-0.png",
-   "setup-apple-id-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-apple-id-1.png",
-   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-terms-0.png",
-   "setup-terms-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-terms-1.png",
-   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-diagnostics-0.png",
-   "setup-diagnostics-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-diagnostics-1.png",
-   "setup-thank-you-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/setup-thank-you-0.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/installed.png",
-   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/powerdown1-7s.png",
-   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/powerdown1-12s.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/home2.png",
-   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/powerdown2-7s.png",
-   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/powerdown2-12s.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B206/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The iPad stopped.",
-   "excerpt": "default-ftl-version was found and it's set to 1\nen0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1)."
-  },
-  "triage": "(c) qemu-ios: every check passes but the clean shutdown. The slider's drag lands, launchd halts (reboot(RB_HALT)), and the D1815 then restarts instead of going to standby with the cable attached; iBoot-1219 autoboots iOS (smoke #28, which also covers #38). The Setup Assistant is walked by the session driver on first boot (Setup5). AppSync is off until Sam's matcher knows 5.x."
- },
- "k48ap-9A334": {
-  "version": "5.0",
-  "board": "k48ap",
-  "status": "untested",
-  "when": "2026-09-29T19:01:18+00:00",
-  "tools": {
-   "firmwarekit": "Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/fk-ios5/export/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 17,
-   "ok": 17,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 177.4,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity and boot chain",
-    "Building the system and data volumes",
-    "Writing the NAND",
-    "Creating the data-protection keybag",
-    "Sealing the NAND",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/fk-ios5/scratch/k48ap-9A334/firmwarekit.log",
-   "lock": {
-    "boot_strategy": "iboot",
-    "gles": null,
-    "gli": null,
-    "guest_package": "k48-ios5",
-    "activation": true,
-    "kernel": null
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 67.9,
+    "seconds": 45.3,
     "setup": {
      "ok": true,
      "detail": "walked language, country, location, wi-fi (not joined: continued without), set up, terms, diagnostics, thank you",
@@ -4514,69 +4386,64 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 54.3,
-     "lockdown": 0.3
+     "lit": 30.6,
+     "lockdown": 6.3
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
+    "ok": true,
+    "seconds": 15.3,
     "reason": "The iPad stopped.",
-    "second": null
+    "second": 15.5
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/lock.png",
-   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-language-0.png",
-   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-country-0.png",
-   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-country-1.png",
-   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-location-0.png",
-   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-location-1.png",
-   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-location-2.png",
-   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-wi-fi-0.png",
-   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-set-up-0.png",
-   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-terms-0.png",
-   "setup-terms-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-terms-1.png",
-   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-diagnostics-0.png",
-   "setup-diagnostics-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-diagnostics-1.png",
-   "setup-thank-you-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/setup-thank-you-0.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/installed.png",
-   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/powerdown1-7s.png",
-   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/powerdown1-12s.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/home2.png",
-   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/powerdown2-7s.png",
-   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/powerdown2-12s.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/lock.png",
+   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-language-0.png",
+   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-country-0.png",
+   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-country-1.png",
+   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-location-0.png",
+   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-location-1.png",
+   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-location-2.png",
+   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-wi-fi-0.png",
+   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-set-up-0.png",
+   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-terms-0.png",
+   "setup-terms-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-terms-1.png",
+   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-diagnostics-0.png",
+   "setup-diagnostics-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-diagnostics-1.png",
+   "setup-thank-you-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/setup-thank-you-0.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A334/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The iPad stopped.",
-   "excerpt": "IOFlashPartitionScheme::probe: 'boot-from-nand' property doesn't exist; failing probe\ndefault-ftl-version was found and it's set to 1\nAppleBCMWLANConfigManager::gatherParameterData() no enterprise roaming parameters found using default"
-  },
-  "triage": "(c) qemu-ios: every check passes but the clean shutdown. The slider's drag lands, launchd halts (reboot(RB_HALT)), and the D1815 then restarts instead of going to standby with the cable attached; iBoot-1219 autoboots iOS (smoke #28, which also covers #38). The Setup Assistant is walked by the session driver on first boot (Setup5). AppSync is off until Sam's matcher knows 5.x."
+  "events": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B206/driver.jsonl",
+  "triage": "(c) qemu-ios ipad-5x-halt e2ff7016b4 (the D1815 keeps its scratch bank across its own restart): the slider's halt with the cable attached restarts (0x8F = 0x90) into iBoot-1219's power-off simulation, 'waiting for power button or unplug (screen off)', no iOS boot, and the helper's power-off is confirmed at that restart (smoke #28 closed). Every check passes; AppSync off (Sam's matcher). Run 09-29 under host load 20-170 from parallel agents: the only shutdown misses were boots whose gesture never reached the halt (no RB_HALT in the serial: SpringBoard locked instead of raising the sheet), smoke #50."
  },
- "k48ap-9A405": {
-  "version": "5.0.1",
+ "k48ap-9A334": {
+  "version": "5.0",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T19:10:05+00:00",
+  "when": "2026-09-29T23:24:26+00:00",
   "tools": {
-   "firmwarekit": "Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/fk-ios5/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-5x-halt-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-5x-halt/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/export-1/ipad-guest-tools"
   },
   "keys": {
-   "total": 18,
-   "ok": 18,
+   "total": 17,
+   "ok": 17,
    "bad": "",
    "error": null
   },
   "prepare": {
-   "seconds": 92.5,
+   "seconds": 219.2,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4591,7 +4458,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/fk-ios5/scratch/k48ap-9A405/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mscratch/k48ap-9A334/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -4604,16 +4471,16 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 32.4,
+    "seconds": 207.0,
     "setup": {
-     "ok": true,
-     "detail": "walked language, country, location, wi-fi, set up, apple id, terms, diagnostics, thank you",
-     "frontmost": "com.apple.springboard"
+     "ok": false,
+     "detail": "the location page did not answer tap 1 (after language, country)",
+     "frontmost": "com.apple.purplebuddy"
     }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 1.0,
+    "seconds": 8.6,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -4648,13 +4515,13 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 40.7,
-     "lockdown": 1.6
+     "lit": 175.1,
+     "lockdown": 9.1
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
+    "ok": true,
+    "seconds": 16.0,
     "reason": "The iPad stopped.",
     "second": null
    },
@@ -4662,38 +4529,160 @@
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/lock.png",
-   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-language-0.png",
-   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-country-0.png",
-   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-country-1.png",
-   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-location-0.png",
-   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-location-1.png",
-   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-location-2.png",
-   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-wi-fi-0.png",
-   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-set-up-0.png",
-   "setup-apple-id-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-apple-id-0.png",
-   "setup-apple-id-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-apple-id-1.png",
-   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-terms-0.png",
-   "setup-terms-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-terms-1.png",
-   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-diagnostics-0.png",
-   "setup-diagnostics-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-diagnostics-1.png",
-   "setup-thank-you-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/setup-thank-you-0.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/installed.png",
-   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/powerdown1-7s.png",
-   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/powerdown1-12s.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/home2.png",
-   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/powerdown2-7s.png",
-   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/powerdown2-12s.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/lock.png",
+   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-language-0.png",
+   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-country-0.png",
+   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-country-1.png",
+   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-location-0.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/lock2.png",
+   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-location-1.png",
+   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-location-2.png",
+   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-wi-fi-0.png",
+   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-set-up-0.png",
+   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-terms-0.png",
+   "setup-terms-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-terms-1.png",
+   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-diagnostics-0.png",
+   "setup-diagnostics-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-diagnostics-1.png",
+   "setup-thank-you-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/setup-thank-you-0.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A405/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The iPad stopped.",
-   "excerpt": "AppleBCMWLANConfigManager::gatherParameterData() no enterprise roaming parameters found using default\nen0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1)."
+  "events": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A334/driver.jsonl",
+  "triage": "(c) qemu-ios ipad-5x-halt e2ff7016b4 (the D1815 keeps its scratch bank across its own restart): the slider's halt with the cable attached restarts (0x8F = 0x90) into iBoot-1219's power-off simulation, 'waiting for power button or unplug (screen off)', no iOS boot, and the helper's power-off is confirmed at that restart (smoke #28 closed). Every check passes; AppSync off (Sam's matcher). Run 09-29 under host load 20-170 from parallel agents: the only shutdown misses were boots whose gesture never reached the halt (no RB_HALT in the serial: SpringBoard locked instead of raising the sheet), smoke #50. 9A334: boot 1 missed the gesture in the first two runs (display asleep; Home, then Hold locked it); the recorded run confirmed boot 1 in 16 s and boot 2 missed the same way. Its Setup walk stopped at the location page (load 176)."
+ },
+ "k48ap-9A405": {
+  "version": "5.0.1",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-29T22:40:31+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-5x-halt-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-5x-halt/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/export-1/ipad-guest-tools"
   },
-  "triage": "(c) qemu-ios: every check passes but the clean shutdown. The slider's drag lands, launchd halts (reboot(RB_HALT)), and the D1815 then restarts instead of going to standby with the cable attached; iBoot-1219 autoboots iOS (smoke #28, which also covers #38). The Setup Assistant is walked by the session driver on first boot (Setup5). AppSync is off until Sam's matcher knows 5.x."
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 93.8,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes",
+    "Writing the NAND",
+    "Creating the data-protection keybag",
+    "Sealing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mscratch/k48ap-9A405/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios5",
+    "activation": true,
+    "kernel": null
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 70.1,
+    "setup": {
+     "ok": true,
+     "detail": "walked language, country, location, wi-fi (not joined: continued without), set up, terms, diagnostics, thank you",
+     "frontmost": "com.apple.springboard"
+    }
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 1.1,
+    "productType": "iPad1,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": null,
+    "note": "appsync off"
+   },
+   "package": {
+    "ok": true,
+    "offered": 8,
+    "reported": 8,
+    "result": 0
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 23.2,
+     "lockdown": 4.1
+    }
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 34.8,
+    "reason": "The iPad stopped.",
+    "second": 15.2
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/lock.png",
+   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-language-0.png",
+   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-country-0.png",
+   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-country-1.png",
+   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-location-0.png",
+   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-location-1.png",
+   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-location-2.png",
+   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-wi-fi-0.png",
+   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-set-up-0.png",
+   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-terms-0.png",
+   "setup-terms-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-terms-1.png",
+   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-diagnostics-0.png",
+   "setup-diagnostics-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-diagnostics-1.png",
+   "setup-thank-you-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/setup-thank-you-0.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/powerdown2-12s.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A405/driver.jsonl",
+  "triage": "(c) qemu-ios ipad-5x-halt e2ff7016b4 (the D1815 keeps its scratch bank across its own restart): the slider's halt with the cable attached restarts (0x8F = 0x90) into iBoot-1219's power-off simulation, 'waiting for power button or unplug (screen off)', no iOS boot, and the helper's power-off is confirmed at that restart (smoke #28 closed). Every check passes; AppSync off (Sam's matcher). Run 09-29 under host load 20-170 from parallel agents: the only shutdown misses were boots whose gesture never reached the halt (no RB_HALT in the serial: SpringBoard locked instead of raising the sheet), smoke #50."
  },
  "k48ap-9A5220p": {
   "version": "5.0",
@@ -4734,18 +4723,18 @@
    "why": "oneshot_failed: seal boot: QEMU exited without it_seal after 0 s",
    "excerpt": "firmwarekit: oneshot_failed: seal boot: QEMU exited without it_seal after 0 s"
   },
-  "triage": "iboot-bootargs 09-29: smoke #48 (boot-args iBoot32Patcher xref) fixed — the patcher now scans word-aligned literal-pool words only (build-support/patches/iBoot32Patcher-ltm.patch), and 9A5220p's lockdownd needed the activation matcher to skip an LDR-immediate between the log arguments (activation.c). prepare now clears the boot chain and activation and reaches 'Sealing the NAND'; the seal one-shot's iBoot-1219.35.80 then panics 'reset vector overwritten' because iBoot32Patcher's find_bl_verify_shsh_5_6_7 targets a verify_shsh call whose caller holds R3=0 on 9A5220p (new smoke #50). Byte-identity of the patched iBoot holds for every working k48 build (K48IBootTests); swift test / offline / release / app build green. Still untested pending #50."
+  "triage": "iboot-bootargs 09-29: smoke #48 (boot-args iBoot32Patcher xref) fixed \u2014 the patcher now scans word-aligned literal-pool words only (build-support/patches/iBoot32Patcher-ltm.patch), and 9A5220p's lockdownd needed the activation matcher to skip an LDR-immediate between the log arguments (activation.c). prepare now clears the boot chain and activation and reaches 'Sealing the NAND'; the seal one-shot's iBoot-1219.35.80 then panics 'reset vector overwritten' because iBoot32Patcher's find_bl_verify_shsh_5_6_7 targets a verify_shsh call whose caller holds R3=0 on 9A5220p (new smoke #50). Byte-identity of the patched iBoot holds for every working k48 build (K48IBootTests); swift test / offline / release / app build green. Still untested pending #50."
  },
  "k48ap-9A5288d": {
   "version": "5.0",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T20:01:25+00:00",
+  "when": "2026-09-29T22:46:23+00:00",
   "prerelease": "beta",
   "tools": {
-   "firmwarekit": "Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/fk-ios5/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-5x-halt-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-5x-halt/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/export-1/ipad-guest-tools"
   },
   "keys": {
    "total": 17,
@@ -4754,7 +4743,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 81.1,
+   "seconds": 81.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4769,7 +4758,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/fk-ios5/scratch/k48ap-9A5288d/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mscratch/k48ap-9A5288d/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -4782,16 +4771,16 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 31.7,
+    "seconds": 29.1,
     "setup": {
-     "ok": true,
-     "detail": "walked language, country, location, wi-fi (not joined: continued without), set up, terms (absent), diagnostics, thank you",
-     "frontmost": "com.apple.springboard"
+     "ok": false,
+     "detail": "the diagnostics page did not answer tap 1 (after language, country, location, wi-fi (not joined: continued without), set up, terms (absent))",
+     "frontmost": "com.apple.purplebuddy"
     }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 0.6,
+    "seconds": 1.2,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -4826,59 +4815,50 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 32.1,
-     "lockdown": 0.4
+     "lit": 35.1,
+     "lockdown": 0.3
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
+    "ok": true,
+    "seconds": 11.8,
     "reason": "The iPad stopped.",
-    "second": null
+    "second": 11.4
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/installed.png",
-   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/powerdown1-7s.png",
-   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/powerdown1-12s.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/lock2.png",
-   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-language-0.png",
-   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-country-0.png",
-   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-country-1.png",
-   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-location-0.png",
-   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-location-1.png",
-   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-location-2.png",
-   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-wi-fi-0.png",
-   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-set-up-0.png",
-   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-terms-0.png",
-   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-diagnostics-0.png",
-   "setup-diagnostics-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-diagnostics-1.png",
-   "setup-thank-you-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/setup-thank-you-0.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/home2.png",
-   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/powerdown2-7s.png",
-   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/powerdown2-12s.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/lock.png",
+   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-language-0.png",
+   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-country-0.png",
+   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-country-1.png",
+   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-location-0.png",
+   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-location-1.png",
+   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-location-2.png",
+   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-wi-fi-0.png",
+   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-set-up-0.png",
+   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-terms-0.png",
+   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/setup-diagnostics-0.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/powerdown1-7s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/powerdown2-7s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9A5288d/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The iPad stopped.",
-   "excerpt": "AppleH3CamIn: Error conencting to PWM driver\nen0: Error configuring antenna diversity (index = -1).\nen0: Error configuring transmit antenna (index = -1)."
-  },
-  "triage": "(c) qemu-ios: every check passes but the clean shutdown. The slider's drag lands, launchd halts (reboot(RB_HALT)), and the D1815 then restarts instead of going to standby with the cable attached; iBoot-1219 autoboots iOS (smoke #28, which also covers #38). The Setup Assistant is walked by the session driver on first boot (Setup5). AppSync is off until Sam's matcher knows 5.x."
+  "events": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9A5288d/driver.jsonl",
+  "triage": "(c) qemu-ios ipad-5x-halt e2ff7016b4 (the D1815 keeps its scratch bank across its own restart): the slider's halt with the cable attached restarts (0x8F = 0x90) into iBoot-1219's power-off simulation, 'waiting for power button or unplug (screen off)', no iOS boot, and the helper's power-off is confirmed at that restart (smoke #28 closed). Every check passes; AppSync off (Sam's matcher). Run 09-29 under host load 20-170 from parallel agents: the only shutdown misses were boots whose gesture never reached the halt (no RB_HALT in the serial: SpringBoard locked instead of raising the sheet), smoke #50."
  },
  "k48ap-9B176": {
   "version": "5.1",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T19:42:38+00:00",
+  "when": "2026-09-29T22:55:44+00:00",
   "tools": {
-   "firmwarekit": "Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/fk-ios5/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-5x-halt-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad-5x-halt/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/export-1/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4887,7 +4867,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 174.8,
+   "seconds": 101.1,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4902,7 +4882,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/fk-ios5/scratch/k48ap-9B176/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mscratch/k48ap-9B176/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -4915,16 +4895,16 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 116.4,
+    "seconds": 39.1,
     "setup": {
-     "ok": true,
-     "detail": "walked language, country, location, wi-fi (not joined: continued without), set up, terms, diagnostics, thank you",
-     "frontmost": "com.apple.springboard"
+     "ok": false,
+     "detail": "the set up page did not answer tap 1 (after language, country, location, wi-fi)",
+     "frontmost": "com.apple.purplebuddy"
     }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 1.6,
+    "seconds": 2.9,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -4959,49 +4939,37 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 76.6,
-     "lockdown": 2.7
+     "lit": 44.8,
+     "lockdown": 0.4
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
+    "ok": true,
+    "seconds": 11.4,
     "reason": "The iPad stopped.",
-    "second": null
+    "second": 11.7
    },
-   "base_unchanged": true,
+   "base_unchanged": false,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/lock.png",
-   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-language-0.png",
-   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-country-0.png",
-   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-country-1.png",
-   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-location-0.png",
-   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-location-1.png",
-   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-location-2.png",
-   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-wi-fi-0.png",
-   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-set-up-0.png",
-   "setup-terms-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-terms-0.png",
-   "setup-terms-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-terms-1.png",
-   "setup-diagnostics-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-diagnostics-0.png",
-   "setup-diagnostics-1": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-diagnostics-1.png",
-   "setup-thank-you-0": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/setup-thank-you-0.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/installed.png",
-   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/powerdown1-7s.png",
-   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/powerdown1-12s.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/home2.png",
-   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/powerdown2-7s.png",
-   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/powerdown2-12s.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/lock.png",
+   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/setup-language-0.png",
+   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/setup-country-0.png",
+   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/setup-country-1.png",
+   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/setup-location-0.png",
+   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/setup-location-1.png",
+   "setup-location-2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/setup-location-2.png",
+   "setup-wi-fi-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/setup-wi-fi-0.png",
+   "setup-set-up-0": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/setup-set-up-0.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/powerdown1-7s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/powerdown2-7s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/fk-ios5/results/k48ap-9B176/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The iPad stopped.",
-   "excerpt": "AppleBCMWLAN Left BSS:       @ 0xc0be9c00, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 9, ssid[ 8] = \"qemu-ios\"\nAppleBCMWLANCore::handleBcnLiBcnIoVarAsyncCallBack(): Error: cannot set beacon wake up time: operation was aborted\nAppleBCMWLANCore::handleExtDTIMIoVarAsyncCallBack(): Error: cannot set extended dtim to 1 (1): operation was aborted"
-  },
-  "triage": "(c) qemu-ios: every check passes but the clean shutdown. The slider's drag lands, launchd halts (reboot(RB_HALT)), and the D1815 then restarts instead of going to standby with the cable attached; iBoot-1219 autoboots iOS (smoke #28, which also covers #38). The Setup Assistant is walked by the session driver on first boot (Setup5). AppSync is off until Sam's matcher knows 5.x."
+  "events": "/Users/shg/Developer/qemu-ios-files/ipad-5x-halt/mresults/k48ap-9B176/driver.jsonl",
+  "triage": "(c) qemu-ios ipad-5x-halt e2ff7016b4 (the D1815 keeps its scratch bank across its own restart): the slider's halt with the cable attached restarts (0x8F = 0x90) into iBoot-1219's power-off simulation, 'waiting for power button or unplug (screen off)', no iOS boot, and the helper's power-off is confirmed at that restart (smoke #28 closed). Every check passes; AppSync off (Sam's matcher). Run 09-29 under host load 20-170 from parallel agents: the only shutdown misses were boots whose gesture never reached the halt (no RB_HALT in the serial: SpringBoard locked instead of raising the sheet), smoke #50."
  }
 }
