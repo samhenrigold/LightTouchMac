@@ -1450,9 +1450,9 @@ final class EmulatorController {
                         // open networking once, seamlessly. Restrict=on carried Setup down
                         // its no-network path; the in-place flip keeps the Wi-Fi association
                         // and DHCP lease (no reboot, no re-join).
-                        if self.networkRestrictPending, fg?.bundleID == "com.apple.springboard" {
+                        if self.networkRestrictPending, fg?.bundleID == "com.apple.springboard", let link = self.link {
                             self.networkRestrictPending = false
-                            self.link?.send(.netRestrict(false))
+                            link.send(.netRestrict(false))
                             logEvent("networking: Setup finished, lifting slirp restrict on wifi0")
                         }
                     } catch {
