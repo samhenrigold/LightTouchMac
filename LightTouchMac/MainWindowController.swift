@@ -220,8 +220,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let captureStatus = CaptureStatusView()
     private let startupStatus = CaptureStatusView()
     private var startupTask: Task<Void, Never>?
-    private var startupBegan = Date()
-    private var wasStarting = false
     private var quitAfterRecording = false
     private var closeAfterRecording = false
 
@@ -481,15 +479,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func updateStartupStatus() {
         defer { deviceVC?.updateStatusVisibility() }
-        guard let emulator, emulator.isErasing || emulator.state == .booting || emulator.preparingDevice else {
-            wasStarting = false
+        guard let emulator, emulator.isStartingUp else {
             startupTask?.cancel()
             startupTask = nil
             startupStatus.isHidden = true
             return
         }
-        if !wasStarting { startupBegan = Date(); wasStarting = true }
-        let elapsed = Int(Date().timeIntervalSince(startupBegan))
+        let elapsed = Int(Date().timeIntervalSince(emulator.startupBegan))
         startupStatus.update(title: emulator.isErasing ? "Erasing \(emulator.profile.shortName)…" : emulator.preparationStatus,
                              detail: elapsed >= 90 ? "Check Device Logs." : "\(elapsed)s",
                              busy: true, primary: elapsed >= 90 ? "Device Logs" : nil)

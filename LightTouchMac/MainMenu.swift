@@ -143,16 +143,15 @@ enum MainMenuBuilder {
     
     private static func deviceMenu(_ profile: DeviceProfile) -> NSMenu {
         // Nil targets route through the active window's responder chain.
-        // Leave Command-arrow keys to macOS and text navigation.
         let menu = NSMenu(title: "Device")
         menu.addItem(item("Home Screen", #selector(MainWindowController.deviceHome(_:)), "h", [.shift, .command]))
         menu.addItem(item("Lock", #selector(MainWindowController.deviceLock(_:)), "l"))
         menu.addItem(.separator())
         let orientation = NSMenu(title: "Orientation")
         orientation.addItem(item("Rotate Left", #selector(MainWindowController.deviceRotateLeft(_:)),
-                                 "["))
+                                 String(UnicodeScalar(NSLeftArrowFunctionKey)!)))
         orientation.addItem(item("Rotate Right", #selector(MainWindowController.deviceRotateRight(_:)),
-                                 "]"))
+                                 String(UnicodeScalar(NSRightArrowFunctionKey)!)))
         orientation.addItem(.separator())
         orientation.addItem(item("Rotate Automatically", #selector(AppDelegate.toggleAutomaticRotation(_:))))
         orientation.addItem(.separator())
