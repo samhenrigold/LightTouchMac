@@ -1,17 +1,20 @@
 // N45NAND: the iPod touch 1G page directory (bank{0..7}/<page>.page, 2048 data + 64 spare bytes each) that
 // qemu-ios s5l8900_fmc.c serves: the legacy VFL/FTL layout of devos50's qemu-ios-generate-nand (main, the 1G
 // generate_nand.c: FIL id, DEVICEINFOBBT, VFL context at block 35, the FTL from physical block 201 on, one HFS+
-// partition behind an MBR + GPT), with two things that tool left for later:
+// partition behind an MBR + GPT), with what that tool left for later:
 //
 // - Real spares. Every page carries the 12 bytes the 1.x FTL itself writes (read off its own programs through
 //   the ADM): data  [lpn u32][write age u32 = 0][ff][0x40][ff][ff], context [age u32][index u16][ff ff][ff]
-//   [type][ff][ff] (0x43 index/meta, 0x46 map). A page that was never written reads as the machine's blank
-//   (zeros, 0xff at byte 10: type 0), so free and used pages are told apart (docs/smoke.md #12).
+//   [type][ff][ff] (0x43 index/meta, 0x46 map). A page never programmed reads erased (all ones), as on NAND,
+//   so every page of the volume's blocks is written, zeros included (docs/smoke.md #12).
 // - The FTL's own blocks kept out of the data. The FTL context is virtual blocks 0-2 and its free pool 3-22
 //   (FTLCxt.awFreeVbList); the filesystem starts at virtual block 23. generate_nand.c mapped logical block n to
 //   virtual block n + 1, so the first log block the FTL took from its pool overwrote filesystem pages.
+// - A VFL context as VFL_Format stores it (vflContext): the context age, the next context page, the reserved
+//   pool and its remap of the BBT block, both checksums; without the next page the VFL's next store programs
+//   page 0 again.
 //
-//   try N45NAND.write(volume: img, out: dir)       // (filesystem pages, metadata pages); zero pages are not written
+//   try N45NAND.write(volume: img, out: dir)       // (filesystem pages, metadata pages)
 //   N45NAND.location(lpn:)                         // (bank, page) of a logical page
 
 import Foundation
@@ -23,7 +26,9 @@ public enum N45NAND {
     /// The first physical block (all banks) the FTL's virtual block 0 lives in.
     static let ftlStart = 201
     static let cxtBlocks = 3, freeBlocks = 20, dataStart = 23
-    static let vflCxtBlock = 35, mapTables = 18, logCxts = 18
+    static let vflCxtBlock = 35, vflCxtCopies = 8, mapTables = 18, logCxts = 18
+    /// The reserved (bad-block replacement) pool: after the four VFL info blocks, up to the FTL.
+    static let reservedStart = vflCxtBlock + 4, maxReserved = 820
     /// Logical blocks mapped (2 MiB each); the rest are 0xffff. Below the FTL's share of a 4096-block bank.
     static let mappedLBNs = 3800
     static let firstLBA = 3
@@ -58,14 +63,37 @@ public enum N45NAND {
 
     static func crc(_ b: ArraySlice<UInt8>) -> UInt32 { UInt32(b.withUnsafeBufferPointer { zlib.crc32(0, $0.baseAddress, uInt($0.count)) }) }
 
-    /// VFLMeta (vfl.h): the FTL context blocks, the info block, every block good.
-    static func vflContext() -> [UInt8] {
+    /// VFLMeta (Whimory VFLTypes.h: VFLCxt, then the version and two checksums) as VFL_Format leaves bank `bank`:
+    /// the FTL context blocks, the four info blocks (35-38, the context in the first, eight copies on pages 0-7,
+    /// so the next store goes to page 8), the reserved pool after them up to the FTL (39-200), and the BBT's own
+    /// block 4095 (a special block, bad in the factory table) remapped to the pool's first block so the FTL,
+    /// whose virtual block 3894 it is, finds that erased block and never the table.
+    static func vflContext(bank: Int) -> [UInt8] {
         var d = [UInt8](repeating: 0, count: page)
-        for i in 0..<cxtBlocks { put(&d, 4 + 2 * i, UInt64(i), 2) }         // aFTLCxtVbn
-        for i in 1672..<1672 + 281 { d[i] = 0xFF }                            // aBadMark
-        put(&d, 1954, UInt64(vflCxtBlock), 2)                                  // awInfoBlk[0]
+        put(&d, 0, UInt64(bank), 4)                                            // dwGlobalCxtAge
+        for i in 0..<cxtBlocks { put(&d, 4 + 2 * i, UInt64(i), 2) }            // aFTLCxtVbn
+        put(&d, 0xC, 0xFFFF_FFFF, 4)                                           // dwCxtAge: 0, less the one store
+        put(&d, 0x12, UInt64(vflCxtCopies), 2)                                 // wNextCxtPOffset (wCxtLocation 0)
+        put(&d, 0x14, 1, 2)                                                    // wNumOfInitBadBlk: the BBT block
+        put(&d, 0x1A, 1, 2)                                                    // wBadMapTableMaxIdx
+        put(&d, 0x1C, UInt64(reservedStart), 2)                                // wReservedSecStart
+        put(&d, 0x1E, UInt64(ftlStart - reservedStart), 2)                     // wReservedSecSize
+        put(&d, 0x20, UInt64(blocksPerBank - 1), 2)                            // aBadMapTable[0]: 4095 -> 39
+        for i in 0x688..<0x7A2 { d[i] = 0xFF }                                 // aBadMark, one bit per 8 blocks
+        d[0x688 + (blocksPerBank - 1) / 64] &= ~UInt8(1 << (7 - ((blocksPerBank - 1) / 8) % 8))
+        for i in 0..<4 { put(&d, 0x7A2 + 2 * i, UInt64(vflCxtBlock + i), 2) }  // awInfoBlk
+        put(&d, 0x7AA, UInt64(maxReserved), 2)                                 // wBadMapTableScrubIdx
+        var sum: UInt32 = 0, xor: UInt32 = 0
+        for o in stride(from: 0, to: 0x7F8, by: 4) {
+            let w = UInt32(d[o]) | UInt32(d[o + 1]) << 8 | UInt32(d[o + 2]) << 16 | UInt32(d[o + 3]) << 24
+            sum &+= w; xor ^= w
+        }
+        put(&d, 0x7F8, UInt64(sum &+ 0xAABB_CCDD), 4); put(&d, 0x7FC, UInt64(xor ^ 0xAABB_CCDD), 4)
         return d
     }
+
+    /// VFLSpare as the VFL writes its context pages: dwCxtAge, dwReserved, status mark 0 (valid), type 0x80.
+    static let vflSpare: [UInt8] = [UInt8](repeating: 0xFF, count: 8) + [0x00, 0x80] + [UInt8](repeating: 0xFF, count: spare - 10)
 
     /// FTLMeta (ftl.h, FTLCxt2): a flushed, valid context with an empty log and the free pool 3-22.
     static func ftlMeta() -> [UInt8] {
@@ -112,11 +140,10 @@ public enum N45NAND {
         put(&fil, 0, 0x4330_3032, 4)
         var pages: [Page: [UInt8]] = [Page(bank: 0, page: 0): fil + zero]
         let bbt = Array("DEVICEINFOBBT".utf8) + [UInt8](repeating: 0, count: page - 13)
-        var vflSpare = zero
-        vflSpare[0] = 1; vflSpare[9] = 0x80
         for b in 0..<banks {
             pages[Page(bank: b, page: (blocksPerBank - 1) * pagesPerBlock)] = bbt + zero
-            pages[Page(bank: b, page: vflCxtBlock * pagesPerBlock)] = vflContext() + vflSpare
+            let cxt = vflContext(bank: b) + vflSpare
+            for c in 0..<vflCxtCopies { pages[Page(bank: b, page: vflCxtBlock * pagesPerBlock + c)] = cxt }
         }
         pages[location(vpn: 0)] = [UInt8](repeating: 0, count: page) + cxtSpare(type: 0x43, index: 0)
         for i in 0..<mapTables {
@@ -132,14 +159,17 @@ public enum N45NAND {
 
     static func path(_ out: URL, _ p: Page) -> URL { out.appendingPathComponent("bank\(p.bank)/\(p.page).page") }
 
-    /// The page directory for a flat HFS+ volume: metadata pages, then every non-zero filesystem page, plus the
-    /// last page of each written block (the FTL recognises a data block by its last page when it rebuilds).
+    /// The page directory for a flat HFS+ volume: metadata pages, then every page of every logical block the
+    /// volume spans, zeros included, as a restore writes the whole image. The model reads a page never
+    /// programmed as erased, and the FTL fails the read of an erased page it maps (the kernel probes the
+    /// volume's last pages, zeros in a fresh image).
     @discardableResult
     public static func write(volume: URL, out: URL) throws -> (volume: Int, metadata: Int) {
         let fm = FileManager.default
         let size = try fm.attributesOfItem(atPath: volume.path)[.size] as? Int ?? 0
         let fsPages = (size + page - 1) / page
-        guard (firstLBA + fsPages + pagesPerSuperblock - 1) / pagesPerSuperblock <= mappedLBNs else {
+        let blocks = (firstLBA + fsPages + pagesPerSuperblock - 1) / pagesPerSuperblock
+        guard blocks <= mappedLBNs else {
             throw FirmwareError(.unsupported, "a \(size)-byte volume is larger than the NAND's mapped logical blocks")
         }
         for b in 0..<banks { try fm.createDirectory(at: out.appendingPathComponent("bank\(b)"), withIntermediateDirectories: true) }
@@ -147,29 +177,17 @@ public enum N45NAND {
         for (p, d) in meta { try Data(d).write(to: path(out, p)) }
         let f = try FileHandle(forReadingFrom: volume)
         defer { try? f.close() }
-        var n = 0, written = 0, blockUsed = true   // logical block 0 holds the partition pages
-        let chunk = pagesPerSuperblock
-        while n < fsPages {
-            var data = try f.read(upToCount: chunk * page) ?? Data()
-            if data.count < chunk * page { data.append(Data(count: chunk * page - data.count)) }
-            for i in 0..<min(chunk, fsPages - n) {
-                let lpn = firstLBA + n + i
-                let pg = data[data.startIndex + i * page..<data.startIndex + (i + 1) * page]
-                let last = (lpn + 1) % pagesPerSuperblock == 0, empty = pg.allSatisfy { $0 == 0 }
-                blockUsed = blockUsed || !empty
-                if !empty || (last && blockUsed) {
-                    try (Data(pg) + dataSpare(lpn)).write(to: path(out, location(lpn: lpn)))
-                    written += 1
-                }
-                if last { blockUsed = false }
+        var written = 0
+        for lbn in 0..<blocks {   // logical block 0 starts with the partition pages (LBA 0-2), written above
+            let first = lbn * pagesPerSuperblock, skip = max(0, firstLBA - first)
+            try f.seek(toOffset: UInt64((first + skip - firstLBA) * page))
+            var data = try f.read(upToCount: (pagesPerSuperblock - skip) * page) ?? Data()
+            data.append(Data(count: (pagesPerSuperblock - skip) * page - data.count))
+            for i in 0..<pagesPerSuperblock - skip {
+                let lpn = first + skip + i
+                try (data[data.startIndex + i * page..<data.startIndex + (i + 1) * page] + dataSpare(lpn)).write(to: path(out, location(lpn: lpn)))
+                written += 1
             }
-            n += chunk
-        }
-        let end = firstLBA + fsPages
-        if blockUsed, end % pagesPerSuperblock != 0 {   // the volume ends inside a block: close it with its last page
-            let lpn = (end / pagesPerSuperblock + 1) * pagesPerSuperblock - 1
-            try (Data(count: page) + dataSpare(lpn)).write(to: path(out, location(lpn: lpn)))
-            written += 1
         }
         return (written, meta.count)
     }

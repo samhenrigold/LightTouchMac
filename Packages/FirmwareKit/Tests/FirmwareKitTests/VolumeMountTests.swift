@@ -28,6 +28,14 @@ import Testing
             #expect(l.first { $0.path == "a/l" }?.link == "b/c.txt")
             #expect(!l.contains { $0.path.hasPrefix(".fseventsd") })
 
+            // A host-written journal (header bytes, need-init clear) handed to the device: zeroed, need-init set.
+            let w = try HFSPlusVolume(img, writable: true), j = try #require(try w.journal())
+            let jib = try Data(contentsOf: img)[1036..<1040].reduce(0) { $0 << 8 | Int($1) } * w.blockSize
+            try w.restore([(j.offset, Data(repeating: 0xAB, count: 512)), (jib, Data([0, 0, 0, 1]))])
+            #expect(try w.journal()?.needsInit == false)
+            try w.leaveJournalToDevice()
+            #expect(try w.journal()?.needsInit == true && w.journalSnapshot()?.last?.bytes == Data(count: j.size))
+
             guard HFSOracle.available else { return }
             let py = dir.appendingPathComponent("py.img")
             _ = try HFSOracle.python("import ipad1_nand; ipad1_nand.make_hfs_image(sys.argv[1], int(sys.argv[2]))", [py.path, String(64 << 20 + 123)])

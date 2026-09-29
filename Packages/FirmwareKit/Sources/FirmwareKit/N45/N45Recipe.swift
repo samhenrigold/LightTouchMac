@@ -6,7 +6,8 @@
 // docs/changes.md through SystemEdits: fstab rw with no /private/var line (one partition), the kernelcache (the
 // IPSW's 8900 container, which the machine's 8900 engine decrypts) where iBoot loads it, SpringBoard's
 // LK_ENABLE_MBX2D=0 (no MBX 2D on this machine), the six LaunchDaemons that changes.md keeps, and the
-// /var/root/Library skeleton; activation as every board has it; owners patched in the catalog. Store: N45NAND.
+// /var/root/Library skeleton; the volume journaled (it is also /private/var); activation as every board has it;
+// owners patched in the catalog. Store: N45NAND.
 // No guest tools on 1.x yet, no keybag, no seal.
 //
 // The recipe: storage "8g" (MA623; the only NAND geometry modelled), system_mib = the volume.
@@ -88,11 +89,16 @@ final class N45Board: Board {
                 try SystemEdits.mkdirs(at(Self.rootLibrary + d))
                 owners.append((0, Self.rootLibrary + d))
             }
+            // One partition, so the root holds what a device keeps in its journaled /private/var: journaled, so a
+            // hard power-off is replayed at mount (the stock root is unjournaled and 1.x runs no fsck or update);
+            // the journal itself is left for the device's first mount to initialize (leaveJournalToDevice).
+            try VolumeMount.run("/usr/sbin/diskutil", ["enableJournal", m.path])
             return (try SystemEdits.activate(m, log: c.log), removed)
         }
         c.activation = activation
         derived["launch_daemons_removed"] = removed
         let hfs = try HFSPlusVolume(volume, writable: true)
+        try hfs.leaveJournalToDevice()
         c.log("0:0 patched \(try hfs.setOwner(owners.map(\.1), uid: 0, gid: 0)) catalog record(s)")
         c.log("\(try hfs.normalize(after: newest, to: newest)) catalog records dated as of the IPSW's newest file")
     }
