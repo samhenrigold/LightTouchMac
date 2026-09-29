@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 #include <plist/plist.h>
@@ -64,7 +65,17 @@ static double set_time(lockdownd_client_t cli, time_t now)
     lockdownd_error_t e = lockdownd_set_value(cli, NULL, "TimeIntervalSince1970", node);
     if (e != LOCKDOWN_E_SUCCESS)
         fprintf(stderr, "set time failed: %d\n", e);
-    return get_time(cli, &is_real);
+    /* lockdownd applies the time asynchronously (iOS 4: the read right after
+     * the set still shows the old clock while the lock screen already moved);
+     * give it a few seconds before judging. */
+    double held = -1;
+    for (int i = 0; i < 4; i++) {
+        sleep(1);
+        held = get_time(cli, &is_real);
+        if (held >= 0 && held - (double)now < 300 && (double)now - held < 300)
+            break;
+    }
+    return held;
 }
 
 static char *current_zone(lockdownd_client_t cli)

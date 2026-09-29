@@ -581,8 +581,11 @@ final class EmulatorController {
                     if clock != nil { clockPinned = true }
                     return
                 } catch DeviceToolsError.failed(let why) where why.contains("clock not applied") {
-                    logEvent("clock: \(why)")   // lockdown-tz exit 3: the guest did not take the pin; no point retrying
-                    return
+                    // lockdown-tz exit 3: the guest did not take the pin this time (iOS 4 drops an early set);
+                    // the 5 s tick tries again, for a minute.
+                    clockAttempts += 1
+                    logEvent("clock: \(why.trimmingCharacters(in: .whitespacesAndNewlines)) (attempt \(clockAttempts))")
+                    if clockAttempts >= 12 { return }
                 } catch {}
             }
             try? await Task.sleep(for: .seconds(5))
@@ -591,6 +594,7 @@ final class EmulatorController {
 
     /// This boot's pinned clock has been set (catalogEntry.clock); later syncs pass "keep".
     private var clockPinned = false
+    private var clockAttempts = 0
 
     /// App quit (after the clean shutdowns) and restarts. The helper gets
     /// SIGTERM: a guest that already powered off quits at once; one that

@@ -44,10 +44,17 @@ struct SingleConfig: Decodable {
         await waitLit(d, ipad ? 0.2 : 0.03, 240)
         await waitUSB(d, expecting: ipad ? "iPad1,1" : "iPod2,1", 300)
         if let clock = s.clock, let tool = s.lockdownTZ, let epoch = FirmwareCatalog.Entry.epoch(ofClock: clock) {
-            do {
-                let zone = try await GuestServices.setTimeZone(TimeZone.current.identifier, clock: String(Int(epoch)), tool: tool, socket: d.mux.clientSocket)
-                emit("clock", ["device": d.name, "generation": generation, "clock": clock, "zone": zone])
-            } catch { emit("clock", ["device": d.name, "generation": generation, "clock": clock, "error": "\(error)"]) }
+            // As the app's sync loop: a set the guest drops (iOS 4, early in the boot) is tried again.
+            for attempt in 1...6 {
+                do {
+                    let zone = try await GuestServices.setTimeZone(TimeZone.current.identifier, clock: String(Int(epoch)), tool: tool, socket: d.mux.clientSocket)
+                    emit("clock", ["device": d.name, "generation": generation, "clock": clock, "zone": zone, "attempt": attempt])
+                    break
+                } catch {
+                    emit("clock", ["device": d.name, "generation": generation, "clock": clock, "error": "\(error)", "attempt": attempt])
+                    try? await Task.sleep(for: .seconds(5))
+                }
+            }
         }
         emit("activation", ["device": d.name, "generation": generation, "state": await d.lockdownValue("ActivationState") ?? ""])
         if offered {   // the loader's report: it_boot reports the serial it ran and R_* (GuestPackage.ReportCode)

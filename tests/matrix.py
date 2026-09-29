@@ -142,7 +142,8 @@ def excerpt(path, n=3):
         return ""
     hot = [l for l in lines[-400:] if re.search(r"panic|error|fail|refus|not valid|timed out|Timeout|abort|fault", l, re.I)]
     pick = (hot or lines)[-n:]
-    return "\n".join(l[:200] for l in pick)
+    # iBoot's serial lines start with a NUL; one in the markdown makes git treat the file as binary.
+    return "\n".join(re.sub(r"[\x00-\x08\x0e-\x1f]", "", l)[:200] for l in pick)
 
 
 def boot(entry, base, a, helper, work, env):
