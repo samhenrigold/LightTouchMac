@@ -130,10 +130,8 @@ public enum GuestPackage {
         }
         let mode = { (s: Any?) in mode_t(strtoul(s as? String ?? "0", nil, 8)) }
 
-        if man["loader"] as? Bool ?? true {   // "loader": false (n45-ios1: it_boot dies under 1.x launchd): hooks baked only
-            try put(loader.0, payload("loader/it_boot"), 0o755)
-            try put(loader.1, payload("loader/com.qemu.it-boot.plist"), 0o644)
-        }
+        try put(loader.0, payload("loader/it_boot"), 0o755)
+        try put(loader.1, payload("loader/com.qemu.it-boot.plist"), 0o644)
         let serial = man["serial"] as? Int ?? 0, pkg = "\(root)/pkgs/\(serial)"
         for f in files { try put(pkg + "/" + (f["name"] as! String), payload(family + "/" + (f["name"] as! String)), mode(f["mode"])) }
         try put(pkg + "/offer", Data(offerText(man, build: build).utf8), 0o644)

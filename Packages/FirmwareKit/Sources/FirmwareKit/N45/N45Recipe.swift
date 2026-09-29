@@ -9,8 +9,8 @@
 // /var/root/Library skeleton; then ipod1g_device.bake: when the stock OpenGLES exports exactly
 // opengles-1x.exports (a guest helper), the seed package's n45-ios1 hook (OpenGLES-1x, the GL front end) replaces it
 // (the stock binary kept as OpenGLES.baked) and SpringBoard gets LK_ENABLE_OGL=1 LK_AUTO_ENABLE_OGL=0 (else
-// LK_ENABLE_OGL stays unset: software LayerKit); the seed package goes in either way, without a loader (the family's
-// "loader": false: it_boot dies under 1.x launchd); an itpack without the hook is refused. The volume journaled (it
+// LK_ENABLE_OGL stays unset: software LayerKit); the loader and the seed package go in either way, as on every board
+// (the legacy-linked it_boot runs under 1.x launchd); an itpack without the hook is refused. The volume journaled (it
 // is also /private/var); activation as every board has it; owners patched in the catalog. Store: N45NAND.
 // No other guest tools on 1.x, no keybag, no seal.
 //
@@ -127,7 +127,7 @@ final class N45Board: Board {
     }
 
     /// ipod1g_device.bake over the mounted 1.x volume `m`: the GL front end if the stock OpenGLES exports exactly
-    /// opengles-1x.exports (and `gles`), the seed package (GuestPackage.seed of armv6.itpack: n45-ios1, no loader),
+    /// opengles-1x.exports (and `gles`), the seed package (GuestPackage.seed of armv6.itpack: the loader and n45-ios1),
     /// SpringBoard's LK_* environment. Returns (the lock's derived gles/gles_engine, the guest_package record, the
     /// volume-relative paths to make root-owned).
     static func bake(_ m: URL, helpers: URL, gles: Bool, log: (String) -> Void) throws -> ([String: Any], GuestPackage.Record, [String]) {

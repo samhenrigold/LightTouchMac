@@ -39,9 +39,6 @@ nonisolated enum GuestPackage {
         var family: String
         var arch: String
         var stub: Bool?
-        /// false: the family has no loader (n45-ios1: it_boot dies under 1.x launchd), so its hooks are only
-        /// ever baked and nothing would pull an offer.
-        var loader: Bool?
         var requires: Requires
         var files: [File]
         var jobs: [String]
@@ -171,7 +168,7 @@ nonisolated enum GuestPackage {
                         into dir: URL) throws -> Offer? {
         let fm = FileManager.default
         try? fm.removeItem(at: dir)
-        guard let found = try package(in: itpack, board: board, build: build), found.0.loader != false else { return nil }
+        guard let found = try package(in: itpack, board: board, build: build) else { return nil }
         var (manifest, payloads) = found
         if let range = manifest.requires.host?["guest-package"], range.count == 2,
            !(range[0]...range[1]).contains(packageProtocol) { return nil }

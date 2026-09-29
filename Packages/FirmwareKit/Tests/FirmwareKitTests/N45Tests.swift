@@ -133,7 +133,7 @@ import Testing
     /// gles2x_exports.scan, the check against opengles-1x.exports (and its refusal of a list that differs), and, with
     /// an armv6.itpack at hand, N45Board.bake as ipod1g_device.bake on the same three stock files (OpenGLES,
     /// SpringBoard's job, SystemVersion), with the GL front end and without: the same paths written (all to be
-    /// root-owned; no loader), the same record, the hook's and OpenGLES.baked's bytes and modes, the same LK_* job.
+    /// root-owned, the loader among them), the same record, the hook's and OpenGLES.baked's bytes and modes, the same LK_* job.
     @Test func frontEndAndBakeMatchPython() throws {
         let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles"), list = it.appendingPathComponent(N45Board.openGLESExports)
         let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
@@ -194,7 +194,7 @@ import Testing
                 #expect(NSDictionary(dictionary: rec) == NSDictionary(dictionary: pyRecord))
                 #expect(record.family == "n45-ios1" && record.hooks == (gles ? ["/" + N72Board.openGLES] : []))
                 #expect(report["gles_engine"] as? String == pyReport["gles_engine"] as? String && (report["gles_engine"] is NSNull) != gles)
-                #expect(!owned.contains(GuestPackage.loader.0) && !owned.contains(GuestPackage.loader.1))
+                #expect(owned.contains(GuestPackage.loader.0) && owned.contains(GuestPackage.loader.1))
                 for rel in owned {   // the modes, bytes and symlinks of everything written
                     let (x, y) = (a.appendingPathComponent(rel), b.appendingPathComponent(rel))
                     if let t = try? fm.destinationOfSymbolicLink(atPath: x.path) { #expect(t == (try? fm.destinationOfSymbolicLink(atPath: y.path)), "\(rel)"); continue }
