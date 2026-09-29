@@ -37,7 +37,7 @@ def offline():
     s = (ROOT / "LightTouchMac/Device/EmulatorController.swift").read_text()
     a = s.index("    func reportConnectionFailure(_ error: Error, operation: String) {")
     report = s[a:s.index("    private var connectionFailures =", a)]
-    a = s.index("    // MARK: - Activation (verified per boot")
+    a = s.index("    // MARK: - Activation (prepared offline, completed and verified per boot")
     activation = s[a:s.index("    func launchApp(_ bundleID: String)", a)]
     instance = (ROOT / "LightTouchMac/Library/DeviceInstance.swift").read_text()
     a = instance.index("    static func lockLacksActivation(_ lock: URL) -> Bool {")
