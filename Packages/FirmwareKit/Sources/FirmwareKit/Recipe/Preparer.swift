@@ -39,10 +39,13 @@ public enum Preparer {
         public var seed: String?, helper: URL?, cache: URL?
         /// The flat guest-helpers directory SystemEdits reads (+ it_keybag).
         public var guestTools: URL
+        /// A decrypted restore ramdisk to boot for the keybag one-shot instead of this IPSW's own: a sibling build's
+        /// (same iOS major) when the wiki has no ramdisk keys for this one (iPad 4.3.1–4.3.5).
+        public var keybagRamdisk: URL?
         public init(entry: FirmwareEntry, ipsw: URL, out: URL, seed: String? = nil, helper: URL?,
-                    guestTools: URL, cache: URL? = nil) {
+                    guestTools: URL, cache: URL? = nil, keybagRamdisk: URL? = nil) {
             self.entry = entry; self.ipsw = ipsw; self.out = out; self.seed = seed
-            self.helper = helper; self.guestTools = guestTools; self.cache = cache
+            self.helper = helper; self.guestTools = guestTools; self.cache = cache; self.keybagRamdisk = keybagRamdisk
         }
     }
 
@@ -187,7 +190,13 @@ public enum Preparer {
             let comp = try BuildComponents.load(ipsw)   // a restore-only build ships just the Restore ramdisk (N72Recipe)
             guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no ramdisk") }
             ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
-            try keybag(store: nand, nor: norURL, ramdisk: decFile(ramdisk!), dec: dec, identity: ident, dieID: dieID,
+            var rd = decFile(ramdisk!)
+            if let sibling = o.keybagRamdisk {   // no ramdisk keys for this build: a sibling build's decrypted ramdisk
+                log("keybag ramdisk: \(sibling.path) instead of \(ramdisk!)")
+                ramdisk = sibling.path
+                rd = sibling
+            }
+            try keybag(store: nand, nor: norURL, ramdisk: rd, dec: dec, identity: ident, dieID: dieID,
                        helper: helper, tools: o.guestTools, work: work, emit: emit, log: log)
         }
 

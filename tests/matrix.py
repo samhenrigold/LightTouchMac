@@ -106,6 +106,8 @@ def prepare(entry, entry_file, ipsw, out, a, helper, env):
            "--helper", helper, "--cache", a.scratch / "cache", "--guest-tools", a.guest_tools]
     if a.activation_hook:   # opt-in, forwarded verbatim
         cmd += ["--activation-hook", a.activation_hook]
+    if a.keybag_ramdisk:    # a sibling build's decrypted ramdisk for the keybag one-shot (run one entry at a time)
+        cmd += ["--keybag-ramdisk", a.keybag_ramdisk]
     out.mkdir(parents=True, exist_ok=True)
     (a.scratch / "cache").mkdir(parents=True, exist_ok=True)
     stderr = out.parent / "firmwarekit.log"
@@ -325,6 +327,8 @@ def main():
     ap.add_argument("--rerun", action="store_true", help="run entries that already have a result")
     ap.add_argument("--seed-ipsws", nargs="*", type=Path, default=[], help="local IPSWs to clone into the cache by sha1")
     ap.add_argument("--activation-hook", help="forwarded verbatim to firmwarekit create (opt-in)")
+    ap.add_argument("--keybag-ramdisk", help="a sibling build's decrypted restore ramdisk for the keybag one-shot (firmwarekit --keybag-ramdisk); "
+                    "select one entry with --build")
     ap.add_argument("--restore", action="store_true", help="also run restore-smoke.py on prepared iPads")
     ap.add_argument("--restore-rom", type=Path, help="--restore: the SecureROM image")
     ap.add_argument("--restore-libirecovery", type=Path, help="--restore: the libirecovery adapter build dir")

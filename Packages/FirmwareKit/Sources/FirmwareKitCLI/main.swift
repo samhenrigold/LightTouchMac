@@ -47,7 +47,7 @@ guard command == "create" else {
     exit(64)
 }
 var flags: [String: String] = [:]
-let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools"]
+let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools", "--keybag-ramdisk"]
 while let a = args.popFirst() {
     guard known.contains(a), let v = args.popFirst() else { emit(.error(code: "internal", message: "bad argument \(a)")); exit(1) }
     flags[a] = v
@@ -89,7 +89,8 @@ do {
         .appendingPathComponent("../Resources/guest-tools").standardizedFileURL
     options = .init(entry: try FirmwareEntry.load(from: url(entryPath)), ipsw: url(ipsw), out: staging, seed: flags["--seed"],
                     helper: flags["--helper"].map(url),
-                    guestTools: flags["--guest-tools"].map(url) ?? bundled, cache: flags["--cache"].map(url))
+                    guestTools: flags["--guest-tools"].map(url) ?? bundled, cache: flags["--cache"].map(url),
+                    keybagRamdisk: flags["--keybag-ramdisk"].map(url))
 } catch { fail(error) }
 
 Thread.detachNewThread { [options] in
