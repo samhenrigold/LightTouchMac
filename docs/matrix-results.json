@@ -1610,5 +1610,762 @@
    "excerpt": "firmwarekit: Error Domain=NSCocoaErrorDomain Code=260 \"The file \u201c038-2268-002-ramdisk.dmg\u201d couldn\u2019t be opened because there is no such file.\" UserInfo={NSFilePath=/Users/shg/Developer/qemu-ios-files/m"
   },
   "triage": "(no keys) as 8G4."
+ },
+ "n72ap-8A230m": {
+  "version": "4.0",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-29T02:02:02+00:00",
+  "prerelease": "beta",
+  "clock": "2010-04-15",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 42.6,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8A230m/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "shim MBXGLEngine-8C148",
+    "gli": "8C148",
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Sat Apr  3 03:01:48 PDT 2010; root:xnu-1504.51.1~2/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 16.9
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 4.6,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 14,
+    "attempt": 1
+   },
+   "package": {
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 30.5,
+     "lockdown": 0.2
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": "The emulator stopped.",
+    "second": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/driver.jsonl",
+  "first_failure": {
+   "check": "shutdown",
+   "why": "The emulator stopped.",
+   "excerpt": "\u0000Boot Failure Count: 0\tPanic Fail Count: 0\n\u0000pinot_init(): pinot_default_color: 0x00ffffff\n\u0000Boot Failure Count: 0\tPanic Fail Count: 0"
+  }
+ },
+ "n72ap-8A248c": {
+  "version": "4.0",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-29T02:06:46+00:00",
+  "prerelease": "beta",
+  "clock": "2010-04-27",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 17,
+   "ok": 17,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 54.4,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8A248c/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "shim MBXGLEngine-8C148",
+    "gli": "8C148",
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Wed Apr 14 23:40:46 PDT 2010; root:xnu-1504.50.51~3/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 21.5
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 13.4,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 16,
+    "attempt": 1
+   },
+   "package": {
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": false,
+    "error": "afc(unknown AFC error (code 1))",
+    "second_boot": {
+     "lit": 31.1,
+     "lockdown": 0.3
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": "The emulator stopped.",
+    "second": 33.5
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/driver.jsonl",
+  "first_failure": {
+   "check": "persist",
+   "why": "afc(unknown AFC error (code 1))",
+   "excerpt": "\u0000Boot Failure Count: 0\tPanic Fail Count: 0\n\u0000pinot_init(): pinot_default_color: 0x00ffffff\n\u0000Boot Failure Count: 0\tPanic Fail Count: 0"
+  }
+ },
+ "n72ap-8A260b": {
+  "version": "4.0",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-29T02:11:57+00:00",
+  "prerelease": "beta",
+  "clock": "2010-05-11",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 17,
+   "ok": 17,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 43.3,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8A260b/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "shim MBXGLEngine-8C148",
+    "gli": "8C148",
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Wed Apr 28 20:45:34 PDT 2010; root:xnu-1504.50.61~1/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 26.9
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 4.8,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 20,
+    "attempt": 1
+   },
+   "package": {
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 27.3,
+     "lockdown": 5.4
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": "The emulator stopped.",
+    "second": 31.1
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/driver.jsonl",
+  "first_failure": {
+   "check": "shutdown",
+   "why": "The emulator stopped.",
+   "excerpt": "\u0000Boot Failure Count: 0\tPanic Fail Count: 0\n\u0000pinot_init(): pinot_default_color: 0x00ffffff\n\u0000Boot Failure Count: 0\tPanic Fail Count: 0"
+  }
+ },
+ "n72ap-8A274b": {
+  "version": "4.0",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-29T02:16:54+00:00",
+  "prerelease": "beta",
+  "clock": "2010-05-25",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 17,
+   "ok": 17,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 57.8,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8A274b/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "shim MBXGLEngine-8C148",
+    "gli": "8C148",
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Tue May 11 22:10:33 PDT 2010; root:xnu-1504.50.69~2/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 31.7
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 1.1,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 2,
+    "attempt": 1
+   },
+   "package": {
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 28.8,
+     "lockdown": 0.7
+    }
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 1.5,
+    "reason": "The emulator stopped.",
+    "second": 1.0
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/driver.jsonl"
+ },
+ "n72ap-8B5080c": {
+  "version": "4.1",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-29T02:19:53+00:00",
+  "prerelease": "beta",
+  "clock": "2010-07-21",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 61.3,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8B5080c/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "shim MBXGLEngine-8C148",
+    "gli": "8C148",
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Mon Jul  5 20:00:30 PDT 2010; root:xnu-1504.55.27~4/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 29.4
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 11.6,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 2,
+    "attempt": 1
+   },
+   "package": {
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 60.1,
+     "lockdown": 1.4
+    }
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 1.5,
+    "reason": "The emulator stopped.",
+    "second": 1.8
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/driver.jsonl"
+ },
+ "n72ap-8B5091b": {
+  "version": "4.1",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-29T02:23:50+00:00",
+  "prerelease": "beta",
+  "clock": "2010-08-03",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 69.4,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8B5091b/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "shim MBXGLEngine-8C148",
+    "gli": "8C148",
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Tue Jul 20 21:24:02 PDT 2010; root:xnu-1504.55.32~9/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 25.1
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 13.7,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 3,
+    "attempt": 1
+   },
+   "package": {
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 50.6,
+     "lockdown": 0.7
+    }
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 1.5,
+    "reason": "The emulator stopped.",
+    "second": 1.5
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/driver.jsonl"
+ },
+ "n72ap-8B5097d": {
+  "version": "4.1",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-29T02:27:42+00:00",
+  "prerelease": "beta",
+  "clock": "2010-08-10",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 62.2,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8B5097d/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "shim MBXGLEngine-8C148",
+    "gli": "8C148",
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Wed Jul 28 01:14:40 PDT 2010; root:xnu-1504.55.33~3/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 21.8
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 5.3,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 2,
+    "attempt": 1
+   },
+   "package": {
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 24.1,
+     "lockdown": 0.7
+    }
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 0.9,
+    "reason": "The emulator stopped.",
+    "second": 1.0
+   },
+   "base_unchanged": false,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/driver.jsonl"
  }
 }
