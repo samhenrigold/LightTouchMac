@@ -281,13 +281,14 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
 
 // MARK: - Row cell
 
-/// "iOS 3.2.2" with its build in the tooltip, an Experimental tag, and the
-/// state accessory. VoiceOver reads the version, the tag and the state.
+/// "iOS 3.2.2" with its build in the tooltip, an Experimental / Beta 3 / GM tag, and
+/// the state accessory. VoiceOver reads the version, the tag and the state.
 private final class DeviceRowCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("entry")
 
     private let title = NSTextField(labelWithString: "")
-    private let experimentalTag = NSTextField(labelWithString: "Experimental")
+    private let badge = NSTextField(labelWithString: "")
+    private var badgeWidth: NSLayoutConstraint!
     private let detail = NSTextField(labelWithString: "")
     private let ring = NSProgressIndicator()
     private let symbol = NSImageView()
@@ -299,14 +300,13 @@ private final class DeviceRowCell: NSTableCellView {
         title.lineBreakMode = .byTruncatingTail
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        experimentalTag.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium)
-        experimentalTag.textColor = .systemOrange
-        experimentalTag.wantsLayer = true
-        experimentalTag.layer?.cornerRadius = 4
-        experimentalTag.layer?.borderWidth = 1
-        experimentalTag.layer?.borderColor = NSColor.systemOrange.cgColor
-        experimentalTag.alignment = .center
-        experimentalTag.setAccessibilityLabel("Experimental")
+        badge.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium)
+        badge.textColor = .systemOrange
+        badge.wantsLayer = true
+        badge.layer?.cornerRadius = 4
+        badge.layer?.borderWidth = 1
+        badge.layer?.borderColor = NSColor.systemOrange.cgColor
+        badge.alignment = .center
 
         detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         detail.textColor = .secondaryLabelColor
@@ -318,17 +318,18 @@ private final class DeviceRowCell: NSTableCellView {
         ring.maxValue = 1
 
         let stack = NSStackView()
-        stack.setViews([title, experimentalTag], in: .leading)
+        stack.setViews([title, badge], in: .leading)
         stack.setViews([detail, ring, symbol], in: .trailing)
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+        badgeWidth = badge.widthAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
+            badgeWidth,
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            experimentalTag.widthAnchor.constraint(equalToConstant: experimentalTag.intrinsicContentSize.width + 8),
             ring.widthAnchor.constraint(equalToConstant: 16),
             ring.heightAnchor.constraint(equalToConstant: 16),
         ])
@@ -339,8 +340,11 @@ private final class DeviceRowCell: NSTableCellView {
     func update(_ row: DeviceRow) {
         title.stringValue = row.title
         title.textColor = row.isDimmed ? .disabledControlTextColor : .labelColor
-        toolTip = (["\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))"] + row.progressLines).joined(separator: "\n")
-        experimentalTag.isHidden = !row.isExperimental
+        toolTip = (["\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))"] + [row.entry.clockNote].compactMap { $0 }
+                   + row.progressLines).joined(separator: "\n")
+        badge.stringValue = row.badge ?? ""
+        badge.isHidden = row.badge == nil
+        badgeWidth.constant = badge.intrinsicContentSize.width + 8
 
         detail.isHidden = true
         ring.isHidden = true
@@ -366,7 +370,7 @@ private final class DeviceRowCell: NSTableCellView {
         // One element per row for VoiceOver: "iOS 3.2.2, Experimental, Running".
         setAccessibilityElement(true)
         setAccessibilityRole(.cell)
-        setAccessibilityLabel(([row.title] + (row.isExperimental ? ["Experimental"] : []) + [row.stateDescription] + [row.note].compactMap { $0 })
+        setAccessibilityLabel(([row.title] + [row.badge, row.stateDescription, row.note].compactMap { $0 })
             .joined(separator: ", "))
         if case let .error(reason) = row.state { setAccessibilityHelp(reason) } else { setAccessibilityHelp(nil) }
     }

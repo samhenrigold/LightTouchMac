@@ -556,7 +556,9 @@ final class EmulatorController {
     /// changes (travel). Set through lockdown's TimeZone value — lockdownd
     /// rewrites /var/db/timezone/localtime and SpringBoard follows live, so
     /// no respring. The guest's clock itself is UTC from the RTC model; only
-    /// the zone needs the host's help.
+    /// the zone needs the host's help — unless the catalog entry pins a
+    /// `clock` (a developer build inside its validity window): that date is set
+    /// once per boot, and later zone syncs keep the guest's time as it is.
     private func startTimeZoneSync() {
         NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange,
                                                object: nil, queue: nil) { [weak self] _ in
@@ -572,13 +574,18 @@ final class EmulatorController {
     private func syncTimeZoneWhenReady() async {
         while !Task.isCancelled {
             guard !shuttingDown, !isDead, !isPoweredOff else { return }
+            let clock = catalogEntry?.clockEpoch.map { clockPinned ? "keep" : String(Int($0)) }
             if state == .running, !preparingDevice, canManageApps, await deviceReady(),
-               (try? await tools().setTimeZone(TimeZone.current.identifier)) != nil {
+               (try? await tools().setTimeZone(TimeZone.current.identifier, clock: clock)) != nil {
+                if clock != nil { clockPinned = true }
                 return
             }
             try? await Task.sleep(for: .seconds(5))
         }
     }
+
+    /// This boot's pinned clock has been set (catalogEntry.clock); later syncs pass "keep".
+    private var clockPinned = false
 
     /// App quit (after the clean shutdowns) and restarts. The helper gets
     /// SIGTERM: a guest that already powered off quits at once; one that

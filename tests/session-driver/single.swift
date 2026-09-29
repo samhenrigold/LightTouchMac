@@ -18,6 +18,10 @@ struct SingleConfig: Decodable {
     var itpack: String?
     /// A second boot on the same overlay after the clean shutdown, with the persist check.
     var reboot: Bool?
+    /// The catalog entry's pinned `clock` (YYYY-MM-DD) and the lockdown-tz tool that sets it, as the app does at
+    /// every connect: a developer build past its expiry refuses to run on the Mac's date.
+    var clock: String?
+    var lockdownTZ: String?
 }
 
 @MainActor func runSingle(_ s: SingleConfig) async {
@@ -39,6 +43,12 @@ struct SingleConfig: Decodable {
         do { try d.boot(generation: generation, guestPackage: offer) } catch { fail("boot \(generation): \(error)") }
         await waitLit(d, ipad ? 0.2 : 0.03, 240)
         await waitUSB(d, expecting: ipad ? "iPad1,1" : "iPod2,1", 300)
+        if let clock = s.clock, let tool = s.lockdownTZ, let epoch = FirmwareCatalog.Entry.epoch(ofClock: clock) {
+            do {
+                let zone = try await GuestServices.setTimeZone(TimeZone.current.identifier, clock: String(Int(epoch)), tool: tool, socket: d.mux.clientSocket)
+                emit("clock", ["device": d.name, "generation": generation, "clock": clock, "zone": zone])
+            } catch { emit("clock", ["device": d.name, "generation": generation, "clock": clock, "error": "\(error)"]) }
+        }
         emit("activation", ["device": d.name, "generation": generation, "state": await d.lockdownValue("ActivationState") ?? ""])
         if offered {   // the loader's report: it_boot reports the serial it ran and R_* (GuestPackage.ReportCode)
             let start = Date()

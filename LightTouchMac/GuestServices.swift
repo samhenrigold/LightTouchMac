@@ -315,11 +315,12 @@ nonisolated struct GuestServices: Sendable {
     /// The guest's time zone through the lockdown-tz child process — a child ON
     /// PURPOSE: lockdownd_set_value in-process corrupts the app's heap against
     /// 3.1.3's lockdownd (memory lockdown-setvalue-trap). The tool reads first,
-    /// sets only on a mismatch and prints the zone in effect.
-    static func setTimeZone(_ identifier: String, tool: String, socket: String) async throws -> String {
+    /// sets only on a mismatch and prints the zone in effect. `clock`: the tool's second argument, seconds
+    /// since 1970 to set instead of the Mac's clock, or "keep" to leave the guest's time alone; nil syncs the Mac's.
+    static func setTimeZone(_ identifier: String, clock: String? = nil, tool: String, socket: String) async throws -> String {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: tool)
-        task.arguments = [identifier]
+        task.arguments = [identifier] + (clock.map { [$0] } ?? [])
         task.environment = ProcessInfo.processInfo.environment.merging(["USBMUXD_SOCKET_ADDRESS": socket]) { $1 }
         let output = Pipe(), error = Pipe()
         task.standardOutput = output

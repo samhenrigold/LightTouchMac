@@ -122,6 +122,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
 
     var title: String { "iOS \(entry.version)" }
     var isExperimental: Bool { entry.status == .experimental }
+    /// The tag beside the title: a developer build's "Beta 3"/"GM", else "Experimental" for that status.
+    var badge: String? { entry.prereleaseBadge ?? (isExperimental ? "Experimental" : nil) }
     var isStartable: Bool { instanceID != nil }
     var isDimmed: Bool { if case .unavailable = state { true } else { false } }
     var isError: Bool { if case .error = state { true } else { false } }
