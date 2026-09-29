@@ -309,7 +309,10 @@ nonisolated final class DeviceLink: @unchecked Sendable {
             if status & 0x7f == 0 { termination = .exited((status >> 8) & 0xff) }
             else { termination = .signaled(status & 0x7f) }
         } else if r == 0 {
-            return      // not yet (spurious); the source fires again
+            // NOTE_EXIT is one-shot: if the kernel hasn't finished the exit yet
+            // (seen once in 300 SIGKILLs under load), poll again instead of losing it.
+            queue.asyncAfter(deadline: .now() + .milliseconds(10)) { [weak self] in self?.reap() }
+            return
         } else {
             termination = .unknown
         }
