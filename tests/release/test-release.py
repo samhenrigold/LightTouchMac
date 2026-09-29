@@ -356,5 +356,26 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse(release.source_identity(self.product)['submodules']['module']['initialized'])
 
 
+class RemoveTreeTests(unittest.TestCase):
+    def test_retries_when_finder_refills_a_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary) / 'prepare-check'
+            (work / 'out/nand').mkdir(parents=True)
+            (work / 'out/nand/nand.bin').write_bytes(b'x')
+            real, calls = shutil.rmtree, []
+
+            def finder_rmtree(path, *args, **kwargs):   # Finder writes .DS_Store as the tree empties
+                calls.append(path)
+                if len(calls) == 1:
+                    (work / 'out/nand/nand.bin').unlink()
+                    (work / 'out/nand/.DS_Store').write_bytes(b'')
+                    raise OSError(66, 'Directory not empty', str(work / 'out/nand'))
+                return real(path, *args, **kwargs)
+            with mock.patch.object(release.shutil, 'rmtree', finder_rmtree), mock.patch.object(release.time, 'sleep'):
+                release.remove_tree(work)
+            self.assertFalse(work.exists())
+            self.assertEqual(len(calls), 2)
+
+
 if __name__ == '__main__':
     unittest.main()

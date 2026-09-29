@@ -570,6 +570,21 @@ VERIFY_ENTRIES = {
 }
 
 
+def remove_tree(path, attempts=5):
+    """Delete a verify work tree. A Finder window open on the output writes .DS_Store into directories as
+    they empty, so rmtree can hit ENOTEMPTY (09-29 preflight); retry rather than fail a passing entry."""
+    for attempt in range(attempts):
+        if not path.exists():
+            return
+        subprocess.run(['chmod', '-R', 'u+w', path], check=True)
+        try:
+            return shutil.rmtree(path)
+        except OSError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(1)
+
+
 def check_prepare(args, log, state, app):
     """Run the bundled firmwarekit as the app does (bundled --guest-tools default, bundled helper), then boot
     what it made through the bundle. Frames and events stay in verify-frames/<entry>/."""
@@ -590,9 +605,7 @@ def check_prepare(args, log, state, app):
     work, frames = args.output / 'prepare-check', args.output / 'verify-frames' / entry_id
 
     def clean():
-        if work.exists():
-            subprocess.run(['chmod', '-R', 'u+w', work], check=True)
-            shutil.rmtree(work)
+        remove_tree(work)
     clean()
     shutil.rmtree(frames, ignore_errors=True)
     (work / 'out').mkdir(parents=True)
