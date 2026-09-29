@@ -106,6 +106,98 @@ import Testing
         }
     }
 
+    /// 3A101a's rootfs vfdecrypt key (022-3601-4.dmg).
+    static let rootfsKey = "6f021b478cc21ff77f775850c0efc2e66fd015f6a6894be079ee1351dce9af069f915f3d"
+
+    /// 1.x GL front end against the oracle on the stock 3A101a IPSW's OpenGLES: the export scan as
+    /// gles2x_exports.scan, the check against opengles-1x.exports (and its refusal of a list that differs), and, with
+    /// an armv6.itpack at hand, N45Board.bake as ipod1g_device.bake on the same three stock files (OpenGLES,
+    /// SpringBoard's job, SystemVersion), with the GL front end and without: the same paths written (all to be
+    /// root-owned; no loader), the same record, the hook's and OpenGLES.baked's bytes and modes, the same LK_* job.
+    @Test func frontEndAndBakeMatchPython() throws {
+        let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles"), list = it.appendingPathComponent(N45Board.openGLESExports)
+        let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
+        guard Self.available, Oracle.exists(list) else { return }
+        try Oracle.withTemp { dir in
+            let fm = FileManager.default
+            let enc = dir.appendingPathComponent("enc.dmg"), dmg = dir.appendingPathComponent("rootfs.dmg"), raw = dir.appendingPathComponent("rootfs.hfs")
+            try IPSWArchive(Self.ipsw).extract("022-3601-4.dmg", to: enc)
+            try VFDecrypt.decrypt(input: enc, output: dmg, key: Data(hex: Self.rootfsKey)!)
+            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            var stock: [String: Data] = [:]
+            do {
+                let v = try HFSPlusVolume(raw)
+                for p in [N72Board.openGLES, SystemEdits.springBoardJob, GuestPackage.systemVersion] { stock[p] = try v.contents(v.record(at: p)) }
+            }
+            for u in [enc, dmg, raw] { try fm.removeItem(at: u) }
+            let stockGL = stock[N72Board.openGLES]!, gl = dir.appendingPathComponent("OpenGLES")
+            try stockGL.write(to: gl)
+
+            let scan = dir.appendingPathComponent("scan.txt")
+            try K48Oracle.sh(["python3", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import gles2x_exports; open(sys.argv[3], 'w').write('\\n'.join(gles2x_exports.scan(sys.argv[2])))",
+                              it.path, gl.path, scan.path], cwd: dir)
+            let names = try N72Board.exportedSymbols(stockGL)
+            let pyNames = try String(contentsOf: scan, encoding: .utf8).split(separator: "\n").map(String.init)
+            #expect(names.count == 186 && names == pyNames)
+            let (ok, line) = try N72Board.frontEnd(gl, exports: list)
+            #expect(ok, "\(line)")
+            let short = dir.appendingPathComponent("short.exports")
+            try (String(contentsOf: list, encoding: .utf8).replacingOccurrences(of: "\nglFlush\n", with: "\n")).write(to: short, atomically: true, encoding: .utf8)
+            #expect(try N72Board.frontEnd(gl, exports: short).0 == false)
+            #expect(try N72Board.frontEnd(gl, exports: it.appendingPathComponent(N72Board.openGLESExports)).0 == false)   // 2.x's list is not 1.x's
+
+            guard Oracle.exists(itpack) else { return }
+            let helpers = dir.appendingPathComponent("helpers")
+            try SystemEdits.mkdirs(helpers)
+            for u in [itpack, list] { try fm.copyItem(at: u, to: helpers.appendingPathComponent(u.lastPathComponent)) }
+            for gles in [true, false] {
+                func volume(_ name: String) throws -> URL {
+                    let m = dir.appendingPathComponent("\(name)-\(gles)")
+                    for (p, d) in stock {
+                        try SystemEdits.mkdirs(m.appendingPathComponent(p).deletingLastPathComponent())
+                        try SystemEdits.put(d, m.appendingPathComponent(p), mode: p == N72Board.openGLES ? 0o755 : 0o644)
+                    }
+                    return m
+                }
+                let a = try volume("swift"), b = try volume("python"), out = dir.appendingPathComponent("py-\(gles).json")
+                let (report, record, owned) = try N45Board.bake(a, helpers: helpers, gles: gles, log: { _ in })
+                try K48Oracle.sh(["python3", "-c", """
+                    import json, sys; sys.path.insert(0, sys.argv[1]); import ipod1g_device
+                    report, owned = ipod1g_device.bake(sys.argv[2], sys.argv[3], sys.argv[4] == "1")
+                    json.dump({"report": report, "owned": owned}, open(sys.argv[5], "w"))
+                    """, Oracle.qemuIOS.appendingPathComponent("imgtools").path, b.path, itpack.path, gles ? "1" : "0", out.path], cwd: dir)
+                let py = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as! [String: Any], pyReport = py["report"] as! [String: Any]
+                #expect(owned == py["owned"] as? [String])
+                var pyRecord = pyReport["guest_package"] as! [String: Any], rec = record.object
+                #expect((pyRecord["itpack"] as? [String: Any])?["sha256"] as? String == record.itpackSHA256)
+                pyRecord["itpack"] = nil; rec["itpack"] = nil   // the paths differ (a copy); the sha256 is the same
+                #expect(NSDictionary(dictionary: rec) == NSDictionary(dictionary: pyRecord))
+                #expect(record.family == "n45-ios1" && record.hooks == (gles ? ["/" + N72Board.openGLES] : []))
+                #expect(report["gles_engine"] as? String == pyReport["gles_engine"] as? String && (report["gles_engine"] is NSNull) != gles)
+                #expect(!owned.contains(GuestPackage.loader.0) && !owned.contains(GuestPackage.loader.1))
+                for rel in owned {   // the modes, bytes and symlinks of everything written
+                    let (x, y) = (a.appendingPathComponent(rel), b.appendingPathComponent(rel))
+                    if let t = try? fm.destinationOfSymbolicLink(atPath: x.path) { #expect(t == (try? fm.destinationOfSymbolicLink(atPath: y.path)), "\(rel)"); continue }
+                    #expect(try SystemEdits.permissions(x) == SystemEdits.permissions(y), "\(rel)")
+                    var isDir: ObjCBool = false
+                    if fm.fileExists(atPath: x.path, isDirectory: &isDir), !isDir.boolValue, rel != SystemEdits.springBoardJob {
+                        #expect(try Data(contentsOf: x) == Data(contentsOf: y), "\(rel)")
+                    }
+                }
+                let env = { (m: URL) in (NSDictionary(contentsOf: m.appendingPathComponent(SystemEdits.springBoardJob))?["EnvironmentVariables"] as? [String: String]) ?? [:] }
+                #expect(env(a) == env(b))
+                #expect(env(a)["LK_ENABLE_OGL"] == (gles ? "1" : nil) && env(a)["LK_AUTO_ENABLE_OGL"] == (gles ? "0" : nil) && env(a)["LK_ENABLE_MBX2D"] == "0")
+                let hooked = try Data(contentsOf: a.appendingPathComponent(N72Board.openGLES)), baked = a.appendingPathComponent(N72Board.openGLES + ".baked")
+                if gles {
+                    #expect(try Data(contentsOf: baked) == stockGL && hooked != stockGL)
+                    #expect(try N72Board.exportedSymbols(hooked) == names)   // the front end exports the firmware's own names
+                } else {
+                    #expect(hooked == stockGL && !fm.fileExists(atPath: baked.path))
+                }
+            }
+        }
+    }
+
     @Test func components() throws {
         guard Self.available else { return }
         let c = try BuildComponents.load(IPSWArchive(Self.ipsw))

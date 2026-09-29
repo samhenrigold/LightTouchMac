@@ -25,7 +25,7 @@ import mkpkg
 MBX = mkpkg.MBX
 
 
-def package(tree, family, builds, serial, stub=False, host=None):
+def package(tree, family, builds, serial, stub=False, host=None, loader=True):
     """A package directory as mkpkg.assemble writes one."""
     pkg = tree / family
     files = []
@@ -41,6 +41,8 @@ def package(tree, family, builds, serial, stub=False, host=None):
                 'provides': ['it_agent', 'itmedia'], 'files': files, 'jobs': ['jobs/com.qemu.it-agent.plist'],
                 'hooks': [{'file': 'hooks/MBXGLEngine', 'target': MBX, 'respring': True},
                           {'file': 'hooks/libappsync.dylib', 'target': '/usr/lib/libappsync.dylib', 'respring': False}]}
+    if not loader:
+        manifest['loader'] = False      # as mkpkg writes n45-ios1's
     (pkg / 'manifest.json').write_text(json.dumps(manifest))
     return manifest
 
@@ -51,8 +53,9 @@ with tempfile.TemporaryDirectory(prefix='ltm-guest-package-') as t:
     package(tree, 'n72-ios2', ['5F138'], 3, stub=True)
     good = package(tree, 'n72-ios3', ['7E18'], 7)
     package(tree, 'n72-ios9', ['9A1'], 7, host={'guest-package': [2, 3], 'gles': [0, 0]})
+    package(tree, 'n72-ios1', ['3*'], 7, loader=False)
     entries = []
-    for family in ('n72-ios2', 'n72-ios3', 'n72-ios9'):
+    for family in ('n72-ios2', 'n72-ios3', 'n72-ios9', 'n72-ios1'):
         m = json.loads((tree / family / 'manifest.json').read_text())
         entries.append((family + '/manifest.json', (tree / family / 'manifest.json').read_bytes()))
         entries += [(family + '/' + f['name'], (tree / family / f['name']).read_bytes()) for f in m['files']]
@@ -83,7 +86,7 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   let t = URL(fileURLWithPath: CommandLine.arguments[1])
   let pack = t.appendingPathComponent("armv6.itpack")
   let entries = try GuestPackage.read(pack)
-  check(entries.count == 20 && entries.last?.name == "loader/com.qemu.it-boot.plist")
+  check(entries.count == 26 && entries.last?.name == "loader/com.qemu.it-boot.plist")
   // The same offer and payloads as mkpkg.py offer, with the record's verdicts.
   var record = DeviceInstance.Guest(); record.lastGood = 5; record.bad = [6]
   let dir = t.appendingPathComponent("work/guest-offer")
@@ -115,8 +118,9 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   record.builtIn = 6
   check(try GuestPackage.compose(itpack: pack, board: "n72ap", build: "7E18", lock: nil, guest: record, into: dir)!.serial == 7,
                "a newer bundled package ends the built-in choice")
-  // Nothing for a stub, another build, another board or an unspoken host protocol; no directory either.
-  for (board, build) in [("n72ap", "5F138"), ("n72ap", "8C148"), ("k48ap", "7E18"), ("n72ap", "9A1")] {
+  // Nothing for a stub, another build, another board, an unspoken host protocol or a family with no loader to
+  // pull it ("loader": false, 1.x); no directory either.
+  for (board, build) in [("n72ap", "5F138"), ("n72ap", "8C148"), ("k48ap", "7E18"), ("n72ap", "9A1"), ("n72ap", "3A101a")] {
    let none = try GuestPackage.compose(itpack: pack, board: board, build: build, lock: nil, guest: nil, into: dir)
    check(none == nil, build)
    check(!FileManager.default.fileExists(atPath: dir.path))

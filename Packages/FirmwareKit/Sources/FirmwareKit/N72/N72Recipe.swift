@@ -365,17 +365,18 @@ final class N72Board: Board {
 }
 
 extension N72Board {
-    /// ipod2g_device.gles2x_front_end: (true, line) if the stock OpenGLES exports exactly the names in `exports`
-    /// (contrib/it-gles/opengles-2x.exports), so the package's hook may replace it; else (false, why), stock kept.
+    /// ipod2g_device.gles2x_front_end (ipod1g_device's for 1.x): (true, line) if the stock OpenGLES exports exactly
+    /// the names in `exports` (contrib/it-gles/opengles-<1x|2x>.exports), so the package's hook may replace it;
+    /// else (false, why), stock kept.
     static func frontEnd(_ stock: URL, exports: URL) throws -> (Bool, String) {
         guard FileManager.default.fileExists(atPath: stock.path) else { return (false, "no \(openGLES)") }
         guard let list = try? String(contentsOf: exports, encoding: .utf8) else {
-            throw FirmwareError(.internal, "guest helper \(openGLESExports) missing from \(exports.deletingLastPathComponent().path)")
+            throw FirmwareError(.internal, "guest helper \(exports.lastPathComponent) missing from \(exports.deletingLastPathComponent().path)")
         }
         let want = Set(list.split(separator: "\n").filter { !$0.hasPrefix("#") }.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
         let got = Set(try exportedSymbols(Data(contentsOf: stock)))
         guard want == got else {
-            return (false, "stock OpenGLES exports differ from \(openGLESExports) (missing \(want.subtracting(got).sorted().prefix(4)), extra \(got.subtracting(want).sorted().prefix(4))): stock kept")
+            return (false, "stock OpenGLES exports differ from \(exports.lastPathComponent) (missing \(want.subtracting(got).sorted().prefix(4)), extra \(got.subtracting(want).sorted().prefix(4))): stock kept")
         }
         return (true, "GL front end replaces OpenGLES (\(got.count) exports, the firmware's own)")
     }

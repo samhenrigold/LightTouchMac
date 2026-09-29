@@ -6,9 +6,13 @@
 // docs/changes.md through SystemEdits: fstab rw with no /private/var line (one partition), the kernelcache (the
 // IPSW's 8900 container, which the machine's 8900 engine decrypts) where iBoot loads it, SpringBoard's
 // LK_ENABLE_MBX2D=0 (no MBX 2D on this machine), the six LaunchDaemons that changes.md keeps, and the
-// /var/root/Library skeleton; the volume journaled (it is also /private/var); activation as every board has it;
-// owners patched in the catalog. Store: N45NAND.
-// No guest tools on 1.x yet, no keybag, no seal.
+// /var/root/Library skeleton; then ipod1g_device.bake: when the stock OpenGLES exports exactly
+// opengles-1x.exports (a guest helper), the seed package's n45-ios1 hook (OpenGLES-1x, the GL front end) replaces it
+// (the stock binary kept as OpenGLES.baked) and SpringBoard gets LK_ENABLE_OGL=1 LK_AUTO_ENABLE_OGL=0 (else
+// LK_ENABLE_OGL stays unset: software LayerKit); the seed package goes in either way, without a loader (the family's
+// "loader": false: it_boot dies under 1.x launchd); an itpack without the hook is refused. The volume journaled (it
+// is also /private/var); activation as every board has it; owners patched in the catalog. Store: N45NAND.
+// No other guest tools on 1.x, no keybag, no seal.
 //
 // The recipe: storage "8g" (MA623; the only NAND geometry modelled), system_mib = the volume.
 
@@ -20,6 +24,7 @@ final class N45Board: Board {
     static let keptDaemons: Set = ["com.apple.AddressBook.plist", "com.apple.CommCenter.plist", "com.apple.configd.plist",
                                    "com.apple.mobile.lockdown.plist", "com.apple.notifyd.plist", "com.apple.SpringBoard.plist"]
     static let rootLibrary = "private/var/root/Library"
+    static let openGLESExports = "opengles-1x.exports"
 
     let arch = "armv6", seedPrefix = "ipod1g"
     let bootStep = "Writing the identity, NOR and boot files", volumesStep = "Building the system volume", keybagStep = ""
@@ -81,7 +86,6 @@ final class N45Board: Board {
             try SystemEdits.put(Data(N72Board.fstabRW.utf8), at(SystemEdits.fstab))
             try SystemEdits.mkdirs(at(kcPath).deletingLastPathComponent())
             try c.ipsw.extract(kcMember, to: at(kcPath))
-            try SystemEdits.editSpringBoardJob(m) { env, _ in env["LK_ENABLE_MBX2D"] = "0" }
             let removed = try fm.contentsOfDirectory(atPath: at(SystemEdits.daemons).path)
                 .filter { $0.hasSuffix(".plist") && !Self.keptDaemons.contains($0) }.sorted()
             for n in removed { try fm.removeItem(at: at(SystemEdits.daemons + "/" + n)) }
@@ -89,6 +93,10 @@ final class N45Board: Board {
                 try SystemEdits.mkdirs(at(Self.rootLibrary + d))
                 owners.append((0, Self.rootLibrary + d))
             }
+            let (report, record, owned) = try Self.bake(m, helpers: c.o.guestTools, gles: recipe.options["gles_shim"] ?? true, log: c.log)
+            for (k, v) in report { derived[k] = v }
+            c.guestPackage = record
+            owners += owned.map { (0, $0) }
             // One partition, so the root holds what a device keeps in its journaled /private/var: journaled, so a
             // hard power-off is replayed at mount (the stock root is unjournaled and 1.x runs no fsck or update);
             // the journal itself is left for the device's first mount to initialize (leaveJournalToDevice).
@@ -101,6 +109,33 @@ final class N45Board: Board {
         try hfs.leaveJournalToDevice()
         c.log("0:0 patched \(try hfs.setOwner(owners.map(\.1), uid: 0, gid: 0)) catalog record(s)")
         c.log("\(try hfs.normalize(after: newest, to: newest)) catalog records dated as of the IPSW's newest file")
+    }
+
+    /// ipod1g_device.bake over the mounted 1.x volume `m`: the GL front end if the stock OpenGLES exports exactly
+    /// opengles-1x.exports (and `gles`), the seed package (GuestPackage.seed of armv6.itpack: n45-ios1, no loader),
+    /// SpringBoard's LK_* environment. Returns (the lock's derived gles/gles_engine, the guest_package record, the
+    /// volume-relative paths to make root-owned).
+    static func bake(_ m: URL, helpers: URL, gles: Bool, log: (String) -> Void) throws -> ([String: Any], GuestPackage.Record, [String]) {
+        var front = false, report: [String: Any] = [:]
+        if gles {
+            let (ok, line) = try N72Board.frontEnd(m.appendingPathComponent(N72Board.openGLES), exports: helpers.appendingPathComponent(openGLESExports))
+            front = ok
+            report["gles"] = line + (ok ? "; LayerKit composites through it (LK_ENABLE_OGL=1)" : "; software LayerKit")
+        } else {
+            report["gles"] = "gles off; software LayerKit"
+        }
+        let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: "armv6", gles: front, log: log)
+        if front, !record.hooks.contains("/" + N72Board.openGLES) {
+            // LK_ENABLE_OGL=1 over the stock IMG driver drives the unemulated MBX: fail rather than wedge
+            throw FirmwareError(.internal, "\(SystemEdits.Helpers.itpack("armv6")) has no OpenGLES hook for this build; rebuild the guest package")
+        }
+        try SystemEdits.editSpringBoardJob(m) { env, _ in
+            if front { env["LK_ENABLE_OGL"] = "1"; env["LK_AUTO_ENABLE_OGL"] = "0" } else { env.removeObjects(forKeys: ["LK_ENABLE_OGL", "LK_AUTO_ENABLE_OGL"]) }
+            env["LK_ENABLE_MBX2D"] = "0"   // never the unemulated MBX 2D path
+        }
+        report["gles_engine"] = front ? "OpenGLES" : NSNull()
+        log("bake: \(report)")
+        return (report, record, [SystemEdits.springBoardJob] + seeded)
     }
 
     func store(_ c: Recipe.Context) throws {

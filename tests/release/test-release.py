@@ -81,7 +81,7 @@ class ReleaseTests(unittest.TestCase):
             'inputs': {name: release.digest(self.qemu / name)
                        for name in ('contrib/it-agent/it_agent.c', 'contrib/export-guest-artifacts.sh')},
             'files': files,
-            'guest_package': {'serial': release.GUEST_PACKAGE_MIN_SERIAL, 'version': '1.1.3'},
+            'guest_package': {'serial': release.GUEST_PACKAGE_MIN_SERIAL, 'version': '1.1.5'},
         }
         self.put(self.guest.parent / 'manifest.json', json.dumps(manifest))
         self.args.guest_tools = self.guest
@@ -189,13 +189,14 @@ class ReleaseTests(unittest.TestCase):
         manifest = self.guest_fixture()
         release.validate_guest(self.args, self.guest)
         for name in ('guest-tools/it_agent', 'ipad-guest-tools/GLEngine', 'ipad-guest-tools/MBXGLEngine',
-                     'ipad-guest-tools/gles-names.h', 'ipad-guest-tools/OpenGLES-2x'):
+                     'ipad-guest-tools/gles-names.h', 'ipad-guest-tools/OpenGLES-2x',
+                     'ipad-guest-tools/OpenGLES-1x', 'ipad-guest-tools/opengles-1x.exports'):
             missing = dict(manifest, files={k: v for k, v in manifest['files'].items() if k != name})
             self.put(self.guest.parent / 'manifest.json', json.dumps(missing))
             with self.assertRaisesRegex(ValueError, 'missing from the export manifest: ' + Path(name).name):
                 release.validate_guest(self.args, self.guest)
-        self.put(self.guest.parent / 'manifest.json', json.dumps(dict(manifest, guest_package={'serial': 4})))
-        with self.assertRaisesRegex(ValueError, 'serial 4 predates 5'):
+        self.put(self.guest.parent / 'manifest.json', json.dumps(dict(manifest, guest_package={'serial': 6})))
+        with self.assertRaisesRegex(ValueError, 'serial 6 predates 7'):
             release.validate_guest(self.args, self.guest)
 
     def test_guest_directory_must_match_manifest(self):
