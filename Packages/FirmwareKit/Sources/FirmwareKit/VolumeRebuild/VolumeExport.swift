@@ -4,7 +4,7 @@
 //   2. rebuild each volume into <out>/<name>.img (VolumeRebuild), then drop the clone;
 //   3. a volume that was not cleanly unmounted gets `fsck_hfs -fy` (staging copy only);
 //   4. mount it read-write, privately (nobrowse), to add .metadata_never_index; unmount + fsck -fn;
-//   5. mount: `hdiutil attach -readonly` with browsing on, so the stock HFS driver serves it in Finder.
+//   5. mount: a read-only attach (DiskImage) with browsing on, so the stock HFS driver serves it in Finder.
 //
 // Base and overlay files are never opened for writing. <out>/export.json records what is attached;
 // unmount(out:) detaches it and deletes <out>. The caller (the app's lease, F0) guarantees the device is
@@ -110,15 +110,9 @@ public enum VolumeExport {
         do {
             for i in vols.indices {
                 let t = Date()
-                let o = try VolumeMount.run("/usr/bin/hdiutil", ["attach", "-readonly", "-owners", "off", "-noverify", "-noautoopen",
-                                                                 "-imagekey", "diskimage-class=CRawDiskImage", vols[i].image])
-                // "/dev/disk8\t<tab>/Volumes/Name" (a bare volume has no partition-map line)
-                guard let line = o.split(separator: "\n").first(where: { $0.hasPrefix("/dev/disk") }) else {
-                    throw FirmwareError(.internal, "hdiutil attach \(vols[i].image): no device in \(o)")
-                }
-                let fields = line.split(separator: "\t").map { $0.trimmingCharacters(in: .whitespaces) }
-                vols[i].device = fields.first
-                vols[i].mountPoint = fields.last.flatMap { $0.hasPrefix("/") ? $0 : nil }
+                let a = try DiskImage.attach(URL(fileURLWithPath: vols[i].image), readOnly: true, mount: true)
+                vols[i].device = a.device
+                vols[i].mountPoint = a.mountPoint
                 vols[i].seconds += Date().timeIntervalSince(t)
                 try write(vols, out)
             }
@@ -132,9 +126,9 @@ public enum VolumeExport {
     /// Detaches what `out`'s export.json says is attached, then deletes `out`.
     public static func unmount(out: URL) throws {
         if let d = try? Data(contentsOf: manifest(out)), let vols = try? JSONDecoder().decode([Exported].self, from: d) {
-            let attached = VolumeMount.exec("/usr/bin/hdiutil", ["info"]).1     // skip what Finder already ejected
+            let attached = DiskImage.attachedImages().map(\.image)     // skip what Finder already ejected
             for v in vols where attached.contains(v.image) { v.device.map { VolumeMount.detach($0, force: true) } }
-            let still = VolumeMount.exec("/usr/bin/hdiutil", ["info"]).1
+            let still = DiskImage.attachedImages().map(\.image)
             for v in vols where v.device != nil && still.contains(v.image) {
                 throw FirmwareError(.internal, "\(v.image) is still attached (\(v.device!)); close what uses \(v.mountPoint ?? "it")")
             }

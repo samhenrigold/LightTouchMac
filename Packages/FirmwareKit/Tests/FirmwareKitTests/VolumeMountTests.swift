@@ -70,7 +70,8 @@ import Testing
             try Oracle.time("grow \(fw.entryID)") { try VolumeMount.grow(raw, toBytes: blocks * 4096) }
             #expect(try VolumeMount.size(raw) == blocks * 4096 && VolumeMount.size(py) == blocks * 4096)
             let a = try HFSPlusVolume(raw), b = try HFSPlusVolume(py)
-            #expect(a.totalBlocks == b.totalBlocks && a.freeBlocks == b.freeBlocks && a.blockSize == b.blockSize)
+            #expect(a.totalBlocks == b.totalBlocks && a.freeBlocks == b.freeBlocks && a.blockSize == b.blockSize,
+                    "swift \(a.totalBlocks) x \(a.blockSize), \(a.freeBlocks) free; python \(b.totalBlocks) x \(b.blockSize), \(b.freeBlocks) free")
             #expect(try a.listing(hashes: false) == b.listing(hashes: false))
             let avh = { (u: URL) throws -> Data in
                 let f = try FileHandle(forReadingFrom: u); defer { try? f.close() }

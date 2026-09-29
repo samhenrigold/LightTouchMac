@@ -64,6 +64,9 @@ public enum K48IBoot {
         var tree = try DeviceTree(plaintext)
         guard tree.contains("arm-io/usb-complex") else { throw FirmwareError(.unsupported, "DeviceTree has no USB complex") }
         try tree.add("arm-io/usb-complex", "hsic-enabled")
+        // No SGX model: unmatch the GPU node so IMGSGX535 never probes the unimplemented window, as KBoot does on
+        // the direct-kernel path (ipad1_gid.host_usb_devicetree; fidelity-ledger K48 #54).
+        if tree.contains("arm-io/sgx") { try tree.set("arm-io/sgx", "compatible", .string("none")) }
         let plain = tree.data
         // pairs: production/development KBAG -> its 48-byte IV/key. Find the production (state 1) KBAG here.
         let recs = [UInt8](blobs)

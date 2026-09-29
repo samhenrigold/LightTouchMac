@@ -402,14 +402,8 @@ public enum Preparer {
     public static func cancel(staging: URL) {
         terminateDescendants(of: getpid(), grace: 1)
         let root = staging.resolvingSymlinksInPath().path + "/"
-        let (status, out) = VolumeMount.exec("/usr/bin/hdiutil", ["info", "-plist"])
-        guard status == 0, let info = try? PropertyListSerialization.propertyList(from: Data(out.utf8), format: nil) as? [String: Any] else { return }
-        for image in info["images"] as? [[String: Any]] ?? [] {
-            guard let path = image["image-path"] as? String,
-                  URL(fileURLWithPath: path).resolvingSymlinksInPath().path.hasPrefix(root),
-                  let dev = (image["system-entities"] as? [[String: Any]])?.compactMap({ $0["dev-entry"] as? String }).min(by: { $0.count < $1.count })
-            else { continue }
-            VolumeMount.detach(dev, force: true)
+        for (path, dev) in DiskImage.attachedImages() where URL(fileURLWithPath: path).resolvingSymlinksInPath().path.hasPrefix(root) {
+            DiskImage.detach(dev, force: true)
         }
     }
 
