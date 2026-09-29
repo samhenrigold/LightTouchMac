@@ -69,7 +69,7 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 
 | Item | Effort | Gate |
 |---|---|---|
-| F1 Host GL executor on ANGLE (GLES on Metal) instead of deprecated legacy CGL: keep the wire decoder + surface/present plumbing, delete the ES→desktop translation, extension shims and GLSL 1.00 handling; after C1 lands | 5–8 | regress gles/shadow both boards; app-compat 49 with zero refusals |
+| F1 Host GL executor on ANGLE — **dropped 2026-09-28 (Sam):** the deletable translation is a few hundred lines; the rest of gles-host.c is wire/surface/present plumbing and iOS-only extensions ANGLE lacks; a million-line dependency and 10–20 MB for that isn't worth it, and OpenGL deprecation isn't a concern | — | — |
 | F2 VideoToolbox boundary spike — **done 2026-09-28, verdict: ffmpeg stays.** H.264: the guest submits one slice per job with no last-slice marker, so picture completion is only knowable by parsing residuals (libavcodec chunk mode does that); single-slice CAVLC now decodes natively on VideoToolbox (byte-exact), libavcodec only for multi-slice. AAC/MP3/ALAC: the guest DMA is an unframed byte stream; AudioToolbox needs packet boundaries, which only a decoder can find. | done | test_h264_native (VT byte-exact), test_h264_slices/reader |
 | F3 Web proxy in the app on URLSession (system trust store, HTTP/2, cache); guest keeps the PAC redirect only | 2 | check-web-proxy-forwarding; Proxy-compatibility set |
 
