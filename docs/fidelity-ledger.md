@@ -5,6 +5,16 @@ works because the guest is patched, and what is a stub. Kept honest so a new iOS
 be named by component and class, and so the fix that raises the class (H→R, P→R) is preferred over
 another special case.
 
+> **Audit caveat (2026-09-29, docs/test-audit-2026-09-29.md).** Five class claims made in today's
+> smoke.md "Closed" list assert R without citing a hardware contract; the honest class is:
+> - **I2S "stopped" bit (smoke #4)** — H, not R: the bit's meaning is inferred from the driver's spin loop; STATUS says "no datasheet".
+> - **CDMA inline AES (smoke #3)** — H: the fix removed AES on writes to match ledger #34's mmap store; the device-FIFO inline-AES path is now dead code, not a modelled block.
+> - **H2FMI transfer rule (FPart stall)** — fitted to two drivers' write sequences, not a datasheet contract; R-by-fit.
+> - **RGBOUT swap (smoke #27)** — the swap-complete path is modelled, but ledger row 27 (RGBOUT) stays S: nothing is scanned out.
+> - **ADC mux 6 cable read (smoke #35)** — the read path is disassembly-backed R, but the 0 V value and `usb_host`-follows-`usb_cable` are inferred, narrower than "the charger contract".
+> Raising any of these to true R needs a datasheet or a silicon trace; until then they are declared here, not hidden.
+
+
 Sam, 2026-09-28: "iOS 4.3 and iOS 5 will give us a good idea of what parts are brittle, what parts
 mean that we should make a more faithful emulator because we were just getting along by happenstance
 rather than by making a good emulator. A major version update forces us to have all of these
