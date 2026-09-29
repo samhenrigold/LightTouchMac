@@ -127,7 +127,8 @@ struct Instance { let id=UUID() }
    let chord="\(item.keyEquivalent.lowercased()):\(item.keyEquivalentModifierMask.rawValue)"
    precondition(shortcuts.insert(chord).inserted,"Duplicate shortcut: \(item.title)")
    let arrows=[NSLeftArrowFunctionKey,NSRightArrowFunctionKey].map{String(UnicodeScalar($0)!)}
-   precondition(!(arrows.contains(item.keyEquivalent) && item.keyEquivalentModifierMask==[.command]),"Reserved Command-arrow")
+   // Command-arrows are rotation's (Sam, 0928c); nothing else may take them.
+   precondition(!(arrows.contains(item.keyEquivalent) && item.keyEquivalentModifierMask==[.command]) || item.title.hasPrefix("Rotate "),"Command-arrow is rotation's: \(item.title)")
    precondition(!(item.keyEquivalentModifierMask==[.command,.option] && ["+","-","="].contains(item.keyEquivalent)),"Reserved accessibility zoom")
   }
   let windows=root.item(withTitle:"Window")!.submenu!

@@ -10,7 +10,8 @@ HTTPS page open (safari-https.png); a restart on the same overlay, unlocked, sho
 profile screen (rebooted-unlocked.png) after the trust runs again; the fetch still answers 200.
 
     tests/sessions/check-proxy-trust.py --board ipod|ipad [--base DIR] --itwebproxy PATH --itpack armv6.itpack
-                               [--httpget PATH] [--url https://example.com/] [--helper PATH] [--dylib PATH] [--work DIR]
+                               [--ipad-itpack armv7.itpack] [--httpget PATH] [--url https://example.com/]
+                               [--helper PATH] [--dylib PATH] [--work DIR]
 
 --base empty (the default) with --board ipod boots the shipping image (qemu-ios-files/nand-current).
 """
@@ -30,6 +31,7 @@ def main():
     ap.add_argument("--itwebproxy", required=True, help="the host proxy helper (a packaged app's Contents/MacOS/itwebproxy)")
     ap.add_argument("--itpack", type=Path, default=sources.path("qemu-ios") / "build/guest-package/armv6.itpack")
     ap.add_argument("--httpget", type=Path, help="contrib/it-proxy/httpget built for armv6 (the guest-side fetch proof)")
+    ap.add_argument("--ipad-itpack", type=Path, help="--board ipad: the armv7.itpack whose offer brings it_agent up (as the app boots an iPad)")
     ap.add_argument("--url", default="https://example.com/")
     ap.add_argument("--helper")
     ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(sources.qemu_build() / "libqemu-arm.dylib")))
@@ -38,8 +40,8 @@ def main():
     ap.add_argument("--frameworks")
     ap.add_argument("--work", type=Path)
     args = ap.parse_args()
-    if args.board == "ipad" and not args.base:
-        ap.error("--board ipad needs --base")
+    if args.board == "ipad" and not (args.base and args.ipad_itpack):
+        ap.error("--board ipad needs --base and --ipad-itpack (the iPad's agent comes from the package offer)")
 
     spec = importlib.util.spec_from_file_location("check_sessions", ROOT / "tests/sessions/check-sessions.py")
     sessions = importlib.util.module_from_spec(spec)
@@ -57,6 +59,8 @@ def main():
                      "httpget": str(args.httpget) if args.httpget else None, "url": args.url}}
     if args.frameworks:
         cfg["frameworks"] = args.frameworks
+    if args.ipad_itpack:
+        cfg["ipadItpack"] = str(args.ipad_itpack)
     (work / "config.json").write_text(json.dumps(cfg, indent=1))
     driver = subprocess.Popen([work / "session-driver", work / "config.json"], stdout=open(work / "driver.jsonl", "w"),
                               stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=dict(os.environ, LTM_QEMU_DYLIB=args.dylib))
