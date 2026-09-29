@@ -294,6 +294,18 @@ extension String {
     }
     d.screenshot("ipad-launched")
     emit("ipadAgent", ["alive": alive, "home": home ?? "", "locked": locked.map { $0 ? 1 : 0 } ?? -1, "launched": launched ?? ""])
+    // The app's key path (EmulatorController.sendKey -> .key -> the helper's usb-kbd): tap Safari's address
+    // field (panel frame: portrait top is x≈0, portrait left is y≈1) and type "hello"; ipad-typed.png shows it.
+    if launched == "Safari" {
+        await d.drag(0.065, 0.55, 0.065, 0.55)
+        try? await Task.sleep(for: .seconds(2))
+        for code in [4, 14, 37, 37, 31] {   // h e l l o (macOS virtual key codes)
+            d.process.link.send(.key(macKeyCode: code, down: true)); try? await Task.sleep(for: .milliseconds(80))
+            d.process.link.send(.key(macKeyCode: code, down: false)); try? await Task.sleep(for: .milliseconds(120))
+        }
+        try? await Task.sleep(for: .seconds(2))
+        d.screenshot("ipad-typed")
+    }
 }
 
 // MARK: - Prepared first-boot files, on a fake base
