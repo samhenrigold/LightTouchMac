@@ -10,12 +10,12 @@ import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
 link = (root / 'Shared/DeviceLink.swift').read_text()
 a = link.index('nonisolated enum DeviceTermination'); termination = link[a:link.index('\n}\n', a) + 3]
-s = (root / 'LightTouchMac/DeviceSession.swift').read_text()
+s = (root / 'LightTouchMac/Device/DeviceSession.swift').read_text()
 a = s.index('    /// SIGTERM: the helper runs its own clean shutdown'); b = s.index('    /// True once the helper is gone', a)
 c = s.index('    private func received(_ event: LinkEvent)', b); d = s.index('    /// Geometry is DeviceProfile', c)
 e = s.index('    private func terminated(_ termination: DeviceTermination)', d); f = s.index('\n}\n', e) + 1
 methods = s[a:b] + s[c:d] + s[e:f]
-profile = (root / 'LightTouchMac/DeviceProfile.swift').read_text().replace('import Foundation\n', '')
+profile = (root / 'LightTouchMac/Device/DeviceProfile.swift').read_text().replace('import Foundation\n', '')
 source = 'import Foundation\n' + termination + profile + r'''
 nonisolated func logEvent(_ s: String) {}
 nonisolated enum LinkEvent { case qemuExited(Int32), audio, audioEnded }

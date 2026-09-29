@@ -24,7 +24,7 @@ class Handler(fixture.Handler):
         super().do_GET()
 
 
-inspector = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
+inspector = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 
 
 def block(start, end):
@@ -197,8 +197,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-ipa-library-') as directory:
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         (work / 'check.swift').write_text(code)
-        sources = ['IPALibrary', 'CatalogClient', 'CatalogCopy', 'Bundled', 'AppEventLog', 'StorageLocations', 'NativeLogging',
-                   'DeviceInstance', 'DeviceProfile', 'FirmwareCatalog', 'InstallationQueue']
+        sources = ['Library/IPALibrary', 'Features/CatalogClient', 'Features/CatalogCopy', 'Library/Bundled', 'Transport/AppEventLog', 'Library/StorageLocations', 'Transport/NativeLogging',
+                   'Library/DeviceInstance', 'Device/DeviceProfile', 'Library/FirmwareCatalog', 'Features/InstallationQueue']
         subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
                         '-module-cache-path', str(work / 'modules'), *[str(root / f'LightTouchMac/{s}.swift') for s in sources],
                         str(work / 'check.swift'), '-o', str(work / 'check')], check=True)

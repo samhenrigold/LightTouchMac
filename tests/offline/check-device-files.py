@@ -97,6 +97,6 @@ final class Seen: @unchecked Sendable {
 with tempfile.TemporaryDirectory(prefix='ltm-device-files-') as d:
     p = Path(d) / 'check.swift'
     p.write_text(source)
-    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'LightTouchMac/DeviceStateStorage.swift'),
-                    str(root / 'LightTouchMac/DeviceFileWatch.swift'), str(p), '-o', d + '/check'], check=True)
+    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'LightTouchMac/Library/DeviceStateStorage.swift'),
+                    str(root / 'LightTouchMac/Device/DeviceFileWatch.swift'), str(p), '-o', d + '/check'], check=True)
     subprocess.run([d + '/check'], check=True, timeout=20)

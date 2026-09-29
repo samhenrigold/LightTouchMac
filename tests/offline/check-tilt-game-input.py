@@ -23,8 +23,8 @@ qemu = args.qemu_source.resolve()
 if not (qemu / "include/hw/arm/ipod-attitude.h").is_file():
     parser.error("--qemu-source must contain include/hw/arm/ipod-attitude.h")
 
-display = (root / "LightTouchMac/DisplayView.swift").read_text()
-emulator = (root / "LightTouchMac/EmulatorController.swift").read_text()
+display = (root / "LightTouchMac/UI/DisplayView.swift").read_text()
+emulator = (root / "LightTouchMac/Device/EmulatorController.swift").read_text()
 
 
 def method(source, signature):

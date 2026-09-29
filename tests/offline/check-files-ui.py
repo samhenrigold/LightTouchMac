@@ -106,5 +106,5 @@ final class Sink: NSResponder {
  }
 }
 ''')
- subprocess.run(['xcrun','swiftc','-default-isolation','MainActor',str(root/'LightTouchMac/WindowRestorationPolicy.swift'),str(root/'LightTouchMac/DeviceFilesViewController.swift'),str(root/'LightTouchMac/DeviceFilesWindowController.swift'),str(root/'LightTouchMac/DeviceProfile.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+ subprocess.run(['xcrun','swiftc','-default-isolation','MainActor',str(root/'LightTouchMac/App/WindowRestorationPolicy.swift'),str(root/'LightTouchMac/UI/DeviceFilesViewController.swift'),str(root/'LightTouchMac/UI/DeviceFilesWindowController.swift'),str(root/'LightTouchMac/Device/DeviceProfile.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
  subprocess.run([str(tmp/'check')],check=True,timeout=20)

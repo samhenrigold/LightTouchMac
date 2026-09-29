@@ -4,10 +4,10 @@ from pathlib import Path
 import subprocess, tempfile
 
 root = Path(__file__).resolve().parents[2]
-execution = (root/'LightTouchMac/DeviceExecution.swift').read_text()
-controller = (root/'LightTouchMac/EmulatorController.swift').read_text()
+execution = (root/'LightTouchMac/Transport/DeviceExecution.swift').read_text()
+controller = (root/'LightTouchMac/Device/EmulatorController.swift').read_text()
 probe = controller[controller.index('    func deviceReady()'):controller.index('    func installedApps()')]
-inspector = (root/'LightTouchMac/AppsInspectorViewController.swift').read_text()
+inspector = (root/'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 suppression = next(line for line in inspector.splitlines() if 'private var readsSuppressed:' in line).replace('private ', '')
 
 source = r'''

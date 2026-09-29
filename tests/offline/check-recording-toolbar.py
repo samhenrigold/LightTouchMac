@@ -48,5 +48,5 @@ source=r'''import Cocoa
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-recording-toolbar-') as directory:
  work=Path(directory);(work/'check.swift').write_text(source)
- subprocess.run(['swiftc','-swift-version','6','-default-isolation','MainActor','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/RecordingToolbarButton.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
+ subprocess.run(['swiftc','-swift-version','6','-default-isolation','MainActor','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/UI/RecordingToolbarButton.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
  subprocess.run([str(work/'check')],check=True,timeout=20)

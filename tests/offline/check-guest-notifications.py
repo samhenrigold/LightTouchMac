@@ -5,8 +5,8 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-execution = (root / "LightTouchMac/DeviceExecution.swift").read_text()
-watcher = (root / "LightTouchMac/GuestNotifications.swift").read_text()
+execution = (root / "LightTouchMac/Transport/DeviceExecution.swift").read_text()
+watcher = (root / "LightTouchMac/Services/GuestNotifications.swift").read_text()
 # Only accelerate periodic retry/icon ticks. The actual stream/cancellation,
 # client ownership, gate and deadline code is compiled unchanged.
 watcher = watcher.replace(".seconds(1)", ".milliseconds(5)")

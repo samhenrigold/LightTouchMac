@@ -2,14 +2,14 @@
 """Repeated management failures recover once, without reboot or transfer interruption."""
 from pathlib import Path
 import subprocess,tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root=Path(__file__).resolve().parents[2]
-s=(root/'LightTouchMac/EmulatorController.swift').read_text()
+s=(root/'LightTouchMac/Device/EmulatorController.swift').read_text()
 a=s.index('    private var connectionFailures =');b=s.index('    private var didSweepStaging',a)
 recovery=s[a:b].replace('.seconds(2)','.milliseconds(1)').replace('    private var lastConnectionRecovery','    var lastConnectionRecovery')
 report=s[s.index('    private(set) var connectionIssue:'):a]
-errors=(root/'LightTouchMac/DeviceExecution.swift').read_text()
-issue=(root/'LightTouchMac/DeviceConnectionIssue.swift').read_text()
+errors=(root/'LightTouchMac/Transport/DeviceExecution.swift').read_text()
+issue=(root/'LightTouchMac/Device/DeviceConnectionIssue.swift').read_text()
 source=r'''import Foundation
 @MainActor var agentReady=1
 struct FakeLink {}

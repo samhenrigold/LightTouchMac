@@ -218,7 +218,7 @@ struct DeviceTools: Sendable {
     static func developmentHelper(_ name: String) -> String? {
         #if DEBUG
         let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("scripts/\(name).c")
+            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("scripts/\(name).c")
         let binary = Bundled.workDirectory.appendingPathComponent("dev-tools/\(name)")
         let fm = FileManager.default
         guard let sourceDate = (try? fm.attributesOfItem(atPath: source.path))?[.modificationDate] as? Date else { return nil }

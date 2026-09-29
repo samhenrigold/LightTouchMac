@@ -67,7 +67,7 @@ def build(args, out):
     subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)
     subprocess.run(["swiftc", "-O", "-swift-version", "5", "-I", ROOT / "Shared/CLink", out / "ltm_link.o",
                     *sorted((ROOT / "Shared").glob("*.swift")), ROOT / "LightTouchDevice/FrameTools.swift",
-                    ROOT / "LightTouchMac/DeviceFileWatch.swift",
+                    ROOT / "LightTouchMac/Device/DeviceFileWatch.swift",
                     ROOT / "tests/drivers/helper-driver/main.swift", "-o", out / "helper-driver"], check=True)
     if args.helper:
         return Path(args.helper)

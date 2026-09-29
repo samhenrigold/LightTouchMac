@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-source = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
+source = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 def block(start, end):
     return source[source.index(start):source.index(end, source.index(start))]
 state = block('    static var hasPendingWork:', '    static func resume(_ device')
@@ -165,6 +165,6 @@ with tempfile.TemporaryDirectory(prefix='ltm-uninstall-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '6', '-default-isolation', 'MainActor',
-                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/InstallationQueue.swift'),
+                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/Features/InstallationQueue.swift'),
                     str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=20)

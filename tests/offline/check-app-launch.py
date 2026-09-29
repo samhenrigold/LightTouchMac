@@ -5,14 +5,14 @@ The guest side (the agent's launch, and lockstatus telling a locked refusal apar
 tests/offline/check-agent-transport.py; this checks the controller and the inspector around it."""
 from pathlib import Path
 import subprocess, tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[2]
 def method(source, signature):
     start = source.index(signature)
     return source[start:source.index('\n    }', start) + 6]
-tools = (root / 'LightTouchMac/GuestServices.swift').read_text()
-controller = (root / 'LightTouchMac/EmulatorController.swift').read_text()
-inspector = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
+tools = (root / 'LightTouchMac/Guest/GuestServices.swift').read_text()
+controller = (root / 'LightTouchMac/Device/EmulatorController.swift').read_text()
+inspector = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 error = tools[tools.index('enum AppLaunchError:'):tools.index('enum DeviceToolsError:')]
 code = r'''import Cocoa
 ''' + error + r'''

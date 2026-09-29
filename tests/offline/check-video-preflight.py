@@ -2,7 +2,7 @@
 """Actual macOS iPod export: compatible movie, metadata, identity and cancellation."""
 from pathlib import Path
 import json, shutil, subprocess, sys, tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'scripts'))
@@ -85,8 +85,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-video-check-') as directory:
     (work / 'folder.mp4').mkdir()
     shutil.copyfile(movie, work / 'unknown.avi')
     subprocess.run(['xcrun', 'swiftc', DEVICE_PROFILE, '-swift-version', '6', '-default-isolation', 'MainActor',
-                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/MediaIdentity.swift'),
-                    str(root / 'LightTouchMac/MediaVideo.swift'), str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
+                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/Features/MediaIdentity.swift'),
+                    str(root / 'LightTouchMac/Features/MediaVideo.swift'), str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check'), str(movie), str(work)], check=True, timeout=90)
     streams = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_streams', '-of', 'json',
                                                  str(work / 'prepared.m4v')]))['streams']

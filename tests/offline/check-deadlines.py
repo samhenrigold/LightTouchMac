@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess, tempfile
 root=Path(__file__).resolve().parents[2]
-execution=(root/'LightTouchMac/DeviceExecution.swift').read_text()
+execution=(root/'LightTouchMac/Transport/DeviceExecution.swift').read_text()
 source=r'''import Foundation
 import Dispatch
 nonisolated func logEvent(_ s:String){}

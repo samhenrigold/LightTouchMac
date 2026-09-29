@@ -3,8 +3,8 @@
 from pathlib import Path
 import re,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]/'LightTouchMac'
-menu=(root/'MainMenu.swift').read_text()
-controller=(root/'MainWindowController.swift').read_text()
+menu=(root/'App/MainMenu.swift').read_text()
+controller=(root/'UI/MainWindowController.swift').read_text()
 a=controller.index('        case #selector(deviceRotate(_:)), #selector(deviceRotateLeft(_:))')
 b=controller.index('        case #selector(configureWebProxy(_:)):',a)
 validation=controller[a:b]
@@ -188,5 +188,5 @@ struct Instance { let id=UUID() }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-menu-check-') as tmp:
     tmp=Path(tmp);(tmp/'check.swift').write_text(source)
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'MainMenu.swift'),str(root/'DeviceProfile.swift'),str(root/'RotationControlAction.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'App/MainMenu.swift'),str(root/'Device/DeviceProfile.swift'),str(root/'UI/RotationControlAction.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
     subprocess.run([str(tmp/'check')],check=True)

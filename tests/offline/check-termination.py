@@ -8,7 +8,7 @@ process with a timeout; all fixed paths must terminate normally.
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
-s=(root/'LightTouchMac/AppDelegate.swift').read_text()
+s=(root/'LightTouchMac/App/AppDelegate.swift').read_text()
 a=s.index('    static func requestTermination()');b=s.index('    @objc func showDeviceWindow',a)
 request=s[a:b]
 a=s.index('    func applicationShouldTerminate(');b=s.index('    func applicationShouldTerminateAfterLastWindowClosed',a)

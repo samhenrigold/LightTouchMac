@@ -14,9 +14,9 @@ def section(file, start, end):
     return text[text.index(start):text.index(end, text.index(start))]
 
 
-metadata = section("AppMetadataCache.swift", "    nonisolated static func prepareDirectory", "    #if DEBUG")
-metadata_save = section("AppMetadataCache.swift", "    private func save()", "    // MARK: - .ipa reading")
-diagnostics = (root / "LightTouchMac/DiagnosticsExport.swift").read_text()
+metadata = section("Library/AppMetadataCache.swift", "    nonisolated static func prepareDirectory", "    #if DEBUG")
+metadata_save = section("Library/AppMetadataCache.swift", "    private func save()", "    // MARK: - .ipa reading")
+diagnostics = (root / "LightTouchMac/Features/DiagnosticsExport.swift").read_text()
 
 source = r'''
 import Foundation
@@ -169,7 +169,7 @@ exit 1
     executable = work / "check"
     subprocess.run(["xcrun", "swiftc", "-swift-version", "6", "-default-isolation", "MainActor",
                     "-parse-as-library", "-module-cache-path", str(work / "modules"),
-                    str(root / "LightTouchMac/BundledBase.swift"), str(check), "-o", str(executable)], check=True)
+                    str(root / "LightTouchMac/Library/BundledBase.swift"), str(check), "-o", str(executable)], check=True)
     subprocess.run([str(executable), str(work), str(blob)], check=True, timeout=45,
                    env=dict(os.environ, LTM_TEST_ARCHIVER=str(archiver)))
     for name, info in [("success.zip", "real ditto archive"), ("concurrent.zip", "concurrent real archive")]:

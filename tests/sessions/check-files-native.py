@@ -69,7 +69,7 @@ func tryEqual(_ url:URL,_ bytes:Data)->Bool { (try? Data(contentsOf:url))==bytes
 '''
 (out/'check.swift').write_text(swift)
 subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
- '-module-cache-path',str(out/'modules'),*[str(APP/'LightTouchMac'/f'{name}.swift') for name in ['DeviceServices','DeviceFiles','IMobileDevice']],
+ '-module-cache-path',str(out/'modules'),*[str(APP/'LightTouchMac'/f'{name}.swift') for name in ['Services/DeviceServices','Services/DeviceFiles','Transport/IMobileDevice']],
  str(out/'check.swift'),'-o',str(out/'check')],check=True)
 files=APP.parent/'qemu-ios-files'
 cfg=SimpleNamespace(out=str(out),files=str(files),base_nand=str(files/'nand-current'),nor=str(files/'ios3/nor_7E18.bin'),overlay=str(out/'overlay'),

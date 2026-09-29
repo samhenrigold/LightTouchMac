@@ -3,7 +3,7 @@
 from pathlib import Path
 import re,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]/'LightTouchMac'
-source=(root/'AppsInspectorViewController.swift').read_text()
+source=(root/'UI/AppsInspectorViewController.swift').read_text()
 a=source.index('extension AppsInspectorViewController: NSMenuDelegate')
 b=source.index('// MARK: - Table data',a)
 menu=source[a:b]

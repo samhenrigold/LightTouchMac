@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
-s=(root/'LightTouchMac/DisplayView.swift').read_text()
+s=(root/'LightTouchMac/UI/DisplayView.swift').read_text()
 a=s.index('    private func endKeyboardTouch()');b=s.index('    private func updateKeyboardPointer()',a)
 code=r"""import Cocoa
 enum TouchPhase { static let begin: Int32 = 0, update: Int32 = 1, end: Int32 = 2 }

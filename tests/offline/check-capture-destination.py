@@ -2,9 +2,9 @@
 """Exercise the production capture destination without launching the emulator."""
 from pathlib import Path
 import subprocess, tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[2]
-source = (root/'LightTouchMac/MainWindowController.swift').read_text()
+source = (root/'LightTouchMac/UI/MainWindowController.swift').read_text()
 def extract(start, end):
     return source[source.index(start):source.index(end, source.index(start))].replace('private ', '')
 code = 'import Cocoa\nstruct Capture {\n let capturePreferences = CapturePreferences.shared\n' + extract('    private var captureFolder:', '    @objc func showLiveText') + '}\n'
@@ -32,5 +32,5 @@ code = code.replace('assert(try Data(contentsOf: first) == Data([1,2,3]))', 'let
 with tempfile.TemporaryDirectory() as tmp:
     script = Path(tmp)/'main.swift'
     script.write_text(code)
-    subprocess.run(['swiftc', DEVICE_PROFILE, str(root/'LightTouchMac/CapturePreferences.swift'), str(script), '-o', str(Path(tmp)/'check')], check=True)
+    subprocess.run(['swiftc', DEVICE_PROFILE, str(root/'LightTouchMac/Features/CapturePreferences.swift'), str(script), '-o', str(Path(tmp)/'check')], check=True)
     subprocess.run([str(Path(tmp)/'check')], check=True)

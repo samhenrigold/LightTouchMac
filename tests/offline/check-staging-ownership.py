@@ -2,7 +2,7 @@
 """A delayed startup sweep must never remove this process's new uploads."""
 from pathlib import Path
 import subprocess, tempfile
-source=(Path(__file__).resolve().parents[2]/'LightTouchMac/DeviceServices.swift').read_text()
+source=(Path(__file__).resolve().parents[2]/'LightTouchMac/Services/DeviceServices.swift').read_text()
 a=source.index('    private static let stagingSession')
 b=source.index('    func sweepStaging()',a)
 methods=source[a:b].replace('private ', '')

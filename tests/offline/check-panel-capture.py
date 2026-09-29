@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-s = (root / 'LightTouchMac/DisplayView.swift').read_text()
+s = (root / 'LightTouchMac/UI/DisplayView.swift').read_text()
 a = s.index('    private static func rotated(')
 b = s.index('\n    }\n', a) + len('\n    }\n')
 source = 'import CoreGraphics\nimport Foundation\nenum V {\n' + s[a:b].replace('private static', 'static') + '''}

@@ -22,9 +22,9 @@ import json, os, re, subprocess, sys, tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / 'LightTouchMac'
-SOURCES = ['FirmwareCatalog.swift', 'DeviceInstance.swift', 'DeviceStateStorage.swift', 'StorageLocations.swift',
-           'PreparationJob.swift', 'DeviceProfile.swift', 'BundledBase.swift', 'LegacyState.swift', 'IPALibrary.swift',
-           'IPSWStore.swift', 'FirmwareDownloads.swift']
+SOURCES = ['Library/FirmwareCatalog.swift', 'Library/DeviceInstance.swift', 'Library/DeviceStateStorage.swift', 'Library/StorageLocations.swift',
+           'Library/PreparationJob.swift', 'Device/DeviceProfile.swift', 'Library/BundledBase.swift', 'Library/LegacyState.swift', 'Library/IPALibrary.swift',
+           'Library/IPSWStore.swift', 'Library/FirmwareDownloads.swift']
 
 catalog = json.loads((APP / 'Resources/firmware-catalog.json').read_text())
 bundled = [e for e in catalog['entries'] if e.get('bundled')]
@@ -157,7 +157,7 @@ def main():
 
         (tmp / 'stubs.swift').write_text(STUBS)
         (tmp / 'main.swift').write_text(CHECK)
-        subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', '-default-isolation', 'MainActor', str(APP / 'BootRecipe.swift'),
+        subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', '-default-isolation', 'MainActor', str(APP / 'Device/BootRecipe.swift'),
                         '-parse-as-library', '-module-cache-path', tmp / 'modules', *[APP / s for s in SOURCES], ROOT / 'Shared/DeviceLinkProtocol.swift',
                         tmp / 'stubs.swift', tmp / 'main.swift', '-o', tmp / 'check'], check=True)
         catalog_path = APP / 'Resources/firmware-catalog.json'

@@ -21,7 +21,7 @@ import threading
 import time
 import unicodedata
 from types import SimpleNamespace
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 
 parser = argparse.ArgumentParser(description=__doc__)
 mode = parser.add_mutually_exclusive_group()
@@ -49,7 +49,7 @@ cfg = SimpleNamespace(out=str(out),files=files,base_nand=files+'/nand-current',
     usbmuxd=str(sources.path('usbmuxd')/'src/usbmuxd'),usbmuxd_ok=True,
     usb_port=r.free_port(1520,1539),mux_port=r.free_port(27400,27419),
     qmp_port=r.free_port(28200,28219),wifi=False,cpu=None,mem='128M',kernel_console=True)
-text = (APP/'LightTouchMac/DeviceTools.swift').read_text()
+text = (APP/'LightTouchMac/Features/DeviceTools.swift').read_text()
 methods = text[text.index('    // MARK: - Music import'):text.index('    // MARK: - Install')]
 swift = r"""
 import Foundation
@@ -187,10 +187,10 @@ driver.write_text(swift)
 executable = out/'driver'
 subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
     '-module-cache-path',str(out/'modules'),
-    str(APP/'LightTouchMac/MediaIdentity.swift'),str(APP/'LightTouchMac/MediaSong.swift'),str(APP/'LightTouchMac/DeviceServices.swift'),str(APP/'LightTouchMac/DeviceExecution.swift'),
-    str(APP/'LightTouchMac/IMobileDevice.swift'),str(APP/'LightTouchMac/MediaPhoto.swift'),
-    str(APP/'LightTouchMac/MediaVideo.swift'),str(APP/'LightTouchMac/PreparedMedia.swift'),
-    str(APP/'LightTouchMac/GuestServices.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
+    str(APP/'LightTouchMac/Features/MediaIdentity.swift'),str(APP/'LightTouchMac/Features/MediaSong.swift'),str(APP/'LightTouchMac/Services/DeviceServices.swift'),str(APP/'LightTouchMac/Transport/DeviceExecution.swift'),
+    str(APP/'LightTouchMac/Transport/IMobileDevice.swift'),str(APP/'LightTouchMac/Features/MediaPhoto.swift'),
+    str(APP/'LightTouchMac/Features/MediaVideo.swift'),str(APP/'LightTouchMac/Features/PreparedMedia.swift'),
+    str(APP/'LightTouchMac/Guest/GuestServices.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
 if args.photo:
     from PIL import Image,ImageDraw
     source = out/"Photo 'quoted' $title — été.png"
@@ -213,7 +213,7 @@ else:
 if args.recording:
     recorder = out/'recorder'
     subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
-        str(APP/'LightTouchMac/ScreenMovieWriter.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(APP/'tests/fixtures/guest-audio-pump.swift'),str(APP/'tests/fixtures/recording-native.swift'),
+        str(APP/'LightTouchMac/Features/ScreenMovieWriter.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(APP/'tests/fixtures/guest-audio-pump.swift'),str(APP/'tests/fixtures/recording-native.swift'),
         '-o',str(recorder)],check=True)
     class Embedded(r.Procs):
         def spawn(self,argv,logpath,env=None):

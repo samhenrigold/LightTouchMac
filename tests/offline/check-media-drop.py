@@ -4,8 +4,8 @@ from pathlib import Path
 import subprocess, tempfile
 
 root = Path(__file__).resolve().parents[2]
-display = (root / 'LightTouchMac/DisplayView.swift').read_text()
-inspector = (root / 'LightTouchMac/AppsInspectorViewController.swift').read_text()
+display = (root / 'LightTouchMac/UI/DisplayView.swift').read_text()
+inspector = (root / 'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 drop = display[display.index('    override func draggingEntered('):display.index('\n}\n\n/// The shell\'s home button:')]
 a = inspector.index('    @objc private func installStarted(')
 started = inspector[a:inspector.index('\n    }', a) + 6].replace('private func', 'func')

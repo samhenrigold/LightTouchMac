@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GuestAgent and GuestServices (LightTouchMac/GuestServices.swift) over a device's link.
+"""GuestAgent and GuestServices (LightTouchMac/Guest/GuestServices.swift) over a device's link.
 
 The link is a stand-in with DeviceLink's surface (status, request, send). Behind it is a
 fake guest that answers like contrib/it-agent's v2 ops (ping with an op list, spawn with a
@@ -200,6 +200,6 @@ with tempfile.TemporaryDirectory() as temp:
     p = Path(temp)
     (p / 'check.swift').write_text(fixture + main)
     subprocess.run(['swiftc', '-module-cache-path', str(p / 'cache'), '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
-                    str(root / 'Shared/DeviceLinkProtocol.swift'), str(root / 'LightTouchMac/DeviceProfile.swift'),
-                    str(root / 'LightTouchMac/GuestServices.swift'), str(p / 'check.swift'), '-o', str(p / 'check')], check=True)
+                    str(root / 'Shared/DeviceLinkProtocol.swift'), str(root / 'LightTouchMac/Device/DeviceProfile.swift'),
+                    str(root / 'LightTouchMac/Guest/GuestServices.swift'), str(p / 'check.swift'), '-o', str(p / 'check')], check=True)
     subprocess.run([str(p / 'check')], check=True, timeout=60)

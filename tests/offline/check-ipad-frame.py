@@ -19,8 +19,8 @@ let p = DeviceProfile.iPad1
 print(Int(p.shellPixels.width), Int(p.shellPixels.height), Int(p.screenCutout.minX), Int(p.screenCutout.minY),
       Int(p.screenCutout.width), Int(p.screenCutout.height), p.homeButtonDiameter, p.homeButtonBottomInset)
 ''')
-    subprocess.run(['xcrun', 'swiftc', '-module-cache-path', str(tmp / 'modules'), str(root / 'LightTouchMac/DeviceProfile.swift'),
-                    str(root / 'LightTouchMac/DeviceProfile+Display.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'geometry')], check=True)
+    subprocess.run(['xcrun', 'swiftc', '-module-cache-path', str(tmp / 'modules'), str(root / 'LightTouchMac/Device/DeviceProfile.swift'),
+                    str(root / 'LightTouchMac/Device/DeviceProfile+Display.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'geometry')], check=True)
     values = subprocess.check_output([tmp / 'geometry'], text=True).split()
 shell = (int(values[0]), int(values[1]))
 cut = tuple(int(v) for v in values[2:6])

@@ -3,7 +3,7 @@
 from pathlib import Path
 import plistlib,shutil,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]/'LightTouchMac'
-s=(root/'AppDelegate.swift').read_text()
+s=(root/'App/AppDelegate.swift').read_text()
 a=s.index('    @objc func showHelp(');b=s.index('    func applicationDockMenu(',a)
 source="import Cocoa\n@MainActor final class Check:NSObject { var helpController:NSWindowController?\n"+s[a:b]+r'''
 }
@@ -33,5 +33,5 @@ with tempfile.TemporaryDirectory(prefix='ltm-help-') as tmp:
     (app/'Info.plist').write_bytes(plistlib.dumps(dict(CFBundleIdentifier='app.lighttouch.helpcheck',CFBundleExecutable='check',CFBundlePackageType='APPL')))
     shutil.copyfile(root/'Help.txt',app/'Resources/Help.txt')
     (tmp/'check.swift').write_text(source)
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'WindowRestorationPolicy.swift'),str(tmp/'check.swift'),'-parse-as-library','-o',str(app/'MacOS/check')],check=True)
+    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'App/WindowRestorationPolicy.swift'),str(tmp/'check.swift'),'-parse-as-library','-o',str(app/'MacOS/check')],check=True)
     subprocess.run([str(app/'MacOS/check')],check=True)

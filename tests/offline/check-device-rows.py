@@ -138,6 +138,6 @@ with tempfile.TemporaryDirectory(prefix='ltm-device-rows-') as tmp:
     tmp = Path(tmp)
     (tmp / 'main.swift').write_text(check)
     subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
-                    str(root / 'FirmwareCatalog.swift'), str(root / 'DeviceProfile.swift'),
-                    str(root / 'DeviceRow.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'check')], check=True)
+                    str(root / 'Library/FirmwareCatalog.swift'), str(root / 'Device/DeviceProfile.swift'),
+                    str(root / 'Device/DeviceRow.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'check')], check=True)
     subprocess.run([str(tmp / 'check'), str(root / 'Resources/firmware-catalog.json')], check=True)

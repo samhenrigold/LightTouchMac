@@ -5,9 +5,9 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-source = (root / "LightTouchMac/DeviceServices.swift").read_text()
+source = (root / "LightTouchMac/Services/DeviceServices.swift").read_text()
 install = source[source.index("    // MARK: - Install (instproxy_install"):source.index("    /// lockdownd's ActivationState:")]
-support = (root / "LightTouchMac/DeviceExecution.swift").read_text()
+support = (root / "LightTouchMac/Transport/DeviceExecution.swift").read_text()
 # Pause at the two ownership boundaries to deterministically exercise races,
 # without replacing any production deadline, cancellation or cleanup behavior.
 install = install.replace("let connection = try await Self.installConnection(socket: socket)",

@@ -60,10 +60,10 @@ HOME = Path.home()
 sys.path.insert(0, str(ROOT / "scripts"))
 import sources  # the pinned checkouts (build-support/sources.json)
 TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
-APP_SOURCES = ["DeviceServices", "DeviceExecution", "BootRecipe", "DeviceFiles", "IMobileDevice", "DeviceProfile", "DeviceProfile+Display",
-               "NativeLogging", "StorageLocations", "DeviceStateStorage", "GuestServices", "GuestPackage",
-               "DeviceInstance", "FirmwareCatalog", "MediaPhoto", "MediaIdentity", "DeviceConnectionIssue",
-               "WebProxyConfiguration"]
+APP_SOURCES = ["Services/DeviceServices", "Transport/DeviceExecution", "Device/BootRecipe", "Services/DeviceFiles", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
+               "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestPackage",
+               "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
+               "Device/WebProxyConfiguration"]
 
 
 def tree(root):
@@ -117,7 +117,7 @@ def guest_checks(find, check, events):
 
 
 def build(args, out):
-    source = (ROOT / "LightTouchMac/DeviceSession.swift").read_text()
+    source = (ROOT / "LightTouchMac/Device/DeviceSession.swift").read_text()
     section = source[source.index("// MARK: - Helper process"):source.index("// MARK: - Sessions")]
     (out / "DeviceProcess.swift").write_text("import Foundation\nimport IOSurface\n" + section)
     subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)

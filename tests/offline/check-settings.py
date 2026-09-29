@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess, tempfile
 root=Path(__file__).resolve().parents[2]
-source=(root/'LightTouchMac/AppDelegate.swift').read_text()
+source=(root/'LightTouchMac/App/AppDelegate.swift').read_text()
 a=source.index('    @objc func toggleAutomaticRotation(')
 b=source.index('    @objc func showHelp(',a)
 actions=source[a:b]

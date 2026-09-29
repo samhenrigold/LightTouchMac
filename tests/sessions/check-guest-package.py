@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GuestPackage (LightTouchMac/GuestPackage.swift) against qemu-ios's mkpkg.py as the oracle.
+"""GuestPackage (LightTouchMac/Guest/GuestPackage.swift) against qemu-ios's mkpkg.py as the oracle.
 
 A package tree with a manifest is packed with mkpkg.pack; mkpkg.py `offer` composes the
 reference offer directory; the app's compose must write the same `offer` text and the same
@@ -185,7 +185,7 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
     (t / 'check.swift').write_text(check.replace('GuestPackage.Manifest.mbx', '"%s"' % MBX))
     app = root / 'LightTouchMac'
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
-                    '-module-cache-path', str(t / 'modules'), str(app / 'GuestPackage.swift'), str(app / 'DeviceInstance.swift'),
-                    str(app / 'DeviceProfile.swift'), str(app / 'StorageLocations.swift'), str(app / 'FirmwareCatalog.swift'), str(t / 'check.swift'), '-o', str(t / 'check')],
+                    '-module-cache-path', str(t / 'modules'), str(app / 'Guest/GuestPackage.swift'), str(app / 'Library/DeviceInstance.swift'),
+                    str(app / 'Device/DeviceProfile.swift'), str(app / 'Library/StorageLocations.swift'), str(app / 'Library/FirmwareCatalog.swift'), str(t / 'check.swift'), '-o', str(t / 'check')],
                    check=True)
     subprocess.run([str(t / 'check'), str(t)], check=True, timeout=60)

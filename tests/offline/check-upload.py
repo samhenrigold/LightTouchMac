@@ -3,10 +3,10 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-s = (root/'LightTouchMac/DeviceServices.swift').read_text()
+s = (root/'LightTouchMac/Services/DeviceServices.swift').read_text()
 validation = s[s.index("    nonisolated static func validateFilePath"):s.index("    // MARK: - Stage")]
 loop = s[s.index('    func stage('):s.index('    /// A stable device-side filename')]
-errors = (root/'LightTouchMac/DeviceExecution.swift').read_text()
+errors = (root/'LightTouchMac/Transport/DeviceExecution.swift').read_text()
 source = r'''import Foundation
 nonisolated func logEvent(_ message: String) {}
 struct MediaVideo: Sendable { let id: String; let video: URL }

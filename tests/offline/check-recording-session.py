@@ -157,5 +157,5 @@ final class GuestAudioCapture: Sendable { func stop() {} }
 with tempfile.TemporaryDirectory(prefix='ltm-session-') as directory:
     work = Path(directory)
     (work/'check.swift').write_text(fixture)
-    subprocess.run(['swiftc','-swift-version','6','-default-isolation','MainActor','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/ScreenRecordingSession.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
+    subprocess.run(['swiftc','-swift-version','6','-default-isolation','MainActor','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/Features/ScreenRecordingSession.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
     subprocess.run([str(work/'check'),str(work)],check=True,timeout=30)

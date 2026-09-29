@@ -2,9 +2,9 @@
 """Exercise the production boot readiness watch with emulated backlight and cancellation."""
 from pathlib import Path
 import subprocess, tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root=Path(__file__).resolve().parents[2]
-s=(root/'LightTouchMac/EmulatorController.swift').read_text()
+s=(root/'LightTouchMac/Device/EmulatorController.swift').read_text()
 a=s.index('    private func startReadinessWatch()');b=s.index('    /// Keep the guest',a)
 method=s[a:b].replace('private func','func',1)
 a=s.index('    func powerOn()');b=s.index('    private func startForegroundWatch()',a)

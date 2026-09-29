@@ -1,4 +1,4 @@
-// Run: swiftc -module-cache-path /tmp/ltm-module-cache LightTouchMac/DeviceStateStorage.swift tests/fixtures/device-state-storage.swift -o /tmp/device-state-check && /tmp/device-state-check
+// Run: swiftc -module-cache-path /tmp/ltm-module-cache LightTouchMac/Library/DeviceStateStorage.swift tests/fixtures/device-state-storage.swift -o /tmp/device-state-check && /tmp/device-state-check
 import Foundation
 
 @main

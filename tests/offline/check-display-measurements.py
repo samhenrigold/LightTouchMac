@@ -19,5 +19,5 @@ with tempfile.TemporaryDirectory(prefix='ltm-display-') as directory:
   print("PASS: measured physical dimensions, synthetic 72dpi fallback, absent and inconsistent metadata")
  }
 }''')
- subprocess.run(['swiftc','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/DisplayMeasurements.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
+ subprocess.run(['swiftc','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/UI/DisplayMeasurements.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
  subprocess.run([str(work/'check')],check=True)

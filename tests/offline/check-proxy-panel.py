@@ -3,7 +3,7 @@
 per-device proxy files (each device's itwebproxy reads its own routing)."""
 from pathlib import Path
 import subprocess, tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/DeviceProfile.swift')
+DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[2]
 fixture = r'''import Cocoa
 struct Bundled { static let stateDirectory = URL(fileURLWithPath: NSTemporaryDirectory()) }
@@ -101,7 +101,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-proxy-panel-') as directory:
  work = Path(directory)
  (work/'check.swift').write_text(fixture)
  subprocess.run(['swiftc', DEVICE_PROFILE, '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
-   str(root/'LightTouchMac/WebProxyConfiguration.swift'), str(root/'LightTouchMac/ProxySettingsView.swift'),
+   str(root/'LightTouchMac/Device/WebProxyConfiguration.swift'), str(root/'LightTouchMac/UI/ProxySettingsView.swift'),
    str(work/'check.swift'), '-o', str(work/'check')], check=True)
  for zone in ['America/New_York', 'America/Los_Angeles', 'Asia/Tokyo']:
   subprocess.run([str(work/'check'), zone], check=True, timeout=15)

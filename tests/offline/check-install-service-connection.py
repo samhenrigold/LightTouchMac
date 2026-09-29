@@ -109,7 +109,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-instproxy-connect-") as directory:
     # Match the app's Swift 5 language mode and default actor isolation.
     subprocess.run(["xcrun", "swiftc", "-parse-as-library", "-swift-version", "5",
                     "-default-isolation", "MainActor", "-module-cache-path", str(temp / "modules"),
-                    str(root / "LightTouchMac/IMobileDevice.swift"), str(temp / "check.swift"),
+                    str(root / "LightTouchMac/Transport/IMobileDevice.swift"), str(temp / "check.swift"),
                     "-o", str(binary)], check=True)
     for variant in ["complete", "missing"]:
         subprocess.run([str(binary), str(temp / variant), variant], check=True, timeout=10)

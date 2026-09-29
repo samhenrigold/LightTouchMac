@@ -3,12 +3,12 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-metadata = (root/'LightTouchMac/AppMetadataCache.swift').read_text()
+metadata = (root/'LightTouchMac/Library/AppMetadataCache.swift').read_text()
 def block(source, start, end):
     return source[source.index(start):source.index(end, source.index(start))]
 archive = block(metadata, '    static func appRoot(', '    /// The icon PNG')
-once = (root/'LightTouchMac/DeviceExecution.swift').read_text()   # ResumeOnce is file-private, so the whole file goes in
-inspector = (root/'LightTouchMac/AppsInspectorViewController.swift').read_text()
+once = (root/'LightTouchMac/Transport/DeviceExecution.swift').read_text()   # ResumeOnce is file-private, so the whole file goes in
+inspector = (root/'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 freshness = block(inspector, '    static func freshnessText(', '    private func showStaleBanner')
 source = '''import Foundation
 nonisolated func logEvent(_ message: String) {}

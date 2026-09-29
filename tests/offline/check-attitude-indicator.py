@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-attitude-') as tmp:
  }
 }
 ''')
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'LightTouchMac/AttitudeIndicatorButton.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'LightTouchMac/UI/AttitudeIndicatorButton.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
     subprocess.run([str(tmp/'check'),str(tmp)],check=True)
     from PIL import Image
     images=[Image.open(tmp/name).convert('RGBA').resize((160,160)) for name in ['level.png','tilted.png']]

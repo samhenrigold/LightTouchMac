@@ -23,15 +23,15 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
             run([str(exe),*arguments], env=env, timeout=30)
         # CatalogClient consults the IPA library, whose device paths DeviceLibrary.swift resolves in the app.
         (work/'paths.swift').write_text('extension DeviceInstance { var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) } }\n')
-        common = ['LightTouchMac/'+f+'.swift' for f in ['CatalogClient','CatalogCopy','Bundled','AppEventLog','StorageLocations','NativeLogging',
-                                                        'IPALibrary','DeviceInstance','DeviceProfile','FirmwareCatalog']] + [str(work/'paths.swift')]
+        common = ['LightTouchMac/'+f+'.swift' for f in ['Features/CatalogClient','Features/CatalogCopy','Library/Bundled','Transport/AppEventLog','Library/StorageLocations','Transport/NativeLogging',
+                                                        'Library/IPALibrary','Library/DeviceInstance','Device/DeviceProfile','Library/FirmwareCatalog']] + [str(work/'paths.swift')]
         if '--ui-only' not in sys.argv:
             swift('catalog',common+['tests/fixtures/catalog.swift'])
             swift('network',common+['tests/fixtures/catalog-network.swift'],[port])
-            swift('queue',['LightTouchMac/InstallationQueue.swift','tests/fixtures/installation-queue.swift'])
+            swift('queue',['LightTouchMac/Features/InstallationQueue.swift','tests/fixtures/installation-queue.swift'])
         if '--ui' in sys.argv or '--ui-only' in sys.argv:
             run([sys.executable,'tests/offline/check-files-ui.py'])
-            source=(root/'LightTouchMac/AppsInspectorViewController.swift').read_text()
+            source=(root/'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
             start=source.index('    private enum RowIdentity:')
             end=source.index('    @objc private func appsChanged(',start)
             rows=source[start:end]
@@ -124,6 +124,6 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
  }
 }
 ''')
-            swift('ui',common+['LightTouchMac/CatalogDetailsViewController.swift',str(fixture),'tests/fixtures/catalog-ui.swift'],[port])
+            swift('ui',common+['LightTouchMac/UI/CatalogDetailsViewController.swift',str(fixture),'tests/fixtures/catalog-ui.swift'],[port])
     finally:
         server.terminate(); server.wait(timeout=5)

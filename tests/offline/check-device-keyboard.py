@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
-s=(root/'LightTouchMac/EmulatorController.swift').read_text()
+s=(root/'LightTouchMac/Device/EmulatorController.swift').read_text()
 a=s.index('    var keyboardInputEnabled: Bool {');b=s.index('    // MARK: - Machine control',a)
 source=r"""import Foundation
 @MainActor final class Check {
