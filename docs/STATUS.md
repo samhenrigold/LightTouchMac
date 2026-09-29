@@ -122,6 +122,9 @@ in-app run of the 2.1.1 clock fix (`c2832d5`) and the first-run tip fix (`1e7158
 - More point releases (2.2.1, 3.0, 3.1.x, 4.0–4.1): each needs a manifest, catalog keys and a check. Designed to be routine; none tried.
 - iPad iOS 5: not started ("later").
 
+### Fidelity
+- GPU model, first milestone: the SGX MMU page-table walk (fidelity-ledger K48 #54, roadmap row 11). Retires smoke #24's surface fault-in loop and unblocks #25; the full SGX535 stays the 120+ d row.
+
 ### Features
 - Root-FS edit from the Mac: Mount/Export UI with lease and guards (~2 d), then write-back (F2, ~7–10 d). Live Finder volume deferred (guest daemon, 3+ weeks).
 - Live storage snapshot of a running device (F4, ~2 d).
