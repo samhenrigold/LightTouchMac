@@ -9,6 +9,10 @@
 // The tail convention (3.x+: the final partial AES block is encrypted into the tag padding; 2.x: left in
 // plaintext) is decided on the kernelcache, the one component with a checksum: if its complzss length or
 // Adler-32 fails with the padded decrypt, every img3 of the IPSW is decrypted with a plaintext tail.
+//
+// 1.x components are 8900 containers (Apple8900) and need no keys: all_flash images come out as their IMG2
+// payload (iBoot.bin is the image the machine enters), everything else as the container's body. Only the
+// rootfs is keyed.
 
 import Foundation
 
@@ -42,6 +46,10 @@ public enum FirmwareDecryptor {
         }
         func dec(_ p: String, plainTail: Bool) throws -> Data {
             let raw = try ipsw.read(p)
+            if Apple8900.isContainer(raw) {
+                let body = try Apple8900.body(raw)
+                return body.prefix(4) == Data("2gmI".utf8) ? try IMG2.payload(body) : body
+            }
             // 2.x DFU stages have no KBAG: the payload is in the clear (a key for one would only make noise).
             if try IMG3.tags(raw)["KBAG"] == nil { return try IMG3.payload(raw) }
             let (iv, key) = try img3Key(p)
@@ -49,21 +57,27 @@ public enum FirmwareDecryptor {
         }
 
         let kcPath = try path("KernelCache")
-        let kcRaw = try ipsw.read(kcPath), (kcIV, kcKey) = try img3Key(kcPath)
+        let kcRaw = try ipsw.read(kcPath)
         var plainTail = false
         var kernel: Data
-        do {
-            kernel = try LZSS.complzss(IMG3.decrypt(kcRaw, iv: kcIV, key: kcKey))
-        } catch {
-            plainTail = true
-            kernel = try LZSS.complzss(IMG3.decrypt(kcRaw, iv: kcIV, key: kcKey, plainTail: true))
+        if Apple8900.isContainer(kcRaw) {
+            kernel = try LZSS.complzss(Apple8900.body(kcRaw))
+        } else {
+            let (kcIV, kcKey) = try img3Key(kcPath)
+            do {
+                kernel = try LZSS.complzss(IMG3.decrypt(kcRaw, iv: kcIV, key: kcKey))
+            } catch {
+                plainTail = true
+                kernel = try LZSS.complzss(IMG3.decrypt(kcRaw, iv: kcIV, key: kcKey, plainTail: true))
+            }
         }
 
         // Components no recipe reads after this (the DFU stage, the ramdisks) are skipped without a key rather
         // than failing the build: public key pages lack them for several builds (docs/matrix.md). A step that
         // does need one (the 4.x keybag's Update ramdisk) fails on the missing file with its own message.
+        // An 8900 container needs none.
         var files: [String] = []
-        func keyed(_ p: String) -> Bool { (try? entry.key(forPath: p)) != nil }
+        func keyed(_ p: String) -> Bool { (try? entry.key(forPath: p)) != nil || (try? Apple8900.isContainer(ipsw.read(p))) == true }
         for (name, c) in components {
             if c == "KernelCache" {
                 try kernel.write(to: dir.appendingPathComponent("kernelcache.mach"))

@@ -1,6 +1,6 @@
 // Preparer: the entry point of `firmwarekit create` (the preparer contract of docs/multi-device-plan.md) and the
 // helpers every board's recipe shares: the `LightTouchDevice --oneshot` boots, the ramdisk-with-helper copy,
-// cancel, hashing, the lock's bytes. The steps themselves are Recipe.create; a board (K48Board, N72Board)
+// cancel, hashing, the lock's bytes. The steps themselves are Recipe.create; a board (K48Board, N72Board, N45Board)
 // contributes only what differs.
 //
 //   let o = Preparer.Options(entry: e, ipsw: ipsw, out: staging, helper: helper, guestTools: dir, cache: cache)
@@ -63,6 +63,7 @@ public enum Preparer {
         let board: Board = switch (e.board, e.recipe?.name) {
         case ("k48ap", "k48"): try K48Board(o)
         case ("n72ap", "n72"): try N72Board(o)
+        case ("n45ap", "n45"): try N45Board(o)
         default: throw FirmwareError(.unsupported, "\(e.id): no preparer for board \(e.board) recipe \(e.recipe?.name ?? "none")")
         }
         try Recipe.create(o, board: board, emit: emit)

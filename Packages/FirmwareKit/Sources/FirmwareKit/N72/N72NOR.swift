@@ -73,6 +73,15 @@ public enum N72NOR {
         var nor = [UInt8](repeating: 0, count: size)
         nor.replaceSubrange(0..<4, with: Array("2GMI".utf8))
         put32(&nor, 4, 0x40); put32(&nor, 8, 0); put32(&nor, 12, 0x200)
+        try writeSysCfg(&nor, id)
+        let bank = try nvramBank([("debug-uarts", "1"), ("btaddr", (id["bt-mac"] ?? "").uppercased()), ("wifiaddr", (id["wifi-mac"] ?? "").uppercased())])
+        nor.replaceSubrange(nvram..<nvram + nvramBank, with: bank)
+        put32(&nor, 0x30, crc(nor[0..<0x30]))
+        return nor
+    }
+
+    /// SysCfg at 0x4000 (the 1G's generate_nor.c writes the same block): Mod#, Regn, SrNm, Batt from the identity.
+    static func writeSysCfg(_ nor: inout [UInt8], _ id: UnitIdentity) throws {
         nor.replaceSubrange(sysCfg..<sysCfg + 4, with: Array("gfCS".utf8))
         for (i, v) in [0xC8, 0x2000, 0x00010001, 0, 4].enumerated() { put32(&nor, sysCfg + 4 + 4 * i, UInt32(v)) }
         for (i, (tag, key)) in [("Mod#", "model-number"), ("Regn", "region-info"), ("SrNm", "serial-number"), ("Batt", "battery-serial")].enumerated() {
@@ -81,10 +90,6 @@ public enum N72NOR {
             let o = sysCfg + 0x18 + i * 0x14
             nor.replaceSubrange(o..<o + 20, with: Array(tag.utf8).reversed() + value + [UInt8](repeating: 0, count: 16 - value.count))
         }
-        let bank = try nvramBank([("debug-uarts", "1"), ("btaddr", (id["bt-mac"] ?? "").uppercased()), ("wifiaddr", (id["wifi-mac"] ?? "").uppercased())])
-        nor.replaceSubrange(nvram..<nvram + nvramBank, with: bank)
-        put32(&nor, 0x30, crc(nor[0..<0x30]))
-        return nor
     }
 
     /// A CHRP nvram partition header: signature, checksum, length in 16-byte units, 12-byte name.
