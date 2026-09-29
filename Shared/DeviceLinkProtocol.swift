@@ -5,7 +5,7 @@
 // Frames and status never cross it: they live in IOSurfaces (SharedStatus.swift)
 // whose Mach ports arrive in the rendezvous hello (DeviceRendezvous.swift).
 //
-// Compiled into both targets and into tests/helper-driver.
+// Compiled into both targets and into tests/drivers/helper-driver.
 
 import Foundation
 

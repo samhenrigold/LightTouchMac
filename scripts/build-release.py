@@ -552,7 +552,7 @@ def notarize(args, env, log, state, app):
 
 PREPARE_ENTRY = 'k48ap-7B500'
 # verify: each entry is prepared by the bundled firmwarekit, then booted headless through the bundled helper,
-# dylib and usbmuxd (tests/check-sessions.py --single): lit, lockdown, AFC round trips past 16 KiB, an IPA
+# dylib and usbmuxd (tests/sessions/check-sessions.py --single): lit, lockdown, AFC round trips past 16 KiB, an IPA
 # install, a clean shutdown. One entry per run; rerun --stage verify until every entry is current.
 VERIFY_ENTRIES = {
     'k48ap-7B500': ('ipad', None),   # --verify-ipsw
@@ -614,7 +614,7 @@ def check_prepare(args, log, state, app):
         if bundled not in json.dumps(lock):
             raise RuntimeError(f'Prepare did not use the bundled guest tools {bundled}')
         prepared = int(subprocess.check_output(['du', '-sk', work / 'out'], text=True).split()[0]) * 1024
-        boot = [sys.executable, ROOT / 'tests/check-sessions.py', '--single', work / 'out', '--board', board,
+        boot = [sys.executable, ROOT / 'tests/sessions/check-sessions.py', '--single', work / 'out', '--board', board,
                 '--helper', app / 'Contents/MacOS/LightTouchDevice', '--dylib', app / 'Contents/Frameworks/libqemu-arm.dylib',
                 '--usbmuxd', app / 'Contents/MacOS/usbmuxd', '--frameworks', app / 'Contents/Frameworks',
                 '--files', app / 'Contents/Resources/device', '--work', frames]

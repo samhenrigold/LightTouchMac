@@ -1,7 +1,7 @@
 # Guest-package bootstrap
 
 Status: built, 2026-09-28 (STATUS.md "Guest-package bootstrap": loader, versioned packages and rollback in the
-emulator, the preparer and the app; `tests/check-sessions.py --guest`). Sections 1–7 are the design; the app
+emulator, the preparer and the app; `tests/sessions/check-sessions.py --guest`). Sections 1–7 are the design; the app
 side as built is in "P5, the app" at the end. This is the "guest package bootstrap contract" that
 `device-firmware-modularization-plan.md` (an uncommitted 2026-09-27 proposal, on no branch) called for in its M2,
 next to [multi-device-plan.md](multi-device-plan.md).
@@ -153,7 +153,7 @@ The shim is bound to the firmware's dispatch table and must be present before Sp
   `contrib/guest-package/build.sh` into the iPad set), not `Resources/guest/`: firmwarekit seeds from the
   same directory. Development builds read `LTM_GUEST_PACKAGE` or a qemu-ios checkout's `build/guest-package`.
 - **Each boot composes `Devices/<uuid>/work/guest-offer/`** (`GuestPackage.compose`, byte-identical to
-  mkpkg.py `offer`; tests/check-guest-package.py uses it as the oracle) and passes `guest-package=`. The
+  mkpkg.py `offer`; tests/sessions/check-guest-package.py uses it as the oracle) and passes `guest-package=`. The
   family is the itpack's for the device's board and build; stubs, other builds and a guest-package
   protocol outside the manifest's `requires.host` get no offer. With a device.lock.json, hooks are dropped
   as the seed did: another GL table than `guest_package.gli`, or a target missing from `guest_package.hooks`.
@@ -178,6 +178,6 @@ The shim is bound to the firmware's dispatch table and must be present before Sp
 - **The app never touches guest components.** `updateMediaComponents` and the marker went with C6
   (2026-09-28): every device is a prepared base with the loader, so there is no legacy image to upgrade
   in place. Media helpers run from `current/bin` when packaged.
-- **Verified headless** (tests/check-sessions.py --guest): on a fresh no-shell 7E18 (seed 1, P4) the
+- **Verified headless** (tests/sessions/check-sessions.py --guest): on a fresh no-shell 7E18 (seed 1, P4) the
   loader installed the bundled serial 2 (R_INSTALLED), judged good; after `verdict bad 2` and a fresh
   helper it reverted to 1 (R_REVERTED_BAD). The shipping image (no loader) reports nothing: legacy.

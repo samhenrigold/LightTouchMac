@@ -2,7 +2,7 @@
 // Devices/<uuid>, base/, overlay/ and the overlay's files (the pages and NOR
 // QEMU has open) deleted, renamed or replaced. The helper keeps running on the
 // unlinked inodes and the guest never notices; the app says so, and Stop skips
-// flushing into a dead inode. Foundation only: tests/helper-driver compiles it.
+// flushing into a dead inode. Foundation only: tests/drivers/helper-driver compiles it.
 
 import Foundation
 
