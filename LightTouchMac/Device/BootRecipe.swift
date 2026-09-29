@@ -69,6 +69,42 @@ nonisolated enum BootRecipe {
         return !FileManager.default.fileExists(atPath: flat) && FileManager.default.fileExists(atPath: set) ? set : flat
     }
 
+    /// 5.x Setup phones home: with live internet it fetches the software-update catalog and then its
+    /// Apple-ID page ignores "Skip This Step" for minutes (smoke #54). Such a boot runs Setup with slirp
+    /// restrict=on (its no-network path) and opens networking once Setup finishes. 3.x/4.x Setup has
+    /// no Apple-ID page and boots unrestricted.
+    static func setupPhonesHome(iosVersion: String) -> Bool {
+        iosVersion.compare("5.0", options: .numeric) != .orderedAscending
+    }
+
+    /// The wifi0 user netdev: the web proxy's guestfwd (a host-side chardev, reachable restricted or
+    /// not) and restrict=on while Setup runs offline.
+    static func wifiNetdev(guestForward: String, restricted: Bool) -> String {
+        "user,id=wifi0" + guestForward + (restricted ? ",restrict=on" : "")
+    }
+
+    /// When a restricted boot's Setup is over, from it_agent's frontmost polls: an unlocked screen that
+    /// isn't purplebuddy. Locked reads "com.apple.springboard" / "Lock Screen" (agent-sbs.h), and a fresh
+    /// 5.x shows exactly that before Setup starts, so SpringBoard alone is not the signal. Two polls in a
+    /// row, so a transient unlocked state while the slide hands over to purplebuddy can't lift it early.
+    /// `observe` answers true once: the moment to call qemu_ios_ui_net_restrict(off).
+    struct SetupNetworkGate {
+        private var streak = 0
+        private(set) var lifted = false
+        mutating func observe(bundleID: String?, name: String?) -> Bool {
+            guard !lifted else { return false }
+            let unlockedOutsideSetup = bundleID.map { !$0.isEmpty && $0 != "com.apple.purplebuddy" } == true
+                && name != "Lock Screen"
+            streak = unlockedOutsideSetup ? streak + 1 : 0
+            lifted = streak >= 2
+            return lifted
+        }
+    }
+
+    /// The overlay has been through Setup (the app lifted restrict after it). Erase deletes the
+    /// overlay and the mark with it, so the next boot runs Setup offline again.
+    static func setupDoneMark(overlay: URL) -> URL { overlay.appendingPathComponent(".setup-done") }
+
     /// A prepared base's device.lock.json "machine" options; none for a missing lock or field.
     static func lockMachine(_ lock: URL) -> [String: String] {
         guard let data = try? Data(contentsOf: lock),

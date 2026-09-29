@@ -73,6 +73,10 @@ mkdir -p "$P/share/licenses/glib"
 cp glib-2.88.3/COPYING "$SRC/build-support/patches/glib-pipe2-availability.patch" "$P/share/licenses/glib/"
 "$MESON" setup pixman-out pixman-0.46.4 --prefix="$P" --buildtype=release -Ddefault_library=static -Dtests=disabled -Ddemos=disabled --wrap-mode=nofallback
 ninja -C pixman-out -j"$JOBS" && ninja -C pixman-out install
+# qemu-ios's slirp_set_restricted(): the in-place restrict flip behind netdev_set_restrict /
+# qemu_ios_ui_net_restrict (5.x networking on after Setup). Older qemu-ios pins lack the patch file.
+SLIRP_PATCH="$QEMU/subprojects/packagefiles/libslirp-set-restricted.patch"
+if [ -f "$SLIRP_PATCH" ]; then (cd libslirp-v4.9.4 && patch -p1 < "$SLIRP_PATCH"); fi
 "$MESON" setup slirp-out libslirp-v4.9.4 --prefix="$P" --buildtype=release -Ddefault_library=static --wrap-mode=nofallback
 ninja -C slirp-out -j"$JOBS" && ninja -C slirp-out install
 # libusb: only the usbmuxd fork's configure.ac asks for it (PKG_CHECK_MODULES, no flag); its QEMU backend
