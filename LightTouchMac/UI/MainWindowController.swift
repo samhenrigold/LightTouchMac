@@ -435,9 +435,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             return
         }
         let elapsed = Int(Date().timeIntervalSince(emulator.startupBegan))
-        startupStatus.update(title: emulator.isErasing ? "Erasing \(emulator.profile.shortName)…" : emulator.preparationStatus,
-                             detail: elapsed >= 90 ? "Check Device Logs." : "\(elapsed)s",
-                             busy: true, primary: elapsed >= 90 ? "Device Logs" : nil)
+        // The subtitle is the boot's real stage (BootStage, from the device's own signals) and the session's counter.
+        startupStatus.update(title: emulator.isErasing ? "Erasing \(emulator.profile.shortName)…" : "Starting iOS…",
+                             detail: (emulator.isErasing ? "" : emulator.bootStage.text + " · ") + "\(elapsed) s",
+                             busy: true, primary: "Device Logs")
         if startupTask == nil {
             startupTask = Task { [weak self] in
                 while !Task.isCancelled {

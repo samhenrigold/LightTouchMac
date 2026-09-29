@@ -14,7 +14,7 @@ struct DeviceToolsError: Error {static func failed(_ s:String)->Self{Self()}}
 @MainActor var sleeping=false
 @MainActor var queryHook:(()->Void)?
 /// The helper's status block (read live) and link (commands go nowhere).
-struct Status { var displaySleeping: Bool; var shutdownConfirmed = false }
+struct Status { var displaySleeping: Bool; var shutdownConfirmed = false; var guestPackage: Int? = nil }
 struct FakeLink { func send(_ c: LinkCommand) {} }
 @MainActor final class Controller {
  let profile = DeviceProfile.iPodTouch2G
@@ -39,6 +39,8 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
  func startGuestPackageWatch(){}
  func startBootWatch(){}
  var preparationStatus=""
+ var bootStage=BootStage.poweringOn,reportAtBootStart:Int?
+ func noteBoot(_ e:BootStage.Event){bootStage=bootStage.after(e)}
  var onReady:(()->Void)?
  func deviceReady() async -> Bool {onReady?();return true}
  var springBoardReady=true
@@ -57,6 +59,7 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
   for off in [true,false] {
    sleeping=off;let c=Controller();c.startReadinessWatch();await c.readinessTask?.value
    precondition(c.homes==(off ? 1:0) && !c.preparingDevice)
+   precondition(c.bootStage == .usb, "USB answered: the toast moves on to the Home screen")
   }
   let pending=Controller();pending.springBoardReady=false;pending.startReadinessWatch()
   while pending.springBoardChecks==0 {await Task.yield()}
@@ -83,5 +86,5 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-wake-') as d:
  p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc', DEVICE_PROFILE,str(root/'Shared/DeviceLinkProtocol.swift'),'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc', DEVICE_PROFILE,str(root/'Shared/DeviceLinkProtocol.swift'),str(root/'LightTouchMac/Device/BootStage.swift'),'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=10)

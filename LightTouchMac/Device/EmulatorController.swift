@@ -93,6 +93,13 @@ final class EmulatorController {
         didSet { trackStartup(was: isErasing || state == .booting || oldValue); onStatusChange?() }
     }
     private(set) var preparationStatus = "Starting iOS…" { didSet { onStatusChange?() } }
+    /// How far this boot has provably got (BootStage): the boot toast's subtitle.
+    private(set) var bootStage = BootStage.poweringOn {
+        didSet { if oldValue != bootStage { logEvent("boot: \(bootStage.text)"); onStatusChange?() } }
+    }
+    private func noteBoot(_ event: BootStage.Event) { bootStage = bootStage.after(event) }
+    /// The loader's report when this boot began: a reset keeps the last boot's, which proves nothing now.
+    private var reportAtBootStart: GuestPackageReport?
     private var readinessFailure: String?
 
 
@@ -390,12 +397,19 @@ final class EmulatorController {
     private func openSerialLog() {
         do {
             serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"),
-                                                 watch: [Self.recoveryMarker, Self.ethlinkMarker]) { [weak self] phrase in
+                                                 watch: [Self.recoveryMarker, Self.ethlinkMarker] + BootStage.serialMarkers.keys) { [weak self] phrase in
                 Task { @MainActor in
                     guard let self else { return }
-                    if phrase == Self.ethlinkMarker { self.ethlinkUp = true; self.onStatusChange?(); return }
-                    self.inRecovery = true
-                    self.abortBoot(Self.recoveryReason(self.profile))
+                    switch phrase {
+                    case Self.ethlinkMarker:
+                        self.ethlinkUp = true
+                        self.noteBoot(.guestTools)
+                        self.onStatusChange?()
+                    case Self.recoveryMarker:
+                        self.inRecovery = true
+                        self.abortBoot(Self.recoveryReason(self.profile))
+                    default: self.noteBoot(.serial(phrase))
+                    }
                 }
             }
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
@@ -537,6 +551,8 @@ final class EmulatorController {
         readinessTask?.cancel()
         preparingDevice = true
         preparationStatus = "Starting iOS…"
+        bootStage = .poweringOn
+        reportAtBootStart = status?.guestPackage
         readinessFailure = nil
         let generation = bootGeneration
         readinessTask = Task { [weak self] in
@@ -555,6 +571,7 @@ final class EmulatorController {
                 }
                 try Task.checkCancellation()
                 guard generation == bootGeneration else { return }
+                noteBoot(.usbAttached)
                 preparationStatus = "Waiting for the Home screen…"
                 // A framebuffer and lockdown can both respond while SpringBoard
                 // is still starting. Do not enable input until its service answers.
@@ -704,6 +721,9 @@ final class EmulatorController {
         if status.frameSerial != lastFrameSerial {
             lastFrameSerial = status.frameSerial
             noteFrameAdvanced()
+        }
+        if bootStage < .system, status.agentStatus == 1 || (status.guestPackage != nil && status.guestPackage != reportAtBootStart) {
+            noteBoot(.guestTools)
         }
         let now = Date()
         if now.timeIntervalSince(lastAgentStatusCheck) >= 1 {
