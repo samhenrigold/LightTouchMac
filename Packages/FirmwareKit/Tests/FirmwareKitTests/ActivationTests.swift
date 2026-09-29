@@ -14,7 +14,7 @@ struct ActivationTests {
             .appendingPathComponent("Developer/qemu-ios-files/activation-native/corpus-stock")
         guard FileManager.default.fileExists(atPath: corpus.path) else { return }
         let names = try FileManager.default.contentsOfDirectory(atPath: corpus.path)
-        for name in names where name.hasSuffix(".lockdownd") && !name.contains("4B1") {
+        for name in names where name.hasSuffix(".lockdownd") {
             try Oracle.withTemp { dir in
                 let target = dir.appendingPathComponent("lockdownd")
                 try FileManager.default.copyItem(at: corpus.appendingPathComponent(name), to: target)
@@ -24,6 +24,12 @@ struct ActivationTests {
                 let after = [UInt8](try Data(contentsOf: target))
                 #expect(result.inputSHA256 != result.outputSHA256)
                 #expect((try FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)?.intValue == 0o751)
+                if name.contains("4B1") {
+                    #expect(MachOSignature.codeSignature(in: Data(after)) == nil)
+                    #expect(throws: ActivationFailure.self) { try Activation.run(on: target) }
+                    #expect(try Data(contentsOf: target) == Data(after))
+                    return
+                }
                 let start = try #require(MachOSignature.codeSignature(in: Data(after))).offset
                 let count = u32(after, start + 8)
                 for index in 0..<count {

@@ -1,6 +1,6 @@
 # Built-in legacy iOS activation
 
-Light Touch always activates devices during FirmwareKit system preparation. The recognizer is statically linked into FirmwareKit from `Packages/FirmwareKit/Sources/CActivation`; Swift refreshes the code signature while preserving entitlements. There is no hook path, preference, catalog switch, or separate shipped executable.
+Light Touch always activates devices during FirmwareKit system preparation. The recognizer is statically linked into FirmwareKit from `Packages/FirmwareKit/Sources/CActivation`; Swift refreshes existing code signatures while preserving entitlements. Recognized pre-signing 1.x binaries remain unsigned. There is no hook path, preference, catalog switch, or separate shipped executable.
 
 The command-line wrapper here is only for developer diagnostics and sanitizer tests. It uses the same C source, but does not sign its output.
 
@@ -29,12 +29,10 @@ The diagnostic CLI does not sign. FirmwareKit preserves entitlements and re-sign
   wide branches, and both forward and backward layouts. It enables the firmware's existing local
   activation path. Register allocation and addresses need not match a particular build.
 - **iPod 2.x no-record initializer:** recognizes the null-record guard and diagnostic, the state initializer, and its shared state store. Sets the local state to Activated and clears the brick flag. Runs automatically. A fresh 5F138 device reports Activated over paired USB; its home screen is not yet validated.
-- **Legacy no-record initializer (experimental):** for the inspected 1.x implementation, recognizes
-  the `determine_activation_state` context, the no-record initializer, zeroed temporary references,
-  state storage and its control flow. Redirects the state load to the firmware's existing `Activated`
-  CFString and clears the associated brick boolean. It does not rewrite shared string objects or disable
-  record verification. This has static validation only and cannot be applied accidentally: it requires
-  `--experimental-legacy`. Probe mode reports it without that flag.
+- **1.x no-record initializer:** recognizes the `determine_activation_state` context, the guarded
+  no-record initializer and its state/brick stores. Reuses the existing `Activated` CFString and clears
+  the brick boolean. Runs automatically. On fresh n45 devices the recipe also initializes Lockdown's
+  persistent `-BrickState` to false, the independent first-iTunes-connect state; no USB setup is required.
 
 The instruction decoder is intentionally limited to the operations needed to establish these patterns.
 Unknown code fails closed. `compatibility.json` records observations and hashes; the tool does **not**
@@ -44,7 +42,8 @@ use its addresses, hashes, product names, or build numbers as a patch lookup tab
 
 | Device / version | Build | Evidence |
 |---|---|---|
-| iPod touch 1 / 1.1.5 | 4B1 | Experimental legacy pattern; exact-byte and refusal checks only |
+| iPod touch 1 / 1.1 | 3A101a | Fresh native preparation reaches Home automatically; stock unsigned daemon mode retained |
+| iPod touch 1 / 1.1.5 | 4B1 | Automatic legacy pattern; exact-byte, signature-policy and refusal checks |
 | iPod touch 2 / 2.1.1 | 5F138 | Fresh device reports **Activated** over paired USB; status-bar-only UI, home screen not validated |
 | iPod touch 2 / 3.0 | 7A341 | Native probe/apply and exact-byte/repeat checks |
 | iPod touch 2 / 3.1.1 | 7C145 | Same |
@@ -57,9 +56,9 @@ use its addresses, hashes, product names, or build numbers as a patch lookup tab
 | iPad 1 / 5.1.1 | 9B206 | Native probe/apply and exact-byte/repeat checks; no emulator boot validation |
 | iPhone 3GS / 6.1.6 | 10B500 | Same; no emulator boot validation |
 
-This is coverage of these **12 binaries**, not every release or beta between 1.1.5 and 6.1.6. Static
+This is coverage of these **13 binaries**, not every release or beta between 1.1.5 and 6.1.6. Static
 recognition cannot establish that SpringBoard, pairing, or a particular device's activation requirements
-are satisfied. The early strategy remains experimental until a compatible emulator can exercise it.
+are satisfied. The 1.1 guest boot exercises the early strategy; other 1.x releases still need individual guest checks.
 
 The 7E18 test starts with a stock-IPSW-derived image, generated identity and NOR, and no imported
 Lockdown directory. It uses no Wi-Fi/netdev; USB is a private local test bridge. Both home screenshots
@@ -69,7 +68,7 @@ The final tool produces the same ARM patch bytes used in that boot test.
 
 `test.sh` builds synthetic Mach-O fixtures under AddressSanitizer and UndefinedBehaviorSanitizer. Tests
 cover ARM/Thumb, register variation, literal/PIC/CFString arguments, MOVW/MOVT, both wide-branch layouts,
-both legacy initializers and their explicit opt-in, exact writes, read-only probing, mode preservation,
+the early stack, later stack and shared-store initializers without opt-ins, exact writes, read-only probing, mode preservation,
 ambiguity, repeat application, malformed/truncated headers and symlinks. No Apple firmware is shipped
 in the source tree or tests. Real-firmware hashes and exact observed patches are in `compatibility.json`.
 
@@ -79,7 +78,7 @@ Preserved local evidence and the working iPod image live at:
 `/Users/shg/Developer/qemu-ios-files/activation-native/`.
 The two iPad experiments remain in `ipad1/offline-activation/` and `ipad1/offline-activation-8C148/`.
 
-Next useful checks are 1.x guest activation, the 2.1.1 home screen, and iOS 5/6 UI + pairing
+Next useful checks are further 1.x point releases and iOS 5/6 UI + pairing
 validation when their emulation is ready. New builds should first pass `--probe`, then a fresh offline
 boot and persistence test. Add a recognition strategy when behavior differs; do not loosen a matcher
 merely to make an unsupported binary pass.

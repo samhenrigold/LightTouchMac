@@ -109,6 +109,26 @@ import Testing
     /// 3A101a's rootfs vfdecrypt key (022-3601-4.dmg).
     static let rootfsKey = "6f021b478cc21ff77f775850c0efc2e66fd015f6a6894be079ee1351dce9af069f915f3d"
 
+    @Test func stockUnsignedActivation() throws {
+        guard Self.available else { return }
+        try Oracle.withTemp { dir in
+            let enc = dir.appendingPathComponent("enc.dmg"), dmg = dir.appendingPathComponent("rootfs.dmg"), raw = dir.appendingPathComponent("rootfs.hfs")
+            try IPSWArchive(Self.ipsw).extract("022-3601-4.dmg", to: enc)
+            try VFDecrypt.decrypt(input: enc, output: dmg, key: Data(hex: Self.rootfsKey)!)
+            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            let volume = try HFSPlusVolume(raw)
+            let stock = try volume.contents(volume.record(at: "usr/libexec/lockdownd"))
+            let target = dir.appendingPathComponent("lockdownd")
+            try stock.write(to: target)
+            try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: target.path)
+            #expect(MachOSignature.codeSignature(in: stock) == nil)
+            let result = try Activation.run(on: target)
+            #expect((try FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)?.intValue == 0o555)
+            #expect(result.inputSHA256 != result.outputSHA256)
+            #expect(MachOSignature.codeSignature(in: try Data(contentsOf: target)) == nil)
+        }
+    }
+
     /// 1.x GL front end against the oracle on the stock 3A101a IPSW's OpenGLES: the export scan as
     /// gles2x_exports.scan, the check against opengles-1x.exports (and its refusal of a list that differs), and, with
     /// an armv6.itpack at hand, N45Board.bake as ipod1g_device.bake on the same three stock files (OpenGLES,

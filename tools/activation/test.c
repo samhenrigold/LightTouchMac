@@ -222,18 +222,36 @@ int main(void) {
         save(p, d, sizeof(d));
         assert(!run(p, true));
         same(p, d, sizeof(d));
-        if (!kind) {
-            assert(run(p, false));
-            same(p, d, sizeof(d));
-            assert(!runx(p, false, true));
-        } else {
-            assert(!run(p, false));
-        }
+        assert(!run(p, false));
         put32(d + 0x200, 0xe59f208c);
         put32(d + 0x20c, kind ? 0xe3a06000 : 0xe3a04000);
         same(p, d, sizeof(d));
         assert(runx(p, false, true));
         same(p, d, sizeof(d));
+    }
+    // Early 1.x stores the state and brick boolean directly in distinct slots.
+    for (int bad = 0; bad < 4; bad++) {
+        oldfixture(d, false);
+        put32(d + 0x1f4, 0xe3540000);
+        put32(d + 0x1f8, 0xe1a08000);
+        put32(d + 0x1fc, 0x1a000004);
+        put32(d + 0x204, 0xe3a01001);
+        put32(d + 0x208, 0xe58d100c);
+        put32(d + 0x20c, 0xe58d2004);
+        put32(d + 0x210, 0xea00004e);
+        if (bad == 1) put32(d + 0x1fc, 0x1a000003);
+        if (bad == 2) put32(d + 0x20c, 0xe58d200c);
+        if (bad == 3) put32(d + 0x204, 0xe3a02001);
+        save(p, d, sizeof(d));
+        if (bad) { assert(run(p, false)); same(p, d, sizeof(d)); }
+        else {
+            assert(!run(p, true)); same(p, d, sizeof(d));
+            assert(!run(p, false));
+            put32(d + 0x200, 0xe59f208c);
+            put32(d + 0x204, 0xe3a01000);
+            same(p, d, sizeof(d));
+            assert(run(p, false)); same(p, d, sizeof(d));
+        }
     }
     // The shared-store strategy must prove the no-record guard, diagnostic, and store.
     for (int kind = 0; kind < 3; kind++) {

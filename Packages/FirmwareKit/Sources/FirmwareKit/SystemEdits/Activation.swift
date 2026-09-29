@@ -27,8 +27,24 @@ public enum Activation {
         guard success != 0 else {
             throw ActivationFailure(error.map { String(cString: $0) } ?? "Unsupported activation path")
         }
-        after = try signed(after)
+        // 1.x ships unsigned lockdownd and predates mandatory code signing. Only
+        // the positively recognized 1.x path may remain unsigned; later paths
+        // still require a valid signature allocation. Existing signatures are refreshed.
+        if success != 2 || MachOSignature.codeSignature(in: after) != nil {
+            after = try signed(after)
+        }
         // Preserve the HFS catalog record and its metadata; this file is on a disposable staging volume.
+        let metadata = open(file.path, O_RDONLY | O_NOFOLLOW)
+        guard metadata >= 0 else { throw ActivationFailure("Cannot open activation target") }
+        var original = stat()
+        guard fstat(metadata, &original) == 0, original.st_mode & S_IFMT == S_IFREG else {
+            close(metadata)
+            throw ActivationFailure("Activation target is not a regular file")
+        }
+        defer { _ = fchmod(metadata, original.st_mode & 0o7777); close(metadata) }
+        guard fchmod(metadata, original.st_mode & 0o7777 | 0o200) == 0 else {
+            throw ActivationFailure("Cannot make activation target writable")
+        }
         let out = open(file.path, O_WRONLY | O_NOFOLLOW)
         guard out >= 0 else { throw ActivationFailure("Cannot open activation target") }
         defer { close(out) }
