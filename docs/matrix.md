@@ -71,7 +71,8 @@ Notes:
   both get their keybag this way (matrix-results.md).
 - iPod2,1 2.2 / 2.2.1: the wiki has no iBSS/iBEC keys; neither recipe needs those two components. They boot only with
   qemu-ios `ipod-2x` (the LLB's 0x38100000 block, smoke #18); `experimental` since the merge and pin bump (qemu-ios ipad1, 2026-09-29).
-- iPod2,1 2.x: no guest tools, no AppSync (no shared cache); Hold does nothing and a guest-initiated power-off never
+- iPod2,1 2.x: no guest tools, no AppSync (no shared cache); SpringBoard composites through the GL front end (the
+  seed package's `n72-ios2` OpenGLES hook, guest package serial 5+; the GL column is regress.py's gles leg); Hold does nothing and a guest-initiated power-off never
   confirms (smoke #19). The app's Stop is a flush + halt and persist passes, so 2.1.1 is `experimental`.
 - iPod2,1 4.0 (8A293) and iPad1,1 5.0 (9A334): no Update-ramdisk key on the wiki.
 - iPod1,1: only the root filesystem is encrypted on 1.x; listed for the record, no board is emulated.

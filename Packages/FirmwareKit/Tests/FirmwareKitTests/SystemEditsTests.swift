@@ -25,7 +25,7 @@ enum K48Oracle {
         m["GLEngine"] = contrib.appendingPathComponent("ipad1-gles/GLEngine")
         m["gles-names.h"] = qemu.appendingPathComponent("include/hw/arm/guest-services/gles-names.h")
         m["GLRendererFloatQEMU"] = contrib.appendingPathComponent("ipad1-gles/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU")
-        m[SystemEdits.Helpers.itpack] = qemu.appendingPathComponent("build/guest-package/armv7.itpack")
+        m[SystemEdits.Helpers.itpack] = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
         return m
     }
 
@@ -83,7 +83,7 @@ enum K48Oracle {
     /// GuestPackage.seed against mkpkg.seed on a plain directory with the real armv7.itpack: the same tree
     /// (paths, modes, bytes, symlinks) and the same record, for a shim image and a no-shim one.
     @Test(arguments: [("7B500", true), ("8C148", false)]) func seedMatchesPython(_ build: String, _ gles: Bool) throws {
-        let itpack = K48Oracle.qemu.appendingPathComponent("build/guest-package/armv7.itpack")
+        let itpack = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
         guard Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py")) else { return }
         try Oracle.withTemp { dir in
             func volume(_ name: String) throws -> URL {

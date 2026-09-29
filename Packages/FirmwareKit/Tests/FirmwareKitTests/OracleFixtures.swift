@@ -15,6 +15,10 @@ enum Oracle {
     /// The qemu-ios checkout whose imgtools and guest builds are the oracle (FIRMWAREKIT_QEMU_IOS overrides).
     static let qemuIOS = ProcessInfo.processInfo.environment["FIRMWAREKIT_QEMU_IOS"].map { URL(fileURLWithPath: $0) }
         ?? path("Developer/qemu-ios-ipad1")
+    /// Where armv6.itpack / armv7.itpack are: FIRMWAREKIT_GUEST_TOOLS (an export's ipad-guest-tools), else the
+    /// checkout's contrib/guest-package/build.sh output.
+    static let guestPackages = ProcessInfo.processInfo.environment["FIRMWAREKIT_GUEST_TOOLS"].map { URL(fileURLWithPath: $0) }
+        ?? qemuIOS.appendingPathComponent("build/guest-package")
 
     /// The app's catalog, in this repo.
     static let catalog = URL(fileURLWithPath: #filePath)

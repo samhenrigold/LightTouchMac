@@ -24,13 +24,18 @@ GUEST_PAYLOADS = frozenset(('MBXGLEngine', 'sbdlicon', 'ithalt', 'it_agent', 'it
                           'com.qemu.it-agent.plist', 'itstatus', 'itmedia', 'itphoto',
                           'itproxy', 'ittrust', 'itorient'))
 # firmwarekit's --guest-tools set (SystemEdits.Helpers + it_keybag) and the n72 recipe's inputs (N72Recipe): one GL
-# shim per arch (GLEngine, MBXGLEngine: the dispatch layout is read at load) and the name table they speak.
+# shim per arch (GLEngine, MBXGLEngine: the dispatch layout is read at load) and the name table they speak; 2.x's GL
+# front end (OpenGLES-2x) and the export set the recipe checks the stock OpenGLES against (opengles-2x.exports).
 IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquiet.dylib', 'it_seal', 'it_keybag',
                                  'libappsync.dylib', 'com.qemu.it-pbd.plist', 'com.qemu.it-ethlink.plist',
                                  'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'GLEngine', 'gles-names.h',
                                  'GLRendererFloatQEMU', 'armv6.itpack', 'armv7.itpack',
                                  'MBXGLEngine', 'sblaunch', 'sbdlicon', 'it_agent', 'it_typein.dylib',
-                                 'com.qemu.it-agent.plist', 'it_keybag-armv6', 'it_prefs-armv6'))
+                                 'com.qemu.it-agent.plist', 'it_keybag-armv6', 'it_prefs-armv6',
+                                 'OpenGLES-2x', 'opengles-2x.exports'))
+# The oldest guest package the bundle may carry: serial 5 is the first whose n72-ios2 family has the OpenGLES
+# front-end hook, which N72Board refuses to prepare 2.x without.
+GUEST_PACKAGE_MIN_SERIAL = 5
 CATALOG = ROOT / 'LightTouchMac/Resources/firmware-catalog.json'
 SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS_Store'}
 NATIVE_RECIPES = frozenset(('scripts/build-package-native.sh', 'scripts/build-static-deps.sh',
@@ -160,6 +165,9 @@ def validate_guest(args, guest):
     source = manifest.get('source', {})
     if Path(source.get('path', '')).resolve() != args.qemu_source:
         raise ValueError('Guest tools were built from a different QEMU checkout')
+    serial = (manifest.get('guest_package') or {}).get('serial') or 0
+    if serial < GUEST_PACKAGE_MIN_SERIAL:
+        raise ValueError(f'Guest package serial {serial} predates {GUEST_PACKAGE_MIN_SERIAL} (the 2.x OpenGLES hook); rebuild guest tools')
     files = manifest_hashes(manifest.get('files'), 'guest artifact')
     for directory, required, description in ((guest, GUEST_PAYLOADS, 'Guest payload'),
                                              (guest.parent / 'ipad-guest-tools', IPAD_GUEST_PAYLOADS, 'iPad guest payload')):

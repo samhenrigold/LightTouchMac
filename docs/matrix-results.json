@@ -281,8 +281,10 @@
     "note": "itpack has no package for this build (GuestPackage.compose: nil)"
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
+    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214029, safari lit=452073, home lit=214029",
+    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
    },
    "persist": {
     "ok": true,
@@ -1445,8 +1447,10 @@
     "note": "itpack has no package for this build (GuestPackage.compose: nil)"
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
+    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214095, safari lit=452084, home lit=214095",
+    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
    },
    "persist": {
     "ok": true,
@@ -1553,8 +1557,10 @@
     "note": "itpack has no package for this build (GuestPackage.compose: nil)"
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
+    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214110, safari lit=452100, home lit=214038",
+    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
    },
    "persist": {
     "ok": true,

@@ -209,8 +209,9 @@ if [ -n "$IPAD_GUEST" ] && [ -d "$IPAD_GUEST" ]; then
     echo "embedding iPad guest helpers…"
     mkdir -p "$GUEST_TOOLS_DST"
     cp -p "$IPAD_GUEST"/* "$GUEST_TOOLS_DST/"
-    # one GL shim per arch (the dispatch layout is read at load) and the name table they speak
-    for f in it_pbd GLEngine MBXGLEngine gles-names.h; do
+    # one GL shim per arch (the dispatch layout is read at load) and the name table they speak; 2.x's front end
+    # and the export set N72Board checks the stock OpenGLES against before the seed package's hook replaces it
+    for f in it_pbd GLEngine MBXGLEngine gles-names.h OpenGLES-2x opengles-2x.exports; do
         [ -s "$GUEST_TOOLS_DST/$f" ] || { echo "incomplete iPad guest tools: $IPAD_GUEST (no $f)" >&2; exit 1; }
     done
 elif [ ${#FIRMWAREKIT[@]} -gt 0 ]; then
