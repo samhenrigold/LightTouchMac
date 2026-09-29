@@ -1,24 +1,17 @@
 // One device the user owns: State/Devices/<uuid>/device.json.
 // See docs/multi-device-plan.md section B.
 //
-// Storage paths are relative to the state directory (like the packed-image
-// pointer, so the record survives the state root moving) unless absolute. An
-// adopted device's paths are the legacy names it already lives under, frozen
-// here with its state key: nothing derives them again, so a later change to
-// key derivation cannot orphan it.
+// Storage paths are relative to the state directory (so the record survives
+// the state root moving) unless absolute: a development base (LTM_DEV_BASE)
+// is named by its absolute path.
 
 import Foundation
 
 nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
     struct Base: Codable, Equatable, Sendable {
         enum Kind: String, Codable, Sendable {
-            /// Read-only prepared output in Devices/<uuid>/base.
+            /// Read-only `firmwarekit create` output: Devices/<uuid>/base, or a development directory.
             case prepared
-            /// The iPod image the app ships (nand.itnand), unpacked into
-            /// State/device/<nand>-<digest> and chosen by active-<nand>.json.
-            case legacyBundled
-            /// A raw image in a development checkout (LTM_FILES).
-            case development
         }
         var kind: Kind
         var path: String
@@ -31,8 +24,6 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
         var writableNOR: String?
         /// Also .meta, .tmp and .bad beside it.
         var snapshot: String
-        /// Legacy erase marker; removed, never acted on.
-        var resetMarker: String?
         var usbmuxConf: String
     }
 
@@ -46,15 +37,6 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
     struct Provenance: Codable, Equatable, Sendable {
         var lock: String?
         var sha256: String?
-    }
-
-    /// What adoption resolved from, kept to match the device again when a
-    /// development launch names the same files root.
-    struct Legacy: Codable, Equatable, Sendable {
-        var filesRoot: String
-        var nand: String
-        /// State-relative active-<nand>.json, for legacyBundled.
-        var pointer: String?
     }
 
     /// device.json `guest`: the guest package serials this device has run.
@@ -92,8 +74,6 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
     var storage: Storage
     var identity: Identity?
     var provenance: Provenance?
-    var lastEmulatorBuild: String?
-    var legacy: Legacy?
     /// Guest-package serials and verdicts (GuestPackage).
     var guest: Guest?
 
@@ -116,17 +96,16 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
         state.appendingPathComponent("Devices/\(id.uuidString)", isDirectory: true)
     }
 
-    /// Runtime paths, which are per instance for every device, adopted or
-    /// not, so two running devices never share a pid file, session file or log.
+    /// Runtime paths, per instance, so two running devices never share a pid
+    /// file, lease or log.
     struct Paths: Sendable {
         let directory: URL
         let base: URL
         let overlay: URL
         let writableNOR: URL?
         let snapshot: URL
-        let resetMarker: URL
         let usbmuxConf: URL
-        /// usbmuxd.pid and session.env.
+        /// usbmuxd.pid, the lease and the guest-package offer.
         let work: URL
         /// serial.log, usbmuxd.log.
         let logs: URL
@@ -135,7 +114,6 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
         var snapshotTmp: URL { snapshot.appendingPathExtension("tmp") }
         var snapshotBad: URL { snapshot.appendingPathExtension("bad") }
         var usbmuxPID: URL { work.appendingPathComponent("usbmuxd.pid") }
-        var sessionFile: URL { work.appendingPathComponent("session.env") }
         /// The helper's flock while it runs this device (LightTouchDevice --lease).
         var lease: URL { work.appendingPathComponent("lease") }
         /// Retained .ipa copies of the apps installed on this device (IPALibrary).
@@ -150,7 +128,6 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
                      overlay: Self.url(storage.overlay, state: state),
                      writableNOR: storage.writableNOR.map { Self.url($0, state: state) },
                      snapshot: Self.url(storage.snapshot, state: state),
-                     resetMarker: Self.url(storage.resetMarker ?? "Devices/\(id.uuidString)/.reset", state: state),
                      usbmuxConf: Self.url(storage.usbmuxConf, state: state),
                      work: directory.appendingPathComponent("work", isDirectory: true),
                      logs: logs.appendingPathComponent("Devices/\(id.uuidString)", isDirectory: true))
@@ -169,9 +146,10 @@ nonisolated struct DeviceInstance: Codable, Equatable, Identifiable, Sendable {
 
     // MARK: - UserDefaults
 
-    /// Per-device UserDefaults key, e.g. "deviceNotice.<uuid>". Adoption
-    /// copies the single-device value to the adopted iPod's key.
+    /// Per-device UserDefaults key, e.g. "deviceNotice.<uuid>".
     func defaultsKey(_ name: String) -> String { "\(name).\(id.uuidString)" }
+    /// The names kept per device; Delete removes them with the record.
+    static let perDeviceDefaults = ["deviceNotice", "motionPose", "keyboardInputEnabled", "autoRotateWithGuest"]
 
     // MARK: - Record I/O
 

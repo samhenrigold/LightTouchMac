@@ -149,7 +149,7 @@ nonisolated struct IPSWStore: Sendable {
     /// build as an entry means the wrong file, anything else is unsupported.
     static func match(sha1: String, restore: (productType: String, build: String)?,
                       in catalog: FirmwareCatalog) throws -> FirmwareCatalog.Entry {
-        let ipsw = catalog.entries.filter { $0.source.kind == .ipsw }
+        let ipsw = catalog.entries
         if let entry = ipsw.first(where: { $0.source.sha1 == sha1 }) { return entry }
         if let restore, let entry = ipsw.first(where: { $0.productType == restore.productType && $0.build == restore.build }) {
             throw FirmwareError.wrongFile(model: entry.profile?.displayName ?? entry.productType, version: entry.version)

@@ -481,7 +481,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func updateStartupStatus() {
         defer { deviceVC?.updateStatusVisibility() }
-        guard let emulator, emulator.isErasing || emulator.state == .booting || emulator.preparingMedia else {
+        guard let emulator, emulator.isErasing || emulator.state == .booting || emulator.preparingDevice else {
             wasStarting = false
             startupTask?.cancel()
             startupTask = nil
@@ -1472,14 +1472,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func writeDiagnostics(to dest: URL) async {
         await AppEventLog.shared.flush()
         NativeLogging.flush()
-        let logs = diagnosticLogs + [diagnosticInstance?.paths.sessionFile].compactMap { $0 }
+        let logs = diagnosticLogs
         let device = emulator.map { emulator in """
             \(emulator.dylibProvenance)
             state: \(emulator.statusLine)
             guest tools: \(emulator.guestToolsStatus) (offer \(emulator.guestOffer.map { "\($0)" } ?? "none"))
-            files-root: \(emulator.options.filesRoot)
-            nand: \(emulator.options.nand)
-            appsync: \(emulator.options.appsync)   network: \(emulator.options.network)
+            base: \(emulator.instance.base.path)
+            network: \(emulator.network)   usbmuxd: \(emulator.usbmuxSession ?? "none")
             canManageApps: \(emulator.canManageApps)
             """ } ?? "state: not running"
         let info = """

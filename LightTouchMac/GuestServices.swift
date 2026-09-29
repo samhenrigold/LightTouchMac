@@ -242,17 +242,10 @@ nonisolated struct GuestAgent: Sendable {
 nonisolated struct GuestServices: Sendable {
     let agent: GuestAgent
     /// True when the guest runs a package from the loader (a guest-package
-    /// report arrived): its binaries are under `packageBin`, and the loader,
-    /// not the app, keeps the agent, the GL engine and typein current.
+    /// report arrived): its binaries are under `packageBin`.
     var packaged = false
 
     static let packageBin = "/usr/local/lighttouch/current/bin"
-    static let springBoardJob = "/System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
-    static let springBoardPreferences = "/var/mobile/Library/Preferences/com.apple.springboard.plist"
-    static let agentJob = "/System/Library/LaunchDaemons/com.qemu.it-agent.plist"
-    static let legacyClipboardJob = "/System/Library/LaunchDaemons/com.qemu.it-pbd.plist"
-    static let engine = "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"
-    static let typing = "/usr/lib/it_typein.dylib"
     static let launchctl = "/bin/launchctl"
 
     // MARK: Media
@@ -315,151 +308,6 @@ nonisolated struct GuestServices: Sendable {
     func foregroundAppName() async throws -> String? {
         let name = try await agent.frontmost().name.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : String(name.prefix(200))
-    }
-
-    // MARK: Component upgrade (images without the loader)
-
-    /// The app's copies of the components it keeps current on a legacy image.
-    struct Components {
-        var engine: URL
-        var agent: URL
-        var typing: URL
-    }
-
-    /// Upgrade an image that has no guest-package loader in place: the agent
-    /// (at the path its own launch job names), it_typein, the GL engine and
-    /// SpringBoard's environment, plus the old lock-disabling preferences.
-    /// Reloads SpringBoard after a change; the caller waits for it to answer.
-    /// A packaged image is the loader's to keep current, so nothing happens.
-    func updateComponents(_ bundled: Components) async throws -> Bool {
-        guard !packaged else { return false }
-        guard await agent.waitAlive(seconds: 30) else {
-            throw DeviceToolsError.failed("The device's guest agent did not start.")
-        }
-        let engineData = try Data(contentsOf: bundled.engine)
-        let agentData = try Data(contentsOf: bundled.agent)
-        let typingData = try Data(contentsOf: bundled.typing)
-        guard [engineData, agentData, typingData].allSatisfy({ !$0.isEmpty && $0.count <= 250_000 }) else {
-            throw DeviceToolsError.failed("The bundled guest components are invalid.")
-        }
-        var guest: [String: Data] = [:]
-        for path in [Self.springBoardPreferences, Self.springBoardJob, Self.engine, Self.typing, Self.agentJob, Self.legacyClipboardJob] {
-            try Task.checkCancellation()
-            guest[path] = try await agent.get(path)
-        }
-        // Where this image runs its agent from: its own job says. Under the
-        // loader's package it is not ours to replace.
-        let agentPath = (guest[Self.agentJob].flatMap {
-            try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any]
-        }?["ProgramArguments"] as? [String])?.first
-        // The loader's package runs this agent (its job points into current/):
-        // the package owns the agent, the GL engine and typein hooks, even
-        // before this boot's report has arrived.
-        if agentPath?.hasPrefix("/usr/local/lighttouch/") == true { return false }
-        var changedAgent = false
-        if let agentPath, agentPath.hasPrefix("/") {
-            let running = try await agent.get(agentPath)
-            let version = try await agent.capabilities().version
-            // Never replace an agent with an older one (a development build can
-            // resolve a stale checkout's copy).
-            changedAgent = running != agentData && Self.agentVersion(agentData) >= version
-            if changedAgent {
-                try await agent.put(agentPath, mode: 0o755, agentData)
-            }
-        }
-        let newPreferences = try Self.lockButtonPreferences(guest[Self.springBoardPreferences] ?? Data())
-        let newPlist = try Self.mediaLaunchConfiguration(guest[Self.springBoardJob] ?? Data(), includeTyping: true)
-        let changedEngine = guest[Self.engine] != engineData
-        let changedTyping = guest[Self.typing] != typingData
-        // put is atomic (mkstemp beside the file, fsync, rename): a torn engine
-        // or job never reaches the next boot.
-        if changedTyping { try await agent.put(Self.typing, mode: 0o755, typingData) }
-        if changedEngine { try await agent.put(Self.engine, mode: 0o755, engineData) }
-        if let newPlist { try await agent.put(Self.springBoardJob, mode: 0o644, newPlist) }
-        if guest[Self.legacyClipboardJob] != nil {
-            // Two clipboard daemons must never compete; stock launchctl, no shell.
-            _ = try? await agent.spawn([Self.launchctl, "unload", Self.legacyClipboardJob])
-            try await agent.unlink(Self.legacyClipboardJob)
-        }
-        if changedAgent {
-            // A daemon can't reload its own job, but it can be stopped: KeepAlive
-            // relaunches the new binary, which claims the channel ~11 s later.
-            // The reply is ECONNRESET from the daemon that stopped.
-            _ = try? await agent.spawn([Self.launchctl, "stop", "com.qemu.it-agent"])
-            agent.cache.reset()
-            try? await Task.sleep(for: .seconds(2))
-            guard await agent.waitAlive(seconds: 40) else {
-                throw DeviceToolsError.failed("The upgraded guest agent did not start.")
-            }
-            logEvent("media: guest agent upgraded (v\((try? await agent.capabilities().version) ?? 0))")
-        }
-        let changed = changedEngine || changedTyping || newPlist != nil || newPreferences != nil
-        if changed { try await reloadSpringBoard(preferences: newPreferences) }
-        return changed || changedAgent
-    }
-
-    /// Host-sequenced, as the old shell trap was: stop SpringBoard (it can
-    /// flush its cached preferences on exit), replace them, and always load
-    /// the job again, even if the replacement failed.
-    private func reloadSpringBoard(preferences: Data?) async throws {
-        try Task.checkCancellation()
-        try await agent.sync()
-        try await agent.spawn([Self.launchctl, "unload", Self.springBoardJob])
-        var failure: Error?
-        if let preferences {
-            do {
-                try await agent.put(Self.springBoardPreferences, mode: 0o600, preferences)
-                try await agent.chown(501, 501, Self.springBoardPreferences)
-            } catch { failure = error }
-        }
-        try await agent.spawn([Self.launchctl, "load", Self.springBoardJob])
-        try await agent.sync()
-        if let failure { throw failure }
-    }
-
-    static func lockButtonPreferences(_ data: Data) throws -> Data? {
-        var format = PropertyListSerialization.PropertyListFormat.xml
-        guard var preferences = try PropertyListSerialization.propertyList(from: data, format: &format) as? [String: Any] else {
-            throw DeviceToolsError.failed("The device's SpringBoard preferences are invalid.")
-        }
-        let keys = ["SBDontLockEver", "SBDisableCABlanking"]
-        guard keys.contains(where: { preferences[$0] != nil }) else { return nil }
-        for key in keys { preferences.removeValue(forKey: key) }
-        return try PropertyListSerialization.data(fromPropertyList: preferences, format: format, options: 0)
-    }
-
-    /// Preserve the launch job and unrelated environment, including binary
-    /// plists. A malformed job must never be replaced with a guessed default.
-    static func mediaLaunchConfiguration(_ data: Data, includeTyping: Bool = false) throws -> Data? {
-        var format = PropertyListSerialization.PropertyListFormat.xml
-        guard var job = try PropertyListSerialization.propertyList(from: data, format: &format) as? [String: Any],
-              job["Label"] as? String == "com.apple.SpringBoard",
-              job["EnvironmentVariables"] == nil || job["EnvironmentVariables"] is [String: Any] else {
-            throw DeviceToolsError.failed("The device's SpringBoard configuration is invalid.")
-        }
-        var environment = job["EnvironmentVariables"] as? [String: Any] ?? [:]
-        let original = environment
-        let keys = ["CA_ENABLE_OGL", "LK_ENABLE_OGL"]
-        for key in keys { environment[key] = "1" }
-        if includeTyping {
-            guard environment["DYLD_INSERT_LIBRARIES"] == nil || environment["DYLD_INSERT_LIBRARIES"] is String else {
-                throw DeviceToolsError.failed("The device's injected-library configuration is invalid.")
-            }
-            var libraries = (environment["DYLD_INSERT_LIBRARIES"] as? String ?? "")
-                .split(separator: ":").map(String.init)
-                .filter { $0 != "/usr/lib/it_kbd_agent.dylib" }
-            if !libraries.contains("/usr/lib/it_typein.dylib") { libraries.append("/usr/lib/it_typein.dylib") }
-            environment["DYLD_INSERT_LIBRARIES"] = libraries.joined(separator: ":")
-        }
-        if NSDictionary(dictionary: environment).isEqual(to: original) { return nil }
-        job["EnvironmentVariables"] = environment
-        return try PropertyListSerialization.data(fromPropertyList: job, format: format, options: 0)
-    }
-
-    /// "it_agent v<N>" inside the binary; 0 when it has none.
-    static func agentVersion(_ binary: Data) -> Int {
-        guard let range = binary.range(of: Data("it_agent v".utf8)) else { return 0 }
-        return Int(String(decoding: binary[range.upperBound...].prefix { $0 >= 0x30 && $0 <= 0x39 }, as: UTF8.self)) ?? 0
     }
 
     // MARK: Stock lockdown

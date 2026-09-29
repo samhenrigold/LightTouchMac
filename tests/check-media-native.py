@@ -55,6 +55,7 @@ nonisolated func logEvent(_ message: String) { NSLog("%@", message) }
 struct InstalledApp: Sendable { let id, name, version: String }
 nonisolated enum Bundled {
     static var frameworksDirectory: String? { CommandLine.arguments[5] }
+    static var filesRoot: String { CommandLine.arguments[2] }
     static func resolve(_ name: String, fallbacks: [String]) -> String? {
         if CommandLine.arguments.count > 7 {
             let candidate = URL(fileURLWithPath: CommandLine.arguments[7]).appendingPathComponent(name).path
@@ -81,7 +82,6 @@ final class DeviceLink: Sendable {
 }
 struct DeviceTools: Sendable {
     let clientSocket: String
-    let filesRoot: String
     var agent: DeviceLink? = DeviceLink()
     var agentCache = GuestAgentCache()
     var packaged = false
@@ -119,7 +119,7 @@ final class Progress: @unchecked Sendable {
         let prepared = URL(fileURLWithPath:CommandLine.arguments[6]).deletingLastPathComponent()
             .appendingPathComponent("prepared." + file.pathExtension)
         try FileManager.default.copyItem(at:file,to:prepared)
-        let device = DeviceTools(clientSocket:CommandLine.arguments[3],filesRoot:CommandLine.arguments[2])
+        let device = DeviceTools(clientSocket:CommandLine.arguments[3])
         let progress = Progress()
         try await device.stageMedia(media) { progress.update($0) }
         precondition(progress.complete())

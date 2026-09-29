@@ -7,6 +7,7 @@
   "build": "7E18",
   "status": "user_ipsw",
   "source": {"kind": "ipsw", "sha1": "5f4f5c01eda2f811f73167e7d1f82dbeed82367b", "bytes": 263275211},
+  "bundled": "device/n72ap-7E18.itbase",
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "f246cfefd363c2ec38927473be6f6d45", "key": "afa37377de73fdf1e2ad6b0117cd2847"},
    "BatteryCharging0": {"file": "batterycharging0.s5l8720x.img3", "iv": "f617033546f742170011669656b57494", "key": "a8ab6a757b1f2cfdb69f8a2455e0aa95"},

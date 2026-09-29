@@ -3,6 +3,7 @@
 from pathlib import Path
 import os
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
@@ -15,21 +16,17 @@ def section(file, start, end):
 
 metadata = section("AppMetadataCache.swift", "    nonisolated static func prepareDirectory", "    #if DEBUG")
 metadata_save = section("AppMetadataCache.swift", "    private func save()", "    // MARK: - .ipa reading")
-unpack = section("EmulatorController.swift", "    nonisolated private static func unpackNAND", "    /// The helper is gone")
 diagnostics = section("MainWindowController.swift", "nonisolated enum DiagnosticsExport", "// MARK: - Toolbar item validation")
 
 source = r'''
 import Foundation
 import Darwin
 nonisolated func logEvent(_ format: String, _ arguments: CVarArg...) {}
-nonisolated enum Bundled {
-    static func tool(_ name: String) -> String? { ProcessInfo.processInfo.environment["LTM_TEST_HELPER"] }
-}
 struct Metadata {
     var entries: [String: String] = [:]
     let dir: URL
     var indexURL: URL { dir.appendingPathComponent("index.json") }
-''' + metadata + metadata_save.replace("private func", "func") + "}\nenum NAND {\n" + unpack.replace("private static", "static") + "}\n" + diagnostics + r'''
+''' + metadata + metadata_save.replace("private func", "func") + "}\n" + diagnostics + r'''
 
 @main struct Check {
     static func main() async throws {
@@ -41,30 +38,13 @@ struct Metadata {
         func children(_ url: URL) throws -> [URL] { try fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) }
         let state = root.appendingPathComponent("state", isDirectory: true)
         let caches = root.appendingPathComponent("system caches", isDirectory: true)
-        let legacy = state.appendingPathComponent("AppCache", isDirectory: true)
-        try fm.createDirectory(at: legacy, withIntermediateDirectories: true)
         try fm.createDirectory(at: caches, withIntermediateDirectories: true)
-        try put("old index", legacy.appendingPathComponent("index.json"))
-        try put("old icon", legacy.appendingPathComponent("com.example.app.png"))
         let cache = Metadata.prepareDirectory(state: state, caches: caches, isolated: true)
-        precondition(cache == state.appendingPathComponent("Caches/AppMetadata", isDirectory: true))
-        precondition(!exists(legacy), "successful migration retained duplicate cache")
-        precondition(try text(cache.appendingPathComponent("index.json")) == "old index")
+        precondition(cache == state.appendingPathComponent("Caches/AppMetadata", isDirectory: true) && exists(cache))
         precondition(try children(caches).isEmpty, "isolated run wrote global cache")
-        // Existing current data wins; conflicting legacy data is kept for review.
-        try fm.createDirectory(at: legacy, withIntermediateDirectories: true)
-        try put("legacy conflict", legacy.appendingPathComponent("index.json"))
-        try put("current index", cache.appendingPathComponent("index.json"))
-        _ = Metadata.prepareDirectory(state: state, caches: caches, isolated: true)
-        precondition(try text(cache.appendingPathComponent("index.json")) == "current index")
-        precondition(try text(legacy.appendingPathComponent("index.json")) == "legacy conflict")
         let normal = root.appendingPathComponent("normal state", isDirectory: true)
-        try fm.createDirectory(at: normal.appendingPathComponent("AppCache"), withIntermediateDirectories: true)
-        try put("normal", normal.appendingPathComponent("AppCache/index.json"))
         let normalCache = Metadata.prepareDirectory(state: normal, caches: caches, isolated: false)
-        precondition(normalCache == caches.appendingPathComponent("gold.samhenri.LightTouchMac/AppMetadata", isDirectory: true))
-        precondition(try text(normalCache.appendingPathComponent("index.json")) == "normal")
-        precondition(!exists(normal.appendingPathComponent("AppCache")))
+        precondition(normalCache == caches.appendingPathComponent("gold.samhenri.LightTouchMac/AppMetadata", isDirectory: true) && exists(normalCache))
         // A running cache must recover after its directory is purged. Exercise
         // production save() as well as the icon writer, without reinitializing.
         var running = Metadata(dir: normalCache)
@@ -83,37 +63,25 @@ struct Metadata {
         try Metadata.writeCacheData(Data("replacement icon".utf8), to: icon)
         precondition(try text(icon) == "replacement icon")
         precondition(try children(normalCache).map(\.lastPathComponent) == ["com.example.new.png"])
-        // A failed migration keeps the only copy usable at its original path.
-        let blockedState = root.appendingPathComponent("blocked state", isDirectory: true)
-        try fm.createDirectory(at: blockedState.appendingPathComponent("AppCache"), withIntermediateDirectories: true)
-        try put("preserved", blockedState.appendingPathComponent("AppCache/index.json"))
-        try put("not a directory", blockedState.appendingPathComponent("Caches"))
-        let retained = Metadata.prepareDirectory(state: blockedState, caches: caches, isolated: true)
-        precondition(retained == blockedState.appendingPathComponent("AppCache", isDirectory: true))
-        precondition(try text(retained.appendingPathComponent("index.json")) == "preserved")
-
+        // The built-in device's blob (scripts/pack-base.py's format): unpacked as a stream, modes
+        // kept; a truncated stream, extra bytes and an escaping name are refused.
+        let blob = URL(fileURLWithPath: CommandLine.arguments[2])
         let image = root.appendingPathComponent("device/image")
-        precondition(!NAND.unpackNAND("fail", into: image.path))
-        precondition(!exists(image) && !exists(URL(fileURLWithPath: image.path + ".partial")))
-        let partial = URL(fileURLWithPath: image.path + ".partial", isDirectory: true)
-        try fm.createDirectory(at: partial, withIntermediateDirectories: true)
-        try put("abandoned", partial.appendingPathComponent("stale.page"))
-        precondition(NAND.unpackNAND("success", into: image.path))
-        precondition(try text(image.appendingPathComponent("page")) == "success")
-        precondition(!exists(image.appendingPathComponent("stale.page")) && !exists(partial))
-        // Publication failure must not change a pre-existing device directory.
-        precondition(!NAND.unpackNAND("replacement", into: image.path))
-        precondition(try text(image.appendingPathComponent("page")) == "success")
-        precondition(!exists(partial))
-        let helper = URL(fileURLWithPath: ProcessInfo.processInfo.environment["LTM_TEST_HELPER"]!)
-        let helperText = try text(helper)
-        try put("#!/missing-lighttouch-test-interpreter\n", helper)
-        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
-        let missing = root.appendingPathComponent("device/spawn-failure")
-        precondition(!NAND.unpackNAND("success", into: missing.path))
-        precondition(!exists(URL(fileURLWithPath: missing.path + ".partial")))
-        try put(helperText, helper)
-        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+        var fractions: [Double] = []
+        try BundledBase.unpack(blob, into: image) { fractions.append($0) }
+        precondition(try text(image.appendingPathComponent("nand/cs0/1.page")) == "page one" && fractions.last == 1 && fractions == fractions.sorted())
+        precondition(try text(image.appendingPathComponent("nor.bin")) == String(repeating: "n", count: 70000) && exists(image.appendingPathComponent("empty")))
+        precondition(try fm.attributesOfItem(atPath: image.appendingPathComponent("nor.bin").path)[.posixPermissions] as! NSNumber == 0o444)
+        precondition(try fm.attributesOfItem(atPath: image.appendingPathComponent("identity.json").path)[.posixPermissions] as! NSNumber == 0o600)
+        let bytes = try Data(contentsOf: blob)
+        let truncated = root.appendingPathComponent("truncated.itbase")
+        try bytes.prefix(bytes.count - 40).write(to: truncated)
+        do { try BundledBase.unpack(truncated, into: root.appendingPathComponent("device/truncated")); preconditionFailure("truncated blob accepted") } catch {}
+        let escaping = root.appendingPathComponent("escaping.itbase")
+        let index = Data(#"{"entries":[{"name":"../outside","size":0}]}"#.utf8)
+        try (Data("ITPACK01".utf8) + Data([UInt8(index.count), 0, 0, 0]) + index + Data([0x78, 0x9c, 3, 0, 0, 0, 0, 1])).write(to: escaping)
+        do { try BundledBase.unpack(escaping, into: root.appendingPathComponent("device/escaping")); preconditionFailure("escaping name accepted") } catch {}
+        precondition(!exists(root.appendingPathComponent("outside")) && !exists(root.appendingPathComponent("device/escaping")))
 
         let scratch = root.appendingPathComponent("diagnostic temp", isDirectory: true)
         let exports = root.appendingPathComponent("exports", isDirectory: true)
@@ -164,7 +132,7 @@ struct Metadata {
         precondition(try children(scratch).isEmpty)
         precondition(try children(exports).allSatisfy { !$0.lastPathComponent.hasPrefix(".LightTouch-") })
         precondition(try text(log) == "sample events")
-        print("PASS: cache migration/isolation/purge recovery, failed extraction cleanup, concurrent diagnostics, cancellation, and atomic export")
+        print("PASS: cache isolation/purge recovery, the built-in base unpacked and refused when torn, concurrent diagnostics, cancellation, and atomic export")
     }
 }
 '''
@@ -176,9 +144,16 @@ source = source.replace('func text(_ url:', 'func check(_ condition: Bool, _ mes
 
 with tempfile.TemporaryDirectory(prefix="ltm-storage-check-") as directory:
     work = Path(directory)
-    helper = work / "unpack-helper"
-    helper.write_text('#!/bin/sh\nprintf %s "$2" > "$3/page"\n[ "$2" != fail ]\n')
-    helper.chmod(0o700)
+    base = work / "base"
+    (base / "nand/cs0").mkdir(parents=True)
+    (base / "nand/cs0/1.page").write_text("page one")
+    (base / "nor.bin").write_text("n" * 70000)
+    (base / "nor.bin").chmod(0o444)
+    (base / "identity.json").write_text("{}")
+    (base / "identity.json").chmod(0o600)
+    (base / "empty").write_text("")
+    blob = work / "base.itbase"
+    subprocess.run([sys.executable, str(root / "scripts/pack-base.py"), "pack", str(base), str(blob)], check=True, stdout=subprocess.DEVNULL)
     archiver = work / "archive-helper"
     archiver.write_text('''#!/bin/sh
 case "$(cat "$5/info.txt")" in
@@ -194,9 +169,9 @@ exit 1
     executable = work / "check"
     subprocess.run(["xcrun", "swiftc", "-swift-version", "6", "-default-isolation", "MainActor",
                     "-parse-as-library", "-module-cache-path", str(work / "modules"),
-                    str(check), "-o", str(executable)], check=True)
-    subprocess.run([str(executable), str(work)], check=True, timeout=45,
-                   env=dict(os.environ, LTM_TEST_HELPER=str(helper), LTM_TEST_ARCHIVER=str(archiver)))
+                    str(root / "LightTouchMac/BundledBase.swift"), str(check), "-o", str(executable)], check=True)
+    subprocess.run([str(executable), str(work), str(blob)], check=True, timeout=45,
+                   env=dict(os.environ, LTM_TEST_ARCHIVER=str(archiver)))
     for name, info in [("success.zip", "real ditto archive"), ("concurrent.zip", "concurrent real archive")]:
         archive = work / "exports" / name
         subprocess.run(["/usr/bin/unzip", "-tq", str(archive)], check=True)

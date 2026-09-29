@@ -43,28 +43,12 @@ final class AppMetadataCache {
     }
 
     /// Icons and names are disposable metadata, not device storage. An isolated
-    /// run keeps even its cache under LTM_STATE_DIR. Move only the old cache when
-    /// the new location is absent; an existing current cache always wins.
+    /// run keeps even its cache under LTM_STATE_DIR.
     nonisolated static func prepareDirectory(state: URL, caches: URL, isolated: Bool) -> URL {
-        let fm = FileManager.default
         let root = isolated ? state.appendingPathComponent("Caches", isDirectory: true)
             : caches.appendingPathComponent("gold.samhenri.LightTouchMac", isDirectory: true)
         let directory = root.appendingPathComponent("AppMetadata", isDirectory: true)
-        let legacy = state.appendingPathComponent("AppCache", isDirectory: true)
-        if !fm.fileExists(atPath: directory.path) {
-            try? fm.createDirectory(at: root, withIntermediateDirectories: true)
-            if fm.fileExists(atPath: legacy.path) {
-                // These locations normally share a volume. An atomic move
-                // leaves no duplicate and preserves the original on failure.
-                // Do not fall back to copying/deleting across volumes.
-                guard rename(legacy.path, directory.path) == 0 else {
-                    logEvent("metadata: cache migration failed; retaining %@: %@",
-                             legacy.path, String(cString: strerror(errno)))
-                    return legacy
-                }
-            }
-        }
-        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
 

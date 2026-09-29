@@ -36,17 +36,16 @@ class ReleaseTests(unittest.TestCase):
             self.put(self.qemu / 'contrib' / component / 'source.c', component)
         self.put(self.usb / 'configure.ac')
         self.init_git(self.usb)
-        for name in ('bootrom_240_4', 'ios3/iBoot.bin', 'ios3/nor_7E18.bin'):
-            self.put(self.assets / name)
-        (self.assets / 'nand-agent-v4').mkdir()
-        (self.assets / 'nand-current').symlink_to('nand-agent-v4')
+        self.put(self.assets / 'bootrom_240_4')
+        self.put(self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw')
         for name in ('usr/lib/libSystem.dylib', 'usr/include/stdio.h'):
             self.put(self.sdk / name)
         self.addCleanup(mock.patch.stopall)
         mock.patch.object(release, 'ROOT', self.product).start()
         mock.patch.object(release, 'SCRIPTS', self.product / 'scripts').start()
         self.argv = ['--output', str(self.root / 'output'), '--qemu-source', str(self.qemu),
-                     '--usbmuxd-source', str(self.usb), '--assets', str(self.assets), '--sdk', str(self.sdk)]
+                     '--usbmuxd-source', str(self.usb), '--assets', str(self.assets), '--sdk', str(self.sdk),
+                     '--bundled-ipsw', str(self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw')]
         self.args = release.parse(self.argv)
 
     def put(self, path, content='fixture'):
@@ -116,9 +115,41 @@ class ReleaseTests(unittest.TestCase):
             release.validate_native(args, self.native)
 
     def test_missing_firmware_is_rejected(self):
-        (self.assets / 'ios3/iBoot.bin').unlink()
+        (self.assets / 'bootrom_240_4').unlink()
         with self.assertRaisesRegex(ValueError, 'bundled firmware input'):
             release.validate(self.args)
+        self.put(self.assets / 'bootrom_240_4')
+        (self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw').unlink()
+        with self.assertRaisesRegex(ValueError, 'built-in iPod'):
+            release.validate(self.args)
+
+    def test_bundled_base_is_prepared_packed_and_reused(self):
+        """bundled_base runs the built firmwarekit (a fake here), packs its output, records it, and skips when current."""
+        self.guest_fixture()
+        self.args.output.mkdir()
+        firmwarekit = self.root / 'fk/firmwarekit'
+        firmwarekit.parent.mkdir()
+        firmwarekit.write_text('#!/bin/sh\n'
+                               'while [ $# -gt 0 ]; do case "$1" in --out) out=$2;; --guest-tools) tools=$2;; esac; shift; done\n'
+                               'mkdir -p "$out/nand/cs0"; printf page > "$out/nand/cs0/1.page"; printf boot > "$out/iBoot.bin"\n'
+                               'printf "{\\"tool\\": {\\"guest_tools\\": \\"$tools\\"}, \\"outputs\\": {}}" > "$out/device.lock.json"\n')
+        firmwarekit.chmod(0o755)
+        self.put(self.product / 'scripts/pack-base.py', (Path(__file__).with_name('pack-base.py')).read_text())
+        self.put(self.product / 'LightTouchMac/Resources/firmware-catalog.json', json.dumps({'format': 1, 'entries': [
+            {'id': 'n72ap-7E18', 'bundled': 'device/n72ap-7E18.itbase', 'source': {'kind': 'ipsw', 'sha1': 'a' * 40}}]}))
+        log = self.args.output / 'build.log'
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            blob = release.bundled_base(self.args, {'PATH': '/usr/bin:/bin'}, log, firmwarekit, self.guest)
+        self.assertEqual(blob.read_bytes()[:8], b'ITPACK01')
+        record = json.loads((blob.parent / 'bundled.json').read_text())
+        self.assertEqual(record['entry'], 'n72ap-7E18')
+        self.assertEqual(record['blob_sha256'], release.digest(blob))
+        self.assertFalse((blob.parent / 'staging').exists())
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            release.bundled_base(self.args, {'PATH': '/usr/bin:/bin'}, log, firmwarekit, self.guest)
+        self.assertIn('bundled: current', out.getvalue())
+        with self.assertRaisesRegex(ValueError, 'needs firmwarekit'):
+            release.bundled_base(self.args, {}, log, self.root / 'missing-firmwarekit', self.guest)
 
     def test_existing_and_symlink_outputs_are_rejected(self):
         self.args.output.mkdir()

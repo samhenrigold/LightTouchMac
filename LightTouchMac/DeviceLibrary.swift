@@ -32,20 +32,10 @@ final class DeviceLibrary {
     }
 
     /// Deletes Devices/<uuid> (the record and whatever the device keeps
-    /// there). An adopted device's legacy files outside it stay on disk; a
-    /// later launch that resolves to them adopts them again.
-    /// The read-only base included (DeviceStateStorage.removeDevice).
+    /// there), the read-only base included (DeviceStateStorage.removeDevice).
     func remove(id: UUID) throws {
         defer { reload() }
         try DeviceStateStorage.removeDevice(id, state: state)
-    }
-
-    /// The device a single-device launch runs: LIGHTTOUCH_DEVICE picks the
-    /// board and LTM_FILES the files root, choosing the matching record or
-    /// adopting that state. Adopts everything on first run.
-    func resolve(_ inputs: LegacyAdoption.Inputs, profile: DeviceProfile) throws -> LegacyAdoption.Resolution {
-        defer { reload() }
-        return try LegacyAdoption.resolve(inputs, profile: profile, state: state)
     }
 
     func reload() {

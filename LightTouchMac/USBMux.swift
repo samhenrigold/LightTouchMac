@@ -47,8 +47,7 @@ final class USBMux {
     /// record per device into it. Pointed at the bundle it cannot write at all
     /// (read-only, and writing would break the signature), so pairing could
     /// never persist. Seed a copy in Application Support once and use that.
-    /// Each device has its own (DeviceInstance.Storage.usbmuxConf); the
-    /// adopted iPod keeps work/usbmuxd-conf.
+    /// Each device has its own (DeviceInstance.Storage.usbmuxConf).
     /// Pairing records are secrets: the directory is 0700 and its plists
     /// 0600, including ones an older build or the daemon left wider.
     private static func conf(_ work: URL) -> String {
@@ -79,11 +78,10 @@ final class USBMux {
     
     /// Start usbmuxd and record a session. Returns nil (and does nothing) if the
     /// binary is missing — the app still runs, just without app management.
-    /// `filesRoot`/`nand`/`overlay` are written into the session file the
-    /// existing install/terminal scripts read. Everything the daemon writes
-    /// is the device's own (`paths`), so two devices' daemons never collide.
+    /// Everything the daemon writes is the device's own (`paths`), so two
+    /// devices' daemons never collide.
     @discardableResult
-    func start(paths: DeviceInstance.Paths, filesRoot: String, nand: String, overlay: String) -> Session? {
+    func start(paths: DeviceInstance.Paths) -> Session? {
         guard FileManager.default.isExecutableFile(atPath: Self.binary) else {
             logEvent("usbmux: no binary at \(Self.binary); app management disabled")
             return nil
@@ -100,27 +98,17 @@ final class USBMux {
             return nil
         }
         pidFile = paths.usbmuxPID.path
-        sessionFile = paths.sessionFile.path
         // A daemon from a previous run survives anything that skips stop() —
         // Xcode's stop button is a SIGKILL — and orphans accumulate one per
         // dev cycle. The pid file names the only process this may kill, and
         // the executable path is checked so a recycled pid is never someone
         // else's process.
         reapStaleDaemon(pidFile)
-        // Builds before the device library kept one pid file for the app.
-        let legacyPID = Bundled.workDirectory.appendingPathComponent("usbmuxd.pid").path
-        if FileManager.default.fileExists(atPath: legacyPID) {
-            reapStaleDaemon(legacyPID)
-            try? FileManager.default.removeItem(atPath: legacyPID)
-        }
 
         let clientSocket = "127.0.0.1:\(Self.freePort())"
         let guestAddress = "127.0.0.1:\(Self.freePort())"
         let session = Session(clientSocket: clientSocket, guestAddress: guestAddress)
         self.session = session
-
-        writeSessionFile(filesRoot: filesRoot, nand: nand, overlay: overlay,
-                         session: session)
 
         let binary = Self.binary, conf = Self.conf(paths.usbmuxConf)
         let logURL = paths.logs.appendingPathComponent("usbmuxd.log")
@@ -226,39 +214,10 @@ final class USBMux {
         // the task cancellation would otherwise run. Only ever our own child.
         if let pid = daemonPID { kill(pid, SIGTERM) }
         if let pidFile { try? FileManager.default.removeItem(atPath: pidFile) }
-        if let sessionFile { try? FileManager.default.removeItem(atPath: sessionFile) }
         daemonPID = nil
         daemonTask?.cancel()
         daemonTask = nil
         session = nil
-    }
-    
-    // MARK: - session.env (for developer scripts and Export Diagnostics)
-
-    /// Where scripts read this device's mux socket from
-    /// (DeviceInstance.Paths.sessionFile), set by start().
-    private(set) var sessionFile: String?
-
-    private func writeSessionFile(filesRoot: String, nand: String,
-                                  overlay: String, session: Session) {
-        // Values are quoted: the overlay lives under "Application Support", whose
-        // space would otherwise break `. session.env` in the shell scripts.
-        let contents = """
-        # written by LightTouchMac for developer scripts
-        SOCK="\(session.clientSocket)"
-        QEMU_ADDR="\(session.guestAddress)"
-        NAND="\(filesRoot)/\(nand)"
-        OVL="\(overlay)"
-        """
-        guard let sessionFile else { return }
-        do {
-            try contents.write(toFile: sessionFile, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: sessionFile)
-        } catch {
-            // Not fatal — only scripts and diagnostics read this — but no longer
-            // silent: a write failure here used to be invisible.
-            logEvent("usbmux: could not write session.env: \(error.localizedDescription)")
-        }
     }
     
     // MARK: - Free-port pick

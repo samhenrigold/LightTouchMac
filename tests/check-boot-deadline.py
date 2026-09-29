@@ -68,7 +68,7 @@ struct Serial { func finish() {} }
  func reportDeviceNotice(_ text: String, for operation: NoticeOperation) { notices.append(text) }
  var usbmux = Mux()
  var fileWatch: Int?
- var statusTimer: Timer?, mediaPreparationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?
+ var statusTimer: Timer?, readinessTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?
  var audioSink: ((Int) -> Void)?
  var serialCapture: Serial? = Serial()
  init(_ profile: DeviceProfile) {

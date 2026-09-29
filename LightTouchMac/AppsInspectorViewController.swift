@@ -1032,7 +1032,7 @@ final class AppsInspectorViewController: NSViewController {
         let emulator = self.emulator
         watcher.start(attachAllowed: {
             await MainActor.run {
-                emulator.isRunning && !emulator.preparingMedia && emulator.usbConnected && !AppInstaller.isUsingDevice(emulator.instance.id)
+                emulator.isRunning && !emulator.preparingDevice && emulator.usbConnected && !AppInstaller.isUsingDevice(emulator.instance.id)
                     && !emulator.isInstalling && !emulator.hasFileTransfer && !emulator.isReconnecting
             }
         }) {
@@ -1147,7 +1147,7 @@ final class AppsInspectorViewController: NSViewController {
     /// Waiting removals must not suppress recovery: a paused transfer queue can
     /// contain them indefinitely. Only the operation actually owning the guest
     /// connection (or a recovery in progress) needs reads to stand aside.
-    private var readsSuppressed: Bool { installing || emulator.preparingMedia || emulator.hasFileTransfer || emulator.isReconnecting }
+    private var readsSuppressed: Bool { installing || emulator.preparingDevice || emulator.hasFileTransfer || emulator.isReconnecting }
 
     private func updateButtons() {
         // A cached list can outlive the connection. Match the removal action's

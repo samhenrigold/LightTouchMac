@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'LightTouchMac/EmulatorController.swift').read_text()
-a=s.index('    func requestFactoryReset()');b=s.index('    func cancelFactoryReset()',a)
+a=s.index('    func requestFactoryReset()');b=s.index('    // MARK: - App management',a)
 reset=s[a:b].replace('.seconds(15)','.milliseconds(30)').replace('.milliseconds(100)','.milliseconds(5)')
 source=r'''import Foundation
 @MainActor var events:[String]=[]
@@ -31,9 +31,6 @@ nonisolated func logEvent(_ s:String){}
  var link:FakeLink?=FakeLink()
  var onRestartRequested:(()->Void)?={restart()}
  var foregroundTask:Task<Void,Never>?,orientationTask:Task<Void,Never>?
- struct Options {let nand="nand",packedNAND="/missing"}
- let options=Options()
- var packedImage:Int?=nil
  var stateDir:URL{root}
  let root:URL
  var overlayURL:URL{root.appendingPathComponent("overlay")}
@@ -41,7 +38,6 @@ nonisolated func logEvent(_ s:String){}
  var snapshotURL:URL{root.appendingPathComponent("snapshot")}
  var snapshotTmpURL:URL{snapshotURL.appendingPathExtension("tmp")}
  var snapshotBadURL:URL{snapshotURL.appendingPathExtension("bad")}
- var resetMarkerURL:URL{root.appendingPathComponent(".reset")}
  init(_ root:URL)throws {
   self.root=root
   try FileManager.default.createDirectory(at:overlayURL,withIntermediateDirectories:true)
@@ -70,7 +66,6 @@ nonisolated func logEvent(_ s:String){}
   while current.isErasing {try await Task.sleep(for:.milliseconds(5))}
   precondition(events==["halt","stop","failure"])
   precondition(FileManager.default.fileExists(atPath:current.overlayURL.path))
-  precondition(!FileManager.default.fileExists(atPath:current.resetMarkerURL.path))
   events=[];current.isDead=true
   current.requestFactoryReset()
   while current.isErasing {try await Task.sleep(for:.milliseconds(5))}

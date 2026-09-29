@@ -91,8 +91,6 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     private var cancelled = false
 
     var staging: URL { Self.preparing(request.state).appendingPathComponent(id.uuidString, isDirectory: true) }
-    /// Where the device is assembled before its one rename into Devices/.
-    var publishing: URL { Self.preparing(request.state).appendingPathComponent("\(id.uuidString).publish", isDirectory: true) }
     private var entryFile: URL { Self.preparing(request.state).appendingPathComponent("\(id.uuidString).entry.json") }
     static func preparing(_ state: URL) -> URL { state.appendingPathComponent("Preparing", isDirectory: true) }
 
@@ -222,12 +220,20 @@ nonisolated final class PreparationJob: @unchecked Sendable {
 
     // MARK: - Publish
 
-    /// Assembles Preparing/<id>.publish/{base, device.json} (the staging
-    /// directory renamed to base) and renames it to Devices/<id> in one step.
-    /// Any failure before that rename leaves Devices/ untouched.
     func publish(lock lockName: String) throws -> DeviceInstance {
+        try Self.publish(staging: staging, entry: request.entry, id: id, state: request.state, lock: lockName)
+    }
+
+    /// Assembles Preparing/<id>.publish/{base, device.json} (the staging
+    /// directory renamed to base, `pairing` copied in as usbmuxd-conf) and
+    /// renames it to Devices/<id> in one step. Any failure before that
+    /// rename leaves Devices/ untouched. Also the built-in device's publish
+    /// (FirmwareJobs.prepareBundled) and a development base's record
+    /// (`staging` absolute, kept in place: `keep`).
+    static func publish(staging: URL, entry: FirmwareCatalog.Entry, id: UUID, state: URL,
+                        lock lockName: String = "device.lock.json", pairing: URL? = nil, keep: Bool = false) throws -> DeviceInstance {
         let fm = FileManager.default
-        let profile = request.entry.profile ?? .iPad1
+        let profile = entry.profile ?? .iPad1
         let lockURL = staging.appendingPathComponent(lockName)
         let boot = profile.preparedBoot(strategy: BootRecipe.bootStrategy(lockURL))
         for name in [boot.boot, "nand", "identity.json", lockName] + boot.files
@@ -235,22 +241,26 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             throw FirmwareError.failed("The preparer’s output has no \(name).")
         }
         let lockData = try Data(contentsOf: lockURL)
-        let identity = Self.identity(identityJSON: try? Data(contentsOf: staging.appendingPathComponent("identity.json")),
-                                     lock: lockData, seed: id.uuidString)
-        let directory = DeviceInstance.directory(id, state: request.state)
+        let identity = identity(identityJSON: try? Data(contentsOf: staging.appendingPathComponent("identity.json")),
+                                lock: lockData, seed: id.uuidString)
+        let directory = DeviceInstance.directory(id, state: state)
         let relative = "Devices/\(id.uuidString)"
-        let entry = request.entry
+        let base = keep ? staging.path : "\(relative)/base"
         let instance = DeviceInstance(
             id: id, name: entry.profile?.displayName ?? entry.productType, board: entry.board, firmware: entry.id,
-            created: DeviceInstance.now, base: .init(kind: .prepared, path: "\(relative)/base"),
-            storage: .init(key: String(Self.sha256(lockData).prefix(16)), overlay: "\(relative)/overlay",
+            created: DeviceInstance.now, base: .init(kind: .prepared, path: base),
+            storage: .init(key: String(sha256(lockData).prefix(16)), overlay: "\(relative)/overlay",
                            writableNOR: fm.fileExists(atPath: staging.appendingPathComponent("nor.bin").path)
                                ? "\(relative)/nor.bin" : nil,
-                           snapshot: "\(relative)/snapshot", resetMarker: nil, usbmuxConf: "\(relative)/usbmuxd-conf"),
-            identity: identity, provenance: .init(lock: "\(relative)/base/\(lockName)", sha256: Self.sha256(lockData)))
+                           snapshot: "\(relative)/snapshot", usbmuxConf: "\(relative)/usbmuxd-conf"),
+            identity: identity, provenance: .init(lock: "\(base)/\(lockName)", sha256: sha256(lockData)))
+        let publishing = preparing(state).appendingPathComponent("\(id.uuidString).publish", isDirectory: true)
         do {
             try StorageLocations.privateDirectory(publishing)
-            try fm.moveItem(at: staging, to: publishing.appendingPathComponent("base", isDirectory: true))
+            if !keep { try fm.moveItem(at: staging, to: publishing.appendingPathComponent("base", isDirectory: true)) }
+            if let pairing, fm.fileExists(atPath: pairing.path) {
+                try fm.copyItem(at: pairing, to: publishing.appendingPathComponent("usbmuxd-conf", isDirectory: true))
+            }
             try DeviceInstance.encoder.encode(instance)
                 .write(to: publishing.appendingPathComponent(DeviceInstance.recordName), options: .atomic)
             try StorageLocations.privateDirectory(directory.deletingLastPathComponent())
@@ -259,7 +269,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             try? DeviceStateStorage.removeTree(publishing)
             throw error
         }
-        DeviceStateStorage.lockBase(directory.appendingPathComponent("base", isDirectory: true))
+        if !keep { DeviceStateStorage.lockBase(directory.appendingPathComponent("base", isDirectory: true)) }
         return instance
     }
 

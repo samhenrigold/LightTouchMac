@@ -1,6 +1,6 @@
 // Created by Sam on 2026-08-05.
 //
-// Owns one device: builds its boot from the device record and launch options,
+// Owns one device: builds its boot from the device record (a prepared base),
 // starts its usbmuxd (for app management), then runs it in its own
 // LightTouchDevice helper (DeviceProcess) and exposes input and app operations
 // to the UI. Everything that used to be a direct call into the dylib crosses the
@@ -13,8 +13,9 @@ import Cocoa
 @MainActor
 final class EmulatorController {
 
-    let options: LaunchOptions
     let profile: DeviceProfile
+    /// Emulated Wi-Fi with the Mac's networking (slirp); off is a device with no internet.
+    let network: Bool
     private let usbmux = USBMux()
     private var started = false
     private var serialCapture: SerialLogCapture?
@@ -81,15 +82,14 @@ final class EmulatorController {
     private var bootGeneration = 0
     var isPoweredOff: Bool { state == .poweredOff }
 
-    private var packedImage: DeviceStateStorage.PackedImage?
-    private var retainedPackedImage = false
     private var reportedStorageFailure = false
-    private var mediaPreparationTask: Task<Void, Never>?
-    private(set) var preparingMedia = false {
+    private var readinessTask: Task<Void, Never>?
+    /// From the boot until SpringBoard answers over lockdown (startReadinessWatch); the status line says where it is.
+    private(set) var preparingDevice = false {
         didSet { onStatusChange?() }
     }
     private(set) var preparationStatus = "Starting iOS…" { didSet { onStatusChange?() } }
-    private var mediaPreparationFailure: String?
+    private var readinessFailure: String?
 
 
     /// The VM's lifecycle. Everything the UI enables or disables keys off this;
@@ -159,7 +159,7 @@ final class EmulatorController {
     /// Never reboot the iPod or touch its applications to repair a connection.
     private func considerConnectionRecovery() {
         if deviceReachable == true { connectionFailures = 0; return }
-        guard deviceReachable == false, isRunning, !preparingMedia,
+        guard deviceReachable == false, isRunning, !preparingDevice,
               connectionIssue?.reconnectManagement == true else { return }
         connectionFailures += 1
         guard connectionFailures >= 2, connectionRecoveryTask == nil,
@@ -172,7 +172,7 @@ final class EmulatorController {
             guard let self else { return }
             defer { connectionRecoveryTask = nil; isReconnecting = false }
             do {
-                guard isRunning, !preparingMedia, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice(instance.id) else { return }
+                guard isRunning, !preparingDevice, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice(instance.id) else { return }
                 if try await DeviceTools.reconnectManagementService(agent: link, cache: agentCache) {
                     logEvent("device: restarted unresponsive management service; reconnecting")
                     try await Task.sleep(for: .seconds(2))
@@ -187,20 +187,13 @@ final class EmulatorController {
 
     private var didSweepStaging = false
 
-    /// The device record whose state this controller runs (LegacyAdoption).
+    /// The device record whose state this controller runs.
     let instance: DeviceInstance
-    private let instanceError: (any Error)?
 
-    /// `resolution` is the library record DeviceSessionHost chose for this
-    /// device; a non-nil `instanceError` boots dead and logs it.
-    init(options: LaunchOptions, profile: DeviceProfile, resolution: LegacyAdoption.Resolution,
-         instanceError: (any Error)? = nil) {
-        self.options = options
+    init(instance: DeviceInstance, profile: DeviceProfile, network: Bool = true) {
+        self.instance = instance
         self.profile = profile
-        instance = resolution.instance
-        packedImage = resolution.packedImage
-        retainedPackedImage = resolution.retained
-        self.instanceError = instanceError
+        self.network = network
         usbmux.onUnexpectedExit = { [weak self] in self?.onStatusChange?() }
     }
 
@@ -238,14 +231,6 @@ final class EmulatorController {
         started = true
         state = .booting
         resolveDeviceNotice(for: .files)   // a fresh helper opens the files as they are now
-        if let instanceError {
-            logEvent("nand: could not resolve device image: \(instanceError.localizedDescription)")
-            state = .dead(exitCode: 1)
-            return
-        }
-        if retainedPackedImage {
-            logEvent("nand: preserving existing base and user data; Erase All Content and Settings adopts the bundled image")
-        }
         let process = DeviceProcess(instance: instance.id, profile: profile,
                                     log: instance.paths.logs.appendingPathComponent("native.log"),
                                     lease: instance.paths.lease)
@@ -257,25 +242,13 @@ final class EmulatorController {
         }
         process.onAudio = { [weak self] event in self?.audioSink?(event) }
         startStatusPoll()
-        let unpack = profile == .iPodTouch2G && instance.base.kind != .prepared ? iPodNAND().unpack : nil
         // Low space doesn't stop a boot; it's said before writes start failing.
         warnIfLowOnSpace()
-        Task { [weak self] in
-            // First boot of a packaged app: inflate the device image before the
-            // helper opens it, off the main actor (the window says "Booting…").
-            if let unpack {
-                do { try IPSWStore.checkSpace(Self.unpackedNANDBytes, at: URL(fileURLWithPath: unpack.dest)) }
-                catch { self?.helperDied("The device image could not be unpacked. \(error.localizedDescription)"); return }
-                let unpacked = await Task.detached { Self.unpackNAND(unpack.packed, into: unpack.dest) }.value
-                guard unpacked else { self?.helperDied("The device image could not be unpacked."); return }
-            }
-            guard let self, self.process === process, !releasing else { return }
-            // The boot is built after the hello: usbmuxd must listen before the guest's USB.
-            process.start({ [weak self] _ in self?.bootConfiguration() }) { [weak self] result in
-                if case let .failure(error) = result, let self { logEvent("boot: \(instance.name): \(error)") }
-            }
+        // The boot is built after the hello: usbmuxd must listen before the guest's USB.
+        process.start({ [weak self] _ in self?.bootConfiguration() }) { [weak self] result in
+            if case let .failure(error) = result, let self { logEvent("boot: \(instance.name): \(error)") }
         }
-        startMediaPreparation()
+        startReadinessWatch()
         if hasGuestTools {
             startOrientationWatch()   // idle until the guest is up and reachable
         } else {
@@ -298,122 +271,81 @@ final class EmulatorController {
         return config
     }
 
-    /// The iPod's base NAND, and whether a packaged app must unpack it first.
-    /// A raw NAND directory (dev checkout) is used as-is; a packaged app carries
-    /// only the opaque blob, unpacked into Application Support on first boot:
-    /// the bundle is signed and read-only, and the notary would have rejected
-    /// the raw pages inside it.
-    private func iPodNAND() -> (base: String, unpack: (packed: String, dest: String)?) {
-        if FileManager.default.fileExists(atPath: options.nandImage) { return (options.nandImage, nil) }
-        let dest = stateDir.appendingPathComponent(packedImage?.directory ?? "device/\(options.nand)", isDirectory: true).path
-        return (dest, FileManager.default.fileExists(atPath: dest) ? nil : (options.packedNAND, dest))
+    /// The overlay only fits the base it was made on (DeviceStateStorage.pinOverlay); a
+    /// refusal is a dead boot whose notice offers Erase.
+    private func pinOverlay(_ overlay: URL) throws -> Bool {
+        guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
+            baseImageMismatch = true
+            reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
+            state = .dead(exitCode: 1)
+            return false
+        }
+        return true
     }
 
+    /// The iPod boots its base/ (firmwarekit's n72 recipe): iBoot.bin, nor.bin with a private
+    /// writable copy, gid-blobs.bin (the emulated AES has no GID key) and nand/, with the machine
+    /// options its lock names, over the shipped bootrom (Bundled.filesRoot) and this device's
+    /// copy-on-write overlay.
     private func iPodBoot() -> BootConfig? {
-        // One overlay per base image, so an overlay is never replayed onto a
-        // different NAND (which would shadow unrelated blocks).
         let overlay = overlayURL
-        // Older builds armed an erase for a later launch. Never perform a
-        // destructive operation implicitly while opening the app.
-        if FileManager.default.fileExists(atPath: resetMarkerURL.path) {
-            try? FileManager.default.removeItem(at: resetMarkerURL)
-            reportDeviceNotice("The previous erase did not finish. Choose Erase All Content and Settings to try again.", for: .erase)
-        }
-        // A prepared device (firmwarekit's n72 recipe) boots its own base/: iBoot.bin, nor.bin with a
-        // private writable copy, gid-blobs.bin (the emulated AES has no GID key) and nand/, with the
-        // machine options its lock names. The shipping and development images boot the files they
-        // were adopted from, with the legacy defaults.
-        var iBoot = options.iBoot, nor = options.nor, gidBlobs: String?, machineOptions: [String: String] = [:]
-        let writableNOR: URL, nand: String
+        let base = instance.paths.base
+        let lock = base.appendingPathComponent("device.lock.json")
+        let files: (boot: URL, nand: URL, writableNOR: URL?)
         do {
-            if instance.base.kind == .prepared {
-                let base = instance.paths.base
-                let boot = profile.preparedBoot(strategy: BootRecipe.bootStrategy(base.appendingPathComponent("device.lock.json")))
-                let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: instance.paths.writableNOR,
-                                                         boot: boot.boot, also: boot.files)
-                guard let rw = files.writableNOR else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
-                guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
-                    baseImageMismatch = true
-                    reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
-                    state = .dead(exitCode: 1)
-                    return nil
-                }
-                (iBoot, nor, writableNOR, nand) = (files.boot.path, base.appendingPathComponent("nor.bin").path, rw, files.nand.path)
-                gidBlobs = base.appendingPathComponent("gid-blobs.bin").path
-                machineOptions = BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))
-            } else {
-                writableNOR = try DeviceStateStorage.writableNOR(base: URL(fileURLWithPath: options.nor), overlay: overlay)
-                nand = iPodNAND().base
-            }
+            let boot = profile.preparedBoot(strategy: BootRecipe.bootStrategy(lock))
+            files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: instance.paths.writableNOR,
+                                                 boot: boot.boot, also: boot.files)
+            guard files.writableNOR != nil else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
+            guard try pinOverlay(overlay) else { return nil }
         } catch {
             failBoot(error)
             return nil
         }
         // usbmuxd must be listening before the guest USB core comes up.
-        let usbSession = options.appsync
-            ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: instance.base.kind == .prepared ? nand : options.nand, overlay: overlay.path)
-            : nil
+        let usbSession = usbmux.start(paths: instance.paths)
         openSerialLog()
-        let netdev = options.network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
-        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: iBoot, bootrom: options.bootrom, nand: nand,
-                                     nor: nor, writableNOR: writableNOR.path, overlay: overlay.path,
-                                     usbAddress: usbSession?.guestAddress, wifi: options.network, memory: options.memory,
-                                     gidBlobs: gidBlobs, guestPackage: composeGuestOffer(), machineOptions: machineOptions),
+        let netdev = network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
+        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: files.boot.path, bootrom: "\(Bundled.filesRoot)/bootrom_240_4",
+                                     nand: files.nand.path, nor: base.appendingPathComponent("nor.bin").path,
+                                     writableNOR: files.writableNOR!.path, overlay: overlay.path,
+                                     usbAddress: usbSession?.guestAddress, wifi: network,
+                                     gidBlobs: base.appendingPathComponent("gid-blobs.bin").path, guestPackage: composeGuestOffer(),
+                                     machineOptions: BootRecipe.lockMachine(lock)),
                                serial: serialCapture?.argument ?? "null",
                                audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
                                netdev: netdev, restore: [])
     }
 
-    /// iPad 1: kernel-direct boot from a K48KBOOT bundle over a read-only NAND,
-    /// with this device's writes in its copy-on-write overlay (so Erase is
-    /// "delete the overlay", as for the iPod). A prepared device boots its own
-    /// base/ (kboot.bin, nand/, its die id and writable NOR); a development one
-    /// the files it was adopted from. USB goes to the device's usbmuxd bridge;
-    /// host keys to an emulated USB keyboard.
+    /// iPad 1 boots its base/ by the lock's boot_strategy: iboot (default) = iBoot.bin + nor.bin +
+    /// gid-blobs.bin, kboot (the two older prepared iPads) = kboot.bin; both over a private writable
+    /// NOR clone, its die id and this device's copy-on-write overlay (so Erase is "delete the overlay",
+    /// as for the iPod). USB goes to the device's usbmuxd bridge; host keys to an emulated USB keyboard.
     private func iPadBoot() -> BootConfig? {
         let overlay = overlayURL
-        let kboot: String, nand: String, writableNOR: String?, dieID: String?
-        var machineOptions: [String: String] = [:]
-        var gidBlobs: String?
+        let lock = instance.paths.base.appendingPathComponent("device.lock.json")
+        let strategy = BootRecipe.bootStrategy(lock)
+        let files: (boot: URL, nand: URL, writableNOR: URL?)
         do {
-            let identity: String
-            if instance.base.kind == .prepared {
-                // The lock's boot_strategy picks the boot files: iboot (default) = iBoot.bin + nor.bin + gid-blobs.bin,
-                // kboot (the two older prepared iPads) = kboot.bin. Both boot over a private writable NOR clone.
-                let lock = instance.paths.base.appendingPathComponent("device.lock.json")
-                let strategy = BootRecipe.bootStrategy(lock)
-                let boot = profile.preparedBoot(strategy: strategy)
-                let files = try BootRecipe.preparedFiles(base: instance.paths.base, overlay: overlay,
-                                                         writableNOR: instance.paths.writableNOR, boot: boot.boot, also: boot.files)
-                (kboot, nand, writableNOR, dieID) = (files.boot.path, files.nand.path, files.writableNOR?.path, instance.identity?.dieID)
-                gidBlobs = strategy == "iboot" ? instance.paths.base.appendingPathComponent("gid-blobs.bin").path : nil
-                machineOptions = BootRecipe.lockMachine(lock)
-                identity = instance.storage.key
-            } else {
-                (kboot, nand, writableNOR, dieID) = (options.ipad1KBoot, options.ipad1NAND, nil, nil)
-                identity = try DeviceStateStorage.developmentImageIdentity(at: URL(fileURLWithPath: nand), key: imageKey)
-            }
-            guard try DeviceStateStorage.pinOverlay(overlay, toBase: identity) else {
-                baseImageMismatch = true
-                reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
-                state = .dead(exitCode: 1)
-                return nil
-            }
+            let boot = profile.preparedBoot(strategy: strategy)
+            files = try BootRecipe.preparedFiles(base: instance.paths.base, overlay: overlay,
+                                                 writableNOR: instance.paths.writableNOR, boot: boot.boot, also: boot.files)
+            guard try pinOverlay(overlay) else { return nil }
         } catch {
             failBoot(error)
             return nil
         }
-        let usbSession = options.appsync
-            ? usbmux.start(paths: instance.paths, filesRoot: options.filesRoot, nand: nand, overlay: overlay.path)
-            : nil
+        let usbSession = usbmux.start(paths: instance.paths)
         openSerialLog()
         // The web proxy, as on the iPod: itwebproxy on a slirp guestfwd at 10.0.2.100:3128. This
-        // explicit wifi0 replaces the machine's own. The golden image's Wi-Fi service carries a PAC that
+        // explicit wifi0 replaces the machine's own. The image's Wi-Fi service carries a PAC that
         // uses the proxy and falls back to DIRECT, so Proxy off is purely host-side (itwebproxy "off").
-        let netdev = options.network ? proxyForward().map { "user,id=wifi0" + $0 } : nil
-        return BootRecipe.iPad(.init(kboot: kboot, nand: nand, overlay: overlay.path, dieID: dieID, writableNOR: writableNOR,
-                                     gidBlobs: gidBlobs, usbAddress: usbSession?.guestAddress, wifi: options.network,
-                                     guestPackage: composeGuestOffer(), machineOptions: machineOptions),
+        let netdev = network ? proxyForward().map { "user,id=wifi0" + $0 } : nil
+        return BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: instance.identity?.dieID,
+                                     writableNOR: files.writableNOR?.path,
+                                     gidBlobs: strategy == "iboot" ? instance.paths.base.appendingPathComponent("gid-blobs.bin").path : nil,
+                                     usbAddress: usbSession?.guestAddress, wifi: network,
+                                     guestPackage: composeGuestOffer(), machineOptions: BootRecipe.lockMachine(lock)),
                                serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev, restore: [])
     }
 
@@ -442,8 +374,7 @@ final class EmulatorController {
     private func startFileWatch() {
         guard fileWatch == nil, !filesMeddled else { return }
         let paths = instance.paths
-        fileWatch = DeviceFileWatch(directories: [paths.directory, paths.overlay],
-                                    base: instance.base.kind == .prepared ? paths.base : nil) { [weak self] path in
+        fileWatch = DeviceFileWatch(directories: [paths.directory, paths.overlay], base: paths.base) { [weak self] path in
             Task { @MainActor in self?.filesChanged(path) }
         }
     }
@@ -519,7 +450,7 @@ final class EmulatorController {
     /// The guestfwd for itwebproxy, reading this device's routing file; nil
     /// when the helper is missing or the routing can't be written.
     private func proxyForward() -> String? {
-        guard let helper = Bundled.resolve("itwebproxy", fallbacks: ["\(options.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"]) else { return nil }
+        guard let helper = Bundled.resolve("itwebproxy", fallbacks: ["\(Bundled.filesRoot)/../qemu-ios/contrib/it-webproxy/itwebproxy"]) else { return nil }
         do {
             try webProxy.writeRouting(in: proxyDirectory)
             webProxyAvailable = true
@@ -553,45 +484,32 @@ final class EmulatorController {
         return await process.waitForExit(timeout: 10)
     }
 
-    /// Existing images need the same media engine/configuration as newly
-    /// packaged images before apps can use the native compositor.
     /// The iPod machine has the guest agent's channel; a stock iPad has none,
-    /// so its component update, media import and agent extras are skipped.
+    /// so its media import and agent extras are skipped.
     var hasGuestTools: Bool { profile.hasGuestTools }
 
     /// The boot's readiness steps, shown as the startup status until the Home
-    /// screen answers: lockdown, (iPod) the agent's component update, SpringBoard.
-    private func startMediaPreparation() {
-        guard options.appsync, !shuttingDown else { return }
-        mediaPreparationTask?.cancel()
-        preparingMedia = true
+    /// screen answers: lockdown, then SpringBoard.
+    private func startReadinessWatch() {
+        guard !shuttingDown else { return }
+        readinessTask?.cancel()
+        preparingDevice = true
         preparationStatus = "Starting iOS…"
-        mediaPreparationFailure = nil
+        readinessFailure = nil
         let generation = bootGeneration
-        mediaPreparationTask = Task { [weak self] in
+        readinessTask = Task { [weak self] in
             guard let self else { return }
-            defer { if generation == self.bootGeneration { self.preparingMedia = false } }
+            defer { if generation == self.bootGeneration { self.preparingDevice = false } }
             do {
                 let deadline = ContinuousClock.now + .seconds(profile.bootBudget)
                 while true {
                     try Task.checkCancellation()
                     guard generation == bootGeneration else { return }
                     guard !isDead, !storageFailed, ContinuousClock.now < deadline else {
-                        throw DeviceToolsError.failed("The device did not become ready for its media update.")
+                        throw DeviceToolsError.failed("The device did not become ready.")
                     }
                     if state == .running, await deviceReady() { break }
                     try await Task.sleep(for: .milliseconds(250))
-                }
-                try Task.checkCancellation()
-                guard generation == bootGeneration else { return }
-                if hasGuestTools {
-                    preparationStatus = "Preparing your \(profile.shortName)…"
-                    logEvent("media: checking guest graphics components")
-                    if try await tools().updateMediaComponents() {
-                        logEvent("media: guest graphics components updated")
-                    } else {
-                        logEvent("media: guest graphics components already current")
-                    }
                 }
                 try Task.checkCancellation()
                 guard generation == bootGeneration else { return }
@@ -625,9 +543,9 @@ final class EmulatorController {
                 resolveDeviceNotice(for: .preparation)
             } catch {
                 if !Task.isCancelled, generation == bootGeneration {
-                    mediaPreparationFailure = error.localizedDescription
-                    reportDeviceNotice("Device preparation failed. Reopen Light Touch to retry; open Device Logs for details.", for: .preparation)
-                    logEvent("media: preparation failed: \(error.localizedDescription)")
+                    readinessFailure = error.localizedDescription
+                    reportDeviceNotice("The device didn’t finish starting. Restart it to try again; open Device Logs for details.", for: .preparation)
+                    logEvent("boot: readiness failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -654,7 +572,7 @@ final class EmulatorController {
     private func syncTimeZoneWhenReady() async {
         while !Task.isCancelled {
             guard !shuttingDown, !isDead, !isPoweredOff else { return }
-            if state == .running, !preparingMedia, canManageApps, await deviceReady(),
+            if state == .running, !preparingDevice, canManageApps, await deviceReady(),
                (try? await tools().setTimeZone(TimeZone.current.identifier)) != nil {
                 return
             }
@@ -675,7 +593,7 @@ final class EmulatorController {
         // helper is finished writing.
         serialCapture?.removeEndpoints()
         bootWatchTask?.cancel()
-        mediaPreparationTask?.cancel()
+        readinessTask?.cancel()
         foregroundTask?.cancel()
         guestPackageTask?.cancel()
         orientationTask?.cancel()
@@ -689,65 +607,6 @@ final class EmulatorController {
         else { resolveDeviceNotice(for: .lowSpace) }
     }
 
-    /// Allocated size of an unpacked iPod image, with headroom.
-    // ponytail: measured, not read from the blob (nand-agent-v4: 1.25 GiB allocated);
-    // record it beside nand.itnand.sha256 if images grow.
-    nonisolated static let unpackedNANDBytes: Int64 = 1_500_000_000
-
-    /// Inflate the packed device image with the bundled ipod-helper. Into a
-    /// .partial sibling first, renamed only on success, so a first launch
-    /// killed mid-unpack can't leave a torn base image that boots corrupt.
-    nonisolated private static func unpackNAND(_ packed: String, into dest: String) -> Bool {
-        guard let helper = Bundled.tool("ipod-helper") else {
-            logEvent("nand: packed image present but no bundled ipod-helper to unpack it")
-            return false
-        }
-        logEvent("nand: first launch — unpacking the device image")
-        let fm = FileManager.default
-        let tmp = dest + ".partial"
-        // The helper creates cs0…cs3 INSIDE the directory it is given; the
-        // directory itself must already exist. Its absence was an instant
-        // "The emulator stopped" on every first packaged boot.
-        do {
-            if fm.fileExists(atPath: tmp) { try fm.removeItem(atPath: tmp) }
-            try fm.createDirectory(atPath: tmp, withIntermediateDirectories: true)
-        } catch {
-            logEvent("nand: could not create \(tmp): \(error.localizedDescription)")
-            return false
-        }
-        // A failed spawn, extraction or publish must not retain a second,
-        // incomplete device image until the user happens to launch again.
-        defer { try? fm.removeItem(atPath: tmp) }
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: helper)
-        task.arguments = ["nand-unpack", packed, tmp]
-        let errPipe = Pipe()
-        task.standardError = errPipe
-        do { try task.run() } catch {
-            logEvent("nand: could not run ipod-helper: \(error.localizedDescription)")
-            return false
-        }
-        // Drain before waiting: a full stderr pipe otherwise deadlocks unpack.
-        var errorTail = Data()
-        while true {
-            let chunk = errPipe.fileHandleForReading.readData(ofLength: 8192)
-            if chunk.isEmpty { break }
-            errorTail.append(chunk)
-            if errorTail.count > 1 << 16 { errorTail.removeFirst(errorTail.count - (1 << 16)) }
-        }
-        let err = String(decoding: errorTail, as: UTF8.self)
-        task.waitUntilExit()
-        guard task.terminationStatus == 0 else {
-            logEvent("nand: unpack failed (exit \(task.terminationStatus)): \(err)")
-            return false
-        }
-        do { try fm.moveItem(atPath: tmp, toPath: dest) } catch {
-            logEvent("nand: could not move the unpacked image into place: \(error.localizedDescription)")
-            return false
-        }
-        return true
-    }
-
     /// The helper is gone (QEMU returned, it crashed or was killed). Flip to
     /// `.dead`; the window shows a Restart overlay, and the other devices keep running.
     private func helperDied(_ reason: String) {
@@ -758,7 +617,7 @@ final class EmulatorController {
         statusTimer?.invalidate()
         statusTimer = nil
         audioSink?(.audioEnded(generation: 0, failed: true))
-        mediaPreparationTask?.cancel()
+        readinessTask?.cancel()
         foregroundTask?.cancel()
         orientationTask?.cancel()
         orientationTask = nil
@@ -824,7 +683,7 @@ final class EmulatorController {
             isSleeping = false
             deviceReachable = false
         }
-        if state == .running, !preparingMedia, !shuttingDown {
+        if state == .running, !preparingDevice, !shuttingDown {
             isSleeping = status.displaySleeping
         } else if isSleeping {
             isSleeping = false
@@ -836,7 +695,7 @@ final class EmulatorController {
         }
     }
 
-    var isRunning: Bool { state == .running && !storageFailed && !preparingMedia && mediaPreparationFailure == nil && !restartingSpringBoard && !shuttingDown && !isErasing }
+    var isRunning: Bool { state == .running && !storageFailed && !preparingDevice && readinessFailure == nil && !restartingSpringBoard && !shuttingDown && !isErasing }
     var isPaused:  Bool { state == .paused }
     var isDead:    Bool { if case .dead = state { return true } else { return false } }
     /// The guest can take input only while actually executing.
@@ -853,11 +712,10 @@ final class EmulatorController {
         case .booting:    return "Booting…"
         case .running:
             if let issue = connectionIssue, issue.persistent { return issue.summary }
-            if preparingMedia { return preparationStatus }
+            if preparingDevice { return preparationStatus }
             if isSleeping { return "Sleeping" }
             if restartingSpringBoard { return "Restarting SpringBoard…" }
-            if let mediaPreparationFailure { return "Media update failed — \(mediaPreparationFailure)" }
-            if retainedPackedImage { return "Running — existing image retained; erase device to upgrade" }
+            if let readinessFailure { return "Startup failed — \(readinessFailure)" }
             guard canManageApps else { return "Running — USB unavailable" }
             return "Running — " + guestToolsLine
         case .paused:     return "Paused"
@@ -1179,7 +1037,7 @@ final class EmulatorController {
         orientationTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                if self.state == .running, !self.preparingMedia, !self.isSleeping, !self.isInstalling {
+                if self.state == .running, !self.preparingDevice, !self.isSleeping, !self.isInstalling {
                     let generation = self.bootGeneration
                     do {
                         if let degrees = try await self.tools().guestOrientation() {
@@ -1210,9 +1068,9 @@ final class EmulatorController {
     private var recordURL: URL {
         DeviceInstance.directory(instance.id, state: stateDir).appendingPathComponent(DeviceInstance.recordName)
     }
-    /// The preparer's device.lock.json record, for a prepared base.
+    /// The preparer's device.lock.json record.
     private var lockRecord: GuestPackage.LockRecord? {
-        instance.base.kind == .prepared ? GuestPackage.lockRecord(instance.paths.base.appendingPathComponent("device.lock.json")) : nil
+        GuestPackage.lockRecord(instance.paths.base.appendingPathComponent("device.lock.json"))
     }
     private var guestRecord: DeviceInstance.Guest? { (try? DeviceInstance.read(recordURL))?.guest }
 
@@ -1236,7 +1094,7 @@ final class EmulatorController {
     private func composeGuestOffer() -> String? {
         guestOffer = nil
         guard status?.guestPackageSupported == true, let arch = GuestPackage.arch(board: instance.board),
-              let pack = GuestPackage.bundledPack(arch: arch, filesRoot: options.filesRoot) else {
+              let pack = GuestPackage.bundledPack(arch: arch, filesRoot: Bundled.filesRoot) else {
             try? FileManager.default.removeItem(at: guestOfferDirectory)
             return nil
         }
@@ -1379,7 +1237,7 @@ final class EmulatorController {
         // Connect-to-iTunes screen. The quit path has done this for a while;
         // Restart, which is one menu row away from Erase, was still doing it
         // the dangerous way.
-        let preparation = mediaPreparationTask
+        let preparation = readinessTask
         preparation?.cancel()
         Task { [weak self] in
             guard let self else { return }
@@ -1397,7 +1255,7 @@ final class EmulatorController {
             self.rotationDegrees = 0
             self.setAccelerometer(for: 0)
             self.state = .booting
-            self.startMediaPreparation()
+            self.startReadinessWatch()
             self.startGuestPackageWatch()
             self.startBootWatch()
         }
@@ -1443,7 +1301,7 @@ final class EmulatorController {
             }
             link?.send(.machine(.resume))
             self.poweringOn = false
-            self.startMediaPreparation()
+            self.startReadinessWatch()
             self.startForegroundWatch()
             self.startGuestPackageWatch()
             self.startBootWatch()
@@ -1516,19 +1374,14 @@ final class EmulatorController {
 
     // MARK: - Device storage paths
 
-    /// Frozen in the device record; LegacyAdoption derived it once.
-    private var imageKey: String { instance.storage.key }
-
     /// Saved-state files older builds wrote beside the overlay; Erase removes them.
     private var snapshotURL: URL { instance.paths.snapshot }
     private var snapshotTmpURL: URL { snapshotURL.appendingPathExtension("tmp") }
     private var snapshotBadURL: URL { snapshotURL.appendingPathExtension("bad") }
     private var overlayURL: URL { instance.paths.overlay }
-    /// A prepared device's private NOR copy, which pairs with its overlay: Erase removes it too, and the
+    /// The device's private NOR copy, which pairs with its overlay: Erase removes it too, and the
     /// next boot clones base/nor.bin again.
-    private var preparedNORURL: URL? { instance.base.kind == .prepared ? instance.paths.writableNOR : nil }
-    /// Legacy marker, removed without erasing when opening an older device.
-    private var resetMarkerURL: URL { instance.paths.resetMarker }
+    private var preparedNORURL: URL? { instance.paths.writableNOR }
     /// Stop is a hard halt (Sam, 2026-09-28), never a guest shutdown: a booting or
     /// wedged guest ignores those and left the window on "Powering off…". SIGTERM
     /// makes the helper pause the VM, which flushes storage, and quit QEMU
@@ -1552,7 +1405,7 @@ final class EmulatorController {
         bootWatchTask?.cancel()
         orientationTask?.cancel()
         foregroundTask?.cancel()
-        mediaPreparationTask?.cancel()
+        readinessTask?.cancel()
         haltCompletions = [completion]
         let process = process
         if filesMeddled {
@@ -1611,22 +1464,15 @@ final class EmulatorController {
             }
             let overlay = overlayURL
             let snapshots = [snapshotURL, snapshotTmpURL, snapshotBadURL]
-            let marker = resetMarkerURL
             let stateDirectory = stateDir
-            let nand = options.nand
-            let manifest = packedImage.map { _ in URL(fileURLWithPath: options.packedNAND + ".sha256") }
             let preparedNOR = preparedNORURL
             let owner = instance.id
             do {
                 try await Task.detached {
-                    try DeviceStateStorage.erase(overlay: overlay, snapshots: snapshots, legacyMarker: marker,
-                                                 state: stateDirectory, owner: owner)
+                    try DeviceStateStorage.erase(overlay: overlay, snapshots: snapshots, state: stateDirectory, owner: owner)
                     if let preparedNOR, FileManager.default.fileExists(atPath: preparedNOR.path) {
                         try DeviceStateStorage.checkRemovable(preparedNOR, state: stateDirectory, owner: owner)
                         try FileManager.default.removeItem(at: preparedNOR)
-                    }
-                    if let manifest {
-                        try DeviceStateStorage.adoptBundledImageAfterErase(state: stateDirectory, nand: nand, manifest: manifest, owner: owner)
                     }
                 }.value
                 resolveDeviceNotice(for: .erase)
@@ -1643,10 +1489,6 @@ final class EmulatorController {
                 reportDeviceNotice("The device could not be completely erased: \(error.localizedDescription) Choose Erase All Content and Settings to try again.", for: .erase)
             }
         }
-    }
-
-    func cancelFactoryReset() {
-        try? FileManager.default.removeItem(at: resetMarkerURL)
     }
 
     // MARK: - App management
@@ -1679,7 +1521,7 @@ final class EmulatorController {
         guard let session = usbmux.session else {
             throw DeviceToolsError.failed("The device is not reachable over USB yet.")
         }
-        return DeviceTools(clientSocket: session.clientSocket, filesRoot: options.filesRoot,
+        return DeviceTools(clientSocket: session.clientSocket,
                            proxyDirectory: proxyDirectory, agent: link, agentCache: agentCache,
                            packaged: status?.guestPackage != nil, deviceOS: iosVersion)
     }
@@ -1760,8 +1602,8 @@ final class EmulatorController {
             }
             connectionIssue = issue
             deviceReachable = false
-            mediaPreparationTask?.cancel()
-            preparingMedia = false
+            readinessTask?.cancel()
+            preparingDevice = false
             reportDeviceNotice(issue.summary, for: .activation)
         }
     }

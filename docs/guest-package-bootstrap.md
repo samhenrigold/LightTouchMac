@@ -175,11 +175,9 @@ The shim is bound to the firmware's dispatch table and must be present before Sp
   Guest Tools records the choice (`bad` += the running serial; `builtIn` = the bundled serial, offered
   as `serial 0` until a newer bundle; or clear both), discards the snapshot, powers off cleanly and starts
   a fresh helper. Not a guest reset: after `system_reset` a fresh 7E18 once stayed on the Apple logo.
-- **The app no longer touches packaged components.** `updateMediaComponents` (GuestServices) returns at
-  once when a report arrived or the agent's own job runs it from `/usr/local/lighttouch/`; on a legacy
-  image it upgrades the agent at the path its job names. Media helpers run from `current/bin` when packaged.
-  The `.lt-guest-tools-v2` marker was never read by this branch; its stand-in (`nand` contains
-  "ultimate") went with the script installer in P2.
+- **The app never touches guest components.** `updateMediaComponents` and the marker went with C6
+  (2026-09-28): every device is a prepared base with the loader, so there is no legacy image to upgrade
+  in place. Media helpers run from `current/bin` when packaged.
 - **Verified headless** (tests/check-sessions.py --guest): on a fresh no-shell 7E18 (seed 1, P4) the
   loader installed the bundled serial 2 (R_INSTALLED), judged good; after `verdict bad 2` and a fresh
   helper it reverted to 1 (R_REVERTED_BAD). The shipping image (no loader) reports nothing: legacy.

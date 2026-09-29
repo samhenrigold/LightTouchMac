@@ -173,50 +173,6 @@ func expectFailure(_ what: String, _ body: () async throws -> Void) async {
   try await legacy.respring(); precondition(link.spawns.last == ["/bin/launchctl", "stop", "com.apple.SpringBoard"])
   try await legacy.reconnectManagement(); precondition(link.spawns.last == ["/bin/launchctl", "stop", "com.apple.mobile.lockdown"])
 
-  // Component upgrade on a legacy image.
-  let job = try PropertyListSerialization.data(fromPropertyList: ["Label": "com.qemu.it-agent", "ProgramArguments": ["/usr/local/bin/it_agent"]], format: .xml, options: 0)
-  let sb = try PropertyListSerialization.data(fromPropertyList: ["Label": "com.apple.SpringBoard", "EnvironmentVariables": ["X": "1"]], format: .binary, options: 0)
-  let prefs = try PropertyListSerialization.data(fromPropertyList: ["SBDontLockEver": true, "keep": 1], format: .binary, options: 0)
-  link.files = [GuestServices.agentJob: job, GuestServices.springBoardJob: sb, GuestServices.springBoardPreferences: prefs,
-                "/usr/local/bin/it_agent": Data("old it_agent v2".utf8), GuestServices.legacyClipboardJob: Data("pbd".utf8)]
-  let parts = GuestServices.Components(engine: try local("MBXGLEngine", Data("engine".utf8)),
-                                        agent: try local("it_agent", Data("new it_agent v2\u{0}".utf8)),
-                                        typing: try local("it_typein.dylib", Data("typein".utf8)))
-  link.spawns = []
-  check(try await legacy.updateComponents(parts))
-  precondition(link.files["/usr/local/bin/it_agent"] == Data("new it_agent v2\u{0}".utf8), "the agent at its job's path")
-  precondition(link.files[GuestServices.engine] == Data("engine".utf8) && link.files[GuestServices.typing] == Data("typein".utf8))
-  precondition(link.files[GuestServices.legacyClipboardJob] == nil)
-  let env = (try PropertyListSerialization.propertyList(from: link.files[GuestServices.springBoardJob]!, format: nil) as! [String: Any])["EnvironmentVariables"] as! [String: String]
-  precondition(env["CA_ENABLE_OGL"] == "1" && env["DYLD_INSERT_LIBRARIES"] == GuestServices.typing && env["X"] == "1")
-  let newPrefs = try PropertyListSerialization.propertyList(from: link.files[GuestServices.springBoardPreferences]!, format: nil) as! [String: Any]
-  precondition(newPrefs["SBDontLockEver"] == nil && newPrefs["keep"] as? Int == 1 && link.owners[GuestServices.springBoardPreferences] == "501:501")
-  let expected: [[String]] = [["/bin/launchctl", "unload", GuestServices.legacyClipboardJob], ["/bin/launchctl", "stop", "com.qemu.it-agent"],
-                              ["/bin/launchctl", "unload", GuestServices.springBoardJob], ["/bin/launchctl", "load", GuestServices.springBoardJob]]
-  precondition(link.spawns == expected, "\(link.spawns)")
-  link.spawns = []
-  check(try await legacy.updateComponents(parts) == false && link.spawns.isEmpty, "idempotent")
-  // Never a downgrade: an image whose agent is newer than the bundled one keeps it.
-  link.files["/usr/local/bin/it_agent"] = Data("guest it_agent v2".utf8)
-  let v1parts = GuestServices.Components(engine: parts.engine, agent: try local("old", Data("it_agent v1".utf8)), typing: parts.typing)
-  check(try await legacy.updateComponents(v1parts) == false && link.files["/usr/local/bin/it_agent"] == Data("guest it_agent v2".utf8))
-  // SpringBoard is loaded again even when the preference write fails, and the failure surfaces.
-  link.files[GuestServices.springBoardPreferences] = prefs
-  link.files["/usr/local/bin/it_agent"] = Data("new it_agent v2\u{0}".utf8)
-  link.failPut = GuestServices.springBoardPreferences; link.spawns = []
-  await expectFailure("failed preference write succeeded") { _ = try await legacy.updateComponents(parts) }
-  precondition(link.spawns == [["/bin/launchctl", "unload", GuestServices.springBoardJob], ["/bin/launchctl", "load", GuestServices.springBoardJob]], "\(link.spawns)")
-  precondition(link.files[GuestServices.springBoardPreferences] == prefs)
-  link.failPut = nil
-  // A packaged image is the loader's.
-  let before = link.ops.count
-  check(try await packaged.updateComponents(parts) == false && link.ops.count == before)
-  // ... and so is one whose agent job points into the package, before any report.
-  let packagedJob = try PropertyListSerialization.data(fromPropertyList: ["Label": "com.qemu.it-agent", "ProgramArguments": ["/usr/local/lighttouch/current/bin/it_agent"]], format: .xml, options: 0)
-  link.files[GuestServices.agentJob] = packagedJob; link.files[GuestServices.engine] = Data("package hook".utf8)
-  check(try await legacy.updateComponents(parts) == false && link.files[GuestServices.engine] == Data("package hook".utf8))
-  precondition(GuestServices.agentVersion(Data("..it_agent v12\n".utf8)) == 12 && GuestServices.agentVersion(Data()) == 0)
-
   // Halt: submitted with deadline 0; absent and stale agents.
   check(await agent.requestHalt() && link.halts == 1)
   link.agent = 0
