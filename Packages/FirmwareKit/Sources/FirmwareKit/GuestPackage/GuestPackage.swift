@@ -2,7 +2,7 @@
 // (docs/guest-package-bootstrap.md, P4). Ports qemu-ios contrib/guest-package/mkpkg.py read_pack, offer_text
 // and seed.
 //
-//   let (written, record) = try GuestPackage.seed(volume: mnt, itpack: helpers/armv7.itpack, gli: "7B500")
+//   let (written, record) = try GuestPackage.seed(volume: mnt, itpack: helpers/armv7.itpack, gles: true)
 //   // written: volume-relative paths to make root-owned; record: the lock's guest_package
 //
 // An .itpack is "ITPACK01", a little-endian u32 index length, a JSON index {entries: [{name, size}]} and one
@@ -17,14 +17,16 @@ public enum GuestPackage {
     static let root = "usr/local/lighttouch"
     static let loader = ("usr/local/bin/it_boot", "System/Library/LaunchDaemons/com.qemu.it-boot.plist")
     static let systemVersion = "System/Library/CoreServices/SystemVersion.plist"
+    /// The GL engines' stock paths (mkpkg MBX, GLENGINE, GLD): hooks kept only when the preparer installed the shim.
+    static let glTargets: Set<String> = ["/" + N72Board.mbx, "/" + SystemEdits.glEngine, "/" + SystemEdits.gldPath]
 
     /// What was baked: device.lock.json's guest_package (the same keys as the Python preparers').
     public struct Record: Sendable, Equatable {
-        public var family: String, seed: Int, version: String, gli: String?
+        public var family: String, seed: Int, version: String, gles: Bool
         public var itpackPath: String, itpackSHA256: String
         public var hooks: [String], jobs: [String]
         public var object: [String: Any] {
-            ["family": family, "seed": seed, "version": version, "gli": gli as Any? ?? NSNull(),
+            ["family": family, "seed": seed, "version": version, "gles": gles,
              "itpack": ["path": itpackPath, "sha256": itpackSHA256], "hooks": hooks, "jobs": jobs]
         }
     }
@@ -72,8 +74,8 @@ public enum GuestPackage {
 
     /// Bakes the loader and the seed package into the system volume mounted at `volume` (mkpkg.seed): the
     /// itpack's package for the volume's ProductBuildVersion as it_boot installs one (pkgs/<serial>/ with its
-    /// `offer`, `current` -> it, `state` "seed N"); the hooks whose target is on the volume and whose gli id is
-    /// nil or `gli`, as target + <target>.baked with the package's bytes; the baked jobs the package provides
+    /// `offer`, `current` -> it, `state` "seed N"); the hooks whose target is on the volume (the GL engines' only
+    /// when the preparer installed the shim: `gles`), as target + <target>.baked with the package's bytes; the baked jobs the package provides
     /// removed. Returns (volume-relative paths written, all root-owned; the lock's guest_package record).
     /// mkpkg's requires.builds: an exact build id, or "<major>*" for every build of that iOS major (2.x = 5*,
     /// 3.x = 7*, 4.x = 8*).
@@ -82,7 +84,7 @@ public enum GuestPackage {
         return builds.contains { $0 == build || ($0.hasSuffix("*") && $0.dropLast() == major) }
     }
 
-    public static func seed(volume m: URL, itpack: URL, gli: String?) throws -> (written: [String], record: Record) {
+    public static func seed(volume m: URL, itpack: URL, gles: Bool) throws -> (written: [String], record: Record) {
         let fm = FileManager.default
         let entries = try read(itpack)
         let at = { (rel: String) in m.appendingPathComponent(rel) }
@@ -99,8 +101,8 @@ public enum GuestPackage {
         let family = String(families[0].dropLast("/manifest.json".count))
         let allHooks = man["hooks"] as? [[String: Any]] ?? []
         let hooks = allHooks.filter { h in
-            let g = h["gli"] as? String, target = String((h["target"] as? String ?? "").dropFirst())
-            return (g == nil || g == gli) && fm.fileExists(atPath: at(target).path)
+            let target = h["target"] as? String ?? ""
+            return (gles || !glTargets.contains(target)) && fm.fileExists(atPath: at(String(target.dropFirst())).path)
         }
         let dropped = Set(allHooks.compactMap { $0["file"] as? String }).subtracting(hooks.compactMap { $0["file"] as? String })
         man["hooks"] = hooks
@@ -146,7 +148,7 @@ public enum GuestPackage {
             if (try? fm.attributesOfItem(atPath: at(rel).path)) != nil { try fm.removeItem(at: at(rel)) }
         }
         let sha = SHA256.hash(data: try Data(contentsOf: itpack)).map { String(format: "%02x", $0) }.joined()
-        return (written, Record(family: family, seed: serial, version: man["version"] as? String ?? "", gli: gli, itpackPath: itpack.path,
+        return (written, Record(family: family, seed: serial, version: man["version"] as? String ?? "", gles: gles, itpackPath: itpack.path,
                                 itpackSHA256: sha, hooks: hooks.map { $0["target"] as! String }, jobs: jobs))
     }
 }

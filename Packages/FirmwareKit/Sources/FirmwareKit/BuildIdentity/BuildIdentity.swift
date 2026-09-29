@@ -43,7 +43,6 @@ public struct FirmwareEntry: Codable, Sendable, Equatable {
         public var systemMiB: Int
         public var dataSize: String
         public var options: [String: Bool]
-        public var gliDispatch: String?
         public var guest: Guest?
         /// The k48 boot chain: "iboot" (SecureROM -> LLB -> iBoot -> kernel; default when absent) or "kboot"
         /// (direct-kernel, for debugging). Ignored by n72ap.
@@ -54,7 +53,7 @@ public struct FirmwareEntry: Codable, Sendable, Equatable {
         public var keybagRamdiskFrom: String?
         enum CodingKeys: String, CodingKey {
             case name, version, storage, options, guest, boot
-            case systemMiB = "system_mib", dataSize = "data_size", gliDispatch = "gli_dispatch", keybagRamdiskFrom = "keybag_ramdisk_from"
+            case systemMiB = "system_mib", dataSize = "data_size", keybagRamdiskFrom = "keybag_ramdisk_from"
         }
     }
 

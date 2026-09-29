@@ -4,7 +4,7 @@
 A package tree with a manifest is packed with mkpkg.pack; mkpkg.py `offer` composes the
 reference offer directory; the app's compose must write the same `offer` text and the same
 payload files. Also: verdict lines from device.json `guest`, the built-in (serial 0) offer,
-hooks dropped by the preparer's lock (another GL table, a target the device lacks), stub and
+hooks dropped by the preparer's lock (no GL shim installed, a target the device lacks), stub and
 foreign-build packages, a host protocol the app doesn't speak, a payload that doesn't match its
 manifest, the UI status for each report, and a tolerant `guest` record decode.
 
@@ -39,8 +39,8 @@ def package(tree, family, builds, serial, stub=False, host=None):
     manifest = {'format': 1, 'serial': serial, 'version': '1.%d.0' % serial, 'family': family, 'arch': 'armv6', 'stub': stub,
                 'requires': {'boards': ['n72ap'], 'builds': builds, 'link': 'modern', 'host': host or mkpkg.HOST},
                 'provides': ['it_agent', 'itmedia'], 'files': files, 'jobs': ['jobs/com.qemu.it-agent.plist'],
-                'hooks': [{'file': 'hooks/MBXGLEngine', 'target': MBX, 'gli': '7E18', 'respring': True},
-                          {'file': 'hooks/libappsync.dylib', 'target': '/usr/lib/libappsync.dylib', 'gli': None, 'respring': False}]}
+                'hooks': [{'file': 'hooks/MBXGLEngine', 'target': MBX, 'respring': True},
+                          {'file': 'hooks/libappsync.dylib', 'target': '/usr/lib/libappsync.dylib', 'respring': False}]}
     (pkg / 'manifest.json').write_text(json.dumps(manifest))
     return manifest
 
@@ -97,13 +97,13 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   let left = try FileManager.default.contentsOfDirectory(atPath: dir.deletingLastPathComponent().path)
   check(!text.contains("verdict") && left == ["guest-offer"], "\(left)")
   // A lock that kept only the GL hook drops the other (and its file), as the seed did.
-  var lock = GuestPackage.LockRecord(seed: 1, gli: "7E18", hooks: [GuestPackage.Manifest.mbx])
+  var lock = GuestPackage.LockRecord(seed: 1, gles: true, hooks: [GuestPackage.Manifest.mbx])
   _ = try GuestPackage.compose(itpack: pack, board: "n72ap", build: "7E18", lock: lock, guest: nil, into: dir)
   let trimmed = String(decoding: try Data(contentsOf: dir.appendingPathComponent("offer")), as: UTF8.self)
   check(trimmed == String(decoding: try Data(contentsOf: t.appendingPathComponent("trimmed.txt")), as: UTF8.self), trimmed)
   check(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("hooks/libappsync.dylib").path))
-  // No shim installed (gli null): the GL hook goes, and the offer has no GL hook.
-  lock = GuestPackage.LockRecord(seed: 1, gli: nil, hooks: nil)
+  // No shim installed (gles false): the GL hook goes, and the offer has no GL hook.
+  lock = GuestPackage.LockRecord(seed: 1, gles: false, hooks: nil)
   let noGL = try GuestPackage.compose(itpack: pack, board: "n72ap", build: "7E18", lock: lock, guest: nil, into: dir)!
   check(!noGL.glHook && !FileManager.default.fileExists(atPath: dir.appendingPathComponent("hooks/MBXGLEngine").path))
   // Built-in tools: serial 0, no payloads, while the bundled serial is the one chosen.
@@ -132,6 +132,7 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   check(GuestPackage.status(report: .init(serial: 7, result: 1), offer: o, record: nil, glesProtocol: 0) == S.current(serial: 7))
   check(GuestPackage.status(report: .init(serial: 7, result: 0), offer: o, record: nil, glesProtocol: 0) == S.current(serial: 7))
   check(GuestPackage.status(report: .init(serial: 5, result: -2), offer: o, record: nil, glesProtocol: 0) == S.outOfDate)
+  check(GuestPackage.status(report: .init(serial: 7, result: 0), offer: o, record: nil, glesProtocol: 1) == S.current(serial: 7), "the name-keyed GL wire")
   check(GuestPackage.status(report: .init(serial: 7, result: 0), offer: o, record: nil, glesProtocol: 3) == S.outOfDate, "GL wire out of range")
   check(GuestPackage.status(report: .init(serial: 5, result: 3), offer: o, record: nil, glesProtocol: 0) == S.reverted(serial: 5, why: .revertedBad))
   check(GuestPackage.status(report: .init(serial: 5, result: 5), offer: o, record: nil, glesProtocol: 0) == S.reverted(serial: 5, why: .refused))
@@ -165,8 +166,10 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   check(round == record)
   // The preparer's record.
   let lockFile = t.appendingPathComponent("device.lock.json")
-  try Data("{\"guest_package\": {\"family\": \"n72-ios3\", \"seed\": 1, \"gli\": null, \"hooks\": [\"/usr/lib/libappsync.dylib\"]}}".utf8).write(to: lockFile)
-  check(GuestPackage.lockRecord(lockFile) == GuestPackage.LockRecord(seed: 1, gli: nil, hooks: ["/usr/lib/libappsync.dylib"]))
+  try Data("{\"guest_package\": {\"family\": \"n72-ios3\", \"seed\": 1, \"gles\": false, \"hooks\": [\"/usr/lib/libappsync.dylib\"]}}".utf8).write(to: lockFile)
+  check(GuestPackage.lockRecord(lockFile) == GuestPackage.LockRecord(seed: 1, gles: false, hooks: ["/usr/lib/libappsync.dylib"]))
+  try Data("{\"guest_package\": {\"seed\": 1, \"gli\": \"7E18\"}}".utf8).write(to: lockFile)
+  check(GuestPackage.lockRecord(lockFile)?.gles == true, "a lock from before gl-runtime: a gli id is a shim")
   check(GuestPackage.lockRecord(t.appendingPathComponent("missing.json")) == nil)
   check(GuestPackage.arch(board: "n72ap") == "armv6" && GuestPackage.arch(board: "k48ap") == "armv7")
   print("PASS: itpack read, offer identical to mkpkg.py (verdicts, lock-dropped hooks), built-in serial 0, no offer for stubs/other builds/host protocols, UI status, verdicts, guest record")

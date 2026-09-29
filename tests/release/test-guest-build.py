@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """build-guest-tools.sh is a thin caller of qemu-ios contrib/export-guest-artifacts.sh: it resolves the pinned
 checkout (QEMU_IOS_DIR overrides), checks the SDK, refuses an existing output directory and a checkout without
-the export, hands the directory to the export, and publishes nothing itself. A fixture export stands in for
+the export, hands the directory to the export, refuses an export without the runtime-dispatch GL engines, and
+publishes nothing itself. A fixture export stands in for
 the real one (which needs the armv6 toolchain and both SDKs; the release build runs it)."""
 import json
 import os
@@ -21,6 +22,7 @@ if [ "${EXPORT_FAIL:-}" = 1 ]; then echo "intentional failure" >&2; exit 7; fi
 mkdir -p "$OUT/guest-tools" "$OUT/ipad-guest-tools"
 printf rebuilt > "$OUT/guest-tools/it_agent"
 printf rebuilt > "$OUT/ipad-guest-tools/it_pbd"
+[ "${EXPORT_OLD:-}" = 1 ] || for f in GLEngine MBXGLEngine gles-names.h; do printf rebuilt > "$OUT/ipad-guest-tools/$f"; done
 printf '{"schema": 1, "files": {"guest-tools/it_agent": "x", "ipad-guest-tools/it_pbd": "x"}}\n' > "$OUT/manifest.json"
 '''
 
@@ -51,6 +53,8 @@ with tempfile.TemporaryDirectory(prefix="lighttouch guest test ") as directory:
     assert json.loads((output / "manifest.json").read_text())["schema"] == 1
     assert f"LTM_GUEST_TOOLS_DIR={output}/guest-tools".replace(" ", "\\ ") in result.stdout, result.stdout
     build(output, error="use a new build directory")
+
+    build(root / "old export", error="predates gl-runtime", env=dict(environment, EXPORT_OLD="1"))
 
     failed = root / "failed build"
     build(failed, error="intentional failure", env=dict(environment, EXPORT_FAIL="1"))

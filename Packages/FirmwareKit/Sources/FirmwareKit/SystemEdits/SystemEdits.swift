@@ -5,7 +5,7 @@
 //
 //   system.img  the IPSW rootfs, grown to partition 1; rw fstab; SpringBoard env (GL CoreAnimation or
 //               CA_ENABLE_OGL=0) + stdio on /dev/console; [appsync] libappsync.dylib injected into installd +
-//               the shared-cache MISValidateSignature patch; [ca_ogl] the GLI shim as GLEngine (+ the gld plugin
+//               the shared-cache MISValidateSignature patch; [ca_ogl] the GL shim as GLEngine (+ the gld plugin
 //               and dyld's override switch on 4.x); [web_proxy] the PAC; the guest helpers; storage_mounter loads
 //               it_msmquiet; BTServer Disabled; lockdownd activated (Activation); the guest-package loader and
 //               seed package from armv7.itpack (GuestPackage.seed), whose jobs it_boot loads.
@@ -17,8 +17,7 @@
 // patched offline afterwards (HFSPlusVolume.setOwner), as the oracle does.
 //
 //   let r = try SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: p1 * 4096, dataBytes: p2 * 4096,
-//                                    options: .init(recipe: entry.recipe!), helpers: guestTools,
-//                                    gliDispatch: entry.recipe?.gliDispatch) { print($0) }
+//                                    options: .init(recipe: entry.recipe!), helpers: guestTools) { print($0) }
 //   r.system, r.data, r.activation
 //
 // `helpers` is a flat directory of prebuilt, signed files (the app bundles it; see `Helpers`).
@@ -61,8 +60,9 @@ public enum SystemEdits {
         public static let sealJob = "com.qemu.it-seal.plist", glTestJob = "com.qemu.it-gltest.plist"
         /// The fat armv6+armv7 AppSync dylib.
         public static let appsync = "libappsync.dylib"
-        /// The GLI shim for a dispatch layout: GLEngine-<BUILD>, paired with gli-dispatch-<BUILD>.tsv.
-        public static func engine(tsv: String) -> String { "GLEngine-" + tsv.dropFirst("gli-dispatch-".count).dropLast(4) }
+        /// The GL shims, one per arch (they read the firmware's dispatch layout at load), and the name table
+        /// they speak (a reference artifact: the install logs which of the firmware's fields it lacks).
+        public static let glEngine = "GLEngine", mbxEngine = "MBXGLEngine", glesNames = "gles-names.h"
         /// The gld plugin 4.x's libGFXShared loads.
         public static let gld = "GLRendererFloatQEMU"
     }
@@ -116,7 +116,7 @@ public enum SystemEdits {
     public static let kernelcachePath = "System/Library/Caches/com.apple.kernelcaches/kernelcache"
 
     public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
-                                gliDispatch: String? = nil, kernelcache: Data? = nil, dataVolumeUUID: [UInt8]? = nil,
+                                kernelcache: Data? = nil, dataVolumeUUID: [UInt8]? = nil,
                                 log: (String) -> Void = { _ in }) throws -> Result {
         let fm = FileManager.default
         let system = work.appendingPathComponent("system.img"), data = work.appendingPathComponent("data.img")
@@ -167,12 +167,12 @@ public enum SystemEdits {
             }
             try put(Data(fstabRW.utf8), at(fstab))
             if o.webProxy { rootOwned += try installPAC(m) }
-            // GL first: a firmware whose dispatch layout no shim fits (a new GLI table) boots the stock engine with
-            // software CoreAnimation, as the iPod recipe does, rather than refusing the build (docs/matrix.md).
+            // GL first: a firmware whose gld plugin does not fit boots the stock engine with software CoreAnimation,
+            // as the iPod recipe does, rather than refusing the build (docs/matrix.md).
             var caOGL = o.caOGL
             if caOGL {
                 do {
-                    let (engine, gld, overridden) = try installGL(m, helpers: helpers, gliDispatch: gliDispatch, log: log)
+                    let (engine, gld, overridden) = try installGL(m, helpers: helpers, log: log)
                     result.engine = engine
                     rootOwned.append(glEngine)
                     if overridden { rootOwned.append(dyldOverride) }
@@ -207,8 +207,7 @@ public enum SystemEdits {
             try rewritePlist(at(btJob)) { $0["Disabled"] = true }
             result.activation = try activate(m, log: log)
             rootOwned.append(lockdownd)
-            let gli = result.engine.map { String($0.dropFirst("GLEngine-".count)) }
-            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gli: gli, log: log)
+            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gles: result.engine != nil, log: log)
             result.guestPackage = record
             rootOwned += seeded
             rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"] + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
@@ -301,35 +300,31 @@ public enum SystemEdits {
     }
 
     /// The guest-package loader and the arch's seed package (GuestPackage.seed of <arch>.itpack).
-    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gli: String?, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
-        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gli: gli)
+    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gles: Bool, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
+        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gles: gles)
         log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
         return (seeded, record)
     }
 
-    /// The GLI shim as GLEngine (+ the gld plugin when this firmware's EAGL needs one, + dyld's override switch
+    /// The GL shim as GLEngine (+ the gld plugin when this firmware's EAGL needs one, + dyld's override switch
     /// when GLEngine is in the shared cache). Returns (engine helper name, gld installed, override switch set).
-    static func installGL(_ m: URL, helpers: URL, gliDispatch: String?, log: (String) -> Void) throws -> (String, Bool, Bool) {
+    static func installGL(_ m: URL, helpers: URL, log: (String) -> Void) throws -> (String, Bool, Bool) {
         let fm = FileManager.default
-        let cacheURL = m.appendingPathComponent(dyldCache("armv7"))
-        let (engine, gld, cached): (String, Bool, Bool) = try autoreleasepool {
-            let cache = try DyldSharedCache(contentsOf: cacheURL)
-            let tsvs = try gliDispatch.map { [helpers.appendingPathComponent($0)] }
-                ?? fm.contentsOfDirectory(at: helpers, includingPropertiesForKeys: nil).filter { $0.lastPathComponent.wholeMatch(of: /gli-dispatch-\w+\.tsv/) != nil }
-            let (tsv, why) = try GLIDispatch.engine(cache: cache.data, cachePath: cacheURL.path, tsvs: tsvs)
-            guard let tsv else { throw FirmwareError(.unsupported, "GLI shim does not fit this firmware: \(why ?? "no dispatch tables")") }
+        let (gld, cached): (Bool, Bool) = try autoreleasepool {
+            let cache = try DyldSharedCache(contentsOf: m.appendingPathComponent(dyldCache("armv7")))
+            log(glesSanity(cache.data, helpers: helpers))
             let (needed, gwhy) = GLIDispatch.gldProblem(cache, plugin: helpers.appendingPathComponent(Helpers.gld))
             if let gwhy { throw FirmwareError(.unsupported, "gld plugin does not fit this firmware: \(gwhy)") }
-            return (Helpers.engine(tsv: tsv.lastPathComponent), needed, cache.image("/" + glEngine) != nil)
+            return (needed, cache.image("/" + glEngine) != nil)
         }
-        let src = helpers.appendingPathComponent(engine)
+        let engine = Helpers.glEngine, src = helpers.appendingPathComponent(engine)
         guard fm.fileExists(atPath: src.path) else { throw FirmwareError(.internal, "\(src.path) missing") }
         var overridden = false
         if cached {   // 4.x: dyld's own switch lets the file on disk win over the cached image
             try setOverrideSwitch(m, image: glEngine)
             overridden = true
         }
-        log("GLI engine \(engine)\(gld ? " + gld plugin" : ""); \(overridden ? "cached GLEngine overridden by the file" : "no cached GLEngine")")
+        log("GL engine \(engine)\(gld ? " + gld plugin" : ""); \(overridden ? "cached GLEngine overridden by the file" : "no cached GLEngine")")
         try put(Data(contentsOf: src), m.appendingPathComponent(glEngine), mode: try permissions(src))
         if gld {
             let plugin = helpers.appendingPathComponent(Helpers.gld)
@@ -337,6 +332,19 @@ public enum SystemEdits {
             try put(Data(contentsOf: plugin), m.appendingPathComponent(gldPath), mode: try permissions(plugin))
         }
         return (engine, gld, overridden)
+    }
+
+    /// ipad1_rootfs.gli_dispatch_info: the sanity line about what the shim will find at load (the firmware's
+    /// dispatch slot count, and the fields the shipped name table, gles-names.h in the helpers, does not name).
+    static func glesSanity(_ cache: Data, helpers: URL) -> String {
+        guard let have = GLIDispatch.fields(in: cache) else {
+            return "no __GLIFunctionDispatchRec @encode in the shared cache: the shim will read OpenGLES's trampolines"
+        }
+        let names = (try? String(contentsOf: helpers.appendingPathComponent(Helpers.glesNames), encoding: .utf8)) ?? ""
+        let known = Set(names.matches(of: /(?m)^GLES_FN\(\w+,\s*(\w+),/).map { String($0.1) })
+        let unknown = have.filter { !known.contains($0) }
+        return "GLI dispatch: \(have.count) slots, \(unknown.count) unknown to the name table"
+            + (unknown.isEmpty ? "" : " (\(unknown.prefix(8).joined(separator: ", ")))")
     }
 
     /// ipad1_rootfs.gli_uncache: when `image` is in the volume's shared cache `cache`, create dyld's

@@ -36,7 +36,7 @@ class ReleaseTests(unittest.TestCase):
         self.put(self.qemu / 'contrib/export-guest-artifacts.sh', 'export')
         self.put(self.product / 'LightTouchMac/Resources/firmware-catalog.json', json.dumps({'format': 1, 'entries': [
             {'id': 'n72ap-7E18', 'bundled': 'device/n72ap-7E18.itbase', 'source': {'kind': 'ipsw', 'sha1': 'a' * 40},
-             'recipe': {'gli_dispatch': 'gli-dispatch-7E18.tsv'}}]}))
+             'recipe': {'name': 'n72'}}]}))
         self.put(self.usb / 'configure.ac')
         self.init_git(self.usb)
         self.put(self.assets / 'bootrom_240_4')
@@ -70,7 +70,7 @@ class ReleaseTests(unittest.TestCase):
         """An export tree as qemu-ios contrib/export-guest-artifacts.sh stages it, with its manifest."""
         files = {}
         for directory, names in (('guest-tools', release.GUEST_PAYLOADS),
-                                 ('ipad-guest-tools', release.IPAD_GUEST_PAYLOADS | {'gli-dispatch-7E18.tsv', 'extra-table.tsv'})):
+                                 ('ipad-guest-tools', release.IPAD_GUEST_PAYLOADS | {'extra-file'})):
             for name in names:
                 self.put(self.guest.parent / directory / name, 'payload ' + name)
                 files[f'{directory}/{name}'] = release.digest(self.guest.parent / directory / name)
@@ -184,10 +184,11 @@ class ReleaseTests(unittest.TestCase):
         self.put(self.args.output / 'new-binary')
         self.assertEqual(before, release.source_identity(self.product))
 
-    def test_guest_required_payloads_and_catalog_tables_are_required(self):
+    def test_guest_required_payloads_are_required(self):
         manifest = self.guest_fixture()
         release.validate_guest(self.args, self.guest)
-        for name in ('guest-tools/it_agent', 'ipad-guest-tools/gli-dispatch-7E18.tsv'):
+        for name in ('guest-tools/it_agent', 'ipad-guest-tools/GLEngine', 'ipad-guest-tools/MBXGLEngine',
+                     'ipad-guest-tools/gles-names.h'):
             missing = dict(manifest, files={k: v for k, v in manifest['files'].items() if k != name})
             self.put(self.guest.parent / 'manifest.json', json.dumps(missing))
             with self.assertRaisesRegex(ValueError, 'missing from the export manifest: ' + Path(name).name):
@@ -199,7 +200,7 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'differs from the export manifest'):
             release.validate_guest(self.args, self.guest)
         (self.guest / 'old-helper').unlink()
-        (self.guest.parent / 'ipad-guest-tools/extra-table.tsv').unlink()
+        (self.guest.parent / 'ipad-guest-tools/extra-file').unlink()
         with self.assertRaisesRegex(ValueError, 'differs from the export manifest'):
             release.validate_guest(self.args, self.guest)
 

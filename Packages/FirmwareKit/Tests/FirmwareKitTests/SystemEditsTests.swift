@@ -3,7 +3,7 @@ import Testing
 @testable import FirmwareKit
 
 /// The oracle's inputs: the Python cache's rootfs.dmg, the qemu-ios helper build outputs (contrib/*/build.sh),
-/// the dispatch TSVs and the user's activation hooks. Everything is read in place; outputs go to temp dirs.
+/// the GL name table and the user's activation hooks. Everything is read in place; outputs go to temp dirs.
 enum K48Oracle {
     static let qemu = Oracle.qemuIOS
     /// FIRMWAREKIT_ACTIVATION_HOOK (an executable) overrides both.
@@ -22,10 +22,8 @@ enum K48Oracle {
             m[j] = contrib.appendingPathComponent("\(d)/\(j)")
         }
         m["libappsync.dylib"] = qemu.appendingPathComponent("build/appsync/libappsync.dylib")
-        for b in ["7B500", "8C148"] {
-            m["GLEngine-\(b)"] = contrib.appendingPathComponent("ipad1-gles/GLEngine-\(b)")
-            m["gli-dispatch-\(b).tsv"] = qemu.appendingPathComponent("docs/ipad1/gli-dispatch-\(b).tsv")
-        }
+        m["GLEngine"] = contrib.appendingPathComponent("ipad1-gles/GLEngine")
+        m["gles-names.h"] = qemu.appendingPathComponent("include/hw/arm/guest-services/gles-names.h")
         m["GLRendererFloatQEMU"] = contrib.appendingPathComponent("ipad1-gles/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU")
         m[SystemEdits.Helpers.itpack] = qemu.appendingPathComponent("build/guest-package/armv7.itpack")
         return m
@@ -84,7 +82,7 @@ enum K48Oracle {
 
     /// GuestPackage.seed against mkpkg.seed on a plain directory with the real armv7.itpack: the same tree
     /// (paths, modes, bytes, symlinks) and the same record, for a shim image and a no-shim one.
-    @Test(arguments: [("7B500", "7B500" as String?), ("8C148", nil)]) func seedMatchesPython(_ build: String, _ gli: String?) throws {
+    @Test(arguments: [("7B500", true), ("8C148", false)]) func seedMatchesPython(_ build: String, _ gles: Bool) throws {
         let itpack = K48Oracle.qemu.appendingPathComponent("build/guest-package/armv7.itpack")
         guard Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py")) else { return }
         try Oracle.withTemp { dir in
@@ -101,18 +99,18 @@ enum K48Oracle {
                 return v
             }
             let a = try volume("swift"), b = try volume("python")
-            let (written, record) = try GuestPackage.seed(volume: a, itpack: itpack, gli: gli)
+            let (written, record) = try GuestPackage.seed(volume: a, itpack: itpack, gles: gles)
             let out = dir.appendingPathComponent("py.json")
             try K48Oracle.sh(["python3", "-c", """
                 import json, sys; sys.path.insert(0, sys.argv[1]); import mkpkg
-                made, rec = mkpkg.seed(sys.argv[2], sys.argv[3], sys.argv[4] or None)
+                made, rec = mkpkg.seed(sys.argv[2], sys.argv[3], sys.argv[4] == "1")
                 json.dump({"written": made, "record": rec}, open(sys.argv[5], "w"))
-                """, K48Oracle.qemu.appendingPathComponent("contrib/guest-package").path, b.path, itpack.path, gli ?? "", out.path],
+                """, K48Oracle.qemu.appendingPathComponent("contrib/guest-package").path, b.path, itpack.path, gles ? "1" : "0", out.path],
                              cwd: dir)
             let py = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as! NSDictionary
             #expect(written == py["written"] as? [String])
             #expect(NSDictionary(dictionary: record.object) == py["record"] as? NSDictionary)
-            #expect(record.gli == gli && record.hooks.contains("/" + SystemEdits.glEngine) == (gli != nil))
+            #expect(record.gles == gles && record.hooks.contains("/" + SystemEdits.glEngine) == gles)
             func tree(_ v: URL) throws -> [String: String] {
                 var t: [String: String] = [:]
                 try SystemEdits.walk(v) { rel in
@@ -175,7 +173,7 @@ enum K48Oracle {
             let helpers = try K48Oracle.helpers(in: dir)
             let r = try Oracle.time("SystemEdits.buildK48 \(fw.entryID)") {
                 try SystemEdits.buildK48(rootfs: dmg, work: swift, systemBytes: parts[0] * 4096, dataBytes: Int64(parts[1]) * 4096,
-                                         options: .init(recipe: recipe), helpers: helpers, gliDispatch: recipe.gliDispatch) { print("  \($0)") }
+                                         options: .init(recipe: recipe), helpers: helpers) { print("  \($0)") }
             }
             #expect(r.activation != nil)
             // the seed record, as the Python bake wrote it for the lock (the itpack path differs: a symlink here)
@@ -183,7 +181,7 @@ enum K48Oracle {
             var record = try #require(r.guestPackage?.object)
             record["itpack"] = pyRecord["itpack"]
             #expect(NSDictionary(dictionary: record) == pyRecord)
-            #expect(r.guestPackage?.gli != nil && r.guestPackage?.gli == r.engine.map { String($0.dropFirst("GLEngine-".count)) })
+            #expect(r.guestPackage?.gles == true && r.engine == SystemEdits.Helpers.glEngine)
 
             // lockdownd: different ad-hoc signature representation; .journal: each volume's own journal
             for (vol, expected) in [("system.img", ["usr/libexec/lockdownd"]), ("data.img", [".journal"])] {
@@ -253,7 +251,7 @@ enum K48Oracle {
                 let r = try Oracle.time("SystemEdits.buildK48 \(fw.entryID) \(run)") {
                     try SystemEdits.buildK48(rootfs: cache.appendingPathComponent("rootfs.dmg"), work: work, systemBytes: parts[0].count * 4096,
                                              dataBytes: Int64(parts[1].count) * 4096, options: .init(recipe: recipe), helpers: helpers,
-                                             gliDispatch: recipe.gliDispatch, dataVolumeUUID: [1, 2, 3, 4, 5, 6, 7, 8]) { _ in }
+                                             dataVolumeUUID: [1, 2, 3, 4, 5, 6, 7, 8]) { _ in }
                 }
                 volumes.append([r.system, r.data])
             }
