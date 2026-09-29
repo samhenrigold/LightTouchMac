@@ -69,9 +69,9 @@ Notes:
   one-shot. The app (FirmwareJobs) and `tests/matrix.py` resolve the sibling entry's IPSW and pass
   `firmwarekit create --sibling-entry/--sibling-ipsw`; firmwarekit decrypts just that ramdisk with the sibling's key.
   The app queues the sibling IPSW's download beside the entry's own. All five get their keybag this way
-  (matrix-results.md). 8K2 and 8L1 carry `recipe.boot: "kboot"`: their iBoot-1072 is security epoch (SEPO) 2 and the
-  emulator's `iboot=` path models POWER_ID's epoch as 1 (smoke.md #7), so they boot the kernel directly until it is read
-  off the image; 8F190–8J3 are SEPO 1 and take the iBoot chain.
+  (matrix-results.md). All six take the iBoot chain (the default strategy): 8K2/8L1's iBoot-1072 is security epoch 2 and the
+  emulator reads it off the staged image (smoke.md #7, closed); 8F190–8J3 are epoch 1. 8K2/8L1 were on
+  `recipe.boot: "kboot"` until then.
 - iPod2,1 2.2 / 2.2.1: the wiki has no iBSS/iBEC keys; neither recipe needs those two components. They boot only with
   qemu-ios `ipod-2x` (the LLB's 0x38100000 block, smoke #18); `experimental` since the merge and pin bump (qemu-ios ipad1, 2026-09-29).
 - iPod2,1 2.x: no guest tools, no AppSync (no shared cache); SpringBoard composites through the GL front end (the
