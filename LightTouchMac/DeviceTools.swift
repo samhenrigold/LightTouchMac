@@ -334,8 +334,9 @@ struct DeviceTools: Sendable {
         return try await guest.foregroundAppName()
     }
 
-    /// Both boards, no guest helper: routing is the image's PAC (always the proxy, DIRECT as fallback) and
-    /// the host's itwebproxy mode, so only trust needs the device. Turning the proxy on trusts this
+    /// Both boards, no guest helper: routing is the image's PAC (always the proxy, DIRECT as fallback), or
+    /// itproxy's configd setting on an image without one (GuestServices.routeThroughProxy), and the host's
+    /// itwebproxy mode. Turning the proxy on trusts this
     /// device's CA in the guest silently through the agent (GuestServices.trustCertificate, the store
     /// keeps it); only a guest without an agent gets the configuration profile through lockdown's stock
     /// MCInstall service (lockdown-mcinstall, a child process like lockdown-tz), once: an installed
@@ -357,7 +358,8 @@ struct DeviceTools: Sendable {
         // The agent claims its channel shortly after lockdown answers; give it a moment before falling back.
         if await guestAgent.waitAlive(seconds: 15) {
             do {
-                try await guest.trustCertificate(der) { try Self.bundledGuestTool("ittrust") }
+                try await guest.routeThroughProxy(localTool: Self.bundledGuestTool)
+                try await guest.trustCertificate(der, localTool: Self.bundledGuestTool)
                 logEvent("proxy: certificate trusted through the guest agent")
                 return .ready
             } catch is CancellationError { throw CancellationError() }

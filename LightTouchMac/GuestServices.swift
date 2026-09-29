@@ -293,31 +293,46 @@ nonisolated struct GuestServices: Sendable {
     /// or the app's uploaded to /tmp for the one run. Idempotent; the store
     /// keeps it across boots, so nothing asks twice. ittrust adapts at runtime
     /// (dlopen), one source for both arches.
-    func trustCertificate(_ der: Data, localTool: () throws -> Data) async throws {
-        let id = UUID().uuidString
-        let cert = "/tmp/ltm-ca-\(id).der"
-        var temporary = [cert]
-        do {
-            try await agent.put(cert, mode: 0o644, der)
-            var output: Data?
-            if packaged {
-                do { output = try await agent.spawn(["\(Self.packageBin)/ittrust", "add", cert]) }
-                catch let error as GuestAgentError where error.status == GuestAgentError.notFound { output = nil }
-            }
-            if output == nil {
-                let executable = "/tmp/ltm-ittrust-\(id)"
-                try await agent.put(executable, mode: 0o755, try localTool())
-                temporary.append(executable)
-                output = try await agent.spawn([executable, "add", cert])
-            }
-            for path in temporary { try? await agent.unlink(path) }
-            guard String(decoding: output ?? Data(), as: UTF8.self).contains("Guest trust add: 0") else {
-                throw DeviceToolsError.failed("The device did not accept the certificate: \(String(decoding: output ?? Data(), as: UTF8.self))")
-            }
-        } catch {
-            for path in temporary { try? await agent.unlink(path) }
-            throw error
+    func trustCertificate(_ der: Data, localTool: (String) throws -> Data) async throws {
+        let cert = "/tmp/ltm-ca-\(UUID().uuidString).der"
+        try await agent.put(cert, mode: 0o644, der)
+        let output: String
+        do { output = try await runTool("ittrust", ["add", cert], localTool: localTool) }
+        catch { try? await agent.unlink(cert); throw error }
+        try? await agent.unlink(cert)
+        guard output.contains("Guest trust add: 0") else {
+            throw DeviceToolsError.failed("The device did not accept the certificate: \(output)")
         }
+    }
+
+    /// The image's baked PAC (/usr/local/share/ltm/proxy.pac: every request to the itwebproxy guestfwd,
+    /// DIRECT as fallback) routes the guest through the proxy. An image without it (the legacy iPod
+    /// image) goes straight out through slirp, so the trusted CA never sees a request: itproxy points
+    /// the Wi-Fi service's HTTP and HTTPS proxies at the guestfwd through configd (idempotent; it keeps
+    /// a backup of the keys it owns). The host's "off" mode passes those connections straight through.
+    func routeThroughProxy(localTool: (String) throws -> Data) async throws {
+        guard try await agent.get(Self.proxyPAC) == nil else { return }
+        let output = try await runTool("itproxy", ["on"], localTool: localTool)
+        guard output.contains("Proxy enabled") else {
+            throw DeviceToolsError.failed("The device did not accept the proxy setting: \(output)")
+        }
+    }
+
+    static let proxyPAC = "/usr/local/share/ltm/proxy.pac"
+
+    /// A guest tool's output: the package's copy, or the app's uploaded to /tmp for the one run.
+    private func runTool(_ name: String, _ arguments: [String], localTool: (String) throws -> Data) async throws -> String {
+        if packaged {
+            do { return String(decoding: try await agent.spawn(["\(Self.packageBin)/\(name)"] + arguments), as: UTF8.self) }
+            catch let error as GuestAgentError where error.status == GuestAgentError.notFound {}
+        }
+        let executable = "/tmp/ltm-\(name)-\(UUID().uuidString)"
+        try await agent.put(executable, mode: 0o755, try localTool(name))
+        let output: Data
+        do { output = try await agent.spawn([executable] + arguments) }
+        catch { try? await agent.unlink(executable); throw error }
+        try? await agent.unlink(executable)
+        return String(decoding: output, as: UTF8.self)
     }
 
     // MARK: SpringBoard and launchd
