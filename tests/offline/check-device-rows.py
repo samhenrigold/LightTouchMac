@@ -80,10 +80,10 @@ import Foundation
         precondition(r.progressLine == "50% · About 2 min remaining" && r.progressSummary == "50%", r.progressLine ?? "nil")
         // A build that boots its sibling's ramdisk: one job, both IPSWs, one bar.
         r = row(iPad32, job: .downloading(fraction: 0.25, files: 2))
-        precondition(r.progressSummary == "2 IPSWs · 25%" && r.progressLine == "25%" && r.progressDetail == ["2 IPSWs"] && r.progress == 0.25, "\(r.progressDetail)")
-        precondition(r.stateDescription == "Downloading, 2 IPSWs · 25%" && r.primaryTitle == "Cancel", r.stateDescription)
+        precondition(r.progressSummary == "25%" && r.progressLine == "25%" && r.progressDetail == ["2 IPSWs"] && r.progress == 0.25, "\(r.progressDetail)")
+        precondition(r.stateDescription == "Downloading, 25%" && r.primaryTitle == "Cancel", r.stateDescription)
         r = row(iPad32, job: .preparing(.init(step: 2, steps: 5, name: "Decrypting")))
-        precondition(r.stateDescription == "Preparing, Step 2 of 5 · 20%" && allowed(r, canDownload: true) == ["cancel"], r.stateDescription)
+        precondition(r.stateDescription == "Preparing, 20%" && allowed(r, canDownload: true) == ["cancel"], r.stateDescription)
 
         // Overall progress: equal steps without the preparer's seconds, weighted by them with.
         var p = Preparation(step: 6, steps: 7, name: "Sealing the NAND", fraction: 0.5)
@@ -93,14 +93,15 @@ import Foundation
         p.detail = "Booting to seal the flash — 42 s"
         p.remaining = 45
         r = row(iPad32, job: .preparing(p))
-        precondition(r.progressSummary == "Step 6 of 7 · 60%", r.progressSummary ?? "nil")
+        precondition(r.progressSummary == "60%", r.progressSummary ?? "nil")
         // The placeholder shows one plain line; the preparer's step and its words are the bar's tooltip.
         precondition(r.progressLine == "60% · About 50 s remaining", r.progressLine ?? "nil")
         precondition(r.progressDetail == ["Step 6 of 7: Sealing the NAND", "Booting to seal the flash — 42 s"], "\(r.progressDetail)")
         p.step = 7; p.fraction = 1
         precondition(p.overall == 1)
         r = row(iPad32, job: .preparing(.init(name: "Checking the IPSW")))
-        precondition(r.progress == nil && r.progressLine == nil && r.progressDetail == ["Checking the IPSW"] && r.stateDescription == "Preparing, Checking the IPSW")
+        precondition(r.progress == nil && r.progressLine == nil && r.progressDetail == ["Checking the IPSW"] && r.stateDescription == "Preparing…")
+        precondition(r.accessory == .progress(nil, nil), "no fraction yet: the ring spins, no words")
 
         // Time remaining: nothing for the first 5 s or 2 %, then the rate so far.
         precondition(estimatedRemaining(elapsed: 4, from: 0, to: 0.5) == nil && estimatedRemaining(elapsed: 60, from: 0.3, to: 0.31) == nil)
@@ -136,7 +137,8 @@ import Foundation
         // iPod 4.2.1 downloads and prepares like the iPads.
         r = row(iPod4)
         precondition(r.isExperimental && r.primaryAction == .downloadAndPrepare)
-        precondition(r.badge == "Experimental" && row(iPad).badge == nil)
+        precondition(r.badge == nil && r.supportNote == "Experimental" && row(iPad).badge == nil && row(iPad).supportNote == nil,
+                     "Experimental is the tooltip's and VoiceOver's, not a capsule in the row")
         // A developer build: its badge is the beta/GM ordinal.
         let beta3 = entry("k48ap-8C5115c"), gm2 = entry("k48ap-8C134b"), beta1 = entry("n72ap-8A230m")
         precondition(row(beta3).badge == "Beta 3" && row(gm2).badge == "GM 2" && row(beta1).badge == "Beta 1", "\(row(beta1).badge ?? "nil")")
@@ -152,12 +154,26 @@ import Foundation
             guard case .notDownloaded = r.state else { fatalError("\(e.id): \(r.state)") }
             precondition(!r.isDimmed && r.primaryAction == .downloadAndPrepare && r.primaryTitle == "Download & Prepare", e.id)
             precondition(allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"], "\(e.id): \(allowed(r, canDownload: true))")
-            precondition(r.note == "Untested" && r.stateDescription.hasPrefix("Not downloaded"), e.id)
+            precondition(r.note == nil && r.supportNote == "Untested" && r.stateDescription.hasPrefix("Not downloaded"), e.id)
             precondition(row(e, job: .downloading(fraction: 0.5)).state == .downloading(fraction: 0.5), e.id)
             precondition(row(e, instance: id).state == .ready && row(e, instance: id).isStartable, e.id)
         }
         precondition(row(beta1).badge == "Beta 1" && row(entry("n72ap-8B117")).badge == nil, "the badge stays on an offered beta")
         precondition(row(iPad).note == nil && row(iPod4).note == nil, "tested builds carry no note")
+        // The sidebar shows only what differs from the usual (DeviceRow.accessory, what the cell draws).
+        let downloaded = DeviceRow(entry: iPad, instanceID: nil, session: nil, job: nil, failure: nil, downloaded: true)
+        precondition(downloaded.accessory == .none, "Downloaded is the normal state: nothing after the title")
+        precondition(row(iPod).accessory == .none && row(iPad, instance: id).accessory == .none, "built in and ready: nothing")
+        precondition(row(iPad).accessory == .notDownloaded && row(beta1).accessory == .notDownloaded, "not here yet: the download glyph")
+        precondition(row(iPad32, job: .downloading(fraction: 0.425)).accessory == .progress(0.425, "42%"))
+        precondition(row(iPad32, job: .preparing(p)).accessory == .progress(1, "100%"))
+        precondition(row(iPad, instance: id, session: .running).accessory == .running && row(iPad, instance: id, session: .stopping).accessory == .stopping)
+        precondition(row(iPod, instance: id, session: .dead("x")).accessory == .error && row(soon).accessory == .text("Coming soon"))
+        precondition(row(beta).accessory == .text("Requires an IPSW"))
+        let running = row(beta1, instance: id, session: .running)
+        precondition(running.accessory == .running && running.note == nil, "a running untested build: the dot alone, no \"Untested\" beside it")
+        precondition(DeviceRow(entry: iPad, instanceID: id, session: nil, job: nil, failure: nil, preparedWithoutActivation: true).note
+                     == "Prepared without activation")
         // The prepare screen: the catalog note (untested, experimental, a beta's source) is one popover's text,
         // and disk numbers appear only when the volume can't hold the download and the preparation.
         precondition(row(beta1).catalogNote?.hasPrefix("Untested. ") == true && row(iPad).catalogNote == nil, row(beta1).catalogNote ?? "nil")

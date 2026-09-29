@@ -280,14 +280,14 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
 
 // MARK: - Row cell
 
-/// "iOS 3.2.2" with its build in the tooltip, an Experimental / Beta 3 / GM tag, and
-/// the state accessory. VoiceOver reads the version, the tag and the state.
+/// "iOS 3.2.2" with its build in the tooltip, a Beta 3 / GM 1 tag in secondary text, and the
+/// state accessory only when it isn't the usual (DeviceRow.accessory). VoiceOver reads the version,
+/// the tag, the state and how well the build is tested.
 private final class DeviceRowCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("entry")
 
     private let title = NSTextField(labelWithString: "")
     private let badge = NSTextField(labelWithString: "")
-    private var badgeWidth: NSLayoutConstraint!
     private let detail = NSTextField(labelWithString: "")
     private let ring = NSProgressIndicator()
     private let symbol = NSImageView()
@@ -299,13 +299,9 @@ private final class DeviceRowCell: NSTableCellView {
         title.lineBreakMode = .byTruncatingTail
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        badge.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium)
-        badge.textColor = .systemOrange
-        badge.wantsLayer = true
-        badge.layer?.cornerRadius = 4
-        badge.layer?.borderWidth = 1
-        badge.layer?.borderColor = NSColor.systemOrange.cgColor
-        badge.alignment = .center
+        badge.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        badge.textColor = .secondaryLabelColor
+        badge.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
         detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         detail.textColor = .secondaryLabelColor
@@ -323,9 +319,7 @@ private final class DeviceRowCell: NSTableCellView {
         stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
-        badgeWidth = badge.widthAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
-            badgeWidth,
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -339,36 +333,33 @@ private final class DeviceRowCell: NSTableCellView {
     func update(_ row: DeviceRow) {
         title.stringValue = row.title
         title.textColor = row.isDimmed ? .disabledControlTextColor : .labelColor
-        toolTip = (["\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))"] + row.progressDetail + [row.progressLine].compactMap { $0 }).joined(separator: "\n")
+        let size = row.entry.source.bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
+        toolTip = (["\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))",
+                    row.supportNote, row.accessory == .notDownloaded ? size.map { "Not downloaded, \($0)" } ?? "Not downloaded" : nil]
+                   + row.progressDetail + [row.progressLine]).compactMap { $0 }.joined(separator: "\n")
         badge.stringValue = row.badge ?? ""
         badge.isHidden = row.badge == nil
-        badgeWidth.constant = badge.intrinsicContentSize.width + 8
 
         detail.isHidden = true
         ring.isHidden = true
         ring.stopAnimation(nil)
         symbol.isHidden = true
-        switch row.state {
-        case let .notDownloaded(bytes):
-            // An untested build says so here; its size is on the placeholder.
-            show(row.note ?? bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) })
-        case .downloaded: show("Downloaded")
-        case .bundled: show("Built in")
-        case .downloading, .preparing:
-            spin(fraction: row.progress)
-            show(row.progressSummary)
-        case .ready: break
+        switch row.accessory {
+        case .none: break
+        case .notDownloaded: show(symbol: "arrow.down.circle", color: .tertiaryLabelColor, size: 12)
+        case let .progress(fraction, summary):
+            spin(fraction: fraction)
+            show(summary)
         case .running: show(symbol: "circle.fill", color: .systemGreen, size: 8)
         case .stopping: spin(fraction: nil)
         case .error: show(symbol: "exclamationmark.triangle.fill", color: .systemYellow, size: 12)
-        case .unavailable(.comingSoon): show("Coming soon")
-        case .unavailable(.requiresIPSW): show("Requires an IPSW")
+        case let .text(text): show(text)
         }
         if let note = row.note, detail.isHidden { show(note) }
-        // One element per row for VoiceOver: "iOS 3.2.2, Experimental, Running".
+        // One element per row for VoiceOver: "iOS 4.2.1, Beta 1, Running, Untested".
         setAccessibilityElement(true)
         setAccessibilityRole(.cell)
-        setAccessibilityLabel(([row.title] + [row.badge, row.stateDescription, row.note].compactMap { $0 })
+        setAccessibilityLabel(([row.title] + [row.badge, row.stateDescription, row.note, row.supportNote].compactMap { $0 })
             .joined(separator: ", "))
         if case let .error(reason) = row.state { setAccessibilityHelp(reason) } else { setAccessibilityHelp(nil) }
     }

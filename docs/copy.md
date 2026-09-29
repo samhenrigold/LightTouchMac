@@ -42,21 +42,21 @@ The same state has the same words on every surface (sidebar accessory, placehold
 
 | State | Words | Notes |
 |---|---|---|
-| notDownloaded | Not downloaded (, 580 MB) | size only in VoiceOver/row |
-| downloaded | Downloaded | |
-| bundled | Built in | |
-| downloading | Downloading, 43% / Downloading… | placeholder: one line under the bar, “43% · About 1 min remaining”; a build that also fetches its keybag sibling says “2 IPSWs” in the bar’s tooltip |
-| preparing | Preparing, Step 6 of 7 · 48% / Preparing… | placeholder: the same one line; the step and the preparer’s words are the bar’s tooltip |
+| notDownloaded | Not downloaded (, 580 MB) | row: a tertiary download glyph (`arrow.down.circle`), the words and size in its tooltip and VoiceOver |
+| downloaded | Downloaded | VoiceOver only; the row shows nothing (the usual state) |
+| bundled | Built in | VoiceOver only; the row shows nothing |
+| downloading | Downloading, 43% / Downloading… (row: ring and “43%”) | placeholder: one line under the bar, “43% · About 1 min remaining”; a build that also fetches its keybag sibling says “2 IPSWs” in the bar’s tooltip |
+| preparing | Preparing, 48% / Preparing… (row: ring and “48%”) | placeholder: the same one line; the step and the preparer’s words are the bar’s tooltip |
 | ready | Ready | |
 | running | Running | |
 | stopping | Stopping / Stopping… | |
 | error | Error, with the reason below | reason is the failure or stop text |
 | comingSoon | Coming soon | |
-| untested (note) | Untested (row, instead of the size) / “Untested.” before the catalog note in the placeholder’s info popover (ⓘ beside the version) | not a state: an untested build downloads and prepares like any other |
+| untested (note) | Untested (row tooltip and VoiceOver, never drawn in the row) / “Untested.” before the catalog note in the placeholder’s info popover (ⓘ beside the version) | not a state: an untested build downloads and prepares like any other |
 | requiresIPSW | Requires an IPSW | |
-| experimental (tag) | Experimental | placeholder: “Experimental.” and the catalog `status_note` in the info popover |
+| experimental (tag) | Experimental | row tooltip and VoiceOver, no capsule; placeholder: “Experimental.” and the catalog `status_note` in the info popover |
 | prepared without activation (note) | Prepared without activation | |
-| beta / GM (tag) | Beta 1, Beta 3, GM 1, GM 2 | always numbered |
+| beta / GM (tag) | Beta 1, Beta 3, GM 1, GM 2 | always numbered; secondary text after the version, no capsule |
 
 ### Status line (`EmulatorController.statusLine`, window subtitle and dead overlay)
 

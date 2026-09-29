@@ -119,8 +119,10 @@ nonisolated struct DeviceRow: Equatable, Sendable {
 
     var title: String { "iOS \(entry.version)" }
     var isExperimental: Bool { entry.status == .experimental }
-    /// The tag beside the title: a developer build's "Beta 3"/"GM", else "Experimental" for that status.
-    var badge: String? { entry.prereleaseBadge ?? (isExperimental ? "Experimental" : nil) }
+    /// The tag beside the title, in secondary text: a developer build's "Beta 3"/"GM 1". How well a build is
+    /// tested isn't the row's to shout: that is `supportNote`, in the tooltip, VoiceOver and the placeholder's popover.
+    var badge: String? { entry.prereleaseBadge }
+    var supportNote: String? { entry.status == .untested ? "Untested" : isExperimental ? "Experimental" : nil }
     var isStartable: Bool { instanceID != nil }
     var isDimmed: Bool { if case .unavailable = state { true } else { false } }
     var isError: Bool { if case .error = state { true } else { false } }
@@ -133,13 +135,26 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
     }
 
-    /// The sidebar's words beside the ring: "43%", "Step 6 of 7 · 48%".
-    var progressSummary: String? {
-        let percent = progress.map { "\(Int(($0 * 100).rounded(.down)))%" }
+    /// The sidebar's words beside the ring: "43%"; nil while there is no fraction yet (the ring spins).
+    var progressSummary: String? { progress.map { "\(Int(($0 * 100).rounded(.down)))%" } }
+
+    /// What the sidebar shows after the title. Only what differs from the usual: a downloaded, built-in or
+    /// ready build shows nothing; one that isn't here yet shows a download glyph (its size is in VoiceOver).
+    enum Accessory: Equatable, Sendable {
+        case none, notDownloaded, running, stopping, error
+        case progress(Double?, String?)
+        case text(String)
+    }
+    var accessory: Accessory {
         switch state {
-        case let .downloading(_, _, files): return files > 1 ? "\(files) IPSWs" + (percent.map { " · \($0)" } ?? "") : percent
-        case let .preparing(p): return p.steps > 0 ? "Step \(p.step) of \(p.steps)" + (percent.map { " · \($0)" } ?? "") : p.name
-        default: return nil
+        case .notDownloaded: .notDownloaded
+        case .downloaded, .bundled, .ready: .none
+        case .downloading, .preparing: .progress(progress, progressSummary)
+        case .running: .running
+        case .stopping: .stopping
+        case .error: .error
+        case .unavailable(.comingSoon): .text("Coming soon")
+        case .unavailable(.requiresIPSW): .text("Requires an IPSW")
         }
     }
 
@@ -232,11 +247,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
     }
 
-    /// The row's note, when there is one: an untested build (downloadable and preparable like any
-    /// other, never run through the matrix) says so.
-    var note: String? {
-        preparedWithoutActivation && instanceID != nil ? "Prepared without activation" : entry.status == .untested ? "Untested" : nil
-    }
+    /// The row's note beside a quiet accessory: a device prepared without activation says so.
+    var note: String? { preparedWithoutActivation && instanceID != nil ? "Prepared without activation" : nil }
 
     /// The accessory's words: what VoiceOver reads after the version.
     var stateDescription: String {
@@ -245,8 +257,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
             bytes.map { "Not downloaded, " + ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Not downloaded"
         case .downloaded: "Downloaded"
         case .bundled: "Built in"
-        case .downloading: "Downloading, " + (progressSummary ?? "")
-        case .preparing: "Preparing, " + (progressSummary ?? "")
+        case .downloading: "Downloading" + (progressSummary.map { ", " + $0 } ?? "…")
+        case .preparing: "Preparing" + (progressSummary.map { ", " + $0 } ?? "…")
         case .ready: "Ready"
         case .running: "Running"
         case .stopping: "Stopping"
