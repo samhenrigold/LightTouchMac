@@ -306,6 +306,13 @@ GL counters are skipped until qemu-ios gl-coverage merges. Last write {datetime.
 | Entry | iOS | Keys | Prepare | Lit | Lockdown | Activation | AFC | Install | Package | GL | Persist | Shutdown | Restore | First failure |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 {chr(10).join(rows)}
+
+## Triage
+
+(a) a generic pipeline/emulator fix, (b) per-build data for the catalog entry, (c) real emulator or guest-tool work.
+Set with `tests/matrix.py --triage ENTRY "text"`.
+
+{chr(10).join(f"- **{eid}**: {results[eid]['triage']}" for eid in sorted(results, key=lambda k: order.get(k, 999)) if results[eid].get("triage")) or "(none yet)"}
 """)
 
 
@@ -338,7 +345,14 @@ def main():
     ap.add_argument("--prepare-timeout", type=int, default=1800)
     ap.add_argument("--boot-timeout", type=int, default=1200)
     ap.add_argument("--build-only", action="store_true", help="build the driver, helper and firmwarekit, then exit")
+    ap.add_argument("--triage", nargs=2, metavar=("ENTRY", "TEXT"), help="record a triage note for an entry's result and exit")
     a = ap.parse_args()
+    if a.triage:
+        catalog = json.loads(CATALOG.read_text())
+        results = json.loads(RESULTS_JSON.read_text())
+        results[a.triage[0]]["triage"] = a.triage[1]
+        RESULTS_JSON.write_text(json.dumps(results, indent=1) + "\n")
+        return write_md(results, catalog)
     if not a.guest_tools or not a.guest_tools.is_dir():
         ap.error("--guest-tools DIR (or LTM_GUEST_TOOLS_DIR) is required")
     if not a.dylib or not a.dylib.exists():
