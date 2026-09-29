@@ -73,6 +73,15 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 | F2 VideoToolbox boundary spike — **done 2026-09-28, verdict: ffmpeg stays.** H.264: the guest submits one slice per job with no last-slice marker, so picture completion is only knowable by parsing residuals (libavcodec chunk mode does that); single-slice CAVLC now decodes natively on VideoToolbox (byte-exact), libavcodec only for multi-slice. AAC/MP3/ALAC: the guest DMA is an unframed byte stream; AudioToolbox needs packet boundaries, which only a decoder can find. | done | test_h264_native (VT byte-exact), test_h264_slices/reader |
 | F3 Web proxy in the app on URLSession (system trust store, HTTP/2, cache); guest keeps the PAC redirect only | 2 | check-web-proxy-forwarding; Proxy-compatibility set |
 
+## Track G: iPhone OS 1.x/2.x graphics (docs/sweep/gpu-1x-2x.md)
+
+| Item | Effort | Gate |
+|---|---|---|
+| G1 2.x keeps software compositing (Apple's own CPU renderer via CA_ENABLE_MBX2D=0; 24–50 fps measured, full fidelity, planar-YUV video goes to the LCD plane) — record in the ledger; measure video on the plane path | 0.5 | ledger row + a video measurement |
+| G2 2.x GL front end for apps: `mkold.py --legacy` turns rebase opcodes into classic relocations (prereq); `gles2x.c` exports the firmware's own gl*/egl*/EAGL names over the same mbxshim core and gles-names.h wire; replaces OpenGLES.framework's binary via an n72-ios2 hook; first App Store game on screen, then compatibility | 5–8 | a 2.x game renders through the host with zero refusals; 5F138/5H11 boot+gles; 3.x/4.x unchanged |
+| G3 1.x ships with LK_ENABLE_MBX2D=0 (software compositing); test Cover Flow + video on the first 4B1 boot | 0 | 1G milestone screenshots |
+| G4 Optional MBX 2D API shim (~40 exports, 5 draw ops hoisted to host 2D blits) only if 1.x/2.x Cover Flow or video is wrong; never a hardware MBX model | 5–8 | Cover Flow + video on 4B1 and 5F138 |
+
 ## Track D: emulator consolidation (after gl-coverage and usb-alert merge; ~10 d)
 
 | Item | Effort | Gate |
