@@ -18,6 +18,8 @@ enum Fixtures {
     static let rootfs: [String: (image: URL, raw: Bool, cache: String)] = [
         "7B500": (files.appendingPathComponent("ipad1/7B500/dec/rootfs.dmg"), false, "dyld_shared_cache_armv7"),
         "8C148": (files.appendingPathComponent("ipad1/repro-8C148/dec/rootfs.dmg"), false, "dyld_shared_cache_armv7"),
+        "9B206": (files.appendingPathComponent("ipad1/repro/cache/ad9b607439250f2337fe132890dadc4c487beca8/rootfs.dmg"), false,
+                  "dyld_shared_cache_armv7"),
         "7E18": (files.appendingPathComponent("ipod-ipsw/scratch/stock-7E18.img"), true, "dyld_shared_cache_armv6"),
         "8C148-ipod": (files.appendingPathComponent("ipod-ipsw/cache/b9efddc7bb4350c237a8d3846af61bbfc8a2f647/rootfs.dmg"), false,
                        "dyld_shared_cache_armv6"),

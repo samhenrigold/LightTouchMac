@@ -42,6 +42,23 @@ struct BuildIdentityTests {
         #expect(throws: FirmwareError.self) { try r.verify(against: Oracle.entry("k48ap-7B367")) }
     }
 
+    /// iOS 5.1.1: the Erase identity's components, the Update identity's ramdisk as UpdateRamDisk (the keybag
+    /// one-shot's own, no sibling), and a catalog key for every component the k48 recipe decrypts.
+    static let ios5 = Oracle.path("Developer/qemu-ios-files/ios5-spike/iPad1,1_5.1.1_9B206_Restore.ipsw")
+
+    @Test(.enabled(if: Oracle.exists(ios5))) func buildManifestComponentsOn5x() throws {
+        let ipsw = IPSWArchive(Self.ios5)
+        let c = try BuildComponents.load(ipsw), e = try Oracle.entry("k48ap-9B206")
+        #expect(c["KernelCache"] == "kernelcache.release.k48" && c["OS"] == "038-4291-006.dmg")
+        #expect(c["RestoreRamDisk"] == "038-4361-021.dmg" && c["UpdateRamDisk"] == "038-4304-027.dmg")
+        #expect(c["RecoveryMode"] == "Firmware/all_flash/all_flash.k48ap.production/recoverymode~ipad.s5l8930x.img3")
+        for n in ["KernelCache", "OS", "RestoreRamDisk", "UpdateRamDisk", "iBoot", "LLB", "DeviceTree"] {
+            #expect(throws: Never.self) { try e.key(forPath: c[n]!) }
+        }
+        #expect(e.recipe?.keybagRamdiskFrom == nil && e.recipe?.options["appsync"] == false)
+        try RestoreInfo(ipsw).verify(against: e)
+    }
+
     @Test(.enabled(if: ios2.available)) func restorePlistFallbackOn2x() throws {
         let ipsw = IPSWArchive(Self.ios2.ipsw)
         #expect(try !ipsw.contains("BuildManifest.plist"))

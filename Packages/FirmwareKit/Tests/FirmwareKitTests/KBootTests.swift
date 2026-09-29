@@ -11,7 +11,8 @@ struct KBootTests {
         DeviceTree.Value.le([UInt32(props.count), UInt32(children.count)]) + props.map { prop($0, $1) }.reduce(Data(), +) + children.reduce(Data(), +)
     }
     static func z(_ n: Int) -> Data { Data(count: n) }
-    static let dtBlob = node([("name", Data("device-tree\0".utf8))] + ["platform-name", "model-number", "region-info", "serial-number", "mlb-serial-number"].map { ($0, z(32)) }, [
+    static let dtBlob = deviceTree()
+    static func deviceTree(armIO extra: [Data] = []) -> Data { node([("name", Data("device-tree\0".utf8))] + ["platform-name", "model-number", "region-info", "serial-number", "mlb-serial-number"].map { ($0, z(32)) }, [
         node([("name", Data("chosen\0".utf8)), ("firmware-version", z(256)), ("root-matching", z(256)), ("unique-chip-id", z(8)), ("die-id", z(8))]
              + ["debug-enabled", "production-cert", "secure-boot", "gid-aes-key", "uid-aes-key", "system-trusted",
                 "board-id", "chip-id", "display-rotation", "display-scale"].map { ($0, z(4)) },
@@ -19,10 +20,10 @@ struct KBootTests {
         node([("name", Data("cpus\0".utf8))], [node([("name", Data("cpu0\0".utf8))] + ["clock-frequency", "memory-frequency", "bus-frequency",
              "peripheral-frequency", "fixed-frequency", "timebase-frequency"].map { ($0, z(4)) })]),
         node([("name", Data("arm-io\0".utf8)), ("clock-frequencies", z(256)), ("usbphy-frequency", z(4))],
-             [node([("name", Data("usb-complex\0".utf8))], [node([("name", Data("usb-ehci\0".utf8))])])]),
+             [node([("name", Data("usb-complex\0".utf8))], [node([("name", Data("usb-ehci\0".utf8))])])] + extra),
         node([("name", Data("pram\0".utf8)), ("reg", z(8))]),
         node([("name", Data("vram\0".utf8)), ("reg", z(8))]),
-    ])
+    ]) }
     static let placeholder = UnitIdentity(fields: [
         ("serial-number", .string("EMU000000000")), ("mlb-serial-number", .string("EMU0000000000")),
         ("unique-chip-id", .string("0x0000000001")), ("die-id", .list(["0x0", "0x0"])),
@@ -75,6 +76,21 @@ struct KBootTests {
         let dtr = try DeviceTree(imgr.image[0x7000..<0x7000 + Self.dtBlob.count + 36])
         #expect(dtr.value("chosen/memory-map", "RAMDisk") == DeviceTree.Value.le([0x4000_5000, UInt32(rd.count)]))
         #expect(dtr.value("chosen", "root-matching")?.prefix(4) == Data(count: 4))
+    }
+
+    /// ipad1_kboot.fill_dt's NAND geometry: every key a node has, on flash-controller0 (iBoot-1219, 5.x: with
+    /// ce-bitmap, which AppleIOPFMI-49 spins on when empty) and on its disk child (4.x).
+    @Test func nandGeometryOn5xNodes() throws {
+        let blob = Self.deviceTree(armIO: [Self.node([("name", Data("flash-controller0\0".utf8)), ("#ce", Self.z(4)), ("ce-bitmap", Self.z(4))],
+                                                     [Self.node([("name", Data("disk\0".utf8)), ("#ce", Self.z(4)), ("#databus", Self.z(4))])])])
+        let img = try KBoot.build(kernel: Self.kernel(at: 0x8000_0000), deviceTree: blob, identity: Self.placeholder)
+        let r0 = Int(img.bootArgsPA - img.loadPA), vbase = Self.u32(img.image, r0 + 4)
+        let dtp = Int(Self.u32(img.image, r0 + 0x30) - vbase), dtlen = Int(Self.u32(img.image, r0 + 0x34))
+        let built = try DeviceTree(img.image[dtp..<dtp + dtlen])
+        let w = { (p: String, k: String) in built.value(p, k).map { Self.u32($0, 0) } }
+        #expect(w("arm-io/flash-controller0", "ce-bitmap") == 0x0F0F && w("arm-io/flash-controller0", "#ce") == 8)
+        #expect(w("arm-io/flash-controller0/disk", "#ce") == 8 && w("arm-io/flash-controller0/disk", "#databus") == 2)
+        #expect(built.value("arm-io/flash-controller0/disk", "ce-bitmap") == nil)
     }
 
     @Test func deviceTreeEdits() throws {

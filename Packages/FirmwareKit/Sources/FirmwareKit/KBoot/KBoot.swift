@@ -46,7 +46,12 @@ public enum KBoot {
         ("read-cycle-ns", 25), ("read-setup-ns", 10), ("read-hold-ns", 10), ("read-delay-ns", 20),
         ("read-valid-ns", 20), ("write-cycle-ns", 25), ("write-hold-ns", 10),
         ("meta-per-logical-page", 12), ("valid-meta-per-logical-page", 10), ("logical-page-size", 4096), ("ppn-device", 0),
+        // iBoot-1219 (5.x): the populated CEs numbered across the buses (bus b's at 8b + n); AppleIOPFMI-49's
+        // _fmiInitVirtToPhysMap loops forever on an empty one. 4 CEs on each of 2 buses.
+        ("ce-bitmap", 0x0F0F),
     ]
+    /// The nodes the geometry goes in: iBoot-1219 DTs carry it on flash-controller0 itself as well as on its disk.
+    static let nandNodes = ["arm-io/flash-controller0", "arm-io/flash-controller0/disk"]
     static let model = [("model-number", "MB292"), ("region-info", "LL/A")]
 
     public struct Segment: Equatable, Sendable {
@@ -138,8 +143,9 @@ public enum KBoot {
             for (k, v) in [("compatible", "none"), ("device_type", "none"), ("name", "nobb")] { try dt.set("baseband", k, .string(v)) }
         }
         if dt.props["arm-io"]?["chip-revision"] != nil { try dt.set("arm-io", "chip-revision", .u32(0x11)) }
-        if let disk = dt.props["arm-io/flash-controller0/disk"] {
-            for (k, v) in nand where disk[k] != nil { try dt.set("arm-io/flash-controller0/disk", k, .u32(v)) }
+        for node in nandNodes {
+            guard let props = dt.props[node] else { continue }
+            for (k, v) in nand where props[k] != nil { try dt.set(node, k, .u32(v)) }
         }
         try dt.set("pram", "reg", .words([pramPA, pramSize]))
         try dt.set("vram", "reg", .words([vramPA, vramSize]))

@@ -338,8 +338,9 @@ public enum K48NAND {
     /// The NAND-signature epoch this kernel's FIL wants (nSig's low byte, '0' + epoch). IOFlashStorage-410.4 (4.3.5)
     /// wants 2 and parks a '1' store in "AppleNANDLegacyFTL: epoch roll wait" until a restore rolls it; 410.3
     /// (4.3.0) and earlier have no such getter and take '1'. Read off the getter's own shape in the FIL,
-    /// `ldr r3, [pc, #imm]; blx r3; adds r0, #0x30; uxtb r0, r0; pop {r7, pc}`, whose literal names `movs r0, #N;
-    /// bx lr` (8F190 -> 1, 8L1 -> 2; the iOS 5 kernels have another shape and get 1).
+    /// `ldr rN, [pc, #imm]; blx rN; adds r0, #0x30; uxtb r0, r0; pop {r7, pc}` (r3 on 4.3.5, r0 on the 5.0 betas),
+    /// whose literal names `movs r0, #N; bx lr` (8F190 -> 1, 8L1 -> 2, 9A5288d -> 2; 5.0 GM on have no such getter
+    /// and take 1).
     public static func signatureEpoch(kernelcache: URL) throws -> UInt8 {
         let d = try Data(contentsOf: kernelcache, options: .alwaysMapped)
         let m = try MachO(d)
@@ -348,7 +349,8 @@ public enum K48NAND {
         while let r = d.range(of: shape, in: from..<d.count) {
             let i = r.lowerBound
             from = i + 1
-            guard i >= 4, d[i - 3] == 0x4B, d[i - 2] == 0x98, d[i - 1] == 0x47 else { continue }   // ldr r3, [pc, #imm]; blx r3
+            // ldr rN, [pc, #imm] (0x48 | N); blx rN (0x47, 0x80 | N << 3), N a low register
+            guard i >= 4, d[i - 3] & 0xF8 == 0x48, d[i - 2] == 0x80 | (d[i - 3] & 7) << 3, d[i - 1] == 0x47 else { continue }
             let pool = ((i - 4) & ~3) + 4 + Int(d[i - 4]) * 4
             guard pool + 4 <= d.count else { continue }
             let target = MachO.u32(d, pool) & ~1

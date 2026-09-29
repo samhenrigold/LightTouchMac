@@ -92,14 +92,29 @@ struct SingleConfig: Decodable {
             let r = d.process.status?.guestPackage
             emit("guestPackage", ["device": d.name, "generation": generation, "serial": r?.serial ?? -1, "result": r?.result ?? -99])
         }
-        if !ipad {   // wake: the display may have slept while it booted
+        func home() async {
             d.process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))
             d.process.link.send(.button(0, down: false))
         }
+        if !ipad { await home() }   // wake: the display may have slept while it booted
         try? await Task.sleep(for: .seconds(3))
+        // an iPad's lock screen turns the panel off ~10 s after it appears; Home wakes it
+        for _ in 0..<3 where ipad && (d.brightness() ?? 1) < 0.05 {
+            await home()
+            try? await Task.sleep(for: .seconds(2))
+        }
         d.screenshot(generation == 1 ? "lock" : "lock\(generation)")
         if ipad { await d.drag(0.9365, 0.621, 0.9365, 0.0612) } else { await d.drag(0.18, 0.9, 0.92, 0.9) }
         try? await Task.sleep(for: .seconds(5))
+        // A fresh 5.x iPad slides into the Setup Assistant instead of the home screen: walk it as a user would.
+        if ipad, offered, let front = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost(),
+           front.bundleID == Setup5.bundleID {
+            let (ok, detail) = await Setup5.walk(d)
+            let after = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost().bundleID
+            emit("setup", ["device": d.name, "generation": generation, "ok": ok && after != Setup5.bundleID, "detail": detail,
+                           "frontmost": after ?? ""])
+            try? await Task.sleep(for: .seconds(5))
+        }
         d.screenshot(generation == 1 ? "home" : "home\(generation)")
     }
 
@@ -111,9 +126,13 @@ struct SingleConfig: Decodable {
         else {   // no guest agent (2.x, 3.0): the machine's own hold-power-and-slide sequence
             d.process.link.send(.machine(.powerdown))
         }
-        var confirmed = -1.0
+        var confirmed = -1.0, shots = ipad ? [7.0, 12.0] : []   // the iPad gesture's power-off sheet, then after its drag
         while Date().timeIntervalSince(quit) < 50 {
             if d.process.status?.shutdownConfirmed == true { confirmed = Date().timeIntervalSince(quit); break }
+            if let s = shots.first, Date().timeIntervalSince(quit) >= s {
+                shots.removeFirst()
+                d.screenshot("powerdown\(generation)-\(Int(s))s")
+            }
             try? await Task.sleep(for: .milliseconds(100))
         }
         d.process.terminate()
@@ -228,4 +247,111 @@ struct SingleConfig: Decodable {
     d.serial?.finish()
     emit("done")
     exit(0)
+}
+
+/// iOS 5's Setup Assistant on a fresh iPad, walked as qemu-ios tests/ipad1/regress.py's gles leg walks it (SETUP_5):
+/// framebuffer pixels (1024x768, the panel's landscape scan; portrait top is x 0). A tap counts as answered when
+/// its box changes, or, for an alert's button, once an alert's navy buttons fill ALERT; only those taps are
+/// retried (behind a modal alert a second tap does nothing). When Wi-Fi has not joined by its page, Setup asks
+/// "Continue without Wi-Fi?" and then skips the Apple ID page, so the walk does too (smoke #39).
+@MainActor enum Setup5 {
+    static let bundleID = "com.apple.purplebuddy"
+    typealias Box = (x0: Int, y0: Int, x1: Int, y1: Int)
+    static let title: Box = (20, 150, 65, 620), alert: Box = (548, 255, 605, 515)
+    static let wifiContinue = (575, 450)
+    static let pages: [(String, [(x: Int, y: Int, hold: Double, box: Box)])] = [
+        ("language", [(42, 28, 0.12, title)]),
+        ("country", [(470, 400, 0.12, (95, 150, 1000, 620)), (42, 28, 0.12, title)]),
+        ("location", [(833, 500, 0.12, (765, 150, 860, 620)), (42, 28, 0.12, alert), (585, 315, 0.12, title)]),
+        ("wi-fi", [(42, 28, 0.12, title)]), ("set up", [(42, 28, 0.12, title)]),
+        ("apple id", [(981, 385, 0.2, alert), (585, 450, 0.12, title)]),
+        ("terms", [(1002, 32, 0.12, alert), (565, 315, 0.12, title)]),
+        ("diagnostics", [(242, 500, 0.12, (150, 150, 265, 620)), (42, 28, 0.12, title)]),
+        ("thank you", [(870, 385, 0.12, title)]),
+    ]
+
+    /// The box's BGRA bytes from the newest frame (nil without a 1024x768 frame).
+    static func region(_ d: Device, _ b: Box) -> [UInt8]? {
+        guard let s = d.process.link.frontSurface()?.surface, s.width == 1024, s.height == 768 else { return nil }
+        s.incrementUseCount(); s.lock(options: .readOnly, seed: nil)
+        defer { s.unlock(options: .readOnly, seed: nil); s.decrementUseCount() }
+        var out: [UInt8] = []
+        for y in b.y0..<b.y1 {
+            out += UnsafeRawBufferPointer(start: s.baseAddress + y * s.bytesPerRow + b.x0 * 4, count: (b.x1 - b.x0) * 4)
+        }
+        return out
+    }
+
+    /// An alert is up: over 15% of ALERT's samples navy (blue well above red).
+    static func alertUp(_ d: Device) -> Bool {
+        guard let px = region(d, alert) else { return false }
+        let w = alert.x1 - alert.x0
+        var navy = 0, n = 0
+        for y in stride(from: 0, to: alert.y1 - alert.y0, by: 4) {
+            for x in stride(from: 0, to: w, by: 4) {
+                let i = (y * w + x) * 4, b = Int(px[i]), r = Int(px[i + 2])
+                if b > r + 40 && b > 80 { navy += 1 }
+                n += 1
+            }
+        }
+        return navy * 100 > 15 * n
+    }
+
+    /// The box once it holds still for a second (a page still sliding in under load).
+    static func settled(_ d: Device, _ box: Box, timeout: Double = 20) async -> [UInt8]? {
+        var last = region(d, box)
+        let t0 = Date()
+        while Date().timeIntervalSince(t0) < timeout {
+            try? await Task.sleep(for: .seconds(1))
+            let now = region(d, box)
+            if now == last { break }
+            last = now
+        }
+        return last
+    }
+
+    static func tap(_ d: Device, _ x: Int, _ y: Int, hold: Double = 0.12) async {
+        let nx = Double(x) / 1024, ny = Double(y) / 768
+        d.process.link.send(.touch(slot: 0, phase: 0, x: nx, y: ny))
+        try? await Task.sleep(for: .seconds(hold))
+        d.process.link.send(.touch(slot: 0, phase: 2, x: nx, y: ny))
+    }
+
+    /// From the first Setup page (the driver has already slid "slide to set up"): (walked, detail).
+    static func walk(_ d: Device) async -> (Bool, String) {
+        var skipAppleID = false, walked: [String] = []
+        page: for (name, taps) in pages {
+            if name == "apple id", skipAppleID { continue }
+            if name == "wi-fi" { try? await Task.sleep(for: .seconds(15)) }   // give the join time before Next
+            for (i, t) in taps.enumerated() {
+                _ = await settled(d, title)
+                let isAlert = t.box == alert
+                var ref: [UInt8]?
+                if !isAlert { ref = await settled(d, t.box) }
+                let answered = { isAlert ? alertUp(d) : region(d, t.box) != ref }
+                d.screenshot("setup-\(name.replacingOccurrences(of: " ", with: "-"))-\(i)")
+                var ok = false
+                for _ in 0..<(isAlert ? 3 : 1) where !ok {
+                    await tap(d, t.x, t.y, hold: t.hold)
+                    let t0 = Date()
+                    while Date().timeIntervalSince(t0) < (isAlert ? 20 : 60), !answered() { try? await Task.sleep(for: .seconds(1)) }
+                    ok = answered()
+                }
+                // 5.0 beta 5 has no Terms page: its Agree tap (an empty corner elsewhere) raises no alert
+                if !ok, name == "terms", i == 0 { walked.append("terms (absent)"); continue page }
+                guard ok else { return (false, "the \(name) page did not answer tap \(i + 1) (after \(walked.joined(separator: ", ")))") }
+            }
+            if name == "wi-fi", alertUp(d) {   // "Continue without Wi-Fi?": no join, so no Apple ID page follows
+                let ref = await settled(d, title)
+                await tap(d, wifiContinue.0, wifiContinue.1)
+                let t0 = Date()
+                while Date().timeIntervalSince(t0) < 60, region(d, title) == ref { try? await Task.sleep(for: .seconds(1)) }
+                skipAppleID = true
+                walked.append("wi-fi (not joined: continued without)")
+            } else {
+                walked.append(name)
+            }
+        }
+        return (true, "walked \(walked.joined(separator: ", "))")
+    }
 }
