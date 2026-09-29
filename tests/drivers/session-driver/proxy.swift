@@ -1,5 +1,5 @@
 // The web proxy's certificate, trusted the way the app does it (tests/sessions/check-proxy-trust.py): one prepared
-// base (or the shipping iPod image) booted with itwebproxy on the wifi guestfwd, the CA from `--init-ca`
+// base (or the shipping iPod image) booted with the helper's web proxy on the wifi guestfwd, the CA from WebProxyCA
 // trusted through the guest agent (GuestServices.trustCertificate: the package's ittrust or the app's copy
 // out of the armv6 itpack), never the MCInstall profile screen. Proof: httpget (the guest's own CFNetwork
 // over the proxy) fails before the trust and answers HTTP 200 after; Safari opens the HTTPS page
@@ -12,7 +12,6 @@ struct ProxyConfig: Decodable {
     var board: String   // "ipod" | "ipad"
     /// A firmwarekit base; empty for an iPod: the shipping image (config.ipodNAND).
     var base: String
-    var itwebproxy: String
     /// The app's armv6.itpack: ittrust for a guest whose package lacks it (WebProxySetup.bundledGuestTool).
     var itpack: String
     /// contrib/it-proxy/httpget, built for armv6; optional.
@@ -33,14 +32,12 @@ struct ProxyConfig: Decodable {
     let proxyDir = work.appendingPathComponent("\(p.board)/proxy")
     var routing = WebProxyConfiguration(); routing.mode = .direct
     do { try routing.save(in: proxyDir) } catch { fail("routing: \(error)") }
-    let conf = WebProxyConfiguration.file(in: proxyDir).path
-    let initCA = Process()
-    initCA.executableURL = URL(fileURLWithPath: p.itwebproxy)
-    initCA.arguments = ["--init-ca", conf]
-    do { try initCA.run() } catch { fail("itwebproxy: \(error)") }
-    initCA.waitUntilExit()
-    guard initCA.terminationStatus == 0, let der = try? Data(contentsOf: URL(fileURLWithPath: conf + ".ca.der")) else { fail("--init-ca failed") }
-    d.netdevExtra = WebProxyConfiguration.guestForward(helper: p.itwebproxy, directory: proxyDir)
+    let der: Data
+    do { der = SecCertificateCopyData(try WebProxyCA.prepare(config: WebProxyConfiguration.file(in: proxyDir)).certificate) as Data }
+    catch { fail("proxy CA: \(error)") }
+    let endpoint = WebProxyConfiguration.endpoint(directory: proxyDir)
+    d.webProxy = endpoint
+    d.netdevExtra = WebProxyConfiguration.guestForward(socket: endpoint.socket)
     let cache = GuestAgentCache()
     var agent: GuestAgent { GuestAgent(link: d.process.link, cache: cache) }
     func localTool(_ name: String) throws -> Data {

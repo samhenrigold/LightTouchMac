@@ -27,7 +27,7 @@ DEFAULT_DEVICE = HOME / "Developer/qemu-ios-files/ipod-ipsw/devices/8C148-b"
 def offline():
     s = (ROOT / "LightTouchMac/Device/EmulatorController.swift").read_text()
     a = s.index("    // MARK: - Boot deadline")
-    deadline = s[a:s.index("    /// The guestfwd for itwebproxy", a)]
+    deadline = s[a:s.index("    /// This boot's web proxy", a)]
     deadline = deadline.replace("try? await Task.sleep(for: .seconds(self?.profile.bootBudget ?? 0))",
                                 "try? await Task.sleep(for: .milliseconds(Int((self?.profile.bootBudget ?? 0) * 1000)))")
     a = s.index("    private func helperDied(_ reason: String) {")

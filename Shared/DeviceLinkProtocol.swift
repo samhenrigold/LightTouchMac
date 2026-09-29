@@ -108,6 +108,8 @@ nonisolated struct BootConfig: Codable, Sendable, Equatable {
     var environment: [String: String] = [:]
     /// The -M machine name ("iPod-Touch", "ipad1"). Picks the orphan shutdown.
     var machine: String
+    /// The web proxy the helper serves before QEMU starts (argv's guestfwd connects to its socket).
+    var webProxy: WebProxyEndpoint?
 
     init(argv: [String], environment: [String: String] = [:], machine: String) {
         self.argv = argv
@@ -120,7 +122,15 @@ nonisolated struct BootConfig: Codable, Sendable, Equatable {
         argv = try c.decode([String].self, forKey: .argv)
         environment = try c.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
         machine = try c.decode(String.self, forKey: .machine)
+        webProxy = try c.decodeIfPresent(WebProxyEndpoint.self, forKey: .webProxy)
     }
+}
+
+nonisolated struct WebProxyEndpoint: Codable, Sendable, Equatable {
+    /// The device's web-proxy.conf: routing read per connection; the CA, cache and location beside it.
+    var config: String
+    /// The Unix socket the guestfwd's `nc -U` reaches.
+    var socket: String
 }
 
 nonisolated struct DeviceInfo: Codable, Sendable, Equatable {

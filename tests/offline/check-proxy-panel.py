@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Exercise the real proxy panel's choices and transient status layout, and the
-per-device proxy files (each device's itwebproxy reads its own routing)."""
+per-device proxy files (each device's helper proxy reads its own routing)."""
 from pathlib import Path
 import subprocess, tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[2]
 fixture = r'''import Cocoa
 struct Bundled { static let stateDirectory = URL(fileURLWithPath: NSTemporaryDirectory()) }
+struct WebProxyEndpoint: Equatable { var config: String; var socket: String }
 enum DeviceToolsError: Error { case failed(String) }
 struct DeviceInstance {
  struct Storage { var usbmuxConf: String }
@@ -36,7 +37,10 @@ func descendants(_ view: NSView) -> [NSView] {
   try! saved.save(in: own)
   precondition(WebProxyConfiguration.load(from: own) == saved)
   precondition((try? String(contentsOf: WebProxyConfiguration.file(in: own), encoding: .utf8)) == "archive\n20100101\n")
-  precondition(WebProxyConfiguration.guestForward(helper: "/h", directory: own).contains(WebProxyConfiguration.file(in: own).path))
+  let endpoint = WebProxyConfiguration.endpoint(directory: own)
+  precondition(endpoint.config == WebProxyConfiguration.file(in: own).path && endpoint.socket.utf8.count < 104)
+  precondition(endpoint != WebProxyConfiguration.endpoint(directory: own.appendingPathComponent("other")), "one socket per device")
+  precondition(WebProxyConfiguration.guestForward(socket: "/t/a,b's") == ",guestfwd=tcp:10.0.2.100:3128-cmd:/usr/bin/nc -U '/t/a,,b'\"'\"'s'")
   _ = NSApplication.shared
   for mode in [WebProxyConfiguration.Mode.off, .direct, .archive] {
    let initial = WebProxyConfiguration(mode: mode, archiveDate: "20090909")
