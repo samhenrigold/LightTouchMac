@@ -76,6 +76,10 @@ import Foundation
         precondition(r.progress == 0.425 && r.progressLines == ["42%"], "\(r.progressLines)")
         r = row(iPad32, job: .downloading(fraction: 0.5, remaining: 125))
         precondition(r.progressLines == ["50% · About 2 min remaining"] && r.progressSummary == "50%", "\(r.progressLines)")
+        // A build that boots its sibling's ramdisk: one job, both IPSWs, one bar.
+        r = row(iPad32, job: .downloading(fraction: 0.25, files: 2))
+        precondition(r.progressSummary == "2 IPSWs · 25%" && r.progressLines == ["2 IPSWs", "25%"] && r.progress == 0.25, "\(r.progressLines)")
+        precondition(r.stateDescription == "Downloading, 2 IPSWs · 25%" && r.primaryTitle == "Cancel", r.stateDescription)
         r = row(iPad32, job: .preparing(.init(step: 2, steps: 5, name: "Decrypting")))
         precondition(r.stateDescription == "Preparing, Step 2 of 5 · 20%" && allowed(r, canDownload: true) == ["cancel"], r.stateDescription)
 
@@ -132,8 +136,25 @@ import Foundation
         precondition(r.badge == "Experimental" && row(iPad).badge == nil)
         // A developer build: its badge is the beta/GM ordinal.
         let beta3 = entry("k48ap-8C5115c"), gm2 = entry("k48ap-8C134b"), beta1 = entry("n72ap-8A230m")
-        precondition(row(beta3).badge == "Beta 3" && row(gm2).badge == "GM 2" && row(beta1).badge == "Beta")
-        precondition(row(beta3).state == .unavailable(.untested), "a beta is listed but not offered until the matrix passes it")
+        precondition(row(beta3).badge == "Beta 3" && row(gm2).badge == "GM 2" && row(beta1).badge == "Beta 1", "\(row(beta1).badge ?? "nil")")
+        var unnumbered = beta1
+        unnumbered.prereleaseNumber = nil
+        precondition(row(unnumbered).badge == "Beta 1" && entry("k48ap-8C134").prereleaseBadge == "GM 1", "a first beta/GM without a number is 1")
+
+        // Untested builds (betas from archive.org, releases the matrix hasn't run) download and
+        // prepare like any other, with an Untested note; coming soon stays shut (above).
+        for e in [beta1, beta3, gm2, entry("n72ap-8B117"), entry("k48ap-8G4")] {
+            precondition(e.status == .untested && e.source.url?.scheme == "https", e.id)
+            r = row(e)
+            guard case .notDownloaded = r.state else { fatalError("\(e.id): \(r.state)") }
+            precondition(!r.isDimmed && r.primaryAction == .downloadAndPrepare && r.primaryTitle == "Download & Prepare", e.id)
+            precondition(allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"], "\(e.id): \(allowed(r, canDownload: true))")
+            precondition(r.note == "Untested" && r.stateDescription.hasPrefix("Not downloaded"), e.id)
+            precondition(row(e, job: .downloading(fraction: 0.5)).state == .downloading(fraction: 0.5), e.id)
+            precondition(row(e, instance: id).state == .ready && row(e, instance: id).isStartable, e.id)
+        }
+        precondition(row(beta1).badge == "Beta 1" && row(entry("n72ap-8B117")).badge == nil, "the badge stays on an offered beta")
+        precondition(row(iPad).note == nil && row(iPod4).note == nil, "tested builds carry no note")
         print("PASS: row states, accessories, primary buttons and commands for every catalog status")
     }
 }

@@ -70,6 +70,8 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var productType: String
         var version: String
         var build: String
+        /// Apple's release date ("2010-09-08"), or a developer build's; the listings' primary order.
+        var released: String?
         var status: Status
         var statusNote: String?
         var prerelease: Prerelease?
@@ -86,17 +88,15 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var estimates: Estimates
 
         enum CodingKeys: String, CodingKey {
-            case id, board, version, build, status, source, bundled, keys, recipe, emulator, estimates, prerelease
+            case id, board, version, build, released, status, source, bundled, keys, recipe, emulator, estimates, prerelease
             case productType = "product_type", statusNote = "status_note", prereleaseNumber = "prerelease_number"
         }
 
         var profile: DeviceProfile? { DeviceProfile(boardID: board) }
 
-        /// The sidebar's badge: "Beta", "Beta 3", "GM", "GM 2"; nil for a release.
+        /// The sidebar's badge, always numbered: "Beta 1", "Beta 3", "GM 1", "GM 2"; nil for a release.
         var prereleaseBadge: String? {
-            guard let prerelease else { return nil }
-            let name = prerelease == .beta ? "Beta" : "GM"
-            return prereleaseNumber.map { $0 > 1 ? "\(name) \($0)" : name } ?? name
+            prerelease.map { "\($0 == .beta ? "Beta" : "GM") \(prereleaseNumber ?? 1)" }
         }
     }
 
@@ -108,19 +108,31 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         return catalog.sortedByVersion()
     }
 
-    /// Boards in the order the file introduces them; each board's entries by version ascending
-    /// (2.1.1, 3.1.3, 4.2.1), build as the tiebreak. Every listing (sidebar, settings) shows this order.
+    /// Boards in the order the file introduces them; each board's entries chronologically. By
+    /// version ascending, and within a version its betas, then its GMs (by number), then the
+    /// release (4.1 beta 1–3, then 4.1), build as the last tiebreak; then the entries with a
+    /// `released` date take the dated positions in date order, so a beta of the next version
+    /// that came out before a point release (5.0 beta 1, then 4.3.4) lists where it happened.
+    /// Every listing (sidebar, settings) shows this order.
     func sortedByVersion() -> FirmwareCatalog {
         var boards: [String] = []
         for entry in entries where !boards.contains(entry.board) { boards.append(entry.board) }
-        func key(_ e: Entry) -> ([Int], String) { (e.version.split(separator: ".").map { Int($0) ?? 0 }, e.build) }
-        var sorted = self
-        sorted.entries = entries.sorted {
-            let (a, b) = (boards.firstIndex(of: $0.board)!, boards.firstIndex(of: $1.board)!)
-            if a != b { return a < b }
-            let (ka, kb) = (key($0), key($1))
-            return ka.0 != kb.0 ? ka.0.lexicographicallyPrecedes(kb.0) : ka.1 < kb.1
+        func board(_ e: Entry) -> Int { boards.firstIndex(of: e.board)! }
+        func rank(_ e: Entry) -> (Int, Int) { (e.prerelease.map { $0 == .beta ? 0 : 1 } ?? 2, e.prereleaseNumber ?? 1) }
+        func precedes(_ a: Entry, _ b: Entry) -> Bool {
+            if board(a) != board(b) { return board(a) < board(b) }
+            let (va, vb) = (a.version.split(separator: ".").map { Int($0) ?? 0 }, b.version.split(separator: ".").map { Int($0) ?? 0 })
+            if va != vb { return va.lexicographicallyPrecedes(vb) }
+            return rank(a) != rank(b) ? rank(a) < rank(b) : a.build < b.build
         }
+        var sorted = self
+        sorted.entries = entries.sorted(by: precedes)
+        let slots = sorted.entries.indices.filter { sorted.entries[$0].released != nil }
+        let dated = slots.map { sorted.entries[$0] }.sorted {
+            if board($0) != board($1) { return board($0) < board($1) }
+            return $0.released != $1.released ? $0.released! < $1.released! : precedes($0, $1)
+        }
+        for (slot, entry) in zip(slots, dated) { sorted.entries[slot] = entry }
         return sorted
     }
 

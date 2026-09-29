@@ -132,21 +132,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         do { try NativeLogging.start() }
         catch { logEvent("logging: native output capture unavailable: \(error.localizedDescription)") }
         // State from before the built-in iPod was a prepared device: erased once, or the app quits.
+        // The erase runs off the main actor behind a progress window, which then follows the
+        // built-in device's unpack as a sheet; a launch after a quit midway resumes without asking.
         if let legacy = LegacyState.find(state: Bundled.stateDirectory, applicationSupport: ProcessInfo.processInfo.environment["LTM_STATE_DIR"] == nil
                                             ? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0] : nil) {
-            let alert = NSAlert()
-            alert.messageText = LegacyState.message
-            alert.informativeText = LegacyState.detail
-            alert.addButton(withTitle: "Erase & Continue")
-            alert.addButton(withTitle: "Quit")
-            alert.buttons.first?.hasDestructiveAction = true
-            guard alert.runModal() == .alertFirstButtonReturn else { Self.requestTermination(); return }
-            do { try legacy.erase() } catch {
-                NSAlert(error: error).runModal()
-                Self.requestTermination()
-                return
+            if !legacy.resuming {
+                let alert = NSAlert()
+                alert.messageText = LegacyState.message
+                alert.informativeText = LegacyState.detail
+                alert.addButton(withTitle: "Erase & Continue")
+                alert.addButton(withTitle: "Quit")
+                alert.buttons.first?.hasDestructiveAction = true
+                guard alert.runModal() == .alertFirstButtonReturn else { Self.requestTermination(); return }
             }
+            let progress = MigrationProgress()
+            progress.window.makeKeyAndOrderFront(nil)
+            Task {
+                do { try await legacy.erase() } catch {
+                    progress.window.orderOut(nil)
+                    NSAlert(error: error).runModal()
+                    Self.requestTermination()
+                    return
+                }
+                finishLaunching(progress: progress)
+            }
+            return
         }
+        finishLaunching(progress: nil)
+    }
+
+    /// The rest of the launch, once no legacy state is left. `progress`, from the erase,
+    /// becomes a sheet on the device window that follows the built-in device's unpack.
+    private func finishLaunching(progress: MigrationProgress?) {
         // The network question belongs to the device being started (DeviceSessionHost.start), not to the app.
         let host = DeviceSessionHost()
         Self.sweepStorage()
@@ -163,6 +180,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         self.host = host
         self.windowController = controller
         controller.selectLaunchDevice()
+        if let progress, let window = controller.window {
+            progress.follow(host.catalog.bundledEntry?.id, on: window)
+        }
     }
 
     /// Development runs: LTM_DEV_BASE names a `firmwarekit create` output directory to run as a
@@ -297,5 +317,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // false would select legacy coding, not disable window restoration.
         // LightTouchApplication and each window independently opt out.
         true
+    }
+}
+
+/// "Updating the built-in iPod…": a small window while the legacy erase runs off the main actor,
+/// then a sheet on the device window that follows the built-in device's unpack (FirmwareJobs)
+/// and ends when it is published or fails. The observer holds it until then.
+private final class MigrationProgress {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 80), styleMask: [.titled], backing: .buffered, defer: false)
+    private let bar = NSProgressIndicator()
+    private var observer: (any NSObjectProtocol)?
+
+    init() {
+        window.title = "Light Touch"
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        let label = NSTextField(labelWithString: LegacyState.progressMessage)
+        bar.style = .bar
+        bar.isIndeterminate = true
+        bar.minValue = 0
+        bar.maxValue = 1
+        bar.startAnimation(nil)
+        let stack = NSStackView(views: [label, bar])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        let content = NSView()
+        content.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
+            bar.widthAnchor.constraint(equalToConstant: 320),
+        ])
+        window.contentView = content
+        window.center()
+    }
+
+    /// The erase is done: the bar now follows `entry`'s unpack as a sheet on `parent`, if one is under way.
+    func follow(_ entry: String?, on parent: NSWindow) {
+        window.orderOut(nil)
+        guard let entry, case .preparing? = FirmwareJobs.shared.jobs[entry] else { return }
+        parent.beginSheet(window)
+        observer = NotificationCenter.default.addObserver(forName: FirmwareJobs.didChangeNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { self.update(entry, parent) }
+        }
+        update(entry, parent)
+    }
+
+    private func update(_ entry: String, _ parent: NSWindow) {
+        guard case let .preparing(preparation)? = FirmwareJobs.shared.jobs[entry] else {
+            parent.endSheet(window)
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+            return
+        }
+        if let overall = preparation.overall {
+            bar.isIndeterminate = false
+            bar.doubleValue = overall
+        }
     }
 }

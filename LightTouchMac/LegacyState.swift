@@ -21,6 +21,14 @@ nonisolated struct LegacyState {
 
     static let message = "Light Touch’s built-in iPod has changed format."
     static let detail = "Erase it and continue (apps you’ve saved are kept), or quit."
+    /// The progress sheet's words while the erase and the unpack after it run.
+    static let progressMessage = "Updating the built-in iPod…"
+
+    /// Written when Erase & Continue starts, removed once it has finished: a
+    /// launch that finds it (the app quit midway) carries on without asking again.
+    static func marker(_ state: URL) -> URL { state.appendingPathComponent(".legacy-erase") }
+    /// The user already chose Erase & Continue; this launch finishes it.
+    var resuming: Bool { FileManager.default.fileExists(atPath: Self.marker(state).path) }
 
     /// Whether anything of the old layout is here. `applicationSupport` is
     /// nil for an isolated run (LTM_STATE_DIR), which has no old root.
@@ -47,7 +55,7 @@ nonisolated struct LegacyState {
                   let kind = (json["base"] as? [String: Any])?["kind"] as? String, kind != "prepared" else { continue }
             records.append(id)
         }
-        guard oldRoot != nil || !items.isEmpty || !records.isEmpty else { return nil }
+        guard oldRoot != nil || !items.isEmpty || !records.isEmpty || fm.fileExists(atPath: marker(state).path) else { return nil }
         return LegacyState(state: state, oldRoot: oldRoot, items: items, records: records)
     }
 
@@ -74,10 +82,16 @@ nonisolated struct LegacyState {
     /// Erase & Continue: the .ipa files into the library, the pairing kept
     /// (State/work/usbmuxd-conf), then everything else of the old layout
     /// removed, the old root included. Never a path outside `state` or the
-    /// old root.
-    @MainActor func erase() throws {
+    /// old root. Off the main actor (hashing the IPAs and removing the old
+    /// trees takes a while), and idempotent: a run the app quit in the middle
+    /// of is finished by the next launch (adopted IPAs aren't read again, a
+    /// record goes by rename, whatever is still here is removed).
+    @concurrent func erase() async throws {
         let fm = FileManager.default
-        for directory in ipaDirectories { IPALibrary.adopt(copies: directory) }
+        guard fm.createFile(atPath: Self.marker(state).path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: Self.marker(state).path])
+        }
+        for directory in ipaDirectories { await IPALibrary.adopt(copies: directory) }
         _ = pairing
         for record in records {
             for name in DeviceInstance.perDeviceDefaults { UserDefaults.standard.removeObject(forKey: "\(name).\(record.uuidString)") }
@@ -88,6 +102,7 @@ nonisolated struct LegacyState {
             try DeviceStateStorage.removeTree(item)
         }
         if let oldRoot { try DeviceStateStorage.removeTree(oldRoot) }
+        try fm.removeItem(at: Self.marker(state))
         logEvent("legacy: erased the pre-library state (\(items.count) items, \(records.count) records\(oldRoot == nil ? "" : ", the old root"))")
     }
 }

@@ -28,8 +28,16 @@ import Cocoa
     private var unpacking: Set<String> = []
     /// When each job's current phase started and how far along it was, for time remaining.
     private var starts: [String: (date: Date, fraction: Double)] = [:]
+    /// The IPSWs (sha1s) each downloading job waits for: the entry's own and, for a recipe with
+    /// keybag_ramdisk_from, its sibling's. One job, one bar, weighted by size; prepared when all are here.
+    private var waiting: [String: [String]] = [:]
+    /// Downloads with a live task, and how far each is.
+    private var inFlight: [String: Double] = [:]
+    private let bytes: [String: Int64]
 
-    init(catalog: FirmwareCatalog = .bundled, store: IPSWStore = .shared) {
+    /// `configuration`: tests use an ephemeral session and file URLs.
+    init(catalog: FirmwareCatalog = .bundled, store: IPSWStore = .shared,
+         configuration: URLSessionConfiguration = .background(withIdentifier: FirmwareDownloads.identifier)) {
         self.catalog = catalog
         self.store = store
         // Staging a previous launch left behind is never a device; nor is a
@@ -41,15 +49,23 @@ import Cocoa
         }
         let bytes = Dictionary(catalog.entries.compactMap { e in e.source.sha1.map { ($0, e.source.bytes ?? 0) } },
                                uniquingKeysWith: { a, _ in a })
+        self.bytes = bytes
         // Made at launch so a download the last launch started reports here.
-        downloads = FirmwareDownloads(store: store, expectedBytes: { bytes[$0] }) { [weak self] sha1, event in
+        downloads = FirmwareDownloads(store: store, configuration: configuration, expectedBytes: { bytes[$0] }) { [weak self] sha1, event in
             Task { @MainActor in self?.download(sha1, event) }
         }
+        // ponytail: a resumed download reports under its own entry, so a sibling IPSW the last
+        // launch was fetching for 4.3.x prepares its own entry; persist `waiting` if that matters.
         downloads.active { sha1s in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 for sha1 in sha1s {
-                    if let entry = entry(sha1: sha1), jobs[entry.id] == nil { starts[entry.id] = nil; jobs[entry.id] = .downloading(fraction: 0) }
+                    inFlight[sha1] = inFlight[sha1] ?? 0
+                    if let entry = entry(sha1: sha1), jobs[entry.id] == nil {
+                        starts[entry.id] = nil
+                        waiting[entry.id] = [sha1]
+                        jobs[entry.id] = .downloading(fraction: 0)
+                    }
                 }
             }
         }
@@ -89,15 +105,42 @@ import Cocoa
         guard jobs[entry.id].map({ if case .failed = $0 { true } else { false } }) ?? true else { return }
         if entry.bundled != nil { return prepareBundled(entry) }
         guard let sha1 = entry.source.sha1, !refuseExisting(entry) else { return }
-        if let ipsw = store.existing(sha1) { return prepare(entry, ipsw: ipsw) }
-        guard let url = entry.source.url else { return fail(entry, FirmwareError.unsupported) }
+        // The entry's IPSW and its keybag sibling's (4.3.1–4.3.5 boot 4.3's ramdisk), whichever aren't here yet.
+        let sources = ([entry] + [entry.recipe?.keybagRamdiskFrom.flatMap(catalog.entry(id:))].compactMap { $0 })
+            .filter { $0.source.sha1.flatMap(store.existing) == nil }
+        if sources.isEmpty, let ipsw = store.existing(sha1) { return prepare(entry, ipsw: ipsw) }
+        fetch(entry, sources)
+    }
+
+    /// Downloads `sources`' IPSWs as one job for `entry`, which is prepared once they're all here.
+    /// A download another job already started is shared, not started twice.
+    private func fetch(_ entry: FirmwareCatalog.Entry, _ sources: [FirmwareCatalog.Entry]) {
+        let wanted = sources.compactMap { source in source.source.sha1.flatMap { sha1 in source.source.url.map { (sha1, $0) } } }
+        guard wanted.count == sources.count, !wanted.isEmpty else { return fail(entry, FirmwareError.unsupported) }
         do {
-            // The IPSW, then its preparation, beside every job already under way.
-            try IPSWStore.checkSpace((entry.source.bytes ?? 0) + entry.estimates.peakBytes + inFlightPeakBytes, at: store.downloads)
+            // The IPSWs, then the preparation, beside every job already under way.
+            let size = sources.reduce(0) { $0 + ($1.source.bytes ?? 0) }
+            try IPSWStore.checkSpace(size + entry.estimates.peakBytes + inFlightPeakBytes, at: store.downloads)
             starts[entry.id] = nil
-            jobs[entry.id] = .downloading(fraction: 0)
-            try downloads.start(sha1: sha1, url: url)
-        } catch { fail(entry, error) }
+            waiting[entry.id] = wanted.map(\.0)
+            jobs[entry.id] = .downloading(fraction: downloadFraction(entry.id), files: wanted.count)
+            for (sha1, url) in wanted where inFlight[sha1] == nil {
+                inFlight[sha1] = 0
+                try downloads.start(sha1: sha1, url: url)
+            }
+        } catch {
+            waiting[entry.id] = nil
+            fail(entry, error)
+        }
+    }
+
+    /// How far a job's downloads are together, by their catalog sizes.
+    private func downloadFraction(_ id: String) -> Double {
+        let sha1s = waiting[id] ?? []
+        let weight = { (sha1: String) in Double(max(self.bytes[sha1] ?? 1, 1)) }
+        let total = sha1s.reduce(0) { $0 + weight($1) }
+        let done = sha1s.reduce(0) { $0 + weight($1) * (self.inFlight[$1] ?? (self.store.existing($1) != nil ? 1 : 0)) }
+        return total > 0 ? done / total : 0
     }
 
     /// Hashes, matches in the catalog and clones into State/IPSW, then
@@ -153,7 +196,13 @@ import Cocoa
     func cancel(_ entry: FirmwareCatalog.Entry) {
         guard !unpacking.contains(entry.id) else { return }
         if let job = preparations[entry.id] { job.cancel() }
-        else if case .downloading? = jobs[entry.id], let sha1 = entry.source.sha1 { downloads.cancel(sha1: sha1) }
+        else if let sha1s = waiting.removeValue(forKey: entry.id) {
+            // A download another job still waits for goes on.
+            for sha1 in sha1s where inFlight[sha1] != nil && !waiting.values.contains(where: { $0.contains(sha1) }) {
+                inFlight[sha1] = nil
+                downloads.cancel(sha1: sha1)
+            }
+        }
         jobs[entry.id] = nil
     }
 
@@ -208,17 +257,39 @@ import Cocoa
 
     // MARK: - Steps
 
+    /// One IPSW's event, for every job waiting on it.
     private func download(_ sha1: String, _ event: FirmwareDownloads.Event) {
-        guard let entry = entry(sha1: sha1) else { return }
+        let name = entry(sha1: sha1)?.id ?? sha1
+        let ids = waiting.filter { $0.value.contains(sha1) }.map(\.key).sorted()
         switch event {
         case let .progress(fraction):
-            if case .downloading? = jobs[entry.id] { jobs[entry.id] = .downloading(fraction: fraction, remaining: remaining(entry, fraction)) }
+            guard inFlight[sha1] != nil else { return }
+            inFlight[sha1] = fraction
+            for id in ids {
+                guard let entry = catalog.entry(id: id), case .downloading? = jobs[id], let sha1s = waiting[id] else { continue }
+                let overall = downloadFraction(id)
+                jobs[id] = .downloading(fraction: overall, remaining: remaining(entry, overall), files: sha1s.count)
+            }
         case .resumed: break
-        case let .finished(ipsw):
-            logEvent("firmware: downloaded \(entry.id)")
-            prepare(entry, ipsw: ipsw)
-        case let .failed(error): fail(entry, error)
-        case .cancelled: logEvent("firmware: download of \(entry.id) cancelled and discarded")
+        case .finished:
+            inFlight[sha1] = nil
+            logEvent("firmware: downloaded \(name)")
+            // A job with nothing left to fetch prepares; one still fetching the other IPSW waits.
+            for id in ids {
+                guard let entry = catalog.entry(id: id), let sha1s = waiting[id], sha1s.allSatisfy({ inFlight[$0] == nil }) else { continue }
+                waiting[id] = nil
+                guard let own = entry.source.sha1, let ipsw = store.existing(own) else { fail(entry, FirmwareError.failed("The download of iOS \(entry.version) is missing.")); continue }
+                prepare(entry, ipsw: ipsw)
+            }
+            // Nobody waits (the other IPSW of a job that failed): it stays downloaded.
+            if ids.isEmpty { NotificationCenter.default.post(name: Self.didChangeNotification, object: self) }
+        case let .failed(error):
+            inFlight[sha1] = nil
+            for id in ids {
+                waiting[id] = nil
+                if let entry = catalog.entry(id: id) { fail(entry, error) }
+            }
+        case .cancelled: logEvent("firmware: download of \(name) cancelled and discarded")
         }
     }
 
@@ -233,11 +304,9 @@ import Cocoa
         catch { return fail(entry, error) }
         var sibling: (entry: FirmwareCatalog.Entry, ipsw: URL)?
         if let from = entry.recipe?.keybagRamdiskFrom {
-            // ponytail: the sibling IPSW must already be in the store; queueing its download first is the upgrade
             guard let sib = catalog.entry(id: from), let sha1 = sib.source.sha1 else { return fail(entry, FirmwareError.failed("catalog names no \(from)")) }
-            guard let sibIPSW = store.existing(sha1) else {
-                return fail(entry, FirmwareError.failed("needs the \(sib.profile?.displayName ?? sib.productType) iOS \(sib.version) firmware downloaded first (its restore ramdisk creates this build's keybag)"))
-            }
+            // An imported IPSW whose sibling isn't here yet: that download first, as this entry's job.
+            guard let sibIPSW = store.existing(sha1) else { return fetch(entry, [sib]) }
             sibling = (sib, sibIPSW)
         }
         let request = PreparationJob.Request(

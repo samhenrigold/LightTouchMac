@@ -45,17 +45,18 @@ The same state has the same words on every surface (sidebar accessory, placehold
 | notDownloaded | Not downloaded (, 580 MB) | size only in VoiceOver/row |
 | downloaded | Downloaded | |
 | bundled | Built in | |
-| downloading | Downloading, 43% / Downloading… | |
+| downloading | Downloading, 43% / Downloading… | a build that also fetches its keybag sibling: Downloading, 2 IPSWs · 43% / “2 IPSWs” below the bar |
 | preparing | Preparing, Step 6 of 7 · 48% / Preparing… | step name below the bar |
 | ready | Ready | |
 | running | Running | |
 | stopping | Stopping / Stopping… | |
 | error | Error, with the reason below | reason is the failure or stop text |
 | comingSoon | Coming soon | |
-| untested | Untested | |
+| untested (note) | Untested (row, instead of the size) / “Untested.” before the catalog note (placeholder) | not a state: an untested build downloads and prepares like any other |
 | requiresIPSW | Requires an IPSW | |
 | experimental (tag) | Experimental | catalog `status_note` replaces the placeholder note only when it adds something |
 | prepared without activation (note) | Prepared without activation | |
+| beta / GM (tag) | Beta 1, Beta 3, GM 1, GM 2 | always numbered |
 
 ### Status line (`EmulatorController.statusLine`, window subtitle and dead overlay)
 
@@ -122,6 +123,7 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | not enough space to prepare | Not enough disk space: this needs X, and Y is available. |
 | files changed under a running device | Files of this iPod were changed while it was running. Stop and start it again; unsaved changes may be lost. |
 | older data | This iPod’s data was made with an older system image. |
+| legacy erase and the unpack after it (window, then sheet) | Updating the built-in iPod… |
 
 ### Web proxy (`WebProxyStatus.message`)
 

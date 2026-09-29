@@ -12,7 +12,12 @@ the shipped catalog and a small packed base made with scripts/pack-base.py, in a
   legacy    the old layout (State/device/<nand>-<digest>, active-<nand>.json, nandrw-<key>, a
             legacyBundled record with a retained IPA, work/usbmuxd-conf, State/IPAs) is found;
             erase() keeps the IPAs in the library and the pairing, removes the rest; then the
-            bundled publish seeds the new device with that pairing and removes it from work/
+            bundled publish seeds the new device with that pairing and removes it from work/.
+            With a 160 MB retained IPA and 24,000 old pages (about 260 MB), run twice: legacy-quit
+            exits midway (200 ms in, State/IPAs adopted); the next run
+            resumes without asking (the .legacy-erase marker) and finishes. Both assert a main-
+            actor heartbeat (10 ms ticks, no gap over 250 ms) while erase() runs; a lone marker
+            left by a quit after the last removal resumes and clears
   none      a state dir with only prepared records has no legacy state
 
 Also the catalog's shape: exactly one entry is bundled, and it is the iPod 3.1.3 user_ipsw entry.
@@ -56,8 +61,28 @@ import Foundation
 func expect(_ ok: Bool, _ what: @autoclosure () -> String, line: Int = #line) {
     if !ok { print("FAIL line \(line): \(what())"); exit(1) }
 }
+/// Ticks on the main actor every 10 ms and keeps the longest gap between ticks.
+@MainActor final class Heartbeat {
+    var beats = 0, worst = 0.0
+    var onBeat: () -> Void = {}
+    private var task: Task<Void, Never>?
+    func start() {
+        var last = Date()
+        task = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(10))
+                let now = Date()
+                worst = max(worst, now.timeIntervalSince(last))
+                last = now
+                beats += 1
+                onBeat()
+            }
+        }
+    }
+    func stop() { task?.cancel() }
+}
 @main struct Check {
-@MainActor static func main() throws {
+@MainActor static func main() async throws {
 let fm = FileManager.default
 let args = CommandLine.arguments
 let catalog = try FirmwareCatalog.load(from: URL(fileURLWithPath: args[1]))
@@ -101,14 +126,43 @@ case "fresh":
     expect(!DeviceInstance.all(state: state).filter { $0.firmware == entry.id }.isEmpty, "the row is Ready: a device exists for the entry")
     print("PASS fresh: the built-in iPod is published as a prepared device from its packed base")
 
+case "legacy-quit":
+    // Erase & Continue, then the app quits midway: 200 ms in, once State/IPAs is adopted
+    // (the big retained IPA is hashing, or the old trees are going). The main actor must have kept beating until then.
+    let legacy = LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4]))!
+    expect(!legacy.resuming, "a first run asks")
+    let heart = Heartbeat()
+    heart.onBeat = {
+        guard heart.beats >= 20, IPALibrary.index.values.contains(where: { $0.bundleID == "com.example.shared" }) else { return }
+        expect(fm.fileExists(atPath: LegacyState.marker(state).path) && fm.fileExists(atPath: state.appendingPathComponent("device").path),
+               "marked, and not done yet")
+        expect(heart.worst < 0.25, "the main actor free: worst gap \(heart.worst) s")
+        print("PASS legacy-quit: quit midway (\(heart.beats) heartbeats, worst gap \(Int(heart.worst * 1000)) ms)")
+        exit(0)
+    }
+    heart.start()
+    try await legacy.erase()
+    expect(false, "the erase finished before the quit")
+
 case "legacy":
     let legacy = LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4]))!
+    expect(legacy.resuming, "the launch after the quit resumes without asking")
     expect(legacy.records.count == 1 && legacy.oldRoot != nil, "the legacy record and the old root are found: \(legacy.records) \(String(describing: legacy.oldRoot))")
     let names = Set(legacy.items.map(\.lastPathComponent))
     expect(names.isSuperset(of: ["device", "nandrw-nand-ultimate", "snapshot-nand-ultimate", "IPAs", "app.log", "usbmuxd.pid", "session.env", "AppCache"]), "\(names)")
     expect(!names.contains("Library") && !names.contains("Devices") && !names.contains("work") && !names.contains(".app-lock"), "the library, the devices and the pairing stay: \(names)")
     expect(DeviceInstance.all(state: state).isEmpty, "the legacy record does not decode as a device")
-    try legacy.erase()
+    // A few hundred MB of old pages go without blocking the main actor.
+    let heart = Heartbeat()
+    heart.start()
+    let started = Date()
+    try await legacy.erase()
+    heart.stop()
+    let took = Date().timeIntervalSince(started)
+    expect(took > 0.5 && heart.worst < 0.25 && Double(heart.beats) > took / 0.05,
+           "the main actor kept running: worst gap \(heart.worst) s over \(took) s, \(heart.beats) beats")
+    print("  erase: \(String(format: "%.1f", took)) s off the main actor, worst main-actor gap \(Int(heart.worst * 1000)) ms")
+    expect(!fm.fileExists(atPath: LegacyState.marker(state).path), "the marker goes with the erase")
     for name in ["device", "nandrw-nand-ultimate", "snapshot-nand-ultimate", "IPAs", "app.log", "AppCache", "work/usbmuxd.pid", "work/session.env"] {
         expect(!fm.fileExists(atPath: state.appendingPathComponent(name).path), "\(name) erased")
     }
@@ -120,6 +174,12 @@ case "legacy":
     expect(kept == ["com.example.retained", "com.example.shared", "com.example.old"], "every retained IPA is in the library: \(kept)")
     expect(fm.fileExists(atPath: state.appendingPathComponent("Library/IPAs/index.json").path), "the library index")
     expect(LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4])) == nil, "erased once: nothing legacy left")
+    // A quit after the last removal but before the marker went: the next launch finishes quietly.
+    fm.createFile(atPath: LegacyState.marker(state).path, contents: nil)
+    let leftover = LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4]))
+    expect(leftover?.resuming == true && leftover?.items.isEmpty == true, "a lone marker resumes")
+    try await leftover?.erase()
+    expect(LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4])) == nil, "and then nothing is left")
     let instance = try publishBundled(pairing: fm.fileExists(atPath: pairing.path) ? pairing : nil)
     expect(fm.fileExists(atPath: instance.paths.usbmuxConf.appendingPathComponent("device.plist").path), "the new device is seeded with the pairing")
     expect(!fm.fileExists(atPath: pairing.path), "the pairing left work/")
@@ -197,13 +257,24 @@ def main():
         (state / 'Library/IPAs/index.json').write_text('{}')
         record = str(__import__('uuid').uuid4()).upper()
         (state / f'Devices/{record}/IPAs').mkdir(parents=True)
-        (state / f'Devices/{record}/IPAs/com.example.retained.ipa').write_bytes(b'retained ipa')
+        # A few hundred MB: a retained IPA big enough that hashing it takes a while, and the old
+        # image's and overlay's pages as thousands of small files.
+        with open(state / f'Devices/{record}/IPAs/com.example.retained.ipa', 'wb') as f:
+            for _ in range(160):
+                f.write(os.urandom(1 << 20))
+        page = b'\xff' * 4160
+        for tree, count in ((state / f'device/nand-ultimate-{digest}', 18000), (state / 'nandrw-nand-ultimate', 6000)):
+            for bank in range(4):
+                (tree / f'cs{bank}').mkdir(parents=True, exist_ok=True)
+            for i in range(count):
+                (tree / f'cs{i % 4}/{i + 1}.page').write_bytes(page)
         (state / f'Devices/{record}/device.json').write_text(json.dumps({
             'format': 1, 'id': record, 'name': 'iPod touch', 'board': 'n72ap', 'firmware': 'n72ap-7E18', 'created': '2026-09-01T00:00:00Z',
             'base': {'kind': 'legacyBundled', 'path': f'device/nand-ultimate-{digest}'},
             'storage': {'key': 'nand-ultimate', 'overlay': 'nandrw-nand-ultimate', 'writableNOR': 'nandrw-nand-ultimate/nor.bin',
                         'snapshot': 'snapshot-nand-ultimate', 'usbmuxConf': 'work/usbmuxd-conf'},
             'legacy': {'filesRoot': '/x', 'nand': 'nand-ultimate', 'pointer': 'device/active-nand-ultimate.json'}}))
+        run('legacy-quit', state, support)
         run('legacy', state, support)
 
         prepared = tmp / 'prepared'

@@ -13,9 +13,10 @@ nonisolated enum DeviceAction: CaseIterable, Sendable {
 }
 
 /// A download or preparation in flight for a catalog entry (FirmwareJobs).
-/// `remaining` is the estimated seconds left, nil until there is one.
+/// `remaining` is the estimated seconds left, nil until there is one; `files` is how many
+/// IPSWs the one job fetches (2 for a build that boots its sibling's ramdisk), `fraction` all of them.
 nonisolated enum FirmwareJob: Equatable, Sendable {
-    case downloading(fraction: Double, remaining: TimeInterval? = nil)
+    case downloading(fraction: Double, remaining: TimeInterval? = nil, files: Int = 1)
     case preparing(Preparation)
     case failed(String)
 }
@@ -57,13 +58,13 @@ nonisolated enum SessionPhase: Equatable, Sendable {
 }
 
 nonisolated enum DeviceRowState: Equatable, Sendable {
-    enum Unavailable: Equatable, Sendable { case comingSoon, untested, requiresIPSW }
+    enum Unavailable: Equatable, Sendable { case comingSoon, requiresIPSW }
     case notDownloaded(bytes: Int64?)
     /// Its IPSW is in a store (downloaded or imported), not yet prepared.
     case downloaded
     /// The app ships its prepared base (`entry.bundled`), not yet unpacked.
     case bundled
-    case downloading(fraction: Double, remaining: TimeInterval? = nil)
+    case downloading(fraction: Double, remaining: TimeInterval? = nil, files: Int = 1)
     case preparing(Preparation)
     case ready, running, stopping
     case error(String)
@@ -103,9 +104,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case nil: break
         }
         if entry.status == .comingSoon { return .unavailable(.comingSoon) }
-        if entry.status == .untested { return .unavailable(.untested) }
         switch job {
-        case let .downloading(fraction, remaining)?: return .downloading(fraction: fraction, remaining: remaining)
+        case let .downloading(fraction, remaining, files)?: return .downloading(fraction: fraction, remaining: remaining, files: files)
         case let .preparing(preparation)?: return .preparing(preparation)
         case let .failed(reason)?: return .error(reason)
         case nil: break
@@ -127,7 +127,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     /// A download's or preparation's overall progress; nil while it has no steps yet.
     var progress: Double? {
         switch state {
-        case let .downloading(fraction, _): fraction
+        case let .downloading(fraction, _, _): fraction
         case let .preparing(preparation): preparation.overall
         default: nil
         }
@@ -137,7 +137,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     var progressSummary: String? {
         let percent = progress.map { "\(Int(($0 * 100).rounded(.down)))%" }
         switch state {
-        case .downloading: return percent
+        case let .downloading(_, _, files): return files > 1 ? "\(files) IPSWs" + (percent.map { " · \($0)" } ?? "") : percent
         case let .preparing(p): return p.steps > 0 ? "Step \(p.step) of \(p.steps)" + (percent.map { " · \($0)" } ?? "") : p.name
         default: return nil
         }
@@ -147,8 +147,9 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     var progressLines: [String] {
         let percent = progress.map { "\(Int(($0 * 100).rounded(.down)))%" }
         switch state {
-        case let .downloading(_, remaining):
-            return [[percent, remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")]
+        case let .downloading(_, remaining, files):
+            return [files > 1 ? "\(files) IPSWs" : nil,
+                    [percent, remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")].compactMap { $0 }
         case let .preparing(p) where p.steps > 0:
             return ["Step \(p.step) of \(p.steps): \(p.name)", p.detail,
                     [percent, p.remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")].compactMap { $0 }
@@ -177,7 +178,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case .downloadAndPrepare:
             return (canDownload || state == .bundled) && !isStartable && !working && !isDimmed
         case .importIPSW:
-            return !isStartable && entry.status != .comingSoon && entry.status != .untested && !working
+            return !isStartable && entry.status != .comingSoon && !working
         case .cancel: return !hasSession && working
         case .erase: return instanceID != nil && !working
         case .showInFinder: return instanceID != nil
@@ -193,7 +194,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case .downloading, .preparing: .cancel
         case .error: isStartable ? .start : entry.status == .userIPSW ? .importIPSW : .downloadAndPrepare
         case .unavailable(.requiresIPSW): .importIPSW
-        case .unavailable(.comingSoon), .unavailable(.untested), .running, .stopping: nil
+        case .unavailable(.comingSoon), .running, .stopping: nil
         }
     }
 
@@ -208,8 +209,11 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
     }
 
-    /// The row's note under the state, when there is one.
-    var note: String? { preparedWithoutActivation && instanceID != nil ? "Prepared without activation" : nil }
+    /// The row's note, when there is one: an untested build (downloadable and preparable like any
+    /// other, never run through the matrix) says so.
+    var note: String? {
+        preparedWithoutActivation && instanceID != nil ? "Prepared without activation" : entry.status == .untested ? "Untested" : nil
+    }
 
     /// The accessory's words: what VoiceOver reads after the version.
     var stateDescription: String {
@@ -225,7 +229,6 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case .stopping: "Stopping"
         case .error: "Error"
         case .unavailable(.comingSoon): "Coming soon"
-        case .unavailable(.untested): "Untested"
         case .unavailable(.requiresIPSW): "Requires an IPSW"
         }
     }

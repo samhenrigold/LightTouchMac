@@ -188,15 +188,22 @@ enum IPALibrary {
     }
 
     /// The <bundle-id>.ipa files of a device from the old layout (LegacyState).
-    static func adopt(copies directory: URL) {
-        var index = index
-        let stored = store(copies: directory, into: &index)
+    /// Hashed and cloned off the main actor (hundreds of MB, seconds); the index is written here.
+    static func adopt(copies directory: URL) async {
+        let before = index
+        let (after, stored) = await Task.detached {
+            var index = before
+            let stored = store(copies: directory, into: &index)
+            return (index, stored)
+        }.value
         if stored > 0 { logEvent("library: \(stored) copies kept from \(directory.path)") }
+        var index = index   // what the main actor recorded meanwhile, plus what was stored
+        for (sha256, entry) in after where before[sha256] != entry { index[sha256] = entry }
         if index != self.index { save(index) }
     }
 
     /// Every <bundle-id>.ipa in `directory` the index doesn't list, into the store; how many.
-    private static func store(copies directory: URL, into index: inout [String: Entry]) -> Int {
+    private nonisolated static func store(copies directory: URL, into index: inout [String: Entry]) -> Int {
         let fm = FileManager.default
         var stored = 0
         for name in (try? fm.contentsOfDirectory(atPath: directory.path)) ?? []

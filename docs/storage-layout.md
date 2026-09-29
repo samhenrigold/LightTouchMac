@@ -75,6 +75,15 @@ then unpacked and published with that pairing as its `usbmuxd-conf`, and
 `State/work/usbmuxd-conf` goes. Quit changes nothing. Records the app cannot
 read (a `base.kind` other than `prepared`) are never booted.
 
+The erase runs off the main actor behind a small "Updating the built-in iPod…"
+window, which becomes a sheet on the device window following the unpack
+(determinate) until the device is published. `State/.legacy-erase` is written
+when it starts and removed when it ends; every step is idempotent (adopted IPAs
+aren't read again, records go by rename, whatever remains is removed), so a
+launch that finds the marker (the app quit midway) finishes the erase without
+asking again. An unpack cut short leaves only `Preparing/`, which the launch
+sweep empties before the unpack starts over.
+
 ## Notes
 
 - Ordinary logs use the standard Logs directory with private directory/file
