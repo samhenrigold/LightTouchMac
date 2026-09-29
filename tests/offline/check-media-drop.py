@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Native file-drop acceptance and immediate visibility of non-Store transfers."""
+"""Native file-drop acceptance and immediate visibility of non-Store transfers. The file kinds are
+UI/DroppedFiles.swift, compiled whole; the drag handling is the device screen's (DisplayView)."""
 from pathlib import Path
 import subprocess, tempfile
 
@@ -14,16 +15,13 @@ nonisolated let device = UUID()
 struct DeviceInstance { let id = device }
 @MainActor final class EmulatorController { var canQueueInstall = true; let instance = DeviceInstance() }
 struct CatalogApp: Codable { let id: Int }
-@MainActor final class FirmwareJobs {
- static let shared = FirmwareJobs(); var imported: [String] = []
- func importIPSW(_ url: URL, for entry: Int?) { precondition(entry == nil); imported.append(url.lastPathComponent) }
-}
-enum PreparedMedia { static let extensions: Set<String> = ["png", "jpg", "mp3", "m4a", "mp4", "mov", "m4v"] }
+enum PreparedMedia { nonisolated static let extensions: Set<String> = ["png", "jpg", "mp3", "m4a", "mp4", "mov", "m4v"] }
 extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.catalog.app") }
 @MainActor final class DropView: NSView {
  let emulator: EmulatorController? = EmulatorController()
  var onDropUnsupportedFiles: (([URL]) -> Void)?
  var onDropIPA: ((URL) -> Void)?, onDropMedia: ((URL) -> Void)?, onDropCatalogApp: ((CatalogApp) -> Void)?
+ var onDropIPSW: ((URL) -> Void)?
 ''' + drop + r'''
 }
 @MainActor final class Drag: NSObject, NSDraggingInfo {
@@ -78,7 +76,8 @@ extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.ca
   _ = NSApplication.shared
   let view = DropView(), drag = Drag()
   defer { drag.draggingPasteboard.releaseGlobally() }
-  var apps: [String] = [], media: [String] = [], catalog: [Int] = [], omitted: [String] = []
+  var apps: [String] = [], media: [String] = [], catalog: [Int] = [], omitted: [String] = [], ipsws: [String] = []
+  view.onDropIPSW = { ipsws.append($0.lastPathComponent) }
   view.onDropIPA = { apps.append($0.lastPathComponent) }
   view.onDropMedia = { media.append($0.lastPathComponent) }
   view.onDropCatalogApp = { catalog.append($0.id) }
@@ -101,7 +100,7 @@ extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.ca
   view.emulator!.canQueueInstall = false
   drag.files(["iPad1,1_3.2.2_7B500_Restore.IPSW", "Notes.txt"])
   precondition(view.draggingEntered(drag) == .copy && drag.numberOfValidItemsForDrop == 1)
-  precondition(view.performDragOperation(drag) && FirmwareJobs.shared.imported == ["iPad1,1_3.2.2_7B500_Restore.IPSW"])
+  precondition(view.performDragOperation(drag) && ipsws == ["iPad1,1_3.2.2_7B500_Restore.IPSW"])
   view.emulator!.canQueueInstall = true
   drag.files(["App.ipa"])
   drag.draggingSource = NSTableView()
@@ -140,5 +139,6 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-drop-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
     subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
-                    '-module-cache-path', str(work / 'modules'), str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
+                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/UI/DroppedFiles.swift'),
+                    str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=25)

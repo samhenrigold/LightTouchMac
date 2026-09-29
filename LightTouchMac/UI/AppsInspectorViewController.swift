@@ -1384,9 +1384,7 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
     }
 
     private static func droppedIPAs(_ info: NSDraggingInfo) -> [URL] {
-        guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self])
-                as? [URL] else { return [] }
-        return urls.filter { $0.pathExtension.lowercased() == "ipa" }
+        DroppedFiles.files(info.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] ?? [], .ipa)
     }
 
     func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo,

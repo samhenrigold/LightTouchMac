@@ -169,10 +169,9 @@ import IOSurface
  }
  func send(_ command: LinkCommand) { if case let .touch(_, _, x, y) = command { touches.append((x, y)) } }
 }
-@MainActor final class FirmwareJobs { static let shared = FirmwareJobs(); func importIPSW(_ url: URL, for entry: Int?) {} }
 struct CatalogApp: Decodable {}
 extension NSPasteboard.PasteboardType { static let ltmCatalogApp=Self("test.catalog") }
-enum PreparedMedia { static let extensions: Set<String> = [] }
+enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
 @MainActor final class SleepingAnimationView: NSView {}
 @MainActor final class EmulatorController {
  enum Pose { case flat, upright }
@@ -271,7 +270,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
         raise SystemExit("Set QEMU_SRC to the QEMU source tree for the production accelerometer comparison")
     for name,source,extra in [
         ("model",model_source,[]),
-        ("display",display_source,["UI/DisplayView", "Device/DeviceProfile", "Device/DeviceProfile+Display", "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView"])
+        ("display",display_source,["UI/DisplayView", "Device/DeviceProfile", "Device/DeviceProfile+Display", "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles"])
     ]:
         swift=work/(name+".swift");swift.write_text(source)
         exe=app/"MacOS"/name
