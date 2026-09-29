@@ -1015,7 +1015,7 @@ final class DisplayView: NSView {
     /// A movement in view points expressed in content-layer points, un-rotated
     /// so directions match what the user sees in any orientation.
     private func rotatedPanelDelta(_ dx: CGFloat, _ dy: CGFloat) -> CGVector {
-        let a = -(Self.layerAngle(emulator?.rotationDegrees ?? 0) + tiltAngle)
+        let a = -(Self.layerAngle(emulator?.rotationDegrees ?? 0) + tiltAngle + profile.panelRotation)  // the iPad panel is mounted a quarter turn
         let s = max(appliedScale * (contentLayer.bounds.width / max(framePixels.width, 1)), 0.01)
         let ux = dx / s, uy = dy / s
         return CGVector(dx: ux * cos(a) - uy * sin(a), dy: ux * sin(a) + uy * cos(a))
