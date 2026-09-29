@@ -135,11 +135,10 @@ final class DevicePlaceholderViewController: NSViewController {
         if entry.estimates.peakBytes > 0 { parts.append("\(format(entry.estimates.peakBytes)) free space to prepare") }
         sizes.stringValue = parts.joined(separator: " · ")
         sizes.isHidden = parts.isEmpty || row.isStartable
-        // A developer build's note (source, keys) and its pinned clock; an experimental release's note.
-        let notes = entry.prerelease != nil ? [entry.statusNote, entry.clockNote].compactMap { $0 }
-            : row.isExperimental ? [entry.statusNote ?? "Experimental"] : []
-        note.stringValue = notes.joined(separator: "\n")
-        note.isHidden = notes.isEmpty
+        // A developer build's note (source, keys); an experimental release's note.
+        let text = entry.prerelease != nil ? entry.statusNote : row.isExperimental ? entry.statusNote ?? "Experimental" : nil
+        note.stringValue = text ?? ""
+        note.isHidden = text == nil
     }
 
     /// The bar (moving without a fraction yet) and the row's progress lines.

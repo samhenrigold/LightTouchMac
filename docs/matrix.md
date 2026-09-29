@@ -75,36 +75,35 @@ Third-party: Apple never hosted the betas (8C134b and the iPod 8C134 GM it still
 archive for all of them so one source answers). Keys from The Apple Wiki's `Keys:` pages (the *Vail codenames),
 verified with `firmwarekit verify-keys`. Release dates from the wiki's Beta Firmware tables.
 
-Catalog: `prerelease` (`beta`/`gm`) with `prerelease_number` gives the sidebar its badge ("Beta 3", "GM 2");
-`clock` is a date inside the build's validity window: developer betas of the era refuse to run past their expiry
-(SpringBoard's "This version of iOS has expired"), so the app sets that date over lockdown
-(TimeIntervalSince1970, lockdown-tz) instead of the Mac's clock, once per boot, and later zone syncs pass `keep`.
-The date is the release date + 7 days: the era's expiry windows were 60–90 days (the next beta usually landed inside
-two or three weeks), so a week in is inside every plausible window. GMs carry no clock until a run shows they need one.
+Catalog: `prerelease` (`beta`/`gm`) with `prerelease_number` gives the sidebar its badge ("Beta 3", "GM 2").
+Beta expiry was never observed on iOS 4 betas with the Mac's date (every 4.0/4.1/4.2 beta booted to its home screen
+in 2026, no "This version of iOS has expired"); if an iOS 5 beta refuses to run past its expiry, a per-entry clock
+pin is the planned fix (lockdown-tz already takes an optional epoch; the app would set it instead of the Mac's clock
+once per boot). Sam (2026-09-28): no fussing with the device date unless it is required.
 
-| Device | iOS | Build | Released | SHA-1 | Bytes | Keys | Clock | Catalog status |
-|---|---|---|---|---|---|---|---|---|
-| iPad1,1 | 4.2 beta | 8C5091e | 2010-09-15 | `bb685f022c6267dd77d4ce4c6bff8b60ad84c5d5` | 538,847,283 | 18/18 verified | 2010-09-22 | untested |
-| iPad1,1 | 4.2 beta 2 | 8C5101c | 2010-09-28 | `b9c9c84b312d61a77413e8d71d1231a3d3899b96` | 545,646,316 | 18/18 verified | 2010-10-05 | untested |
-| iPad1,1 | 4.2 beta 3 | 8C5115c | 2010-10-12 | `ff01b907cc170648405224dd72311c9eabc29105` | 576,124,370 | 18/18 verified | 2010-10-19 | untested |
-| iPad1,1 | 4.2 GM | 8C134 | 2010-11-01 | `edc2374ea39a029a943b345c43a8c2f2ab4bb504` | 575,667,008 | 18/18 verified | — | untested |
-| iPad1,1 | 4.2 GM 2 | 8C134b | 2010-11-12 | `57b9bef53d56bfb81c107847b62da97d5fb207ae` | 578,020,841 | 18/18 verified | — | untested |
-| iPad1,1 | 4.3 beta | 8F5148b | 2011-01-12 | `7fb2f13a47282ee22938ccea1b8f6cf762c20da3` | 639,846,333 | 18/18 verified | 2011-01-19 | untested |
-| iPad1,1 | 4.3 beta 2 | 8F5153d | 2011-01-19 | `5624814e59d7a56279df1e19823d228c0b26ad88` | 636,269,961 | 18/18 verified | 2011-01-26 | untested |
-| iPad1,1 | 4.3 beta 3 | 8F5166b | 2011-02-01 | `246e5a2f33f3cd14e97b37003a7c2a1f47aa8bf2` | 624,729,345 | 18/18 verified | 2011-02-08 | untested |
-| iPad1,1 | 5.0 beta | 9A5220p | 2011-06-07 | `006bd8859e534e6cf68d6a72e7c7086dbb675dae` | 702,191,668 | 17/17 verified, wiki lacks UpdateRamDisk | 2011-06-14 | untested |
-| iPad1,1 | 5.0 beta 5 | 9A5288d | 2011-08-06 | `383ec353c779168aa60a1e3110037a81929785e9` | 759,078,534 | 17/17 verified, wiki lacks UpdateRamDisk | 2011-08-13 | untested |
-| iPod2,1 | 4.0 beta | 8A230m | 2010-04-08 | `30ab55a8ad3788af70c8bc3b036adb94fa274836` | 320,899,292 | 18/18 verified, wiki lacks UpdateRamDisk | 2010-04-15 | untested |
-| iPod2,1 | 4.0 beta 2 | 8A248c | 2010-04-20 | `02631ccd3a847a66b870f8f9078c97f801c51f61` | 324,553,033 | 17/17 verified, wiki lacks UpdateRamDisk | 2010-04-27 | untested |
-| iPod2,1 | 4.0 beta 3 | 8A260b | 2010-05-04 | `fd65a731d0764ca6e1fac145d792aa21b787102d` | 330,073,091 | 17/17 verified, wiki lacks UpdateRamDisk | 2010-05-11 | untested |
-| iPod2,1 | 4.0 beta 4 | 8A274b | 2010-05-18 | `e95696a965f16b8cba70a647da73338422653e1b` | 324,314,892 | 17/17 verified, wiki lacks UpdateRamDisk | 2010-05-25 | untested |
-| iPod2,1 | 4.1 beta | 8B5080c | 2010-07-14 | `4a44df7abad161cc5ac3d1a9a54e692b65c5d375` | 343,163,477 | 18/18 verified | 2010-07-21 | untested |
-| iPod2,1 | 4.1 beta 2 | 8B5091b | 2010-07-27 | `01e2bfbbd54558c3a2546234e848da958ec651d5` | 349,571,734 | 18/18 verified | 2010-08-03 | untested |
-| iPod2,1 | 4.1 beta 3 | 8B5097d | 2010-08-03 | `12ebb29c9ff04007b218232a6690ec6830f73c52` | 345,660,363 | 18/18 verified | 2010-08-10 | untested |
-| iPod2,1 | 4.2 beta | 8C5091e | 2010-09-15 | `711597af361f003d5f3d2ec865ada3fb5e2bbb1d` | 363,496,695 | 18/18 verified | 2010-09-22 | untested |
-| iPod2,1 | 4.2 beta 2 | 8C5101c | 2010-09-28 | `ccd8249250491f6b7783c67e71b492e201138aba` | 366,143,810 | 18/18 verified | 2010-10-05 | untested |
-| iPod2,1 | 4.2 beta 3 | 8C5115c | 2010-10-12 | `c1113a43303b99ba2bed9333477df162c6d043e1` | 364,755,569 | 18/18 verified | 2010-10-19 | untested |
-| iPod2,1 | 4.2 GM | 8C134 | 2010-11-01 | `cd4bb233a54f35f765ce12625f00b20ef31a777f` | 363,581,294 | 18/18 verified | — | untested |
+| Device | iOS | Build | Released | SHA-1 | Bytes | Keys | Catalog status |
+|---|---|---|---|---|---|---|---|
+| iPad1,1 | 4.2 beta | 8C5091e | 2010-09-15 | `bb685f022c6267dd77d4ce4c6bff8b60ad84c5d5` | 538,847,283 | 18/18 verified | untested |
+| iPad1,1 | 4.2 beta 2 | 8C5101c | 2010-09-28 | `b9c9c84b312d61a77413e8d71d1231a3d3899b96` | 545,646,316 | 18/18 verified | untested |
+| iPad1,1 | 4.2 beta 3 | 8C5115c | 2010-10-12 | `ff01b907cc170648405224dd72311c9eabc29105` | 576,124,370 | 18/18 verified | untested |
+| iPad1,1 | 4.2 GM | 8C134 | 2010-11-01 | `edc2374ea39a029a943b345c43a8c2f2ab4bb504` | 575,667,008 | 18/18 verified | untested |
+| iPad1,1 | 4.2 GM 2 | 8C134b | 2010-11-12 | `57b9bef53d56bfb81c107847b62da97d5fb207ae` | 578,020,841 | 18/18 verified | untested |
+| iPad1,1 | 4.3 beta | 8F5148b | 2011-01-12 | `7fb2f13a47282ee22938ccea1b8f6cf762c20da3` | 639,846,333 | 18/18 verified | untested |
+| iPad1,1 | 4.3 beta 2 | 8F5153d | 2011-01-19 | `5624814e59d7a56279df1e19823d228c0b26ad88` | 636,269,961 | 18/18 verified | untested |
+| iPad1,1 | 4.3 beta 3 | 8F5166b | 2011-02-01 | `246e5a2f33f3cd14e97b37003a7c2a1f47aa8bf2` | 624,729,345 | 18/18 verified | untested |
+| iPad1,1 | 5.0 beta | 9A5220p | 2011-06-07 | `006bd8859e534e6cf68d6a72e7c7086dbb675dae` | 702,191,668 | 17/17 verified, wiki lacks UpdateRamDisk | untested |
+| iPad1,1 | 5.0 beta 5 | 9A5288d | 2011-08-06 | `383ec353c779168aa60a1e3110037a81929785e9` | 759,078,534 | 17/17 verified, wiki lacks UpdateRamDisk | untested |
+| iPod2,1 | 4.0 beta | 8A230m | 2010-04-08 | `30ab55a8ad3788af70c8bc3b036adb94fa274836` | 320,899,292 | 18/18 verified, wiki lacks UpdateRamDisk | untested |
+| iPod2,1 | 4.0 beta 2 | 8A248c | 2010-04-20 | `02631ccd3a847a66b870f8f9078c97f801c51f61` | 324,553,033 | 17/17 verified, wiki lacks UpdateRamDisk | untested |
+| iPod2,1 | 4.0 beta 3 | 8A260b | 2010-05-04 | `fd65a731d0764ca6e1fac145d792aa21b787102d` | 330,073,091 | 17/17 verified, wiki lacks UpdateRamDisk | untested |
+| iPod2,1 | 4.0 beta 4 | 8A274b | 2010-05-18 | `e95696a965f16b8cba70a647da73338422653e1b` | 324,314,892 | 17/17 verified, wiki lacks UpdateRamDisk | untested |
+| iPod2,1 | 4.1 beta | 8B5080c | 2010-07-14 | `4a44df7abad161cc5ac3d1a9a54e692b65c5d375` | 343,163,477 | 18/18 verified | untested |
+| iPod2,1 | 4.1 beta 2 | 8B5091b | 2010-07-27 | `01e2bfbbd54558c3a2546234e848da958ec651d5` | 349,571,734 | 18/18 verified | untested |
+| iPod2,1 | 4.1 beta 3 | 8B5097d | 2010-08-03 | `12ebb29c9ff04007b218232a6690ec6830f73c52` | 345,660,363 | 18/18 verified | untested |
+| iPod2,1 | 4.2 beta | 8C5091e | 2010-09-15 | `711597af361f003d5f3d2ec865ada3fb5e2bbb1d` | 363,496,695 | 18/18 verified | untested |
+| iPod2,1 | 4.2 beta 2 | 8C5101c | 2010-09-28 | `ccd8249250491f6b7783c67e71b492e201138aba` | 366,143,810 | 18/18 verified | untested |
+| iPod2,1 | 4.2 beta 3 | 8C5115c | 2010-10-12 | `c1113a43303b99ba2bed9333477df162c6d043e1` | 364,755,569 | 18/18 verified | untested |
+| iPod2,1 | 4.2 GM | 8C134 | 2010-11-01 | `cd4bb233a54f35f765ce12625f00b20ef31a777f` | 363,581,294 | 18/18 verified | untested |
 
 - iPad1,1 4.3 and 5.0 betas: blocked as their releases are (8F190's IOP startup ping, docs/matrix-results.md); listed, not run.
 - iPod2,1 4.0 betas and iPad1,1 5.0 betas: no Update-ramdisk key on the wiki (as 8A293 / 9A334).

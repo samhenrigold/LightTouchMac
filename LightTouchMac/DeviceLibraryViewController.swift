@@ -340,8 +340,7 @@ private final class DeviceRowCell: NSTableCellView {
     func update(_ row: DeviceRow) {
         title.stringValue = row.title
         title.textColor = row.isDimmed ? .disabledControlTextColor : .labelColor
-        toolTip = (["\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))"] + [row.entry.clockNote].compactMap { $0 }
-                   + row.progressLines).joined(separator: "\n")
+        toolTip = (["\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))"] + row.progressLines).joined(separator: "\n")
         badge.stringValue = row.badge ?? ""
         badge.isHidden = row.badge == nil
         badgeWidth.constant = badge.intrinsicContentSize.width + 8

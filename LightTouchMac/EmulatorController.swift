@@ -556,9 +556,7 @@ final class EmulatorController {
     /// changes (travel). Set through lockdown's TimeZone value — lockdownd
     /// rewrites /var/db/timezone/localtime and SpringBoard follows live, so
     /// no respring. The guest's clock itself is UTC from the RTC model; only
-    /// the zone needs the host's help — unless the catalog entry pins a
-    /// `clock` (a developer build inside its validity window): that date is set
-    /// once per boot, and later zone syncs keep the guest's time as it is.
+    /// the zone needs the host's help.
     private func startTimeZoneSync() {
         NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange,
                                                object: nil, queue: nil) { [weak self] _ in
@@ -574,27 +572,13 @@ final class EmulatorController {
     private func syncTimeZoneWhenReady() async {
         while !Task.isCancelled {
             guard !shuttingDown, !isDead, !isPoweredOff else { return }
-            let clock = catalogEntry?.clockEpoch.map { clockPinned ? "keep" : String(Int($0)) }
-            if state == .running, !preparingDevice, canManageApps, await deviceReady() {
-                do {
-                    try await tools().setTimeZone(TimeZone.current.identifier, clock: clock)
-                    if clock != nil { clockPinned = true }
-                    return
-                } catch DeviceToolsError.failed(let why) where why.contains("clock not applied") {
-                    // lockdown-tz exit 3: the guest did not take the pin this time (iOS 4 drops an early set);
-                    // the 5 s tick tries again, for a minute.
-                    clockAttempts += 1
-                    logEvent("clock: \(why.trimmingCharacters(in: .whitespacesAndNewlines)) (attempt \(clockAttempts))")
-                    if clockAttempts >= 12 { return }
-                } catch {}
+            if state == .running, !preparingDevice, canManageApps, await deviceReady(),
+               (try? await tools().setTimeZone(TimeZone.current.identifier)) != nil {
+                return
             }
             try? await Task.sleep(for: .seconds(5))
         }
     }
-
-    /// This boot's pinned clock has been set (catalogEntry.clock); later syncs pass "keep".
-    private var clockPinned = false
-    private var clockAttempts = 0
 
     /// App quit (after the clean shutdowns) and restarts. The helper gets
     /// SIGTERM: a guest that already powered off quits at once; one that

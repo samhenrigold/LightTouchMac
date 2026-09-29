@@ -428,14 +428,13 @@ struct DeviceTools: Sendable {
     /// unrelated Swift runtime code, reproducibly, while the identical call
     /// from a child process is clean (scripts/lockdown-tz.c). The tool reads
     /// first, sets only on mismatch, and prints the zone in effect. Dev builds
-    /// without the bundled tool skip quietly — the zone is cosmetic. `clock`: a pinned epoch ("1284000000") or
-    /// "keep" (GuestServices.setTimeZone); nil syncs the Mac's clock, as iTunes did.
-    func setTimeZone(_ identifier: String, clock: String? = nil) async throws {
+    /// without the bundled tool skip quietly — the zone is cosmetic.
+    func setTimeZone(_ identifier: String) async throws {
         guard let tool = Bundled.tool("lockdown-tz") ?? Self.developmentHelper("lockdown-tz") else {
             logEvent("timezone: no bundled lockdown-tz (dev build) — leaving the guest's zone alone")
             return
         }
-        let zone = try await GuestServices.setTimeZone(identifier, clock: clock, tool: tool, socket: clientSocket)
-        logEvent("timezone: guest zone now \(zone)" + (clock.map { ", clock \($0)" } ?? ""))
+        let zone = try await GuestServices.setTimeZone(identifier, tool: tool, socket: clientSocket)
+        logEvent("timezone: guest zone now \(zone)")
     }
 }

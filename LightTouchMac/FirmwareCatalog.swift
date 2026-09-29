@@ -73,9 +73,6 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var prerelease: Prerelease?
         /// Which beta/GM of its version (absent: the first).
         var prereleaseNumber: Int?
-        /// An ISO date (YYYY-MM-DD) inside a developer build's validity window. Betas of the era refuse to run
-        /// past their expiry, so the guest's clock is set to this date instead of the Mac's, once per boot.
-        var clock: String?
         var source: Source
         /// The built-in device: a prepared base packed under the app's Resources
         /// (scripts/pack-base.py), published on first launch (FirmwareJobs.prepareBundled).
@@ -87,7 +84,7 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var estimates: Estimates
 
         enum CodingKeys: String, CodingKey {
-            case id, board, version, build, status, source, bundled, keys, recipe, emulator, estimates, prerelease, clock
+            case id, board, version, build, status, source, bundled, keys, recipe, emulator, estimates, prerelease
             case productType = "product_type", statusNote = "status_note", prereleaseNumber = "prerelease_number"
         }
 
@@ -98,19 +95,6 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
             guard let prerelease else { return nil }
             let name = prerelease == .beta ? "Beta" : "GM"
             return prereleaseNumber.map { $0 > 1 ? "\(name) \($0)" : name } ?? name
-        }
-
-        /// The pinned date as seconds since 1970 (noon UTC, inside the day in every zone); nil without a clock.
-        var clockEpoch: TimeInterval? { clock.flatMap(Self.epoch(ofClock:)) }
-
-        /// What the UI says about a pinned clock.
-        var clockNote: String? { clock.map { "Clock pinned to \($0) so this \(prerelease == .gm ? "GM" : "beta") runs." } }
-
-        nonisolated static func epoch(ofClock clock: String) -> TimeInterval? {
-            let f = ISO8601DateFormatter()
-            f.formatOptions = [.withFullDate, .withDashSeparatorInDate]
-            f.timeZone = TimeZone(secondsFromGMT: 0)
-            return f.date(from: clock).map { $0.timeIntervalSince1970 + 12 * 3600 }
         }
     }
 

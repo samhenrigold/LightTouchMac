@@ -157,8 +157,6 @@ def boot(entry, base, a, helper, work, env):
            "single": {"board": board, "base": str(base), "reboot": True}}
     if a.frameworks:
         cfg["frameworks"] = str(a.frameworks)
-    if entry.get("clock"):   # a developer build: its pinned date goes in over lockdown as the app sets it
-        cfg["single"].update(clock=entry["clock"], lockdownTZ=str(a.scratch / "tools/lockdown-tz"))
     itpack = a.guest_tools / ("armv7.itpack" if board == "ipad" else "armv6.itpack")
     if itpack.exists():
         if board == "ipad":
@@ -381,12 +379,6 @@ def main():
     tools.mkdir()
     log(f"building the session driver and helper in {tools}")
     helper = check_sessions.build(argparse.Namespace(helper=str(a.helper) if a.helper else None), tools)
-    # lockdown-tz as the app's Debug build compiles it (DeviceTools.developmentHelper): pinned clocks for betas.
-    r = subprocess.run(["/bin/sh", "-c", 'PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; cc -O2 -o "$1" "$2" '
-                        '$(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)', "sh", str(tools / "lockdown-tz"),
-                        str(ROOT / "scripts/lockdown-tz.c")])
-    if r.returncode:
-        sys.exit("building lockdown-tz failed")
     if a.build_only:
         return log(f"built: {helper}")
 
@@ -407,7 +399,7 @@ def main():
             continue
         log(f"== {eid} (iOS {entry['version']}, {entry['status']})")
         rec = {"version": entry["version"], "board": entry["board"], "status": entry["status"], "when": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-               **({"prerelease": entry["prerelease"], "clock": entry.get("clock")} if entry.get("prerelease") else {}),
+               **({"prerelease": entry["prerelease"]} if entry.get("prerelease") else {}),
                "tools": {"firmwarekit": str(a.firmwarekit), "dylib": str(a.dylib), "guest_tools": str(a.guest_tools)}}
         work = a.scratch / eid
         rmtree(work)

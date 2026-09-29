@@ -132,12 +132,9 @@ import Foundation
         r = row(iPod4)
         precondition(r.isExperimental && iPod4.statusNote != nil && r.primaryAction == .downloadAndPrepare)
         precondition(r.badge == "Experimental" && row(iPad).badge == nil)
-        // A developer build: its badge is the beta/GM ordinal, its clock a date the guest is pinned to.
+        // A developer build: its badge is the beta/GM ordinal.
         let beta3 = entry("k48ap-8C5115c"), gm2 = entry("k48ap-8C134b"), beta1 = entry("n72ap-8A230m")
         precondition(row(beta3).badge == "Beta 3" && row(gm2).badge == "GM 2" && row(beta1).badge == "Beta")
-        precondition(beta3.clock == "2010-10-19" && beta3.clockEpoch == 1_287_489_600 && gm2.clock == nil && gm2.clockEpoch == nil)
-        precondition(beta3.clockNote == "Clock pinned to 2010-10-19 so this beta runs." && gm2.clockNote == nil)
-        precondition(FirmwareCatalog.Entry.epoch(ofClock: "2010-13-40") == nil)
         precondition(row(beta3).state == .unavailable(.untested), "a beta is listed but not offered until the matrix passes it")
         print("PASS: row states, accessories, primary buttons and commands for every catalog status")
     }
