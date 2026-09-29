@@ -425,6 +425,8 @@ def main():
                 rec["first_failure"] = {"check": "prepare", "why": rec["prepare"]["error"], "excerpt": excerpt(fklog)}
                 shots.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(fklog, shots / "firmwarekit.log")
+                for l in (base / "work").glob("*.log"):   # the one-shots' serial logs (keybag-N, seal, check)
+                    shutil.copyfile(l, shots / l.name)
                 continue
             base_before = check_sessions.tree(base)
             drive = work / "boot"
