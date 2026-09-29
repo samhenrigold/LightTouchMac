@@ -79,8 +79,8 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 |---|---|---|
 | G1 2.x compositing leaves the software path (Sam: "dog slow and janky"): CoreAnimation composites through the 2.x GL front end (CA_ENABLE_OGL, as 3.x does), else the MBX 2D API shim so the stock MBX2D compositor runs | in G2 | home swipe / Safari zoom / scroll fps and stalls vs the software path; 3.x-level smoothness |
 | G2 2.x GL front end for apps: `mkold.py --legacy` turns rebase opcodes into classic relocations (prereq); `gles2x.c` exports the firmware's own gl*/egl*/EAGL names over the same mbxshim core and gles-names.h wire; replaces OpenGLES.framework's binary via an n72-ios2 hook; first App Store game on screen, then compatibility | 5–8 | a 2.x game renders through the host with zero refusals; 5F138/5H11 boot+gles; 3.x/4.x unchanged |
-| G3 1.x boots first with LK_ENABLE_MBX2D=0 (software) to reach the milestone, then G4 makes it smooth | 0 | 1G milestone screenshots |
-| G4 MBX 2D API shim (~40 exports, 5 draw ops hoisted to host 2D blits): the 1.x compositor path (LayerKit has no EAGL) and the 2.x fallback if CA's GL renderer can't be completed; never a hardware MBX model | 5–8 | 1.x home/Cover Flow/video smooth on 4B1; 2.x if used |
+| G3 1.x boots first with LK_ENABLE_MBX2D=0 (software) only to reach the milestone; **Sam (09-29): 1.x gets hardware acceleration too** — G4 is required for 1.x, not optional | 0 | 1G milestone screenshots |
+| G4 1.x hardware acceleration (required): LayerKit has no EAGL, so its accelerated paths are MBX 2D (`LKRenderMBX2DRenderDisplay`, five draw ops incl. perspective quads) and its GLES renderer (`LKRenderGLESRenderDisplay`, egl-based). Hoist one of them: the GLES renderer through the 1.x export front end (same mbxshim core; 1.x exports 153/156 names in gles-names.h) if LayerKit's GLES path is complete, else the MBX 2D API shim (~40 exports → host blits/quads over CoreSurface memory). Never a hardware MBX model | 5–8 | 1.x home swipes, Cover Flow and video smooth on 4B1, measured vs software |
 
 ## Track D: emulator consolidation (after gl-coverage and usb-alert merge; ~10 d)
 
