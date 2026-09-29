@@ -3,7 +3,7 @@ Light Touch Help
 Using the device
 Click and drag on the screen as you would with a finger. Pinch on a trackpad, or Option-drag on the screen, to use two fingers. Home Screen is ⇧⌘H; Lock is ⌘L. Device → Power Off shuts down the iPod and leaves Light Touch open. Choose Power On to start it again.
 
-Rotate left with ⌘[ or right with ⌘]. Device → Orientation also contains Rotate Automatically. View contains Physical Size, Zoom to Fit, and zoom controls. Physical Size uses the current display’s reported measurements. It is unavailable when measurements are missing; moving to an unsupported display returns to Zoom to Fit.
+Rotate left with ⌘← or right with ⌘→. Device → Orientation also contains Rotate Automatically. View contains Physical Size, Zoom to Fit, and zoom controls. Physical Size uses the current display’s reported measurements. It is unavailable when measurements are missing; moving to an unsupported display returns to Zoom to Fit.
 
 Controls and windows
 The toolbar provides Home Screen, Lock, Rotate, Zoom, and capture actions. Rotate switches between portrait and landscape; hold Option to turn the other way. View → Customize Toolbar lets you rearrange controls or add Files, Motion, and Capture Options.

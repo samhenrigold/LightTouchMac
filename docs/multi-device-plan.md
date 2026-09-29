@@ -566,8 +566,11 @@ The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for
   guest tools the loader keeps current.)
 - The SSH transport, the script installer, itorient-over-SSH and Open Terminal are gone; package.sh no
   longer ships it-ssh-terminal.sh, sbdlicon, ithalt, itstatus, itproxy, ittrust or itorient. The web
-  proxy on both boards is the image's PAC plus the MCInstall profile. A legacy image without a baked PAC
-  keeps whatever proxy settings itproxy last wrote.
+  proxy on both boards is the image's PAC plus the CA trusted silently through the guest agent
+  (GuestServices.trustCertificate: the package's ittrust, or the app's copy out of the armv6 itpack, so no
+  "Install Profile" screen); the MCInstall profile is the fallback for a guest without an agent, offered
+  once (lockdown-mcinstall --installed) and named in the proxy settings ("Tap Install on the device…").
+  A legacy image without a baked PAC keeps whatever proxy settings itproxy last wrote.
 - The helper's SIGTERM path no longer resumes a VM whose guest already powered off (a quit after Power
   Off or after the app's halt aborted QEMU: "invalid runstate transition: 'shutdown' -> 'running'").
 

@@ -7,6 +7,7 @@ import Foundation
 
 struct ActivationConfig: Decodable {
     var board: String   // "ipod" | "ipad"
+    /// A firmwarekit base; empty for an iPod: the shipping image (config.ipodNAND, the app's built-in iPod).
     var base: String
 }
 
@@ -14,7 +15,7 @@ struct ActivationConfig: Decodable {
     let ipad = a.board == "ipad"
     let d = Device(name: a.board, profile: ipad ? .iPad1 : .iPodTouch2G)
     let b = URL(fileURLWithPath: a.base)
-    if !ipad {
+    if !ipad, !a.base.isEmpty {
         d.ipod = .init(nand: b.appendingPathComponent("nand").path, nor: b.appendingPathComponent("nor.bin").path,
                        iBoot: b.appendingPathComponent("iBoot.bin").path, gidBlobs: FileManager.default.fileExists(atPath: b.appendingPathComponent("gid-blobs.bin").path) ? b.appendingPathComponent("gid-blobs.bin").path : nil,
                        machine: BootRecipe.lockMachine(b.appendingPathComponent("device.lock.json")))
@@ -29,12 +30,12 @@ struct ActivationConfig: Decodable {
     emit("activation", ["state": state ?? "", "summary": issue?.summary ?? "", "persistent": issue?.persistent ?? false,
                         "blocks": issue?.blocksCommands ?? false, "retries": issue?.reconnectManagement ?? false])
     // The same question the inspector's first list read asks; -34 lands on the same issue.
-    var serviceIssue: DeviceConnectionIssue?, serviceError = ""
-    do { _ = try await d.services.installedApps() } catch {
+    var serviceIssue: DeviceConnectionIssue?, serviceError = "", apps = -1
+    do { apps = try await d.services.installedApps().count } catch {
         serviceError = "\(error)"
         serviceIssue = DeviceConnectionIssue(error: error, operation: "Refreshing apps", profile: d.profile)
     }
-    emit("service", ["error": serviceError, "summary": serviceIssue?.summary ?? "", "persistent": serviceIssue?.persistent ?? false])
+    emit("service", ["error": serviceError, "summary": serviceIssue?.summary ?? "", "persistent": serviceIssue?.persistent ?? false, "apps": apps])
     let quit = Date()
     d.process.terminate()
     let exited = await d.process.waitForExit(timeout: 30)

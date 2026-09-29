@@ -116,8 +116,8 @@ struct Instance { let id=UUID() }
   precondition(find("Show Finger Dots",in:root.item(withTitle:"View")!.submenu!) != nil)
   precondition(find("Discard Recording…",in:capture)?.isHidden==false)
   precondition(find("Save Screenshot As…",in:file)==nil)
-  precondition(find("Rotate Left",in:device)?.keyEquivalent=="[")
-  precondition(find("Rotate Right",in:device)?.keyEquivalent=="]")
+  precondition(find("Rotate Left",in:device)?.keyEquivalent==String(UnicodeScalar(NSLeftArrowFunctionKey)!))
+  precondition(find("Rotate Right",in:device)?.keyEquivalent==String(UnicodeScalar(NSRightArrowFunctionKey)!))
   for name in ["Shake","Pause"] { precondition(find(name,in:device)?.keyEquivalent.isEmpty==true) }
   func leaves(_ menu:NSMenu)->[NSMenuItem] {
    menu.items.flatMap { item in item.submenu.map(leaves) ?? [item] }

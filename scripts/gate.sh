@@ -66,7 +66,7 @@ export -f run1
 
 # Boots an emulator, so not offline: the four session checks and the guest-package oracle check (a qemu-ios
 # checkout); check-files-native and check-media-native are in no tier yet, run them by hand.
-EMULATOR_CHECKS=" tests/check-helper-boot.py tests/check-sessions.py tests/check-files-native.py tests/check-media-native.py tests/check-guest-package.py "
+EMULATOR_CHECKS=" tests/check-helper-boot.py tests/check-sessions.py tests/check-files-native.py tests/check-media-native.py tests/check-guest-package.py tests/check-proxy-trust.py "
 
 # --- quick: host-only checks, in parallel
 {
@@ -85,6 +85,7 @@ EMULATOR_CHECKS=" tests/check-helper-boot.py tests/check-sessions.py tests/check
     esac' _ {}
 skip tests/check-files-native.py "boots an emulator; in no tier yet, run by hand"
 skip tests/check-media-native.py "boots an emulator; in no tier yet, run by hand"
+skip tests/check-proxy-trust.py "boots an emulator; needs a packaged itwebproxy and the armv6 itpack, run by hand"
 
 # --- full: the emulator-backed checks, one at a time; each prints its own PASS/FAIL lines
 suite() {   # NAME CMD...
