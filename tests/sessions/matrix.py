@@ -214,8 +214,6 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     want = entry["product_type"]
     r["lockdown"] = {"ok": bool(usb) and usb[0].get("productType") == want, "seconds": round(usb[0]["seconds"], 1) if usb else None,
                      "productType": usb[0].get("productType") if usb else None}
-    if nousb := find("noUSB"):   # the 1G machine: no USB link, so nothing over lockdown can run
-        r["lockdown"]["error"] = nousb[0]["why"]
     act = find("activation")
     r["activation"] = {"ok": bool(act) and act[0].get("state") == "Activated", "state": act[0].get("state") if act else None}
     afc = find("afc")
@@ -404,7 +402,7 @@ def main():
     tools.mkdir()
     log(f"building the session driver and helper in {tools}")
     helper = check_sessions.build(argparse.Namespace(helper=str(a.helper) if a.helper else None), tools)
-    a.lockdown_tz = check_sessions.build_lockdown_tz(tools)
+    a.lockdown_tz = check_sessions.build_lockdown_tz(tools, a.frameworks)
     if a.build_only:
         return log(f"built: {helper}")
 

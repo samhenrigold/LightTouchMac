@@ -37,9 +37,6 @@ struct SingleConfig: Decodable {
 @MainActor func runSingle(_ s: SingleConfig) async {
     let ipad = s.board == "ipad"
     let d = Device(name: s.board, profile: ipad ? .iPad1 : s.board == "ipod1g" ? .iPodTouch1G : .iPodTouch2G)
-    // The 1G machine has no USB link (DeviceProfile.hasUSBLink): lockdown, AFC, the install and the marker are not
-    // reachable; the boot is judged by lit + the home screen, persist by a second boot after the first's halt.
-    let usb = d.profile.hasUSBLink
     let b = URL(fileURLWithPath: s.base)
     if !ipad {
         d.ipod = .init(nand: b.appendingPathComponent("nand").path, nor: b.appendingPathComponent("nor.bin").path,
@@ -48,7 +45,7 @@ struct SingleConfig: Decodable {
     }
     var offer: String?
     if !ipad, let itpack = s.itpack {
-        do { offer = try d.offer(base: b, board: usb ? "n72ap" : "n45ap", itpack: itpack) } catch { emit("offerError", ["error": "\(error)"]) }
+        do { offer = try d.offer(base: b, board: s.board == "ipod1g" ? "n45ap" : "n72ap", itpack: itpack) } catch { emit("offerError", ["error": "\(error)"]) }
     }
     let offered = offer != nil || (ipad && config.ipadItpack != nil)
     // The lock says whether the bake installed it_agent (3.1+); 2.x and 3.0 have none to halt the guest.
@@ -58,24 +55,6 @@ struct SingleConfig: Decodable {
     func boot(_ generation: Int) async {
         do { try d.boot(generation: generation, guestPackage: offer) } catch { fail("boot \(generation): \(error)") }
         await waitLit(d, ipad ? 0.2 : 0.03, 240)
-        guard usb else {
-            emit("noUSB", ["device": d.name, "generation": generation, "why": "\(d.profile.machineName) has no USB link (smoke.md #43)"])
-            // SpringBoard configures at ~60 s of guest time (docs/ipod1g). A status-bar tap every 15 s keeps the
-            // display awake: nothing wakes a sleeping 1G yet (smoke.md #21).
-            for _ in 0..<4 {
-                try? await Task.sleep(for: .seconds(15))
-                await d.tap(0.5, 0.02)
-            }
-            if offered {
-                let r = d.process.status?.guestPackage
-                emit("guestPackage", ["device": d.name, "generation": generation, "serial": r?.serial ?? -1, "result": r?.result ?? -99])
-            }
-            d.screenshot(generation == 1 ? "lock" : "lock\(generation)")
-            await d.drag(0.18, 0.9, 0.92, 0.9)
-            try? await Task.sleep(for: .seconds(5))
-            d.screenshot(generation == 1 ? "home" : "home\(generation)")
-            return
-        }
         await waitUSB(d, expecting: d.profile.productType, 300)
         if let tool = s.lockdownTZ {
             var zone: String?
@@ -182,7 +161,7 @@ struct SingleConfig: Decodable {
 
     await boot(1)
 
-    for size in usb ? s.afcBytes ?? [16384, 16385, 65536, 1_048_583] : [] {
+    for size in s.afcBytes ?? [16384, 16385, 65536, 1_048_583] {
         let name = "ltm-verify-\(size).bin"
         let local = d.dir.appendingPathComponent(name), back = d.dir.appendingPathComponent("back-" + name)
         var bytes = [UInt8](repeating: 0, count: size)
@@ -202,15 +181,15 @@ struct SingleConfig: Decodable {
         try? FileManager.default.removeItem(at: local); try? FileManager.default.removeItem(at: back)
     }
 
-    if s.install != false, usb { await install(d) }
+    if s.install != false { await install(d) }
     try? await Task.sleep(for: .seconds(3))
     d.screenshot("installed")
-    if s.launch == true, usb { await launch(d, at: s.launchAt) }
+    if s.launch == true { await launch(d, at: s.launchAt) }
 
     // The persist marker: a file that must still be there after the clean shutdown and the second boot.
     let marker = "ltm-matrix-persist.bin"
     let markerBytes = Data((0..<65_536).map { UInt8(truncatingIfNeeded: $0 &* 2654435761 >> 11) })
-    if s.reboot == true, usb {
+    if s.reboot == true {
         let local = d.dir.appendingPathComponent(marker)
         do {
             try markerBytes.write(to: local)
@@ -223,13 +202,6 @@ struct SingleConfig: Decodable {
     if s.reboot == true {
         d.serial?.removeEndpoints()
         await boot(2)
-        if !usb {   // boot 2 lit and reached its home screen after boot 1's halt: the store survived it
-            emit("persist", ["device": d.name, "kept": true, "same": true, "note": "no USB: boot 2 lit after the halt"])
-            await shutdown(2)
-            d.serial?.finish()
-            emit("done")
-            exit(0)
-        }
         let back = d.dir.appendingPathComponent("back-" + marker)
         do {
             guard let file = try await d.services.files(in: "").first(where: { $0.name == marker }) else { throw DeviceError.preflight("\(marker) not listed") }

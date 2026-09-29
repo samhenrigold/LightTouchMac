@@ -46,9 +46,6 @@ nonisolated enum DeviceProfile: Equatable {
     }
     /// The SecureROM image the machine boots, looked up under Bundled.filesRoot (DeviceProfile.bootrom).
     var bootromName: String { self == .iPodTouch1G ? "bootrom_s5l8900" : "bootrom_240_4" }
-    /// The machine has a USB link to the device's usbmuxd. The 1G machine has none yet (its OTG has no TCP host,
-    /// smoke.md #43): no lockdown, so no installs, AFC, activation check or readiness wait; lit is up.
-    var hasUSBLink: Bool { self != .iPodTouch1G }
 
     /// How long a boot may take until lockdown answers (the app's "iOS is up")
     /// before the app gives up on it. The lock screen is normally there in 25 s

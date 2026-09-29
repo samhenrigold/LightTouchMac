@@ -82,7 +82,11 @@ ninja -C slirp-out -j"$JOBS" && ninja -C slirp-out install
 # corresponding static archives intentionally hide these public symbols.
 export PKG_CONFIG_LIBDIR="$P/lib/pkgconfig:$STATIC/lib/pkgconfig"
 (cd libplist-2.7.0 && ./configure --prefix="$P" --enable-shared --disable-static --without-cython && make -j"$JOBS" && make install)
+# iPhone OS 1.x lockdownd speaks SSLv3 only: offer exactly SSLv3 below ProductVersion 2.0 (smoke.md #51).
+(cd libimobiledevice-1.4.0 && patch -p1 < "$SRC/build-support/patches/libimobiledevice-sslv3-ios1.patch")
 (cd libimobiledevice-1.4.0 && LDFLAGS="$LDFLAGS -framework SystemConfiguration -framework CoreFoundation" ./configure --prefix="$P" --enable-shared --disable-static --without-cython && make -j"$JOBS" && make install)
+mkdir -p "$P/share/licenses/libimobiledevice"
+cp libimobiledevice-1.4.0/COPYING "$SRC/build-support/patches/libimobiledevice-sslv3-ios1.patch" "$P/share/licenses/libimobiledevice/"
 (cd usbmuxd && glibtoolize --copy --force && autoreconf -fi)
 (cd usbmuxd && LDFLAGS="$LDFLAGS -framework IOKit -framework CoreFoundation -framework Security" ./configure --prefix="$P" --without-systemd && make -j"$JOBS")
 # iBoot32Patcher (GPL-3.0, the "tools" group of the manifest): firmwarekit runs it for the k48 real-iBoot
@@ -144,6 +148,7 @@ record = {
         source / 'scripts/build-package-native.sh', source / 'scripts/build-static-deps.sh',
         source / 'scripts/dependency-sources.py', source / 'build-support/dependencies.json', source / 'scripts/build-iboot32patcher.sh',
         source / 'build-support/patches/glib-pipe2-availability.patch',
+        source / 'build-support/patches/libimobiledevice-sslv3-ios1.patch',
         source / 'scripts/test-glib-compat.py', source / 'scripts/check-macho.py')},
     'static_inputs': [{'path': str(path.relative_to(static)), 'sha256': digest(path)}
                       for path in sorted(static.rglob('*')) if path.is_file()],

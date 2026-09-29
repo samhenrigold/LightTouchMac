@@ -3,11 +3,11 @@
   "version": "3.1.3",
   "board": "n72ap",
   "status": "user_ipsw",
-  "when": "2026-09-29T00:58:09+00:00",
+  "when": "2026-09-29T21:31:29+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-matrix/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest3/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ssl3-1g/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-1g-sigill/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
   },
   "keys": {
    "total": 19,
@@ -16,7 +16,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 30.6,
+   "seconds": 107.8,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -29,11 +29,11 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-7E18/firmwarekit.log",
+   "log": "/tmp/ssl3-1g/mscratch/n72ap-7E18/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-7E18",
-    "gli": "7E18",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 822 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios3",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.0.0d3: Fri Dec 18 01:31:23 PST 2009; root:xnu-1357.5.30~6/RELEASE_ARM_S5L8720X"
@@ -42,11 +42,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 25.6
+    "seconds": 26.8
    },
    "lockdown": {
     "ok": true,
-    "seconds": 23.8,
+    "seconds": 21.3,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -65,13 +65,16 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 3,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
@@ -82,37 +85,37 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 11.8,
-     "lockdown": 8.7
+     "lit": 16.4,
+     "lockdown": 10.2
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.6,
-    "reason": "The emulator stopped.",
-    "second": 1.4
+    "seconds": 2.8,
+    "reason": "The iPod stopped.",
+    "second": 2.0
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7E18/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7E18/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7E18/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7E18/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7E18/home2.png"
+   "lock": "/tmp/ssl3-1g/results/n72ap-7E18/lock.png",
+   "home": "/tmp/ssl3-1g/results/n72ap-7E18/home.png",
+   "installed": "/tmp/ssl3-1g/results/n72ap-7E18/installed.png",
+   "lock2": "/tmp/ssl3-1g/results/n72ap-7E18/lock2.png",
+   "home2": "/tmp/ssl3-1g/results/n72ap-7E18/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7E18/driver.jsonl"
+  "events": "/tmp/ssl3-1g/results/n72ap-7E18/driver.jsonl"
  },
  "n72ap-8C148": {
   "version": "4.2.1",
   "board": "n72ap",
   "status": "experimental",
-  "when": "2026-09-29T00:19:07+00:00",
+  "when": "2026-09-29T21:35:32+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ssl3-1g/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-1g-sigill/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -121,7 +124,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 74.5,
+   "seconds": 63.4,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -135,11 +138,11 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-8C148/firmwarekit.log",
+   "log": "/tmp/ssl3-1g/mscratch/n72ap-8C148/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.4.0: Wed Oct 20 20:06:26 PDT 2010; root:xnu-1504.58.28~3/RELEASE_ARM_S5L8720X"
@@ -148,11 +151,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 23.9
+    "seconds": 25.5
    },
    "lockdown": {
     "ok": true,
-    "seconds": 12.0,
+    "seconds": 13.1,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -172,7 +175,10 @@
    "install": {
     "ok": true,
     "seconds": 2,
-    "attempt": 1
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
@@ -186,27 +192,27 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 22.0,
-     "lockdown": 4.6
+     "lit": 23.0,
+     "lockdown": 2.4
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 0.8,
-    "reason": "The emulator stopped.",
-    "second": 1.0
+    "seconds": 0.9,
+    "reason": "The iPod stopped.",
+    "second": 1.3
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/home2.png"
+   "lock": "/tmp/ssl3-1g/results/n72ap-8C148/lock.png",
+   "home": "/tmp/ssl3-1g/results/n72ap-8C148/home.png",
+   "installed": "/tmp/ssl3-1g/results/n72ap-8C148/installed.png",
+   "lock2": "/tmp/ssl3-1g/results/n72ap-8C148/lock2.png",
+   "home2": "/tmp/ssl3-1g/results/n72ap-8C148/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/driver.jsonl"
+  "events": "/tmp/ssl3-1g/results/n72ap-8C148/driver.jsonl"
  },
  "n72ap-5F138": {
   "version": "2.1.1",
@@ -339,11 +345,11 @@
   "version": "3.2.2",
   "board": "k48ap",
   "status": "available",
-  "when": "2026-09-29T01:01:08+00:00",
+  "when": "2026-09-29T21:38:48+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-matrix/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest3/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ssl3-1g/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-1g-sigill/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
   },
   "keys": {
    "total": 19,
@@ -352,7 +358,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 81.9,
+   "seconds": 79.4,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -366,7 +372,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-7B500/firmwarekit.log",
+   "log": "/tmp/ssl3-1g/mscratch/k48ap-7B500/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -379,11 +385,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 27.3
+    "seconds": 24.1
    },
    "lockdown": {
     "ok": true,
-    "seconds": 5.5,
+    "seconds": 3.2,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -402,13 +408,16 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
@@ -419,33 +428,32 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 74.7,
-     "lockdown": 1.1
+     "lit": 37.9,
+     "lockdown": 6.4
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": 16.1,
-    "reason": "The device helper exited unexpectedly (code 0).",
-    "second": 16.4
+    "ok": true,
+    "seconds": 14.9,
+    "reason": "The iPad stopped.",
+    "second": 24.3
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/home2.png"
+   "lock": "/tmp/ssl3-1g/results/k48ap-7B500/lock.png",
+   "home": "/tmp/ssl3-1g/results/k48ap-7B500/home.png",
+   "installed": "/tmp/ssl3-1g/results/k48ap-7B500/installed.png",
+   "powerdown1-7s": "/tmp/ssl3-1g/results/k48ap-7B500/powerdown1-7s.png",
+   "powerdown1-12s": "/tmp/ssl3-1g/results/k48ap-7B500/powerdown1-12s.png",
+   "lock2": "/tmp/ssl3-1g/results/k48ap-7B500/lock2.png",
+   "home2": "/tmp/ssl3-1g/results/k48ap-7B500/home2.png",
+   "powerdown2-7s": "/tmp/ssl3-1g/results/k48ap-7B500/powerdown2-7s.png",
+   "powerdown2-12s": "/tmp/ssl3-1g/results/k48ap-7B500/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The device helper exited unexpectedly (code 0).",
-   "excerpt": "AppleBCMWLAN Joined BSS:     @ 0xc5235000, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\"\n[42.761860000]: AppleBCMWLANNetManager::handleDelayedPowerManagementTimeout(): Timed out waiting for IP address, entering powersave mode: 0\nUSB mux: 260 reads / 0 errors, 183 writes / 0 errors"
-  },
-  "triage": "pass (merged tree 21:05): boot 1's quit was labelled 'helper exited unexpectedly (code 0)' although power-off confirmed in 16 s and the helper exited 0; boot 2 read 'The emulator stopped.' Reason-string race in the new DeviceLink reap path (multidevice a2d4a92), not a boot problem."
+  "events": "/tmp/ssl3-1g/results/k48ap-7B500/driver.jsonl",
+  "triage": "ssl3-1g 09-29 rerun (qemu-ios ipod-1g-sigill OTG OUT fix; the bundled libimobiledevice with the SSLv3 patch via --frameworks): every check passes. Before: pass (merged tree 21:05): boot 1's quit was labelled 'helper exited unexpectedly (code 0)' although power-off confirmed in 16 s and the helper exited 0; boot 2 read 'The emulator stopped.' Reason-string race in the new DeviceLink reap path (multidevice a2d4a92), not a boot problem."
  },
  "k48ap-7B367": {
   "version": "3.2",
@@ -557,11 +565,11 @@
   "version": "4.2.1",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-29T16:35:06+00:00",
+  "when": "2026-09-29T21:42:43+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ssl3-1g/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-1g-sigill/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -570,7 +578,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 85.9,
+   "seconds": 135.1,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -585,7 +593,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8C148/firmwarekit.log",
+   "log": "/tmp/ssl3-1g/mscratch/k48ap-8C148/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -598,11 +606,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 26.8
+    "seconds": 58.1
    },
    "lockdown": {
     "ok": true,
-    "seconds": 0.6,
+    "seconds": 2.4,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -621,13 +629,16 @@
    },
    "install": {
     "ok": true,
-    "seconds": 1,
-    "attempt": 1
+    "seconds": 4,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
@@ -638,28 +649,31 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 25.5,
-     "lockdown": 1.2
+     "lit": 44.5,
+     "lockdown": 2.1
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.1,
+    "seconds": 11.7,
     "reason": "The iPad stopped.",
-    "second": 15.0
+    "second": 15.5
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/home2.png"
+   "lock": "/tmp/ssl3-1g/results/k48ap-8C148/lock.png",
+   "home": "/tmp/ssl3-1g/results/k48ap-8C148/home.png",
+   "installed": "/tmp/ssl3-1g/results/k48ap-8C148/installed.png",
+   "powerdown1-7s": "/tmp/ssl3-1g/results/k48ap-8C148/powerdown1-7s.png",
+   "lock2": "/tmp/ssl3-1g/results/k48ap-8C148/lock2.png",
+   "home2": "/tmp/ssl3-1g/results/k48ap-8C148/home2.png",
+   "powerdown2-7s": "/tmp/ssl3-1g/results/k48ap-8C148/powerdown2-7s.png",
+   "powerdown2-12s": "/tmp/ssl3-1g/results/k48ap-8C148/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/driver.jsonl",
-  "triage": "(a) control for the 4.3.x rows on qemu-ios aec1594bf7: unchanged, end to end (it read the same 2.5 V brick ID before and still said USBHost, only because 4.2.1's 1 A window also wants D+ <= 2340 mV; now 0 V). Evidence: matrix-results/k48ap-8C148/."
+  "events": "/tmp/ssl3-1g/results/k48ap-8C148/driver.jsonl",
+  "triage": "ssl3-1g 09-29 rerun (qemu-ios ipod-1g-sigill OTG OUT fix; the bundled libimobiledevice with the SSLv3 patch via --frameworks): every check passes. Before: (a) control for the 4.3.x rows on qemu-ios aec1594bf7: unchanged, end to end (it read the same 2.5 V brick ID before and still said USBHost, only because 4.2.1's 1 A window also wants D+ <= 2340 mV; now 0 V). Evidence: matrix-results/k48ap-8C148/."
  },
  "n72ap-7A341": {
   "version": "3.0",
@@ -4068,10 +4082,10 @@
   "version": "1.1",
   "board": "n45ap",
   "status": "untested",
-  "when": "2026-09-29T20:31:34+00:00",
+  "when": "2026-09-29T21:25:15+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipod1g-app/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/libqemu-arm.dylib",
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ssl3-1g/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-1g-sigill/build/libqemu-arm.dylib",
    "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
   },
   "keys": {
@@ -4081,7 +4095,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 93.1,
+   "seconds": 109.2,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4094,7 +4108,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/matrix-scratch/n45ap-3A101a/firmwarekit.log",
+   "log": "/tmp/ssl3-1g/mscratch/n45ap-3A101a/firmwarekit.log",
    "lock": {
     "boot_strategy": null,
     "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
@@ -4107,21 +4121,25 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 8.3
+    "seconds": 8.6
    },
    "lockdown": {
-    "ok": false,
-    "seconds": null,
-    "productType": null,
-    "error": "iPod-Touch-1G has no USB link (smoke.md #43)"
+    "ok": true,
+    "seconds": 4.2,
+    "productType": "iPod1,1"
    },
    "activation": {
-    "ok": false,
-    "state": null
+    "ok": true,
+    "state": "Activated"
    },
    "afc": {
-    "ok": false,
-    "sizes": [],
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
     "error": null
    },
    "install": {
@@ -4142,8 +4160,8 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 8.5,
-     "lockdown": null
+     "lit": 10.4,
+     "lockdown": 2.2
     }
    },
    "shutdown": {
@@ -4156,19 +4174,14 @@
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/home2.png"
+   "lock": "/tmp/ssl3-1g/results/n45ap-3A101a/lock.png",
+   "home": "/tmp/ssl3-1g/results/n45ap-3A101a/home.png",
+   "installed": "/tmp/ssl3-1g/results/n45ap-3A101a/installed.png",
+   "lock2": "/tmp/ssl3-1g/results/n45ap-3A101a/lock2.png",
+   "home2": "/tmp/ssl3-1g/results/n45ap-3A101a/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/results/n45ap-3A101a/driver.jsonl",
-  "first_failure": {
-   "check": "lockdown",
-   "why": "iPod-Touch-1G has no USB link (smoke.md #43)",
-   "excerpt": "Oct 17 16:46:33 launchd[1]: 16/com.apple.configd: Standard Out/Error: 16:46:33.301 server shutdown complete (750901593.300323)\nOct 17 16:46:33 launchd[1]: 16/com.apple.CommCenter: Standard Out/Error: QUIT received.  Setting flag to shut down.\nOct 17 16:46:33 launchd[1]: 16/com.apple.CommCenter: Standard Out/Error: Communications Center shutdown."
-  },
-  "triage": "ipod-1g-app 09-29 (qemu-ios ipod-1g-app, dylib from it; FirmwareKit keeps usbptpd; usbmuxd 33728ae): the app's Shut Down now reaches the 1G: .machine(.powerdown) -> the machine's hold-and-slide gesture -> 'pmu go stdby', confirmed 15.1 s on both boots; persist is boot 2 lit 8.5 s after that clean power-off (package serial 8 r0). The app still runs the 1G without a USB link (DeviceProfile.hasUSBLink false, BootRecipe.iPod1G passes no usb-tcp-addr), so lockdown/Activation/AFC are not attempted; the emulator side is wired (usb-tcp-addr: usbmuxd enumerates 05ac:1291 with the UDID serial, mux v1.0, lockdown answers and pairs) and with an SSLv3 client the session gives iPod1,1 / 1.1 / Activated and AFC lists and round-trips 70000 bytes. The app's libimobiledevice (OpenSSL 3, no SSLv3) cannot open 1.x lockdownd's SSLv3 session (smoke #51). Boot 2's home screenshot shows the status bar without icons 5 s after the unlock (#32 family?)."
+  "events": "/tmp/ssl3-1g/results/n45ap-3A101a/driver.jsonl",
+  "triage": "ssl3-1g 09-29 (qemu-ios ipod-1g-sigill: OTG OUT transfers end on a short packet/PktCnt; libimobiledevice 1.4.0 + libimobiledevice-sslv3-ios1.patch on OpenSSL 3.6.3 enable-ssl3 enable-ssl3-method, --frameworks the native build's prefix; usbmuxd 33728ae): the 1G's USB columns through the app's own libimobiledevice: lockdown 4.2 s (iPod1,1), Activated, AFC 4/4 (16384..1048583 bytes), persist through the AFC marker (boot 2 lockdown 2.2 s), shutdown 15.1 s both boots. Reverting either half fails lockdown/Activation: without the patch the handshake is TLS1.0 (SSL error -5, 'Could not perform SSL handshake'); without the OTG fix a 512-byte mux packet merges with the next ('expected 512 bytes, received 540'), the TCP stream loses 484 bytes and ActivationState never answers."
  },
  "n45ap-4B1": {
   "version": "1.1.5",
