@@ -32,13 +32,15 @@ the lower class in the summary.
 
 | Board | R | H | P | S | rows |
 |---|---|---|---|---|---|
-| K48 iPad 1 | 24 | 10 | 6 | 20 | 60 |
+| K48 iPad 1 | 26 | 8 | 6 | 20 | 60 |
 | N72 iPod touch 2G | 20 | 6 | 8 | 22 | 56 |
 | Guest side (both boards: boot-args, injected components, image edits, synthesised state) | 0 | 0 | 42 | 0 | 42 |
 
-The distance to "boots any iOS unchanged" is the H and P rows. The two that decide it are the IOP
-(every NAND and SDIO byte goes through a C reimplementation of one specific firmware's mailbox ABI)
-and the GPU (there is none; GL exists only because the guest's GLEngine is replaced by a shim). The
+The distance to "boots any iOS unchanged" is the H and P rows. The two that decided it were the IOP
+(every NAND and SDIO byte went through a C reimplementation of one specific firmware's mailbox ABI;
+since 2026-09-29 Apple's firmware runs on a modelled second core, the default) and the GPU (there is
+none; GL exists only because the guest's GLEngine is replaced by a shim), which is now the first stop
+of iOS 5 (5.1.1 reaches SpringBoard on the IOP core and never draws). The
 iOS 5 spike hit exactly those, in that order (`docs/ipad1/ios5.md`).
 
 ## K48 (iPad 1, S5L8930 "A4")
@@ -64,7 +66,7 @@ uses `iboot=`.
 | 12 | GPIO + interrupt controller @0xbfa00000 | `hw/arm/s5l8930_gpio.c:1-16` | R | 176 pin configs, group mask/status, IRQ 0x74. | – |
 | 13 | Buttons | `ipad1.c:381-389, 509-577, 1517-1546` | R | Host keys drive GPIO port 0 levels and PMU wake events. | – |
 | 14 | I2C0 / I2C2 | `hw/arm/s5l8930_i2c.c:26-160` | R | FIFO block driven by the stock kext; a transfer completes inside the command write. I2C1 absent. | – |
-| 15 | D1815 PMU (i2c0 0x74) | `s5l8930_i2c.c:224-470` | H | Register file with events and IRQ, but hibernate keeps the AP running, only ADC mux 4 is real (others 0x800), RTC is host time, an OOC write shuts QEMU down. | Power-down/resume through the ROM, all ADC channels, regulator effects, 5-10 d |
+| 15 | D1815 PMU (i2c0 0x74) | `s5l8930_i2c.c:224-480` | H | Register file with events and IRQ, but hibernate keeps the AP running, only ADC mux 4 is real (others 0x800), RTC is host time, an OOC write shuts QEMU down, the restart command (0x7b = 0x0b, AppleD1815PMU vtable +0x358 on 4.2.1 and 4.3.5) resets the machine; the rest of 0x7b (0x0f/0x0e from +0x354) is stored. | Power-down/resume through the ROM, all ADC channels, regulator effects, 5-10 d |
 | 16 | TCA6408 GPIO expander (i2c0 0x20) | `s5l8930_i2c.c:529-690` | R | Datasheet registers and INT; no input pins wired. | – |
 | 17 | LTC4099 charger (i2c0 0x09) | `hw/arm/s5l8930_ltc4099.c:41-80` | S | STAT synthesised from `usb-cable`; writes stored, never acted on. | Charge state machine, 0.5-1 d |
 | 18 | CS42L61 codec (i2c0 0x4a) | `ipad1.c:732-739`, `hw/arm/ipod_touch_cs42l58.c` | S | The iPod's CS42L58 register file stands in; the kext never checks the chip ID; MCLK (PWM block) unmodelled. | CS42L61 map, 1-2 d |
@@ -80,12 +82,12 @@ uses `iboot=`.
 | 28 | MIPI-DSIM + Pinot panel @0x89500000 | `hw/arm/ipod_touch_mipi_dsi.c:27-155` | H | DSIM registers with direct-boot handshake shortcuts; the panel answers only DCS B1 with a constant; DSI IRQ unwired. | Panel state machine, 1-2 d |
 | 29 | M2 scaler/CSC @0x89300000 | `hw/arm/ipod_touch_scaler.c:63-210` | H | RGB32 nearest-neighbour only; its NV12 path rejects iPad DRAM addresses (`:130-134`). | Polyphase, all formats, through DART, 4-7 d |
 | 30 | SWI (backlight, core voltage) @0xbf600000 | `hw/arm/ipod_touch_swi.c` | S | RAM; busy bit self-clears; backlight level ignored. | Dimming on the console, 0.5-1 d |
-| 31 | SDHC @0x80000000 + IOP SDIO ring | `hw/arm/s5l8930_sdio.c:73-183` | H | IOP ring-3 commands executed at SD-command level in C; SDHCI registers exist only for the card interrupt. | QEMU `sdhci` under real IOP firmware, 3-5 d (after row 33) |
+| 31 | SDHC @0x80000000 | `hw/arm/s5l8930_sdio.c` | R | SDHCI 2.0 host under the IOP firmware's sdiodrv: self-clearing software reset, internal-clock-stable, block size/count, argument, transfer mode, command (issued by its index byte), responses, present state, normal/error status with status and signal enables, caps/version; CMD53 data through the buffer data port the firmware's CDMA channel streams (read: in the FIFO when the command completes; write: collected, then to the card). No SDMA/ADMA (the firmware uses neither), no command/data timeouts. With `iop-core=off` ring-3 commands are still run in C (H). | Timeouts/error bits, 0.5 d |
 | 32 | BCM4329 Wi-Fi card | `ipad1.c:829-876`, `hw/arm/ipod_touch_sdio.c:128-178, 228-244, 501-679` | H | The firmware the driver downloads is stored and never executed; DEVREADY/FWREADY announced on a CORECTL write; CDC/BDC ioctls answered in C (BSS_INFO, RSSI −45, `ver` = "4.218.175.43"); a fake open BSS "qemu-ios" auto-joined; only the 802.3 frames are real. | Dongle SoC (Cortex-M3, backplane, D11 MAC/PHY) running the downloaded firmware, 60-120 d; practically infeasible |
-| 33 | IOP (the A4's ARM7 coprocessor) | `hw/arm/s5l8930_iop.c:134-142, 716-928, 930-1091` | H | The firmware the kernel uploads "never executes here". Rings 0 (control), 3 (SDIO), 5/6 (FMI) are answered in C. Two command ABIs are known: v1 (iBoot-817 firmware) and v2 (iBoot-931), selected by the string `h2fmi_iop_read_chip_ids` in the image (`:832-840`); the ring table comes from a `cnfg` scan (`:842-857`). Ring 1 (IOP→AP messages) is never produced. | Run the uploaded ARM7 firmware on a second core with its own VICs, timer, and real H2FMI/SDHCI/CDMA routing, 20-30 d |
-| 34 | IOP NAND page store | `s5l8930_iop.c:247-441, 1127-1287` | H | mmap'd sparse store + dirty-bitmap overlay; the AES field of FMI commands is ignored, pages are plaintext. | Keep the store, apply the requested AES, 1-2 d (with row 33) |
-| 35 | H2FMI0/1 @0x81200000 | `hw/arm/s5l8930_h2fmi.c:136-257` | R (read subset) | Register-level for what iBoot's own NAND driver uses (0x90/0xFF/0x70/0x00/0x30); no program/erase, no ECC. The kernel never touches it (the IOP does). | Program/erase/ECC/whitening, 3-5 d (needed by row 33) |
-| 36 | CDMA @0x87000000 | `hw/arm/s5l8930_cdma.c:360-420` | R | Descriptor engine driven by the stock AppleCDMA; chains complete inside the go write; I2S paced; UART RX channels park. | Timing + UART RX hook, 2-3 d |
+| 33 | IOP (the A4's ARM7 coprocessor) | `hw/arm/s5l8930_iop_core.c`, `s5l8930_iop.c` (control block) | R | The firmware the kernel uploads (iBoot-817, iBoot-931, EmbeddedIOP-20.4, -33.4 seen) runs unmodified on an arm946 second core (default `iop-core=on`): address 0 = the image, DRAM at 0xc0000000, the AP's peripherals at their addresses, its own four PL192s with every board interrupt split to them, PMGR event timer 1 as its tick; system reset and snapshots cover it. Eight cp15 overrides stand in for what QEMU's arm946 lacks (ID/thread regs, a ninth MPU region, CPACR, v6 WFI). `iop-core=off` keeps the v1/v2 HLE (iOS 3.2-4.2 firmware only; the v3 instrument is deleted). | cp15 by the ARM7TDMI-S/946 TRM rather than overrides, 1 d |
+| 34 | NAND page store | `s5l8930_iop.c` (store), `s5l8930_h2fmi.c` (chips) | H | mmap'd sparse store + dirty-bitmap overlay, programmed and erased through the H2FMI; pages are plaintext: the CDMA's inline AES and per-page IVs on the NAND FIFO channels are skipped both ways (a real device holds ciphertext). | Keep the store, apply the NAND AES both ways (key + IV descriptors) with an encrypted store format, 1-2 d + pipeline |
+| 35 | H2FMI0/1 @0x81200000 | `hw/arm/s5l8930_h2fmi.c` | R | Register-level read, program (0x80/0x10, cache 0x81/0x11) and erase (0x60/0xd0) for iBoot and the IOP firmware: per-CE page latches, a transfer starts on entering read mode or raising bit 7, FIFOs paced for the CDMA (O(1) pops), a page write waits for its data and meta, each write FIFO completes its own chain on drain, ECC results per sector (clean or blank; no bit errors), migrated. A full stock restore (`restore-smoke --erase`) passes through it. | ECC error injection for FTL error paths, 1 d |
+| 36 | CDMA @0x87000000 | `hw/arm/s5l8930_cdma.c` | R | Descriptor engine driven by the stock AppleCDMA, iBoot and the IOP firmware; +0x10/+0x14 read back the enabled channels (the three drivers' enable helpers and AppleCDMA-300.8's CSR check); device-FIFO channels paced by the H2FMI and completed when it drains them; AES on memory-to-memory pairs, skipped on device FIFOs (row 34); I2S paced; UART RX channels park. | Timing + UART RX hook, 2-3 d |
 | 37 | AES filter (custom keys) | `s5l8930_cdma.c:273-279` | R | Real AES-CBC with the guest's key. | – |
 | 38 | AES UID key | `s5l8930_cdma.c:171-176, 294-298` | S | "A fixed made-up value". | Impossible (fused) |
 | 39 | AES GID key | `s5l8930_cdma.c:178-193`, `ipad1.c:916-918` | S/P | Pre-decrypted KBAGs from `gid-blobs=` (from the public key page); a miss falls back to the UID stand-in. | Impossible (fused); the table is the honest substitute |
@@ -227,7 +229,7 @@ Everything here is class P. "Replaces" says what a real device has instead.
 | NAND: offline FTL/VFL writer ("restore + power cut before the CXT flush", first boot does a R/O restore) | `imgtools/ipad1_nand.py`, `imgtools/ipod2g_nand.py` | The on-flash state `restored`/asr leave. Bets on the FTL format (YaFTL 3.x/4.x; iOS 5 adds LwVM). | Stock restore, 1-2 d; then no format knowledge in the pipeline |
 | `gid-blobs.bin` (KBAG→key from the public key page) | `imgtools/ipad1_gid.py` | The fused GID key. | Impossible; this is the honest substitute |
 | Synthetic identity (serial, ECID, die-id, MACs) | `imgtools/ipad1_kboot.py synth_identity` | SysCfg of a real unit. | – (must stay synthetic) |
-| kboot DeviceTree fill (`chosen/*`, clocks, NAND geometry, `display-rotation 270`, `lcd-panel-id`, baseband unmatched, `sgx` off) | `ipad1_kboot.py:284-331` | What iBoot writes into the DT before handoff. | The iBoot path already does most of it (default); kboot stays a debug path |
+| kboot DeviceTree fill (`chosen/*`, clocks, NAND geometry on `disk` and, for iBoot-1219's 5.x layout, on flash-controller0 with `ce-bitmap`, `display-rotation 270`, `lcd-panel-id`, baseband unmatched, `sgx` off) | `ipad1_kboot.py:284-331` | What iBoot writes into the DT before handoff. | The iBoot path already does most of it (default); kboot stays a debug path |
 
 ### Per-build assumptions still in the emulator and pipeline
 
@@ -236,7 +238,7 @@ From the consolidation survey (`docs/sweep/emulator.md` (b)), with the iOS 5 spi
 1. GLI dispatch layout per build (`gli-dispatch-<BUILD>.tsv`, `GLEngine-<BUILD>`, `mkpkg.py` FAMILIES). Confirmed by 9B206: 905 slots vs 841, derivable by `glitsv.py`, but a new shim build per release.
 2. `mkpkg.py` FAMILIES keyed on exact build strings. 9B206 matches no family.
 3. iOS-4 gld plugin: discovered by symbol; unchanged.
-4. IOP HLE v1/v2 by firmware string + `cnfg` scan. 8L1 and 9B206 firmware both carry the v2 marker; whether their ABI is still v2 is the spike's first boot question.
+4. ~~IOP HLE v1/v2 by firmware string + `cnfg` scan.~~ The IOP core runs whatever firmware the kernel uploads (2026-09-29, default); the v1/v2 HLE is left behind `iop-core=off` for iOS 3.2-4.2 only.
 5. Kernel banner table `ipod_touch_firmware.c`: deleted (D6, 2026-09-29).
 6. GID KBAG hex in C (`ipod_touch_aes.c:52-383`): delete after the nand-current swap.
 7. iPod boot-args delivery (DRAM scan, literal redirect, `IT_BOOT_ARGS*`).
@@ -250,8 +252,8 @@ From the consolidation survey (`docs/sweep/emulator.md` (b)), with the iOS 5 spi
 
 | # | Item | Class today | Cost | What it removes |
 |---|---|---|---|---|
-| 1 | Run the IOP firmware (second ARM7 core, real mailbox/VIC/timer, H2FMI program/erase/ECC, SDHCI under it) | H | 20-30 d (+3-5 d H2FMI) | The v1/v2/vN ABI bets on every NAND and SDIO byte; the first thing a new iBoot/kernel pair breaks |
-| 2 | NAND and NOR from a stock USB restore instead of the offline writers | P (pipeline) | 1-2 d (path exists) | All FTL/VFL/LwVM format knowledge; the keybag one-shot; the img3 kernelcache install; the `it_seal` boot |
+| 1 | ~~Run the IOP firmware (second ARM7 core, real mailbox/VIC/timer, H2FMI program/erase/ECC, SDHCI under it)~~ done 2026-09-29 (qemu-ios `iop-core`, `iop-core-2`; default on) | R | – | The v1/v2/vN ABI bets on every NAND and SDIO byte; 4.3.5 and 5.1.1 need no IOP table |
+| 2 | NAND and NOR from a stock USB restore instead of the offline writers | P (pipeline) | 1-2 d (path exists; `restore-smoke --erase` passes on the IOP core too) | All FTL/VFL/LwVM format knowledge; the keybag one-shot; the img3 kernelcache install; the `it_seal` boot |
 | 3 | GLI shim reads the dispatch @encode at load | P | 2-3 d | Per-build TSVs, `GLEngine-<BUILD>`, `gli_dispatch` in the catalog, FAMILIES by build |
 | 4 | USB_CTL + cable-type host/device switching | R+P | 2-4 d | `enable-hsic`, the DT edit; matches 4.3+'s `publish-criteria` gate |
 | 5 | PMGR clock tree | S | 5-8 d | The reconstructed table; 4.3+ reads new pmgr props (`voltage-states0`, performance domains) |
@@ -288,3 +290,12 @@ boot chain's own state (epoch) is the second; both are exactly "getting along by
 the iBoot-817/931 generation.
 
 > 2026-09-28 `iop-v3` (qemu-ios): the HLE now also speaks the EmbeddedIOP-20/33 layout (ring table at +0x10, IOP DRAM window 0xc0000000, 64-byte ring entries, FMI args +0x18): an H-class instrument to be deleted when the IOP core lands. 4.3.5 reaches VFL init (then waits on a NAND epoch notification the blank effaceable NOR never gives); 5.1.1 needs the IOP→AP message ring (endpoint activation events), which only the real firmware defines.
+
+> 2026-09-29 `iop-core-2` (qemu-ios): with the IOP core the default, 4.3.5 boots, powers off through launchd and
+> reboots; 5.1.1 (kboot) gets through the IOP ping, FTL_Open, the keybag one-shot, the seal, root mount and
+> launchd to SpringBoard, which never draws (no GPU, 9B206 has no GL shim). What the spike read as "the IOP->AP
+> message ring's endpoint activation" was AppleIOPFMI-49 spinning in `_fmiInitVirtToPhysMap` on an empty
+> `ce-bitmap`: iBoot-1219 writes the NAND geometry to flash-controller0 itself, the kboot fill only wrote the 4.x
+> `disk` node (guest side, P; fixed generically). Before that, 5.1.1 panicked 1 s in on the CDMA's +0x10 (K48 #36,
+> R now). Ring 1 carries only the firmware's console ('tty ') messages. Remaining 5.x stops: GPU (absent), the
+> `iboot=` path's epoch (smoke #7), halt-as-restart with USB power (smoke #28).
