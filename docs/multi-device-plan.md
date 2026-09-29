@@ -525,6 +525,41 @@ STAGING_DIR exists and is empty when firmwarekit starts; the app creates it.
 
 **Reproducible stores (2026-09-28, `iboot-ship`):** `outputs.nand.built_listing_sha256` (both boards) is the listing of the store as built from the volumes, before any boot writes into it. It is the same for the same entry, seed, IPSW and guest tools: the host mount's traces are normalized after the unmount (`HFSPlusVolume.normalize`: every date the recipe touched becomes the IPSW's newest file date, macOS's "date added" is cleared, B-tree slack is zeroed, the data volume's identifier derives from the seed; `VolumeMount.withMounted` puts a journaled volume's empty journal back as it was). `listing_sha256` stays the identity of the shipped store; for k48 it differs run to run by design, because the keybag (4.x) and seal boots write the guest's first-boot state (SpringBoard, lockdownd, guest-clock timestamps) into the store, and for n72 8C148 the keybag boot folds guest pages in. Golden-lock tests compare `built_listing_sha256` (and `iboot`/`nor`/`gid_blobs`), never `listing_sha256`. `SystemEditsTests.volumesAreReproducible` builds the k48 volumes and store twice and names any differing page.
 
+**One recipe (C4/C8, 2026-09-28, `one-recipe`).** `Preparer.create` picks a board (`K48Board`, `N72Board`) and runs
+`Recipe.create`: verify → decrypt → identity + `board.bootFiles` → `board.volumes` → `board.store` → [`board.keybag` if
+data protection] → [`board.seal` if the board needs one] → lock. Shared in `Recipe`: the sha1 and Restore.plist checks,
+the decrypt cache, the seed name (`<board.seedPrefix>-<build>-default`), the step/progress events, the read-only
+outputs, the store listing hashes and the lock (the board's keys merged in). Shared in `SystemEdits` (every board's
+system volume): the PAC, AppSync (cache patch + installd interposer), the SpringBoard job edit, activation, the
+guest-package seed. Helper names and the dyld cache derive from `board.arch` (`Helpers.name("it_prefs", "armv6")`,
+`Helpers.itpack(arch)`, `dyldCache(arch)`), never from a per-recipe string. The board keeps its NAND writer, NOR,
+boot chain (iBoot/kboot vs direct-iboot), data volume (k48) and seal (k48). The lock's keys and bytes are unchanged:
+`scripts/lock-identity.py create` builds every catalog entry whose IPSW is in the download store and `diff` compares
+`built_listing_sha256`, the iboot/nor/gid_blobs hashes and the whole lock minus `created`.
+
+- **Disk images** go through `DiskImage` (attach, detach, resize, UDIF → raw): hdiutil while macOS ships it
+  (deprecated on 27, functional; the floor is 14.4), `diskutil image` otherwise; `FIRMWAREKIT_DISK_IMAGE` overrides.
+  Not diskutil first: its attach presents the image as a solid-state device and the HFS+ driver then lays files out
+  differently (no metadata zone), so a store edited through it differs from the golden hashes (7E18: 281 pages moved).
+  Resize and convert are byte-identical on both: hdiutil grows to whole allocation blocks less one when the file's
+  end is not block-aligned (the iPad IPSW volumes: 8 KiB blocks, 4 KiB past the last block), so the diskutil backend
+  asks for size - (slack mod block size) (DiskImageTests.backendsAgree, 4 and 8 KiB blocks, 0-8 KiB slack). Listing
+  attached images (cancel, Export's unmount) reads `hdiutil info -plist`: `diskutil` has no listing that names the
+  image file. Mount/unmount, newfs_hfs and fsck_hfs are not disk-image operations and stay in VolumeMount. The
+  volume header's writeCount (the mount's write count, chunking included) is zeroed by `HFSPlusVolume.normalize`
+  like the dates, and the lock's `entry.sha256` is over a sorted-keys encoding (it was per-process random before).
+- **Still mounted at prepare time:** the system volume (file adds: helpers, jobs, PAC, the kernelcache, the guest
+  package; plist rewrites that change size), the data volume (newfs_hfs + the /private/var skeleton copy) and the
+  keybag ramdisk (restored_external). The native HFSPlus module edits owners, dates, the volume identifier, B-tree
+  slack and the journal; to prepare without a mount it needs a block allocator, fork extension and catalog B-tree
+  insertion (docs/sweep/PLAN.md C8). Export/Mount (F1) mount by design.
+- **IPSW members** are read through ZIPFoundation (`IPSWArchive`; zip64 included); guest-helper Mach-O checks
+  (`MachOSignature`: thin/fat headers, load commands, LC_CODE_SIGNATURE) through MachOKit; tools run through
+  swift-subprocess. The dyld_v1 shared-cache reader stays FirmwareKit's own: MachOKit reads a v1 cache's mappings,
+  images and symbol tables the same way but resolves a cached image's sections wrongly, and the GL dispatch and AppSync
+  scans need the cache's bytes at file offsets (`MachOKitProbeTests`). All three are pinned exact in
+  `Packages/FirmwareKit/Package.swift` and recorded with licenses in `build-support/dependencies.json` (`swiftpm`).
+
 The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for the built-in iPod's unpacked blob and, kept in place, an `LTM_DEV_BASE` development base).
 
 **The built-in iPod (C6, 2026-09-28).** The release build runs the same `firmwarekit create` for `n72ap-7E18` (built firmwarekit, built guest tools, the 7E18 IPSW) and packs STAGING_DIR with `scripts/pack-base.py` into `Resources/device/n72ap-7E18.itbase`: the .itpack format ("ITPACK01", a JSON index of the files in stream order, one zlib stream), which the notary does not open. The app (`BundledBase.unpack`) streams it into `Preparing/<id>/` and publishes it as above; nothing in the app boots anything but a prepared base. Development runs: `LTM_DEV_BASE=<firmwarekit create output>` writes a `.prepared` record naming that directory once (absolute path, never locked), for the entry its lock names.

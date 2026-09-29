@@ -1,6 +1,7 @@
-// SystemEdits: the k48 recipe's system and data volumes. Ports ipad1_rootfs.py build (pristine base, no
-// stash, no Lockdown) + bake --seal as ipad1_device.build drives them, in one mount of
-// the system volume:
+// SystemEdits: the edits a prepared system volume gets, shared by every board (the PAC, AppSync, the SpringBoard
+// job, activation, the guest-package seed; helper names and the dyld cache by arch), and the k48 recipe's
+// system and data volumes (buildK48). Ports ipad1_rootfs.py build (pristine base, no stash, no Lockdown) +
+// bake --seal as ipad1_device.build drives them, in one mount of the system volume:
 //
 //   system.img  the IPSW rootfs, grown to partition 1; rw fstab; SpringBoard env (GL CoreAnimation or
 //               CA_ENABLE_OGL=0) + stdio on /dev/console; [appsync] libappsync.dylib injected into installd +
@@ -51,8 +52,12 @@ public enum SystemEdits {
         /// launchd job file names baked into System/Library/LaunchDaemons (mode 0644). The helpers' own jobs
         /// (it-pbd, it-ethlink, it-prefs) are the seed package's, loaded by it_boot.
         public static let jobs: [String] = []
-        /// The guest packages and the loader (qemu-ios contrib/guest-package/build.sh).
+        /// The guest packages and the loader (qemu-ios contrib/guest-package/build.sh), one per arch.
         public static let itpack = "armv7.itpack"
+        public static func itpack(_ arch: String) -> String { arch + ".itpack" }
+        /// A helper built for `arch`: the armv7 build keeps the bare name, the others carry the arch
+        /// (it_prefs-armv6, it_keybag-armv6).
+        public static func name(_ base: String, _ arch: String) -> String { arch == "armv7" ? base : base + "-" + arch }
         public static let sealJob = "com.qemu.it-seal.plist", glTestJob = "com.qemu.it-gltest.plist"
         /// The fat armv6+armv7 AppSync dylib.
         public static let appsync = "libappsync.dylib"
@@ -83,7 +88,7 @@ public enum SystemEdits {
     static let appsyncPath = "usr/lib/libappsync.dylib"
     static let glEngine = "System/Library/Frameworks/OpenGLES.framework/GLEngine.bundle/GLEngine"
     static let gldPath = "System/Library/Frameworks/OpenGLES.framework/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU"
-    static let dyldCache = "System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv7"
+    static func dyldCache(_ arch: String) -> String { "System/Library/Caches/com.apple.dyld/dyld_shared_cache_" + arch }
     static let dyldOverride = "System/Library/Caches/com.apple.dyld/enable-dylibs-to-override-cache"
     static let lockdownd = "usr/libexec/lockdownd"
     static let retired = ["usr/local/bin/it_notip", daemons + "/com.qemu.it-notip.plist"]
@@ -127,13 +132,13 @@ public enum SystemEdits {
         if o.seal { tools.append(Helpers.seal); jobs.append(Helpers.sealJob) }
         if o.glTest { tools.append(Helpers.glTest); jobs.append(Helpers.glTestJob) }
         for t in tools {
-            if let why = MachOSignature.guestToolProblem(try Data(contentsOf: try helper(t.name))) {
+            if let why = MachOSignature.guestToolProblem(try helper(t.name)) {
                 throw FirmwareError(.internal, "\(helpers.path)/\(t.name): \(why)")
             }
         }
         for j in jobs { _ = try helper(j) }
-        let itpack = try helper(Helpers.itpack)
-        if o.appsync, let why = MachOSignature.appSyncProblem(try Data(contentsOf: try helper(Helpers.appsync))) {
+        _ = try helper(Helpers.itpack("armv7"))
+        if o.appsync, let why = MachOSignature.appSyncProblem(try helper(Helpers.appsync)) {
             throw FirmwareError(.internal, "\(helpers.path)/\(Helpers.appsync): \(why)")
         }
 
@@ -161,11 +166,7 @@ public enum SystemEdits {
                 try put(kernelcache, at(kernelcachePath), mode: 0o644)
             }
             try put(Data(fstabRW.utf8), at(fstab))
-            if o.webProxy {
-                try mkdirs(at(pacPath).deletingLastPathComponent())
-                try put(Data(pac.utf8), at(pacPath))
-                rootOwned += ["usr/local", "usr/local/share", "usr/local/share/ltm", pacPath]
-            }
+            if o.webProxy { rootOwned += try installPAC(m) }
             // GL first: a firmware whose dispatch layout no shim fits (a new GLI table) boots the stock engine with
             // software CoreAnimation, as the iPod recipe does, rather than refusing the build (docs/matrix.md).
             var caOGL = o.caOGL
@@ -182,16 +183,12 @@ public enum SystemEdits {
                     log("warning: " + result.notes.last!)
                 }
             }
-            try rewritePlist(at(springBoardJob)) { d in
-                guard d["Label"] as? String == "com.apple.SpringBoard" else { throw FirmwareError(.unsupported, "\(springBoardJob): not SpringBoard's job") }
-                dict(d, "EnvironmentVariables").addEntries(from: caOGL ? sbEnvCAOGL : sbEnv)
+            try editSpringBoardJob(m) { env, d in
+                env.addEntries(from: caOGL ? sbEnvCAOGL : sbEnv)
                 d["StandardOutPath"] = "/dev/console"; d["StandardErrorPath"] = "/dev/console"
             }
             if o.appsync {
-                try mkdirs(at(appsyncPath).deletingLastPathComponent())
-                try put(Data(contentsOf: try helper(Helpers.appsync)), at(appsyncPath), mode: 0o644)
-                try rewritePlist(at(installdJob)) { dyldInsert($0, "/" + appsyncPath) }
-                log(try AppSyncCachePatch.patchCache(at: at(dyldCache)))
+                _ = try installAppSync(m, helper: try helper(Helpers.appsync), cache: dyldCache("armv7"), log: log)
                 rootOwned.append(appsyncPath)
             }
             // bake
@@ -208,12 +205,10 @@ public enum SystemEdits {
                 dict(d, "EnvironmentVariables")["DYLD_INSERT_LIBRARIES"] = "/" + Helpers.tools[3].path
             }
             try rewritePlist(at(btJob)) { $0["Disabled"] = true }
-            log("Activating device")
-            result.activation = try Activation.run(on: at(lockdownd))
+            result.activation = try activate(m, log: log)
             rootOwned.append(lockdownd)
             let gli = result.engine.map { String($0.dropFirst("GLEngine-".count)) }
-            let (seeded, record) = try GuestPackage.seed(volume: m, itpack: itpack, gli: gli)
-            log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
+            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gli: gli, log: log)
             result.guestPackage = record
             rootOwned += seeded
             rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"] + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
@@ -259,11 +254,64 @@ public enum SystemEdits {
         return result
     }
 
+    // MARK: the shared bake (every board's system volume)
+
+    /// The web-proxy PAC at /usr/local/share/ltm/proxy.pac; `dirs` are created too (the iPod's SystemConfiguration
+    /// on the system volume). Returns the paths to make root-owned.
+    static func installPAC(_ m: URL, dirs: [String] = []) throws -> [String] {
+        var owned: [String] = []
+        for rel in ["usr/local", "usr/local/share", "usr/local/share/ltm"] + dirs {
+            try mkdirs(m.appendingPathComponent(rel))
+            owned.append(rel)
+        }
+        try put(Data(pac.utf8), m.appendingPathComponent(pacPath))
+        return owned + [pacPath]
+    }
+
+    /// AppSync: MISValidateSignature patched in the shared cache `cache` (a warning when the firmware has none: 2.x
+    /// and 3.0 keep libmis as its own dylib, so amfid and SpringBoard's gate stay stock), libappsync.dylib as
+    /// /usr/lib/libappsync.dylib (root-owned by the caller) injected into installd's job. Returns the patch's status
+    /// line and the job's file name.
+    static func installAppSync(_ m: URL, helper: URL, cache: String, log: (String) -> Void) throws -> (status: String, job: String) {
+        let fm = FileManager.default
+        let line = fm.fileExists(atPath: m.appendingPathComponent(cache).path) ? try AppSyncCachePatch.patchCache(at: m.appendingPathComponent(cache))
+            : "warning: no dyld shared cache: MISValidateSignature unpatched (installd interposer only)"
+        log(line)
+        try mkdirs(m.appendingPathComponent(appsyncPath).deletingLastPathComponent())
+        try put(Data(contentsOf: helper), m.appendingPathComponent(appsyncPath), mode: 0o644)
+        let job = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map { m.appendingPathComponent(daemons + "/" + $0) }
+            .first { fm.fileExists(atPath: $0.path) }
+        guard let job else { throw FirmwareError(.unsupported, "no installd launchd plist") }
+        try rewritePlist(job) { dyldInsert($0, "/" + appsyncPath) }
+        return (line, job.lastPathComponent)
+    }
+
+    /// SpringBoard's launchd job, checked by label: `edit` gets its EnvironmentVariables and the job.
+    static func editSpringBoardJob(_ m: URL, _ edit: (NSMutableDictionary, NSMutableDictionary) throws -> Void) throws {
+        try rewritePlist(m.appendingPathComponent(springBoardJob)) { d in
+            guard d["Label"] as? String == "com.apple.SpringBoard" else { throw FirmwareError(.unsupported, "\(springBoardJob): not SpringBoard's job") }
+            try edit(dict(d, "EnvironmentVariables"), d)
+        }
+    }
+
+    /// lockdownd activated in place (Activation); the caller makes it root-owned.
+    static func activate(_ m: URL, log: (String) -> Void) throws -> Activation.Result {
+        log("Activating device")
+        return try Activation.run(on: m.appendingPathComponent(lockdownd))
+    }
+
+    /// The guest-package loader and the arch's seed package (GuestPackage.seed of <arch>.itpack).
+    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gli: String?, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
+        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gli: gli)
+        log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
+        return (seeded, record)
+    }
+
     /// The GLI shim as GLEngine (+ the gld plugin when this firmware's EAGL needs one, + dyld's override switch
     /// when GLEngine is in the shared cache). Returns (engine helper name, gld installed, override switch set).
     static func installGL(_ m: URL, helpers: URL, gliDispatch: String?, log: (String) -> Void) throws -> (String, Bool, Bool) {
         let fm = FileManager.default
-        let cacheURL = m.appendingPathComponent(dyldCache)
+        let cacheURL = m.appendingPathComponent(dyldCache("armv7"))
         let (engine, gld, cached): (String, Bool, Bool) = try autoreleasepool {
             let cache = try DyldSharedCache(contentsOf: cacheURL)
             let tsvs = try gliDispatch.map { [helpers.appendingPathComponent($0)] }

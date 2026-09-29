@@ -420,28 +420,8 @@ public enum K48NAND {
         return patch
     }
 
-    /// A bare case-sensitive journaled HFS+ volume (like iOS's data partition) in a sparse raw file, via
-    /// hdiutil + newfs_hfs (stock, no root).
-    public static func makeHFSImage(at url: URL, size: Int64) throws {
-        guard FileManager.default.createFile(atPath: url.path, contents: nil),
-              truncate(url.path, off_t(size / 4096 * 4096)) == 0 else { throw FirmwareError(.internal, "\(url.path): cannot create") }
-        func run(_ args: [String]) throws -> String {
-            let p = Process(), out = Pipe()
-            p.executableURL = URL(fileURLWithPath: args[0])
-            p.arguments = Array(args.dropFirst())
-            p.standardOutput = out
-            p.standardError = FileHandle.nullDevice
-            try p.run()
-            let o = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            p.waitUntilExit()
-            guard p.terminationStatus == 0 else { throw FirmwareError(.internal, "\(args[0]) failed (\(p.terminationStatus))") }
-            return o
-        }
-        let dev = try run(["/usr/bin/hdiutil", "attach", "-imagekey", "diskimage-class=CRawDiskImage", "-nomount", url.path])
-            .split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
-        defer { _ = try? run(["/usr/bin/hdiutil", "detach", dev]) }
-        _ = try run(["/sbin/newfs_hfs", "-s", "-J", "-v", "Data", dev])
-    }
+    /// A bare case-sensitive journaled HFS+ volume (like iOS's data partition) in a sparse raw file.
+    public static func makeHFSImage(at url: URL, size: Int64) throws { try VolumeMount.makeHFS(url, size: size) }
 
     // MARK: build
 

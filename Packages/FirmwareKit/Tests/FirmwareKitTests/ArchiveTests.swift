@@ -3,11 +3,6 @@ import Testing
 @testable import FirmwareKit
 
 struct ArchiveTests {
-    @Test func wildcardsAreBracketed() {
-        #expect(IPSWArchive.literal("a[1]*?.dmg") == "a[[]1][*][?].dmg")
-        #expect(IPSWArchive.literal("Firmware/dfu/iBSS.k48ap.RELEASE.dfu") == "Firmware/dfu/iBSS.k48ap.RELEASE.dfu")
-    }
-
     static let fw = Oracle.firmware("k48ap-7B500")
 
     @Test(.enabled(if: fw.available)) func membersReadAndExtract() throws {
@@ -25,5 +20,24 @@ struct ArchiveTests {
             #expect(streamed == bytes)
         }
         #expect(throws: FirmwareError.self) { try ipsw.read("no-such-member") }
+        #expect(try ipsw.contains("Restore.plist") && !ipsw.contains("no-such-member"))
+    }
+
+    /// The largest cached IPSW (the biggest central directory; zip64 once a member passes 4 GiB, which none does
+    /// yet): names, a large member and its stream match /usr/bin/unzip.
+    @Test func largestIPSWMatchesUnzip() throws {
+        let cache = Oracle.path("Library/Caches/gold.samhenri.LightTouchMac/IPSW")
+        func size(_ u: URL) -> Int { (try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
+        let files = ((try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: [.fileSizeKey])) ?? []).filter { $0.pathExtension == "ipsw" }
+        guard let largest = files.max(by: { size($0) < size($1) }) else { return }
+        let ipsw = IPSWArchive(largest)
+        let names = try ipsw.names()
+        let unzip = try Fixtures.run(["/usr/bin/unzip", "-Z1", largest.path])
+        #expect(names == String(decoding: unzip.out, as: UTF8.self).split(separator: "\n").map(String.init))
+        let big = try #require(names.filter { $0.hasSuffix(".dmg") }.sorted().last)
+        let theirs = try Fixtures.run(["/usr/bin/unzip", "-p", largest.path, big]).out
+        #expect(try ipsw.read(big) == theirs)
+        #expect(try ipsw.stream(big) { try $0.readToEnd() ?? Data() } == theirs)
+        print("largest IPSW \(largest.lastPathComponent): \(size(largest)) bytes, \(names.count) members; \(big) \(theirs.count) bytes")
     }
 }
