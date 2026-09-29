@@ -97,7 +97,7 @@
    "rootfs": {"file": "018-8370-001.dmg", "key": "18ae1e76e7bcf6478321f42888606ca2d998cffab1ee8c7ca6b15d57b1a7254f8a608823"},
    "UpdateRamDisk": {"file": "018-8374-001.dmg", "iv": "3f6f0bdb71a33c801a9b67a616e9cfe3", "key": "3188be37002aef49c9f54d91da23857f89045118c2bb1e6f1db906c98dbb5230"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true}, "gli_dispatch": "gli-dispatch-7B500.tsv"},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3700227067, "seconds": 90}
  },
@@ -310,7 +310,7 @@
    "rootfs": {"file": "038-0018-002.dmg", "key": "6380bc27ef713750c21759ce770cb6540a8e31fca4c78820fd7be3a02030365a59257582"},
    "UpdateRamDisk": {"file": "038-0024-002.dmg", "iv": "509e699fcfbc5317fa5eb3e79fc5a932", "key": "9cee1bb0bf019db324eb266f426b80fbcfba614464932c6b416ed039fbde73dd"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}, "gli_dispatch": "gli-dispatch-8C148.tsv"},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },
@@ -1031,7 +1031,7 @@
    "rootfs": {"file": "018-6481-015.dmg", "key": "2360d83b606481a5ca080fe7a6fc64f8d5a5556413dfcf3e1277fe564734ee0b188798b8"},
    "UpdateRamDisk": {"file": "018-6509-015.dmg", "iv": "c23f914e487b35897d065202db69a507", "key": "45544b6e783b0d80da04ad6cbcf55175"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}, "gli_dispatch": "gli-dispatch-7E18.tsv"},
+  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 907124736, "peak_bytes": 2410758859, "seconds": 50},
   "status_note": "Apple never hosted this paid update; the download is a third-party mirror."

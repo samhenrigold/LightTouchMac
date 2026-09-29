@@ -56,7 +56,7 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 
 | Item | Effort | Gate |
 |---|---|---|
-| C1 Runtime GL shim: parse the dispatch string at load; one GLEngine/MBXGLEngine per arch; no TSVs, no per-build names | 3 | GLIDispatch generate == today's four tables; regress gles 7B500/8C148/7E18/8C148 |
+| C1 Runtime GL shim: parse the dispatch string at load; one GLEngine/MBXGLEngine per arch; no TSVs, no per-build names — **done 2026-09-28 (qemu-ios `gl-runtime`, app `gl-runtime-fk`)**: the shims read the layout at load by gles-names.h; FirmwareKit installs the one engine per arch, logs the slot count, drops `gli_dispatch` (see STATUS) | 3 | GLIDispatch generate == today's four tables; regress gles 7B500/8C148/7E18/8C148 |
 | C2 mkpkg families by rule (board, iOS major, dyld legacy), hooks filtered at seed | 0.5 | mkpkg selfcheck; seed on 6 entries |
 | C3 Catalog is the manifest; delete qemu-ios manifests/; tests take an entry JSON | 0.5 | fresh-device with --entry |
 | C4 One Recipe with board plug-ins (verify/decrypt/identity/lock/keybag/bake shared) — **done 2026-09-28 (`one-recipe`)**: `Recipe.create` + `Board` (K48Board, N72Board); shared bake pieces in SystemEdits; helper names and the dyld cache by arch | 2 | swift test; `scripts/lock-identity.py diff`: every cached entry's lock byte-identical before/after (see STATUS) |

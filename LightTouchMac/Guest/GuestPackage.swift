@@ -32,7 +32,6 @@ nonisolated enum GuestPackage {
         struct Hook: Codable, Sendable {
             var file: String
             var target: String
-            var gli: String?
             var respring: Bool
         }
         var serial: Int64
@@ -44,6 +43,12 @@ nonisolated enum GuestPackage {
         var files: [File]
         var jobs: [String]
         var hooks: [Hook]
+        /// The GL engines' stock paths (mkpkg MBX, GLENGINE, GLD): their hooks exist only where the preparer
+        /// installed the shim.
+        static let glTargets: Set<String> = [
+            "/System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine",
+            "/System/Library/Frameworks/OpenGLES.framework/GLEngine.bundle/GLEngine",
+            "/System/Library/Frameworks/OpenGLES.framework/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU"]
     }
 
     /// What was offered this boot.
@@ -57,9 +62,9 @@ nonisolated enum GuestPackage {
     }
 
     /// The offer wire this app writes (it_boot's `ltpkg 1`), and the GL wire
-    /// range the host serves (QC_GLES_HELLO; 0 is a shim without a hello).
+    /// range the host serves (QC_GLES_HELLO; 0 is no hello yet or no shim, 1 the name-keyed wire).
     static let packageProtocol = 1
-    static let glesProtocols = 0...0
+    static let glesProtocols = 0...1
 
     static let magic = Data("ITPACK01".utf8)
 
@@ -154,8 +159,8 @@ nonisolated enum GuestPackage {
     }
 
     /// Write this boot's offer into `dir` (replacing it). `lock` is the
-    /// preparer's record, when there is one: as its seed did, hooks for another
-    /// GL dispatch table than the shim it installed, and hooks whose targets the
+    /// preparer's record, when there is one: as its seed did, the GL engines'
+    /// hooks when it installed no shim, and hooks whose targets the
     /// device lacks (libappsync without AppSync), are dropped.
     /// Nil (and no directory) when the itpack has nothing for this device.
     static func compose(itpack: URL, board: String, build: String, lock: LockRecord?, guest: DeviceInstance.Guest?,
@@ -168,7 +173,7 @@ nonisolated enum GuestPackage {
            !(range[0]...range[1]).contains(packageProtocol) { return nil }
         if let lock {
             let dropped = Set(manifest.hooks.filter { hook in
-                (hook.gli != nil && hook.gli != lock.gli) || (lock.hooks.map { !$0.contains(hook.target) } ?? false)
+                (!lock.gles && Manifest.glTargets.contains(hook.target)) || (lock.hooks.map { !$0.contains(hook.target) } ?? false)
             }.map(\.file))
             manifest.hooks.removeAll { dropped.contains($0.file) }
             manifest.files.removeAll { dropped.contains($0.name) }
@@ -193,14 +198,14 @@ nonisolated enum GuestPackage {
         try Data(text.utf8).write(to: staging.appendingPathComponent("offer"))
         try fm.moveItem(at: staging, to: dir)
         return Offer(bundled: manifest.serial, version: manifest.version, serial: builtIn ? 0 : manifest.serial,
-                     glHook: !builtIn && manifest.hooks.contains { $0.gli != nil })
+                     glHook: !builtIn && manifest.hooks.contains { Manifest.glTargets.contains($0.target) })
     }
 
     /// The preparer's record (device.lock.json `guest_package`).
     struct LockRecord: Equatable, Sendable {
         var seed: Int64?
-        /// The GL dispatch id it installed a shim for; nil: none.
-        var gli: String?
+        /// Whether it installed the GL shim.
+        var gles: Bool
         /// The hook targets it kept (present on the volume); nil: not recorded.
         var hooks: [String]?
     }
@@ -209,7 +214,7 @@ nonisolated enum GuestPackage {
         guard let data = try? Data(contentsOf: lock),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let record = json["guest_package"] as? [String: Any] else { return nil }
-        return LockRecord(seed: (record["seed"] as? NSNumber)?.int64Value, gli: record["gli"] as? String,
+        return LockRecord(seed: (record["seed"] as? NSNumber)?.int64Value, gles: record["gles"] as? Bool ?? (record["gli"] is String),   // locks before gl-runtime: a gli id
                           hooks: record["hooks"] as? [String])
     }
 

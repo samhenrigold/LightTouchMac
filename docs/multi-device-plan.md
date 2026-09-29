@@ -146,7 +146,7 @@ EC stays in the app: every `qemu_ios_*` call becomes a `link.…` call. `NativeL
  "keys":{"iBoot":{"iv":"…","key":"…"},"kernelcache":{},"DeviceTree":{},"UpdateRamDisk":{},"rootfs":{"key":"…"}},
  "recipe":{"name":"k48","version":1,"storage":"16g","system_mib":1280,"data_size":"partition",
            "options":{"ca_ogl":true,"appsync":false,"web_proxy":true,"usb_net":true,"writable_nor":true,"keybag_oneshot":true},
-           "gli_dispatch":"gli-dispatch-8C148.tsv","guest":{"arch":"armv7","gl_engine":"GLEngine-8C148"}},
+           "guest":{"arch":"armv7","gl_engine":"GLEngine"}},
  "emulator":{"min_protocol":1}, "estimates":{"prepared_bytes":0,"peak_bytes":0,"seconds":0}}]}
 ```
 
@@ -317,7 +317,7 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 | HFS+ in-place ownership/mode edits | setowner.py, build_nand.set_owner | bytes | 150 |
 | HFS+ file writes: v1 uses `hdiutil attach -nobrowse` + `diskutil mount` + `newfs_hfs` + `hdiutil resize` + `fsck_hfs -n` (stock, no root) | ipad1_rootfs.Mounted | tree | 150 |
 | System-volume edits (launchd env, MSM, BT, network/PAC, helper install) | ipad1_rootfs build/bake | tree + plist | 600 |
-| GLIDispatchCheck | gli_abi_problem, gld_problem | verdict | 80 |
+| GLIDispatch (dispatch fields for the sanity line, gld plugin fit) | gli_dispatch_info, gld_problem | line + verdict | 50 |
 | SharedCache symbol lookup + AppSync patch | appsync_cachepatch.py | bytes | 220 |
 | MachOSigner (ad-hoc CD + entitlements; replaces ldid, which is AGPL) | ldid calls | bytes vs `ldid -S` | 350 |
 | Built-in activation (recognize, patch, re-sign, sha256s in lock) | Activation | lock fields | 60 |
@@ -337,7 +337,7 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 - `LightTouchDevice`: hardened runtime + the qemu entitlements (`contrib/macos-app/entitlements.plist`). Its closure goes through package.sh.
 - `firmwarekit`: hardened runtime only.
 - The app target stops linking the dylib: the bridging header drops the qemu headers.
-- `Resources/firmware-catalog.json` and `Resources/gli/*.tsv`.
+- `Resources/firmware-catalog.json`.
 - **New per-build armv7 guest payloads go into one opaque blob per arch** (`Resources/guest/armv7.itpack`, in nandpack format). Unsigned nested `.bundle`s and raw payloads trip codesign and the notary.
 - The built-in iPod ships as `Resources/device/n72ap-7E18.itbase` (about 250 MB: a `firmwarekit create` of 7E18 packed by `scripts/pack-base.py` in the .itpack format), beside `bootrom_240_4`. The old `nand.itnand`, `ios3/iBoot.bin` and `nor_7E18.bin` are gone: a prepared base carries its own iBoot and NOR.
 - **Signing order:** frameworks, then `MacOS/*` (each with its own entitlements), then the app.
@@ -373,7 +373,7 @@ What each stage does:
 - **native:** usbmuxd and iBoot32Patcher.
 - **qemu:** configure once, then ninja.
 - **dylib:** `make-dylib-macos.sh`.
-- **guest:** qemu-ios `contrib/export-guest-artifacts.sh` (through `scripts/build-guest-tools.sh`): every guest component built by its own `build.sh` from a source copy (`contrib/guest-package/build.sh`), staged as `guest/guest-tools` (the iPod set the app uploads) and `guest/ipad-guest-tools` (the flat directory firmwarekit reads: the iPad helpers, AppSync, the GL engines with their `gli-dispatch-*.tsv`, the n72 recipe's inputs, `armv6.itpack` and `armv7.itpack` at `contrib/guest-package/VERSION`'s serial; ldid-signed; `IPAD_SDK` picks the 3.2 SDK), plus the helper entitlements and headers, with `guest/manifest.json` (source commit, dirty flag, sha256 per input and per file). `validate_guest` checks the directories against the manifest, the required names (`GUEST_PAYLOADS`, `IPAD_GUEST_PAYLOADS`, the catalog's `gli_dispatch` tables) and that the checkout's HEAD and the recorded inputs are unchanged. package.sh ships the iPad set flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without it. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed. The app composes each boot's offer from the packages (guest-package-bootstrap.md, P5).
+- **guest:** qemu-ios `contrib/export-guest-artifacts.sh` (through `scripts/build-guest-tools.sh`): every guest component built by its own `build.sh` from a source copy (`contrib/guest-package/build.sh`), staged as `guest/guest-tools` (the iPod set the app uploads) and `guest/ipad-guest-tools` (the flat directory firmwarekit reads: the iPad helpers, AppSync, the two GL engines `GLEngine` and `MBXGLEngine` with `gles-names.h`, the n72 recipe's inputs, `armv6.itpack` and `armv7.itpack` at `contrib/guest-package/VERSION`'s serial; ldid-signed; `IPAD_SDK` picks the 3.2 SDK), plus the helper entitlements and headers, with `guest/manifest.json` (source commit, dirty flag, sha256 per input and per file). `validate_guest` checks the directories against the manifest, the required names (`GUEST_PAYLOADS`, `IPAD_GUEST_PAYLOADS`) and that the checkout's HEAD and the recorded inputs are unchanged. package.sh ships the iPad set flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without it. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed. The app composes each boot's offer from the packages (guest-package-bootstrap.md, P5).
 - **app:** xcodebuild Release (it embeds `LightTouchDevice` and `firmware-catalog.json`), and `swift build -c release` for `Packages/FirmwareKit`; package.sh ships it as `Contents/MacOS/firmwarekit` (hardened runtime, no entitlements). It must build: the built-in iPod needs it.
 - **package:** first the built-in iPod (`bundled_base`): the built firmwarekit's `create` of `n72ap-7E18` from `--bundled-ipsw` with the built `ipad-guest-tools` (and the built helper), packed by `scripts/pack-base.py` into `bundled/n72ap-7E18.itbase` with `bundled.json` (inputs, the lock's hashes) beside it, skipped when its inputs are unchanged; then a fresh copy of the product, `build-inputs.json` and package.sh (`LTM_BASE_BLOB`). Notarization is not done here.
 - **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
@@ -490,7 +490,17 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 - `ENTRY.json` is one catalog entry, exactly as in `Resources/firmware-catalog.json`, with its keys.
 - `--helper` runs the seal and keybag one-shots (`LightTouchDevice --oneshot`).
 - `--cache` holds decrypted components by IPSW sha1. It's recreatable.
-- `--guest-tools` is a flat directory of the prebuilt, signed guest helpers (tools, launchd jobs, GLEngine-*, gli-dispatch-*.tsv, the gld plugin, libappsync.dylib, it_keybag), by file name. It defaults to `../Resources/guest-tools` next to the executable, the app bundle's copy.
+- `--guest-tools` is a flat directory of the prebuilt, signed guest helpers (tools, launchd jobs, GLEngine, MBXGLEngine, gles-names.h, the gld plugin, libappsync.dylib, it_keybag), by file name. It defaults to `../Resources/guest-tools` next to the executable, the app bundle's copy.
+- **GL (qemu-ios `gl-runtime`, 2026-09-28):** one shim per arch, `GLEngine` (armv7) and `MBXGLEngine` (armv6), for
+  every firmware: each reads the firmware's `__GLIFunctionDispatchRec` layout at load and speaks the host's name-keyed
+  wire (`include/hw/arm/guest-services/gles-names.h`, GL hello protocol 1). No per-build engines, no dispatch tables,
+  no catalog pin. k48 (`ca_ogl`) installs `GLEngine` (plus the gld plugin and dyld's override switch on 4.x) unless
+  the gld plugin lacks a name 4.x's libGFXShared looks up (then the stock engine and software CoreAnimation, with a
+  warning); n72 (`gles_shim`) installs `MBXGLEngine` wherever the armv6 shared cache exists (2.x and 3.0 have none)
+  and records `derived.gles_shim`. Both log `GLI dispatch: N slots, K unknown to the name table (...)`
+  (`SystemEdits.glesSanity`, ipad1_rootfs.gli_dispatch_info) from the guest tools' `gles-names.h`. The seed keeps
+  the GL engines' hooks only when the shim was installed, and the lock's `guest_package` records `"gles": bool`
+  (earlier locks: `"gli"`, a build id or null; the app reads either).
 - The k48 `iboot` recipe runs `iBoot32Patcher` (a separate process, `--rsa --debug -b <boot-args>`). `K48IBoot.patcher` takes the bundled copy first (`Contents/MacOS/iBoot32Patcher`, next to firmwarekit or the helper), then `FIRMWAREKIT_IBOOT_PATCHER` / `IBOOT32PATCHER` for development runs, then the bare name on PATH. The lock records the copy it used (`tool.iboot32patcher`: path, sha256).
 
 **stdout is JSON Lines only, one object per line.** Diagnostics go to stderr.
@@ -579,7 +589,7 @@ The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for
   - Never write inside `base/`. (C6: there are no other paths; every device is a prepared base.)
 
 **FirmwareKit wave A2, 2026-09-28** (`2907d45`, `45fdbdd`, `2dbe750`):
-- **GL dispatch tables are generated at prepare time from the IPSW's shared cache.** They use one shipped base table (`gli-dispatch-7B500.tsv`) for the per-function columns. The catalog's `gli_dispatch` field is unused and can be dropped.
+- **GL dispatch tables are generated at prepare time from the IPSW's shared cache.** They use one shipped base table (`gli-dispatch-7B500.tsv`) for the per-function columns. The catalog's `gli_dispatch` field is unused and can be dropped. (Superseded by `gl-runtime`: no tables at all, see the preparer contract.)
 - **No MachOSigner in FirmwareKit.** Guest helpers are signed once when the app is built (`build-release.py` on the dev Mac), so FirmwareKit never signs at run time.
 **W2, 2026-09-28** (link conversion, sessions):
 - **The app no longer links `libqemu-arm.dylib`** (app target `OTHER_LDFLAGS = ""`, no qemu headers in the bridging header); `otool -L` and `nm -u` show nothing of it. Every former `qemu_ios_*` call goes through `DeviceLink` as the section A table says.
@@ -622,5 +632,5 @@ The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for
 
 **iPod 4.2.1, 2026-09-28** (ipod4-app, qemu-ios abb1a1b817):
 - **n72ap-8C148 is experimental.** N72Recipe's `options.data_protection` runs the restore-ramdisk keybag one-shot (N72Keybag, qemu-ios ipod2g_keybag.py) through `LightTouchDevice --oneshot`: firmwarekit stages the ramdisk at the kernel entry over the helper's gdbstub (`-gdb tcp:127.0.0.1:PORT -S`). So an iPod 4.x prepare needs `--helper`, the bootrom (the bundle's `Resources/device`, `LTM_FILES`, or `~/Developer/qemu-ios-files`) and `it_keybag-armv6` in the guest tools.
-- **The MBX shim is per dispatch layout** (`MBXGLEngine-<BUILD>` next to `gli-dispatch-<BUILD>.tsv`, both built and staged by `build-guest-tools.sh`); N72Recipe installs the one whose table is the firmware's, and on 4.x (the engine is in the shared cache) creates dyld's `enable-dylibs-to-override-cache`.
+- **The MBX shim is per dispatch layout** (`MBXGLEngine-<BUILD>` next to `gli-dispatch-<BUILD>.tsv`, both built and staged by `build-guest-tools.sh`); N72Recipe installs the one whose table is the firmware's (superseded by `gl-runtime`: one `MBXGLEngine`), and on 4.x (the engine is in the shared cache) creates dyld's `enable-dylibs-to-override-cache`.
 - **A prepared base's files are per board** (`DeviceProfile.preparedBootFile`/`preparedFiles`): publish failed every iPod prepare while it required `kboot.bin`.

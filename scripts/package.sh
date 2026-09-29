@@ -216,7 +216,10 @@ if [ -n "$IPAD_GUEST" ] && [ -d "$IPAD_GUEST" ]; then
     echo "embedding iPad guest helpers…"
     mkdir -p "$GUEST_TOOLS_DST"
     cp -p "$IPAD_GUEST"/* "$GUEST_TOOLS_DST/"
-    [ -s "$GUEST_TOOLS_DST/it_pbd" ] || { echo "incomplete iPad guest tools: $IPAD_GUEST" >&2; exit 1; }
+    # one GL shim per arch (the dispatch layout is read at load) and the name table they speak
+    for f in it_pbd GLEngine MBXGLEngine gles-names.h; do
+        [ -s "$GUEST_TOOLS_DST/$f" ] || { echo "incomplete iPad guest tools: $IPAD_GUEST (no $f)" >&2; exit 1; }
+    done
 elif [ ${#FIRMWAREKIT[@]} -gt 0 ]; then
     echo "firmwarekit needs the iPad guest helpers: set LTM_IPAD_GUEST_TOOLS_DIR (build-guest-tools.sh output)" >&2
     exit 1

@@ -19,18 +19,18 @@ import sources as pins  # noqa: E402  (build-support/sources.json: the pinned qe
 
 # The guest tools come from qemu-ios contrib/export-guest-artifacts.sh (build-guest-tools.sh calls it) with a
 # manifest naming every staged file; these are the names the app and firmwarekit need to find in it, whatever
-# else the export stages. The catalog's gli_dispatch tables join the iPad set (validate_guest).
+# else the export stages.
 GUEST_PAYLOADS = frozenset(('MBXGLEngine', 'sbdlicon', 'ithalt', 'it_agent', 'it_typein.dylib',
                           'com.qemu.it-agent.plist', 'itstatus', 'itmedia', 'itphoto',
                           'itproxy', 'ittrust', 'itorient'))
-# firmwarekit's --guest-tools set (SystemEdits.Helpers + it_keybag) and the n72 recipe's inputs (N72Recipe).
+# firmwarekit's --guest-tools set (SystemEdits.Helpers + it_keybag) and the n72 recipe's inputs (N72Recipe): one GL
+# shim per arch (GLEngine, MBXGLEngine: the dispatch layout is read at load) and the name table they speak.
 IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquiet.dylib', 'it_seal', 'it_keybag',
                                  'libappsync.dylib', 'com.qemu.it-pbd.plist', 'com.qemu.it-ethlink.plist',
-                                 'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'GLEngine-7B500',
-                                 'GLEngine-8C148', 'GLRendererFloatQEMU', 'armv6.itpack', 'armv7.itpack',
+                                 'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'GLEngine', 'gles-names.h',
+                                 'GLRendererFloatQEMU', 'armv6.itpack', 'armv7.itpack',
                                  'MBXGLEngine', 'sblaunch', 'sbdlicon', 'it_agent', 'it_typein.dylib',
-                                 'com.qemu.it-agent.plist', 'MBXGLEngine-7E18', 'MBXGLEngine-8C148',
-                                 'it_keybag-armv6', 'it_prefs-armv6'))
+                                 'com.qemu.it-agent.plist', 'it_keybag-armv6', 'it_prefs-armv6'))
 CATALOG = ROOT / 'LightTouchMac/Resources/firmware-catalog.json'
 SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS_Store'}
 NATIVE_RECIPES = frozenset(('scripts/build-package-native.sh', 'scripts/build-static-deps.sh',
@@ -153,12 +153,6 @@ def manifest_hashes(entries, description):
     return hashes([{'path': name, 'sha256': checksum} for name, checksum in (entries or {}).items()], description)
 
 
-def catalog_tables():
-    """The gli-dispatch tables the catalog's recipes name: they must be in the iPad guest set."""
-    catalog = json.loads(CATALOG.read_text()) if CATALOG.is_file() else {'entries': []}
-    return {e['recipe']['gli_dispatch'] for e in catalog['entries'] if e.get('recipe', {}).get('gli_dispatch')}
-
-
 def validate_guest(args, guest):
     """The export's manifest is the record: every staged file at its hash, the required names present, and the
     sources it read (commit and input hashes) unchanged in the checkout."""
@@ -168,8 +162,7 @@ def validate_guest(args, guest):
         raise ValueError('Guest tools were built from a different QEMU checkout')
     files = manifest_hashes(manifest.get('files'), 'guest artifact')
     for directory, required, description in ((guest, GUEST_PAYLOADS, 'Guest payload'),
-                                             (guest.parent / 'ipad-guest-tools', IPAD_GUEST_PAYLOADS | catalog_tables(),
-                                              'iPad guest payload')):
+                                             (guest.parent / 'ipad-guest-tools', IPAD_GUEST_PAYLOADS, 'iPad guest payload')):
         staged = {Path(name).name: checksum for name, checksum in files.items()
                   if Path(name).parent == Path(directory.name)}
         missing = required - set(staged)

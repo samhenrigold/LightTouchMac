@@ -8,9 +8,8 @@
 // options.data_protection (4.x) adds the restore-ramdisk keybag one-shot (N72Keybag) through --helper.
 //
 // The recipe: storage "8g" (model MB528; 16g MB531, 32g MB533; region LL/A), system_mib = the volume
-// (7168 MiB = 1835008 blocks), options gles_shim / appsync / web_proxy / data_protection, gli_dispatch
-// optionally pins the shim's ABI table (else every gli-dispatch-<BUILD>.tsv with an MBXGLEngine-<BUILD> is
-// tried, as ipod2g_device.gli_engine does). --guest-tools holds those MBXGLEngine-<BUILD> and TSVs, sblaunch,
+// (7168 MiB = 1835008 blocks), options gles_shim / appsync / web_proxy / data_protection. --guest-tools
+// holds MBXGLEngine (one shim for every firmware with the armv6 shared cache) and gles-names.h, sblaunch,
 // sbdlicon (optional), it_agent, it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib, armv6.itpack (the
 // guest-package loader and seed package, as ipod2g_device.py bakes them), it_prefs-armv6 + com.qemu.it-prefs.plist
 // (3.x+: no first-run "Edit Home Screen" tip) and it_keybag-armv6 (data protection).
@@ -246,29 +245,23 @@ final class N72Board: Board {
             return try Data(contentsOf: u)
         }
         var report: [String: Any] = [:]
-        // ipod2g_device.gli_engine: the MBXGLEngine-<BUILD> whose TSV is this firmware's dispatch table
-        var gli: String?
-        let problem: String? = try {
-            guard opt["gles_shim"] ?? true else { return "options.gles_shim off" }
-            guard fm.fileExists(atPath: at(cache).path) else { return "no dyld shared cache (2.x, 3.0)" }
-            let tsvs = try recipe.gliDispatch.map { [helpers.appendingPathComponent($0)] } ?? fm.contentsOfDirectory(at: helpers, includingPropertiesForKeys: nil)
-                .filter { $0.lastPathComponent.wholeMatch(of: /gli-dispatch-\w+\.tsv/) != nil && fm.fileExists(atPath: helpers.appendingPathComponent(engine($0)).path) }
-            let (tsv, why) = try GLIDispatch.engine(cache: try Data(contentsOf: at(cache), options: .alwaysMapped), cachePath: at(cache).path, tsvs: tsvs)
-            gli = tsv.map { String(engine($0).dropFirst("MBXGLEngine-".count)) }
-            return tsv == nil ? why ?? "no dispatch tables" : nil
-        }()
-        report["gles"] = gli.map { "shim MBXGLEngine-" + $0 } ?? "stock engine, software CA: " + (problem ?? "")
-        report["gli"] = gli.map { $0 as Any } ?? NSNull()
+        // ipod2g_device.gli_engine: the one MBXGLEngine (it reads the dispatch layout at load) wherever the armv6
+        // shared cache exists; the sanity line says what it will find
+        let gles = (opt["gles_shim"] ?? true) && tools
+        let why = !(opt["gles_shim"] ?? true) ? "options.gles_shim off" : "no dyld shared cache (2.x, 3.0)"
+        let info = try gles ? SystemEdits.glesSanity(Data(contentsOf: at(cache), options: .alwaysMapped), helpers: helpers) : ""
+        report["gles"] = gles ? "shim MBXGLEngine (\(info))" : "stock engine, software CA: " + why
+        report["gles_shim"] = gles
         report["guest_tools"] = tools ? "installed" : "omitted: current helpers require the iOS 3.1+ dyld (no shared cache)"
 
         // bake-guest-tools.sh
-        if let gli {
+        if gles {
             try SystemEdits.mkdirs(at(mbx).deletingLastPathComponent())
             let stock = at(mbx + ".stock")   // 4.x has no stock file to keep: its MBXGLEngine is in the shared cache
             if !fm.fileExists(atPath: stock.path), fm.fileExists(atPath: at(mbx).path) {
                 try SystemEdits.put(Data(contentsOf: at(mbx)), stock, mode: try SystemEdits.permissions(at(mbx)) & ~0o022)
             }
-            try SystemEdits.put(helper("MBXGLEngine-" + gli), at(mbx), mode: 0o755)
+            try SystemEdits.put(helper(SystemEdits.Helpers.mbxEngine), at(mbx), mode: 0o755)
         }
         if tools {
             try SystemEdits.mkdirs(at("usr/local/bin"))
@@ -280,7 +273,7 @@ final class N72Board: Board {
             try SystemEdits.put(helper("it_typein.dylib"), at("usr/lib/it_typein.dylib"), mode: 0o755)
         }
         try SystemEdits.editSpringBoardJob(m) { env, _ in
-            for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = problem == nil ? "1" : "0" }
+            for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = gles ? "1" : "0" }
             for k in ["CA_AUTO_ENABLE_OGL", "LK_AUTO_ENABLE_OGL", "CA_ENABLE_MBX2D", "LK_ENABLE_MBX2D"] { env[k] = "0" }
             let old = (env["DYLD_INSERT_LIBRARIES"] as? String ?? "").split(separator: ":").map(String.init)
             let libs = old.filter { !["/usr/lib/it_kbd_agent.dylib", "/usr/lib/it_typein.dylib"].contains($0) } + (tools ? ["/usr/lib/it_typein.dylib"] : [])
@@ -305,7 +298,7 @@ final class N72Board: Board {
             for rel in [Self.agentJob] + (1...3).map({ "private/var/mobile/Media/.lt-guest-tools-v\($0)" }) { try? fm.removeItem(at: at(rel)) }
         }
 
-        if gli != nil {   // ipad1_rootfs.gli_uncache: 4.x caches MBXGLEngine, so dyld must prefer the file
+        if gles {   // ipad1_rootfs.gli_uncache: 4.x caches MBXGLEngine, so dyld must prefer the file
             let status = try autoreleasepool { try SystemEdits.overrideCachedImage(m, image: mbx, cache: cache) }
             report["gles_cache"] = status
             if status.contains("overridden") { owners.append((0, SystemEdits.dyldOverride)) }
@@ -333,7 +326,7 @@ final class N72Board: Board {
         // mkpkg.seed: the loader and the seed package; it_boot loads the package's jobs (com.qemu.it-agent), so
         // the baked copies it provides are removed. Owners after it, for only what is left.
         if tools {
-            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gli: gli, log: c.log)
+            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles, log: c.log)
             report["guest_package"] = record
             owners += seeded.map { (UInt32(0), $0) }
         }
@@ -341,11 +334,6 @@ final class N72Board: Board {
         c.log("bake: \(report.filter { $0.key != "activation" && $0.key != "guest_package" })")
         return report
     }
-}
-
-/// gli-dispatch-<BUILD>.tsv -> MBXGLEngine-<BUILD>
-fileprivate func engine(_ tsv: URL) -> String {
-    "MBXGLEngine-" + tsv.deletingPathExtension().lastPathComponent.dropFirst("gli-dispatch-".count)
 }
 
 fileprivate func le32(_ b: [UInt8], _ o: Int) -> UInt32 { UInt32(b[o]) | UInt32(b[o + 1]) << 8 | UInt32(b[o + 2]) << 16 | UInt32(b[o + 3]) << 24 }
