@@ -65,7 +65,7 @@ actor ScreenMovieWriter {
             writer.add(audio)
             audioInput = audio
         } else { audioInput = nil }
-        guard writer.startWriting() else { throw writer.error ?? CaptureError.failed("Could not start recording.") }
+        guard writer.startWriting() else { throw writer.error ?? CaptureError.failed("Couldn’t start recording.") }
         writer.startSession(atSourceTime: .zero)
         capture = audio
         self.audioInput = audioInput
@@ -85,7 +85,7 @@ actor ScreenMovieWriter {
         guard input.isReadyForMoreMediaData, let pool = adaptor.pixelBufferPool else { return }
         var buffer: CVPixelBuffer?
         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess,
-              let buffer else { throw CaptureError.failed("Could not allocate a recording frame.") }
+              let buffer else { throw CaptureError.failed("Couldn’t allocate a recording frame.") }
         CVBufferSetAttachment(buffer, kCVImageBufferCGColorSpaceKey, CGColorSpace(name: CGColorSpace.sRGB)!, .shouldPropagate)
         CVBufferSetAttachment(buffer, kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
         CVBufferSetAttachment(buffer, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_sRGB, .shouldPropagate)
@@ -96,7 +96,7 @@ actor ScreenMovieWriter {
                                       bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.noneSkipFirst.rawValue) else {
-            throw CaptureError.failed("Could not draw a recording frame.")
+            throw CaptureError.failed("Couldn’t draw a recording frame.")
         }
         let output = CGRect(origin: .zero, size: outputSize)
         context.setFillColor(CGColor(gray: 0, alpha: 1))
@@ -119,7 +119,7 @@ actor ScreenMovieWriter {
                                           width: image.width, height: image.height))
         }
         guard adaptor.append(buffer, withPresentationTime: CMTime(seconds: seconds, preferredTimescale: 600)) else {
-            throw writer.error ?? CaptureError.failed("Could not encode a recording frame.")
+            throw writer.error ?? CaptureError.failed("Couldn’t encode a recording frame.")
         }
         let size = CGSize(width: image.width, height: image.height)
         if let firstFrameSize { changedFrameSize = changedFrameSize || firstFrameSize != size }
@@ -175,14 +175,14 @@ actor ScreenMovieWriter {
             guard CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: &format,
                 layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
                 extensions: nil, formatDescriptionOut: &audioFormat) == noErr else {
-                throw CaptureError.failed("Could not describe guest audio.")
+                throw CaptureError.failed("Couldn’t describe guest audio.")
             }
         }
         var block: CMBlockBuffer?
         guard CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault, memoryBlock: nil,
             blockLength: frames * 4, blockAllocator: kCFAllocatorDefault, customBlockSource: nil,
             offsetToData: 0, dataLength: frames * 4, flags: 0, blockBufferOut: &block) == noErr,
-            let block else { throw CaptureError.failed("Could not allocate an audio packet.") }
+            let block else { throw CaptureError.failed("Couldn’t allocate an audio packet.") }
         let copied = data.withUnsafeBytes {
             CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block,
                 offsetIntoDestination: 0, dataLength: frames * 4)
@@ -196,7 +196,7 @@ actor ScreenMovieWriter {
             sampleTimingEntryCount: 1, sampleTimingArray: &timing,
             sampleSizeEntryCount: 1, sampleSizeArray: &size, sampleBufferOut: &sample) == noErr,
             let sample, audioInput.append(sample) else {
-            throw writer.error ?? CaptureError.failed("Could not encode guest audio.")
+            throw writer.error ?? CaptureError.failed("Couldn’t encode guest audio.")
         }
         audioFrame += Int64(frames)
     }
@@ -225,7 +225,7 @@ actor ScreenMovieWriter {
         else { composition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2 }
         composition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
-            throw CaptureError.failed("Could not prepare the recording for export.")
+            throw CaptureError.failed("Couldn’t prepare the recording for export.")
         }
         export.videoComposition = composition
         let cropped = url.deletingLastPathComponent().appendingPathComponent(".capture-\(UUID().uuidString).mov")
@@ -237,7 +237,7 @@ actor ScreenMovieWriter {
             export.outputFileType = .mov
             await export.export()
             guard export.status == .completed else {
-                throw export.error ?? CaptureError.failed("Could not export the recording.")
+                throw export.error ?? CaptureError.failed("Couldn’t export the recording.")
             }
         }
         // Keep the complete original until the replacement is ready. The asset
@@ -282,7 +282,7 @@ actor ScreenMovieWriter {
             input.markAsFinished()
             audioInput?.markAsFinished()
             await writer.finishWriting()
-            guard writer.status == .completed else { throw writer.error ?? CaptureError.failed("Could not finish recording.") }
+            guard writer.status == .completed else { throw writer.error ?? CaptureError.failed("Couldn’t finish recording.") }
             if canvasSize == nil, let firstFrameSize, !changedFrameSize {
                 try await cropFinishedMovie(at: writer.outputURL, to: firstFrameSize)
             }

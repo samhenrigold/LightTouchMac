@@ -280,11 +280,11 @@ nonisolated enum DeviceError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "libimobiledevice is not available."
+        case .unavailable: return "App services are missing from this copy of Light Touch. Reinstall Light Touch."
         case .notAttached: return "The device is not reachable over USB yet."
-        case .lockdown(let c): return "lockdownd error \(c)."
+        case .lockdown(let c): return "The device refused the connection (error \(c))."
         case .instproxy(let e, let phase):
-            return "Install service error (\(phase ?? "op")): \(e)."
+            return "The install didn’t finish (\(phase ?? "install")): \(e)."
         case .afc(let e): return "File-transfer error: \(e)."
         case .upload(let e, let written, let total):
             return "Upload stopped after \(written / 1_048_576) of \(total / 1_048_576) MB: \(e). Pending installs are paused; resume them from the app list’s context menu after the device responds."
@@ -363,8 +363,8 @@ nonisolated enum AFCError: Equatable, CustomStringConvertible {
         case .opTimeout: return "timeout"
         case .noMem: return "out of memory"
         case .internalError: return "internal error"
-        case .other(1): return "unknown AFC error (code 1)"
-        case .other(18): return "device storage is full (code 18)"
+        case .other(1): return "unknown error"
+        case .other(18): return "the device’s storage is full"
         case .other(11), .other(30): return "device connection lost"
         case .other(let c): return "code \(c)"
         }

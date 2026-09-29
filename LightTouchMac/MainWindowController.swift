@@ -919,9 +919,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         // Confirmed, because a restart cuts the guest off mid-write much the way
         // a force quit does, and it sits one row above Erase in the same menu.
         let alert = NSAlert()
-        alert.messageText = "Restart the device?"
-        alert.informativeText = "LightTouchMac will flush the device's filesystem first, "
-            + "but anything it hasn't finished writing may still be lost."
+        alert.messageText = "Restart the \(emulator.profile.shortName)?"
+        alert.informativeText = "Anything it hasn’t finished saving may be lost."
         alert.addButton(withTitle: "Restart")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -1054,7 +1053,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             do {
                 let image = try await captureImage()
                 guard let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
-                    throw CaptureError.failed("Could not create the screenshot.")
+                    throw CaptureError.failed("Couldn’t create the screenshot.")
                 }
                 let nsImage = NSImage(cgImage: image, size: .zero)
                 var savedURL: URL?
@@ -1108,7 +1107,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func copyImage(_ image: NSImage) throws {
         NSPasteboard.general.clearContents()
-        guard NSPasteboard.general.writeObjects([image]) else { throw CaptureError.failed("Could not copy the screenshot.") }
+        guard NSPasteboard.general.writeObjects([image]) else { throw CaptureError.failed("Couldn’t copy the screenshot.") }
     }
 
     private func showCopyConfirmation() {
@@ -1649,7 +1648,7 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(toggleHighPowerUSB(_:)):
             menuItem.state = emulator.highPowerUSB ? .on : .off
             menuItem.toolTip = emulator.canChooseUSBCharger ? nil
-                : "The Mac's USB connection always grants high power, as a real Mac does."
+                : "A Mac’s USB port always supplies high power."
             return emulator.acceptsInput && emulator.canChooseUSBCharger
         case #selector(setCompassHeading(_:)):
             menuItem.state = menuItem.tag == emulator.compassHeading ? .on : .off

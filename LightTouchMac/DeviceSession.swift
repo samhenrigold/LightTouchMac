@@ -120,7 +120,8 @@ import Cocoa
     }
 
     private func failStart(_ error: DeviceLinkError, _ completion: (Result<HelperInfo, DeviceLinkError>) -> Void) {
-        let reason = "The \(profile.shortName) didn’t start. Open Device Logs for details."
+        let reason = if case .helperFailure(DeviceLinkWire.leaseRefusal) = error { DeviceLinkWire.leaseRefusal }
+            else { "The \(profile.shortName) didn’t start. Open Device Logs for details." }
         logEvent("device helper: didn’t start: \(error)")
         if startFailure == nil { startFailure = reason }
         completion(.failure(error))

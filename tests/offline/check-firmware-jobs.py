@@ -108,7 +108,7 @@ case "unit":
     try bad.write(to: store.partial(bigSHA))
     throwsError(.corrupted) { _ = try store.install(store.partial(bigSHA), sha1: bigSHA, bytes: Int64(big.count)) }
     expect(!fm.fileExists(atPath: store.partial(bigSHA).path), "a sha1 mismatch deletes the download")
-    expect(FirmwareError.corrupted.localizedDescription == "Download corrupted.", FirmwareError.corrupted.localizedDescription)
+    expect(FirmwareError.corrupted.localizedDescription == "The download is damaged. Try again.", FirmwareError.corrupted.localizedDescription)
     expect(store.existing(bigSHA) == nil, "nothing stored yet")
     try big.write(to: store.partial(bigSHA))
     let installed = try store.install(store.partial(bigSHA), sha1: bigSHA, bytes: Int64(big.count))
@@ -145,7 +145,7 @@ case "unit":
            == "This isn’t the IPSW Light Touch knows for iPad iOS 3.2.", "wrong-file words")
     throwsError(.unsupported) { _ = try IPSWStore.match(sha1: bigSHA, restore: ("iPad1,1", "7B999"), in: catalog) }
     throwsError(.unsupported) { _ = try IPSWStore.match(sha1: bigSHA, restore: nil, in: catalog) }
-    expect(FirmwareError.unsupported.localizedDescription == "Not a supported firmware.", "unsupported words")
+    expect(FirmwareError.unsupported.localizedDescription == "This IPSW isn’t supported.", "unsupported words")
 
     // Import of real zips: Restore.plist through unzip -p, a wrong file, junk, and a match cloned into State/IPSW.
     let known = URL(fileURLWithPath: args[5]), other = URL(fileURLWithPath: args[6])
@@ -254,9 +254,9 @@ case "unit":
     expect(run.events.last == .failed("This IPSW doesn’t match the one Light Touch knows.") && !fm.fileExists(atPath: ipsw.path),
            "a sha_mismatch deletes the IPSW: \(run.events)")
     run = prepare(iPad32, state: state, cache: cache, mode: "crash")
-    expect(run.events.last == .failed("The preparer stopped unexpectedly (exit 3)."), "\(run.events)")
+    expect(run.events.last == .failed("Preparation stopped unexpectedly. Show the log for details."), "\(run.events)")
     run = prepare(iPad32, state: state, cache: cache, mode: "incomplete")
-    expect(run.events.last == .failed("Couldn’t save the prepared device: The preparer’s output has no device.lock.json."), "\(run.events)")
+    expect(run.events.last == .failed("Couldn’t save the prepared device: The prepared device is incomplete (device.lock.json is missing)."), "\(run.events)")
     expect(Set(devices()) == before && leftovers().isEmpty, "failures leave nothing: \(devices()) \(leftovers())")
 
     // Cancel: SIGTERM mid-way (with a read-only nand/ in staging), staging removed, published devices untouched.

@@ -33,7 +33,7 @@ enum DeviceToolsError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .toolMissing(let t):
-            return "\(t) is missing from this build of LightTouchMac."
+            return "A component (\(t)) is missing from this copy of Light Touch. Reinstall Light Touch."
         case .failed(let msg): return msg
         }
     }
@@ -45,10 +45,9 @@ nonisolated struct GuestAgentError: LocalizedError, CustomStringConvertible {
     let status: Int
     let output: Data
     static let notFound = -2, again = -35, connectionReset = -54, notImplemented = -78
-    var errorDescription: String? {
-        "The device command \(operation) failed (\(status)). \(String(decoding: output.prefix(4096), as: UTF8.self))"
-    }
-    var description: String { errorDescription ?? operation }
+    /// The alert's words; `description` (what logs interpolate) keeps the status and output.
+    var errorDescription: String? { "The device couldn’t complete the request. Open Device Logs for details." }
+    var description: String { "agent \(operation) failed (\(status)): \(String(decoding: output.prefix(4096), as: UTF8.self))" }
 }
 
 /// What `ping` said: `it_agent v2\nops …` or a v1's bare `it_agent v1`.
@@ -92,7 +91,7 @@ nonisolated struct GuestAgent: Sendable {
     /// Status and body of one op; throws only when no status came back.
     func raw(_ operation: String, _ arguments: String = "", body: Data = Data(),
              deadline: Double = 65) async throws -> (status: Int, output: Data) {
-        guard let link, isAlive else { throw DeviceToolsError.failed("The device agent is not ready.") }
+        guard let link, isAlive else { throw DeviceToolsError.failed("The device isn’t ready yet. Try again when it has finished starting.") }
         try Task.checkCancellation()
         let id = UUID().uuidString
         let request = "\(id) \(operation) \(arguments)\n\(body.base64EncodedString())"
@@ -137,7 +136,7 @@ nonisolated struct GuestAgent: Sendable {
         if let known = cache.capabilities { return known }
         let reply = String(decoding: try await perform("ping"), as: UTF8.self)
         guard let parsed = GuestAgentCapabilities.parse(reply) else {
-            throw DeviceToolsError.failed("The device agent answered an unknown version.")
+            throw DeviceToolsError.failed("The device’s guest tools didn’t respond as expected. Restart the device to update them.")
         }
         cache.capabilities = parsed
         return parsed
@@ -332,7 +331,7 @@ nonisolated struct GuestServices: Sendable {
         let out = String(decoding: output.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
         guard status == 0 else {
             let err = String(decoding: error.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
-            throw DeviceToolsError.failed("Could not set the device timezone. \(err)")
+            throw DeviceToolsError.failed("Couldn’t set the device timezone. \(err)")
         }
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
     }

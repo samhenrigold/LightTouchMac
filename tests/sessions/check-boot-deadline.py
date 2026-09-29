@@ -117,7 +117,7 @@ struct Serial { func finish() {} }
   let reason = Controller.bootFilesReason(missing, profile: .iPodTouch2G)
   precondition(reason == "This iPod’s system files are incomplete: iBoot.bin is missing. Delete it and prepare it again.")
   let other = Controller.bootFilesReason(CocoaError(.fileReadCorruptFile), profile: .iPad1)
-  precondition(other.hasPrefix("Could not prepare device storage: "))
+  precondition(other.hasPrefix("Couldn’t prepare the iPad’s storage: "))
   let failing = Controller(.iPodTouch2G)
   failing.failBoot(missing)
   precondition(failing.isDead && failing.deathReason == reason && failing.notices == [reason])

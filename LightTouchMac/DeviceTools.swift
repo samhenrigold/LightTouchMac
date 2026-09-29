@@ -131,8 +131,7 @@ struct DeviceTools: Sendable {
         // multi-minute upload, for a file that was never installable.
         guard await AppMetadataCache.bundleID(of: ipa) != nil else {
             throw DeviceError.preflight(
-                "“\(ipa.lastPathComponent)” doesn't look like an iPhone app archive — "
-                + "it has no Payload/…app/Info.plist inside.")
+                "“\(ipa.lastPathComponent)” isn’t an app archive (IPA).")
         }
 
         do {
@@ -269,7 +268,7 @@ struct DeviceTools: Sendable {
             output: .discarded, error: .string(limit: 1 << 16))
         guard result.terminationStatus.isSuccess, FileManager.default.fileExists(atPath: out.path) else {
             logEvent("install: executable repair failed: \(result.standardError)")
-            throw DeviceError.preflight("Could not repair the IPA's executable permissions.")
+            throw DeviceError.preflight("Couldn’t prepare the app’s files for install.")
         }
         succeeded = true
         logEvent("install: \(member) archived non-executable — repacked 0755")

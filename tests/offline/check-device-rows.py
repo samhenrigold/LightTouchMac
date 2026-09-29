@@ -100,8 +100,8 @@ import Foundation
         precondition(estimatedRemaining(elapsed: 30, from: 0, to: 0.25) == 90 && estimatedRemaining(elapsed: 10, from: 0.5, to: 0.75) == 10)
         precondition(DeviceRow.remainingText(5) == "Almost done" && DeviceRow.remainingText(41) == "About 50 s remaining"
                      && DeviceRow.remainingText(3000) == "About 50 min remaining" && DeviceRow.remainingText(7200) == "About 2 h remaining")
-        r = row(iPad32, job: .failed("Download corrupted."))
-        precondition(r.state == .error("Download corrupted.") && r.primaryTitle == "Try Again")
+        r = row(iPad32, job: .failed("The download is damaged. Try again."))
+        precondition(r.state == .error("The download is damaged. Try again.") && r.primaryTitle == "Try Again")
         precondition(r.primaryAction == .downloadAndPrepare, "retrying a failed download downloads again")
 
         // A start failure: Try Again starts again.

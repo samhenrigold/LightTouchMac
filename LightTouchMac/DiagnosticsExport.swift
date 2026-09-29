@@ -71,7 +71,7 @@ nonisolated enum DiagnosticsExport {
         try Task.checkCancellation()
         guard status == 0 else {
             throw NSError(domain: "LightTouch.Diagnostics", code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Could not create the diagnostics archive (exit \(status))."
+                NSLocalizedDescriptionKey: "Couldn’t create the diagnostics archive (exit \(status))."
             ])
         }
     }

@@ -404,7 +404,7 @@ final class EmulatorController {
         if let cocoa = error as? CocoaError, cocoa.code == .fileNoSuchFile, let path = cocoa.userInfo[NSFilePathErrorKey] as? String {
             return "This \(profile.shortName)’s system files are incomplete: \(URL(fileURLWithPath: path).lastPathComponent) is missing. Delete it and prepare it again."
         }
-        return "Could not prepare device storage: \(error.localizedDescription)"
+        return "Couldn’t prepare the \(profile.shortName)’s storage: \(error.localizedDescription)"
     }
 
     /// The boot can't be built: dead with a named reason (the row and the overlay show it).
@@ -506,7 +506,7 @@ final class EmulatorController {
                     try Task.checkCancellation()
                     guard generation == bootGeneration else { return }
                     guard !isDead, !storageFailed, ContinuousClock.now < deadline else {
-                        throw DeviceToolsError.failed("The device did not become ready.")
+                        throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.")
                     }
                     if state == .running, await deviceReady() { break }
                     try await Task.sleep(for: .milliseconds(250))
@@ -1638,7 +1638,7 @@ final class EmulatorController {
             if (try? await springBoard().order()) != nil { return }
             try await Task.sleep(for: .seconds(1))
         }
-        throw DeviceToolsError.failed("SpringBoard did not recover. Restart the device to recover; your installed apps are preserved.")
+        throw DeviceToolsError.failed("The Home screen didn’t come back. Restart the \(profile.shortName); your apps are kept.")
     }
 
     /// True while any install is running — the quit guard reads this so ⌘Q
