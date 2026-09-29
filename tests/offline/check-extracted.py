@@ -3,23 +3,21 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
-metadata = (root/'LightTouchMac/Library/AppMetadataCache.swift').read_text()
 def block(source, start, end):
     return source[source.index(start):source.index(end, source.index(start))]
-archive = block(metadata, '    static func appRoot(', '    /// The icon PNG')
 once = (root/'LightTouchMac/Transport/DeviceExecution.swift').read_text()   # ResumeOnce is file-private, so the whole file goes in
 inspector = (root/'LightTouchMac/UI/AppsInspectorViewController.swift').read_text()
 freshness = block(inspector, '    static func freshnessText(', '    private func showStaleBanner')
 source = '''import Foundation
 nonisolated func logEvent(_ message: String) {}
 import Dispatch
-enum Archive {\n''' + archive + freshness + '''}\n''' + once + '''
+enum Archive {\n''' + freshness + '''}\n''' + once + '''
 @main struct Check {
  static func main() async throws {
-  precondition(Archive.appRoot(["Payload/One.app/Info.plist", "Payload/One.app/Nested.app/Info.plist"]) == "Payload/One.app/")
-  precondition(Archive.appRoot(["Payload/One.app/Info.plist", "Payload/Two.app/Info.plist"]) == nil)
-  precondition(Archive.appRoot(["Elsewhere.app/Info.plist"]) == nil)
-  precondition(Archive.appRoot(["Payload/One.app/Info.plist", "Payload/One.app/Info.plist"]) == nil)
+  precondition(IPAMembers.appRoot(["Payload/One.app/Info.plist", "Payload/One.app/Nested.app/Info.plist"]) == "Payload/One.app/")
+  precondition(IPAMembers.appRoot(["Payload/One.app/Info.plist", "Payload/Two.app/Info.plist"]) == nil)
+  precondition(IPAMembers.appRoot(["Elsewhere.app/Info.plist"]) == nil)
+  precondition(IPAMembers.appRoot(["Payload/One.app/Info.plist", "Payload/One.app/Info.plist"]) == nil)
   let now = Date()
   precondition(Archive.freshnessText(since: nil, now: now) == "not yet refreshed")
   for offset in [0.0, -0.5, -59, 1] {
@@ -53,5 +51,6 @@ final class Counter: @unchecked Sendable {
 with tempfile.TemporaryDirectory() as work:
     swift=Path(work)/'check.swift';swift.write_text(source)
     executable=Path(work)/'check'
-    subprocess.run(['swiftc','-parse-as-library','-module-cache-path','/tmp/ltm-module-cache',str(swift),'-o',str(executable)],check=True)
+    subprocess.run(['swiftc','-parse-as-library','-module-cache-path','/tmp/ltm-module-cache',str(root/'LightTouchMac/Library/IPAMembers.swift'),
+                    str(swift),'-o',str(executable)],check=True)
     subprocess.run([str(executable)],check=True)

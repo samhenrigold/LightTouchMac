@@ -2,10 +2,13 @@
 //
 // One device's stock lockdown services, in-process through the dlopen'd
 // libimobiledevice (Transport/IMobileDevice.swift): the struct and its `run`
-// kernel here, one file per service beside it — InstallationProxy (list,
-// install, uninstall), AFC (free space, staging, the Files browser),
-// LockdownTools (ActivationState, the lockdown-tz child). This is what retires
-// ideviceinstaller and the 579-line install script from the app's path, and with them a week of glue
+// kernel (and the bounded attachment probe) here, one file per service beside
+// it — InstallationProxy (list, install, uninstall), AFC (free space, staging,
+// the Files browser), SpringBoardServices (icon order, orientation),
+// LockdownTools (ActivationState, the lockdown-tz and lockdown-mcinstall
+// children); NotificationProxy keeps its own long-lived session. This is what
+// retires ideviceinstaller and the 579-line install script from the app's
+// path, and with them a week of glue
 // bugs: the unbounded idevice_wait_for_command_to_complete hang, retry logic
 // that string-matched stderr, and an ssh ControlPath that silently disabled
 // every guest command.
