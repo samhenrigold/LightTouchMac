@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """DeviceProcess names a helper's death by what was asked of it, not by which message won the exit race.
 
-The production terminate/received/terminated/died text runs against a fake link whose exit report arrives one
+LightTouchMac/Device/DeviceProcess.swift, compiled whole, runs against a fake link whose exit report arrives one
 reap retry (10 ms, DeviceLink.reap on waitpid == 0) after the helper dies. A requested stop whose qemuExited
 event was lost (the helper exited before sending it: DeviceHost.halt racing QEMU's own SIGTERM handler) is still
 "The iPod stopped."; a crash or kill nobody asked for is "stopped unexpectedly" (the code and signal go to the log)."""
@@ -10,21 +10,34 @@ import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
 link = (root / 'Shared/DeviceLink.swift').read_text()
 a = link.index('nonisolated enum DeviceTermination'); termination = link[a:link.index('\n}\n', a) + 3]
-s = (root / 'LightTouchMac/Device/DeviceSession.swift').read_text()
-a = s.index('    /// SIGTERM: the helper runs its own clean shutdown'); b = s.index('    /// True once the helper is gone', a)
-c = s.index('    private func received(_ event: LinkEvent)', b); d = s.index('    /// Geometry is DeviceProfile', c)
-e = s.index('    private func terminated(_ termination: DeviceTermination)', d); f = s.index('\n}\n', e) + 1
-methods = s[a:b] + s[c:d] + s[e:f]
-profile = (root / 'LightTouchMac/Device/DeviceProfile.swift').read_text().replace('import Foundation\n', '')
-source = 'import Foundation\n' + termination + profile + r'''
+source = 'import Foundation\n' + termination + r'''
 nonisolated func logEvent(_ s: String) {}
-nonisolated enum LinkEvent { case qemuExited(Int32), audio, audioEnded }
-@MainActor final class FakeLog { func flush() {} }
+struct SharedStatus {}
+final class ProcessLogCapture {
+ init(url: URL) throws {}
+ var writeDescriptor: Int32 { -1 }
+ func flush() {}
+}
+enum DeviceLinkError: Error { case helperFailure(String) }
 /// The helper's death as DeviceLink reports it: NOTE_EXIT, waitpid == 0 once, the retry 10 ms later.
-@MainActor final class FakeLink {
+@MainActor final class DeviceLink {
+ struct Configuration {
+  var helper = URL(fileURLWithPath: "/usr/bin/false")
+  var instance: UUID
+  var outputDescriptor: Int32 = -1
+  var machine = ""
+  var requirement: String? = nil
+  var arguments: [String] = []
+ }
+ init(configuration: Configuration) {}
  var onEvent: ((LinkEvent) -> Void)?
  var onTerminated: ((DeviceTermination) -> Void)?
+ var info: HelperInfo? { nil }
+ var status: SharedStatus? { nil }
+ var pid: pid_t = 1
  var sendsExitEvent = true
+ func start(_ done: @escaping (Result<HelperInfo, DeviceLinkError>) -> Void) {}
+ func request(_ request: LinkRequest, timeout: TimeInterval, _ done: @escaping (Result<LinkReply, DeviceLinkError>) -> Void) {}
  func terminate() { die(.exited(0)) }
  func kill() { die(.signaled(9)) }
  func die(_ how: DeviceTermination) {
@@ -32,27 +45,10 @@ nonisolated enum LinkEvent { case qemuExited(Int32), audio, audioEnded }
   DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(10)) { self.onTerminated?(how) }
  }
 }
-@MainActor final class DeviceProcess {
- let link = FakeLink()
- let profile = DeviceProfile.iPodTouch2G
- let log: FakeLog? = nil
- var onDeath: ((String) -> Void)?
- var onAudio: ((LinkEvent) -> Void)?
- private(set) var deathReason: String?
- var isDead: Bool { deathReason != nil }
- private var qemuExitCode: Int32?
- private var startFailure: String?
- private var stopRequested = false
- private var helperPID: pid_t = 1
- init() {
-  link.onEvent = { [weak self] in self?.received($0) }
-  link.onTerminated = { [weak self] in self?.terminated($0) }
- }
-''' + methods + r'''}
 @main struct Main {
  @MainActor static func main() async throws {
   func reason(_ act: (DeviceProcess) -> Void) async -> String {
-   let p = DeviceProcess(); act(p)
+   let p = DeviceProcess(instance: UUID(), profile: .iPodTouch2G, log: URL(fileURLWithPath: "/dev/null")); act(p)
    let start = Date()
    while !p.isDead, Date().timeIntervalSince(start) < 1 { try? await Task.sleep(for: .milliseconds(5)) }
    return p.deathReason ?? "(never died)"
@@ -108,7 +104,10 @@ drain = r'''import Foundation
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-reap-') as d:
     p = Path(d) / 'check.swift'; p.write_text(source)
-    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(p), '-o', d + '/check'], check=True)
+    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'LightTouchMac/Device/DeviceProcess.swift'),
+                    str(root / 'LightTouchMac/Device/DeviceProfile.swift'), str(root / 'LightTouchMac/Device/DeviceProfile+Display.swift'),
+                    str(root / 'Shared/DeviceLinkProtocol.swift'), str(p),
+                    '-o', d + '/check'], check=True)
     subprocess.run([d + '/check'], check=True, timeout=8)
     p = Path(d) / 'drain.swift'; p.write_text(drain)
     subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'Shared/DeviceLinkProtocol.swift'),
