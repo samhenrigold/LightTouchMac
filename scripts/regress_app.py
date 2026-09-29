@@ -14,8 +14,10 @@ Needs the qemu-ios checkout and its images; run locally / pre-release, not per-P
 """
 import os, sys, re, time, subprocess, argparse
 
-QEMU_IOS = os.path.expanduser("~/Developer/qemu-ios")
 APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(APP, "scripts"))
+import sources  # the pinned checkouts (build-support/sources.json)
+QEMU_IOS = str(sources.path("qemu-ios"))
 sys.path.insert(0, os.path.join(QEMU_IOS, "tests", "ipod"))
 import regress as R
 if not hasattr(R, "START"):

@@ -26,9 +26,11 @@ and a decrypted iOS 3-compatible .ipa (edit IPA below).
 import os, subprocess, sys, time, tempfile, socket
 from types import SimpleNamespace
 
-ROOT = "/Users/shg/Developer/qemu-ios"
-FILES = "/Users/shg/Developer/qemu-ios-files"
-MUXD = os.path.expanduser("~/Developer/usbmuxd-qemu/usbmuxd/src/usbmuxd")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+import sources  # the pinned checkouts (build-support/sources.json)
+ROOT = str(sources.path("qemu-ios"))
+FILES = os.path.expanduser("~/Developer/qemu-ios-files")
+MUXD = str(sources.path("usbmuxd") / "src/usbmuxd")
 IPA = os.path.expanduser("~/Downloads/ios3/01 Temple Run 1.0 (3423942).ipa")
 sys.path.insert(0, os.path.join(ROOT, "tests", "ipod"))
 from regress import QMP, boot_env                                   # noqa: E402

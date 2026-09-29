@@ -5,7 +5,7 @@ import subprocess, tempfile, os
 root = Path(__file__).resolve().parents[1]
 script = (root / 'scripts/package.sh').read_text()
 copy_lib = script[script.index('copy_with_deps() {'):script.index('echo "embedding dylib')]
-copy_tool = script[script.index('copy_tool() {'):script.index('echo "embedding compatible tools')]
+copy_tool = script[script.index('copy_tool() {'):script.index('# The dlopened device libraries')]
 with tempfile.TemporaryDirectory(prefix='ltm-package-layout-') as tmp:
     work = Path(tmp)
     app = work/'Fixture.app'

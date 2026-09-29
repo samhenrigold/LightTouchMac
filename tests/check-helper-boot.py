@@ -33,6 +33,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path.home()
+sys.path.insert(0, str(ROOT / "scripts"))
+import sources  # the pinned checkouts (build-support/sources.json)
 TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
 SIGN_ID = "Developer ID Application: Sam Gold (SM75355Y6R)"
 IPOD_UNLOCK = "drag 0.18 0.9 0.92 0.9"              # the lock screen slider, 320x480 portrait
@@ -69,7 +71,7 @@ def build(args, out):
                     ROOT / "tests/helper-driver/main.swift", "-o", out / "helper-driver"], check=True)
     if args.helper:
         return Path(args.helper)
-    qemu = os.environ.get("QEMU_IOS_DIR", str(HOME / "Developer/qemu-ios-ipad1"))
+    qemu = sources.path("qemu-ios")
     r = subprocess.run(["xcodebuild", "-project", ROOT / "LightTouchMac.xcodeproj", "-target", "LightTouchDevice",
                         "-configuration", "Debug", f"SYMROOT={out}/xcode", f"QEMU_IOS_DIR={qemu}", "build"],
                        stdout=open(out / "xcodebuild.log", "w"), stderr=subprocess.STDOUT)
@@ -205,7 +207,7 @@ def main():
             print("reject", flush=True)
             impostor = bin_dir / "LightTouchDevice-adhoc"
             shutil.copy(helper, impostor)
-            ent = Path(os.environ.get("QEMU_IOS_DIR", HOME / "Developer/qemu-ios-ipad1")) / "contrib/macos-app/entitlements.plist"
+            ent = sources.path("qemu-ios") / "contrib/macos-app/entitlements.plist"
             subprocess.run(["codesign", "-f", "-o", "runtime", "-s", "-", "--entitlements", ent, impostor],
                            check=True, capture_output=True)
             # It must get as far as the rendezvous: give it a dylib it can load outside the bundle.

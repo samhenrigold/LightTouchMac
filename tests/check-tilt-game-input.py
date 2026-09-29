@@ -9,12 +9,15 @@ No app, emulator, saved device state, or preferences are opened.
 import argparse
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
 root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root / "scripts"))
+import sources  # the pinned checkouts (build-support/sources.json)
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--qemu-source", type=Path, default=root.parent / "qemu-ios")
+parser.add_argument("--qemu-source", type=Path, default=sources.path("qemu-ios"))
 args = parser.parse_args()
 qemu = args.qemu_source.resolve()
 if not (qemu / "include/hw/arm/ipod-attitude.h").is_file():

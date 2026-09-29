@@ -2,10 +2,12 @@
 // the same minimum macOS version.
 MACOSX_DEPLOYMENT_TARGET = 14.4
 
-// A sibling QEMU checkout is the default development layout. Override either
-// setting in Xcode or on the xcodebuild command line for another checkout/build.
-QEMU_IOS_DIR = $(SRCROOT)/../qemu-ios
-QEMU_BUILD_DIR = $(QEMU_IOS_DIR)/build-native14/qemu-build
+// The pinned qemu-ios checkout and its development build (build-support/sources.json: "path" and
+// "build_dir"; an xcconfig cannot run scripts/sources.py, so these two lines repeat the pin and
+// scripts/test-release.py checks that they agree). Override either setting in Xcode or on the
+// xcodebuild command line for another checkout/build.
+QEMU_IOS_DIR = $(HOME)/Developer/qemu-ios-ipad1
+QEMU_BUILD_DIR = $(QEMU_IOS_DIR)/build-w1-native
 
 HEADER_SEARCH_PATHS = $(inherited) "$(QEMU_IOS_DIR)/contrib/ios-app" "$(QEMU_IOS_DIR)/contrib/macos-app"
 OTHER_LDFLAGS = $(inherited) "$(QEMU_BUILD_DIR)/libqemu-arm.dylib"

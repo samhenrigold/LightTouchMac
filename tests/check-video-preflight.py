@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Actual macOS iPod export: compatible movie, metadata, identity and cancellation."""
 from pathlib import Path
-import json, shutil, subprocess, tempfile
+import json, shutil, subprocess, sys, tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[1] / 'LightTouchMac/DeviceProfile.swift')
 
 root = Path(__file__).resolve().parents[1]
-fixtures = root.parent / 'qemu-ios/contrib/it-harness/build/Payload/Harness.app'
+sys.path.insert(0, str(root / 'scripts'))
+import sources  # the pinned checkouts (build-support/sources.json)
+fixtures = sources.path('qemu-ios') / 'contrib/it-harness/build/Payload/Harness.app'
+if not fixtures.is_dir():
+    print(f'SKIP: no harness fixtures at {fixtures}; build them with contrib/it-harness/build.sh in the pinned checkout (or set QEMU_IOS_DIR)'); raise SystemExit(0)
 code = r'''import Foundation
 import AVFoundation
 enum DeviceToolsError: LocalizedError {

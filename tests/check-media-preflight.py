@@ -3,9 +3,14 @@
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 root = Path(__file__).resolve().parents[1]
-fixtures = root.parent/'qemu-ios/contrib/it-harness/build/Payload/Harness.app'
+sys.path.insert(0, str(root/'scripts'))
+import sources  # the pinned checkouts (build-support/sources.json)
+fixtures = sources.path('qemu-ios')/'contrib/it-harness/build/Payload/Harness.app'
+if not fixtures.is_dir():
+    print(f'SKIP: no harness fixtures at {fixtures}; build them with contrib/it-harness/build.sh in the pinned checkout (or set QEMU_IOS_DIR)'); raise SystemExit(0)
 with tempfile.TemporaryDirectory(prefix='ltm-media-check-') as work:
     executable = Path(work)/'check'
     subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',

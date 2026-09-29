@@ -20,8 +20,8 @@ set -euo pipefail
 
 APP="${1:?usage: package.sh path/to/Light Touch.app (or use scripts/build-release.py)}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-QEMU="${QEMU_IOS_DIR:-$SRC/../qemu-ios}"
-BUILD="${QEMU_BUILD_DIR:-$QEMU/build-native14/qemu-build}"
+QEMU="$(python3 "$SRC/scripts/sources.py" qemu-ios)"          # the pin; QEMU_IOS_DIR overrides
+BUILD="$(python3 "$SRC/scripts/sources.py" qemu-build)"       # QEMU_BUILD_DIR overrides
 DYLIB="$BUILD/libqemu-arm.dylib"
 ENTITLEMENTS="$QEMU/contrib/macos-app/entitlements.plist"
 DEPS="${LTM_DEPS_PREFIX:-$QEMU/build-native14/prefix}"
@@ -153,11 +153,7 @@ copy_tool() {
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$dst" 2>/dev/null || true
 }
 
-echo "embedding compatible tools…"
-for tool in ideviceinstaller ideviceinfo idevicesyslog idevice_id iproxy idevicepair; do
-    copy_tool "$DEPS/bin/$tool"
-done
-# Explicitly ship dlopen libraries even when the command-line tools are static.
+# The dlopened device libraries (IMobileDevice.swift); no libimobiledevice command-line tool ships.
 for stem in libimobiledevice-1.0 libplist-2.0; do
     python3 "$CHECK" --no-weak-imports --minos "$MINOS" "$DEPS/lib/$stem.dylib"
     copy_with_deps "$DEPS/lib/$stem.dylib"
@@ -181,7 +177,7 @@ done
 OPENSSL_PREFIX="$STATIC" CFLAGS="-mmacosx-version-min=$MINOS" \
     bash "$WORK/it-webproxy/build.sh"
 copy_tool "$WORK/it-webproxy/itwebproxy"
-copy_tool "${USBMUXD_BIN:-$QEMU/build-native14/build/usbmuxd/src/usbmuxd}"
+copy_tool "${USBMUXD_BIN:-$(python3 "$SRC/scripts/sources.py" usbmuxd)/src/usbmuxd}"
 # iBoot32Patcher (GPL-3.0, built by build-iboot32patcher.sh next to usbmuxd): firmwarekit's k48
 # real-iBoot recipe runs it from Contents/MacOS, where K48IBoot.patcher looks first.
 PATCHER="${IBOOT32PATCHER_BIN:-$(dirname "$DEPS")/build/iBoot32Patcher/iBoot32Patcher}"

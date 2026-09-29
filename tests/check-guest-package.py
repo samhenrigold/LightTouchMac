@@ -8,14 +8,16 @@ hooks dropped by the preparer's lock (another GL table, a target the device lack
 foreign-build packages, a host protocol the app doesn't speak, a payload that doesn't match its
 manifest, the UI status for each report, and a tolerant `guest` record decode.
 
-    tests/check-guest-package.py [--qemu-ios ~/Developer/qemu-ios-ipad1]
+    tests/check-guest-package.py [--qemu-ios DIR]     (default: the pin, scripts/sources.py)
 """
 import argparse, hashlib, json, os, subprocess, sys, tempfile
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root / 'scripts'))
+import sources  # the pinned checkouts (build-support/sources.json)
 ap = argparse.ArgumentParser()
-ap.add_argument('--qemu-ios', type=Path, default=Path.home() / 'Developer/qemu-ios-ipad1')
+ap.add_argument('--qemu-ios', type=Path, default=sources.path('qemu-ios'))
 args = ap.parse_args()
 sys.path.insert(0, str(args.qemu_ios / 'contrib/guest-package'))
 import mkpkg

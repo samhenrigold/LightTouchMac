@@ -1,15 +1,16 @@
 #!/bin/bash
-# Build the client utilities and static libraries from the product's pinned recipes.
+# Build the static libraries from the product's pinned recipes: OpenSSL (the emulator's AES/SHA, the
+# web proxy's TLS) and the libimobiledevice stack the native shared libimobiledevice links against.
+# No command-line tools ship: the app calls libimobiledevice directly (IMobileDevice.swift).
 # Usage: build-static-deps.sh NEW-WORK-DIRECTORY (output: WORK-DIRECTORY/prefix)
 # LTM_SOURCE_CACHE optionally names a directory of source archives; each is verified.
 set -euo pipefail
 ROOT="${1:?usage: build-static-deps.sh new-work-directory}"
 [ ! -e "$ROOT" ] || { echo "use a new build directory: $ROOT" >&2; exit 1; }
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-CMAKE="${CMAKE:-cmake}"
 JOBS="${LTM_JOBS:-$(sysctl -n hw.ncpu)}"
 [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || { echo 'LTM_JOBS must be a positive integer' >&2; exit 1; }
-for tool in python3 curl make pkg-config xcrun "$CMAKE"; do
+for tool in python3 curl make pkg-config xcrun; do
     command -v "$tool" >/dev/null || { echo "missing build tool: $tool" >&2; exit 1; }
 done
 [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || { echo 'requires an Apple Silicon Mac' >&2; exit 1; }
@@ -80,28 +81,6 @@ autobuild libimobiledevice-glue-1.3.2.tar.bz2 libimobiledevice-glue-1.3.2
 autobuild libusbmuxd-2.1.1.tar.bz2 libusbmuxd-2.1.1
 autobuild libtatsu-1.0.5.tar.bz2 libtatsu-1.0.5
 autobuild libimobiledevice-1.4.0.tar.bz2 libimobiledevice-1.4.0 --without-cython
-
-echo 'Building libzip 1.11.4'
-untar libzip-1.11.4.tar.xz
-"$CMAKE" -S "$ROOT/build/libzip-1.11.4" -B "$ROOT/build/libzip-out" \
-    -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
-    -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_OSX_ARCHITECTURES=arm64 \
-    -DZLIB_INCLUDE_DIR="$SDKROOT/usr/include" -DZLIB_LIBRARY_RELEASE="$SDKROOT/usr/lib/libz.tbd" \
-    -DCMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH=OFF -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
-    -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-    -DENABLE_BZIP2=OFF -DENABLE_LZMA=OFF -DENABLE_ZSTD=OFF \
-    -DENABLE_OPENSSL=OFF -DENABLE_GNUTLS=OFF -DENABLE_MBEDTLS=OFF \
-    -DENABLE_COMMONCRYPTO=OFF -DENABLE_WINDOWS_CRYPTO=OFF \
-    -DBUILD_TOOLS=OFF -DBUILD_REGRESS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_DOC=OFF \
-    > "$LOG/libzip.configure.log" 2>&1
-"$CMAKE" --build "$ROOT/build/libzip-out" --parallel "$JOBS" > "$LOG/libzip.build.log" 2>&1
-"$CMAKE" --install "$ROOT/build/libzip-out" > "$LOG/libzip.install.log" 2>&1
-autobuild ideviceinstaller-1.2.0.tar.bz2 ideviceinstaller-1.2.0 \
-    libzip_CFLAGS="-I$PREFIX/include" libzip_LIBS="-L$PREFIX/lib -lzip -lz"
-
-for tool in ideviceinstaller ideviceinfo idevicesyslog iproxy idevicepair idevice_id; do
-    python3 "$SRC/scripts/check-macho.py" "$PREFIX/bin/$tool"
-done
 python3 - "$SRC" "$ROOT" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
 source, root = map(pathlib.Path, sys.argv[1:])

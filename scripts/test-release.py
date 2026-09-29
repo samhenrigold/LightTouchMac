@@ -32,8 +32,11 @@ class ReleaseTests(unittest.TestCase):
         for name in release.NATIVE_RECIPES | {'scripts/build-guest-tools.sh'}:
             self.put(self.product / name, 'recipe: ' + name)
         self.put(self.qemu / 'configure')
-        for component in release.GUEST_COMPONENTS:
-            self.put(self.qemu / 'contrib' / component / 'source.c', component)
+        self.put(self.qemu / 'contrib/it-agent/it_agent.c', 'agent')
+        self.put(self.qemu / 'contrib/export-guest-artifacts.sh', 'export')
+        self.put(self.product / 'LightTouchMac/Resources/firmware-catalog.json', json.dumps({'format': 1, 'entries': [
+            {'id': 'n72ap-7E18', 'bundled': 'device/n72ap-7E18.itbase', 'source': {'kind': 'ipsw', 'sha1': 'a' * 40},
+             'recipe': {'gli_dispatch': 'gli-dispatch-7E18.tsv'}}]}))
         self.put(self.usb / 'configure.ac')
         self.init_git(self.usb)
         self.put(self.assets / 'bootrom_240_4')
@@ -43,6 +46,7 @@ class ReleaseTests(unittest.TestCase):
         self.addCleanup(mock.patch.stopall)
         mock.patch.object(release, 'ROOT', self.product).start()
         mock.patch.object(release, 'SCRIPTS', self.product / 'scripts').start()
+        mock.patch.object(release, 'CATALOG', self.product / 'LightTouchMac/Resources/firmware-catalog.json').start()
         self.argv = ['--output', str(self.root / 'output'), '--qemu-source', str(self.qemu),
                      '--usbmuxd-source', str(self.usb), '--assets', str(self.assets), '--sdk', str(self.sdk),
                      '--bundled-ipsw', str(self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw')]
@@ -63,19 +67,24 @@ class ReleaseTests(unittest.TestCase):
                  '-c', 'commit.gpgsign=false', 'commit', '-qm', 'fixture')
 
     def guest_fixture(self):
-        for name in release.GUEST_PAYLOADS:
-            self.put(self.guest / name, 'payload ' + name)
-        record = {
-            'schema': 1, 'qemu_source': str(self.qemu),
-            'builder': {'sha256': release.digest(self.product / 'scripts/build-guest-tools.sh')},
-            'source_inputs': [{'path': name, 'sha256': checksum}
-                              for name, checksum in release.guest_source_hashes(self.qemu).items()],
-            'outputs': [{'path': name, 'sha256': release.digest(self.guest / name)}
-                        for name in sorted(release.GUEST_PAYLOADS)],
+        """An export tree as qemu-ios contrib/export-guest-artifacts.sh stages it, with its manifest."""
+        files = {}
+        for directory, names in (('guest-tools', release.GUEST_PAYLOADS),
+                                 ('ipad-guest-tools', release.IPAD_GUEST_PAYLOADS | {'gli-dispatch-7E18.tsv', 'extra-table.tsv'})):
+            for name in names:
+                self.put(self.guest.parent / directory / name, 'payload ' + name)
+                files[f'{directory}/{name}'] = release.digest(self.guest.parent / directory / name)
+        self.put(self.guest.parent / 'macos-app/entitlements.plist', 'entitlements')
+        files['macos-app/entitlements.plist'] = release.digest(self.guest.parent / 'macos-app/entitlements.plist')
+        manifest = {
+            'schema': 1, 'source': {'path': str(self.qemu), 'commit': None, 'branch': None, 'dirty': True},
+            'inputs': {name: release.digest(self.qemu / name)
+                       for name in ('contrib/it-agent/it_agent.c', 'contrib/export-guest-artifacts.sh')},
+            'files': files,
         }
-        self.put(self.guest.parent / 'guest-tools.json', json.dumps(record))
+        self.put(self.guest.parent / 'manifest.json', json.dumps(manifest))
         self.args.guest_tools = self.guest
-        return record
+        return manifest
 
     def native_fixture(self):
         self.put(self.static / 'lib/libcrypto.a')
@@ -135,8 +144,6 @@ class ReleaseTests(unittest.TestCase):
                                'printf "{\\"tool\\": {\\"guest_tools\\": \\"$tools\\"}, \\"outputs\\": {}}" > "$out/device.lock.json"\n')
         firmwarekit.chmod(0o755)
         self.put(self.product / 'scripts/pack-base.py', (Path(__file__).with_name('pack-base.py')).read_text())
-        self.put(self.product / 'LightTouchMac/Resources/firmware-catalog.json', json.dumps({'format': 1, 'entries': [
-            {'id': 'n72ap-7E18', 'bundled': 'device/n72ap-7E18.itbase', 'source': {'kind': 'ipsw', 'sha1': 'a' * 40}}]}))
         log = self.args.output / 'build.log'
         with contextlib.redirect_stdout(io.StringIO()) as out:
             blob = release.bundled_base(self.args, {'PATH': '/usr/bin:/bin'}, log, firmwarekit, self.guest)
@@ -177,18 +184,23 @@ class ReleaseTests(unittest.TestCase):
         self.put(self.args.output / 'new-binary')
         self.assertEqual(before, release.source_identity(self.product))
 
-    def test_guest_exact_payloads_are_required(self):
-        record = self.guest_fixture()
+    def test_guest_required_payloads_and_catalog_tables_are_required(self):
+        manifest = self.guest_fixture()
         release.validate_guest(self.args, self.guest)
-        record['outputs'].pop()
-        self.put(self.guest.parent / 'guest-tools.json', json.dumps(record))
-        with self.assertRaisesRegex(ValueError, 'exactly the 12'):
-            release.validate_guest(self.args, self.guest)
+        for name in ('guest-tools/it_agent', 'ipad-guest-tools/gli-dispatch-7E18.tsv'):
+            missing = dict(manifest, files={k: v for k, v in manifest['files'].items() if k != name})
+            self.put(self.guest.parent / 'manifest.json', json.dumps(missing))
+            with self.assertRaisesRegex(ValueError, 'missing from the export manifest: ' + Path(name).name):
+                release.validate_guest(self.args, self.guest)
 
-    def test_extra_guest_payload_is_rejected(self):
+    def test_guest_directory_must_match_manifest(self):
         self.guest_fixture()
         self.put(self.guest / 'old-helper')
-        with self.assertRaisesRegex(ValueError, 'exactly the 12'):
+        with self.assertRaisesRegex(ValueError, 'differs from the export manifest'):
+            release.validate_guest(self.args, self.guest)
+        (self.guest / 'old-helper').unlink()
+        (self.guest.parent / 'ipad-guest-tools/extra-table.tsv').unlink()
+        with self.assertRaisesRegex(ValueError, 'differs from the export manifest'):
             release.validate_guest(self.args, self.guest)
 
     def test_tampered_guest_payload_is_rejected(self):
@@ -199,15 +211,45 @@ class ReleaseTests(unittest.TestCase):
 
     def test_stale_guest_source_is_rejected(self):
         self.guest_fixture()
-        self.put(self.qemu / 'contrib/it-agent/source.c', 'new source')
+        self.put(self.qemu / 'contrib/it-agent/it_agent.c', 'new source')
         with self.assertRaisesRegex(ValueError, 'source inputs have changed'):
             release.validate_guest(self.args, self.guest)
 
     def test_stale_guest_recipe_is_rejected(self):
         self.guest_fixture()
-        self.put(self.product / 'scripts/build-guest-tools.sh', 'new recipe')
-        with self.assertRaisesRegex(ValueError, 'recipe has changed'):
+        self.put(self.qemu / 'contrib/export-guest-artifacts.sh', 'new recipe')
+        with self.assertRaisesRegex(ValueError, 'source inputs have changed'):
             release.validate_guest(self.args, self.guest)
+
+    def test_guest_tools_from_another_commit_are_rejected(self):
+        manifest = self.guest_fixture()
+        self.put(self.guest.parent / 'manifest.json', json.dumps(dict(manifest, source=dict(manifest['source'], commit='0' * 40))))
+        with self.assertRaisesRegex(ValueError, 'not the checkout'):
+            release.validate_guest(self.args, self.guest)
+
+    def test_signed_build_must_come_from_the_pin(self):
+        """Ad-hoc builds record the difference; a Developer ID build from another commit needs --allow-unpinned."""
+        status = release.pin_status(self.args)
+        self.assertEqual({name: s['matches'] for name, s in status.items()}, {'qemu-ios': False, 'usbmuxd': False})
+        signed = release.parse(self.argv + ['--sign-id', 'Developer ID Application: Test'])
+        with self.assertRaisesRegex(ValueError, 'Not built from the pin.*qemu-ios pinned'):
+            release.validate(signed)
+        release.validate(release.parse(self.argv + ['--sign-id', 'Developer ID Application: Test', '--allow-unpinned']))
+        pinned = dict(release.pins.pin())
+        for name in ('qemu-ios', 'usbmuxd'):
+            pinned[name] = dict(pinned[name], commit=release.pins.head(self.usb)[0])
+        with mock.patch.object(release.pins, 'pin', return_value=pinned):
+            self.assertTrue(release.pin_status(release.parse(self.argv + ['--qemu-source', str(self.usb)]))['qemu-ios']['matches'])
+
+    def test_xcconfig_repeats_the_pin(self):
+        """Configuration/Shared.xcconfig cannot run sources.py: its two lines must say what the pin says."""
+        pin = release.pins.pin()['qemu-ios']
+        settings = dict(line.split(' = ', 1) for line in (Path(__file__).parents[1] / 'Configuration/Shared.xcconfig')
+                        .read_text().splitlines() if ' = ' in line and not line.startswith('//'))
+        self.assertEqual(settings['QEMU_IOS_DIR'], pin['path'].replace('~', '$(HOME)', 1))
+        self.assertEqual(settings['QEMU_BUILD_DIR'], '$(QEMU_IOS_DIR)/' + pin['build_dir'])
+        self.assertEqual(len(pin['commit']), 40)
+        self.assertEqual(len(release.USBMUXD_COMMIT), 40)
 
     def test_stale_usbmuxd_is_rejected(self):
         self.native_fixture()
@@ -259,10 +301,10 @@ class ReleaseTests(unittest.TestCase):
         output = self.root / 'receipt-output'
         output.mkdir()
         source = self.native / 'native-build.json'
-        guest = self.guest.parent / 'guest-tools.json'
+        guest = self.guest.parent / 'manifest.json'
         records = release.copy_provenance(output, source, guest)
         self.assertEqual((output / source.name).read_bytes(), source.read_bytes())
-        self.assertEqual((output / guest.name).read_bytes(), guest.read_bytes())
+        self.assertEqual((output / 'guest-manifest.json').read_bytes(), guest.read_bytes())
         self.assertEqual(records[source.name], release.digest(source))
 
     def test_inventory_records_links_without_following_them(self):

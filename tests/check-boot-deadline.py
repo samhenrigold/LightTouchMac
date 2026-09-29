@@ -19,6 +19,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path.home()
+sys.path.insert(0, str(ROOT / "scripts"))
+import sources  # the pinned checkouts (build-support/sources.json)
 DEFAULT_DEVICE = HOME / "Developer/qemu-ios-files/ipod-ipsw/devices/8C148-b"
 
 
@@ -233,9 +235,9 @@ def main():
     ap.add_argument("--board", choices=("ipod", "ipad"), default="ipod")
     ap.add_argument("--budget", type=float, default=120, help="seconds to allow the marker (the app's budget is the board's)")
     ap.add_argument("--helper")
-    ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(HOME / "Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib")))
+    ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(sources.qemu_build() / "libqemu-arm.dylib")))
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
-    ap.add_argument("--usbmuxd", default=str(HOME / "Developer/usbmuxd-qemu/usbmuxd/src/usbmuxd"))
+    ap.add_argument("--usbmuxd", default=str(sources.path("usbmuxd") / "src/usbmuxd"))
     ap.add_argument("--work", type=Path)
     args = ap.parse_args()
     offline()
