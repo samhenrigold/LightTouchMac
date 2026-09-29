@@ -179,7 +179,8 @@ public enum Preparer {
         if dataProtection, let norURL {
             step()   // 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk
             if !iboot { try Data(repeating: 0xFF, count: 1 << 20).write(to: norURL) }   // iboot already built the packed NOR
-            guard let update = try BuildComponents.load(ipsw)["UpdateRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no Update ramdisk") }
+            let comp = try BuildComponents.load(ipsw)   // a restore-only build ships just the Restore ramdisk (N72Recipe)
+            guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no ramdisk") }
             ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
             try keybag(store: nand, nor: norURL, ramdisk: decFile(ramdisk!), dec: dec, identity: ident, dieID: dieID,
                        helper: helper, tools: o.guestTools, work: work, emit: emit, log: log)

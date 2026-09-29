@@ -170,8 +170,10 @@ public enum N72Recipe {
         try fm.removeItem(at: volume)
 
         if dataProtection, let helper = o.helper, let bootrom {
-            step()   // 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk
-            guard let update = try BuildComponents.load(ipsw)["UpdateRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no Update ramdisk") }
+            step()   // 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk (a
+            // restore-only build such as 8A293 ships just the Restore one; restored_external runs first on either)
+            let comp = try BuildComponents.load(ipsw)
+            guard let update = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(e.id): no ramdisk") }
             let ramdisk = String(update.dropLast(4)) + "-ramdisk.dmg"
             _ = try N72Keybag.run(out: o.out, dec: dec, ramdisk: ramdisk, itKeybag: o.guestTools.appendingPathComponent(itKeybag),
                                   bootrom: bootrom, helper: helper, work: work, log: log)

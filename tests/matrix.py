@@ -19,7 +19,7 @@ the JSON. One emulator at a time; every boot -audio driver=none; the prepared de
 --scratch and are deleted when the entry is done, so only the IPSW cache and the results remain.
 Run in the foreground; the driver's processes are gone when an entry returns.
 """
-import argparse, hashlib, importlib.util, json, os, re, shutil, signal, subprocess, sys, tempfile, time
+import argparse, fcntl, hashlib, importlib.util, json, os, re, shutil, signal, subprocess, sys, tempfile, time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -347,6 +347,13 @@ def main():
         ap.error("--restore needs --restore-rom and --restore-libirecovery")
     catalog = json.loads(CATALOG.read_text())
     results = json.loads(RESULTS_JSON.read_text()) if RESULTS_JSON.exists() else {}
+    # One runner at a time: two would share the scratch tools and the results file, and boot two emulators.
+    a.scratch.mkdir(parents=True, exist_ok=True)
+    lock = open(a.scratch / ".lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        sys.exit(f"another tests/matrix.py holds {a.scratch}/.lock; wait for it")
 
     if not a.firmwarekit.exists():
         log("building firmwarekit (release)")

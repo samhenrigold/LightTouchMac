@@ -39,7 +39,13 @@ nonisolated func emit(_ event: String, _ fields: [String: Any] = [:]) {
     FileHandle.standardOutput.write(data + Data("\n".utf8))
 }
 nonisolated func logEvent(_ message: String, _ arguments: CVarArg...) { emit("log", ["message": message]) }
-func fail(_ why: String) -> Never { emit("fail", ["why": why]); exit(1) }
+/// Devices whose serial log must reach disk before a failing exit (the capture flushes on finish).
+@MainActor var liveDevices: [Device] = []
+func fail(_ why: String) -> Never {
+    emit("fail", ["why": why])
+    MainActor.assumeIsolated { for d in liveDevices { d.process?.kill(); d.serial?.finish() } }
+    exit(1)
+}
 
 // App stubs the compiled sources reference.
 nonisolated enum Bundled {
@@ -155,6 +161,7 @@ extension String {
             self?.deaths.append(reason)
             emit("death", ["device": self?.name ?? "?", "reason": reason, "generation": generation])
         }
+        if !liveDevices.contains(where: { $0 === self }) { liveDevices.append(self) }
         let started = Date()
         process.start({ info in
             emit("hello", ["device": self.name, "pid": info.pid, "dylib": info.dylibPath, "build": info.buildID ?? "",
