@@ -77,10 +77,10 @@ check-uninstall-queue, check-install-queue-scope, check-media-queue, check-stora
 
 | Item | Effort | Gate |
 |---|---|---|
-| G1 2.x keeps software compositing (Apple's own CPU renderer via CA_ENABLE_MBX2D=0; 24–50 fps measured, full fidelity, planar-YUV video goes to the LCD plane) — record in the ledger; measure video on the plane path | 0.5 | ledger row + a video measurement |
+| G1 2.x compositing leaves the software path (Sam: "dog slow and janky"): CoreAnimation composites through the 2.x GL front end (CA_ENABLE_OGL, as 3.x does), else the MBX 2D API shim so the stock MBX2D compositor runs | in G2 | home swipe / Safari zoom / scroll fps and stalls vs the software path; 3.x-level smoothness |
 | G2 2.x GL front end for apps: `mkold.py --legacy` turns rebase opcodes into classic relocations (prereq); `gles2x.c` exports the firmware's own gl*/egl*/EAGL names over the same mbxshim core and gles-names.h wire; replaces OpenGLES.framework's binary via an n72-ios2 hook; first App Store game on screen, then compatibility | 5–8 | a 2.x game renders through the host with zero refusals; 5F138/5H11 boot+gles; 3.x/4.x unchanged |
-| G3 1.x ships with LK_ENABLE_MBX2D=0 (software compositing); test Cover Flow + video on the first 4B1 boot | 0 | 1G milestone screenshots |
-| G4 Optional MBX 2D API shim (~40 exports, 5 draw ops hoisted to host 2D blits) only if 1.x/2.x Cover Flow or video is wrong; never a hardware MBX model | 5–8 | Cover Flow + video on 4B1 and 5F138 |
+| G3 1.x boots first with LK_ENABLE_MBX2D=0 (software) to reach the milestone, then G4 makes it smooth | 0 | 1G milestone screenshots |
+| G4 MBX 2D API shim (~40 exports, 5 draw ops hoisted to host 2D blits): the 1.x compositor path (LayerKit has no EAGL) and the 2.x fallback if CA's GL renderer can't be completed; never a hardware MBX model | 5–8 | 1.x home/Cover Flow/video smooth on 4B1; 2.x if used |
 
 ## Track D: emulator consolidation (after gl-coverage and usb-alert merge; ~10 d)
 
