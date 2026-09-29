@@ -153,6 +153,25 @@ def main():
             r = request(f'GET {url}/test HTTP/1.1\r\nHost: ignored\r\nCookie: guest=1\r\nProxy-Connection: keep-alive\r\n\r\n'.encode())
             assert status(r) == b'HTTP/1.0 200 OK' and r.endswith(b'\r\n\r\nhello guest=1') and b'Connection: close' in r, r
             assert 'Proxy-Connection' not in Origin.seen['/test'], Origin.seen['/test']
+            # Offline (a 5.x booting restricted, smoke #54): every connection closes without a byte -- no HTTP
+            # reply, which iOS's captive-network probe would take for a portal ("Log In") -- and nothing goes
+            # upstream, the location answer included; "open" (.netRestrict(false)) serves as normal.
+            offline_sock = str(work / 'offline.sock')
+            offline = subprocess.Popen([exe, 'serve-offline', config, offline_sock], stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, text=True)
+            assert offline.stdout.readline().strip() == 'listening'
+            try:
+                for probe in (f'GET {url}/offline HTTP/1.0\r\n\r\n', f'CONNECT 127.0.0.1:{secure_port} HTTP/1.0\r\n\r\n',
+                              'POST /clls/wloc HTTP/1.0\r\nContent-Length: 0\r\n\r\n'):
+                    r = request(probe.encode(), offline_sock)
+                    assert r == b'', ('offline proxy answered', probe.split()[0], r[:80])
+                assert '/offline' not in Origin.seen, 'offline proxy reached the origin'
+                offline.stdin.write('open\n'); offline.stdin.flush()
+                assert offline.stdout.readline().strip() == 'open'
+                r = request(f'GET {url}/offline HTTP/1.0\r\n\r\n'.encode(), offline_sock)
+                assert status(r) == b'HTTP/1.0 200 OK' and '/offline' in Origin.seen, r[:120]
+            finally:
+                offline.kill()
             r = request(f'GET {url}/chunked HTTP/1.0\r\n\r\n'.encode())
             assert r.endswith(b'\r\n\r\nhello') and b'Transfer-Encoding' not in r, r
             r = request(f'GET {url}/gzip HTTP/1.0\r\nAccept-Encoding: gzip\r\n\r\n'.encode())

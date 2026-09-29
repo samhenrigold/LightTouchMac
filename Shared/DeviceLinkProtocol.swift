@@ -127,6 +127,12 @@ nonisolated struct BootConfig: Codable, Sendable, Equatable {
         machine = try c.decode(String.self, forKey: .machine)
         webProxy = try c.decodeIfPresent(WebProxyEndpoint.self, forKey: .webProxy)
     }
+
+    /// argv's wifi0 user netdev boots restricted (BootRecipe.wifiNetdev): 5.x Setup runs offline. The
+    /// helper's web proxy starts offline to match and opens with `.netRestrict(false)`.
+    var wifiRestricted: Bool {
+        zip(argv, argv.dropFirst()).contains { $0 == "-netdev" && $1.hasPrefix("user,id=wifi0,") && $1.split(separator: ",").contains("restrict=on") }
+    }
 }
 
 nonisolated struct WebProxyEndpoint: Codable, Sendable, Equatable {

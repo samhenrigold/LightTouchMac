@@ -36,6 +36,13 @@ let fwd = ",guestfwd=tcp:10.0.2.100:3128-cmd:/usr/bin/nc -U /tmp/p.sock"
 expect(BootRecipe.wifiNetdev(guestForward: fwd, restricted: false) == "user,id=wifi0" + fwd, "unrestricted netdev changed")
 let r = BootRecipe.wifiNetdev(guestForward: fwd, restricted: true)
 expect(r.hasPrefix("user,id=wifi0" + fwd) && r.hasSuffix(",restrict=on"), "restricted netdev: \(r)")
+// The helper reads the same argv to start its web proxy offline (DeviceHost; the PAC routes public hosts
+// through it, and slirp's restrict lets guestfwd traffic by).
+func argv(_ netdev: String?) -> BootConfig { BootConfig(argv: ["LightTouchMac", "-M", "ipad1"] + (netdev.map { ["-netdev", $0] } ?? []), machine: "ipad1") }
+expect(argv(r).wifiRestricted, "helper doesn't see the restricted netdev")
+expect(!argv(BootRecipe.wifiNetdev(guestForward: fwd, restricted: false)).wifiRestricted, "helper sees an unrestricted netdev as restricted")
+expect(!argv(nil).wifiRestricted, "no netdev read as restricted")
+expect(!argv("user,id=wifi0,guestfwd=tcp:10.0.2.100:3128-cmd:/usr/bin/nc -U /tmp/restrict=on").wifiRestricted, "a path containing restrict=on")
 
 // The gate over frontmost sequences: (bundleID, name) per 3 s poll; nil = agent not up yet.
 typealias Poll = (String?, String?)
