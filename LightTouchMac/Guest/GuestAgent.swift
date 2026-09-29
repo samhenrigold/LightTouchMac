@@ -12,7 +12,7 @@ nonisolated struct GuestAgentError: LocalizedError, CustomStringConvertible {
     let operation: String
     let status: Int
     let output: Data
-    static let notFound = -2, again = -35, connectionReset = -54, notImplemented = -78
+    static let notFound = -2, tooBig = -27, again = -35, connectionReset = -54, notImplemented = -78
     /// The alert's words; `description` (what logs interpolate) keeps the status and output.
     var errorDescription: String? { "The device couldn’t complete the request. Open Device Logs for details." }
     var description: String { "agent \(operation) failed (\(status)): \(String(decoding: output.prefix(4096), as: UTF8.self))" }
@@ -132,15 +132,36 @@ nonisolated struct GuestAgent: Sendable {
         try await perform("sync")
     }
 
-    /// Atomic (mkstemp beside the path, fsync, rename) and root-owned.
+    /// Atomic (temp beside the path, fsync, rename) and root-owned. Over one
+    /// request (256 KiB with its header) it goes as v3 `putpart` chunks, still
+    /// renamed into place by the final one.
     func put(_ path: String, mode: Int, _ data: Data) async throws {
-        try await perform("put", "\(path) \(String(mode, radix: 8))", body: data)
+        let octal = String(mode, radix: 8), part = 256 * 1024 - 4097
+        guard data.count > part else { try await perform("put", "\(path) \(octal)", body: data); return }
+        guard try await capabilities().has("putpart") else {
+            throw DeviceToolsError.failed("The device’s guest tools are too old to receive this file. Restart the device to update them.")
+        }
+        var offset = 0
+        while offset < data.count {
+            let end = min(offset + part, data.count)
+            try await perform("putpart", "\(offset) \(end == data.count ? 1 : 0) \(octal) \(path)",
+                              body: Data(data[(data.startIndex + offset)..<(data.startIndex + end)]))
+            offset = end
+        }
     }
 
-    /// A regular file up to 1 MiB; nil when absent.
+    /// A regular file of any size (past 1 MiB by `getrange`); nil when absent.
     func get(_ path: String) async throws -> Data? {
         let (status, output) = try await raw("get", path)
         if status == GuestAgentError.notFound { return nil }
+        if status == GuestAgentError.tooBig {
+            var data = Data()
+            while true {
+                let piece = try await perform("getrange", "\(data.count) \(1024 * 1024) \(path)")
+                data.append(piece)
+                if piece.count < 1024 * 1024 { return data }
+            }
+        }
         guard status == 0 else { throw GuestAgentError(operation: "get", status: status, output: output) }
         return output
     }
