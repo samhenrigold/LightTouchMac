@@ -104,11 +104,16 @@ def main():
     check(one("usb").get("productType"), f"{b}: lockdown over its usbmuxd: {one('usb').get('productType')}")
     agent = one("agent", generation=1)
     check(agent.get("alive"), f"{b}: the guest agent is up (packaged: {agent.get('packaged')}, ActivationState {agent.get('state')!r})")
+    route = one("route")
+    check(route.get("ok"), f"{b}: guest routed through the proxy (the image's PAC, or itproxy without one)"
+          + ("" if route.get("ok") else f": {route.get('error')}"))
     if args.httpget:
         http = one("httpget", label="http")
         check(http.get("ok"), f"{b}: plain HTTP through the proxy (the guest's Wi-Fi is up): {http.get('output', '')[:60]!r}")
         before = one("httpget", label="untrusted")
-        # iOS 3/4 CFNetwork reports the untrusted chain as -1200 "secure connection failed" (-1202 on later releases).
+        # The proxy's untrusted chain: -1200 "secure connection failed" through the PAC (7E18 and 7B500 bases), -1202
+        # "untrusted server certificate" through itproxy's static proxy (the legacy image). The route check above
+        # makes sure it is the proxy's certificate being refused, not 3.1.3's TLS against the real origin (-1200 too).
         check(before and not before.get("ok") and any(code in before.get("output", "") for code in ("-1200", "-1202")),
               f"{b}: HTTPS through the proxy refused before the trust (untrusted certificate): {before.get('output', '')[:90]!r}")
     trust = one("trust", generation=1)
