@@ -1719,16 +1719,16 @@
   "first_failure": {
    "check": "shutdown",
    "why": "The emulator stopped.",
-   "excerpt": "\u0000Boot Failure Count: 0\tPanic Fail Count: 0\n\u0000pinot_init(): pinot_default_color: 0x00ffffff\n\u0000Boot Failure Count: 0\tPanic Fail Count: 0"
-  }
+   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\npinot_init(): pinot_default_color: 0x00ffffff\nBoot Failure Count: 0\tPanic Fail Count: 0"
+  },
+  "triage": "(a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
  },
  "n72ap-8A248c": {
   "version": "4.0",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T02:06:46+00:00",
+  "when": "2026-09-29T03:08:46+00:00",
   "prerelease": "beta",
-  "clock": "2010-04-27",
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
    "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
@@ -1741,7 +1741,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 54.4,
+   "seconds": 76.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1768,11 +1768,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 21.5
+    "seconds": 46.3
    },
    "lockdown": {
     "ok": true,
-    "seconds": 13.4,
+    "seconds": 19.1,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1791,7 +1791,7 @@
    },
    "install": {
     "ok": true,
-    "seconds": 16,
+    "seconds": 18,
     "attempt": 1
    },
    "package": {
@@ -1803,18 +1803,18 @@
     "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
    },
    "persist": {
-    "ok": false,
-    "error": "afc(unknown AFC error (code 1))",
+    "ok": true,
+    "error": null,
     "second_boot": {
-     "lit": 31.1,
-     "lockdown": 0.3
+     "lit": 27.9,
+     "lockdown": 1.1
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
+    "ok": true,
+    "seconds": 29.5,
     "reason": "The emulator stopped.",
-    "second": 33.5
+    "second": 29.3
    },
    "base_unchanged": true,
    "driver_exit": 0
@@ -1827,11 +1827,7 @@
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/home2.png"
   },
   "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/driver.jsonl",
-  "first_failure": {
-   "check": "persist",
-   "why": "afc(unknown AFC error (code 1))",
-   "excerpt": "\u0000Boot Failure Count: 0\tPanic Fail Count: 0\n\u0000pinot_init(): pinot_default_color: 0x00ffffff\n\u0000Boot Failure Count: 0\tPanic Fail Count: 0"
-  }
+  "triage": "pass on the rerun (persist ok, shutdown confirmed 29 s on both boots): the first run's boot-2 'afc(unknown AFC error (code 1))' came 0.3 s after lockdown answered, the AFC-too-early race, not the build. (a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
  },
  "n72ap-8A260b": {
   "version": "4.0",
@@ -1941,8 +1937,9 @@
   "first_failure": {
    "check": "shutdown",
    "why": "The emulator stopped.",
-   "excerpt": "\u0000Boot Failure Count: 0\tPanic Fail Count: 0\n\u0000pinot_init(): pinot_default_color: 0x00ffffff\n\u0000Boot Failure Count: 0\tPanic Fail Count: 0"
-  }
+   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\npinot_init(): pinot_default_color: 0x00ffffff\nBoot Failure Count: 0\tPanic Fail Count: 0"
+  },
+  "triage": "(a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
  },
  "n72ap-8A274b": {
   "version": "4.0",
@@ -2048,7 +2045,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/driver.jsonl",
+  "triage": "pass on the first run: catalog entry only (8C148 shim, no per-build data)."
  },
  "n72ap-8B5080c": {
   "version": "4.1",
@@ -2154,7 +2152,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/driver.jsonl",
+  "triage": "pass on the first run: catalog entry only."
  },
  "n72ap-8B5091b": {
   "version": "4.1",
@@ -2260,7 +2259,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/driver.jsonl",
+  "triage": "pass on the first run: catalog entry only."
  },
  "n72ap-8B5097d": {
   "version": "4.1",
@@ -2366,7 +2366,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/driver.jsonl",
+  "triage": "pass on the first run: catalog entry only."
  },
  "n72ap-8C134": {
   "version": "4.2",
@@ -2472,7 +2473,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/driver.jsonl",
+  "triage": "pass on the first run (the pulled 4.2 GM): catalog entry only."
  },
  "n72ap-8C5091e": {
   "version": "4.2",
@@ -2578,7 +2580,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/driver.jsonl",
+  "triage": "pass on the first run: catalog entry only."
  },
  "n72ap-8C5101c": {
   "version": "4.2",
@@ -2684,7 +2687,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/driver.jsonl",
+  "triage": "pass on the first run: catalog entry only."
  },
  "n72ap-8C5115c": {
   "version": "4.2",
@@ -2794,8 +2798,9 @@
   "first_failure": {
    "check": "shutdown",
    "why": "The emulator stopped.",
-   "excerpt": "\u0000Boot Failure Count: 0\tPanic Fail Count: 0\n\u0000pinot_init(): pinot_default_color: 0x00ffffff\n\u0000Boot Failure Count: 0\tPanic Fail Count: 0"
-  }
+   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\npinot_init(): pinot_default_color: 0x00ffffff\nBoot Failure Count: 0\tPanic Fail Count: 0"
+  },
+  "triage": "(a) as the 4.0 betas: boot 1's clean shutdown unconfirmed inside 50 s right after the install, boot 2 confirms in 1.3 s; everything else passes."
  },
  "k48ap-8C134": {
   "version": "4.2",
@@ -2903,7 +2908,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/driver.jsonl",
+  "triage": "pass on the first run (4.2 GM): catalog entry only; shutdown 17 s as 8C148."
  },
  "k48ap-8C134b": {
   "version": "4.2",
@@ -3011,7 +3017,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/driver.jsonl",
+  "triage": "pass on the first run (4.2 GM 2): catalog entry only."
  },
  "k48ap-8C5091e": {
   "version": "4.2",
@@ -3124,7 +3131,8 @@
    "check": "shutdown",
    "why": "The emulator stopped.",
    "excerpt": "AppleH3CamIn: Error conencting to PWM driver\nAppleBCMWLAN Joined BSS:     @ 0x89bc1800, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\"\nUSB mux: 263 reads / 0 errors, 184 writes / 0 errors"
-  }
+  },
+  "triage": "(a) boot 1's clean shutdown unconfirmed inside 50 s right after the install (boot 2: 15 s, as 8C148); everything else passes. No expiry alert on the Mac's date."
  },
  "k48ap-8C5101c": {
   "version": "4.2",
@@ -3232,7 +3240,8 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/driver.jsonl",
+  "triage": "pass on the first run: catalog entry only."
  },
  "k48ap-8C5115c": {
   "version": "4.2",
@@ -3340,6 +3349,7 @@
    "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/lock2.png",
    "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/driver.jsonl",
+  "triage": "pass on the first run: catalog entry only."
  }
 }
