@@ -11,9 +11,10 @@ validation=controller[a:b]
 a=controller.index('    @objc func toggleDevicePause(')
 b=controller.index('    @objc func devicePause(',a)
 toggle=controller[a:b]
-a=controller.index('    private var canTakeScreenshot:')
-b=controller.index('    private let fileStatus',a)
-captureAvailability=controller[a:b].replace('private var','var')
+capture=(root/'Features/CaptureController.swift').read_text()
+a=capture.index('    var canTakeScreenshot: Bool {')
+b=capture.index('    init(preferences:',a)
+captureAvailability=capture[a:b]
 selectors=set(re.findall(r'#selector\(MainWindowController\.(\w+)\(',menu))
 selectors.update(re.findall(r'#selector\((\w+)\(',validation))
 selectors.discard('toggleDevicePause')
@@ -50,6 +51,7 @@ struct Instance { let id=UUID() }
 @MainActor final class MainWindowController:NSWindowController {
  let emulator:Emulator?=Emulator(),recording=Recording()
  var screenshotBusy=false
+ var capture:MainWindowController { self }   // CaptureController's availability, below
 '''+stubs+'\n'+toggle+'\n'+captureAvailability+r'''
  func validateMenuItem(_ menuItem:NSMenuItem)->Bool {
  guard let emulator else {return false}

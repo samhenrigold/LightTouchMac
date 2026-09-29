@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
-"""Production capture key routing, native Copy, and recording sheet callbacks."""
+"""Production capture key routing and recording sheet callbacks: Features/CaptureController.swift compiled whole
+against tests/fixtures/capture-controller.swift, with its AppKit sheets and the key monitor swapped for recorders
+(NSAlert(), NSSavePanel(), NSEvent's local monitor). The window controller's own Copy responder
+(MainWindowController.copy) is not part of this file."""
 from pathlib import Path
 import subprocess, tempfile
-DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 
 root = Path(__file__).resolve().parents[2]
-source = (root / 'LightTouchMac/UI/MainWindowController.swift').read_text()
+app = root / 'LightTouchMac'
 
 
-def method(signature):
-    start = source.index(signature)
-    return source[start:source.index('\n    }', start) + 6].replace('private func', 'func')
+def patched(text, old, new):
+    assert old in text, old
+    return text.replace(old, new)
 
 
-keyboard = method('    private func installCaptureKeyboardShortcuts()')
-keyboard = keyboard.replace('NSEvent.addLocalMonitorForEvents', 'EventMonitor.install')
-discard = method('    @objc func discardRecording(').replace('NSAlert()', 'TestAlert()')
-save_start = source.index('        recording.chooseSaveDestination = ')
-save_end = source.index('\n        recording.onCompleted = ', save_start)
-save_hook = source[save_start:save_end].replace('NSSavePanel()', 'TestSavePanel()')
+capture = (app / 'Features/CaptureController.swift').read_text()
+capture = patched(capture, 'NSEvent.addLocalMonitorForEvents', 'EventMonitor.install')
+capture = patched(capture, 'NSEvent.removeMonitor', 'EventMonitor.removeMonitor')
+capture = patched(capture, 'NSAlert()', 'TestAlert()')
+capture = patched(capture, 'NSSavePanel()', 'TestSavePanel()')
 
 code = r'''import Cocoa
 import UniformTypeIdentifiers
 
-// Exercise AppKit's responder chain without taking focus from the running app.
+// Exercise AppKit's key routing without taking focus from the running app.
 @MainActor final class TestApplication: NSApplication {
  var commandWindow: NSWindow?
  var modal: NSWindow?
@@ -39,35 +40,15 @@ import UniformTypeIdentifiers
  override var isKeyWindow: Bool { key }
  override var attachedSheet: NSWindow? { testSheet }
 }
-@MainActor final class TestScreen: NSView {
- var isShowingLiveText = false
- override var acceptsFirstResponder: Bool { true }
-}
-@MainActor final class DeviceController { let screen = TestScreen() }
 @MainActor final class EventMonitor {
  let handler: (NSEvent) -> NSEvent?
  init(_ handler: @escaping (NSEvent) -> NSEvent?) { self.handler = handler }
+ static var last: EventMonitor?
  static func install(matching: NSEvent.EventTypeMask,
                      handler: @escaping (NSEvent) -> NSEvent?) -> Any {
-  precondition(matching == [.keyDown, .keyUp]); return EventMonitor(handler)
+  precondition(matching == [.keyDown, .keyUp]); last = EventMonitor(handler); return last!
  }
-}
-@MainActor final class TestRecording {
- var id = UUID(), canStop = true
- var stops: [Bool] = []
- var chooseSaveDestination: ((Error) async -> URL?)?
- func stop(discard: Bool = false) { stops.append(discard); canStop = false }
- func reset() { id = UUID(); canStop = true; stops = [] }
-}
-@MainActor final class CaptureNotifications {
- static let shared = CaptureNotifications()
- enum RecordingAction { case stopAndSave, stopAndDelete }
- var onRecordingAction: ((UUID, RecordingAction) -> Void)?
- var reminders: [(TimeInterval, UUID)] = [], cancellations = 0
- func scheduleReminder(after delay: TimeInterval, recordingID: UUID, profile: DeviceProfile) async {
-  reminders.append((delay, recordingID))
- }
- func cancelReminder() { cancellations += 1 }
+ nonisolated static func removeMonitor(_ monitor: Any) {}
 }
 @MainActor final class TestAlert {
  static var last: TestAlert?
@@ -87,35 +68,18 @@ import UniformTypeIdentifiers
  func beginSheetModal(for window: NSWindow) async -> NSApplication.ModalResponse {
   Self.last = self; return Self.response
  }
-}
-@MainActor final class EmulatorController { let profile = DeviceProfile.iPodTouch2G }
-@MainActor final class CaptureController: NSWindowController {
- let emulator = EmulatorController()
- let deviceVC: DeviceController? = DeviceController(), recording = TestRecording()
- let currentProfile = DeviceProfile.iPodTouch2G
- let capturePreferences: CapturePreferences
- var captureKeyMonitor: Any?, consumedCaptureSpace = false
- var captures: [String] = []
- var captureFolder: URL { capturePreferences.saveLocation }
- func captureName(_ name: String) -> String { name + " test" }
- init(window: NSWindow, preferences: CapturePreferences) {
-  capturePreferences = preferences
-  super.init(window: window)
-  window.contentView!.addSubview(deviceVC!.screen)
-  deviceVC!.screen.frame = window.contentView!.bounds
-  installCaptureKeyboardShortcuts()
-  installCaptureNotifications()
-  installSaveFallback()
+ func beginSheetModal(for window: NSWindow, completionHandler: @escaping (NSApplication.ModalResponse) -> Void) {
+  Self.last = self; completionHandler(Self.response)
  }
- required init?(coder: NSCoder) { fatalError() }
- @objc func copyScreen(_ sender: Any?) { captures.append("copy") }
- @objc func saveScreenshot(_ sender: Any?) { captures.append("save") }
- @objc func saveScreenshotAs(_ sender: Any?) { captures.append("saveAs") }
- @objc func toggleRecording(_ sender: Any?) { captures.append("record") }
- func installSaveFallback() {
-''' + save_hook + '\n }\n' + keyboard + '\n' + method('    @objc func copy(') + '\n' + discard + '\n' + method('    private func installCaptureNotifications()') + '\n' + method('    @objc private func recordingAppDidResignActive()') + '\n' + r'''
- @objc func recordingAppDidBecomeActive() { CaptureNotifications.shared.cancelReminder() }
- func route(_ event: NSEvent) -> NSEvent? { (captureKeyMonitor as! EventMonitor).handler(event) }
+}
+/// Records which capture the Space bar asked for instead of taking it.
+@MainActor final class RecordingController: CaptureController {
+ var captures: [String] = []
+ override func copyScreen() { captures.append("copy") }
+ override func saveScreenshot() { captures.append("save") }
+ override func saveScreenshotAs() { captures.append("saveAs") }
+ override func toggleRecording() { captures.append("record") }
+ func route(_ event: NSEvent) -> NSEvent? { EventMonitor.last!.handler(event) }
 }
 @main struct Check {
  @MainActor static func main() async throws {
@@ -126,9 +90,15 @@ import UniformTypeIdentifiers
   let preferences = CapturePreferences(defaults: defaults)
   let window = TestWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 400),
                           styleMask: [.titled], backing: .buffered, defer: false)
-  let controller = CaptureController(window: window, preferences: preferences)
+  let device = DeviceSession()
+  let controller = RecordingController(preferences: preferences)
+  controller.window = window
+  controller.session = { device }
+  let screen = device.workspace.deviceVC.screen
+  window.contentView!.addSubview(screen)
+  screen.frame = window.contentView!.bounds
   app.commandWindow = window
-  window.makeFirstResponder(controller.deviceVC!.screen)
+  window.makeFirstResponder(screen)
   func key(_ type: NSEvent.EventType = .keyDown, flags: NSEvent.ModifierFlags = [],
            repeat repeating: Bool = false, code: UInt16 = 49, in target: NSWindow? = nil) -> NSEvent {
    NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: 0,
@@ -163,15 +133,15 @@ import UniformTypeIdentifiers
   precondition(captured(key(.keyUp)))
   precondition(!captured(key()), "typing spaces must not capture")
   precondition(!captured(key(.keyUp)))
-  window.makeFirstResponder(controller.deviceVC!.screen)
+  window.makeFirstResponder(screen)
   precondition(captured(key()))
   // The key-up can be delivered to another app after Cmd-Tab. A later,
   // unrelated modified key press must not inherit stale ownership.
   precondition(!captured(key(flags: .shift)))
   precondition(!captured(key(.keyUp, flags: .shift)))
-  controller.deviceVC!.screen.isShowingLiveText = true
+  screen.isShowingLiveText = true
   precondition(!captured(key()))
-  controller.deviceVC!.screen.isShowingLiveText = false
+  screen.isShowingLiveText = false
   window.key = false
   precondition(!captured(key()))
   window.key = true
@@ -183,25 +153,6 @@ import UniformTypeIdentifiers
   app.modal = other
   precondition(!captured(key()))
   app.modal = nil
-  // A native Copy selector resolves to the focused editor before the window
-  // controller, and resolves to screenshot Copy only on the device itself.
-  let copy = #selector(NSText.copy(_:))
-  precondition(NSApp.target(forAction: copy) as? CaptureController === controller)
-  let beforeCopy = controller.captures.count
-  precondition(NSApp.sendAction(copy, to: nil, from: nil))
-  precondition(controller.captures.count == beforeCopy + 1 && controller.captures.last == "copy")
-  window.makeFirstResponder(editor)
-  editor.string = "Selected text"
-  editor.setSelectedRange(NSRange(location: 0, length: 8))
-  precondition(NSApp.target(forAction: copy) as? NSTextView === editor)
-  // Avoid replacing the user's pasteboard: native target resolution is enough.
-  controller.copy(nil)
-  precondition(controller.captures.count == beforeCopy + 1)
-  window.makeFirstResponder(controller.deviceVC!.screen)
-  controller.deviceVC!.screen.isShowingLiveText = true
-  controller.copy(nil)
-  precondition(controller.captures.count == beforeCopy + 1)
-  controller.deviceVC!.screen.isShowingLiveText = false
   // Notification buttons are tied to the original take, never a later take.
   let notifications = CaptureNotifications.shared
   let recording = controller.recording
@@ -231,18 +182,18 @@ import UniformTypeIdentifiers
   precondition(notifications.reminders[0].1 == recording.id)
   // Discard confirmation can keep recording, save, or discard. A stale
   // confirmation cannot stop a replacement recording.
-  controller.discardRecording(nil)
+  controller.discardRecording()
   TestAlert.last!.reply?(.alertThirdButtonReturn)
   precondition(recording.stops.isEmpty)
-  controller.discardRecording(nil)
+  controller.discardRecording()
   TestAlert.last!.reply?(.alertSecondButtonReturn)
   precondition(recording.stops == [false])
   recording.reset()
-  controller.discardRecording(nil)
+  controller.discardRecording()
   TestAlert.last!.reply?(.alertFirstButtonReturn)
   precondition(recording.stops == [true])
   recording.reset()
-  controller.discardRecording(nil)
+  controller.discardRecording()
   let oldReply = TestAlert.last!.reply
   recording.reset()
   oldReply?(.alertFirstButtonReturn)
@@ -263,7 +214,7 @@ import UniformTypeIdentifiers
   controller.window = nil
   let closed = await recording.chooseSaveDestination?(CocoaError(.fileWriteNoPermission))
   precondition(closed == nil)
-  print("PASS: native Copy routing; Space ownership, repeats, focus, modifiers and sheets; reminder identity; discard and save fallback callbacks")
+  print("PASS: Space ownership, repeats, focus, modifiers and sheets; reminder identity; discard and save fallback callbacks")
  }
 }
 '''
@@ -271,7 +222,10 @@ import UniformTypeIdentifiers
 with tempfile.TemporaryDirectory(prefix='ltm-capture-shortcuts-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
-    subprocess.run(['xcrun', 'swiftc', DEVICE_PROFILE, '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
-                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/Features/CapturePreferences.swift'),
+    (work / 'CaptureController.swift').write_text(capture)
+    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', '-default-isolation', 'MainActor',
+                    '-module-cache-path', str(work / 'modules'),
+                    *[str(app / f) for f in ['Device/DeviceProfile.swift', 'Features/CapturePreferences.swift', 'Features/CaptureSound.swift']],
+                    str(work / 'CaptureController.swift'), str(root / 'tests/fixtures/capture-controller.swift'),
                     str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=25)
