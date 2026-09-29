@@ -299,3 +299,16 @@ the iBoot-817/931 generation.
 > `disk` node (guest side, P; fixed generically). Before that, 5.1.1 panicked 1 s in on the CDMA's +0x10 (K48 #36,
 > R now). Ring 1 carries only the firmware's console ('tty ') messages. Remaining 5.x stops: GPU (absent), the
 > `iboot=` path's epoch (smoke #7), halt-as-restart with USB power (smoke #28).
+
+> 2026-09-29 `ios5-gl` (qemu-ios, not merged): 5.1.1 is created, sealed and booted on the `iboot=` chain and
+> SpringBoard composites through the GL bridge (Setup Assistant, home, Spotlight, Safari; `gles-rejects` empty).
+> Row 3 above: the epoch is what LLB would write, read off the staged iBoot's miu_init check for the model's fuse
+> field (P path, the value as LLB computes it; smoke #7 closed). Row 4 was not the PMU at all: iBoot-1219's
+> `dialog_read_adc` polls the ADC start bit, which never cleared (K48 #15, R now), and ten timeouts mean power-off.
+> Also met: the Pinot panel answered the iPod's ID (K48 #28: now the K48 panel's measured bytes, R), a CDMA
+> drain-during-push race behind the IOP's "dma timeout" on seal (K48 #36, R), and D1815 ADC mux 6 (the dock's
+> D+/D- brick ID) read mid-scale, so 4.3.x/5.x called the cable "Detached" (R now: a host's pull-downs; smoke #35's
+> cause). Per-build item 1 below is retired for GL: one GLEngine and one gld plugin serve 3.2, 4.2.1 and 5.1.1,
+> libGFXShared's generation and the dispatch read at load, the 64 new fields rows 848-911 (guest side, H: the
+> engine and plugin stay stand-ins, smoke #41 for what they take on trust). 5.x activation (smoke #37) and the 5.x
+> guest-package family (#39) remain P.
