@@ -19,6 +19,22 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
         /// API 2.1: the armv6 slice's instructions are really ARMv7 (a
         /// cracked release that relabelled its armv7 slice); nil = not scanned.
         let armv7_code: Bool?
+
+        enum CodingKeys: String, CodingKey { case install_status, architectures, macho_min_os, device_family_macho, armv7_code }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            install_status = try c.decodeIfPresent(String.self, forKey: .install_status)
+            architectures = try c.decodeIfPresent([String].self, forKey: .architectures)
+            macho_min_os = try c.decodeIfPresent(String.self, forKey: .macho_min_os)
+            armv7_code = try c.decodeIfPresent(Bool.self, forKey: .armv7_code)
+            // The server sends the Mach-O families as numbers ([1,2]) while compat.device_family is strings; take either.
+            if let strings = try? c.decodeIfPresent([String].self, forKey: .device_family_macho) {
+                device_family_macho = strings
+            } else {
+                device_family_macho = try c.decodeIfPresent([Int].self, forKey: .device_family_macho)?.map(String.init)
+            }
+        }
     }
 
     /// `deviceOS`: the device's iOS version (its catalog entry).

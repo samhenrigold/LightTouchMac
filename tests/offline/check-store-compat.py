@@ -55,6 +55,10 @@ code = r'''import Foundation
   let fixtures = URL(fileURLWithPath: CommandLine.arguments[2])
   CatalogClient.baseURL = URL(string: "http://127.0.0.1:\(CommandLine.arguments[1])")!
   let new = CommandLine.arguments[3] == "new"
+  // Live copy record (Box.net 1682, 09-29): Mach-O families come as numbers ([1,2]), not strings.
+  let box = try JSONDecoder().decode(CatalogCopy.self, from: Data(contentsOf: fixtures.appendingPathComponent("live-copy-1682.json")))
+  check(box.binary?.device_family_macho == ["1", "2"], "numeric device_family_macho decodes")
+  check(box.unavailableReason(minimumOS: "3.0", deviceOS: "4.2", arch: "armv7") == nil, "Box installs on the iPad")
   func names(_ apps: [CatalogApp]) -> [String: String?] {
    Dictionary(uniqueKeysWithValues: apps.map { ($0.name, $0.incompatibility) })
   }
