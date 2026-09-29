@@ -176,7 +176,7 @@ copy_tool "${USBMUXD_BIN:-$(python3 "$SRC/scripts/sources.py" usbmuxd)/src/usbmu
 PATCHER="${IBOOT32PATCHER_BIN:-$(dirname "$DEPS")/build/iBoot32Patcher/iBoot32Patcher}"
 copy_tool "$PATCHER"
 mkdir -p "$APP/Contents/Resources/licenses/iBoot32Patcher"
-cp "$(dirname "$PATCHER")/LICENSE" "$(dirname "$PATCHER")/SOURCE.txt" "$APP/Contents/Resources/licenses/iBoot32Patcher/"
+cp "$(dirname "$PATCHER")/LICENSE" "$(dirname "$PATCHER")/SOURCE.txt" "$(dirname "$PATCHER")/iBoot32Patcher-ltm.patch" "$APP/Contents/Resources/licenses/iBoot32Patcher/"
 
 # NOTE: usbmuxd's -C directory is writable state (it stores SystemConfiguration
 # and a pairing record per device). The app copies the bundled seed out to

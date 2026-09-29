@@ -1,0 +1,40 @@
+--- a/src/functions.c
++++ b/src/functions.c
+@@ -129,6 +129,17 @@
+     return NULL;
+ }
+ 
++/* A literal-pool word or pointer-table entry is word-aligned: an unaligned match is two neighbouring words
++ * (iBoot-1219 of 9A5220p has one two bytes before the boot-args literal). LightTouchMac carries this patch. */
++static void* find_aligned_word(struct iboot_img* iboot_in, uint32_t value) {
++    for(size_t i = 0; i + sizeof(uint32_t) <= iboot_in->len; i += sizeof(uint32_t)) {
++        if(!memcmp((char*) iboot_in->buf + i, &value, sizeof(value))) {
++            return (char*) iboot_in->buf + i;
++        }
++    }
++    return NULL;
++}
++
+ void* find_next_LDR_insn_with_str(struct iboot_img* iboot_in, char* in) {
+     char *str_loc = memmem(iboot_in->buf, iboot_in->len, in, strlen(in));
+     if(!str_loc) {
+@@ -139,7 +150,7 @@
+ }
+ 
+ void* find_next_LDR_insn_with_value(struct iboot_img* iboot_in, uint32_t value) {
+-    void* ldr_xref = (void*) memmem(iboot_in->buf, iboot_in->len, &value, sizeof(value));
++    void* ldr_xref = find_aligned_word(iboot_in, value);
+     if(!ldr_xref) {
+         printf("%s: Unable to find an LDR xref for 0x%X!\n", __FUNCTION__, value);
+         return 0;
+@@ -219,9 +230,7 @@
+ }
+ 
+ void* iboot_memmem(struct iboot_img* iboot_in, void* pat) {
+-    uint32_t new_pat = (uintptr_t) GET_IBOOT_ADDR(iboot_in, pat);
+-    
+-    return (void*) memmem(iboot_in->buf, iboot_in->len, &new_pat, sizeof(uint32_t));
++    return find_aligned_word(iboot_in, (uint32_t) (uintptr_t) GET_IBOOT_ADDR(iboot_in, pat));
+ }
+ 
+ bool is_BW_insn(void* offset) {

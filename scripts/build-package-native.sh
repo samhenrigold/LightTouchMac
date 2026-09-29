@@ -86,7 +86,7 @@ export PKG_CONFIG_LIBDIR="$P/lib/pkgconfig:$STATIC/lib/pkgconfig"
 (cd usbmuxd && glibtoolize --copy --force && autoreconf -fi)
 (cd usbmuxd && LDFLAGS="$LDFLAGS -framework IOKit -framework CoreFoundation -framework Security" ./configure --prefix="$P" --without-systemd && make -j"$JOBS")
 # iBoot32Patcher (GPL-3.0, the "tools" group of the manifest): firmwarekit runs it for the k48 real-iBoot
-# recipe. Built into build/iBoot32Patcher with its LICENSE and a SOURCE.txt; package.sh ships all three.
+# recipe. Built into build/iBoot32Patcher with its LICENSE, our patch and a SOURCE.txt; package.sh ships them.
 fetch_group tools
 bash "$SRC/scripts/build-iboot32patcher.sh" "$ROOT/src" "$ROOT/build/iBoot32Patcher"
 # AMC audio and incremental H.264 slices use libavcodec/libavutil. Keep the closure native
@@ -143,7 +143,7 @@ record = {
     'recipes': {str(path.relative_to(source)): digest(path) for path in (
         source / 'scripts/build-package-native.sh', source / 'scripts/build-static-deps.sh',
         source / 'scripts/dependency-sources.py', source / 'build-support/dependencies.json', source / 'scripts/build-iboot32patcher.sh',
-        source / 'build-support/patches/glib-pipe2-availability.patch',
+        source / 'build-support/patches/glib-pipe2-availability.patch', source / 'build-support/patches/iBoot32Patcher-ltm.patch',
         source / 'scripts/test-glib-compat.py', source / 'scripts/check-macho.py')},
     'static_inputs': [{'path': str(path.relative_to(static)), 'sha256': digest(path)}
                       for path in sorted(static.rglob('*')) if path.is_file()],

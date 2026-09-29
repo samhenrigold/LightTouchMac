@@ -4169,7 +4169,7 @@
    "why": "iPod-Touch-1G has no USB link (smoke.md #43)",
    "excerpt": "Dec 30 15:45:10 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: [mbxshim] GLESCreateGC\nDec 30 15:45:10 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: [gles] egl: first pixmap surface 320x480: CoreAnimation renders through the host\nDec 30 15:45:11 SpringBoard[10]: Apple80211GetIfListCopy failed, error: -4"
   },
-  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): First 1G row through the app's own path: DeviceProfile.iPodTouch1G / BootRecipe.iPod1G (bootrom_s5l8900 from the device assets, the base's iBoot.bin, nand-overlay, the private NOR as pflash) under the helper and the app's dylib. Prepare 120 s from the stock IPSW; lit 12 s; home screen on boot 1; the legacy-linked loader reports package serial 7; boot 2 after the app's Stop (flush + hard halt) lit in 11 s and showed its lock screen: no smoke #12 storage panic on this store. Activation is Sam's automatic path: lockdownd logs 'Setting the activation state to Activated' on boot 1 and 'Using the cached activation state' on boot 2 (serial). Lockdown/AFC/install fail and Shut Down does nothing because the 1G machine has no USB link, device-info row, app-driven buttons or powerdown gesture (smoke #43). Under QMP (build/qemu-system-arm, same base) Hold → slide to power off → 'pmu go stdby', QEMU exit 0, 6.7 s after the swipe, on both boots (the first hold worked: smoke #21 did not recur); boot 2 used the cached activation. Stays untested: the USB columns cannot pass until #43."
+  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): First 1G row through the app's own path: DeviceProfile.iPodTouch1G / BootRecipe.iPod1G (bootrom_s5l8900 from the device assets, the base's iBoot.bin, nand-overlay, the private NOR as pflash) under the helper and the app's dylib. Prepare 120 s from the stock IPSW; lit 12 s; home screen on boot 1; the legacy-linked loader reports package serial 7; boot 2 after the app's Stop (flush + hard halt) lit in 11 s and showed its lock screen: no smoke #12 storage panic on this store. Activation is Sam's automatic path: lockdownd logs 'Setting the activation state to Activated' on boot 1 and 'Using the cached activation state' on boot 2 (serial). Lockdown/AFC/install fail and Shut Down does nothing because the 1G machine has no USB link, device-info row, app-driven buttons or powerdown gesture (smoke #43). Under QMP (build/qemu-system-arm, same base) Hold \u2192 slide to power off \u2192 'pmu go stdby', QEMU exit 0, 6.7 s after the swipe, on both boots (the first hold worked: smoke #21 did not recur); boot 2 used the cached activation. Stays untested: the USB columns cannot pass until #43."
  },
  "n45ap-4B1": {
   "version": "1.1.5",
@@ -4681,10 +4681,10 @@
   "version": "5.0",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T19:16:46+00:00",
+  "when": "2026-09-29T20:54:21+00:00",
   "prerelease": "beta",
   "tools": {
-   "firmwarekit": "Packages/FirmwareKit/.build/release/firmwarekit",
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-iboot-bootargs/Packages/FirmwareKit/.build/release/firmwarekit",
    "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
    "guest_tools": "/Users/shg/Developer/qemu-ios-files/fk-ios5/export/ipad-guest-tools"
   },
@@ -4695,24 +4695,28 @@
    "error": null
   },
   "prepare": {
-   "seconds": 0.8,
+   "seconds": 21.7,
    "ok": false,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
-    "Writing the identity and boot chain"
+    "Writing the identity and boot chain",
+    "Building the system and data volumes",
+    "Writing the NAND",
+    "Creating the data-protection keybag",
+    "Sealing the NAND"
    ],
    "warnings": [],
-   "error": "internal: iBoot32Patcher failed (exit 255):\nmain: Starting...\nmain: iBoot-1219 inputted.\npatch_boot_args: Entering...\npatch_boot_args: Default boot-args string is at 0x25ff2\npatch_boot_args: boot-args xref is at 0x11f22\npatch_boot_args: Relocating boot-args string...\npatch_boot_args: \"Reliance on this certificate\" string found at 0x2a5f8\npatch_boot_args: Pointing default boot-args xref to 0x5ff2a5f8...\npatch_boot_args: Applying custom boot-args \"serial=3 debug=0x8 amfi_allow_any_signature=1 cs_enforcement_disable=1 enable-hsic=1\"\nfind_next_LDR_insn_with_value: Unable to resolve to LDR insn from xref 0x128019f22!\npatch_boot_args: Error locating LDR Rx, =boot_args!\nmain: Error doing patch_boot_args()!\n",
-   "last_step": "Writing the identity and boot chain",
-   "log": "/Users/shg/Developer/qemu-ios-files/fk-ios5/scratch/k48ap-9A5220p/firmwarekit.log"
+   "error": "oneshot_failed: seal boot: QEMU exited without it_seal after 0 s",
+   "last_step": "Sealing the NAND",
+   "log": "/Users/shg/Developer/qemu-ios-files/iboot-bootargs/scratch/k48ap-9A5220p/firmwarekit.log"
   },
   "first_failure": {
    "check": "prepare",
-   "why": "internal: iBoot32Patcher failed (exit 255):\nmain: Starting...\nmain: iBoot-1219 inputted.\npatch_boot_args: Entering...\npatch_boot_args: Default boot-args string is at 0x25ff2\npatch_boot_args: boot-args xref is at 0x11f22\npatch_boot_args: Relocating boot-args string...\npatch_boot_args: \"Reliance on this certificate\" string found at 0x2a5f8\npatch_boot_args: Pointing default boot-args xref to 0x5ff2a5f8...\npatch_boot_args: Applying custom boot-args \"serial=3 debug=0x8 amfi_allow_any_signature=1 cs_enforcement_disable=1 enable-hsic=1\"\nfind_next_LDR_insn_with_value: Unable to resolve to LDR insn from xref 0x128019f22!\npatch_boot_args: Error locating LDR Rx, =boot_args!\nmain: Error doing patch_boot_args()!\n",
-   "excerpt": "patch_boot_args: Pointing default boot-args xref to 0x5ff2a5f8...\npatch_boot_args: Error locating LDR Rx, =boot_args!\nmain: Error doing patch_boot_args()!"
+   "why": "oneshot_failed: seal boot: QEMU exited without it_seal after 0 s",
+   "excerpt": "firmwarekit: oneshot_failed: seal boot: QEMU exited without it_seal after 0 s"
   },
-  "triage": "(a) pipeline tool: iBoot32Patcher -b takes an unaligned false match of the default boot-args string's address (0x11f22, two pool words' halves) before the real literal at 0x11f24, then cannot find the LDR (smoke #48). Needs an aligned xref search, in the patcher or a native K48IBoot boot-args patch."
+  "triage": "iboot-bootargs 09-29: smoke #48 (boot-args iBoot32Patcher xref) fixed \u2014 the patcher now scans word-aligned literal-pool words only (build-support/patches/iBoot32Patcher-ltm.patch), and 9A5220p's lockdownd needed the activation matcher to skip an LDR-immediate between the log arguments (activation.c). prepare now clears the boot chain and activation and reaches 'Sealing the NAND'; the seal one-shot's iBoot-1219.35.80 then panics 'reset vector overwritten' because iBoot32Patcher's find_bl_verify_shsh_5_6_7 targets a verify_shsh call whose caller holds R3=0 on 9A5220p (new smoke #50). Byte-identity of the patched iBoot holds for every working k48 build (K48IBootTests); swift test / offline / release / app build green. Still untested pending #50."
  },
  "k48ap-9A5288d": {
   "version": "5.0",
