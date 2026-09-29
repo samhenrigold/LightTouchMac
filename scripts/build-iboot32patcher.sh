@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build iBoot32Patcher (arm64, macOS 14) from the pinned archive in build-support/dependencies.json's
 # "tools" group, which dependency-sources.py fetched into SRC-DIR, with build-support/patches/
-# iBoot32Patcher-ltm.patch applied (xref searches take word-aligned matches only; smoke #48).
+# iBoot32Patcher-ltm.patch applied (aligned xrefs and ABI-checked RSA bypass; smoke #48/#50).
 # OUT-DIR ends up with the binary, the upstream LICENSE (GPL-3.0), the patch, SOURCE.txt and build.json
 # (commit, license, sha256s). Called by
 # build-package-native.sh and build-release.py --stage native; package.sh ships OUT-DIR's LICENSE, patch and SOURCE.txt.
