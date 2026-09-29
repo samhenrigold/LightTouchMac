@@ -20,7 +20,11 @@ final class EmulatorController {
     private var started = false
     private var serialCapture: SerialLogCapture?
     private var haltTask: Task<Void, Never>?
-    private(set) var isErasing = false { didSet { onStatusChange?() } }
+    private(set) var isErasing = false { didSet { trackStartup(was: oldValue || state == .booting || preparingDevice); onStatusChange?() } }
+    /// When the current startup (erase, boot, readiness) began: the toast's counter, per device, not per window.
+    private(set) var startupBegan = Date()
+    var isStartingUp: Bool { isErasing || state == .booting || preparingDevice }
+    private func trackStartup(was: Bool) { if isStartingUp, !was { startupBegan = Date() } }
     private var haltCompletions: [(Bool) -> Void] = []
     /// Stop asked the helper to halt: its exit is Stopped, not a crash.
     private var halting = false
@@ -49,7 +53,7 @@ final class EmulatorController {
     private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
         let value = storageFailed
-            ? "Storage writes failed. The device is stopped and recent changes were not saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
+            ? "Couldn’t save to disk. The device stopped and recent changes weren’t saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
             : message
         logEvent(value)
         deviceNotice = value
@@ -86,7 +90,7 @@ final class EmulatorController {
     private var readinessTask: Task<Void, Never>?
     /// From the boot until SpringBoard answers over lockdown (startReadinessWatch); the status line says where it is.
     private(set) var preparingDevice = false {
-        didSet { onStatusChange?() }
+        didSet { trackStartup(was: isErasing || state == .booting || oldValue); onStatusChange?() }
     }
     private(set) var preparationStatus = "Starting iOS…" { didSet { onStatusChange?() } }
     private var readinessFailure: String?
@@ -100,7 +104,7 @@ final class EmulatorController {
         case dead(exitCode: Int32?)
     }
     private(set) var state: VMState = .notStarted {
-        didSet { if oldValue != state { onStatusChange?() } }
+        didSet { trackStartup(was: isErasing || oldValue == .booting || preparingDevice); if oldValue != state { onStatusChange?() } }
     }
 
     /// Fired on any health-relevant change — a state transition, usbmuxd dying,
@@ -111,7 +115,11 @@ final class EmulatorController {
     /// Set by the inspector's poll: nil = never checked, true/false = last read.
     var deviceReachable: Bool? {
         didSet {
-            if deviceReachable == true, connectionIssue?.persistent != true { connectionIssue = nil }
+            // A service answered: nothing blocks commands any more, not even a stale activation issue.
+            if deviceReachable == true, let issue = connectionIssue {
+                if issue.persistent { logEvent("device connection: services answer; clearing \"\(issue.summary)\""); resolveDeviceNotice(for: .activation) }
+                connectionIssue = nil
+            }
             if deviceReachable == true, reachableSince == nil {
                 reachableSince = Date()
                 startFileWatch()   // iOS is up: every file the helper depends on exists now
@@ -276,7 +284,7 @@ final class EmulatorController {
     private func pinOverlay(_ overlay: URL) throws -> Bool {
         guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
             baseImageMismatch = true
-            reportDeviceNotice("This \(profile.shortName)'s data was made with an older system image.", for: .erase)
+            reportDeviceNotice("This \(profile.shortName)’s data was made with an older system image.", for: .erase)
             state = .dead(exitCode: 1)
             return false
         }
@@ -374,7 +382,9 @@ final class EmulatorController {
     private func startFileWatch() {
         guard fileWatch == nil, !filesMeddled else { return }
         let paths = instance.paths
-        fileWatch = DeviceFileWatch(directories: [paths.directory, paths.overlay], base: paths.base) { [weak self] path in
+        // Guest-owned files only; the app's own writes under Devices/<uuid> must not fire this.
+        let nor = [paths.writableNOR].compactMap { $0 }.filter { !$0.path.hasPrefix(paths.overlay.path + "/") }
+        fileWatch = DeviceFileWatch(directories: [paths.overlay], files: nor, base: paths.base) { [weak self] path in
             Task { @MainActor in self?.filesChanged(path) }
         }
     }
@@ -404,7 +414,7 @@ final class EmulatorController {
         if let cocoa = error as? CocoaError, cocoa.code == .fileNoSuchFile, let path = cocoa.userInfo[NSFilePathErrorKey] as? String {
             return "This \(profile.shortName)’s system files are incomplete: \(URL(fileURLWithPath: path).lastPathComponent) is missing. Delete it and prepare it again."
         }
-        return "Could not prepare device storage: \(error.localizedDescription)"
+        return "Couldn’t prepare the \(profile.shortName)’s storage: \(error.localizedDescription)"
     }
 
     /// The boot can't be built: dead with a named reason (the row and the overlay show it).
@@ -506,7 +516,7 @@ final class EmulatorController {
                     try Task.checkCancellation()
                     guard generation == bootGeneration else { return }
                     guard !isDead, !storageFailed, ContinuousClock.now < deadline else {
-                        throw DeviceToolsError.failed("The device did not become ready.")
+                        throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.")
                     }
                     if state == .running, await deviceReady() { break }
                     try await Task.sleep(for: .milliseconds(250))
@@ -704,22 +714,22 @@ final class EmulatorController {
     /// One line for the window's status area.
     var statusLine: String {
         if isErasing { return "Erasing \(profile.shortName)…" }
-        if storageFailed { return "Storage write failed — device stopped; latest changes were not saved" }
+        if storageFailed { return "Couldn’t save to disk — \(profile.shortName) stopped; recent changes weren’t saved" }
         if shuttingDown, !isPoweredOff { return "Stopping…" }
         switch state {
-        case .poweredOff: return "Powered Off"
+        case .poweredOff: return "Powered off"
         case .notStarted: return "Starting…"
-        case .booting:    return "Booting…"
+        case .booting:    return "Starting iOS…"
         case .running:
             if let issue = connectionIssue, issue.persistent { return issue.summary }
             if preparingDevice { return preparationStatus }
             if isSleeping { return "Sleeping" }
-            if restartingSpringBoard { return "Restarting SpringBoard…" }
+            if restartingSpringBoard { return "Restarting the Home screen…" }
             if let readinessFailure { return "Startup failed — \(readinessFailure)" }
             guard canManageApps else { return "Running — USB unavailable" }
             return "Running — " + guestToolsLine
         case .paused:     return "Paused"
-        case .dead:       return "Emulator stopped"
+        case .dead:       return "Stopped"
         }
     }
 
@@ -1323,12 +1333,12 @@ final class EmulatorController {
                             self.onStatusChange?()
                         }
                         do {
-                            try await self.tools().configureWebProxy(enabled: self.webProxy.mode != .off)
+                            let trust = try await self.tools().configureWebProxy(enabled: self.webProxy.mode != .off)
                             try Task.checkCancellation()
                             guard generation == self.bootGeneration else { return }
                             if revision == self.proxyRevision {
                                 appliedProxyRevision = revision
-                                self.webProxyStatus = .ready
+                                self.webProxyStatus = trust
                                 self.onStatusChange?()
                             }
                         } catch {
@@ -1579,27 +1589,55 @@ final class EmulatorController {
         return await DeviceServices(clientSocket: socket).activationState()
     }
 
-    // MARK: - Activation (verified once per boot; activating is the preparer's job)
+    /// installation_proxy answers right now (a lockdown that serves is activated enough).
+    func installProxyReady() async -> Bool {
+        guard let socket = usbmux.session?.clientSocket else { return false }
+        return await DeviceServices(clientSocket: socket).installProxyReady()
+    }
+
+    // MARK: - Activation (verified per boot; activating is the preparer's job)
 
     private var activationCheckedGeneration: Int?
+    private var activationTask: Task<Void, Never>?
+    /// Between the three answers a verdict needs (the check shortens it).
+    static var activationRetryDelay: Duration = .seconds(10)
 
-    /// On the first lockdown answer of a boot, ask ActivationState once. Anything
-    /// but Activated is a persistent issue: commands stay blocked, nothing
-    /// retries, the notice offers Erase. An activated guest clears an old notice.
+    /// On the first lockdown answer of a boot, ask ActivationState: up to three
+    /// times over 20 s, so a failed or transient answer never decides. Anything
+    /// but an activated state is a persistent issue when lockdown's services
+    /// refuse too: commands stay blocked, the notice offers Erase. Services
+    /// that answer win over the string (the built-in iPod reports Unactivated
+    /// and works), and a service answering later clears a standing issue
+    /// (deviceReachable's didSet).
     private func checkActivationIfNeeded() {
-        guard deviceReachable == true, activationCheckedGeneration != bootGeneration else { return }
+        guard deviceReachable == true, activationTask == nil, activationCheckedGeneration != bootGeneration else { return }
         activationCheckedGeneration = bootGeneration
         let generation = bootGeneration
-        Task { [weak self] in
-            guard let self else { return }
-            let state = await activationState()
-            guard generation == bootGeneration else { return }
+        activationTask = Task { [weak self] in
+            defer { self?.activationTask = nil }
+            var state: String?
+            for attempt in 0..<3 {
+                if attempt > 0 { try? await Task.sleep(for: Self.activationRetryDelay) }
+                guard let self, generation == self.bootGeneration else { return }
+                if let answer = await self.activationState() {
+                    state = answer
+                    if DeviceConnectionIssue.activation(state: answer, profile: self.profile) == nil { break }
+                }
+            }
+            guard let self, generation == bootGeneration else { return }
             guard let state else { activationCheckedGeneration = nil; return }   // couldn't ask: again on the next answer
             logEvent("activation: lockdown reports \(state)")
             guard let issue = DeviceConnectionIssue.activation(state: state, profile: profile) else {
                 resolveDeviceNotice(for: .activation)
                 return
             }
+            if await installProxyReady() {
+                guard generation == bootGeneration else { return }
+                logEvent("activation: services answer; not blocking on \(state)")
+                resolveDeviceNotice(for: .activation)
+                return
+            }
+            guard generation == bootGeneration else { return }
             connectionIssue = issue
             deviceReachable = false
             readinessTask?.cancel()
@@ -1638,7 +1676,7 @@ final class EmulatorController {
             if (try? await springBoard().order()) != nil { return }
             try await Task.sleep(for: .seconds(1))
         }
-        throw DeviceToolsError.failed("SpringBoard did not recover. Restart the device to recover; your installed apps are preserved.")
+        throw DeviceToolsError.failed("The Home screen didn’t come back. Restart the \(profile.shortName); your apps are kept.")
     }
 
     /// True while any install is running — the quit guard reads this so ⌘Q

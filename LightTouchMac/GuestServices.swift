@@ -11,7 +11,7 @@
 // version, and each op it lacks falls back here to its `exec` with the same
 // command a shell would have run. No SSH anywhere.
 //
-// Foundation only, so tests/session-driver compiles it as the app does.
+// Foundation only, so tests/drivers/session-driver compiles it as the app does.
 
 import Foundation
 
@@ -33,7 +33,7 @@ enum DeviceToolsError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .toolMissing(let t):
-            return "\(t) is missing from this build of LightTouchMac."
+            return "A component (\(t)) is missing from this copy of Light Touch. Reinstall Light Touch."
         case .failed(let msg): return msg
         }
     }
@@ -45,10 +45,9 @@ nonisolated struct GuestAgentError: LocalizedError, CustomStringConvertible {
     let status: Int
     let output: Data
     static let notFound = -2, again = -35, connectionReset = -54, notImplemented = -78
-    var errorDescription: String? {
-        "The device command \(operation) failed (\(status)). \(String(decoding: output.prefix(4096), as: UTF8.self))"
-    }
-    var description: String { errorDescription ?? operation }
+    /// The alert's words; `description` (what logs interpolate) keeps the status and output.
+    var errorDescription: String? { "The device couldn’t complete the request. Open Device Logs for details." }
+    var description: String { "agent \(operation) failed (\(status)): \(String(decoding: output.prefix(4096), as: UTF8.self))" }
 }
 
 /// What `ping` said: `it_agent v2\nops …` or a v1's bare `it_agent v1`.
@@ -92,7 +91,7 @@ nonisolated struct GuestAgent: Sendable {
     /// Status and body of one op; throws only when no status came back.
     func raw(_ operation: String, _ arguments: String = "", body: Data = Data(),
              deadline: Double = 65) async throws -> (status: Int, output: Data) {
-        guard let link, isAlive else { throw DeviceToolsError.failed("The device agent is not ready.") }
+        guard let link, isAlive else { throw DeviceToolsError.failed("The device isn’t ready yet. Try again when it has finished starting.") }
         try Task.checkCancellation()
         let id = UUID().uuidString
         let request = "\(id) \(operation) \(arguments)\n\(body.base64EncodedString())"
@@ -137,7 +136,7 @@ nonisolated struct GuestAgent: Sendable {
         if let known = cache.capabilities { return known }
         let reply = String(decoding: try await perform("ping"), as: UTF8.self)
         guard let parsed = GuestAgentCapabilities.parse(reply) else {
-            throw DeviceToolsError.failed("The device agent answered an unknown version.")
+            throw DeviceToolsError.failed("The device’s guest tools didn’t respond as expected. Restart the device to update them.")
         }
         cache.capabilities = parsed
         return parsed
@@ -285,6 +284,56 @@ nonisolated struct GuestServices: Sendable {
         }
     }
 
+    // MARK: Trust
+
+    /// Trust a CA in the guest's own trust store the way a profile install
+    /// does, through securityd's API (ittrust: SecTrustStoreSetTrustSettings
+    /// in the user domain), with no screen on the device. The package's copy,
+    /// or the app's uploaded to /tmp for the one run. Idempotent; the store
+    /// keeps it across boots, so nothing asks twice. ittrust adapts at runtime
+    /// (dlopen), one source for both arches.
+    func trustCertificate(_ der: Data, localTool: (String) throws -> Data) async throws {
+        let cert = "/tmp/ltm-ca-\(UUID().uuidString).der"
+        try await agent.put(cert, mode: 0o644, der)
+        let output: String
+        do { output = try await runTool("ittrust", ["add", cert], localTool: localTool) }
+        catch { try? await agent.unlink(cert); throw error }
+        try? await agent.unlink(cert)
+        guard output.contains("Guest trust add: 0") else {
+            throw DeviceToolsError.failed("The device did not accept the certificate: \(output)")
+        }
+    }
+
+    /// The image's baked PAC (/usr/local/share/ltm/proxy.pac: every request to the itwebproxy guestfwd,
+    /// DIRECT as fallback) routes the guest through the proxy. An image without it (the legacy iPod
+    /// image) goes straight out through slirp, so the trusted CA never sees a request: itproxy points
+    /// the Wi-Fi service's HTTP and HTTPS proxies at the guestfwd through configd (idempotent; it keeps
+    /// a backup of the keys it owns). The host's "off" mode passes those connections straight through.
+    func routeThroughProxy(localTool: (String) throws -> Data) async throws {
+        guard try await agent.get(Self.proxyPAC) == nil else { return }
+        let output = try await runTool("itproxy", ["on"], localTool: localTool)
+        guard output.contains("Proxy enabled") else {
+            throw DeviceToolsError.failed("The device did not accept the proxy setting: \(output)")
+        }
+    }
+
+    static let proxyPAC = "/usr/local/share/ltm/proxy.pac"
+
+    /// A guest tool's output: the package's copy, or the app's uploaded to /tmp for the one run.
+    private func runTool(_ name: String, _ arguments: [String], localTool: (String) throws -> Data) async throws -> String {
+        if packaged {
+            do { return String(decoding: try await agent.spawn(["\(Self.packageBin)/\(name)"] + arguments), as: UTF8.self) }
+            catch let error as GuestAgentError where error.status == GuestAgentError.notFound {}
+        }
+        let executable = "/tmp/ltm-\(name)-\(UUID().uuidString)"
+        try await agent.put(executable, mode: 0o755, try localTool(name))
+        let output: Data
+        do { output = try await agent.spawn([executable] + arguments) }
+        catch { try? await agent.unlink(executable); throw error }
+        try? await agent.unlink(executable)
+        return String(decoding: output, as: UTF8.self)
+    }
+
     // MARK: SpringBoard and launchd
 
     /// launchd's KeepAlive brings SpringBoard straight back.
@@ -332,7 +381,7 @@ nonisolated struct GuestServices: Sendable {
         let out = String(decoding: output.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
         guard status == 0 else {
             let err = String(decoding: error.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
-            throw DeviceToolsError.failed("Could not set the device timezone. \(err)")
+            throw DeviceToolsError.failed("Couldn’t set the device timezone. \(err)")
         }
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
     }

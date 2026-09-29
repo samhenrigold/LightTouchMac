@@ -91,6 +91,19 @@ struct KBootTests {
         #expect(throws: FirmwareError.self) { try DeviceTree(Self.dtBlob + Data(count: 4)) }
     }
 
+    /// ipad1_kboot.boot_args_version: the kernel's own `ldrh r3, [r0, #2]; cmp r3, #3` before the Epoch Mismatch literal.
+    @Test func bootArgsVersion() throws {
+        var k = Self.kernel(at: 0x8000_0000)
+        #expect(try MachO(k).bootArgsVersion() == 2)   // no check in the kernel: 3.2.x / 4.2.1 / 4.3.0 shape
+        let s = Data("pe_identify_machine: Epoch Mismatch\0".utf8)
+        k.replaceSubrange(0x100..<0x100 + s.count, with: s)
+        k.replaceSubrange(0x200..<0x204, with: Data([0x43, 0x88, 0x03, 0x2B]))        // ldrh r3, [r0, #2]; cmp r3, #3
+        k.replaceSubrange(0x210..<0x214, with: DeviceTree.Value.le([0x8000_1100]))    // the string's VA in the literal pool
+        #expect(try MachO(k).bootArgsVersion() == 3)
+        let img = try KBoot.build(kernel: k, deviceTree: Self.dtBlob, identity: Self.placeholder)
+        #expect(img.image[Int(img.bootArgsPA - img.loadPA)..<Int(img.bootArgsPA - img.loadPA) + 4] == Data([1, 0, 3, 0]))
+    }
+
     @Test func iBootVersion() {
         #expect(KBoot.ibootVersion(Data("xxiBoot-xiBoot-817.29.\0".utf8)) == "iBoot-817.29")
         #expect(KBoot.ibootVersion(Data("iBoot-931.71.16 ".utf8)) == "iBoot-931.71.16")

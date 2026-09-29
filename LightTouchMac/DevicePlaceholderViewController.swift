@@ -96,9 +96,9 @@ final class DevicePlaceholderViewController: NSViewController {
         reason.isHidden = true
         showLog.isHidden = true
         switch row.state {
-        case .bundled: status.stringValue = "Built In"
+        case .bundled: status.stringValue = "Built in"
         case .notDownloaded, .downloaded:
-            status.stringValue = row.state == .downloaded ? "Downloaded" : "Not Downloaded"
+            status.stringValue = row.state == .downloaded ? "Downloaded" : "Not downloaded"
             if !canDownload, let why = FirmwareJobs.shared.unavailableReason { reason.stringValue = why; reason.isHidden = false }
         case .downloading:
             status.stringValue = "Downloading…"
@@ -110,11 +110,11 @@ final class DevicePlaceholderViewController: NSViewController {
         case .running: status.stringValue = "Running"
         case .stopping: status.stringValue = "Stopping…"
         case let .error(message):
-            status.stringValue = "Couldn’t Start"
+            status.stringValue = "Error"
             reason.stringValue = message
             reason.isHidden = false
             showLog.isHidden = false
-        case .unavailable(.comingSoon): status.stringValue = "Coming Soon"
+        case .unavailable(.comingSoon): status.stringValue = "Coming soon"
         case .unavailable(.untested): status.stringValue = "Untested"
         case .unavailable(.requiresIPSW): status.stringValue = "Requires an IPSW"
         }

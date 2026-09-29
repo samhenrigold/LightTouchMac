@@ -54,7 +54,7 @@ iPod-only branch's dylib lacks the iPad exports the helper links), its expected 
 build directory, and the usbmuxd commit; iBoot32Patcher is pinned in `build-support/dependencies.json`.
 `scripts/sources.py` resolves the pin for every script and check (`sources.py qemu-ios | usbmuxd | qemu-build`,
 `sources.py check` for pinned vs actual; `QEMU_IOS_DIR`, `USBMUXD_SOURCE_DIR` and `QEMU_BUILD_DIR` override),
-and `scripts/test-release.py` checks that the xcconfig agrees with it. To produce the dylib, build
+and `tests/release/test-release.py` checks that the xcconfig agrees with it. To produce the dylib, build
 `qemu-system-arm` in that checkout and run `contrib/macos-app/make-dylib-macos.sh BUILD_DIR`.
 
 Development knobs: `LTM_FIRMWAREKIT=/path/to/firmwarekit` makes a Debug app run that preparer instead of
@@ -75,30 +75,35 @@ the older build walkthrough, is kept at `docs/archive/README-2026-09-26.md`.
 
 ## Gates
 
-One command, two tiers:
+One runner, three tiers, and a wrapper that runs the host-only ones:
 
 ```sh
-scripts/gate.sh --quick    # host only, a few minutes: swift test, the catalog checks, every offline
-                           # check-*.py and scripts/test-*.py (except the network one), in parallel
-scripts/gate.sh --full     # quick + the emulator-backed checks one after the other: check-helper-boot,
-                           # check-sessions (--ipad-device, then --guest), check-guest-package, regress-app.sh
+tests/run.py offline            # no emulator, about a minute: every tests/offline/check-*.py (swiftc on the app's
+                                # sources plus temp fixtures) and the catalog checks, -j 4 through one shared
+                                # module cache
+tests/run.py release            # packaging and build checks (tests/release/); --network adds the dependency fetch
+tests/run.py sessions           # helper + emulator, one boot at a time, -audio driver=none: check-helper-boot,
+                                # check-sessions (--ipad-device, then --guest), check-guest-package,
+                                # check-activation-gate, check-boot-deadline, check-files-native, check-media-native
+scripts/gate.sh --quick         # swift test (Packages/FirmwareKit) + offline + release
+scripts/gate.sh --full          # quick + sessions
 ```
 
-One line per check (PASS, FAIL, SKIP with the reason, XFAIL for a check the script lists as known failing
-on today's code, XPASS once it passes again); non-zero exit only on FAIL; every log under the printed
-directory. The script's header names its inputs (`QEMU_IOS_DIR`, the helper's dylib, the iPad and iPod
-device directories, the armv6 package) and their defaults; a check whose input is missing is SKIP with the
-path it wanted. The table below is what the tiers are made of:
+`--only NAME` runs a subset. One line per check (PASS, FAIL, SKIP with the reason, XFAIL for a check
+`tests/run.py` lists as known failing on today's code, XPASS once it passes again); non-zero exit only on
+FAIL; every log under the printed directory. The sessions tier's inputs (`QEMU_IOS_DIR`, the helper's dylib,
+the iPad and iPod device directories, the armv6 package) are documented in `tests/run.py`; a check whose
+input is missing is SKIP with the path it wanted. Every script resolves the qemu-ios and usbmuxd checkouts
+through `scripts/sources.py` (the pin in `build-support/sources.json`).
 
-| Gate | Runs | Needs |
-|---|---|---|
-| `swift test --package-path Packages/FirmwareKit` | FirmwareKit's unit tests; oracle comparisons against the Python pipeline | Fixtures under `~/Developer/qemu-ios-files` and a qemu-ios checkout (`FIRMWAREKIT_QEMU_IOS`; `gate.sh` sets it from the pin); tests skip when they are absent |
-| `python3 tests/run-catalog-checks.py [--ui]` | Catalog, ready-queue and boundary checks, optionally a brief AppKit test sheet | No QEMU, no device state |
-| `python3 tests/check-<topic>.py` | One check per topic (69 today). Each is standalone; its docstring names what it compiles, what it needs and its flags. Most are offline; `check-helper-boot.py`, `check-sessions.py` and `check-media-native.py` boot the emulator headless, and some flags do real work (`check-firmware-jobs.py --download` fetches an IPSW from Apple) | Read the docstring; QEMU-backed checks default to the pinned checkout and its development dylib (`scripts/sources.py`) and `~/Developer/qemu-ios-files` |
-| `python3 tests/check-sessions.py …` | Two devices at once through the app's own session code (`tests/session-driver`); `--single DIR --board ipod|ipad` boots one prepared base the way the app does and is what the release verify stage runs; `--guest` runs the guest-services scenario | A prepared device directory, a built helper, the usbmuxd fork |
-| `python3 scripts/test-<topic>.py` | Build and packaging checks: dependency sources, guest build, release, package, signing, GLib compatibility, zoom | Per script |
-| `scripts/regress-app.sh` | App-level regression reusing the qemu-ios harness (`scripts/regress_app.py`) | The pinned qemu-ios checkout and its images |
-| `scripts/build-release.py --stage verify` | The bundled `firmwarekit` prepares each entry in `VERIFY_ENTRIES`, then `check-sessions.py --single` boots it through the bundle: lit, lockdown, AFC round trips past 16 KiB, an IPA install, a clean shutdown | A finished `--stage package` and the entries' IPSWs |
+| Directory | What is there |
+|---|---|
+| `tests/offline/` | One check per topic. Each is standalone; its docstring names what it compiles and its flags. Most compile whole production files with a small fixture; the ones that still cut a section out of a hub file by marker are listed with the reason in [tests/SLICED.md](tests/SLICED.md) |
+| `tests/sessions/` | `check-sessions.py` boots two devices at once through the app's own session code (`tests/drivers/session-driver`); `--single DIR --board ipod|ipad` boots one prepared base the way the app does and is what the release verify stage runs; `--guest` runs the guest-services scenario. `check-helper-boot.py` drives the helper directly (`tests/drivers/helper-driver`). `matrix.py`, `install-durability.py` and `volume-rebuild-oracle.py` are tools run by hand (`tests/matrix.py` still works) |
+| `tests/release/` | Build and packaging checks: dependency sources, guest build, release, package, signing, package layout. `scripts/check-macho.py` and `scripts/test-glib-compat.py` stay in `scripts/` because the native recipe hash includes them |
+| `tests/drivers/`, `tests/fixtures/` | The Swift drivers the session checks compile; the fake preparer, the catalog server and the Swift fixtures the checks share |
+| `swift test --package-path Packages/FirmwareKit` | FirmwareKit's unit tests; oracle comparisons against the Python pipeline. Fixtures under `~/Developer/qemu-ios-files` and a qemu-ios checkout (`FIRMWAREKIT_QEMU_IOS`; `gate.sh` sets it from the pin); tests skip when they are absent |
+| `scripts/build-release.py --stage verify` | The bundled `firmwarekit` prepares each entry in `VERIFY_ENTRIES`, then `tests/sessions/check-sessions.py --single` boots it through the bundle: lit, lockdown, AFC round trips past 16 KiB, an IPA install, a clean shutdown |
 
 Every headless boot passes `-audio driver=none`. Nobody but Sam launches the app itself; verification is
 headless.
@@ -148,8 +153,8 @@ current tree.
 | `LightTouchDevice/` | The per-device helper: one QEMU instance, frames over IOSurface, control over the `Shared/` link |
 | `Shared/` | The app–helper link (`DeviceLink`, `DeviceLinkProtocol`, `DeviceRendezvous`, the `CLink` module) |
 | `Packages/FirmwareKit/` | `FirmwareKit` (IPSW → device), the `firmwarekit` CLI (`Sources/FirmwareKitCLI`), `CActivation` |
-| `scripts/` | `build-release.py` and its stages, `build-guest-tools.sh`, `pack-base.py` (the built-in iPod's blob), `package.sh`, `regress-app.sh`, `test-*.py`, lockdown C helpers |
-| `tests/` | `check-*.py`, `run-catalog-checks.py`, the Swift drivers (`helper-driver`, `session-driver`), `fake-firmwarekit.py`, the volume-rebuild oracle |
+| `scripts/` | `build-release.py` and its stages, `build-guest-tools.sh`, `pack-base.py` (the built-in iPod's blob), `package.sh`, `gate.sh`, `sources.py`, `check-macho.py`, `test-glib-compat.py`, lockdown C helpers |
+| `tests/` | `run.py` and the tiers `offline/`, `sessions/`, `release/`; `drivers/` (helper-driver, session-driver), `fixtures/` (fake-firmwarekit.py, catalog-server.py, the Swift fixtures); `SLICED.md` |
 | `build-support/` | `dependencies.json` (pinned archives) and build patches |
 | `Configuration/` | `Shared.xcconfig` |
 | `docs/` | Documentation; `docs/sweep/` surveys and plan; `docs/archive/` superseded material |

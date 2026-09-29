@@ -65,7 +65,7 @@ struct MediaPhoto: Sendable {
             defer { if !complete { try? FileManager.default.removeItem(at: directory) } }
             let output = directory.appendingPathComponent("image.jpg")
             guard let destination = CGImageDestinationCreateWithURL(output as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
-                throw DeviceToolsError.failed("Could not create the prepared photo.")
+                throw DeviceToolsError.failed("Couldn’t create the prepared photo.")
             }
             let encoding: [CFString: Any] = [
                 kCGImageDestinationLossyCompressionQuality: 0.9,
@@ -74,7 +74,7 @@ struct MediaPhoto: Sendable {
             ]
             CGImageDestinationAddImage(destination, image, encoding as CFDictionary)
             guard CGImageDestinationFinalize(destination) else {
-                throw DeviceToolsError.failed("Could not finish the prepared photo.")
+                throw DeviceToolsError.failed("Couldn’t finish the prepared photo.")
             }
             try Task.checkCancellation()
             let id = try MediaIdentity.identifier(for: output)

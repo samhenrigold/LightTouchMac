@@ -65,7 +65,6 @@ func emit(_ object: [String: Any]) {
 /// The device's lease (Devices/<uuid>/work/lease), held until this process
 /// exits: a second helper on the same storage, from another Light Touch or
 /// beside one still finishing its shutdown, is refused before it boots.
-let leaseRefusal = "This device is in use by another Light Touch."
 var leaseDescriptor: Int32 = -1
 func takeLease(_ path: String?) -> Bool {
     guard let path else { return true }
@@ -127,7 +126,7 @@ func runLinked(service: String, token: String) -> Never {
                 exit(70)
             }
             guard takeLease(arguments["--lease"]) else {
-                channel.send(.reply(id: id, .failure(leaseRefusal)))
+                channel.send(.reply(id: id, .failure(DeviceLinkWire.leaseRefusal)))
                 channel.drain()
                 exit(75)
             }

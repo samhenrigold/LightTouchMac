@@ -5,7 +5,7 @@
 // Frames and status never cross it: they live in IOSurfaces (SharedStatus.swift)
 // whose Mach ports arrive in the rendezvous hello (DeviceRendezvous.swift).
 //
-// Compiled into both targets and into tests/helper-driver.
+// Compiled into both targets and into tests/drivers/helper-driver.
 
 import Foundation
 
@@ -13,6 +13,8 @@ nonisolated enum DeviceLinkWire {
     /// Bumped on any incompatible change to the messages below, the status block
     /// layout or the Mach hello. The helper refuses a hello with another version.
     static let protocolVersion = 1
+    /// The helper's hello refusal when another helper holds the device's lease; the app shows it as is.
+    static let leaseRefusal = "This device is in use by another copy of Light Touch."
     /// Upper bound on one framed message, either direction. An agent request is
     /// at most ~350 KB of base64 and an audio event ~22 KB; anything bigger is
     /// a bug or an attack, and closes the link.

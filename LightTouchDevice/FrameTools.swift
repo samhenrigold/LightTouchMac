@@ -1,4 +1,4 @@
-// Frame helpers for the headless modes and tests/helper-driver: PNG dumps and a
+// Frame helpers for the headless modes and tests/drivers/helper-driver: PNG dumps and a
 // "lit" measure, read straight from a ring surface.
 
 import CoreGraphics

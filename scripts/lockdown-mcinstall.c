@@ -1,12 +1,17 @@
 /*
  * lockdown-mcinstall <certificate.der>
+ * lockdown-mcinstall --installed
  *
  * Offer the device a configuration profile that trusts one root certificate
  * (the per-device web proxy CA, itwebproxy --init-ca), through lockdown's
  * stock com.apple.mobile.MCInstall service: what iPhone Configuration Utility
  * did. The device shows "Install Profile" in Settings and the user confirms it
  * once; nothing is trusted without that tap. Reinstalling replaces the profile
- * (same identifier).
+ * (same identifier). The app's first choice is the guest agent (ittrust, no
+ * screen); this is the fallback for a guest without one.
+ *
+ * --installed asks GetProfileList and exits 0 when the profile is installed
+ * (3 when it is not), so the app never offers it twice.
  *
  * A separate process like lockdown-tz, for the same reason: lockdown writes
  * made in-process from the app have corrupted its heap. Finds the device via
@@ -45,21 +50,58 @@ int main(int argc, char **argv)
     long n;
     FILE *f;
 
+    int query = argc == 2 && !strcmp(argv[1], "--installed");
     if (argc != 2) {
-        fprintf(stderr, "usage: lockdown-mcinstall <certificate.der>\n");
+        fprintf(stderr, "usage: lockdown-mcinstall <certificate.der> | --installed\n");
         return 2;
     }
-    if (!(f = fopen(argv[1], "rb")) || fseek(f, 0, SEEK_END) || (n = ftell(f)) <= 0 || n > (1 << 20)) {
+    if (!query && (!(f = fopen(argv[1], "rb")) || fseek(f, 0, SEEK_END) || (n = ftell(f)) <= 0 || n > (1 << 20))) {
         fprintf(stderr, "cannot read %s\n", argv[1]);
         return 2;
     }
-    rewind(f);
-    cert = malloc(n);
-    if (fread(cert, 1, n, f) != (size_t)n) {
-        fprintf(stderr, "cannot read %s\n", argv[1]);
-        return 2;
+    if (!query) {
+        rewind(f);
+        cert = malloc(n);
+        if (fread(cert, 1, n, f) != (size_t)n) {
+            fprintf(stderr, "cannot read %s\n", argv[1]);
+            return 2;
+        }
+        fclose(f);
     }
-    fclose(f);
+
+    if (idevice_new(&dev, NULL) != IDEVICE_E_SUCCESS ||
+        lockdownd_client_new_with_handshake(dev, &ld, "lockdown-mcinstall") != LOCKDOWN_E_SUCCESS ||
+        lockdownd_start_service(ld, "com.apple.mobile.MCInstall", &svc) != LOCKDOWN_E_SUCCESS ||
+        property_list_service_client_new(dev, svc, &pl) != PROPERTY_LIST_SERVICE_E_SUCCESS) {
+        fprintf(stderr, "cannot reach the device's MCInstall service\n");
+        return 1;
+    }
+    if (query) {
+        /* iOS 3 and 4 answer OrderedIdentifiers (an array) and/or ProfileMetadata (a dict by identifier). */
+        plist_t req = plist_new_dict(), resp = NULL;
+        plist_dict_set_item(req, "RequestType", plist_new_string("GetProfileList"));
+        if (property_list_service_send_xml_plist(pl, req) != PROPERTY_LIST_SERVICE_E_SUCCESS ||
+            property_list_service_receive_plist(pl, &resp) != PROPERTY_LIST_SERVICE_E_SUCCESS || !resp) {
+            fprintf(stderr, "MCInstall did not answer\n");
+            return 1;
+        }
+        int found = 0;
+        plist_t meta = plist_dict_get_item(resp, "ProfileMetadata");
+        if (meta && plist_get_node_type(meta) == PLIST_DICT && plist_dict_get_item(meta, PROFILE_ID))
+            found = 1;
+        plist_t ids = plist_dict_get_item(resp, "OrderedIdentifiers");
+        if (ids && plist_get_node_type(ids) == PLIST_ARRAY) {
+            uint32_t i, count = plist_array_get_size(ids);
+            for (i = 0; i < count && !found; i++) {
+                char *id = NULL;
+                plist_get_string_val(plist_array_get_item(ids, i), &id);
+                if (id && !strcmp(id, PROFILE_ID)) found = 1;
+                free(id);
+            }
+        }
+        printf("%s\n", found ? "installed" : "not installed");
+        return found ? 0 : 3;
+    }
 
     /* Fixed identifiers and UUIDs: a new CA replaces the old profile instead of piling up. */
     plist_t root = payload("com.apple.security.root", PROFILE_ID ".ca",
@@ -74,13 +116,6 @@ int main(int argc, char **argv)
     plist_dict_set_item(profile, "PayloadContent", content);
     plist_to_xml(profile, &xml, &xml_len);
 
-    if (idevice_new(&dev, NULL) != IDEVICE_E_SUCCESS ||
-        lockdownd_client_new_with_handshake(dev, &ld, "lockdown-mcinstall") != LOCKDOWN_E_SUCCESS ||
-        lockdownd_start_service(ld, "com.apple.mobile.MCInstall", &svc) != LOCKDOWN_E_SUCCESS ||
-        property_list_service_client_new(dev, svc, &pl) != PROPERTY_LIST_SERVICE_E_SUCCESS) {
-        fprintf(stderr, "cannot reach the device's MCInstall service\n");
-        return 1;
-    }
     plist_t req = plist_new_dict(), resp = NULL;
     plist_dict_set_item(req, "RequestType", plist_new_string("InstallProfile"));
     plist_dict_set_item(req, "Payload", plist_new_data(xml, xml_len));
