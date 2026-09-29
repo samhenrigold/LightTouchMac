@@ -211,12 +211,12 @@
  "n72ap-5F138": {
   "version": "2.1.1",
   "board": "n72ap",
-  "status": "coming_soon",
-  "when": "2026-09-29T06:15:26+00:00",
+  "status": "experimental",
+  "when": "2026-09-29T08:29:28+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-a0637092c594a3d8c/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipod2x/build/libqemu-arm.dylib",
-   "guest_tools": "/tmp/ipod2x/gt/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-2x-hold-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-2x-hold/build/libqemu-arm.dylib",
+   "guest_tools": "/tmp/hold2x/gt"
   },
   "keys": {
    "total": 14,
@@ -225,7 +225,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 26.8,
+   "seconds": 34.1,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -238,7 +238,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/tmp/ipod2x/scratch/n72ap-5F138/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-5F138/firmwarekit.log",
    "lock": {
     "boot_strategy": "bootrom",
     "gles": "stock engine, software CA: no dyld shared cache (2.x, 3.0)",
@@ -251,11 +251,11 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 9.8
+    "seconds": 11.1
    },
    "lockdown": {
     "ok": true,
-    "seconds": 3.0,
+    "seconds": 3.1,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -288,33 +288,28 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 10.1,
-     "lockdown": 3.6
+     "lit": 8.9,
+     "lockdown": 6.6
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
+    "ok": true,
+    "seconds": 15.4,
     "reason": "The iPod stopped.",
-    "second": null
+    "second": 15.7
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/ipod2x/results/n72ap-5F138/lock.png",
-   "home": "/tmp/ipod2x/results/n72ap-5F138/home.png",
-   "installed": "/tmp/ipod2x/results/n72ap-5F138/installed.png",
-   "lock2": "/tmp/ipod2x/results/n72ap-5F138/lock2.png",
-   "home2": "/tmp/ipod2x/results/n72ap-5F138/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/home2.png"
   },
-  "events": "/tmp/ipod2x/results/n72ap-5F138/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The iPod stopped.",
-   "excerpt": "EP83 DIEPCTL=140a8200 DIEPINT=00000000 DIEPTSIZ=20000000 DIEPDMA=08d49950\nEP01 DOEPCTL=940a8200 DOEPINT=00000040 DOEPTSIZ=00401000 DOEPDMA=0cba6000\nEP02 DOEPCTL=940a8200 DOEPINT=00000000 DOEPTSIZ=02008000 DOEPDMA=09aff000"
-  },
-  "triage": "(a)+(c) 2.1.1 through the app pipeline (ipod-2x): prepare needed only the catalog recipe block (the Swift n72 recipe already had the 2.x paths: no BuildManifest, plain-tail img3, epoch-1 NAND, only iBoot's SHSH wrapped, no iBoot.bin, no helpers/seed package without the shared cache); boot needed the lock's boot_strategy \"bootrom\" (SecureROM -> NOR LLB -> iBoot; the app and the session driver passed a missing iBoot.bin as direct-iboot) and the session driver setting the time over lockdown-tz as the app does (clears lockdownd's BrickState; before it the screen sat on Connect to iTunes). Home screen, Activated, AFC 4/4, persist. Byte-matched to qemu-ios ipod2g_device.py: nor.bin, gid-blobs.bin, identity.json identical; the system volumes list the same 10801 entries with equal contents except the SpringBoard job plist (same content, different binary-plist encoding) and lockdownd (same patched code; the signature blob differs, ldid vs FirmwareKit). Shutdown fails (c): 2.x has no guest agent, so the driver asks the machine's hold-and-slide sequence; the guest acks the hold GPIO edge (group 3 bit 26) but never shows the power sheet and never reads the PMU. 2.x's DeviceTree has no function-button_hold (3.x: GPIO 0xC02), only function-wake_button_hold (PMU STAT 0x191), and the kernel unmasks only EVENT_C bits 2/4/6 awake, while the model latches hold at EVENT_C bit 1 on press only: the hold button's 2.x path (PMU event) is unmodelled. The app's Stop is a flush + hard halt, so persist is unaffected. Rows from qemu-ios ipod-2x 43f7aff9ac (bd8d6b1363 + the 0x38100000 block); 5F138 also passes everything but shutdown on the pinned bd8d6b1363."
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5F138/driver.jsonl",
+  "triage": "(a)+(c) 2.1.1 through the app pipeline (ipod-2x): prepare needed only the catalog recipe block (the Swift n72 recipe already had the 2.x paths: no BuildManifest, plain-tail img3, epoch-1 NAND, only iBoot's SHSH wrapped, no iBoot.bin, no helpers/seed package without the shared cache); boot needed the lock's boot_strategy \"bootrom\" (SecureROM -> NOR LLB -> iBoot; the app and the session driver passed a missing iBoot.bin as direct-iboot) and the session driver setting the time over lockdown-tz as the app does (clears lockdownd's BrickState; before it the screen sat on Connect to iTunes). Home screen, Activated, AFC 4/4, persist. Byte-matched to qemu-ios ipod2g_device.py: nor.bin, gid-blobs.bin, identity.json identical; the system volumes list the same 10801 entries with equal contents except the SpringBoard job plist (same content, different binary-plist encoding) and lockdownd (same patched code; the signature blob differs, ldid vs FirmwareKit). Shutdown passes since qemu-ios ipod-2x-hold 19649e467c (smoke #19, closed): the hold button was never the gap (the 2.x DeviceTree has function-button_hold <gpio 0x0c02> like 3.x; Hold locks the screen). Two gaps in the machine's hold-and-slide: (1) it held Home through the 2.5 s settle and pressed Hold in the same tick as the release, so both edges arrived in one GPIO status read (group 3 = 0x06000000) and 2.x's SpringBoard never raised the power-off sheet (from a dark lock screen the first press only wakes the display, which hid it); Home is now a tap. (2) 2.x's AppleD1759PMU-36.2 halt, tethered, prints \"pmu waiting for stdby\" and sleeps on the PMU interrupt until the cable comes out (EVENT_A bit 3 -> 0x0a bit 0), where 3.x/4.x's -94.7 writes 0x6f=0x90; the gesture now unplugs once the guest has turned the backlight rail off. Earlier rows (ipod-2x 43f7aff9ac) failed shutdown only. Rows from qemu-ios ipod-2x 43f7aff9ac (bd8d6b1363 + the 0x38100000 block); 5F138 also passes everything but shutdown on the pinned bd8d6b1363."
  },
  "k48ap-7B500": {
   "version": "3.2.2",
@@ -1375,12 +1370,12 @@
  "n72ap-5G77a": {
   "version": "2.2",
   "board": "n72ap",
-  "status": "untested",
-  "when": "2026-09-29T06:18:41+00:00",
+  "status": "experimental",
+  "when": "2026-09-29T08:32:04+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-a0637092c594a3d8c/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipod2x/build/libqemu-arm.dylib",
-   "guest_tools": "/tmp/ipod2x/gt/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-2x-hold-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-2x-hold/build/libqemu-arm.dylib",
+   "guest_tools": "/tmp/hold2x/gt"
   },
   "keys": {
    "total": 14,
@@ -1389,7 +1384,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 32.0,
+   "seconds": 31.1,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1402,7 +1397,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/tmp/ipod2x/scratch/n72ap-5G77a/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-5G77a/firmwarekit.log",
    "lock": {
     "boot_strategy": "bootrom",
     "gles": "stock engine, software CA: no dyld shared cache (2.x, 3.0)",
@@ -1415,115 +1410,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 10.1
-   },
-   "lockdown": {
-    "ok": true,
-    "seconds": 2.9,
-    "productType": "iPod2,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
-    ],
-    "error": null
-   },
-   "install": {
-    "ok": null,
-    "note": "appsync off"
-   },
-   "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 11.8,
-     "lockdown": 0.5
-    }
-   },
-   "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": "The iPod stopped.",
-    "second": null
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/tmp/ipod2x/results/n72ap-5G77a/lock.png",
-   "home": "/tmp/ipod2x/results/n72ap-5G77a/home.png",
-   "installed": "/tmp/ipod2x/results/n72ap-5G77a/installed.png",
-   "lock2": "/tmp/ipod2x/results/n72ap-5G77a/lock2.png",
-   "home2": "/tmp/ipod2x/results/n72ap-5G77a/home2.png"
-  },
-  "events": "/tmp/ipod2x/results/n72ap-5G77a/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The iPod stopped.",
-   "excerpt": "EP83 140a8200 00000000 20000000 08d8eb7e\nEP01 940a8200 00000040 00401000 0c4ab000\nEP02 940a8200 00000000 02008000 0962e000"
-  },
-  "triage": "(a)+(c) 2.2: SecureROM -> LLB looped into DFU (a CPU reset every ~0.15 s, no serial): iBoot-385.49's LLB stores to 0x38100040/44 in the routine that latches the security epoch into POWER_ID, an unmapped block (external abort -> reset). qemu-ios ipod-2x maps it as an unimplemented RAZ/WI device (class S, smoke #18); the LLB then reaches iBoot. iBoot-385.49 then failed 'load_macho_image: failed to load device tree' with 2.1.1's NOR convention (only iBoot's SHSH wrapped): the epoch-2 chain unwraps every image it loads, so the recipe (and the Python oracle, same branch) now wraps every image but the LLB when Restore.plist SCEP >= 2 (the SecureROM verifies the LLB raw). Byte-matched to the updated oracle: nor.bin, gid-blobs.bin, identity.json identical; 11307 volume entries, same two encoding-only differences as 5F138. Home screen, Activated, AFC, persist. Shutdown as 5F138 (the 2.x hold button, PMU path unmodelled). Needs qemu-ios ipod-2x (43f7aff9ac) merged + pin bump to boot in the app; catalog stays untested until then."
- },
- "n72ap-5H11a": {
-  "version": "2.2.1",
-  "board": "n72ap",
-  "status": "untested",
-  "when": "2026-09-29T06:22:00+00:00",
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-a0637092c594a3d8c/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipod2x/build/libqemu-arm.dylib",
-   "guest_tools": "/tmp/ipod2x/gt/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 14,
-   "ok": 14,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 31.8,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity, NOR and boot files",
-    "Building the system volume",
-    "Writing the NAND",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/tmp/ipod2x/scratch/n72ap-5H11a/firmwarekit.log",
-   "lock": {
-    "boot_strategy": "bootrom",
-    "gles": "stock engine, software CA: no dyld shared cache (2.x, 3.0)",
-    "gli": null,
-    "guest_package": null,
-    "activation": true,
-    "kernel": "Darwin Kernel Version 9.4.1: Mon Dec  8 21:02:57 PST 2008; root:xnu-1228.7.37~4/RELEASE_ARM_S5L8720X"
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 9.1
+    "seconds": 9.6
    },
    "lockdown": {
     "ok": true,
@@ -1560,33 +1447,131 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 11.4,
-     "lockdown": 0.3
+     "lit": 8.8,
+     "lockdown": 4.3
     }
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
+    "ok": true,
+    "seconds": 15.3,
     "reason": "The iPod stopped.",
-    "second": null
+    "second": 15.4
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/ipod2x/results/n72ap-5H11a/lock.png",
-   "home": "/tmp/ipod2x/results/n72ap-5H11a/home.png",
-   "installed": "/tmp/ipod2x/results/n72ap-5H11a/installed.png",
-   "lock2": "/tmp/ipod2x/results/n72ap-5H11a/lock2.png",
-   "home2": "/tmp/ipod2x/results/n72ap-5H11a/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/home2.png"
   },
-  "events": "/tmp/ipod2x/results/n72ap-5H11a/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The iPod stopped.",
-   "excerpt": "EP83 140a8200 00000000 20000000 08db4e7e\nEP01 940a8200 00000040 00401000 0c48c000\nEP02 940a8200 00000000 02008000 09a07000"
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5G77a/driver.jsonl",
+  "triage": "(a)+(c) 2.2: SecureROM -> LLB looped into DFU (a CPU reset every ~0.15 s, no serial): iBoot-385.49's LLB stores to 0x38100040/44 in the routine that latches the security epoch into POWER_ID, an unmapped block (external abort -> reset). qemu-ios ipod-2x maps it as an unimplemented RAZ/WI device (class S, smoke #18); the LLB then reaches iBoot. iBoot-385.49 then failed 'load_macho_image: failed to load device tree' with 2.1.1's NOR convention (only iBoot's SHSH wrapped): the epoch-2 chain unwraps every image it loads, so the recipe (and the Python oracle, same branch) now wraps every image but the LLB when Restore.plist SCEP >= 2 (the SecureROM verifies the LLB raw). Byte-matched to the updated oracle: nor.bin, gid-blobs.bin, identity.json identical; 11307 volume entries, same two encoding-only differences as 5F138. Home screen, Activated, AFC, persist. Shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
+ },
+ "n72ap-5H11a": {
+  "version": "2.2.1",
+  "board": "n72ap",
+  "status": "experimental",
+  "when": "2026-09-29T08:34:11+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-2x-hold-docs/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-2x-hold/build/libqemu-arm.dylib",
+   "guest_tools": "/tmp/hold2x/gt"
   },
-  "triage": "(a)+(c) 2.2.1: identical to 5G77a (iBoot-385.49, SCEP 2): the 0x38100000 block and the wrap-all-but-LLB NOR; byte-matched to the updated oracle (nor, gid-blobs, identity identical; 11307 volume entries, the two encoding-only differences). Home screen, Activated, AFC, persist; shutdown as 5F138. Needs qemu-ios ipod-2x (43f7aff9ac) merged + pin bump; catalog stays untested until then."
+  "keys": {
+   "total": 14,
+   "ok": 14,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 29.9,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-5H11a/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "bootrom",
+    "gles": "stock engine, software CA: no dyld shared cache (2.x, 3.0)",
+    "gli": null,
+    "guest_package": null,
+    "activation": true,
+    "kernel": "Darwin Kernel Version 9.4.1: Mon Dec  8 21:02:57 PST 2008; root:xnu-1228.7.37~4/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 9.9
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 3.4,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": null,
+    "note": "appsync off"
+   },
+   "package": {
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+   },
+   "gl": {
+    "ok": null,
+    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 9.4,
+     "lockdown": 5.1
+    }
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 15.3,
+    "reason": "The iPod stopped.",
+    "second": 15.3
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/home2.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-5H11a/driver.jsonl",
+  "triage": "(a)+(c) 2.2.1: identical to 5G77a (iBoot-385.49, SCEP 2): the 0x38100000 block and the wrap-all-but-LLB NOR; byte-matched to the updated oracle (nor, gid-blobs, identity identical; 11307 volume entries, the two encoding-only differences). Home screen, Activated, AFC, persist; shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
  },
  "k48ap-8F190": {
   "version": "4.3",
