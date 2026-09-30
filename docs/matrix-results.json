@@ -3,11 +3,23 @@
   "version": "3.1.3",
   "board": "n72ap",
   "status": "user_ipsw",
-  "when": "2026-09-30T11:25:13+00:00",
+  "when": "2026-09-30T13:51:20+00:00",
+  "load": {
+   "start": [
+    12.47,
+    16.25,
+    21.78
+   ],
+   "end": [
+    8.16,
+    13.4,
+    19.87
+   ]
+  },
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac-gles-public/Packages/FirmwareKit/.build/release/firmwarekit",
    "dylib": "/Users/shg/Developer/qemu-ios-gles-public/build-gp/libqemu-arm.dylib",
-   "guest_tools": "/tmp/glpub/ga4/ipad-guest-tools"
+   "guest_tools": "/tmp/glpub/ga5/ipad-guest-tools"
   },
   "keys": {
    "total": 19,
@@ -16,7 +28,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 153.4,
+   "seconds": 40.2,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -48,7 +60,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 33.7
+    "seconds": 10.6
    },
    "home": {
     "ok": true,
@@ -70,7 +82,7 @@
    },
    "lockdown": {
     "ok": true,
-    "seconds": 14.6,
+    "seconds": 10.0,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -89,7 +101,7 @@
    },
    "install": {
     "ok": true,
-    "seconds": 5,
+    "seconds": 1,
     "attempt": 1,
     "apps": [
      "com.qemuios.harness"
@@ -126,16 +138,16 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 48.2,
-     "lockdown": 5.8
+     "lit": 10.1,
+     "lockdown": 4.2
     },
     "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 2.8,
+    "seconds": 1.5,
     "reason": "The iPod stopped.",
-    "second": 2.3,
+    "second": 1.5,
     "second_ok": true,
     "boot2_reason": "The iPod stopped."
    },
@@ -143,18 +155,17 @@
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/glpub/final2/n72ap-7E18/lock.png",
-   "unlock1-1": "/tmp/glpub/final2/n72ap-7E18/unlock1-1.png",
-   "home": "/tmp/glpub/final2/n72ap-7E18/home.png",
-   "installed": "/tmp/glpub/final2/n72ap-7E18/installed.png",
-   "launched1": "/tmp/glpub/final2/n72ap-7E18/launched1.png",
-   "tapped1": "/tmp/glpub/final2/n72ap-7E18/tapped1.png",
-   "tapped2": "/tmp/glpub/final2/n72ap-7E18/tapped2.png",
-   "afterlaunch": "/tmp/glpub/final2/n72ap-7E18/afterlaunch.png",
-   "lock2": "/tmp/glpub/final2/n72ap-7E18/lock2.png",
-   "home2": "/tmp/glpub/final2/n72ap-7E18/home2.png"
+   "lock": "/tmp/glpub/final4/n72ap-7E18/lock.png",
+   "home": "/tmp/glpub/final4/n72ap-7E18/home.png",
+   "installed": "/tmp/glpub/final4/n72ap-7E18/installed.png",
+   "launched1": "/tmp/glpub/final4/n72ap-7E18/launched1.png",
+   "tapped1": "/tmp/glpub/final4/n72ap-7E18/tapped1.png",
+   "tapped2": "/tmp/glpub/final4/n72ap-7E18/tapped2.png",
+   "afterlaunch": "/tmp/glpub/final4/n72ap-7E18/afterlaunch.png",
+   "lock2": "/tmp/glpub/final4/n72ap-7E18/lock2.png",
+   "home2": "/tmp/glpub/final4/n72ap-7E18/home2.png"
   },
-  "events": "/tmp/glpub/final2/n72ap-7E18/driver.jsonl"
+  "events": "/tmp/glpub/final4/n72ap-7E18/driver.jsonl"
  },
  "n72ap-8C148": {
   "version": "4.2.1",
@@ -317,11 +328,23 @@
   "version": "2.1.1",
   "board": "n72ap",
   "status": "experimental",
-  "when": "2026-09-30T11:35:12+00:00",
+  "when": "2026-09-30T13:53:52+00:00",
+  "load": {
+   "start": [
+    9.47,
+    13.41,
+    19.72
+   ],
+   "end": [
+    13.05,
+    13.21,
+    18.34
+   ]
+  },
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac-gles-public/Packages/FirmwareKit/.build/release/firmwarekit",
    "dylib": "/Users/shg/Developer/qemu-ios-gles-public/build-gp/libqemu-arm.dylib",
-   "guest_tools": "/tmp/glpub/ga4/ipad-guest-tools"
+   "guest_tools": "/tmp/glpub/ga5/ipad-guest-tools"
   },
   "keys": {
    "total": 14,
@@ -330,7 +353,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 137.3,
+   "seconds": 39.9,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -365,7 +388,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 26.6
+    "seconds": 12.3
    },
    "home": {
     "ok": true,
@@ -388,7 +411,7 @@
    },
    "lockdown": {
     "ok": true,
-    "seconds": 1.8,
+    "seconds": 0.5,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -407,7 +430,7 @@
    },
    "install": {
     "ok": true,
-    "seconds": 8,
+    "seconds": 2,
     "attempt": 1,
     "apps": [
      "com.namconetworks.pacmanlite"
@@ -447,16 +470,16 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 27.9,
-     "lockdown": 1.7
+     "lit": 19.2,
+     "lockdown": 0.8
     },
     "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 17.6,
+    "seconds": 15.6,
     "reason": "The iPod stopped.",
-    "second": 15.5,
+    "second": 15.8,
     "second_ok": true,
     "boot2_reason": "The iPod stopped."
    },
@@ -464,19 +487,19 @@
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/glpub/final2/n72ap-5F138/lock.png",
-   "home": "/tmp/glpub/final2/n72ap-5F138/home.png",
-   "installed": "/tmp/glpub/final2/n72ap-5F138/installed.png",
-   "tip": "/tmp/glpub/final2/n72ap-5F138/tip.png",
-   "prelaunch": "/tmp/glpub/final2/n72ap-5F138/prelaunch.png",
-   "launched1": "/tmp/glpub/final2/n72ap-5F138/launched1.png",
-   "launched2": "/tmp/glpub/final2/n72ap-5F138/launched2.png",
-   "launched3": "/tmp/glpub/final2/n72ap-5F138/launched3.png",
-   "afterlaunch": "/tmp/glpub/final2/n72ap-5F138/afterlaunch.png",
-   "lock2": "/tmp/glpub/final2/n72ap-5F138/lock2.png",
-   "home2": "/tmp/glpub/final2/n72ap-5F138/home2.png"
+   "lock": "/tmp/glpub/final4/n72ap-5F138/lock.png",
+   "home": "/tmp/glpub/final4/n72ap-5F138/home.png",
+   "installed": "/tmp/glpub/final4/n72ap-5F138/installed.png",
+   "tip": "/tmp/glpub/final4/n72ap-5F138/tip.png",
+   "prelaunch": "/tmp/glpub/final4/n72ap-5F138/prelaunch.png",
+   "launched1": "/tmp/glpub/final4/n72ap-5F138/launched1.png",
+   "launched2": "/tmp/glpub/final4/n72ap-5F138/launched2.png",
+   "launched3": "/tmp/glpub/final4/n72ap-5F138/launched3.png",
+   "afterlaunch": "/tmp/glpub/final4/n72ap-5F138/afterlaunch.png",
+   "lock2": "/tmp/glpub/final4/n72ap-5F138/lock2.png",
+   "home2": "/tmp/glpub/final4/n72ap-5F138/home2.png"
   },
-  "events": "/tmp/glpub/final2/n72ap-5F138/driver.jsonl"
+  "events": "/tmp/glpub/final4/n72ap-5F138/driver.jsonl"
  },
  "k48ap-7B500": {
   "version": "3.2.2",
@@ -808,11 +831,23 @@
   "version": "4.2.1",
   "board": "k48ap",
   "status": "available",
-  "when": "2026-09-30T12:40:38+00:00",
+  "when": "2026-09-30T13:23:25+00:00",
+  "load": {
+   "start": [
+    13.2,
+    24.4,
+    27.91
+   ],
+   "end": [
+    28.73,
+    27.63,
+    28.22
+   ]
+  },
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac-gles-public/Packages/FirmwareKit/.build/release/firmwarekit",
    "dylib": "/Users/shg/Developer/qemu-ios-gles-public/build-gp/libqemu-arm.dylib",
-   "guest_tools": "/tmp/glpub/ga4/ipad-guest-tools"
+   "guest_tools": "/tmp/glpub/ga5/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -821,7 +856,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 75.4,
+   "seconds": 82.4,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -855,7 +890,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 25.5
+    "seconds": 48.2
    },
    "home": {
     "ok": true,
@@ -873,8 +908,8 @@
     "locked": null,
     "unanswered": null,
     "frame": {
-     "home": 0.0024,
-     "home2": 0.0028
+     "home": 0.0028,
+     "home2": 0.0031
     },
     "exposure": {
      "home": 1.0,
@@ -883,7 +918,7 @@
    },
    "lockdown": {
     "ok": true,
-    "seconds": 0.8,
+    "seconds": 2.9,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -935,8 +970,8 @@
     "shim": true,
     "rejects": 0,
     "picture": {
-     "home": 0.0024,
-     "home2": 0.0028
+     "home": 0.0028,
+     "home2": 0.0031
     },
     "note": null
    },
@@ -944,16 +979,16 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 25.2,
-     "lockdown": 0.6
+     "lit": 51.6,
+     "lockdown": 1.1
     },
     "restartedApps": true
    },
    "shutdown": {
-    "ok": true,
-    "seconds": 15.0,
+    "ok": false,
+    "seconds": null,
     "reason": "The iPad stopped.",
-    "second": 15.1,
+    "second": 16.2,
     "second_ok": true,
     "boot2_reason": "The iPad stopped."
    },
@@ -961,21 +996,26 @@
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/glpub/final3/k48ap-8C148/lock.png",
-   "home": "/tmp/glpub/final3/k48ap-8C148/home.png",
-   "installed": "/tmp/glpub/final3/k48ap-8C148/installed.png",
-   "launched1": "/tmp/glpub/final3/k48ap-8C148/launched1.png",
-   "tapped1": "/tmp/glpub/final3/k48ap-8C148/tapped1.png",
-   "tapped2": "/tmp/glpub/final3/k48ap-8C148/tapped2.png",
-   "afterlaunch": "/tmp/glpub/final3/k48ap-8C148/afterlaunch.png",
-   "powerdown1-7s": "/tmp/glpub/final3/k48ap-8C148/powerdown1-7s.png",
-   "powerdown1-12s": "/tmp/glpub/final3/k48ap-8C148/powerdown1-12s.png",
-   "lock2": "/tmp/glpub/final3/k48ap-8C148/lock2.png",
-   "home2": "/tmp/glpub/final3/k48ap-8C148/home2.png",
-   "powerdown2-7s": "/tmp/glpub/final3/k48ap-8C148/powerdown2-7s.png",
-   "powerdown2-12s": "/tmp/glpub/final3/k48ap-8C148/powerdown2-12s.png"
+   "lock": "/tmp/glpub/final4/k48ap-8C148/lock.png",
+   "home": "/tmp/glpub/final4/k48ap-8C148/home.png",
+   "installed": "/tmp/glpub/final4/k48ap-8C148/installed.png",
+   "launched1": "/tmp/glpub/final4/k48ap-8C148/launched1.png",
+   "tapped1": "/tmp/glpub/final4/k48ap-8C148/tapped1.png",
+   "tapped2": "/tmp/glpub/final4/k48ap-8C148/tapped2.png",
+   "afterlaunch": "/tmp/glpub/final4/k48ap-8C148/afterlaunch.png",
+   "powerdown1-7s": "/tmp/glpub/final4/k48ap-8C148/powerdown1-7s.png",
+   "powerdown1-12s": "/tmp/glpub/final4/k48ap-8C148/powerdown1-12s.png",
+   "lock2": "/tmp/glpub/final4/k48ap-8C148/lock2.png",
+   "home2": "/tmp/glpub/final4/k48ap-8C148/home2.png",
+   "powerdown2-7s": "/tmp/glpub/final4/k48ap-8C148/powerdown2-7s.png",
+   "powerdown2-12s": "/tmp/glpub/final4/k48ap-8C148/powerdown2-12s.png"
   },
-  "events": "/tmp/glpub/final3/k48ap-8C148/driver.jsonl"
+  "events": "/tmp/glpub/final4/k48ap-8C148/driver.jsonl",
+  "first_failure": {
+   "check": "shutdown",
+   "why": "The iPad stopped.",
+   "excerpt": "AppleH3CamIn: Error conencting to PWM driver\nAppleBCMWLAN Joined BSS:     @ 0x89658800, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\"\nUSB mux: 308 reads / 0 errors, 215 writes / 0 errors"
+  }
  },
  "n72ap-7A341": {
   "version": "3.0",
@@ -2935,11 +2975,23 @@
   "version": "4.3.5",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-30T07:17:59+00:00",
+  "when": "2026-09-30T13:32:54+00:00",
+  "load": {
+   "start": [
+    20.54,
+    32.5,
+    31.11
+   ],
+   "end": [
+    15.11,
+    22.16,
+    26.78
+   ]
+  },
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac-gles-public/Packages/FirmwareKit/.build/release/firmwarekit",
    "dylib": "/Users/shg/Developer/qemu-ios-gles-public/build-gp/libqemu-arm.dylib",
-   "guest_tools": "/tmp/glpub/ga4/ipad-guest-tools"
+   "guest_tools": "/tmp/glpub/ga5/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -2948,7 +3000,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 76.9,
+   "seconds": 87.2,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -2982,7 +3034,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 27.3
+    "seconds": 31.6
    },
    "home": {
     "ok": true,
@@ -3000,8 +3052,8 @@
     "locked": null,
     "unanswered": null,
     "frame": {
-     "home": 0.0024,
-     "home2": 0.0028
+     "home": 0.0028,
+     "home2": 0.0031
     },
     "exposure": {
      "home": 1.0,
@@ -3010,7 +3062,7 @@
    },
    "lockdown": {
     "ok": true,
-    "seconds": 0.8,
+    "seconds": 1.3,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -3062,8 +3114,8 @@
     "shim": true,
     "rejects": 0,
     "picture": {
-     "home": 0.0024,
-     "home2": 0.0028
+     "home": 0.0028,
+     "home2": 0.0031
     },
     "note": null
    },
@@ -3071,16 +3123,16 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 24.9,
-     "lockdown": 0.6
+     "lit": 38.0,
+     "lockdown": 0.9
     },
     "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 14.8,
+    "seconds": 15.5,
     "reason": "The iPad stopped.",
-    "second": 15.0,
+    "second": 16.2,
     "second_ok": true,
     "boot2_reason": "The iPad stopped."
    },
@@ -3088,21 +3140,21 @@
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/glpub/final/k48ap-8L1/lock.png",
-   "home": "/tmp/glpub/final/k48ap-8L1/home.png",
-   "installed": "/tmp/glpub/final/k48ap-8L1/installed.png",
-   "launched1": "/tmp/glpub/final/k48ap-8L1/launched1.png",
-   "tapped1": "/tmp/glpub/final/k48ap-8L1/tapped1.png",
-   "tapped2": "/tmp/glpub/final/k48ap-8L1/tapped2.png",
-   "afterlaunch": "/tmp/glpub/final/k48ap-8L1/afterlaunch.png",
-   "powerdown1-7s": "/tmp/glpub/final/k48ap-8L1/powerdown1-7s.png",
-   "powerdown1-12s": "/tmp/glpub/final/k48ap-8L1/powerdown1-12s.png",
-   "lock2": "/tmp/glpub/final/k48ap-8L1/lock2.png",
-   "home2": "/tmp/glpub/final/k48ap-8L1/home2.png",
-   "powerdown2-7s": "/tmp/glpub/final/k48ap-8L1/powerdown2-7s.png",
-   "powerdown2-12s": "/tmp/glpub/final/k48ap-8L1/powerdown2-12s.png"
+   "lock": "/tmp/glpub/final4/k48ap-8L1/lock.png",
+   "home": "/tmp/glpub/final4/k48ap-8L1/home.png",
+   "installed": "/tmp/glpub/final4/k48ap-8L1/installed.png",
+   "launched1": "/tmp/glpub/final4/k48ap-8L1/launched1.png",
+   "tapped1": "/tmp/glpub/final4/k48ap-8L1/tapped1.png",
+   "tapped2": "/tmp/glpub/final4/k48ap-8L1/tapped2.png",
+   "afterlaunch": "/tmp/glpub/final4/k48ap-8L1/afterlaunch.png",
+   "powerdown1-7s": "/tmp/glpub/final4/k48ap-8L1/powerdown1-7s.png",
+   "powerdown1-12s": "/tmp/glpub/final4/k48ap-8L1/powerdown1-12s.png",
+   "lock2": "/tmp/glpub/final4/k48ap-8L1/lock2.png",
+   "home2": "/tmp/glpub/final4/k48ap-8L1/home2.png",
+   "powerdown2-7s": "/tmp/glpub/final4/k48ap-8L1/powerdown2-7s.png",
+   "powerdown2-12s": "/tmp/glpub/final4/k48ap-8L1/powerdown2-12s.png"
   },
-  "events": "/tmp/glpub/final/k48ap-8L1/driver.jsonl"
+  "events": "/tmp/glpub/final4/k48ap-8L1/driver.jsonl"
  },
  "n72ap-8A230m": {
   "version": "4.0",
@@ -5091,11 +5143,23 @@
   "version": "5.1.1",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-30T09:37:13+00:00",
+  "when": "2026-09-30T13:37:24+00:00",
+  "load": {
+   "start": [
+    14.74,
+    21.61,
+    26.48
+   ],
+   "end": [
+    19.43,
+    22.4,
+    25.52
+   ]
+  },
   "tools": {
    "firmwarekit": "/Users/shg/Developer/LightTouchMac-gles-public/Packages/FirmwareKit/.build/release/firmwarekit",
    "dylib": "/Users/shg/Developer/qemu-ios-gles-public/build-gp/libqemu-arm.dylib",
-   "guest_tools": "/tmp/glpub/ga4/ipad-guest-tools"
+   "guest_tools": "/tmp/glpub/ga5/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -5104,7 +5168,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 254.1,
+   "seconds": 112.0,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -5117,7 +5181,7 @@
     "Writing the lock"
    ],
    "warnings": [
-    "it_msmquiet (storage_mounter's USB \"not supported\" notice) does not fit this firmware (left out): MobileStorageMounter names neither UNSUPPORTED_FAILURE nor UNSUPPORTED_FAILURE_BODY: whatever raises this firmware's notice, it_msmquiet cannot recognise it"
+    "it_msmquiet (MobileStorageMounter's USB \"not supported\" notice) does not fit this firmware (left out): MobileStorageMounter names neither UNSUPPORTED_FAILURE nor UNSUPPORTED_FAILURE_BODY: whatever raises this firmware's notice, it_msmquiet cannot recognise it"
    ],
    "error": null,
    "last_step": "Writing the lock",
@@ -5140,7 +5204,7 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 62.1,
+    "seconds": 77.1,
     "setup": {
      "ok": true,
      "detail": "walked language, country, location, wi-fi, set up, apple id, terms, diagnostics, thank you",
@@ -5151,7 +5215,7 @@
     "ok": true,
     "brightness": {
      "home": 0.962,
-     "home2": 0.768,
+     "home2": 0.962,
      "installed": 0.962
     },
     "frontmost": [
@@ -5167,7 +5231,7 @@
    },
    "lockdown": {
     "ok": true,
-    "seconds": 0.9,
+    "seconds": 1.4,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -5213,16 +5277,16 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 26.6,
-     "lockdown": 4.3
+     "lit": 45.3,
+     "lockdown": 5.6
     },
     "restartedApps": false
    },
    "shutdown": {
     "ok": true,
-    "seconds": 12.6,
+    "seconds": 12.0,
     "reason": "The iPad stopped.",
-    "second": 15.1,
+    "second": 18.1,
     "second_ok": true,
     "boot2_reason": "The iPad stopped."
    },
@@ -5230,36 +5294,35 @@
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/glpub/final2/k48ap-9B206/lock.png",
-   "setup-language-0": "/tmp/glpub/final2/k48ap-9B206/setup-language-0.png",
-   "setup-country-0": "/tmp/glpub/final2/k48ap-9B206/setup-country-0.png",
-   "setup-country-1": "/tmp/glpub/final2/k48ap-9B206/setup-country-1.png",
-   "setup-location-0": "/tmp/glpub/final2/k48ap-9B206/setup-location-0.png",
-   "setup-location-1": "/tmp/glpub/final2/k48ap-9B206/setup-location-1.png",
-   "setup-location-2": "/tmp/glpub/final2/k48ap-9B206/setup-location-2.png",
-   "setup-wi-fi-0": "/tmp/glpub/final2/k48ap-9B206/setup-wi-fi-0.png",
-   "setup-set-up-0": "/tmp/glpub/final2/k48ap-9B206/setup-set-up-0.png",
-   "setup-apple-id-0": "/tmp/glpub/final2/k48ap-9B206/setup-apple-id-0.png",
-   "setup-apple-id-1": "/tmp/glpub/final2/k48ap-9B206/setup-apple-id-1.png",
-   "setup-terms-0": "/tmp/glpub/final2/k48ap-9B206/setup-terms-0.png",
-   "setup-terms-1": "/tmp/glpub/final2/k48ap-9B206/setup-terms-1.png",
-   "setup-diagnostics-0": "/tmp/glpub/final2/k48ap-9B206/setup-diagnostics-0.png",
-   "setup-diagnostics-1": "/tmp/glpub/final2/k48ap-9B206/setup-diagnostics-1.png",
-   "setup-thank-you-0": "/tmp/glpub/final2/k48ap-9B206/setup-thank-you-0.png",
-   "home": "/tmp/glpub/final2/k48ap-9B206/home.png",
-   "installed": "/tmp/glpub/final2/k48ap-9B206/installed.png",
-   "launched1": "/tmp/glpub/final2/k48ap-9B206/launched1.png",
-   "tapped1": "/tmp/glpub/final2/k48ap-9B206/tapped1.png",
-   "tapped2": "/tmp/glpub/final2/k48ap-9B206/tapped2.png",
-   "afterlaunch": "/tmp/glpub/final2/k48ap-9B206/afterlaunch.png",
-   "powerdown1-7s": "/tmp/glpub/final2/k48ap-9B206/powerdown1-7s.png",
-   "powerdown1-12s": "/tmp/glpub/final2/k48ap-9B206/powerdown1-12s.png",
-   "lock2": "/tmp/glpub/final2/k48ap-9B206/lock2.png",
-   "home2": "/tmp/glpub/final2/k48ap-9B206/home2.png",
-   "powerdown2-7s": "/tmp/glpub/final2/k48ap-9B206/powerdown2-7s.png",
-   "powerdown2-12s": "/tmp/glpub/final2/k48ap-9B206/powerdown2-12s.png"
+   "lock": "/tmp/glpub/final4/k48ap-9B206/lock.png",
+   "setup-language-0": "/tmp/glpub/final4/k48ap-9B206/setup-language-0.png",
+   "setup-country-0": "/tmp/glpub/final4/k48ap-9B206/setup-country-0.png",
+   "setup-country-1": "/tmp/glpub/final4/k48ap-9B206/setup-country-1.png",
+   "setup-location-0": "/tmp/glpub/final4/k48ap-9B206/setup-location-0.png",
+   "setup-location-1": "/tmp/glpub/final4/k48ap-9B206/setup-location-1.png",
+   "setup-location-2": "/tmp/glpub/final4/k48ap-9B206/setup-location-2.png",
+   "setup-wi-fi-0": "/tmp/glpub/final4/k48ap-9B206/setup-wi-fi-0.png",
+   "setup-set-up-0": "/tmp/glpub/final4/k48ap-9B206/setup-set-up-0.png",
+   "setup-apple-id-0": "/tmp/glpub/final4/k48ap-9B206/setup-apple-id-0.png",
+   "setup-apple-id-1": "/tmp/glpub/final4/k48ap-9B206/setup-apple-id-1.png",
+   "setup-terms-0": "/tmp/glpub/final4/k48ap-9B206/setup-terms-0.png",
+   "setup-terms-1": "/tmp/glpub/final4/k48ap-9B206/setup-terms-1.png",
+   "setup-diagnostics-0": "/tmp/glpub/final4/k48ap-9B206/setup-diagnostics-0.png",
+   "setup-diagnostics-1": "/tmp/glpub/final4/k48ap-9B206/setup-diagnostics-1.png",
+   "setup-thank-you-0": "/tmp/glpub/final4/k48ap-9B206/setup-thank-you-0.png",
+   "home": "/tmp/glpub/final4/k48ap-9B206/home.png",
+   "installed": "/tmp/glpub/final4/k48ap-9B206/installed.png",
+   "launched1": "/tmp/glpub/final4/k48ap-9B206/launched1.png",
+   "tapped1": "/tmp/glpub/final4/k48ap-9B206/tapped1.png",
+   "tapped2": "/tmp/glpub/final4/k48ap-9B206/tapped2.png",
+   "afterlaunch": "/tmp/glpub/final4/k48ap-9B206/afterlaunch.png",
+   "powerdown1-7s": "/tmp/glpub/final4/k48ap-9B206/powerdown1-7s.png",
+   "lock2": "/tmp/glpub/final4/k48ap-9B206/lock2.png",
+   "home2": "/tmp/glpub/final4/k48ap-9B206/home2.png",
+   "powerdown2-7s": "/tmp/glpub/final4/k48ap-9B206/powerdown2-7s.png",
+   "powerdown2-12s": "/tmp/glpub/final4/k48ap-9B206/powerdown2-12s.png"
   },
-  "events": "/tmp/glpub/final2/k48ap-9B206/driver.jsonl"
+  "events": "/tmp/glpub/final4/k48ap-9B206/driver.jsonl"
  },
  "k48ap-9A334": {
   "version": "5.0",
