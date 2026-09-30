@@ -1,5 +1,7 @@
 # Reuse and fidelity implementation
 
+Current finding dispositions and next steps: [remaining work](remaining-work-2026-09-30.md).
+
 This implementation follows the [architecture review](holistic-review-2026-09-30.md)
 and [reuse survey](reuse-survey-2026-09-30.md). Those documents describe the
 inspection states at the time of the review; their checkout table is historical.

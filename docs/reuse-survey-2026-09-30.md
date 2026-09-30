@@ -1,5 +1,7 @@
 # Existing components that could reduce Light Touch's footprint
 
+Current finding dispositions and next steps: [remaining work](remaining-work-2026-09-30.md).
+
 Research date: 2026-09-30. Companion to [the holistic review](holistic-review-2026-09-30.md).
 This is a source/documentation survey, not an integration or compatibility result.
 Local references below refer to the audit candidates described in that review.

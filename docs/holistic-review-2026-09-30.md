@@ -1,5 +1,7 @@
 # Holistic architecture and fidelity review
 
+Current finding dispositions and next steps: [remaining work](remaining-work-2026-09-30.md).
+
 2026-09-30. Consolidated from four parallel read-only reviews of the application,
 emulator, storage, guest services, dependencies, tests, and registered worktrees.
 This is an engineering assessment and proposed direction, not an implementation
