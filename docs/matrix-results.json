@@ -108,11 +108,11 @@
   "version": "4.2.1",
   "board": "n72ap",
   "status": "experimental",
-  "when": "2026-09-29T00:19:07+00:00",
+  "when": "2026-09-30T01:23:21+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -121,7 +121,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 74.5,
+   "seconds": 79.8,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -135,11 +135,11 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-8C148/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-8C148/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.4.0: Wed Oct 20 20:06:26 PDT 2010; root:xnu-1504.58.28~3/RELEASE_ARM_S5L8720X"
@@ -148,114 +148,26 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 23.9
+    "seconds": 49.5
    },
-   "lockdown": {
+   "home": {
     "ok": true,
-    "seconds": 12.0,
-    "productType": "iPod2,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
+    "brightness": {
+     "home": 0.128,
+     "home2": 0.345,
+     "installed": 0.127
+    },
+    "frontmost": [
+     "com.apple.springboard",
+     "com.apple.springboard"
     ],
-    "error": null
-   },
-   "install": {
-    "ok": true,
-    "seconds": 2,
-    "attempt": 1
-   },
-   "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 22.0,
-     "lockdown": 4.6
-    }
-   },
-   "shutdown": {
-    "ok": true,
-    "seconds": 0.8,
-    "reason": "The emulator stopped.",
-    "second": 1.0
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C148/driver.jsonl"
- },
- "n72ap-5F138": {
-  "version": "2.1.1",
-  "board": "n72ap",
-  "status": "experimental",
-  "when": "2026-09-29T17:24:20+00:00",
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 14,
-   "ok": 14,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 58.6,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity, NOR and boot files",
-    "Building the system volume",
-    "Writing the NAND",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5F138/firmwarekit.log",
-   "lock": {
-    "boot_strategy": "bootrom",
-    "gles": "GL front end replaces OpenGLES (218 exports, the firmware's own); CA composites through it (CA_ENABLE_OGL=1)",
-    "gli": null,
-    "guest_package": "n72-ios2",
-    "activation": true,
-    "kernel": "Darwin Kernel Version 9.4.1: Sun Aug 10 21:25:25 PDT 2008; root:xnu-1228.7.27~12/RELEASE_ARM_S5L8720X"
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 47.1
+    "dark": null,
+    "wrongApp": null,
+    "frame": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 3.8,
+    "seconds": 11.7,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -277,114 +189,175 @@
     "seconds": 3,
     "attempt": 1,
     "apps": [
-     "com.namconetworks.pacmanlite"
-    ],
-    "launch": {
-     "at": [
-      0.384,
-      0.677
-     ],
-     "bundleID": "com.namconetworks.pacmanlite",
-     "shot1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5F138/boot/ipod/launched1.png",
-     "shot2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5F138/boot/ipod/launched2.png",
-     "shot3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5F138/boot/ipod/launched3.png"
-    }
+     "com.qemuios.harness"
+    ]
    },
    "package": {
-    "ok": true,
-    "offered": 7,
-    "reported": 7,
-    "result": 0
+    "ok": null,
+    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
    },
    "gl": {
     "ok": true,
-    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
-    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214029, safari lit=452073, home lit=214029",
-    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 9.6,
-     "lockdown": 3.2
-    }
+     "lit": 46.7,
+     "lockdown": 0.9
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.4,
+    "seconds": 1.8,
     "reason": "The iPod stopped.",
-    "second": 15.2
+    "second": 1.2,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
-   "base_unchanged": false,
+   "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/installed.png",
-   "tip": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/tip.png",
-   "prelaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/prelaunch.png",
-   "launched1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/launched1.png",
-   "launched2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/launched2.png",
-   "launched3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/launched3.png",
-   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/afterlaunch.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-8C148/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-8C148/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-8C148/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-8C148/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-8C148/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5F138/driver.jsonl",
-  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). Earlier: (a)+(c) 2.1.1 through the app pipeline (ipod-2x): prepare needed only the catalog recipe block (the Swift n72 recipe already had the 2.x paths: no BuildManifest, plain-tail img3, epoch-1 NAND, only iBoot's SHSH wrapped, no iBoot.bin, no helpers/seed package without the shared cache); boot needed the lock's boot_strategy \"bootrom\" (SecureROM -> NOR LLB -> iBoot; the app and the session driver passed a missing iBoot.bin as direct-iboot) and the session driver setting the time over lockdown-tz as the app does (clears lockdownd's BrickState; before it the screen sat on Connect to iTunes). Home screen, Activated, AFC 4/4, persist. Byte-matched to qemu-ios ipod2g_device.py: nor.bin, gid-blobs.bin, identity.json identical; the system volumes list the same 10801 entries with equal contents except the SpringBoard job plist (same content, different binary-plist encoding) and lockdownd (same patched code; the signature blob differs, ldid vs FirmwareKit). Shutdown passes since qemu-ios ipod-2x-hold 19649e467c (smoke #19, closed): the hold button was never the gap (the 2.x DeviceTree has function-button_hold <gpio 0x0c02> like 3.x; Hold locks the screen). Two gaps in the machine's hold-and-slide: (1) it held Home through the 2.5 s settle and pressed Hold in the same tick as the release, so both edges arrived in one GPIO status read (group 3 = 0x06000000) and 2.x's SpringBoard never raised the power-off sheet (from a dark lock screen the first press only wakes the display, which hid it); Home is now a tap. (2) 2.x's AppleD1759PMU-36.2 halt, tethered, prints \"pmu waiting for stdby\" and sleeps on the PMU interrupt until the cable comes out (EVENT_A bit 3 -> 0x0a bit 0), where 3.x/4.x's -94.7 writes 0x6f=0x90; the gesture now unplugs once the guest has turned the backlight rail off. Earlier rows (ipod-2x 43f7aff9ac) failed shutdown only. Rows from qemu-ios ipod-2x 43f7aff9ac (bd8d6b1363 + the 0x38100000 block); 5F138 also passes everything but shutdown on the pinned bd8d6b1363."
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-8C148/driver.jsonl",
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T23:27:34+00:00",
+     "host_load": {
+      "start": "{ 76.61 71.63 55.24 }",
+      "end": "{ 49.71 55.96 54.90 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": null,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": false,
+      "shutdown_boot2": true
+     },
+     "first_failure": "shutdown",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/n72ap-8C148",
+     "note": "boot-1 home is the lock screen; boot-1 halt unconfirmed"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T01:23:21+00:00",
+     "host_load": {
+      "start": "{ 32.10 51.49 67.14 }",
+      "end": "{ 53.10 55.14 64.10 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": null,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-8C148",
+     "note": "boot-1 home is the lock screen"
+    }
+   ],
+   "verdict": "Both runs: boot-1 'home' and 'installed' screenshots are the lock screen (slide to unlock, clock 3 h behind), boot-2 home2 is the real home; the judge passes it (brightness above floor, SpringBoard frontmost). Deterministic; counted as home FAIL here. run1 boot-1 shutdown unconfirmed (load 55-77); run2 passes. Keep experimental."
+  },
+  "triage": "rejudge 09-29 (2 runs, qemu-ios 64fc1cfbb2): Both runs: boot-1 'home' and 'installed' screenshots are the lock screen (slide to unlock, clock 3 h behind), boot-2 home2 is the real home; the judge passes it (brightness above floor, SpringBoard frontmost). Deterministic; counted as home FAIL here. run1 boot-1 shutdown unconfirmed (load 55-77); run2 passes. Keep experimental."
  },
- "k48ap-7B500": {
-  "version": "3.2.2",
-  "board": "k48ap",
-  "status": "available",
-  "when": "2026-09-29T01:01:08+00:00",
+ "n72ap-5F138": {
+  "version": "2.1.1",
+  "board": "n72ap",
+  "status": "experimental",
+  "when": "2026-09-30T01:36:07+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-matrix/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest3/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
-   "total": 19,
-   "ok": 19,
+   "total": 14,
+   "ok": 14,
    "bad": "",
    "error": null
   },
   "prepare": {
-   "seconds": 81.9,
+   "seconds": 27.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
-    "Writing the identity and boot chain",
-    "Building the system and data volumes",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
     "Writing the NAND",
-    "Sealing the NAND",
     "Writing the lock"
    ],
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-7B500/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5F138/firmwarekit.log",
    "lock": {
-    "boot_strategy": "iboot",
-    "gles": null,
+    "boot_strategy": "bootrom",
+    "gles": "GL front end replaces OpenGLES (218 exports, the firmware's own); CA composites through it (CA_ENABLE_OGL=1)",
     "gli": null,
-    "guest_package": "k48-ios3",
+    "guest_package": "n72-ios2",
     "activation": true,
-    "kernel": null
+    "kernel": "Darwin Kernel Version 9.4.1: Sun Aug 10 21:25:25 PDT 2008; root:xnu-1228.7.27~12/RELEASE_ARM_S5L8720X"
    }
   },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 27.3
+    "seconds": 12.0
+   },
+   "home": {
+    "ok": false,
+    "brightness": {
+     "home": 0.385,
+     "home2": 0.403,
+     "installed": 0.403
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": {
+     "home": 0.7721
+    }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 5.5,
-    "productType": "iPad1,1"
+    "seconds": 2.6,
+    "productType": "iPod2,1"
    },
    "activation": {
     "ok": true,
@@ -403,59 +376,195 @@
    "install": {
     "ok": true,
     "seconds": 2,
-    "attempt": 1
+    "attempt": 1,
+    "apps": [
+     "com.namconetworks.pacmanlite"
+    ],
+    "launch": {
+     "at": [
+      0.384,
+      0.677
+     ],
+     "bundleID": "com.namconetworks.pacmanlite",
+     "shot1": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5F138/boot/ipod/launched1.png",
+     "shot2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5F138/boot/ipod/launched2.png",
+     "shot3": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5F138/boot/ipod/launched3.png"
+    }
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": false,
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": {
+     "home": 0.7721
+    },
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 74.7,
-     "lockdown": 1.1
-    }
+     "lit": 15.7,
+     "lockdown": 4.8
+    },
+    "restartedApps": true
    },
    "shutdown": {
-    "ok": false,
-    "seconds": 16.1,
-    "reason": "The device helper exited unexpectedly (code 0).",
-    "second": 16.4
+    "ok": true,
+    "seconds": 15.7,
+    "reason": "The iPod stopped.",
+    "second": 15.8,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/installed.png",
+   "tip": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/tip.png",
+   "prelaunch": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/prelaunch.png",
+   "launched1": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/launched1.png",
+   "launched2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/launched2.png",
+   "launched3": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/launched3.png",
+   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/afterlaunch.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B500/driver.jsonl",
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138/driver.jsonl",
   "first_failure": {
-   "check": "shutdown",
-   "why": "The device helper exited unexpectedly (code 0).",
-   "excerpt": "AppleBCMWLAN Joined BSS:     @ 0xc5235000, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\"\n[42.761860000]: AppleBCMWLANNetManager::handleDelayedPowerManagementTimeout(): Timed out waiting for IP address, entering powersave mode: 0\nUSB mux: 260 reads / 0 errors, 183 writes / 0 errors"
+   "check": "home",
+   "why": "{\"ok\": false, \"brightness\": {\"home\": 0.385, \"home2\": 0.403, \"installed\": 0.403}, \"frontmost\": [\"\", \"\"], \"dark\": null, \"wrongApp\": null, \"frame\": {\"home\": 0.7721}}",
+   "excerpt": "Tue Sep 29 21:39:07 iPod configd[18] <Error>: server_shutdown bootstrap_register(): Service name already exists\nUSB mux: 293 reads / 0 errors, 181 writes / 0 errors"
   },
-  "triage": "pass (merged tree 21:05): boot 1's quit was labelled 'helper exited unexpectedly (code 0)' although power-off confirmed in 16 s and the helper exited 0; boot 2 read 'The emulator stopped.' Reason-string race in the new DeviceLink reap path (multidevice a2d4a92), not a boot problem."
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T23:10:44+00:00",
+     "host_load": {
+      "start": "{ 23.24 23.43 30.48 }",
+      "end": "{ 31.69 25.57 29.67 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": false,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": false,
+      "package": true,
+      "gl": false,
+      "persist": false,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": false,
+      "shutdown_boot2": null
+     },
+     "first_failure": "home",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/n72ap-5F138",
+     "note": "invalid input: Harness.ipa min OS 3.1"
+    },
+    {
+     "pass": "run1pac",
+     "when": "2026-09-29T23:36:29+00:00",
+     "host_load": {
+      "start": "{ 49.71 55.96 54.90 }",
+      "end": "{ 70.94 106.15 85.36 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": false,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": false,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": false,
+      "shutdown_boot2": true
+     },
+     "first_failure": "home",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1pac/n72ap-5F138",
+     "note": "PAC-MAN launch drew nothing; boot-1 halt unconfirmed"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T01:07:55+00:00",
+     "host_load": {
+      "start": "{ 61.88 65.77 105.19 }",
+      "end": "{ 36.56 40.72 77.52 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": null,
+      "lockdown": false,
+      "activation": false,
+      "afc": false,
+      "install": false,
+      "package": false,
+      "gl": null,
+      "persist": false,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": false,
+      "shutdown_boot2": null
+     },
+     "first_failure": "lockdown",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5F138",
+     "note": "lockdown never answered"
+    },
+    {
+     "pass": "run3",
+     "when": "2026-09-30T01:36:07+00:00",
+     "host_load": {
+      "start": "{ 130.88 86.19 71.92 }",
+      "end": "{ 39.25 57.27 62.26 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": false,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": false,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": "home",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/n72ap-5F138",
+     "note": "only the bad ref fails"
+    }
+   ],
+   "verdict": "run1 with the matrix default Harness.ipa is invalid input (MinimumOSVersion 3.1: BundleVerificationFailed -15 on 2.x). With PAC-MAN Lite (ipa 145757, min OS 2.0, --launch): run1pac installs and persists but the launch never draws (launched1/2 black, launched3 back at home) and boot-1 shutdown unconfirmed; run2 lit but lockdown never answered (load 62-105); run3 passes everything but home. Home FAILs every run on the committed ref tests/sessions/matrix-refs/n72ap-5F138-home.png, which is the Edit Home Screen tip dialog, not the home; the capture is the correct 2.1.1 home at ~0.76 backlight (undimmed it matches qemu-ios gles-refs/2x-home.png at 0.000). Keep experimental; fix the ref."
+  },
+  "triage": "rejudge 09-29 (4 runs, qemu-ios 64fc1cfbb2): run1 with the matrix default Harness.ipa is invalid input (MinimumOSVersion 3.1: BundleVerificationFailed -15 on 2.x). With PAC-MAN Lite (ipa 145757, min OS 2.0, --launch): run1pac installs and persists but the launch never draws (launched1/2 black, launched3 back at home) and boot-1 shutdown unconfirmed; run2 lit but lockdown never answered (load 62-105); run3 passes everything but home. Home FAILs every run on the committed ref tests/sessions/matrix-refs/n72ap-5F138-home.png, which is the Edit Home Screen tip dialog, not the home; the capture is the correct 2.1.1 home at ~0.76 backlight (undimmed it matches qemu-ios gles-refs/2x-home.png at 0.000). Keep experimental; fix the ref. Earlier: legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). Earlier: (a)+(c) 2.1.1 through the app pipeline (ipod-2x): prepare needed only the catalog recipe block (the Swift n72 recipe already had the 2.x paths: no BuildManifest, plain-tail img3, epoch-1 NAND, only iBoot's SHSH wrapped, no iBoot.bin, no helpers/seed package without the shared cache); boot needed the lock's boot_strategy \"bootrom\" (SecureROM -> NOR LLB -> iBoot; the app and the session driver passed a missing iBoot.bin as direct-iboot) and the session driver setting the time over lockdown-tz as the app does (clears lockdownd's BrickState; before it the screen sat on Connect to iTunes). Home screen, Activated, AFC 4/4, persist. Byte-matched to qemu-ios ipod2g_device.py: nor.bin, gid-blobs.bin, identity.json identical; the system volumes list the same 10801 entries with equal contents except the SpringBoard job plist (same content, different binary-plist encoding) and lockdownd (same patched code; the signature blob differs, ldid vs FirmwareKit). Shutdown passes since qemu-ios ipod-2x-hold 19649e467c (smoke #19, closed): the hold button was never the gap (the 2.x DeviceTree has function-button_hold <gpio 0x0c02> like 3.x; Hold locks the screen). Two gaps in the machine's hold-and-slide: (1) it held Home through the 2.5 s settle and pressed Hold in the same tick as the release, so both edges arrived in one GPIO status read (group 3 = 0x06000000) and 2.x's SpringBoard never raised the power-off sheet (from a dark lock screen the first press only wakes the display, which hid it); Home is now a tap. (2) 2.x's AppleD1759PMU-36.2 halt, tethered, prints \"pmu waiting for stdby\" and sleeps on the PMU interrupt until the cable comes out (EVENT_A bit 3 -> 0x0a bit 0), where 3.x/4.x's -94.7 writes 0x6f=0x90; the gesture now unplugs once the guest has turned the backlight rail off. Earlier rows (ipod-2x 43f7aff9ac) failed shutdown only. Rows from qemu-ios ipod-2x 43f7aff9ac (bd8d6b1363 + the 0x38100000 block); 5F138 also passes everything but shutdown on the pinned bd8d6b1363."
  },
- "k48ap-7B367": {
-  "version": "3.2",
+ "k48ap-7B500": {
+  "version": "3.2.2",
   "board": "k48ap",
   "status": "available",
-  "when": "2026-09-28T23:57:53+00:00",
+  "when": "2026-09-30T00:04:09+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 19,
@@ -464,7 +573,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 74.6,
+   "seconds": 106.0,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -478,7 +587,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-7B367/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-7B500/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -491,11 +600,26 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 18.2
+    "seconds": 90.2
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.611,
+     "home2": 0.611,
+     "installed": 0.603
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 0.8,
+    "seconds": 2.1,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -514,63 +638,109 @@
    },
    "install": {
     "ok": true,
-    "seconds": 3,
-    "attempt": 1
+    "seconds": 6,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 20.7,
-     "lockdown": 4.3
-    }
+     "lit": 33.8,
+     "lockdown": 5.6
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.4,
-    "reason": "The emulator stopped.",
-    "second": 15.8
+    "seconds": 12.0,
+    "reason": "The iPad stopped.",
+    "second": 34.9,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B367/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B367/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B367/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B367/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B367/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/powerdown1-7s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B367/driver.jsonl"
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500/driver.jsonl",
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-30T00:04:09+00:00",
+     "host_load": {
+      "start": "{ 63.47 75.56 71.31 }",
+      "end": "{ 55.81 68.24 69.44 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B500"
+    }
+   ],
+   "verdict": "control, 1 run (load 56-71): every column passes, hardware GL. No 3.2 ref exists."
+  },
+  "triage": "rejudge 09-29 (1 runs, qemu-ios 64fc1cfbb2): control, 1 run (load 56-71): every column passes, hardware GL. No 3.2 ref exists. Earlier: pass (merged tree 21:05): boot 1's quit was labelled 'helper exited unexpectedly (code 0)' although power-off confirmed in 16 s and the helper exited 0; boot 2 read 'The emulator stopped.' Reason-string race in the new DeviceLink reap path (multidevice a2d4a92), not a boot problem."
  },
- "k48ap-8C148": {
-  "version": "4.2.1",
+ "k48ap-7B367": {
+  "version": "3.2",
   "board": "k48ap",
-  "status": "experimental",
-  "when": "2026-09-29T16:35:06+00:00",
+  "status": "available",
+  "when": "2026-09-29T23:56:19+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
-   "total": 18,
-   "ok": 18,
+   "total": 19,
+   "ok": 19,
    "bad": "",
    "error": null
   },
   "prepare": {
-   "seconds": 85.9,
+   "seconds": 102.5,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -578,19 +748,18 @@
     "Writing the identity and boot chain",
     "Building the system and data volumes",
     "Writing the NAND",
-    "Creating the data-protection keybag",
     "Sealing the NAND",
     "Writing the lock"
    ],
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8C148/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-7B367/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
     "gli": null,
-    "guest_package": "k48-ios4",
+    "guest_package": "k48-ios3",
     "activation": true,
     "kernel": null
    }
@@ -598,7 +767,22 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 26.8
+    "seconds": 84.8
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.611,
+     "home2": 0.611,
+     "installed": 0.603
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": null
    },
    "lockdown": {
     "ok": true,
@@ -621,45 +805,295 @@
    },
    "install": {
     "ok": true,
-    "seconds": 1,
-    "attempt": 1
+    "seconds": 2,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 25.5,
-     "lockdown": 1.2
-    }
+     "lit": 99.3,
+     "lockdown": 4.6
+    },
+    "restartedApps": true
    },
    "shutdown": {
-    "ok": true,
-    "seconds": 15.1,
+    "ok": false,
+    "seconds": 13.9,
     "reason": "The iPad stopped.",
-    "second": 15.0
+    "second": null,
+    "second_ok": false,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C148/driver.jsonl",
-  "triage": "(a) control for the 4.3.x rows on qemu-ios aec1594bf7: unchanged, end to end (it read the same 2.5 V brick ID before and still said USBHost, only because 4.2.1's 1 A window also wants D+ <= 2340 mV; now 0 V). Evidence: matrix-results/k48ap-8C148/."
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367/driver.jsonl",
+  "first_failure": {
+   "check": "shutdown",
+   "why": "The iPad stopped.",
+   "excerpt": "default-ftl-version was found and it's set to 1\nAppleBCMWLAN Joined BSS:     @ 0xc3c22000, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\"\n[48.521759000]: AppleBCMWLANNetManager::handleDelayedPowerManagementTimeout(): Timed out waiting for IP address, entering powersave mode: 0"
+  },
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T23:56:19+00:00",
+     "host_load": {
+      "start": "{ 42.58 48.67 61.99 }",
+      "end": "{ 63.47 75.56 71.31 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": false
+     },
+     "first_failure": "shutdown",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-7B367"
+    }
+   ],
+   "verdict": "control, 1 run (load 43-75): all pass but boot-2 shutdown (power-off gesture landed on Spotlight, sheet up at 12 s, never taken). No 3.2 ref exists. Single sample; rerun before reading it as a regression."
+  },
+  "triage": "rejudge 09-29 (1 runs, qemu-ios 64fc1cfbb2): control, 1 run (load 43-75): all pass but boot-2 shutdown (power-off gesture landed on Spotlight, sheet up at 12 s, never taken). No 3.2 ref exists. Single sample; rerun before reading it as a regression."
+ },
+ "k48ap-8C148": {
+  "version": "4.2.1",
+  "board": "k48ap",
+  "status": "experimental",
+  "when": "2026-09-30T00:10:16+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 95.0,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes",
+    "Writing the NAND",
+    "Creating the data-protection keybag",
+    "Sealing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-8C148/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 38.4
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.966,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": {
+     "home": 0.0003,
+     "home2": 0.0007
+    }
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 1.7,
+    "productType": "iPad1,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 2,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
+   },
+   "package": {
+    "ok": true,
+    "offered": 8,
+    "reported": 8,
+    "result": 0
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": {
+     "home": 0.0003,
+     "home2": 0.0007
+    },
+    "note": null
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 41.5,
+     "lockdown": 3.4
+    },
+    "restartedApps": true
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 15.4,
+    "reason": "The iPad stopped.",
+    "second": 15.3,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/powerdown2-12s.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148/driver.jsonl",
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T22:36:58+00:00",
+     "host_load": {
+      "start": "{ 30.83 66.17 74.96 }",
+      "end": "{ 23.99 49.41 65.29 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-8C148"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T00:10:16+00:00",
+     "host_load": {
+      "start": "{ 55.81 68.24 69.44 }",
+      "end": "{ 19.92 40.71 56.58 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8C148"
+    }
+   ],
+   "verdict": "2/2 runs pass every column, hardware GL, home/home2 match the committed software-CA iPad home ref (0.0003-0.0007; refs added this branch from qemu-ios tests/gles-refs/ipad-home.png). Candidate for available."
+  },
+  "triage": "rejudge 09-29 (2 runs, qemu-ios 64fc1cfbb2): 2/2 runs pass every column, hardware GL, home/home2 match the committed software-CA iPad home ref (0.0003-0.0007; refs added this branch from qemu-ios tests/gles-refs/ipad-home.png). Candidate for available. Earlier: (a) control for the 4.3.x rows on qemu-ios aec1594bf7: unchanged, end to end (it read the same 2.5 V brick ID before and still said USBHost, only because 4.2.1's 1 A window also wants D+ <= 2340 mV; now 0 V). Evidence: matrix-results/k48ap-8C148/."
  },
  "n72ap-7A341": {
   "version": "3.0",
@@ -1425,11 +1859,11 @@
   "version": "2.2",
   "board": "n72ap",
   "status": "experimental",
-  "when": "2026-09-29T17:28:35+00:00",
+  "when": "2026-09-30T01:14:46+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 14,
@@ -1438,7 +1872,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 56.3,
+   "seconds": 60.0,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1451,7 +1885,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5G77a/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5G77a/firmwarekit.log",
    "lock": {
     "boot_strategy": "bootrom",
     "gles": "GL front end replaces OpenGLES (218 exports, the firmware's own); CA composites through it (CA_ENABLE_OGL=1)",
@@ -1464,11 +1898,26 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 11.4
+    "seconds": 13.0
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.397,
+     "home2": 0.414,
+     "installed": 0.414
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 3.6,
+    "seconds": 0.7,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1487,7 +1936,7 @@
    },
    "install": {
     "ok": true,
-    "seconds": 3,
+    "seconds": 2,
     "attempt": 1,
     "apps": [
      "com.namconetworks.pacmanlite"
@@ -1498,65 +1947,151 @@
       0.677
      ],
      "bundleID": "com.namconetworks.pacmanlite",
-     "shot1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5G77a/boot/ipod/launched1.png",
-     "shot2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5G77a/boot/ipod/launched2.png",
-     "shot3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5G77a/boot/ipod/launched3.png"
+     "shot1": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5G77a/boot/ipod/launched1.png",
+     "shot2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5G77a/boot/ipod/launched2.png",
+     "shot3": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5G77a/boot/ipod/launched3.png"
     }
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
     "ok": true,
-    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
-    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214095, safari lit=452084, home lit=214095",
-    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 16.3,
-     "lockdown": 2.8
-    }
+     "lit": 21.9,
+     "lockdown": 3.1
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 16.1,
+    "seconds": 15.7,
     "reason": "The iPod stopped.",
-    "second": 12.3
+    "second": 15.4,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/installed.png",
-   "tip": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/tip.png",
-   "prelaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/prelaunch.png",
-   "launched1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/launched1.png",
-   "launched2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/launched2.png",
-   "launched3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/launched3.png",
-   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/afterlaunch.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/installed.png",
+   "tip": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/tip.png",
+   "prelaunch": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/prelaunch.png",
+   "launched1": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/launched1.png",
+   "launched2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/launched2.png",
+   "launched3": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/launched3.png",
+   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/afterlaunch.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5G77a/driver.jsonl",
-  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). Earlier: (a)+(c) 2.2: SecureROM -> LLB looped into DFU (a CPU reset every ~0.15 s, no serial): iBoot-385.49's LLB stores to 0x38100040/44 in the routine that latches the security epoch into POWER_ID, an unmapped block (external abort -> reset). qemu-ios ipod-2x maps it as an unimplemented RAZ/WI device (class S, smoke #18); the LLB then reaches iBoot. iBoot-385.49 then failed 'load_macho_image: failed to load device tree' with 2.1.1's NOR convention (only iBoot's SHSH wrapped): the epoch-2 chain unwraps every image it loads, so the recipe (and the Python oracle, same branch) now wraps every image but the LLB when Restore.plist SCEP >= 2 (the SecureROM verifies the LLB raw). Byte-matched to the updated oracle: nor.bin, gid-blobs.bin, identity.json identical; 11307 volume entries, same two encoding-only differences as 5F138. Home screen, Activated, AFC, persist. Shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a/driver.jsonl",
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T23:14:19+00:00",
+     "host_load": {
+      "start": "{ 31.69 25.57 29.67 }",
+      "end": "{ 55.44 41.43 35.30 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": false,
+      "package": true,
+      "gl": true,
+      "persist": false,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": false,
+      "shutdown_boot2": null
+     },
+     "first_failure": "install",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/n72ap-5G77a",
+     "note": "invalid input: Harness.ipa min OS 3.1"
+    },
+    {
+     "pass": "run1pac",
+     "when": "2026-09-29T23:43:28+00:00",
+     "host_load": {
+      "start": "{ 70.94 106.15 85.36 }",
+      "end": "{ 35.34 59.66 70.87 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1pac/n72ap-5G77a"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T01:14:46+00:00",
+     "host_load": {
+      "start": "{ 36.56 40.72 77.52 }",
+      "end": "{ 47.09 40.55 67.36 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5G77a"
+    }
+   ],
+   "verdict": "2/2 PAC-MAN runs pass every column (the first Harness run is invalid input, min OS 3.1); PAC-MAN renders its title screen both runs. Home judged by brightness only (no ref; the capture is at ~0.76 backlight so the 2x ref cannot be used as-is). Candidate for available."
+  },
+  "triage": "rejudge 09-29 (3 runs, qemu-ios 64fc1cfbb2): 2/2 PAC-MAN runs pass every column (the first Harness run is invalid input, min OS 3.1); PAC-MAN renders its title screen both runs. Home judged by brightness only (no ref; the capture is at ~0.76 backlight so the 2x ref cannot be used as-is). Candidate for available. Earlier: legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). Earlier: (a)+(c) 2.2: SecureROM -> LLB looped into DFU (a CPU reset every ~0.15 s, no serial): iBoot-385.49's LLB stores to 0x38100040/44 in the routine that latches the security epoch into POWER_ID, an unmapped block (external abort -> reset). qemu-ios ipod-2x maps it as an unimplemented RAZ/WI device (class S, smoke #18); the LLB then reaches iBoot. iBoot-385.49 then failed 'load_macho_image: failed to load device tree' with 2.1.1's NOR convention (only iBoot's SHSH wrapped): the epoch-2 chain unwraps every image it loads, so the recipe (and the Python oracle, same branch) now wraps every image but the LLB when Restore.plist SCEP >= 2 (the SecureROM verifies the LLB raw). Byte-matched to the updated oracle: nor.bin, gid-blobs.bin, identity.json identical; 11307 volume entries, same two encoding-only differences as 5F138. Home screen, Activated, AFC, persist. Shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
  },
  "n72ap-5H11a": {
   "version": "2.2.1",
   "board": "n72ap",
   "status": "experimental",
-  "when": "2026-09-29T17:50:44+00:00",
+  "when": "2026-09-30T01:19:10+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 14,
@@ -1565,7 +2100,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 49.6,
+   "seconds": 53.5,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1578,7 +2113,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5H11a/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5H11a/firmwarekit.log",
    "lock": {
     "boot_strategy": "bootrom",
     "gles": "GL front end replaces OpenGLES (218 exports, the firmware's own); CA composites through it (CA_ENABLE_OGL=1)",
@@ -1591,11 +2126,26 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 31.7
+    "seconds": 10.0
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.396,
+     "home2": 0.414,
+     "installed": 0.414
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 2.0,
+    "seconds": 2.4,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1625,65 +2175,151 @@
       0.677
      ],
      "bundleID": "com.namconetworks.pacmanlite",
-     "shot1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5H11a/boot/ipod/launched1.png",
-     "shot2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5H11a/boot/ipod/launched2.png",
-     "shot3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-5H11a/boot/ipod/launched3.png"
+     "shot1": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5H11a/boot/ipod/launched1.png",
+     "shot2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5H11a/boot/ipod/launched2.png",
+     "shot3": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/n72ap-5H11a/boot/ipod/launched3.png"
     }
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
     "ok": true,
-    "note": "regress gles: one front-end hello, CA pixmap surfaces, no refusals, frames follow swipe/launch/close",
-    "detail": "SpringBoard composites through the GL front end: one hello, CA's pixmap surfaces, 2 host context(s), no refusals; swipe lit=214110, safari lit=452100, home lit=214038",
-    "source": "qemu-ios 628e47d656 tests/ipod/regress.py --device <firmwarekit create, guest package serial 5> --checks boot,gles (fk-gles2x, 2026-09-29)"
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 20.1,
-     "lockdown": 0.4
-    }
+     "lit": 17.7,
+     "lockdown": 2.7
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.5,
+    "seconds": 16.5,
     "reason": "The iPod stopped.",
-    "second": 16.0
+    "second": 15.4,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/installed.png",
-   "tip": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/tip.png",
-   "prelaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/prelaunch.png",
-   "launched1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/launched1.png",
-   "launched2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/launched2.png",
-   "launched3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/launched3.png",
-   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/afterlaunch.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/installed.png",
+   "tip": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/tip.png",
+   "prelaunch": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/prelaunch.png",
+   "launched1": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/launched1.png",
+   "launched2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/launched2.png",
+   "launched3": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/launched3.png",
+   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/afterlaunch.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-5H11a/driver.jsonl",
-  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). 5H11a: one earlier run of the final set had boot 1 never answer lockdown (lit 30 s, SpringBoard's IOHIDFamily loop in serial, smoke #20's pattern, host load ~50); the rerun recorded here passed. Earlier: (a)+(c) 2.2.1: identical to 5G77a (iBoot-385.49, SCEP 2): the 0x38100000 block and the wrap-all-but-LLB NOR; byte-matched to the updated oracle (nor, gid-blobs, identity identical; 11307 volume entries, the two encoding-only differences). Home screen, Activated, AFC, persist; shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a/driver.jsonl",
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T23:19:51+00:00",
+     "host_load": {
+      "start": "{ 55.44 41.43 35.30 }",
+      "end": "{ 76.61 71.63 55.24 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": false,
+      "package": true,
+      "gl": true,
+      "persist": false,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": false,
+      "shutdown_boot2": null
+     },
+     "first_failure": "install",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/n72ap-5H11a",
+     "note": "invalid input: Harness.ipa min OS 3.1"
+    },
+    {
+     "pass": "run1pac",
+     "when": "2026-09-29T23:50:16+00:00",
+     "host_load": {
+      "start": "{ 35.34 59.66 70.87 }",
+      "end": "{ 42.58 48.67 61.99 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1pac/n72ap-5H11a"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T01:19:10+00:00",
+     "host_load": {
+      "start": "{ 47.09 40.55 67.36 }",
+      "end": "{ 33.50 52.09 67.44 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/n72ap-5H11a"
+    }
+   ],
+   "verdict": "2/2 PAC-MAN runs pass every column (the first Harness run is invalid input, min OS 3.1); PAC-MAN renders its title screen both runs. Home judged by brightness only (no ref). Candidate for available."
+  },
+  "triage": "rejudge 09-29 (3 runs, qemu-ios 64fc1cfbb2): 2/2 PAC-MAN runs pass every column (the first Harness run is invalid input, min OS 3.1); PAC-MAN renders its title screen both runs. Home judged by brightness only (no ref). Candidate for available. Earlier: legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). 5H11a: one earlier run of the final set had boot 1 never answer lockdown (lit 30 s, SpringBoard's IOHIDFamily loop in serial, smoke #20's pattern, host load ~50); the rerun recorded here passed. Earlier: (a)+(c) 2.2.1: identical to 5G77a (iBoot-385.49, SCEP 2): the 0x38100000 block and the wrap-all-but-LLB NOR; byte-matched to the updated oracle (nor, gid-blobs, identity identical; 11307 volume entries, the two encoding-only differences). Home screen, Activated, AFC, persist; shutdown passes as 5F138 (qemu-ios ipod-2x-hold 19649e467c, smoke #19)."
  },
  "k48ap-8F190": {
   "version": "4.3",
   "board": "k48ap",
-  "status": "untested",
-  "when": "2026-09-29T16:38:36+00:00",
+  "status": "experimental",
+  "when": "2026-09-30T01:29:31+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 18,
@@ -1692,7 +2328,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 89.3,
+   "seconds": 97.9,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1707,7 +2343,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8F190/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-8F190/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -1720,11 +2356,29 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 36.2
+    "seconds": 68.6
+   },
+   "home": {
+    "ok": false,
+    "brightness": {
+     "home": 0.959,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": {
+     "home": 0.2483,
+     "home2": 0.0014
+    }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 1.2,
+    "seconds": 10.4,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -1743,55 +2397,159 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 4,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": false,
+    "path": "software CA (no gldshim device)",
+    "rejects": 0,
+    "picture": {
+     "home": 0.2483,
+     "home2": 0.0014
+    },
+    "note": "software-composited fallback: no gldshim device, no GL"
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 30.0,
-     "lockdown": 0.7
-    }
+     "lit": 55.4,
+     "lockdown": 0.9
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.5,
+    "seconds": 33.6,
     "reason": "The iPad stopped.",
-    "second": 15.2
+    "second": 15.6,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8F190/driver.jsonl",
-  "triage": "(c) 4.3, keys 18/18, own Update ramdisk for the keybag, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). An earlier run at host load 100-300 panicked once in the network stack ('m_free: freeing an already freed mbuf', right after Wi-Fi configured) and never lit: smoke #37. Evidence: matrix-results/k48ap-8F190/."
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190/driver.jsonl",
+  "first_failure": {
+   "check": "home",
+   "why": "{\"ok\": false, \"brightness\": {\"home\": 0.959, \"home2\": 0.966, \"installed\": 0.974}, \"frontmost\": [\"\", \"\"], \"dark\": null, \"wrongApp\": null, \"frame\": {\"home\": 0.2483, \"home2\": 0.0014}}",
+   "excerpt": "USB mux: 308 reads / 0 errors, 214 writes / 0 errors"
+  },
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T22:42:15+00:00",
+     "host_load": {
+      "start": "{ 23.99 49.41 65.29 }",
+      "end": "{ 11.36 28.96 51.69 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-8F190"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T00:14:57+00:00",
+     "host_load": {
+      "start": "{ 19.92 40.71 56.58 }",
+      "end": "{ 200.10 126.34 88.94 }"
+     },
+     "checks": {
+      "lit": false,
+      "home": null,
+      "lockdown": false,
+      "activation": false,
+      "afc": false,
+      "install": false,
+      "package": false,
+      "gl": null,
+      "persist": false,
+      "gl_path": "hardware GL",
+      "shutdown_boot1": false,
+      "shutdown_boot2": null
+     },
+     "first_failure": "lit",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8F190",
+     "note": "guest kernel panic after Wi-Fi join (same pc as 8G4 run2), load-exposed race"
+    },
+    {
+     "pass": "run3",
+     "when": "2026-09-30T01:29:31+00:00",
+     "host_load": {
+      "start": "{ 37.38 49.54 61.14 }",
+      "end": "{ 130.88 86.19 71.92 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": false,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": false,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": "home",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run3/k48ap-8F190",
+     "note": "home frame 0.248: captured mid unlock animation under load"
+    }
+   ],
+   "verdict": "run1 (load 24-65) passes; run2 (load up to 200) kernel panic before lit: kernel abort fault_addr 0xc4, pc 0x80656f7c, right after 'AppleBCMWLAN Joined BSS' (boot slowed to 239 s); run3 (load 37-130) passes except boot-1 home caught mid unlock-zoom animation (frame 0.248, a capture-timing artifact). GL is the software-CA fallback (no gldshim device) every run: GL counts as FAIL. Keep experimental."
+  },
+  "triage": "rejudge 09-29 (3 runs, qemu-ios 64fc1cfbb2): run1 (load 24-65) passes; run2 (load up to 200) kernel panic before lit: kernel abort fault_addr 0xc4, pc 0x80656f7c, right after 'AppleBCMWLAN Joined BSS' (boot slowed to 239 s); run3 (load 37-130) passes except boot-1 home caught mid unlock-zoom animation (frame 0.248, a capture-timing artifact). GL is the software-CA fallback (no gldshim device) every run: GL counts as FAIL. Keep experimental. Earlier: (c) 4.3, keys 18/18, own Update ramdisk for the keybag, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). An earlier run at host load 100-300 panicked once in the network stack ('m_free: freeing an already freed mbuf', right after Wi-Fi configured) and never lit: smoke #37. Evidence: matrix-results/k48ap-8F190/."
  },
  "k48ap-8G4": {
   "version": "4.3.1",
   "board": "k48ap",
-  "status": "untested",
-  "when": "2026-09-29T16:42:26+00:00",
+  "status": "experimental",
+  "when": "2026-09-30T00:23:04+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1800,7 +2558,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 79.7,
+   "seconds": 148.2,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1815,7 +2573,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8G4/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-8G4/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -1828,11 +2586,26 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 33.7
+    "seconds": 46.4
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.966,
+     "installed": 0.966
+    },
+    "frontmost": [
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": {
+     "home": 0.001
+    }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 1.0,
+    "seconds": 4.7,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -1851,55 +2624,130 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 7,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "software CA (no gldshim device)",
+    "rejects": 0,
+    "picture": {
+     "home": 0.001
+    },
+    "note": "software-composited fallback: no gldshim device, no GL"
    },
    "persist": {
-    "ok": true,
+    "ok": false,
     "error": null,
     "second_boot": {
-     "lit": 28.1,
-     "lockdown": 1.7
+     "lit": null,
+     "lockdown": null
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.6,
+    "seconds": 31.4,
     "reason": "The iPad stopped.",
-    "second": 17.4
+    "second": null,
+    "second_ok": null,
+    "boot2_reason": null
    },
    "base_unchanged": true,
-   "driver_exit": 0
+   "driver_exit": 1,
+   "driver_fail": "ipad never lit"
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8G4/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8G4/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8G4/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8G4/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8G4/powerdown1-12s.png",
+   "never-lit": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8G4/never-lit.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8G4/driver.jsonl",
-  "triage": "(c) 4.3.1, keys 16/16, keybag from 8F190's Update ramdisk (recipe.keybag_ramdisk_from), iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8G4/."
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8G4/driver.jsonl",
+  "first_failure": {
+   "check": "persist",
+   "why": "ipad never lit",
+   "excerpt": "\t\tcpsr: 0x00000010 fsr: 0x00000000 far: 0x00000000\n\t\tuser backtrace: 186fe0\n\t\t  lr: 0x30679bc4  fp: 0x00000000"
+  },
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T22:46:51+00:00",
+     "host_load": {
+      "start": "{ 11.36 28.96 51.69 }",
+      "end": "{ 42.80 46.08 52.76 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-8G4"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T00:23:04+00:00",
+     "host_load": {
+      "start": "{ 200.10 126.34 88.94 }",
+      "end": "{ 189.42 157.12 127.33 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": false,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": null
+     },
+     "first_failure": "persist",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8G4",
+     "note": "boot-2 guest kernel panic after Wi-Fi join, load-exposed"
+    }
+   ],
+   "verdict": "run1 passes; run2 (load 89-200) boot 2 panicked (same fault_addr 0xc4 / pc 0x80656f7c after the Wi-Fi BSS join as 8F190 run2), so persist and boot-2 shutdown did not run. GL software-CA fallback both runs (FAIL). Keep experimental."
+  },
+  "triage": "rejudge 09-29 (2 runs, qemu-ios 64fc1cfbb2): run1 passes; run2 (load 89-200) boot 2 panicked (same fault_addr 0xc4 / pc 0x80656f7c after the Wi-Fi BSS join as 8F190 run2), so persist and boot-2 shutdown did not run. GL software-CA fallback both runs (FAIL). Keep experimental. Earlier: (c) 4.3.1, keys 16/16, keybag from 8F190's Update ramdisk (recipe.keybag_ramdisk_from), iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8G4/."
  },
  "k48ap-8H7": {
   "version": "4.3.2",
   "board": "k48ap",
-  "status": "untested",
-  "when": "2026-09-29T16:45:59+00:00",
+  "status": "experimental",
+  "when": "2026-09-30T00:34:23+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -1908,7 +2756,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 85.9,
+   "seconds": 180.8,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1923,7 +2771,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8H7/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-8H7/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -1936,11 +2784,236 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 43.5
+    "seconds": 62.8
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.966,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": {
+     "home": 0.001,
+     "home2": 0.001
+    }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 2.6,
+    "seconds": 6.1,
+    "productType": "iPad1,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 4,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
+   },
+   "package": {
+    "ok": true,
+    "offered": 8,
+    "reported": 8,
+    "result": 0
+   },
+   "gl": {
+    "ok": true,
+    "path": "software CA (no gldshim device)",
+    "rejects": 0,
+    "picture": {
+     "home": 0.001,
+     "home2": 0.001
+    },
+    "note": "software-composited fallback: no gldshim device, no GL"
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 84.1,
+     "lockdown": 2.1
+    },
+    "restartedApps": true
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": "The iPad stopped.",
+    "second": null,
+    "second_ok": false,
+    "boot2_reason": "The iPad stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/powerdown2-12s.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7/driver.jsonl",
+  "first_failure": {
+   "check": "shutdown",
+   "why": "The iPad stopped.",
+   "excerpt": "[glishim] gliInitializeLibrary\n[glishim] libGFXShared registered no gldshim device (GLRendererFloatQEMU.bundle missing?): no GL\nApplePinotLCD::_lcdEnable: enable: 0"
+  },
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T22:51:37+00:00",
+     "host_load": {
+      "start": "{ 42.80 46.08 52.76 }",
+      "end": "{ 13.27 26.51 42.30 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-8H7"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T00:34:23+00:00",
+     "host_load": {
+      "start": "{ 189.42 157.12 127.33 }",
+      "end": "{ 102.56 133.04 135.12 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": false,
+      "shutdown_boot2": false
+     },
+     "first_failure": "shutdown",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8H7",
+     "note": "power-off gesture not completed at load 130-190"
+    }
+   ],
+   "verdict": "run1 passes; run2 (load 127-190) shutdown unconfirmed on both boots (boot 1: slide-to-power-off sheet up at 7 s and 12 s, never taken; boot 2: black at 7/12 s, no standby). GL software-CA fallback (FAIL). Keep experimental."
+  },
+  "triage": "rejudge 09-29 (2 runs, qemu-ios 64fc1cfbb2): run1 passes; run2 (load 127-190) shutdown unconfirmed on both boots (boot 1: slide-to-power-off sheet up at 7 s and 12 s, never taken; boot 2: black at 7/12 s, no standby). GL software-CA fallback (FAIL). Keep experimental. Earlier: (c) 4.3.2, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8H7/."
+ },
+ "k48ap-8J3": {
+  "version": "4.3.3",
+  "board": "k48ap",
+  "status": "experimental",
+  "when": "2026-09-30T00:43:42+00:00",
+  "tools": {
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
+  },
+  "keys": {
+   "total": 16,
+   "ok": 16,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 449.9,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes",
+    "Writing the NAND",
+    "Creating the data-protection keybag",
+    "Sealing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [
+    "keybag boot attempt 1/3 failed after 161 s: halted without the keybag; retrying"
+   ],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-8J3/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 58.9
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.966,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": {
+     "home": 0.001,
+     "home2": 0.001
+    }
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 1.8,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -1960,162 +3033,127 @@
    "install": {
     "ok": true,
     "seconds": 2,
-    "attempt": 1
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "software CA (no gldshim device)",
+    "rejects": 0,
+    "picture": {
+     "home": 0.001,
+     "home2": 0.001
+    },
+    "note": "software-composited fallback: no gldshim device, no GL"
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 38.0,
-     "lockdown": 1.2
-    }
+     "lit": 39.5,
+     "lockdown": 1.7
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 14.4,
+    "seconds": 12.7,
     "reason": "The iPad stopped.",
-    "second": 24.2
+    "second": 16.4,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8H7/driver.jsonl",
-  "triage": "(c) 4.3.2, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8H7/."
- },
- "k48ap-8J3": {
-  "version": "4.3.3",
-  "board": "k48ap",
-  "status": "untested",
-  "when": "2026-09-29T16:50:12+00:00",
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-usb-docs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad-43-usb/build-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 16,
-   "ok": 16,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 131.7,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity and boot chain",
-    "Building the system and data volumes",
-    "Writing the NAND",
-    "Creating the data-protection keybag",
-    "Sealing the NAND",
-    "Writing the lock"
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3/driver.jsonl",
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T22:55:41+00:00",
+     "host_load": {
+      "start": "{ 13.27 26.51 42.30 }",
+      "end": "{ 22.85 21.66 35.15 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-8J3"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T00:43:42+00:00",
+     "host_load": {
+      "start": "{ 102.56 133.04 135.12 }",
+      "end": "{ 128.56 162.76 157.02 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8J3"
+    }
    ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/scratch/k48ap-8J3/firmwarekit.log",
-   "lock": {
-    "boot_strategy": "iboot",
-    "gles": null,
-    "gli": null,
-    "guest_package": "k48-ios4",
-    "activation": true,
-    "kernel": null
-   }
+   "verdict": "2/2 runs pass every column; home/home2 match the ref. GL is the software-CA fallback both runs (FAIL). Keep experimental until 4.3.x runs hardware GL."
   },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 45.4
-   },
-   "lockdown": {
-    "ok": true,
-    "seconds": 4.5,
-    "productType": "iPad1,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
-    ],
-    "error": null
-   },
-   "install": {
-    "ok": true,
-    "seconds": 6,
-    "attempt": 1
-   },
-   "package": {
-    "ok": true,
-    "offered": 7,
-    "reported": 7,
-    "result": 0
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 31.5,
-     "lockdown": 0.8
-    }
-   },
-   "shutdown": {
-    "ok": true,
-    "seconds": 15.8,
-    "reason": "The iPad stopped.",
-    "second": 15.4
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8J3/driver.jsonl",
-  "triage": "(c) 4.3.3, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8J3/."
+  "triage": "rejudge 09-29 (2 runs, qemu-ios 64fc1cfbb2): 2/2 runs pass every column; home/home2 match the ref. GL is the software-CA fallback both runs (FAIL). Keep experimental until 4.3.x runs hardware GL. Earlier: (c) 4.3.3, keys 16/16, keybag from 8F190's ramdisk, iBoot chain (SEPO 1). Passes end to end on qemu-ios ipad1 aec1594bf7 (the dylib built from ipad-43-usb 5d5b70d6c7, which only adds a comment; IOP core; guest tools exported from the same tree, package serial 7). The 09-29 blocker, smoke #35, is closed: AppleD1815PMUPowerSource classifies the cable from PMU ADC mux 6 (the dock's USB data lines, function-brick_id_p/n), the model answered mid-scale (2.5 V on both lines) and 4.3's classifier took that for a 1 A Apple brick, so AppleUSBCableType was Detached and the arbitrator left device mode; with the cable in the lines now read a host's pull-downs, 0 V (qemu-ios b273f07a02): USBHost, device mode, lockdown over USB. Shutdown passes too since the ipad-fires-2 merge (0c9207cbd9, the 4.3.5 slider power-off; smoke #27). Evidence: matrix-results/k48ap-8J3/."
  },
  "k48ap-8K2": {
   "version": "4.3.4",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-29T17:31:56+00:00",
+  "when": "2026-09-30T00:55:22+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-iboot/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -2124,7 +3162,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 138.0,
+   "seconds": 188.4,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -2139,7 +3177,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/scratch/k48ap-8K2/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-8K2/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -2152,11 +3190,29 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 36.5
+    "seconds": 71.1
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.966,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": {
+     "home": 0.001,
+     "home2": 0.001
+    }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 1.1,
+    "seconds": 1.8,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -2176,54 +3232,127 @@
    "install": {
     "ok": true,
     "seconds": 2,
-    "attempt": 1
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "software CA (no gldshim device)",
+    "rejects": 0,
+    "picture": {
+     "home": 0.001,
+     "home2": 0.001
+    },
+    "note": "software-composited fallback: no gldshim device, no GL"
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 34.6,
-     "lockdown": 1.6
-    }
+     "lit": 55.8,
+     "lockdown": 0.9
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 19.7,
+    "seconds": 15.1,
     "reason": "The iPad stopped.",
-    "second": 16.1
+    "second": 15.1,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8K2/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8K2/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8K2/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8K2/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8K2/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/powerdown1-12s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8K2/driver.jsonl",
-  "triage": "(c) 4.3.4, keys 16/16, keybag from 8F190's ramdisk. Real iBoot chain (recipe.boot default iboot; the kboot workaround is gone): smoke #7 closed, qemu-ios reads POWER_ID's epoch off the staged iBoot (iBoot-1072 -> 2). Serial: BUILD_TAG iBoot-1072.61, 'Loading kernel cache at 0x43000000' on both boots, no kboot. Passes end to end on qemu-ios ipad1 5d5b70d6c7 (build-w1-native; IOP core; guest tools package serial 7), as it did on kboot. Evidence: qemu-ios-files/ipad-43-iboot/results/k48ap-8K2/."
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2/driver.jsonl",
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T23:00:52+00:00",
+     "host_load": {
+      "start": "{ 22.85 21.66 35.15 }",
+      "end": "{ 27.07 29.22 35.03 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-8K2"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T00:55:22+00:00",
+     "host_load": {
+      "start": "{ 128.56 162.76 157.02 }",
+      "end": "{ 53.68 109.63 136.61 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8K2"
+    }
+   ],
+   "verdict": "2/2 runs pass every column (run2 at load 128-163); home/home2 match the ref. GL software-CA fallback (FAIL). Keep experimental until 4.3.x runs hardware GL."
+  },
+  "triage": "rejudge 09-29 (2 runs, qemu-ios 64fc1cfbb2): 2/2 runs pass every column (run2 at load 128-163); home/home2 match the ref. GL software-CA fallback (FAIL). Keep experimental until 4.3.x runs hardware GL. Earlier: (c) 4.3.4, keys 16/16, keybag from 8F190's ramdisk. Real iBoot chain (recipe.boot default iboot; the kboot workaround is gone): smoke #7 closed, qemu-ios reads POWER_ID's epoch off the staged iBoot (iBoot-1072 -> 2). Serial: BUILD_TAG iBoot-1072.61, 'Loading kernel cache at 0x43000000' on both boots, no kboot. Passes end to end on qemu-ios ipad1 5d5b70d6c7 (build-w1-native; IOP core; guest tools package serial 7), as it did on kboot. Evidence: qemu-ios-files/ipad-43-iboot/results/k48ap-8K2/."
  },
  "k48ap-8L1": {
   "version": "4.3.5",
   "board": "k48ap",
   "status": "experimental",
-  "when": "2026-09-29T17:36:46+00:00",
+  "when": "2026-09-30T01:02:09+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ipad-43-iboot/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipad-43-usb/guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/rejudge-ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 16,
@@ -2232,7 +3361,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 89.5,
+   "seconds": 86.1,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -2247,7 +3376,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/scratch/k48ap-8L1/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/scratch/k48ap-8L1/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -2260,11 +3389,29 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 72.3
+    "seconds": 41.1
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.966,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": {
+     "home": 0.001,
+     "home2": 0.0014
+    }
    },
    "lockdown": {
     "ok": true,
-    "seconds": 11.2,
+    "seconds": 2.1,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -2283,45 +3430,123 @@
    },
    "install": {
     "ok": true,
-    "seconds": 3,
-    "attempt": 1
+    "seconds": 5,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 7,
-    "reported": 7,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "software CA (no gldshim device)",
+    "rejects": 0,
+    "picture": {
+     "home": 0.001,
+     "home2": 0.0014
+    },
+    "note": "software-composited fallback: no gldshim device, no GL"
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 53.3,
-     "lockdown": 1.2
-    }
+     "lit": 54.7,
+     "lockdown": 12.1
+    },
+    "restartedApps": true
    },
    "shutdown": {
-    "ok": true,
-    "seconds": 18.3,
+    "ok": false,
+    "seconds": 11.3,
     "reason": "The iPad stopped.",
-    "second": 16.1
+    "second": null,
+    "second_ok": false,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/powerdown1-7s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/driver.jsonl",
-  "triage": "(c) 4.3.5, keys 16/16, keybag from 8F190's ramdisk. Real iBoot chain (recipe.boot default iboot; the kboot workaround is gone): iBoot-1072 epoch 2 read off the image (smoke #7 closed). Serial: BUILD_TAG iBoot-1072.61, 'Loading kernel cache at 0x43000000' on both boots, no kboot. Passes end to end on qemu-ios ipad1 5d5b70d6c7 (build-w1-native; IOP core; guest tools package serial 7), as it did on kboot. Boot 1 lit 72.3 s / lockdown 11.2 s (kboot: 24.6 s / 1.2 s); boot 2 lit 53.3 s (kboot 56.0 s). Evidence: qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/."
+  "events": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1/driver.jsonl",
+  "first_failure": {
+   "check": "shutdown",
+   "why": "The iPad stopped.",
+   "excerpt": "[glishim] libGFXShared registered no gldshim device (GLRendererFloatQEMU.bundle missing?): no GL\n[glishim] gliInitializeLibrary\n[glishim] libGFXShared registered no gldshim device (GLRendererFloatQEMU.bundle missing?): no GL"
+  },
+  "rejudge_0929": {
+   "emulator": {
+    "qemu_ios": "64fc1cfbb2 (ipad1, clean; dylib build a46f127160cb325cb081a4af28b2f9b7)",
+    "multidevice": "1f2e9a2"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-29T23:05:46+00:00",
+     "host_load": {
+      "start": "{ 27.07 29.22 35.03 }",
+      "end": "{ 23.24 23.43 30.48 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": true
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run1/k48ap-8L1"
+    },
+    {
+     "pass": "run2",
+     "when": "2026-09-30T01:02:09+00:00",
+     "host_load": {
+      "start": "{ 53.68 109.63 136.61 }",
+      "end": "{ 61.88 65.77 105.19 }"
+     },
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "gl": true,
+      "persist": true,
+      "gl_path": "software CA (no gldshim device)",
+      "shutdown_boot1": true,
+      "shutdown_boot2": false
+     },
+     "first_failure": "shutdown",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/results/run2/k48ap-8L1",
+     "note": "known boot-2 shutdown flake"
+    }
+   ],
+   "verdict": "run1 passes; run2 boot-2 shutdown fails (slide-to-power-off sheet up at 7 s and 12 s, never taken; the known ~half-of-runs flake). GL software-CA fallback (FAIL). Keep experimental."
+  },
+  "triage": "rejudge 09-29 (2 runs, qemu-ios 64fc1cfbb2): run1 passes; run2 boot-2 shutdown fails (slide-to-power-off sheet up at 7 s and 12 s, never taken; the known ~half-of-runs flake). GL software-CA fallback (FAIL). Keep experimental. Earlier: (c) 4.3.5, keys 16/16, keybag from 8F190's ramdisk. Real iBoot chain (recipe.boot default iboot; the kboot workaround is gone): iBoot-1072 epoch 2 read off the image (smoke #7 closed). Serial: BUILD_TAG iBoot-1072.61, 'Loading kernel cache at 0x43000000' on both boots, no kboot. Passes end to end on qemu-ios ipad1 5d5b70d6c7 (build-w1-native; IOP core; guest tools package serial 7), as it did on kboot. Boot 1 lit 72.3 s / lockdown 11.2 s (kboot: 24.6 s / 1.2 s); boot 2 lit 53.3 s (kboot 56.0 s). Evidence: qemu-ios-files/ipad-43-iboot/results/k48ap-8L1/."
  },
  "n72ap-8A230m": {
   "version": "4.0",
@@ -4721,7 +5946,7 @@
    "why": "oneshot_failed: seal boot: QEMU exited without it_seal after 0 s",
    "excerpt": "firmwarekit: oneshot_failed: seal boot: QEMU exited without it_seal after 0 s"
   },
-  "triage": "iboot-bootargs 09-29: smoke #48 (boot-args iBoot32Patcher xref) fixed — the patcher now scans word-aligned literal-pool words only (build-support/patches/iBoot32Patcher-ltm.patch), and 9A5220p's lockdownd needed the activation matcher to skip an LDR-immediate between the log arguments (activation.c). prepare now clears the boot chain and activation and reaches 'Sealing the NAND'; the seal one-shot's iBoot-1219.35.80 then panics 'reset vector overwritten' because iBoot32Patcher's find_bl_verify_shsh_5_6_7 targets a verify_shsh call whose caller holds R3=0 on 9A5220p (new smoke #50). Byte-identity of the patched iBoot holds for every working k48 build (K48IBootTests); swift test / offline / release / app build green. Still untested pending #50."
+  "triage": "iboot-bootargs 09-29: smoke #48 (boot-args iBoot32Patcher xref) fixed \u2014 the patcher now scans word-aligned literal-pool words only (build-support/patches/iBoot32Patcher-ltm.patch), and 9A5220p's lockdownd needed the activation matcher to skip an LDR-immediate between the log arguments (activation.c). prepare now clears the boot chain and activation and reaches 'Sealing the NAND'; the seal one-shot's iBoot-1219.35.80 then panics 'reset vector overwritten' because iBoot32Patcher's find_bl_verify_shsh_5_6_7 targets a verify_shsh call whose caller holds R3=0 on 9A5220p (new smoke #50). Byte-identity of the patched iBoot holds for every working k48 build (K48IBootTests); swift test / offline / release / app build green. Still untested pending #50."
  },
  "k48ap-9A5288d": {
   "version": "5.0",
