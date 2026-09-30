@@ -48,7 +48,8 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         case progress(Double, detail: String? = nil)
         case warning(String)
         case done(lock: String)
-        case error(code: String, message: String)
+        /// `piece`: a required fit check's piece that didn't fit ("OpenGLES front end (contrib/gles-public)").
+        case error(code: String, message: String, piece: String? = nil)
 
         init?(_ text: some StringProtocol) {
             guard let data = text.data(using: .utf8),
@@ -64,23 +65,34 @@ nonisolated final class PreparationJob: @unchecked Sendable {
                 self = .progress(fraction, detail: object["detail"] as? String)
             case "warning": self = .warning(object["message"] as? String ?? "")
             case "done": self = .done(lock: object["lock"] as? String ?? "device.lock.json")
-            case "error": self = .error(code: object["code"] as? String ?? "internal", message: object["message"] as? String ?? "")
+            case "error": self = .error(code: object["code"] as? String ?? "internal", message: object["message"] as? String ?? "",
+                                        piece: object["piece"] as? String)
             default: return nil
             }
         }
     }
 
-    /// What the row says for an error event.
-    static func message(code: String, detail: String) -> String {
+    /// What the row says for an error event. The detail stays in the preparer's log.
+    static func message(code: String, detail: String, piece: String? = nil, beta: Bool = false) -> String {
         switch code {
         case "key_missing": "Light Touch doesn’t have the keys for this firmware."
         case "sha_mismatch": "This IPSW doesn’t match the one Light Touch knows."
+        case "unsupported" where piece != nil:
+            "Light Touch can’t prepare this \(beta ? "beta" : "version") yet: \(unsupportedReason(piece!))."
         case "unsupported": "This IPSW isn’t supported."
         case "activation_failed", "hook_failed": "Couldn’t activate this device."
         case "oneshot_failed": "The device’s first boot didn’t finish."
         case "disk_full": "Not enough disk space to prepare this device."
         default: detail.isEmpty ? "Preparation failed." : "Preparation failed: \(detail)"
         }
+    }
+
+    /// A fit check's piece (FirmwareKit's FitCheck names) in the user's words.
+    static func unsupportedReason(_ piece: String) -> String {
+        if piece.hasPrefix("OpenGLES") { return "its graphics library isn’t supported" }
+        if piece.hasPrefix("kernelcache") || piece.hasPrefix("boot-arg") || piece.hasPrefix("DeviceTree") { return "the way it starts up isn’t supported" }
+        if piece.localizedCaseInsensitiveContains("appsync") { return "installing apps on it isn’t supported" }
+        return "the guest tools don’t run on it"   // it_boot, the guest package's pieces, the helpers
     }
 
     let id = UUID()
@@ -158,13 +170,13 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         case let .done(lockName)? where status == 0:
             do { finish(.published(try publish(lock: lockName))) }
             catch { finish(.failed("Couldn’t save the prepared device: \(error.localizedDescription)")) }
-        case let .error(code, detail)?:
+        case let .error(code, detail, piece)?:
             // A cached or imported IPSW that fails its SHA is never used again.
             if code == "sha_mismatch" { try? FileManager.default.removeItem(at: request.ipsw) }
-            finish(.failed(Self.message(code: code, detail: detail)))
+            finish(.failed(Self.message(code: code, detail: detail, piece: piece, beta: request.entry.prerelease != nil)))
         default:
             logEvent("firmware: firmwarekit exited \(status) without a result")
-            finish(.failed("Preparation stopped unexpectedly. Show the log for details."))
+            finish(.failed("Preparation stopped unexpectedly. Open Device Logs for details."))
         }
     }
 

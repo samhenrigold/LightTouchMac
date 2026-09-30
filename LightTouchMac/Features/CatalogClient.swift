@@ -95,7 +95,9 @@ nonisolated enum CatalogError: LocalizedError {
         case .invalidCopy(let message): message
         case .unreadable: "Legacy Store sent a response Light Touch couldn’t read."
         case .badStatus(503): "The Internet Archive is busy — try again in a minute."
-        case .badStatus(let code): "Legacy Store returned an error (HTTP \(code))."
+        // The code is in app.log (`Legacy Store: HTTP <code> for <path>`).
+        case .badStatus(500...): "Legacy Store isn’t responding. Try again in a moment."
+        case .badStatus: "Legacy Store couldn’t answer that request. Try again later."
         }
     }
 }
