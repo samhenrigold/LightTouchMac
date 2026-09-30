@@ -208,9 +208,23 @@ extension FitCheck {
         return Fit(piece, fits: true, "execs \((program as NSString).lastPathComponent) with /\(SystemEdits.appsyncPath) inserted; " + l.proof)
     }
 
-    /// AppSync's pieces where installAppSync puts them, recorded in `log`, required: libappsync in installd's job's
-    /// program, else (2.x) in Lockbot's installation_proxy service with appsync-launch.
+    /// The shared-cache half of AppSync fits when the cache's MISValidateSignature is a Thumb entry the patch
+    /// recognises (a framed function, or 5.x's movs;b.w thunk): AppSyncCachePatch.locate, the patch's own finder.
+    /// Nil without a shared cache (2.x/3.0: no cache half, installAppSync interposes only).
+    public static func appSyncCache(_ fw: Firmware) -> Fit? {
+        guard let cache = fw.cache else { return nil }
+        let piece = "AppSync shared-cache patch (\(AppSyncCachePatch.target))"
+        do {
+            let (va, _, word) = try AppSyncCachePatch.locate(cache)
+            return Fit(piece, fits: true, "entry \(word.map { String(format: "%02x", $0) }.joined()) at \(hex(va))")
+        } catch { return Fit(piece, fits: false, "\(error)") }
+    }
+
+    /// AppSync's pieces where installAppSync puts them, recorded in `log`, required: the shared-cache patch target where
+    /// there is a cache, libappsync in installd's job's program, else (2.x) in Lockbot's installation_proxy service with
+    /// appsync-launch.
     static func checkAppSync(_ log: Log, _ fw: Firmware, helpers: URL) throws {
+        if let c = appSyncCache(fw) { try log.check(c, required: true) }
         func piece(_ n: String) throws -> Data {
             let u = helpers.appendingPathComponent(n)
             guard FileManager.default.fileExists(atPath: u.path) else { throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)") }

@@ -161,6 +161,26 @@ struct SharedCacheTests {
         #expect(throws: FirmwareError.self) { try AppSyncCachePatch.patchCache(at: cache) }
     }
 
+    /// The prepare-time fit (FitCheck.appSyncCache, required in checkAppSync): a volume holding 9B206's cache fits
+    /// with the thunk named as its entry; the same cache with the entry clobbered misfits; no cache, no piece.
+    @Test func cacheFitCheck() throws {
+        guard Fixtures.hasRootfs("9B206") else { return }
+        let dir = try Fixtures.tempDir("dsc-fit")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let root = dir.appendingPathComponent("root"), rel = SystemEdits.dyldCache("armv7")
+        #expect(FitCheck.appSyncCache(FitCheck.Firmware(root: root, arch: "armv7")) == nil)
+        let cache = root.appendingPathComponent(rel)
+        try FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: try Fixtures.cache("9B206", to: dir), to: cache)
+        let fit = try #require(FitCheck.appSyncCache(FitCheck.Firmware(root: root, arch: "armv7")))
+        #expect(fit.fits && fit.proof.hasPrefix("entry 0022fff7"), "\(fit.proof)")
+        let (_, off, _) = try AppSyncCachePatch.locate(DyldSharedCache(contentsOf: cache))
+        let fh = try FileHandle(forUpdating: cache)
+        try fh.seek(toOffset: UInt64(off)); try fh.write(contentsOf: Data([0, 0, 0, 0])); try fh.close()
+        let bad = try #require(FitCheck.appSyncCache(FitCheck.Firmware(root: root, arch: "armv7")))
+        #expect(!bad.fits && bad.proof.contains("refusing"), "\(bad.proof)")
+    }
+
     /// Byte-identical patched cache vs appsync_cachepatch.py --patch, and the same status lines.
     @Test(arguments: ["7B500", "8C148", "7E18", "7B367"])
     func patchMatchesPython(build: String) throws {

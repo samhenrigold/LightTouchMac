@@ -159,17 +159,24 @@ public enum AppSyncCachePatch {
 
     /// Locates and (with `apply`) patches the cache in place. Returns appsync_cachepatch's status line;
     /// throws on a prologue that is not a Thumb function entry.
-    @discardableResult
-    public static func patchCache(at url: URL, apply: Bool = true) throws -> String {
-        let cache = try DyldSharedCache(contentsOf: url)
+    /// The patch target in `cache`: its VA, file offset and current first word; throws where it is not a Thumb
+    /// function entry (or already the patch).
+    public static func locate(_ cache: DyldSharedCache) throws -> (va: UInt64, offset: Int, word: [UInt8]) {
         let (va, thumb) = try cache.findSymbol(target)
         guard let foff = cache.fileOffset(of: va) else { throw FirmwareError(.internal, "VA \(hex(va)) not in any mapping") }
         let cur = [UInt8](cache.data[foff..<foff + 4])
-        let curHex = cur.map { String(format: "%02x", $0) }.joined(), patchHex = "00207047"
-        if cur == patch { return "\(target) already patched (VA \(hex(va)) off \(hex(foff)))" }
-        guard thumb, looksLikeThumbEntry(cur) else {
+        guard cur == patch || (thumb && looksLikeThumbEntry(cur)) else {
+            let curHex = cur.map { String(format: "%02x", $0) }.joined()
             throw FirmwareError(.unsupported, "\(target) prologue \(curHex) at \(hex(foff)) is not a Thumb function entry — refusing to patch")
         }
+        return (va, foff, cur)
+    }
+
+    @discardableResult
+    public static func patchCache(at url: URL, apply: Bool = true) throws -> String {
+        let (va, foff, cur) = try locate(DyldSharedCache(contentsOf: url))
+        let curHex = cur.map { String(format: "%02x", $0) }.joined(), patchHex = "00207047"
+        if cur == patch { return "\(target) already patched (VA \(hex(va)) off \(hex(foff)))" }
         if !apply { return "would patch \(target) \(curHex) -> \(patchHex) at \(hex(foff))" }
         let fh = try FileHandle(forUpdating: url)
         defer { try? fh.close() }
