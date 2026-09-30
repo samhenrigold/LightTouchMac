@@ -106,7 +106,7 @@ final class DevicePlaceholderViewController: NSViewController {
         status.isHidden = false
         switch row.state {
         // The button says it: Prepare, or Download & Prepare.
-        case .bundled, .notDownloaded, .downloaded:
+        case .notDownloaded, .downloaded:
             status.isHidden = true
             if !canDownload, let why = FirmwareJobs.shared.unavailableReason { reason.stringValue = why; reason.isHidden = false }
         case .downloading:

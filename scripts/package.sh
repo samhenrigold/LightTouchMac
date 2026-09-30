@@ -15,7 +15,9 @@
 #
 # Build compatible dependencies with scripts/build-package-native.sh first; it
 # prints the QEMU_BUILD_DIR/LTM_DEPS_PREFIX/USBMUXD_BIN settings to use here.
-# Device assets (the bootrom and LTM_BASE_BLOB, the packed built-in iPod) are embedded below unless LTM_ASSETS=none (development only).
+# Device assets (the SecureROMs) are embedded below unless LTM_ASSETS=none (development only).
+# LTM_DSYM_DIR: where the dSYMs of the binaries this strips go (build-release.py: <output>/dSYMs), never the bundle.
+# LTM_SWIFT_CHECKOUTS: colon-separated SwiftPM checkouts dirs (the app's, firmwarekit's) whose licenses ship.
 set -euo pipefail
 
 APP="${1:?usage: package.sh path/to/Light Touch.app (or use scripts/build-release.py)}"
@@ -201,8 +203,7 @@ copy_guest() {
         copy_tool "$QEMU/contrib/$1" guest
     fi
 }
-copy_guest it-agent/it_agent
-copy_guest it-agent/it_typein.dylib
+# it_agent and it_typein.dylib ship once, in guest-tools below (firmwarekit installs them; the app reads neither).
 copy_guest it-media/itmedia
 copy_guest it-media/itphoto
 # The iPad guest helpers firmwarekit installs at prepare time (its --guest-tools
@@ -246,13 +247,8 @@ PLIST
 
 # -------------------------------------------------------------- device assets
 #
-# Resources/device (Bundled.filesRoot): the iPod bootroms (flat), and the built-in
-# iPod as ONE opaque blob (LTM_BASE_BLOB: a `firmwarekit create` of
-# n72ap-7E18 packed by scripts/pack-base.py, which build-release.py makes).
-# Never raw pages: the notary walks every file in the bundle and rejects the
-# armv6 Mach-Os an iOS filesystem contains, and it opens tarballs too. The app
-# unpacks it into a device on first launch; all writable state stays in
-# Application Support.
+# Resources/device (Bundled.filesRoot): the iPod SecureROMs, flat. Every device is
+# prepared from an IPSW on the user's Mac; all writable state stays in Application Support.
 FILES="${LTM_ASSETS:-$SRC/../qemu-ios-files}"
 DEVICE="$APP/Contents/Resources/device"
 rm -rf "$DEVICE"
@@ -261,21 +257,44 @@ if [ "$FILES" != none ]; then
     for rom in "${BOOTROMS[@]}"; do
         [ -e "$FILES/$rom" ] || { echo "missing device asset: $FILES/$rom (LTM_ASSETS=none to skip)" >&2; exit 1; }
     done
-    [ -f "${LTM_BASE_BLOB:-}" ] || { echo "LTM_BASE_BLOB must name the packed built-in iPod (scripts/pack-base.py pack <firmwarekit create output> n72ap-7E18.itbase)" >&2; exit 1; }
-    [ "$(head -c 8 "$LTM_BASE_BLOB")" = ITPACK01 ] || { echo "$LTM_BASE_BLOB is not a packed device" >&2; exit 1; }
-    echo "embedding device assets (bootroms, $(basename "$LTM_BASE_BLOB"))…"
+    echo "embedding device assets (bootroms)…"
     mkdir -p "$DEVICE"
     for rom in "${BOOTROMS[@]}"; do cp "$FILES/$rom" "$DEVICE/"; done
-    cp "$LTM_BASE_BLOB" "$DEVICE/n72ap-7E18.itbase"
 fi
 
-mkdir -p "$APP/Contents/Resources/licenses/qemu"
-cp "$QEMU/LICENSE" "$QEMU/COPYING" "$QEMU/COPYING.LIB" "$APP/Contents/Resources/licenses/qemu/"
+# Licenses (Help ▸ Licenses): every component shipped, with SOURCE.txt beside each GPL/LGPL one naming its source.
+# tests/release/test-bundle-hygiene.py checks the result.
+LICENSES="$APP/Contents/Resources/licenses"
+mkdir -p "$LICENSES/qemu"
+cp "$QEMU/LICENSE" "$QEMU/COPYING" "$QEMU/COPYING.LIB" "$LICENSES/qemu/"
+QEMU_BRANCH="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["qemu-ios"]["branch"])' "$SRC/build-support/sources.json")"
+printf '%s\n' "QEMU $(cat "$QEMU/VERSION") for iOS devices (qemu-ios): https://github.com/samhenrigold/qemu-ios, branch $QEMU_BRANCH." \
+    'The public commit this build matches is published with this Light Touch release.' \
+    'The emulator (Frameworks/libqemu-arm.dylib), ipod-helper and the guest tools (Resources/guest-tools, Resources/tools) are built from that tree.' \
+    > "$LICENSES/qemu/SOURCE.txt"
+USBMUXD_SRC="$(python3 "$SRC/scripts/sources.py" usbmuxd)"   # USBMUXD_SOURCE_DIR overrides
+mkdir -p "$LICENSES/usbmuxd"
+cp "$USBMUXD_SRC/COPYING.GPLv2" "$USBMUXD_SRC/COPYING.GPLv3" "$LICENSES/usbmuxd/"
+python3 - "$SRC/build-support/sources.json" > "$LICENSES/usbmuxd/SOURCE.txt" <<'PY'
+import json, sys
+pin = json.load(open(sys.argv[1]))['usbmuxd']
+print(f"usbmuxd (Light Touch's fork): {pin['repository']}, branch {pin['branch']}, commit {pin['commit']}.\n"
+      "The branch is published there with this Light Touch release.")
+PY
+IFS=: read -r -a SWIFT_CHECKOUTS <<< "${LTM_SWIFT_CHECKOUTS:-}"
+for checkouts in ${SWIFT_CHECKOUTS[@]+"${SWIFT_CHECKOUTS[@]}"}; do
+    for package in "$checkouts"/*/; do
+        name="$(basename "$package")"
+        texts=("$package"LICENSE* "$package"LICENCE* "$package"COPYING* "$package"NOTICE*)
+        mkdir -p "$LICENSES/swift/$name"
+        for text in "${texts[@]}"; do [ -f "$text" ] && cp -f "$text" "$LICENSES/swift/$name/"; done
+    done
+done
 if [ -d "$DEPS/share/licenses" ]; then
-    cp -R "$DEPS/share/licenses/." "$APP/Contents/Resources/licenses/"
+    cp -R "$DEPS/share/licenses/." "$LICENSES/"
 fi
 if [ -d "$STATIC/share/licenses" ]; then
-    cp -R "$STATIC/share/licenses/." "$APP/Contents/Resources/licenses/"
+    cp -R "$STATIC/share/licenses/." "$LICENSES/"
 fi
 if [ -n "${LTM_BUILD_RECORD:-}" ]; then
     cp "$LTM_BUILD_RECORD" "$APP/Contents/Resources/build-inputs.json"
@@ -286,6 +305,18 @@ for f in "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${
     while IFS= read -r path; do
         case "$path" in /*) install_name_tool -delete_rpath "$path" "$f" ;; esac
     done < <(python3 "$CHECK" --rpaths "$f")
+done
+
+# No debug symbols or build paths ship: each binary's dSYM (crash symbolication) goes to LTM_DSYM_DIR when it
+# still has a debug map (build-release.py's dylib stage already stripped libqemu-arm.dylib and kept its dSYMs),
+# then strip -S -x (debug and local symbols) before signing.
+for f in "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
+    [ -L "$f" ] && continue
+    if [ -n "${LTM_DSYM_DIR:-}" ] && nm -ap "$f" 2>/dev/null | grep ' OSO ' >/dev/null; then
+        mkdir -p "$LTM_DSYM_DIR"
+        dsymutil "$f" -o "$LTM_DSYM_DIR/$(basename "$f").dSYM"
+    fi
+    strip -S -x "$f"
 done
 
 # Check all host Mach-Os, including the app and its complete load closure.

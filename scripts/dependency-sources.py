@@ -137,6 +137,18 @@ def stage_git(args):
     })
 
 
+def note(args):
+    """SOURCE.txt for a shipped build of a manifest package: the archive, its hash and the patches applied."""
+    manifest = json.loads(args.manifest.read_text())
+    package = next((p for p in manifest['packages'] if p['name'] == args.name), None)
+    if package is None:
+        raise ValueError(f'no package {args.name} in {args.manifest}')
+    patches = ', '.join(args.patches) + ' (in this directory), applied with patch -p1' if args.patches else 'none'
+    print(f'{package["name"]} {package["version"]}: {package["url"]}\n'
+          f'SHA256: {package["sha256"]}\n'
+          f'Patches: {patches}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -152,6 +164,11 @@ def main():
     staging.add_argument('--destination', type=Path, required=True)
     staging.add_argument('--record', type=Path, required=True)
     staging.set_defaults(action=stage_git)
+    notes = commands.add_parser('note', help='print the SOURCE.txt of a shipped package')
+    notes.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
+    notes.add_argument('name')
+    notes.add_argument('patches', nargs='*')
+    notes.set_defaults(action=note)
     args = parser.parse_args()
     try:
         args.action(args)

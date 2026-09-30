@@ -234,13 +234,11 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     }
 
     /// Assembles Preparing/<id>.publish/{base, device.json} (the staging
-    /// directory renamed to base, `pairing` copied in as usbmuxd-conf) and
-    /// renames it to Devices/<id> in one step. Any failure before that
-    /// rename leaves Devices/ untouched. Also the built-in device's publish
-    /// (FirmwareJobs.prepareBundled) and a development base's record
-    /// (`staging` absolute, kept in place: `keep`).
+    /// directory renamed to base) and renames it to Devices/<id> in one
+    /// step. Any failure before that rename leaves Devices/ untouched. Also
+    /// a development base's record (`staging` absolute, kept in place: `keep`).
     static func publish(staging: URL, entry: FirmwareCatalog.Entry, id: UUID, state: URL,
-                        lock lockName: String = "device.lock.json", pairing: URL? = nil, keep: Bool = false) throws -> DeviceInstance {
+                        lock lockName: String = "device.lock.json", keep: Bool = false) throws -> DeviceInstance {
         let fm = FileManager.default
         let profile = entry.profile ?? .iPad1
         let lockURL = staging.appendingPathComponent(lockName)
@@ -267,9 +265,6 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         do {
             try StorageLocations.privateDirectory(publishing)
             if !keep { try fm.moveItem(at: staging, to: publishing.appendingPathComponent("base", isDirectory: true)) }
-            if let pairing, fm.fileExists(atPath: pairing.path) {
-                try fm.copyItem(at: pairing, to: publishing.appendingPathComponent("usbmuxd-conf", isDirectory: true))
-            }
             try DeviceInstance.encoder.encode(instance)
                 .write(to: publishing.appendingPathComponent(DeviceInstance.recordName), options: .atomic)
             try StorageLocations.privateDirectory(directory.deletingLastPathComponent())

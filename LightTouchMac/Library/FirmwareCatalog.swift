@@ -7,6 +7,9 @@ import Foundation
 nonisolated struct FirmwareCatalog: Codable, Sendable {
     var format: Int
     var entries: [Entry]
+    /// The entry a first launch selects (firstRunEntry).
+    var firstRun: String?
+    enum CodingKeys: String, CodingKey { case format, entries, firstRun = "first_run" }
 
     struct Entry: Codable, Sendable, Identifiable, Equatable {
         /// `untested`: enumerated from Apple's list with public keys, never run through the pipeline (docs/matrix.md).
@@ -77,9 +80,6 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         /// Which beta/GM of its version (absent: the first).
         var prereleaseNumber: Int?
         var source: Source
-        /// The built-in device: a prepared base packed under the app's Resources
-        /// (scripts/pack-base.py), published on first launch (FirmwareJobs.prepareBundled).
-        var bundled: String?
         var keys: [String: Key]
         var recipe: Recipe?
         /// "none" or "optional": whether a user-configured hook may run.
@@ -87,7 +87,7 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var estimates: Estimates
 
         enum CodingKeys: String, CodingKey {
-            case id, board, version, build, released, status, source, bundled, keys, recipe, emulator, estimates, prerelease
+            case id, board, version, build, released, status, source, keys, recipe, emulator, estimates, prerelease
             case productType = "product_type", statusNote = "status_note", prereleaseNumber = "prerelease_number"
         }
 
@@ -145,8 +145,8 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
 
     func entry(id: String) -> Entry? { entries.first { $0.id == id } }
 
-    /// The entry the app ships a prepared base for (the iPod 3.1.3), if any.
-    var bundledEntry: Entry? { entries.first { $0.bundled != nil } }
+    /// What a first launch selects: an `available` build whose IPSW Apple's servers still serve (`first_run`).
+    var firstRunEntry: Entry? { firstRun.flatMap(entry(id:)) }
 }
 
 nonisolated extension DeviceProfile {
