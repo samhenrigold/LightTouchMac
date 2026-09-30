@@ -117,6 +117,7 @@ def offline_checks():
     checks.append([TESTS / 'offline/run-catalog-checks.py'])
     checks.append([TESTS / 'sessions/check-activation-gate.py', '--offline'])
     checks.append([TESTS / 'sessions/check-boot-deadline.py', '--offline'])
+    checks.append([TESTS / 'sessions/test-matrix-judge.py'])   # the matrix's verdicts on fabricated event streams
     skips = []
     # Opt-in (Sam, 09-29): these put the 3D device model on screen. LTM_DISPLAY_CHECKS=1 runs them.
     if os.environ.get('LTM_DISPLAY_CHECKS') != '1':

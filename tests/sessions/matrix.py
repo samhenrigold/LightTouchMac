@@ -36,7 +36,8 @@ PATCHER = HOME / "Downloads/Legacy-iOS-Kit_complete_v25.09.01/bin/macos/arm64/iB
 ORDER = ["n72ap-7E18", "n72ap-8C148", "n72ap-5F138", "k48ap-7B500", "k48ap-7B367", "k48ap-8C148",
          "n72ap-7A341", "n72ap-7C145", "n72ap-7D11", "k48ap-7B405", "n72ap-8A293", "n72ap-8A400", "n72ap-8B117",
          "n72ap-5G77a", "n72ap-5H11a", "k48ap-8F190", "k48ap-8G4", "k48ap-8H7", "k48ap-8J3", "k48ap-8K2", "k48ap-8L1"]
-CHECKS = ["prepare", "lit", "home", "lockdown", "activation", "afc", "install", "package", "gl", "persist", "shutdown"]
+CHECKS = ["prepare", "lit", "home", "lockdown", "activation", "afc", "install", "package", "helpers", "gl", "persist", "shutdown"]
+USB_ETHERNET = "USB Ethernet (it_ethlink, en1 pinned by IOPathMatch)"   # FirmwareKit FitCheck.usbEthernet's piece
 
 spec = importlib.util.spec_from_file_location("check_sessions", ROOT / "tests/sessions/check-sessions.py")
 check_sessions = importlib.util.module_from_spec(spec)
@@ -269,14 +270,39 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
                         "result": pkg[0].get("result") if pkg else None}
     else:
         r["package"] = {"ok": None, "note": "no offer (no itpack or nothing for this build)"}
-    if not json.loads((base / "device.lock.json").read_text()).get("guest_package"):   # 3.0: no loader baked
+    lock = json.loads((base / "device.lock.json").read_text())
+    gp = lock.get("guest_package") or {}
+    if not gp:   # 3.0: no loader baked
         r["package"] = {"ok": None, "note": "no loader baked (the lock has no guest_package)"}
+    elif not offer and r["package"].get("ok") is None:
+        # a loader was baked but never heard from: a seed with jobs or hooks is a package it must report on, so the
+        # missing report fails; a stub seed (n72-ios4: nothing to load) has nothing to report, which is not a pass
+        if gp.get("jobs") or gp.get("hooks"):
+            r["package"] = {"ok": False, "note": f"loader baked with {gp.get('family')} (jobs/hooks) but the host offered nothing, so it never reported"}
+        else:
+            r["package"] = {"ok": None, "note": f"stub seed {gp.get('family')} (no jobs, no hooks): nothing for the loader to run or report"}
+    # helpers (docs/fidelity-ledger.md "Fit checks", the boot side): what the prepare baked must answer. The guest
+    # agent wherever the lock has it (the seed's it-agent job, or the iPod bake's installed tools): some home event
+    # names the frontmost app through it. On the iPad (its console is the serial) it_ethlink watching its service
+    # where the prepare proved USB Ethernet fits, and it_prefs having run, where the seed has their jobs.
+    serial_text = serial.read_text(errors="replace") if serial.exists() else ""
+    jobs = gp.get("jobs") or []
+    fits = {f.get("piece"): f.get("fits") for f in lock.get("fit") or []}
+    helpers = {}
+    if "com.qemu.it-agent.plist" in jobs or str((lock.get("derived") or {}).get("guest_tools", "")).startswith("installed"):
+        helpers["agent"] = any(h.get("frontmost") for h in homes)
+    if entry["board"] == "k48ap":
+        if "com.qemu.it-ethlink.plist" in jobs and fits.get(USB_ETHERNET):
+            helpers["ethlink"] = "it_ethlink: watching AppleUSBEthernetDevice" in serial_text
+        if "com.qemu.it-prefs.plist" in jobs:
+            helpers["prefs"] = "it_prefs: " in serial_text
+    r["helpers"] = ({"ok": all(helpers.values()), **helpers, "silent": [k for k, v in helpers.items() if not v] or None} if helpers
+                    else {"ok": None, "note": "no guest helpers baked"})
     # gl (audit gap #1/#2: this column was a hard-coded skip). The matrix boots with GL on, so its
     # home/installed screenshots ARE GL output -- a black/slept or wrong picture already fails `home`
     # above (and the framecheck diff there is the frame reference). Here we also record the render
     # path and refusals: a software-composited fallback (4.3.5's "no gldshim device ... no GL") must
     # SHOW in the column, not pass silently.
-    serial_text = serial.read_text(errors="replace") if serial.exists() else ""
     sw_fallback = "no gldshim device" in serial_text or "GLRendererFloatQEMU.bundle" in serial_text
     gl_rejects = len(re.findall(r"unsupported graphics hardware|gl[ie]s?[-_ ]?reject", serial_text, re.I))
     home_ok = r["home"].get("ok")
@@ -356,7 +382,8 @@ def write_md(results, catalog):
                      "activation": lambda: f" {v.get('state') or '?'}",
                      "afc": lambda: f" {len(v.get('sizes', []))}/4",
                      "install": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
-                     "package": lambda: f" serial {v.get('reported')} r{v.get('result')}",
+                     "package": lambda: f" serial {v.get('reported')} r{v.get('result')}" if v.get("ok") or v.get("offered") is not None else f" ({v.get('note', '')})",
+                     "helpers": lambda: " " + ",".join(k for k in ("agent", "ethlink", "prefs") if k in v) + (f" (silent: {','.join(v['silent'])})" if v.get("silent") else ""),
                      "persist": lambda: f" (boot 2 lit {v.get('second_boot', {}).get('lit')} s)" if v.get("ok") else "",
                      "shutdown": lambda: (f" {v['seconds']} s" if v.get("seconds") is not None else "")
                                          + (f" (boot 2 {v['second']} s)" if v.get("second") is not None else
@@ -378,7 +405,7 @@ def write_md(results, catalog):
             if ff.get("excerpt"):
                 fftxt += "<br>" + "<br>".join("`" + l.replace("`", "'").replace("|", "\\|") + "`" for l in ff["excerpt"].splitlines())
         rows.append(f"| {eid} | {r.get('version', '')} | {ktxt} | {ptxt} | {cell('lit')} | {cell('home')} | {cell('lockdown')} | {cell('activation')} | "
-                    f"{cell('afc')} | {cell('install')} | {cell('package')} | {cell('gl')} | {cell('persist')} | {cell('shutdown')} | "
+                    f"{cell('afc')} | {cell('install')} | {cell('package')} | {cell('helpers')} | {cell('gl')} | {cell('persist')} | {cell('shutdown')} | "
                     f"{r.get('restore', {}).get('ok', '-') if r.get('restore') else '-'} | {fftxt} |")
     RESULTS_MD.write_text(f"""# Matrix results
 
@@ -388,10 +415,12 @@ the same overlay. Screenshots and logs per entry are outside the repo (`screensh
 Home judges the home screen itself (audit gap #2): every home/installed screenshot lit (not brightness 0), SpringBoard
 frontmost where an agent can say, and the picture against a committed reference where one exists. GL records the render
 path (hardware GL vs a software-composited fallback), any refusals, and the frame-reference verdict -- it no longer
-skips. Shutdown judges boot 2's clean power-off as well as boot 1. Last write {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.
+skips. Shutdown judges boot 2's clean power-off as well as boot 1. Helpers: what the prepare baked answers at boot (the
+agent names the frontmost app; on the iPad it_ethlink and it_prefs report on the console), per the lock's seed and fit
+checks; a loader baked with a package that never reports fails Package. Last write {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.
 
-| Entry | iOS | Keys | Prepare | Lit | Home | Lockdown | Activation | AFC | Install | Package | GL | Persist | Shutdown | Restore | First failure |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Entry | iOS | Keys | Prepare | Lit | Home | Lockdown | Activation | AFC | Install | Package | Helpers | GL | Persist | Shutdown | Restore | First failure |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 {chr(10).join(rows)}
 
 ## Triage
