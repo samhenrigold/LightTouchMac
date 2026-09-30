@@ -92,17 +92,10 @@ struct SingleConfig: Decodable {
             try? await Task.sleep(for: .seconds(2))
         }
         d.screenshot(generation == 1 ? "lock" : "lock\(generation)")
-        // The agent (where the boot has one) says when the slide took: 4.2.1's iPod stayed on the lock screen after
-        // one slide (rejudge 09-29), so slide again until SpringBoard reports it unlocked, as guest.swift's unlock does.
         let asks = agent || (ipad && offered)
         let guestAgent = GuestAgent(link: d.process.link, cache: GuestAgentCache())
         if asks { _ = await guestAgent.waitAlive(seconds: 60) }
-        for attempt in 0..<3 {
-            if attempt > 0 { await wakeForShot(d, "unlock\(generation)-\(attempt)") }
-            if ipad { await d.drag(0.9365, 0.621, 0.9365, 0.0612) } else { await d.drag(0.18, 0.9, 0.92, 0.9) }
-            try? await Task.sleep(for: .seconds(5))
-            guard asks, (try? await guestAgent.isLocked()) == true else { break }
-        }
+        await d.slideToUnlock(generation, agent: asks ? guestAgent : nil)
         // A fresh 5.x iPad slides into the Setup Assistant instead of the home screen: walk it as a user would.
         // Ask until the agent answers (under load it comes up after the slide; one unanswered probe skipped the
         // walk on 9B176's first boot and left Setup up through the install and launch).
@@ -121,7 +114,7 @@ struct SingleConfig: Decodable {
                            "frontmost": after ?? ""])
             try? await Task.sleep(for: .seconds(5))
         }
-        let hp = await wakeForShot(d, generation == 1 ? "home" : "home\(generation)")
+        let hp = await d.wakeForShot(generation == 1 ? "home" : "home\(generation)")
         // Judge the home screen, not just a lit boot: the panel sleeps ~12 s after `lit` (audit
         // finding 3), so a later shot lands black. wakeForShot woke it; report the frontmost app
         // (SpringBoard where an agent can say) and the brightness so the matrix fails a slept/black
@@ -133,21 +126,6 @@ struct SingleConfig: Decodable {
         if asks, let f = try? await guestAgent.frontmost() { (front, screen) = f }
         emit("home", ["device": d.name, "generation": generation, "brightness": d.brightness() ?? -1,
                       "agent": asks, "frontmost": front, "screen": screen, "path": hp ?? ""])
-    }
-
-    /// Wake the panel, then capture. The display sleeps ~12 s after `lit`, so an unqualified
-    /// screenshot lands on a black panel (audit finding 3). Press Home, re-check brightness, and
-    /// capture only once it is lit -- or capture the black frame after the last try, so the matrix
-    /// fails the row honestly rather than passing a slept panel.
-    @discardableResult
-    func wakeForShot(_ d: Device, _ label: String, floor: Double = 0.05, tries: Int = 5) async -> String? {
-        for _ in 0..<tries {
-            if (d.brightness() ?? 0) >= floor { break }
-            d.process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))
-            d.process.link.send(.button(0, down: false))
-            try? await Task.sleep(for: .seconds(2))
-        }
-        return d.screenshot(label)
     }
 
     /// Clean shutdown, as the app's quit path starts it: iPad powerdown, iPod agent halt.
@@ -236,7 +214,7 @@ struct SingleConfig: Decodable {
 
     if s.install != false { await install(d) }
     try? await Task.sleep(for: .seconds(3))
-    await wakeForShot(d, "installed")   // wake first: the panel may have slept during the install
+    await d.wakeForShot("installed")   // wake first: the panel may have slept during the install
     // launch() goes through the guest agent wherever it answers (judged on the frontmost app), else taps the icon.
     if s.launch == true { await launch(d, at: s.launchAt, tap: s.tapAfterLaunch) }
 
