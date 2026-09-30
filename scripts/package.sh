@@ -287,7 +287,7 @@ for checkouts in ${SWIFT_CHECKOUTS[@]+"${SWIFT_CHECKOUTS[@]}"}; do
         name="$(basename "$package")"
         texts=("$package"LICENSE* "$package"LICENCE* "$package"COPYING* "$package"NOTICE*)
         mkdir -p "$LICENSES/swift/$name"
-        for text in "${texts[@]}"; do [ -f "$text" ] && cp "$text" "$LICENSES/swift/$name/"; done
+        for text in "${texts[@]}"; do [ -f "$text" ] && cp -f "$text" "$LICENSES/swift/$name/"; done
     done
 done
 if [ -d "$DEPS/share/licenses" ]; then
