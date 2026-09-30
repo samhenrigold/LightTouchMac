@@ -220,7 +220,23 @@ md = mx.RESULTS_MD.read_text()
 check("md: the row shows the load at start and end", "| 55.6 → 12.3 |" in md)
 check("md: the first failure carries the label", "stuck: serial silent for 200 s" in md)
 
+# AppSync on: the agent launch must leave the installed app frontmost, and the reboot must still list it.
+APPSYNC = dict(ENTRY, recipe={"options": {"appsync": True}})
+H = "com.qemuios.harness"
+def appsync_events(fronts, still_there):
+    ev = boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True)
+    ev.insert(3, {"event": "installed", "has": True, "seconds": 2.0, "attempt": 1, "apps": [H], "bundleID": H})
+    ev.insert(4, {"event": "launched", "bundleID": H, "via": "agent", **{f"frontmost{i + 1}": f for i, f in enumerate(fronts)}})
+    ev += [{"event": "persist", "kept": True, "same": True}, {"event": "restartedApps", "has": still_there}]
+    return ev
+r, _, _ = run(appsync_events([mx.SPRINGBOARD, H, H], True), entry=APPSYNC)
+check("agent launch reaching the app passes install", r["install"]["ok"] is True and r["persist"]["ok"] is True)
+r, _, _ = run(appsync_events([mx.SPRINGBOARD] * 3, True), entry=APPSYNC)
+check("agent launch that never brings the app forward fails install", r["install"]["ok"] is False)
+r, _, _ = run(appsync_events([H] * 3, False), entry=APPSYNC)
+check("an installed app gone after the reboot fails persist", r["persist"]["ok"] is False and r["persist"]["restartedApps"] is False)
+
 import shutil; shutil.rmtree(TMP, ignore_errors=True)
 if fails:
     sys.exit("%d matrix-judge assertion(s) failed" % fails)
-print("matrix judge: home (incl. lock screen, silent agent, unknown frontmost, backlight exposure), GL (incl. shim software fallback), boot-2 shutdown, helpers, package and deadline-triage (slow/stuck) verdicts all bite")
+print("matrix judge: home (incl. lock screen, silent agent, unknown frontmost, backlight exposure), GL (incl. shim software fallback), boot-2 shutdown, helpers, package, launch-frontmost, reboot-kept app and deadline-triage (slow/stuck) verdicts all bite")

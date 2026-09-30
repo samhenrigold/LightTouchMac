@@ -421,6 +421,8 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base, ti
                                    "lockdown": round(usb2[1]["seconds"], 1) if len(usb2) > 1 else None}
     if ra := find("restartedApps"):   # audit gap #2: the reboot's app list, previously ignored
         r["persist"]["restartedApps"] = ra[0].get("has")
+        if appsync and r["install"].get("ok"):   # an installed app must still be installed after the reboot
+            r["persist"]["ok"] = bool(r["persist"]["ok"]) and bool(ra[0].get("has"))
     # shutdown: judge boot 2's clean power-off too (audit gap #2 / finding 4: 8L1's boot-2 stalls and
     # the matrix judged only boot 1). If a second boot ran, its quit must confirm PMU standby / exit.
     quits = find("quit")
