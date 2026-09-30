@@ -242,7 +242,6 @@ private struct CaptureBannerThumbnail: View {
     let state = CaptureBannerState()
     let _ = {
         state.title = "Screenshot saved"
-        state.detail = "Open in Finder"
         state.image = NSImage(named: "gradient")
         state.fileURL = URL(filePath: "/tmp/Preview.png")
         state.dismissible = true

@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var emulators: [EmulatorController] { host?.sessions.map(\.emulator) ?? [] }
     /// The running device, for settings that apply to it on its next boot.
     private var emulator: EmulatorController? { windowController?.session?.emulator ?? emulators.first }
-    private var helpController: NSWindowController?
+    private var helpController: HelpWindowController?
     private var awaitingTermination = false
     private var terminationBackstop: Task<Void, Never>?
 
@@ -55,36 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func showHelp(_ sender: Any?) {
         if helpController == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 640),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
-            window.title = "Light Touch Help"
-            window.isReleasedWhenClosed = false
-            window.minSize = NSSize(width: 360, height: 300)
-            WindowRestorationPolicy.configure(window)
-            let scroll = NSScrollView(frame: window.contentView!.bounds)
-            scroll.hasVerticalScroller = true
-            scroll.autoresizingMask = [.width, .height]
-            let text = NSTextView(frame: NSRect(origin: .zero, size: scroll.contentSize))
-            text.isEditable = false
-            text.isSelectable = true
-            text.isVerticallyResizable = true
-            text.isHorizontallyResizable = false
-            text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-            text.usesFindBar = true
-            text.autoresizingMask = [.width]
-            text.textContainer?.widthTracksTextView = true
-            text.textContainer?.heightTracksTextView = false
-            text.textContainerInset = NSSize(width: 24, height: 20)
-            text.font = .systemFont(ofSize: 14)
-            text.string = Bundle.main.url(forResource: "Help", withExtension: "txt")
-                .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "Help is missing from this copy of Light Touch."
-            text.setAccessibilityLabel("Light Touch Help")
-            scroll.documentView = text
-            text.sizeToFit()
-            window.contentView!.addSubview(scroll)
-            window.center()
-            helpController = NSWindowController(window: window)
+            helpController = HelpWindowController(text: Bundle.main.url(forResource: "Help", withExtension: "txt")
+                .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "# Help\nHelp is missing from this copy of Light Touch.")
         }
+        helpController?.show(deviceName: emulator?.profile.shortName ?? "iPod")
         helpController?.showWindow(sender)
         helpController?.window?.makeKeyAndOrderFront(sender)
     }
