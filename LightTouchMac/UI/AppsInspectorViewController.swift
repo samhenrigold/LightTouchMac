@@ -56,7 +56,10 @@ final class AppsInspectorViewController: NSViewController {
     private let modeControl = NSSegmentedControl(labels: ["Installed", "Store"],
                                                  trackingMode: .selectOne,
                                                  target: nil, action: nil)
-    private var catalogResults: [CatalogApp] = []
+    /// What the server returned; the table shows catalogResults, these through the filter menu.
+    private var catalogFetched: [CatalogApp] = []
+    private var catalogResults: [CatalogApp] { filterButton.apply(catalogFetched) }
+    private lazy var filterButton = CatalogFilterButton(isIPad: emulator.profile == .iPad1)
     private var searchTask: Task<Void, Never>?
     /// The table is showing Legacy Store content.
     private var searching: Bool { mode == .store }
@@ -143,7 +146,10 @@ final class AppsInspectorViewController: NSViewController {
         emptyActions.isHidden = true
         resumeButton.translatesAutoresizingMaskIntoConstraints = false
         resumeButton.isHidden = true
-        [modeControl, banner, scroll, placeholder, emptyActions, resumeButton].forEach(container.addSubview)
+        filterButton.translatesAutoresizingMaskIntoConstraints = false
+        filterButton.isEnabled = mode == .store
+        filterButton.onChange = { [weak self] in self?.filterChanged() }
+        [modeControl, filterButton, banner, scroll, placeholder, emptyActions, resumeButton].forEach(container.addSubview)
         // Everything hangs below the safe area — a hard edge at the toolbar,
         // so rows can never slide behind the search field (full-bleed +
         // automatic insets let them scroll under the glass, unblurred and
@@ -153,7 +159,9 @@ final class AppsInspectorViewController: NSViewController {
         var constraints = [
             modeControl.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: 6),
             modeControl.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
-            modeControl.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
+            filterButton.leadingAnchor.constraint(equalTo: modeControl.trailingAnchor, constant: 4),
+            filterButton.centerYAnchor.constraint(equalTo: modeControl.centerYAnchor),
+            filterButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -6),
 
             banner.topAnchor.constraint(equalTo: modeControl.bottomAnchor, constant: 6),
             banner.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
@@ -851,6 +859,14 @@ final class AppsInspectorViewController: NSViewController {
 
     // MARK: - Legacy Store (mode + search)
 
+    private func filterChanged() {
+        reloadTablePreservingSelection()
+        if searching, !catalogFetched.isEmpty {
+            showPlaceholder(catalogResults.isEmpty ? "No apps match the filter." : nil)
+        }
+        updateButtons()
+    }
+
     @objc private func modeChanged(_ sender: NSSegmentedControl) {
         setMode(PaneMode(rawValue: sender.selectedSegment) ?? .installed)
     }
@@ -862,6 +878,7 @@ final class AppsInspectorViewController: NSViewController {
         searchField.stringValue = queries[newMode, default: ""]
         searchField.placeholderString = newMode == .store ? "Search Store" : "Search Installed Apps"
         modeControl.selectedSegment = newMode.rawValue
+        filterButton.isEnabled = newMode == .store
         tableView.deselectAll(nil)
         reloadTablePreservingSelection()
         updateButtons()
@@ -903,7 +920,7 @@ final class AppsInspectorViewController: NSViewController {
         guard mode == .store else { return }
         let query = searchField.stringValue.trimmingCharacters(in: .whitespaces)
         catalogFailed = false
-        catalogResults = []
+        catalogFetched = []
         reloadTablePreservingSelection()
         // iPhone OS 1 predates the App Store: Legacy Store's suggested list is empty for it by definition,
         // which read as the store being broken. A search still runs (and says why each app can't install).
@@ -932,16 +949,16 @@ final class AppsInspectorViewController: NSViewController {
                 let results = try await CatalogClient.search(query, device: self.emulator.productType,
                                                              os: self.emulator.iosVersion)
                 guard !Task.isCancelled, current() else { return }
-                self.catalogResults = results
+                self.catalogFetched = results
                 self.reloadTablePreservingSelection()
                 self.showPlaceholder(results.isEmpty
                     ? (query.isEmpty ? "Legacy Store is empty right now."
                                      : "No compatible apps found for “\(query)”.")
-                    : nil)
+                    : self.catalogResults.isEmpty ? "No apps match the filter." : nil)
                 self.fetchCatalogIcons(results)
             } catch {
                 guard !Task.isCancelled, current() else { return }
-                self.catalogResults = []
+                self.catalogFetched = []
                 self.catalogFailed = true
                 self.reloadTablePreservingSelection()
                 // Legacy Store's own errors say it plainly; a network error needs the name.
@@ -1069,6 +1086,7 @@ final class AppsInspectorViewController: NSViewController {
             return self.emulator.canQueueInstall && self.catalogJob(for: app)?.isFinished != false
         }
         let sheet = CatalogDetailsViewController(app: app, device: emulator.productType, deviceOS: emulator.iosVersion, arch: emulator.guestArch,
+                                                 installedVersion: apps.first { $0.id == app.bundleID }?.version,
                                                  canInstall: canInstall) { [weak self] copy in
             guard let self, canInstall() else { return }
             AppInstaller.startCatalog(copy, with: self.emulator, presenting: self.view.window)
