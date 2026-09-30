@@ -14,18 +14,20 @@ before it (persist). GL counters are recorded when the emulator exposes them (qe
                     [--only-new] [--rerun] [--seed-ipsws FILE ...] [--activation-hook PATH] [--restore ...]
 
 Results: docs/matrix-results.json (one record per entry) and docs/matrix-results.md, rewritten after every entry;
-an entry with a record is skipped unless --rerun. Screenshots go under --results-dir (outside the repo), path in
+only successful records with matching hashed inputs are reused unless --rerun. Each run gets an immutable
+artifact directory under --results-dir, including its record; the JSON index points to the latest run. Paths are in
 the JSON. One emulator at a time; every boot -audio driver=none; the prepared device and every clone live in
 --scratch and are deleted when the entry is done, so only the IPSW cache and the results remain.
 Run in the foreground; the driver's processes are gone when an entry returns.
 """
-import argparse, fcntl, hashlib, importlib.util, json, os, re, shutil, signal, subprocess, sys, tempfile, time
+import argparse, fcntl, hashlib, importlib.util, json, os, platform, re, shutil, signal, subprocess, sys, tempfile, time
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HOME = Path.home()
 sys.path.insert(0, str(ROOT / "scripts"))
+import matrix_provenance as provenance
 import sources  # the pinned checkouts (build-support/sources.json)
 CATALOG = ROOT / "LightTouchMac/Resources/firmware-catalog.json"
 RESULTS_JSON, RESULTS_MD = ROOT / "docs/matrix-results.json", ROOT / "docs/matrix-results.md"
@@ -588,10 +590,11 @@ def main():
     a = ap.parse_args()
     if a.triage:
         catalog = json.loads(CATALOG.read_text())
-        results = json.loads(RESULTS_JSON.read_text())
-        results[a.triage[0]]["triage"] = a.triage[1]
-        RESULTS_JSON.write_text(json.dumps(results, indent=1) + "\n")
-        return write_md(results, catalog)
+        def annotate(current):
+            current[a.triage[0]]["triage"] = a.triage[1]
+            return current
+        provenance.update_index(RESULTS_JSON, annotate, lambda current: write_md(current, catalog))
+        return
     if not a.guest_tools or not a.guest_tools.is_dir():
         ap.error("--guest-tools DIR (or LTM_GUEST_TOOLS_DIR) is required")
     if not a.dylib or not a.dylib.exists():
@@ -619,6 +622,7 @@ def main():
     helper = check_sessions.build(argparse.Namespace(helper=str(a.helper) if a.helper else None), tools)
     a.lockdown_tz = check_sessions.build_lockdown_tz(tools, a.frameworks)
     if a.build_only:
+        lock.close()
         return log(f"built: {helper}")
 
     seeds = a.seeds = {}
@@ -631,11 +635,31 @@ def main():
                 and (not a.build or e["build"] in a.build) and (not a.status or e["status"] == a.status)
                 and (not a.only_new or e["status"] == "untested")]
     selected.sort(key=lambda e: (ORDER.index(e["id"]) if e["id"] in ORDER else 999, e["id"]))
+    inputs = {name: provenance.artifact(path) for name, path in {
+        "firmwarekit": a.firmwarekit, "dylib": a.dylib, "helper": helper,
+        "driver": tools / "session-driver", "lockdown_tz": a.lockdown_tz,
+        "usbmuxd": a.usbmuxd, "guest_tools": a.guest_tools,
+        "judge": ROOT / "tests/sessions", "driver_source": ROOT / "tests/drivers/session-driver",
+    }.items()}
+    for name in ("patcher", "frameworks", "activation_hook", "restore_rom", "restore_libirecovery"):
+        if path := getattr(a, name, None):
+            inputs[name] = provenance.artifact(path)
+    if a.restore:
+        inputs["restore_qemu"] = provenance.artifact(a.qemu_ios / "build/qemu-system-arm")
+        inputs["restore_judge"] = provenance.artifact(a.qemu_ios / "tests/ipad1/restore-smoke.py")
+    sources_used = {"app": provenance.source_state(ROOT), "qemu": provenance.source_state(a.qemu_ios)}
+    options = {name: getattr(a, name, None) for name in
+               ("launch", "launch_at", "gl_tap", "bundle_id", "restore", "prepare_timeout", "boot_timeout")}
+    options["host"] = {"system": platform.system(), "release": platform.release(), "machine": platform.machine(),
+                       "macos": platform.mac_ver()[0]}
+    options["emulator_environment"] = {key: value for key, value in os.environ.items()
+                                       if key.startswith("IT_") or key in ("DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH", "QEMU_AUDIO_DRV")}
+    # Default Homebrew library discovery is outside this runner's control. Do not
+    # reuse evidence until the caller pins the loaded frameworks explicitly.
+    can_reuse = a.frameworks is not None
     for entry in selected:
+        reused = False
         eid = entry["id"]
-        if eid in results and not a.rerun:
-            log(f"{eid}: has a result; skipping (--rerun to redo)")
-            continue
         log(f"== {eid} (iOS {entry['version']}, {entry['status']})")
         rec = {"version": entry["version"], "board": entry["board"], "status": entry["status"], "when": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                "load": {"start": [round(x, 2) for x in os.getloadavg()]},   # uptime's 1/5/15-minute averages
@@ -644,9 +668,19 @@ def main():
         work = a.scratch / eid
         rmtree(work)
         work.mkdir()
-        shots = a.results_dir / eid
-        rmtree(shots)
+        signature = provenance.identity(entry, inputs, options)
+        shots = None
         try:
+            rec["test_app"] = test_app(entry, a)
+            app_input = provenance.artifact(rec["test_app"]["ipa"])
+            signature = provenance.identity(entry, {**inputs, "test_app": app_input}, options)
+            if can_reuse and not a.rerun and provenance.reusable(results.get(eid, {}), signature):
+                log(f"{eid}: matching successful evidence; skipping (--rerun to redo)")
+                reused = True
+                continue
+            shots = provenance.run_directory(a.results_dir, eid, signature["sha256"])
+            provenance.preserve_previous(a.results_dir, eid, results.get(eid))
+            rec.update(provenance=signature, sources=sources_used, artifacts=str(shots))
             ipsw, why = fetch_ipsw(entry, a.ipsw_cache, seeds)
             if not ipsw:
                 rec["skipped"] = why
@@ -671,7 +705,6 @@ def main():
             drive.mkdir()
             for n in ("session-driver",):
                 os.symlink(tools / n, drive / n)
-            rec["test_app"] = test_app(entry, a)
             log(f"  test app: {rec['test_app']['bundle_id']} (min OS {rec['test_app']['min_os']}, {rec['test_app']['source']})")
             events, rc, serial, shots_from, timing = boot(entry, base, a, helper, drive, env, rec["test_app"])
             rec["checks"], rec["screenshots"], first = judge(entry, events, rc, serial, shots_from, shots, base_before, base, timing)
@@ -696,16 +729,31 @@ def main():
             rec.setdefault("first_failure", {"check": "runner", "why": repr(e)})
             log(f"  runner error: {e!r}")
         finally:
-            rec["load"]["end"] = [round(x, 2) for x in os.getloadavg()]
-            results[eid] = rec
-            RESULTS_JSON.write_text(json.dumps(results, indent=1) + "\n")
-            write_md(results, catalog)
-            rmtree(work)
-            rmtree(a.scratch / "cache" / entry["source"]["sha1"])
-            rmtree(a.scratch / "cache" / (entry["source"]["sha1"] + ".tmp"))
-            free = shutil.disk_usage(a.scratch).free
-            log(f"  recorded; scratch cleaned; {free / 1e9:.0f} GB free")
+            if reused:
+                rmtree(work)
+            else:
+                if shots is None:
+                    shots = provenance.run_directory(a.results_dir, eid, signature["sha256"])
+                    provenance.preserve_previous(a.results_dir, eid, results.get(eid))
+                    rec.update(provenance=signature, sources=sources_used, artifacts=str(shots))
+                rec["load"]["end"] = [round(x, 2) for x in os.getloadavg()]
+                checks = rec.get("checks", {})
+                rec["complete"] = (not any(k in rec for k in ("runner_error", "first_failure", "skipped"))
+                                   and rec.get("prepare", {}).get("ok") is True
+                                   and checks.get("driver_exit") == 0 and checks.get("base_unchanged") is True
+                                   and not checks.get("driver_fail")
+                                   and (not a.restore or entry["board"] != "k48ap" or rec.get("restore", {}).get("ok") is True))
+                rec["evidence"] = provenance.artifact(shots, exclude=("record.json",))
+                provenance.atomic_json(shots / "record.json", rec)
+                results = provenance.publish_result(RESULTS_JSON, a.results_dir, eid, rec,
+                                                    lambda current: write_md(current, catalog))
+                rmtree(work)
+                rmtree(a.scratch / "cache" / entry["source"]["sha1"])
+                rmtree(a.scratch / "cache" / (entry["source"]["sha1"] + ".tmp"))
+                free = shutil.disk_usage(a.scratch).free
+                log(f"  recorded; scratch cleaned; {free / 1e9:.0f} GB free")
     rmtree(tools)
+    lock.close()
     total = sum(f.stat().st_size for f in a.ipsw_cache.glob("*.ipsw")) if a.ipsw_cache.exists() else 0
     log(f"done: {len(results)} results in {RESULTS_MD}; IPSW cache {a.ipsw_cache}: {total / 1e9:.2f} GB")
 

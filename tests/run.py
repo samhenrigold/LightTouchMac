@@ -119,6 +119,7 @@ def offline_checks():
     checks.append([TESTS / 'offline/run-catalog-checks.py'])
     checks.append([TESTS / 'sessions/check-activation-gate.py', '--offline'])
     checks.append([TESTS / 'sessions/check-boot-deadline.py', '--offline'])
+    checks.append([TESTS / 'sessions/test-matrix-provenance.py'])   # immutable input identity and retained evidence
     checks.append([TESTS / 'sessions/test-matrix-judge.py'])   # the matrix's verdicts on fabricated event streams
     checks.append([TESTS / 'sessions/check-setup-walk.py'])   # the 5.x Setup walk's tap-retry core, fake taps
     checks.append([TESTS / 'sessions/test-proxy-trust-judge.py'])   # check-proxy-trust's home-screen verdict
