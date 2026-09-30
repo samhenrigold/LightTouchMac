@@ -201,12 +201,12 @@ final class K48Board: Board {
             "iboot_signature_checks": iboot ? "pattern-patched" : NSNull(),
             "tool": ["helper": helper.path, "helper_sha256": try Preparer.digest(helper, SHA256()),
                      "iboot32patcher": opt(iboot ? ["path": patcher.path, "sha256": try Preparer.digest(patcher, SHA256())] as [String: Any] : nil),
-                     "built": ["GLEngine": opt(vols.engine)]],
+                     "built": ["OpenGLES": opt(vols.engine)]],
             "inputs": ["kernelcache": "kernelcache.mach", "devicetree": "DeviceTree.bin", "restore_ramdisk": opt(ramdisk),
                        "mbr": ["sha256": try Preparer.digest(mbr, SHA256())], "stash": NSNull()],
             "identity": ["die_id": dieID],
             "outputs": outputs,
-            "gl_test": false,
+            "gl_test": SystemEdits.Options(recipe: recipe).glTest,
         ]
     }
 }

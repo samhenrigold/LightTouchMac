@@ -19,7 +19,7 @@ public enum GuestPackage {
     static let systemVersion = "System/Library/CoreServices/SystemVersion.plist"
     /// The GL engines' stock paths (mkpkg GL_TARGETS: MBX, GLENGINE, GLD, and 2.x's OPENGLES front end): hooks kept
     /// only when the preparer installed the shim or the front end.
-    static let glTargets: Set<String> = ["/" + N72Board.mbx, "/" + SystemEdits.glEngine, "/" + SystemEdits.gldPath, "/" + N72Board.openGLES]
+    static let glTargets: Set<String> = ["/" + N72Board.mbx, "/" + FitCheck.openGLES]
 
     /// What was baked: device.lock.json's guest_package (the same keys as the Python preparers').
     public struct Record: Sendable, Equatable {

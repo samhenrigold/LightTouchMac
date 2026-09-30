@@ -5,8 +5,8 @@
 //
 //   system.img  the IPSW rootfs, grown to partition 1; rw fstab; SpringBoard env (GL CoreAnimation or
 //               CA_ENABLE_OGL=0) + stdio on /dev/console; [appsync] libappsync.dylib injected into installd +
-//               the shared-cache MISValidateSignature patch; [ca_ogl] the GL shim as GLEngine (+ the gld plugin
-//               and dyld's override switch on 4.x); [web_proxy] the PAC; the guest helpers; storage_mounter loads
+//               the shared-cache MISValidateSignature patch; [ca_ogl] the GL front end as OpenGLES.framework/OpenGLES
+//               (+ dyld's override switch: OpenGLES is cached); [web_proxy] the PAC; the guest helpers; storage_mounter loads
 //               it_msmquiet; BTServer Disabled; lockdownd activated (Activation); the guest-package loader and
 //               seed package from armv7.itpack (GuestPackage.seed), whose jobs it_boot loads.
 //   data.img    fresh journaled HFSX "Data" (sparse) seeded with the system volume's /private/var skeleton
@@ -30,13 +30,14 @@ public enum SystemEdits {
         public var caOGL = true, appsync = false, webProxy = true, usbNet = true
         /// bake --seal: the one-shot clean halt the seal step needs (always on for a prepared device).
         public var seal = true
-        /// bake --gl-test: the GL fixture job (test devices only).
+        /// bake --gl-test: the GL fixture job (test devices only: recipe option gl_test, never set in the catalog).
         public var glTest = false
         public init() {}
         public init(recipe: FirmwareEntry.Recipe) {
             let o = recipe.options
             caOGL = o["ca_ogl"] ?? true; appsync = o["appsync"] ?? false
             webProxy = o["web_proxy"] ?? true; usbNet = o["usb_net"] ?? true
+            glTest = o["gl_test"] ?? false
         }
     }
 
@@ -60,17 +61,16 @@ public enum SystemEdits {
         public static let sealJob = "com.qemu.it-seal.plist", glTestJob = "com.qemu.it-gltest.plist"
         /// The fat armv6+armv7 AppSync dylib.
         public static let appsync = "libappsync.dylib", appsyncLauncher = "appsync-launch"
-        /// The GL shims, one per arch (they read the firmware's dispatch layout at load), and the name table
-        /// they speak (a reference artifact: the install logs which of the firmware's fields it lacks).
-        public static let glEngine = "GLEngine", mbxEngine = "MBXGLEngine", glesNames = "gles-names.h"
-        /// The gld plugin 4.x's libGFXShared loads.
-        public static let gld = "GLRendererFloatQEMU"
+        /// The GL front end (qemu-ios contrib/gles-public: one fat armv6 + armv7 OpenGLES.framework/OpenGLES for
+        /// every firmware), and the name table it and the host speak (the fit check proves a 5.x firmware's
+        /// dispatch fields are all rows of it). MBXGLEngine: the iPod's engine shim.
+        public static let openGLES = "OpenGLES", mbxEngine = "MBXGLEngine", glesNames = "gles-names.h"
     }
 
     public struct Result: Sendable {
         public var system: URL, data: URL
         public var activation: Activation.Result?
-        /// The GLEngine installed (helpers file name), if any.
+        /// The GL front end installed (helpers file name), if any.
         public var engine: String?
         /// The seed package baked (GuestPackage.seed's record: the lock's guest_package).
         public var guestPackage: GuestPackage.Record?
@@ -90,8 +90,6 @@ public enum SystemEdits {
     static let btJob = daemons + "/com.apple.BTServer.plist"
     static let installdJob = daemons + "/com.apple.mobile.installd.plist"
     static let appsyncPath = "usr/lib/libappsync.dylib", appsyncLauncherPath = "usr/libexec/appsync-launch"
-    static let glEngine = "System/Library/Frameworks/OpenGLES.framework/GLEngine.bundle/GLEngine"
-    static let gldPath = "System/Library/Frameworks/OpenGLES.framework/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU"
     static func dyldCache(_ arch: String) -> String { "System/Library/Caches/com.apple.dyld/dyld_shared_cache_" + arch }
     static let dyldOverride = "System/Library/Caches/com.apple.dyld/enable-dylibs-to-override-cache"
     static let lockdownd = "usr/libexec/lockdownd"
@@ -109,7 +107,7 @@ public enum SystemEdits {
 
         """
     static let sbEnv = ["CA_ENABLE_OGL": "0", "MBX2D_PAGE_FLIP": "0"]
-    static let sbEnvCAOGL = ["MBX2D_PAGE_FLIP": "0", "GLI_ACCELERATED": "1"]
+    static let sbEnvCAOGL = ["MBX2D_PAGE_FLIP": "0"]
     static let mobileTop: Set<String> = ["mobile", "ea"]   // uid 501 on the real unit; the rest of /var is root
 
     /// The k48 system + data volumes into `work` (system.img, data.img; scratch next to them).
@@ -195,13 +193,13 @@ public enum SystemEdits {
                 rootOwned += try installPAC(m)
             }
             if o.caOGL {   // GL first
-                let (engine, owned) = try installCAOGL(m, helpers: helpers, log: log)
+                let (engine, owned) = try installCAOGL(m, helpers: helpers, arch: "armv7", fw: fw, fit: fit, log: log)
                 result.engine = engine
                 rootOwned += owned
             }
             let env = o.caOGL ? sbEnvCAOGL : sbEnv
             try fit.check(FitCheck.environment(fw, env.keys.sorted().map { [$0] },
-                                               also: result.engine != nil ? [(Helpers.glEngine, try Data(contentsOf: helper(Helpers.glEngine)))] : []),
+                                               also: result.engine != nil ? [(Helpers.openGLES, try Data(contentsOf: helper(Helpers.openGLES)))] : []),
                           required: false, outcome: "kept: a switch nothing reads is inert")
             try editSpringBoardJob(m) { env, d in
                 env.addEntries(from: o.caOGL ? sbEnvCAOGL : sbEnv)
@@ -358,46 +356,28 @@ public enum SystemEdits {
         return (seeded, record)
     }
 
-    /// [ca_ogl] installGL for a recipe that asks SpringBoard to composite through the GL bridge; returns the engine
-    /// and the files to own by root. A firmware the shim cannot serve (a gld plugin that does not fit) fails the
-    /// prepare, as ipad1_rootfs.py build does, rather than quietly producing a software-CoreAnimation device.
-    static func installCAOGL(_ m: URL, helpers: URL, log: (String) -> Void) throws -> (engine: String, owned: [String]) {
+    /// [ca_ogl] the GL front end (qemu-ios contrib/gles-public) as OpenGLES.framework/OpenGLES, + dyld's override
+    /// switch where the stock OpenGLES is in the shared cache, once FitCheck.glesFrontEnd has proven, from the pristine
+    /// firmware, everything it looks up at run time: a misfit fails the prepare rather than quietly producing a
+    /// software-CoreAnimation device. Nothing under OpenGLES (GLEngine, libGFXShared, a gld plugin) is touched.
+    /// Returns the helper name and the files to own by root.
+    static func installCAOGL(_ m: URL, helpers: URL, arch: String, fw: FitCheck.Firmware, fit: FitCheck.Log,
+                             log: (String) -> Void) throws -> (engine: String, owned: [String]) {
+        let src = helpers.appendingPathComponent(Helpers.openGLES)
+        guard FileManager.default.fileExists(atPath: src.path) else { throw FirmwareError(.internal, "\(src.path) missing") }
+        let bin = try Data(contentsOf: src)
+        let names = (try? String(contentsOf: helpers.appendingPathComponent(Helpers.glesNames), encoding: .utf8)) ?? ""
         do {
-            let (engine, gld, overridden) = try installGL(m, helpers: helpers, log: log)
-            return (engine, [glEngine] + (overridden ? [dyldOverride] : [])
-                            + (gld ? [(gldPath as NSString).deletingLastPathComponent, gldPath] : []))
+            try fit.check(FitCheck.glesFrontEnd(fw, binary: bin, names: names), required: true)
         } catch let e as FirmwareError where e.code == .unsupported {
             throw FirmwareError(.unsupported, "the recipe asks for GL CoreAnimation (ca_ogl) and this firmware cannot "
                                 + "composite through the GL bridge: \(e.message)")
         }
-    }
-
-    /// The GL shim as GLEngine (+ the gld plugin when this firmware's EAGL needs one, + dyld's override switch
-    /// when GLEngine is in the shared cache). Returns (engine helper name, gld installed, override switch set).
-    static func installGL(_ m: URL, helpers: URL, log: (String) -> Void) throws -> (String, Bool, Bool) {
-        let fm = FileManager.default
-        let (gld, cached): (Bool, Bool) = try autoreleasepool {
-            let cache = try DyldSharedCache(contentsOf: m.appendingPathComponent(dyldCache("armv7")))
-            log(glesSanity(cache.data, helpers: helpers))
-            let (needed, gwhy) = GLIDispatch.gldProblem(cache, plugin: helpers.appendingPathComponent(Helpers.gld))
-            if let gwhy { throw FirmwareError(.unsupported, "gld plugin does not fit this firmware: \(gwhy)") }
-            return (needed, cache.image("/" + glEngine) != nil)
-        }
-        let engine = Helpers.glEngine, src = helpers.appendingPathComponent(engine)
-        guard fm.fileExists(atPath: src.path) else { throw FirmwareError(.internal, "\(src.path) missing") }
-        var overridden = false
-        if cached {   // 4.x: dyld's own switch lets the file on disk win over the cached image
-            try setOverrideSwitch(m, image: glEngine)
-            overridden = true
-        }
-        log("GL engine \(engine)\(gld ? " + gld plugin" : ""); \(overridden ? "cached GLEngine overridden by the file" : "no cached GLEngine")")
-        try put(Data(contentsOf: src), m.appendingPathComponent(glEngine), mode: try permissions(src))
-        if gld {
-            let plugin = helpers.appendingPathComponent(Helpers.gld)
-            try mkdirs(m.appendingPathComponent(gldPath).deletingLastPathComponent())
-            try put(Data(contentsOf: plugin), m.appendingPathComponent(gldPath), mode: try permissions(plugin))
-        }
-        return (engine, gld, overridden)
+        let cached = fw.cache?.image("/" + FitCheck.openGLES) != nil
+        if cached { try setOverrideSwitch(m, image: FitCheck.openGLES) }
+        log("GL front end \(Helpers.openGLES) as OpenGLES.framework/OpenGLES; \(cached ? "cached OpenGLES overridden by the file" : "the stock file replaced")")
+        try put(bin, m.appendingPathComponent(FitCheck.openGLES), mode: 0o755)
+        return (Helpers.openGLES, [FitCheck.openGLES] + (cached ? [dyldOverride] : []))
     }
 
     /// ipad1_rootfs.gli_dispatch_info: the sanity line about what the shim will find at load (the firmware's
