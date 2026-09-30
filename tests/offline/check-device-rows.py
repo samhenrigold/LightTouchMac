@@ -141,7 +141,7 @@ import Foundation
         precondition(r.badge == nil && r.supportNote == "Experimental" && row(iPad).badge == nil && row(iPad).supportNote == nil,
                      "Experimental is the tooltip's and VoiceOver's, not a capsule in the row")
         // A developer build: its badge is the beta/GM ordinal.
-        let beta3 = entry("k48ap-8C5115c"), gm2 = entry("k48ap-8C134b"), beta1 = entry("n72ap-8A230m")
+        let beta3 = entry("k48ap-8C5115c"), gm2 = entry("k48ap-8C134b"), beta1 = entry("n72ap-8C5091e")   // an untested Beta 1 (8A230m went experimental 09-30)
         precondition(row(beta3).badge == "Beta 3" && row(gm2).badge == "GM 2" && row(beta1).badge == "Beta 1", "\(row(beta1).badge ?? "nil")")
         var unnumbered = beta1
         unnumbered.prereleaseNumber = nil
@@ -149,7 +149,7 @@ import Foundation
 
         // Untested builds (betas from archive.org, releases the matrix hasn't run) download and
         // prepare like any other, with an Untested note; coming soon stays shut (above).
-        for e in [beta1, beta3, gm2, entry("n72ap-8B117"), entry("k48ap-7B405")] {
+        for e in [entry("n72ap-8C5091e"), entry("k48ap-8F5148b"), entry("n72ap-7A341")] {   // still untested after the 09-30 sweep
             precondition(e.status == .untested && e.source.url?.scheme == "https", e.id)
             r = row(e)
             guard case .notDownloaded = r.state else { fatalError("\(e.id): \(r.state)") }
