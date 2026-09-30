@@ -149,7 +149,7 @@ public enum Preparer {
     /// The sibling entry's restore ramdisk (Update, else Restore), decrypted with that entry's key into `work`.
     static func siblingRamdisk(_ sib: FirmwareEntry, ipsw url: URL, work: URL) throws -> URL {
         let ipsw = IPSWArchive(url)
-        let comp = try BuildComponents.load(ipsw)
+        let comp = try BuildComponents.load(ipsw, board: sib.board)
         guard let path = comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(sib.id): no ramdisk") }
         let k = try sib.key(forPath: path)
         guard let ivHex = k.iv, let iv = Data(hex: ivHex), let key = Data(hex: k.key) else {

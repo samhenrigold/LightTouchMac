@@ -253,7 +253,7 @@ import Testing
 
     @Test func components() throws {
         guard Self.available else { return }
-        let c = try BuildComponents.load(IPSWArchive(Self.ipsw))
+        let c = try BuildComponents.load(IPSWArchive(Self.ipsw), board: "n45ap")
         #expect(c["iBoot"] == Self.prefix + "iBoot.n45ap.RELEASE.img2" && c["AppleLogo"] == Self.prefix + "applelogo.img2")
         #expect(c["KernelCache"] == "kernelcache.release.s5l8900xrb" && c["OS"] == "022-3601-4.dmg")
     }

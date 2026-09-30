@@ -80,7 +80,7 @@ final class N45Board: Board {
         let ipsw = c.ipsw
         let iboot = try Data(contentsOf: c.decFile("iBoot.bin"))
         kcPath = try N72Board.kernelcachePath(iboot)
-        guard let kc = try BuildComponents.load(ipsw)["KernelCache"] else { throw FirmwareError(.unsupported, "\(c.e.id): the IPSW names no KernelCache") }
+        guard let kc = try BuildComponents.load(ipsw, board: c.e.board)["KernelCache"] else { throw FirmwareError(.unsupported, "\(c.e.id): the IPSW names no KernelCache") }
         kcMember = kc
         prefix = "Firmware/all_flash/all_flash.\(c.e.board).production/"
         var images: [String: Data] = [:]

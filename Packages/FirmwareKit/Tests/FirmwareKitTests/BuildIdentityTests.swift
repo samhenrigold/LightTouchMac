@@ -22,7 +22,7 @@ struct BuildIdentityTests {
 
     @Test(.enabled(if: ipad.available)) func buildManifestComponents() throws {
         let ipsw = IPSWArchive(Self.ipad.ipsw)
-        let c = try BuildComponents.load(ipsw)
+        let c = try BuildComponents.load(ipsw, board: "k48ap")
         let af = "Firmware/all_flash/all_flash.k48ap.production/"
         #expect(c == [
             "AppleLogo": af + "applelogo.s5l8930x.img3", "BatteryCharging": af + "glyphcharging.s5l8930x.img3",
@@ -48,7 +48,7 @@ struct BuildIdentityTests {
 
     @Test(.enabled(if: Oracle.exists(ios5))) func buildManifestComponentsOn5x() throws {
         let ipsw = IPSWArchive(Self.ios5)
-        let c = try BuildComponents.load(ipsw), e = try Oracle.entry("k48ap-9B206")
+        let e = try Oracle.entry("k48ap-9B206"), c = try BuildComponents.load(ipsw, board: e.board)
         #expect(c["KernelCache"] == "kernelcache.release.k48" && c["OS"] == "038-4291-006.dmg")
         #expect(c["RestoreRamDisk"] == "038-4361-021.dmg" && c["UpdateRamDisk"] == "038-4304-027.dmg")
         #expect(c["RecoveryMode"] == "Firmware/all_flash/all_flash.k48ap.production/recoverymode~ipad.s5l8930x.img3")
@@ -63,12 +63,36 @@ struct BuildIdentityTests {
         let ipsw = IPSWArchive(Self.ios2.ipsw)
         #expect(try !ipsw.contains("BuildManifest.plist"))
         let af = "Firmware/all_flash/all_flash.n72ap.production/"
-        #expect(try BuildComponents.load(ipsw) == [
+        #expect(try BuildComponents.load(ipsw, board: "n72ap") == [
             "iBSS": "Firmware/dfu/iBSS.n72ap.RELEASE.dfu", "iBEC": "Firmware/dfu/iBEC.n72ap.RELEASE.dfu",
             "iBoot": af + "iBoot.n72ap.RELEASE.img3", "LLB": af + "LLB.n72ap.RELEASE.img3",
             "DeviceTree": af + "DeviceTree.n72ap.img3", "AppleLogo": af + "applelogo.s5l8720x.img3",
             "KernelCache": "kernelcache.release.s5l8720x", "OS": "018-4160-1.dmg",
             "RestoreRamDisk": "018-4166-1.dmg", "UpdateRamDisk": "018-4177-1.dmg"])
         try RestoreInfo(ipsw).verify(against: Oracle.entry("n72ap-5F138"))
+    }
+    /// The 4.3 betas' BuildManifest lists the k48dev development board's identities first; the IPSW ships only
+    /// k48ap's files. The components are the entry board's, every one an IPSW member.
+    @Test(arguments: ["k48ap-8F5148b", "k48ap-8F5153d", "k48ap-8F5166b"])
+    func buildManifestPicksTheEntryBoard(_ id: String) throws {
+        guard let url = try K48IBootTests.cachedIPSW(id) else { return }
+        let ipsw = IPSWArchive(url), e = try Oracle.entry(id), names = Set(try ipsw.names())
+        let c = try BuildComponents.load(ipsw, board: e.board)
+        #expect(c["iBSS"] == "Firmware/dfu/iBSS.k48ap.RELEASE.dfu" && c["iBoot"] == "Firmware/all_flash/all_flash.k48ap.production/iBoot.k48ap.RELEASE.img3")
+        #expect(c["UpdateRamDisk"] != nil && c["UpdateRamDisk"] != c["RestoreRamDisk"])
+        #expect(c.values.filter { !names.contains($0) }.isEmpty)
+        #expect(throws: FirmwareError.self) { try BuildComponents.load(ipsw, board: "n72ap") }
+        try RestoreInfo(ipsw).verify(against: e)
+    }
+
+    /// 1.1.2 (3B48b)'s Restore.plist gives ProductType as the board name, N45AP.
+    @Test func boardNameProductTypeOn112() throws {
+        guard let url = try K48IBootTests.cachedIPSW("n45ap-3B48b") else { return }
+        let r = try RestoreInfo(IPSWArchive(url)), e = try Oracle.entry("n45ap-3B48b")
+        #expect(r.productType == "N45AP" && e.productType == "iPod1,1")
+        try r.verify(against: e)
+        var other = e; other.board = "n72ap"
+        #expect(throws: FirmwareError.self) { try r.verify(against: other) }   // BoardConfig still binds it
+        #expect(throws: FirmwareError.self) { try r.verify(against: Oracle.entry("n45ap-4B1")) }
     }
 }

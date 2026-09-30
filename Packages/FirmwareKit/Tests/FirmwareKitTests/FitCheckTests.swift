@@ -9,6 +9,7 @@ enum FitFixture {
         "k48ap-7B500": Oracle.ipadCache.appendingPathComponent("68b613f78581d36eab96aa5a007001dff142baa3/rootfs.dmg"),
         "k48ap-8C148": Oracle.ipadCache.appendingPathComponent("8717b3bedc925b587566442ad375aa65d857e79a/rootfs.dmg"),
         "k48ap-9B206": Oracle.ipadCache.appendingPathComponent("ad9b607439250f2337fe132890dadc4c487beca8/rootfs.dmg"),
+        "k48ap-9A5220p": Oracle.ipadCache.appendingPathComponent("006bd8859e534e6cf68d6a72e7c7086dbb675dae/rootfs.dmg"),
         "n72ap-5F138": Oracle.ipodCache.appendingPathComponent("c3c700be49ad227d1152188e7c1e46b8958fd1e4/rootfs.dmg"),
         "n72ap-7A341": Oracle.ipodCache.appendingPathComponent("0f7fc76d9b9aa826b5ab14be9821a315d3d9dc42/rootfs.dmg"),
         "n72ap-7E18": Oracle.ipodCache.appendingPathComponent("5f4f5c01eda2f811f73167e7d1f82dbeed82367b/rootfs.dmg"),
@@ -129,8 +130,8 @@ enum FitFixture {
         }
     }
 
-    /// The GL front end (qemu-ios contrib/gles-public: one fat OpenGLES for every build) fits the iPad's 3.2.2, 4.2.1 and
-    /// 5.1.1 and the iPod's 2.1.1, 3.1.3 and 4.2.1, and each lookup decides: an export renamed away fails every build,
+    /// The GL front end (qemu-ios contrib/gles-public: one fat OpenGLES for every build) fits the iPad's 3.2.2, 4.2.1,
+    /// 5.0 beta 1 and 5.1.1 and the iPod's 2.1.1, 3.1.3 and 4.2.1, and each lookup decides: an export renamed away fails every build,
     /// and a dispatch field the name table lacks fails 5.1.1 alone (the one compositor that asks for a macro context).
     @Test func glesFrontEndFits() throws {
         let bin = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.openGLES)
@@ -145,7 +146,7 @@ enum FitFixture {
         let files = [FitCheck.openGLES, FitCheck.quartzCore, FitCheck.coreImage, FitCheck.ioSurface, FitCheck.ioMobileFramebuffer,
                      FitCheck.sgxEngine, "System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
                      "System/Library/Frameworks/Foundation.framework/Foundation", "usr/lib/libobjc.A.dylib"] + FitCheck.coreSurfaces
-        for id in ["k48ap-7B500", "k48ap-8C148", "k48ap-9B206", "n72ap-5F138", "n72ap-7E18", "n72ap-8C148"] {
+        for id in ["k48ap-7B500", "k48ap-8C148", "k48ap-9A5220p", "k48ap-9B206", "n72ap-5F138", "n72ap-7E18", "n72ap-8C148"] {
             try Oracle.withTemp { dir in
                 guard let v = try FitFixture.volume(id, FitFixture.stock(id) + files, in: dir) else { return }
                 let fw = { FitCheck.Firmware(root: v, arch: FitFixture.arch(id)) }
@@ -157,6 +158,10 @@ enum FitFixture {
                 let unnamed = FitCheck.glesFrontEnd(fw(), binary: front, names: names.replacingOccurrences(of: "bind_framebuffer_EXT,", with: "bind_framebuffer_XXX,"))
                 #expect(unnamed.fits == (id != "k48ap-9B206"), "\(id): \(unnamed.proof)")
                 if id == "k48ap-9B206" { #expect(unnamed.proof.contains("bind_framebuffer_EXT") && f.proof.contains("macro context: 905")) }
+                // 5.0 beta 1 exports the ...EXT set as ...APPLE: a front end without one of those names (the pin before
+                // 9A5220p's 43) does not fit it, and every other build does not look it up
+                let noApple = FitCheck.glesFrontEnd(fw(), binary: renamingAll(front, "_glBeginQueryAPPLE", "_glBeginQueryAPPLX"), names: names)
+                #expect(noApple.fits == (id != "k48ap-9A5220p"), "\(id): \(noApple.proof)")
             }
         }
     }
