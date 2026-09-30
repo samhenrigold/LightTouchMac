@@ -28,6 +28,13 @@ GW = 64          # signature grid width; height is aspect-scaled from the source
 TOL = 8          # per-channel block-mean drift still counted as "the same block"
 THR = 0.02       # FAIL if more than this fraction of unmasked blocks differ by > TOL
 MASK_TOP = 0.08  # top band excluded: the status-bar clock (and the iPad lock time)
+# The iPod panel model scales every pixel by the backlight level the guest programs (qemu-ios
+# ipod_touch_lcd.c, PMU WLED register 0x30), as a dim real screen looks; the references are
+# captured at full exposure (IT_LCD_BRIGHT=255). 2.x's SpringBoard leaves the backlight at
+# ~0.76-0.79 (5F138 193/255, 5G77a/5H11a 201/255), so its captures are the right picture,
+# uniformly dimmer. `verdict` measures that gain and undoes it before the diff, down to this
+# exposure; a dimmer capture is compared as it is (and fails).
+EXPOSURE_MIN = 0.6
 
 
 def signature(path, gw=GW):
@@ -56,16 +63,31 @@ def fraction_differing(cap, ref, tol=TOL, mask_top=MASK_TOP):
     return differ / total if total else 0.0
 
 
+def exposure(cap, ref):
+    """The capture's backlight gain against the reference: the median capture/reference
+    ratio over blocks the reference has bright (a uniform backlight scales them all alike)."""
+    r = sorted(sum(c) / sum(f) for c, f in zip(cap[2], ref[2]) if sum(f) > 150)
+    return r[len(r) // 2] if r else 1.0
+
+
+def normalise(cap, gain):
+    """Undo a backlight gain (see EXPOSURE_MIN); outside [EXPOSURE_MIN, 1) the capture stays as it is."""
+    if not EXPOSURE_MIN <= gain < 1:
+        return cap
+    return cap[0], cap[1], [tuple(min(255, round(v / gain)) for v in px) for px in cap[2]]
+
+
 def verdict(cap_path, ref_path, thr=THR):
-    """{ok, frac, thr, why} for a captured frame against a reference PNG."""
+    """{ok, frac, thr, exposure, why} for a captured frame against a reference PNG."""
     try:
         ref = signature(ref_path)
         cap = signature(cap_path, ref[0])
-        frac = fraction_differing(cap, ref)
+        gain = exposure(cap, ref)
+        frac = fraction_differing(normalise(cap, gain), ref)
     except Exception as e:  # aspect mismatch, unreadable frame: not the reference picture
         return {"ok": False, "frac": None, "thr": thr, "why": "could not compare: %s" % e}
     ok = frac <= thr
-    return {"ok": ok, "frac": round(frac, 4), "thr": thr,
+    return {"ok": ok, "frac": round(frac, 4), "thr": thr, "exposure": round(gain, 3),
             "why": ("matches the reference (%.3f <= %.2f)" % (frac, thr)) if ok else
                    ("differs from the reference (%.3f > %.2f): flip / colour swap / stale surface"
                     % (frac, thr))}
@@ -93,6 +115,13 @@ def _selftest():
     red = (2, 2, [(255, 0, 0)] * 4)
     assert fraction_differing(black, red) == 1.0        # every unmasked block differs
     assert fraction_differing(black, red, tol=255) == 0.0  # tolerance swallows it
+    grad = (2, 2, [(40, 80, 120), (200, 160, 120), (120, 200, 40), (240, 240, 240)])
+    dim = (2, 2, [tuple(round(v * 0.76) for v in px) for px in grad[2]])
+    assert abs(exposure(dim, grad) - 0.76) < 0.01
+    assert fraction_differing(normalise(dim, exposure(dim, grad)), grad) == 0.0  # a dim backlight is undone
+    assert normalise(dim, 0.5) is dim                                             # below EXPOSURE_MIN: as is
+    flip = (2, 2, dim[2][::-1])
+    assert fraction_differing(normalise(flip, exposure(flip, grad)), grad) > 0.5  # a dim flip still fails
     print("framecheck selftest ok")
 
 

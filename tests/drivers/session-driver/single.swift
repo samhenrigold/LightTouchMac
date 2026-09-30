@@ -83,8 +83,17 @@ struct SingleConfig: Decodable {
             try? await Task.sleep(for: .seconds(2))
         }
         d.screenshot(generation == 1 ? "lock" : "lock\(generation)")
-        if ipad { await d.drag(0.9365, 0.621, 0.9365, 0.0612) } else { await d.drag(0.18, 0.9, 0.92, 0.9) }
-        try? await Task.sleep(for: .seconds(5))
+        // The agent (where the boot has one) says when the slide took: 4.2.1's iPod stayed on the lock screen after
+        // one slide (rejudge 09-29), so slide again until SpringBoard reports it unlocked, as guest.swift's unlock does.
+        let asks = agent || (ipad && offered)
+        let guestAgent = GuestAgent(link: d.process.link, cache: GuestAgentCache())
+        if asks { _ = await guestAgent.waitAlive(seconds: 60) }
+        for attempt in 0..<3 {
+            if attempt > 0 { await wakeForShot(d, "unlock\(generation)-\(attempt)") }
+            if ipad { await d.drag(0.9365, 0.621, 0.9365, 0.0612) } else { await d.drag(0.18, 0.9, 0.92, 0.9) }
+            try? await Task.sleep(for: .seconds(5))
+            guard asks, (try? await guestAgent.isLocked()) == true else { break }
+        }
         // A fresh 5.x iPad slides into the Setup Assistant instead of the home screen: walk it as a user would.
         if ipad, offered, let front = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost(),
            front.bundleID == Setup5.bundleID {
@@ -99,10 +108,13 @@ struct SingleConfig: Decodable {
         // finding 3), so a later shot lands black. wakeForShot woke it; report the frontmost app
         // (SpringBoard where an agent can say) and the brightness so the matrix fails a slept/black
         // or wrong-app home instead of passing it on the single `lit` threshold (audit gap #2).
-        var front = ""   // the iPad's agent comes from the seed package (offered): ask it too, the matrix's helpers check
-        if agent || (ipad && offered), let f = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost() { front = f.bundleID }
+        // The iPad's agent comes from the seed package (offered). `screen` is the agent's name for what is up
+        // (`Home Screen`, `Lock Screen`, an app's name): the lock screen is SpringBoard too, so the bundle id
+        // alone cannot tell it from home. No agent (2.x, 3.0): `agent` false, and the matrix says unknown.
+        var front = "", screen = ""
+        if asks, let f = try? await guestAgent.frontmost() { (front, screen) = f }
         emit("home", ["device": d.name, "generation": generation, "brightness": d.brightness() ?? -1,
-                      "frontmost": front, "path": hp ?? ""])
+                      "agent": asks, "frontmost": front, "screen": screen, "path": hp ?? ""])
     }
 
     /// Wake the panel, then capture. The display sleeps ~12 s after `lit`, so an unqualified

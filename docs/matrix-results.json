@@ -271,6 +271,105 @@
     }
    ],
    "verdict": "Both runs: boot-1 'home' and 'installed' screenshots are the lock screen (slide to unlock, clock 3 h behind), boot-2 home2 is the real home; the judge passes it (brightness above floor, SpringBoard frontmost). Deterministic; counted as home FAIL here. run1 boot-1 shutdown unconfirmed (load 55-77); run2 passes. Keep experimental."
+  },
+  "matrix_holes_0929": {
+   "emulator": {
+    "qemu_ios": "9509655ac4 (pin, clean; own worktree ~/Developer/qemu-ios-mh)",
+    "branch": "matrix-holes"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-30T01:55:46+00:00",
+     "test_app": "com.qemuios.harness (Harness)",
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": null,
+      "helpers": true,
+      "gl": true,
+      "persist": true,
+      "shutdown": false
+     },
+     "home": {
+      "frontmost": [
+       "com.apple.springboard / Home Screen",
+       "com.apple.springboard / Home Screen"
+      ],
+      "locked": null,
+      "unanswered": null,
+      "frame": null,
+      "exposure": null
+     },
+     "first_failure": "shutdown",
+     "evidence": "/Users/shg/Developer/qemu-ios-files/mh/results/n72ap-8C148"
+    },
+    {
+     "pass": "r2",
+     "when": "2026-09-30T02:07:23+00:00",
+     "test_app": "com.qemuios.harness (Harness)",
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": null,
+      "helpers": true,
+      "gl": true,
+      "persist": true,
+      "shutdown": true
+     },
+     "home": {
+      "frontmost": [
+       "com.apple.springboard / Home Screen",
+       "com.apple.springboard / Home Screen"
+      ],
+      "locked": null,
+      "unanswered": null,
+      "frame": null,
+      "exposure": null
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/mh/results-r2/n72ap-8C148"
+    },
+    {
+     "pass": "r3",
+     "when": "2026-09-30T02:10:29+00:00",
+     "test_app": "com.qemuios.harness (Harness)",
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": null,
+      "helpers": true,
+      "gl": true,
+      "persist": true,
+      "shutdown": true
+     },
+     "home": {
+      "frontmost": [
+       "com.apple.springboard / Home Screen",
+       "com.apple.springboard / Home Screen"
+      ],
+      "locked": null,
+      "unanswered": null,
+      "frame": null,
+      "exposure": null
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/mh/results-r3/n72ap-8C148"
+    }
+   ],
+   "note": "Boot-1 home is SpringBoard's Home Screen by the agent in all 3 runs (the unlock slid once each time; the retry loop was not needed at load 15-45). run1 boot-1 halt unconfirmed (the known flake), r2/r3 pass. Lock screen clock 3 h behind on boot 1 is smoke #58, not the RTC."
   }
  },
  "n72ap-5F138": {
@@ -535,7 +634,47 @@
    ],
    "verdict": "run1 with the matrix default Harness.ipa is invalid input (MinimumOSVersion 3.1: BundleVerificationFailed -15 on 2.x). With PAC-MAN Lite (ipa 145757, min OS 2.0, --launch): run1pac installs and persists but the launch never draws (launched1/2 black, launched3 back at home) and boot-1 shutdown unconfirmed; run2 lit but lockdown never answered (load 62-105); run3 passes everything but home. Home FAILs every run on the committed ref tests/sessions/matrix-refs/n72ap-5F138-home.png, which is the Edit Home Screen tip dialog, not the home; the capture is the correct 2.1.1 home at ~0.76 backlight (undimmed it matches qemu-ios gles-refs/2x-home.png at 0.000). Keep experimental; fix the ref."
   },
-  "triage": "rejudge 09-29 (4 runs, qemu-ios 64fc1cfbb2): run1 with the matrix default Harness.ipa is invalid input (MinimumOSVersion 3.1: BundleVerificationFailed -15 on 2.x). With PAC-MAN Lite (ipa 145757, min OS 2.0, --launch): run1pac installs and persists but the launch never draws (launched1/2 black, launched3 back at home) and boot-1 shutdown unconfirmed; run2 lit but lockdown never answered (load 62-105); run3 passes everything but home. Home FAILs every run on the committed ref tests/sessions/matrix-refs/n72ap-5F138-home.png, which is the Edit Home Screen tip dialog, not the home; the capture is the correct 2.1.1 home at ~0.76 backlight (undimmed it matches qemu-ios gles-refs/2x-home.png at 0.000). Keep experimental; fix the ref. Earlier: legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). Earlier: (a)+(c) 2.1.1 through the app pipeline (ipod-2x): prepare needed only the catalog recipe block (the Swift n72 recipe already had the 2.x paths: no BuildManifest, plain-tail img3, epoch-1 NAND, only iBoot's SHSH wrapped, no iBoot.bin, no helpers/seed package without the shared cache); boot needed the lock's boot_strategy \"bootrom\" (SecureROM -> NOR LLB -> iBoot; the app and the session driver passed a missing iBoot.bin as direct-iboot) and the session driver setting the time over lockdown-tz as the app does (clears lockdownd's BrickState; before it the screen sat on Connect to iTunes). Home screen, Activated, AFC 4/4, persist. Byte-matched to qemu-ios ipod2g_device.py: nor.bin, gid-blobs.bin, identity.json identical; the system volumes list the same 10801 entries with equal contents except the SpringBoard job plist (same content, different binary-plist encoding) and lockdownd (same patched code; the signature blob differs, ldid vs FirmwareKit). Shutdown passes since qemu-ios ipod-2x-hold 19649e467c (smoke #19, closed): the hold button was never the gap (the 2.x DeviceTree has function-button_hold <gpio 0x0c02> like 3.x; Hold locks the screen). Two gaps in the machine's hold-and-slide: (1) it held Home through the 2.5 s settle and pressed Hold in the same tick as the release, so both edges arrived in one GPIO status read (group 3 = 0x06000000) and 2.x's SpringBoard never raised the power-off sheet (from a dark lock screen the first press only wakes the display, which hid it); Home is now a tap. (2) 2.x's AppleD1759PMU-36.2 halt, tethered, prints \"pmu waiting for stdby\" and sleeps on the PMU interrupt until the cable comes out (EVENT_A bit 3 -> 0x0a bit 0), where 3.x/4.x's -94.7 writes 0x6f=0x90; the gesture now unplugs once the guest has turned the backlight rail off. Earlier rows (ipod-2x 43f7aff9ac) failed shutdown only. Rows from qemu-ios ipod-2x 43f7aff9ac (bd8d6b1363 + the 0x38100000 block); 5F138 also passes everything but shutdown on the pinned bd8d6b1363."
+  "triage": "rejudge 09-29 (4 runs, qemu-ios 64fc1cfbb2): run1 with the matrix default Harness.ipa is invalid input (MinimumOSVersion 3.1: BundleVerificationFailed -15 on 2.x). With PAC-MAN Lite (ipa 145757, min OS 2.0, --launch): run1pac installs and persists but the launch never draws (launched1/2 black, launched3 back at home) and boot-1 shutdown unconfirmed; run2 lit but lockdown never answered (load 62-105); run3 passes everything but home. Home FAILs every run on the committed ref tests/sessions/matrix-refs/n72ap-5F138-home.png, which is the Edit Home Screen tip dialog, not the home; the capture is the correct 2.1.1 home at ~0.76 backlight (undimmed it matches qemu-ios gles-refs/2x-home.png at 0.000). Keep experimental; fix the ref. Earlier: legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): AppSync on (catalog default): the app's install pipeline installs PAC-MAN Lite (Legacy Store ipa 145757, min OS 2.0, decrypted armv6) in 2-4 s and it launches (launched1-3.png: its title screen, 'TOUCH SCREEN TO START'); package serial 7 reported by the legacy-linked it_boot (qemu-ios ff2f139cf9). App fix found here: 2.x's installation_proxy drops an Install with no ClientOptions, so every install timed out at 90 s until the app sent an empty dictionary (InstallationProxy.blockingInstall). No com.apple.springboardservices on 2.x (the icon is tapped where SpringBoard puts it: --launch-at 0.384,0.677); the first install raises the Edit Home Screen tip (smoke #45). Earlier: (a)+(c) 2.1.1 through the app pipeline (ipod-2x): prepare needed only the catalog recipe block (the Swift n72 recipe already had the 2.x paths: no BuildManifest, plain-tail img3, epoch-1 NAND, only iBoot's SHSH wrapped, no iBoot.bin, no helpers/seed package without the shared cache); boot needed the lock's boot_strategy \"bootrom\" (SecureROM -> NOR LLB -> iBoot; the app and the session driver passed a missing iBoot.bin as direct-iboot) and the session driver setting the time over lockdown-tz as the app does (clears lockdownd's BrickState; before it the screen sat on Connect to iTunes). Home screen, Activated, AFC 4/4, persist. Byte-matched to qemu-ios ipod2g_device.py: nor.bin, gid-blobs.bin, identity.json identical; the system volumes list the same 10801 entries with equal contents except the SpringBoard job plist (same content, different binary-plist encoding) and lockdownd (same patched code; the signature blob differs, ldid vs FirmwareKit). Shutdown passes since qemu-ios ipod-2x-hold 19649e467c (smoke #19, closed): the hold button was never the gap (the 2.x DeviceTree has function-button_hold <gpio 0x0c02> like 3.x; Hold locks the screen). Two gaps in the machine's hold-and-slide: (1) it held Home through the 2.5 s settle and pressed Hold in the same tick as the release, so both edges arrived in one GPIO status read (group 3 = 0x06000000) and 2.x's SpringBoard never raised the power-off sheet (from a dark lock screen the first press only wakes the display, which hid it); Home is now a tap. (2) 2.x's AppleD1759PMU-36.2 halt, tethered, prints \"pmu waiting for stdby\" and sleeps on the PMU interrupt until the cable comes out (EVENT_A bit 3 -> 0x0a bit 0), where 3.x/4.x's -94.7 writes 0x6f=0x90; the gesture now unplugs once the guest has turned the backlight rail off. Earlier rows (ipod-2x 43f7aff9ac) failed shutdown only. Rows from qemu-ios ipod-2x 43f7aff9ac (bd8d6b1363 + the 0x38100000 block); 5F138 also passes everything but shutdown on the pinned bd8d6b1363.",
+  "matrix_holes_0929": {
+   "emulator": {
+    "qemu_ios": "9509655ac4 (pin, clean; own worktree ~/Developer/qemu-ios-mh)",
+    "branch": "matrix-holes"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-30T01:59:46+00:00",
+     "test_app": "com.namconetworks.pacmanlite (Legacy Store 145757 (Harness needs iOS 3.1))",
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "helpers": null,
+      "gl": true,
+      "persist": true,
+      "shutdown": true
+     },
+     "home": {
+      "frontmost": "unknown (no guest agent on this build)",
+      "locked": null,
+      "unanswered": null,
+      "frame": {
+       "home": 0.0
+      },
+      "exposure": {
+       "home": 0.757
+      }
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/mh/results/n72ap-5F138"
+    }
+   ],
+   "note": "PAC-MAN Lite chosen by test_app (Harness needs 3.1); home matches the new ref (qemu-ios gles-refs/2x-home.png) at 0.000 after undoing exposure 0.757; frontmost reported unknown (no agent on 2.x). LCD_TRACE: the guest programs WLED 212 then 193 (193/255 = 0.757)."
+  }
  },
  "k48ap-7B500": {
   "version": "3.2.2",
@@ -1027,6 +1166,51 @@
     }
    ],
    "verdict": "2/2 runs pass every column, hardware GL, home/home2 match the committed software-CA iPad home ref (0.0003-0.0007; refs added this branch from qemu-ios tests/gles-refs/ipad-home.png). Candidate for available."
+  },
+  "matrix_holes_0929": {
+   "emulator": {
+    "qemu_ios": "9509655ac4 (pin, clean; own worktree ~/Developer/qemu-ios-mh)",
+    "branch": "matrix-holes"
+   },
+   "runs": [
+    {
+     "pass": "run1",
+     "when": "2026-09-30T02:03:01+00:00",
+     "test_app": "com.qemuios.harness (Harness)",
+     "checks": {
+      "lit": true,
+      "home": true,
+      "lockdown": true,
+      "activation": true,
+      "afc": true,
+      "install": true,
+      "package": true,
+      "helpers": true,
+      "gl": true,
+      "persist": true,
+      "shutdown": true
+     },
+     "home": {
+      "frontmost": [
+       "com.apple.springboard / Home Screen",
+       "com.apple.springboard / Home Screen"
+      ],
+      "locked": null,
+      "unanswered": null,
+      "frame": {
+       "home": 0.0,
+       "home2": 0.0003
+      },
+      "exposure": {
+       "home": 1.0,
+       "home2": 1.0
+      }
+     },
+     "first_failure": null,
+     "evidence": "/Users/shg/Developer/qemu-ios-files/mh/results/k48ap-8C148"
+    }
+   ],
+   "note": "frontmost now answered on both home shots (Home Screen): the driver waits for the agent before asking."
   }
  },
  "n72ap-7A341": {

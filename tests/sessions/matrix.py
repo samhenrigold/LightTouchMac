@@ -5,7 +5,7 @@ For each catalog entry: the IPSW is fetched into the app's content-addressed dow
 (resumable; sha1 checked), its keys are verified against the IPSW (firmwarekit verify-keys), `firmwarekit create`
 runs exactly as the app runs it (--entry/--ipsw/--out/--seed/--helper/--cache, the guest tools), and the result
 boots through tests/drivers/session-driver --single as the app boots a device: lit, lockdown (ProductType, ActivationState),
-AFC round trips, the IPA install (Harness.ipa) when the entry enables appsync, the guest-package report when an
+AFC round trips, the IPA install (Harness.ipa, or on a build below its min OS a Legacy Store app: test_app) when the entry enables appsync, the guest-package report when an
 itpack is at hand, a clean shutdown, then a second boot on the same overlay that must still hold a file uploaded
 before it (persist). GL counters are recorded when the emulator exposes them (qemu-ios gl-coverage), else skipped.
 --restore additionally runs qemu-ios tests/ipad1/restore-smoke.py on prepared iPads.
@@ -152,6 +152,58 @@ def prepare(entry, entry_file, ipsw, out, a, helper, env):
     return rec, stderr
 
 
+HARNESS = sources.path("qemu-ios") / "contrib/it-harness/build/Harness.ipa"
+# The 2.x test app: Harness is built against the 3.1.3 SDK (MinimumOSVersion 3.1, BundleVerificationFailed on 2.x),
+# so a device below its min OS installs PAC-MAN Lite (Legacy Store copy 145757, min OS 2.0), fetched as the app's
+# CatalogClient fetches it (/api/emulator/apps judges the copy for the device, download_url, md5) and cached by copy.
+LEGACY_STORE, OLD_OS_APP = "https://legacystore.app", 145757
+
+
+def ipa_app(path):
+    """(bundle id, MinimumOSVersion) from an IPA's Payload/*.app/Info.plist."""
+    import plistlib, zipfile
+    with zipfile.ZipFile(path) as z:
+        name = next(n for n in z.namelist() if re.fullmatch(r"Payload/[^/]+\.app/Info\.plist", n))
+        info = plistlib.loads(z.read(name))
+    return info["CFBundleIdentifier"], str(info.get("MinimumOSVersion", "0"))
+
+
+def os_tuple(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v))
+
+
+def test_app(entry, a):
+    """The IPA the install check runs for this entry: --ipa if given, else Harness where the device's iOS meets its
+    min OS, else the Legacy Store's old-OS copy. The record says which ran and why."""
+    if a.ipa:
+        bundle, min_os = ipa_app(a.ipa)
+        return {"ipa": str(a.ipa), "bundle_id": a.bundle_id or bundle, "min_os": min_os, "source": "--ipa"}
+    bundle, min_os = ipa_app(HARNESS)
+    if os_tuple(min_os) <= os_tuple(entry["version"]):
+        return {"ipa": str(HARNESS), "bundle_id": bundle, "min_os": min_os, "source": "Harness"}
+    import urllib.request
+    ua = {"User-Agent": "LightTouchMac/matrix (+https://legacystore.app)"}
+    q = f"{LEGACY_STORE}/api/emulator/apps?ipa_id={OLD_OS_APP}&device={entry['product_type']}&os={entry['version']}"
+    with urllib.request.urlopen(urllib.request.Request(q, headers=ua), timeout=60) as r:
+        apps = json.load(r)["apps"]
+    copy = next(x for x in apps if x["ipa_id"] == OLD_OS_APP)
+    if not (copy.get("compat") or {}).get("compatible", True):
+        raise RuntimeError(f"Legacy Store copy {OLD_OS_APP} is not compatible with {entry['id']}: {copy['compat']}")
+    cached = a.files / "matrix-ipa" / f"{OLD_OS_APP}.ipa"
+    if not cached.exists() or hashlib.md5(cached.read_bytes()).hexdigest() != copy["md5"]:
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        with urllib.request.urlopen(urllib.request.Request(copy["download_url"], headers=ua), timeout=300) as r:
+            data = r.read()
+        if hashlib.md5(data).hexdigest() != copy["md5"]:
+            raise RuntimeError(f"Legacy Store copy {OLD_OS_APP}: md5 differs from the catalog's {copy['md5']}")
+        cached.write_bytes(data)
+    bundle, min_os = ipa_app(cached)
+    if os_tuple(min_os) > os_tuple(entry["version"]):
+        raise RuntimeError(f"{copy['name']} needs iOS {min_os}; {entry['id']} is {entry['version']}")
+    return {"ipa": str(cached), "bundle_id": bundle, "min_os": min_os, "name": copy["name"],
+            "source": f"Legacy Store {OLD_OS_APP} (Harness needs iOS {ipa_app(HARNESS)[1]})"}
+
+
 def excerpt(path, n=3):
     """The last few telling lines of a log: panics and errors near the end, else the tail."""
     try:
@@ -164,12 +216,12 @@ def excerpt(path, n=3):
     return "\n".join(re.sub(r"[\x00-\x08\x0e-\x1f]", "", l)[:200] for l in pick)
 
 
-def boot(entry, base, a, helper, work, env):
+def boot(entry, base, a, helper, work, env, app):
     """tests/drivers/session-driver --single with reboot; returns the parsed events, the driver's exit and the serial log."""
     board = {"k48ap": "ipad", "n45ap": "ipod1g"}.get(entry["board"], "ipod")
     nand_current = a.files / "nand-current"
-    cfg = {"helper": str(helper), "requirement": check_sessions.TEAM_REQ, "usbmuxd": str(a.usbmuxd), "ipa": str(a.ipa),
-           "bundleID": a.bundle_id, "work": str(work), "files": str(a.files),
+    cfg = {"helper": str(helper), "requirement": check_sessions.TEAM_REQ, "usbmuxd": str(a.usbmuxd), "ipa": app["ipa"],
+           "bundleID": app["bundle_id"], "work": str(work), "files": str(a.files),
            "ipodNAND": str(a.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(base) if board == "ipad" else "", "timeout": a.boot_timeout - 20,
            "single": {"board": board, "base": str(base), "reboot": True, "lockdownTZ": str(a.lockdown_tz),
@@ -223,11 +275,21 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     # where a known-good reference is committed the picture must match it (framecheck). Boot 2's home
     # is judged the same way. This fails the 4.x iPad rows whose boot-1 home is captured black
     # (audit finding 3), which the single `lit` threshold passed.
+    # The frontmost check runs wherever the boot has a guest agent (the lock's it-agent job, or the iPod bake's
+    # installed tools): each home shot must be SpringBoard's Home Screen. The lock screen is SpringBoard too
+    # (it_agent answers `com.apple.springboard / Lock Screen`), so a locked shot FAILs, and so does a home shot
+    # the agent never answered for. Without an agent (2.x, 3.0: smoke #10) the frontmost is unknown, said so.
+    lock = json.loads((base / "device.lock.json").read_text())
+    gp = lock.get("guest_package") or {}
+    has_agent = ("com.qemu.it-agent.plist" in (gp.get("jobs") or [])
+                 or str((lock.get("derived") or {}).get("guest_tools", "")).startswith("installed"))
     shots_ev = {Path(e["path"]).stem: e for e in find("screenshot")}
     homes = find("home")
     home_names = [n for n in ("home", "home2", "installed") if n in shots_ev]
     dark = [n for n in home_names if float(shots_ev[n].get("brightness", 0)) < HOME_FLOOR]
     wrong_app = [h.get("frontmost") for h in homes if h.get("frontmost") and h["frontmost"] != SPRINGBOARD]
+    locked = [h.get("generation") for h in homes if h.get("frontmost") == SPRINGBOARD and h.get("screen") == "Lock Screen"]
+    unanswered = [h.get("generation") for h in homes if has_agent and not h.get("frontmost")]
     frame = {}
     for n in home_names:
         ref = MATRIX_REFS / f"{entry['id']}-{n}.png"
@@ -237,11 +299,14 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     if not home_names:
         r["home"] = {"ok": None, "note": "no home screenshot taken"}
     else:
-        r["home"] = {"ok": not dark and not wrong_app and not bad_frame,
+        r["home"] = {"ok": not dark and not wrong_app and not locked and not unanswered and not bad_frame,
                      "brightness": {n: round(float(shots_ev[n].get("brightness", -1)), 3) for n in home_names},
-                     "frontmost": [h.get("frontmost", "") for h in homes] or None,
-                     "dark": dark or None, "wrongApp": wrong_app or None,
-                     "frame": {n: frame[n]["frac"] for n in frame} or None}
+                     "frontmost": ([" / ".join(x for x in (h.get("frontmost"), h.get("screen")) if x) or "no answer" for h in homes]
+                                   if has_agent else "unknown (no guest agent on this build)") if homes else None,
+                     "dark": dark or None, "wrongApp": wrong_app or None, "locked": locked or None,
+                     "unanswered": unanswered or None,
+                     "frame": {n: frame[n]["frac"] for n in frame} or None,
+                     "exposure": {n: frame[n].get("exposure") for n in frame} or None}
     usb = find("usb")
     want = entry["product_type"]
     r["lockdown"] = {"ok": bool(usb) and usb[0].get("productType") == want, "seconds": round(usb[0]["seconds"], 1) if usb else None,
@@ -270,8 +335,6 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
                         "result": pkg[0].get("result") if pkg else None}
     else:
         r["package"] = {"ok": None, "note": "no offer (no itpack or nothing for this build)"}
-    lock = json.loads((base / "device.lock.json").read_text())
-    gp = lock.get("guest_package") or {}
     if not gp:   # 3.0: no loader baked
         r["package"] = {"ok": None, "note": "no loader baked (the lock has no guest_package)"}
     elif not offer and r["package"].get("ok") is None:
@@ -289,7 +352,7 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     jobs = gp.get("jobs") or []
     fits = {f.get("piece"): f.get("fits") for f in lock.get("fit") or []}
     helpers = {}
-    if "com.qemu.it-agent.plist" in jobs or str((lock.get("derived") or {}).get("guest_tools", "")).startswith("installed"):
+    if has_agent:
         helpers["agent"] = any(h.get("frontmost") for h in homes)
     if entry["board"] == "k48ap":
         if "com.qemu.it-ethlink.plist" in jobs and fits.get(USB_ETHERNET):
@@ -384,7 +447,10 @@ def write_md(results, catalog):
             extra = {"lit": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
                      "home": lambda: (" black:" + ",".join(v["dark"]) if v.get("dark") else
                                       " wrong-app" if v.get("wrongApp") else
-                                      " picture off" if not v["ok"] else ""),
+                                      " locked" if v.get("locked") else
+                                      " agent silent" if v.get("unanswered") else
+                                      " picture off" if not v["ok"] else "")
+                                     + (" (frontmost unknown: no agent)" if isinstance(v.get("frontmost"), str) else ""),
                      "lockdown": lambda: f" {v['seconds']} s" if v.get("seconds") is not None else "",
                      "activation": lambda: f" {v.get('state') or '?'}",
                      "afc": lambda: f" {len(v.get('sizes', []))}/4",
@@ -419,8 +485,11 @@ def write_md(results, catalog):
 Produced by `tests/matrix.py` (docs/matrix.md has the builds). Prepare = `firmwarekit create` as the app runs it; lit,
 lockdown, AFC, install, package, persist and shutdown come from tests/drivers/session-driver `--single` with a second boot on
 the same overlay. Screenshots and logs per entry are outside the repo (`screenshots` in matrix-results.json).
-Home judges the home screen itself (audit gap #2): every home/installed screenshot lit (not brightness 0), SpringBoard
-frontmost where an agent can say, and the picture against a committed reference where one exists. GL records the render
+Home judges the home screen itself (audit gap #2): every home/installed screenshot lit (not brightness 0), SpringBoard's
+Home Screen frontmost wherever the boot has an agent (the lock screen, or no answer, fails; 2.x/3.0 have none and say
+"frontmost unknown"), and the picture against a committed reference where one exists (framecheck undoes the guest's
+backlight level first: 2.x runs at ~0.76). Install uses Harness.ipa, or below its min OS (3.1) PAC-MAN Lite from the
+Legacy Store (`test_app` in the JSON). GL records the render
 path (hardware GL vs a software-composited fallback), any refusals, and the frame-reference verdict -- it no longer
 skips. Shutdown judges boot 2's clean power-off as well as boot 1. Helpers: what the prepare baked answers at boot (the
 agent names the frontmost app; on the iPad it_ethlink and it_prefs report on the console), per the lock's seed and fit
@@ -458,8 +527,8 @@ def main():
     ap.add_argument("--dylib", type=Path, default=os.environ.get("LTM_QEMU_DYLIB"), help="libqemu-arm.dylib the helper loads")
     ap.add_argument("--usbmuxd", type=Path, default=sources.path("usbmuxd") / "src/usbmuxd")
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
-    ap.add_argument("--ipa", type=Path, default=sources.path("qemu-ios") / "contrib/it-harness/build/Harness.ipa")
-    ap.add_argument("--bundle-id", default="com.qemuios.harness")
+    ap.add_argument("--ipa", type=Path, help="the install check's IPA (default: per the entry's iOS, see test_app)")
+    ap.add_argument("--bundle-id", help="with --ipa: its bundle id (default: its Info.plist's)")
     ap.add_argument("--launch-at", help="--launch on 2.x (no springboardservices): the icon's normalized X,Y")
     ap.add_argument("--launch", action="store_true", help="after the install, open the app from the Home screen (screenshots launched1-3)")
     ap.add_argument("--frameworks", type=Path, help="where libimobiledevice is loaded from (default Homebrew's)")
@@ -556,7 +625,9 @@ def main():
             drive.mkdir()
             for n in ("session-driver",):
                 os.symlink(tools / n, drive / n)
-            events, rc, serial, shots_from = boot(entry, base, a, helper, drive, env)
+            rec["test_app"] = test_app(entry, a)
+            log(f"  test app: {rec['test_app']['bundle_id']} (min OS {rec['test_app']['min_os']}, {rec['test_app']['source']})")
+            events, rc, serial, shots_from = boot(entry, base, a, helper, drive, env, rec["test_app"])
             rec["checks"], rec["screenshots"], first = judge(entry, events, rc, serial, shots_from, shots, base_before, base)
             rec["events"] = str(shots / "driver.jsonl")
             shutil.copyfile(drive / "driver.jsonl", shots / "driver.jsonl")

@@ -9,7 +9,10 @@ gaps the 2026-09-29 audit found are now caught:
   - the `gl` column reports the render path instead of a hard-coded skip, and a software
     fallback FAILs it where the pipeline installed the GL shim (k48's built GLEngine, n72's
     gles_shim): the 4.3.x "no gldshim device" boots drew a correct home screen in software;
-  - a clean lit-SpringBoard boot with both shutdowns confirmed passes all three.
+  - a clean lit-SpringBoard boot with both shutdowns confirmed passes all three;
+  - (matrix-holes) a lock-screen home shot and an agent that never answers FAIL `home`; with no
+    agent (2.x/3.0) the frontmost is reported unknown; a dim-backlight capture of the reference
+    picture passes (framecheck exposure) while a flipped one still fails.
 """
 import importlib.util, json, os, sys, tempfile
 from pathlib import Path
@@ -51,16 +54,16 @@ def screenshot(stem, lum):
     return {"event": "screenshot", "path": png(stem + ".png", lum), "serial": 1,
             "width": 32, "height": 48, "brightness": mx.framecheck.brightness(png(stem + ".png", lum))}
 
-def boot_events(home_lum, frontmost, boot2_confirmed, boot2_home_lum=200):
+def boot_events(home_lum, frontmost, boot2_confirmed, boot2_home_lum=200, screen="Home Screen"):
     ev = [{"event": "lit", "seconds": 60.0, "brightness": 0.5},
           {"event": "usb", "productType": "iPad1,1", "seconds": 70.0},
           {"event": "activation", "state": "Activated"},
           screenshot("lock", 200), screenshot("home", home_lum), screenshot("installed", home_lum),
-          {"event": "home", "generation": 1, "brightness": home_lum / 255, "frontmost": frontmost},
+          {"event": "home", "generation": 1, "brightness": home_lum / 255, "frontmost": frontmost, "screen": screen if frontmost else ""},
           {"event": "quit", "generation": 1, "confirmed": 15.0, "exited": True, "reason": "the device stopped."},
           {"event": "lit", "seconds": 55.0, "brightness": 0.5},
           screenshot("home2", boot2_home_lum),
-          {"event": "home", "generation": 2, "brightness": boot2_home_lum / 255, "frontmost": frontmost}]
+          {"event": "home", "generation": 2, "brightness": boot2_home_lum / 255, "frontmost": frontmost, "screen": "Home Screen" if frontmost else ""}]
     if boot2_confirmed:
         ev.append({"event": "quit", "generation": 2, "confirmed": 16.0, "exited": True, "reason": "the device stopped."})
     else:
@@ -143,7 +146,48 @@ check("package: a stub seed is a skip", r["package"]["ok"] is None and "stub" in
 r, _, _ = run(good + [offer, report], serial_text=KONSOLE, lock=IPAD_LOCK)
 check("package: offered and reported passes", r["package"]["ok"] is True)
 
+# 8. frontmost (matrix-holes 1/2): wherever the boot has an agent, each home shot must be SpringBoard's Home Screen.
+#    4.2.1's iPod boot-1 home was the lock screen, which is SpringBoard too: it_agent names it `Lock Screen`.
+AGENT_IPOD = {"guest_package": {"family": "n72-ios4", "seed": 8, "jobs": [], "hooks": []}, "derived": {"guest_tools": "installed"}}
+N72 = dict(ENTRY, board="n72ap", id="n72ap-8C148", product_type="iPod2,1", version="4.2.1")
+r, _, first = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True, screen="Lock Screen"),
+                  lock=AGENT_IPOD, entry=N72)
+check("frontmost: a lock-screen home shot fails home", r["home"]["ok"] is False and r["home"]["locked"] == [1] and first == "home")
+check("frontmost: the answer is recorded with its screen", r["home"]["frontmost"][0] == "com.apple.springboard / Lock Screen")
+r, _, _ = run(boot_events(home_lum=200, frontmost="", boot2_confirmed=True) + [offer, report], serial_text=KONSOLE, lock=IPAD_LOCK)
+check("frontmost: an iPad agent that never answers at a home shot fails home",
+      r["home"]["ok"] is False and r["home"]["unanswered"] == [1, 2] and r["home"]["frontmost"] == ["no answer", "no answer"])
+r, _, _ = run(good + [offer, report], serial_text=KONSOLE, lock=IPAD_LOCK)
+check("frontmost: iPad Home Screen passes", r["home"]["ok"] is True and r["home"]["frontmost"][0] == "com.apple.springboard / Home Screen")
+TWO_X = {"guest_package": {"family": "n72-ios2", "seed": 8, "jobs": [], "hooks": ["x"]}, "derived": {"guest_tools": "omitted: 2.x"}}
+r, _, _ = run(boot_events(home_lum=200, frontmost="", boot2_confirmed=True),
+              lock=TWO_X, entry=dict(N72, id="n72ap-5F138", version="2.1.1"))
+check("frontmost: no agent (2.x) says unknown, not a silent pass",
+      r["home"]["ok"] is True and str(r["home"]["frontmost"]).startswith("unknown") and not r["home"].get("unanswered"))
+
+# 9. exposure (matrix-holes 3/4): a 2.x capture is the right picture under the guest's ~0.76 backlight; framecheck
+#    undoes that uniform gain, so the committed full-exposure ref passes it, and a flipped dim frame still fails.
+refs = TMP / "refs"; refs.mkdir()
+grad = Image.new("RGB", (64, 96))
+grad.putdata([((x * 4) % 256, (y * 2) % 256, ((x + y) * 3) % 256) for y in range(96) for x in range(64)])
+grad.save(refs / "n72ap-5F138-home.png")
+def dim_shot(stem, im):
+    p = TMP / (stem + ".png")
+    im.point(lambda v: round(v * 0.76)).resize((320, 480), Image.NEAREST).save(p)
+    return {"event": "screenshot", "path": str(p), "serial": 1, "width": 320, "height": 480,
+            "brightness": mx.framecheck.brightness(str(p))}
+mx.MATRIX_REFS = refs
+def two_x(im):
+    ev = [e for e in boot_events(home_lum=200, frontmost="", boot2_confirmed=True) if e.get("event") != "screenshot"]
+    return run(ev + [dim_shot("home", im)], lock=TWO_X, entry=dict(N72, id="n72ap-5F138", version="2.1.1"))[0]
+r = two_x(grad)
+check("exposure: a 0.76-backlight capture of the ref picture passes", r["home"]["ok"] is True and r["home"]["frame"]["home"] == 0.0
+      and abs(((r["home"].get("exposure") or {}).get("home") or 0) - 0.76) < 0.01)
+r = two_x(grad.transpose(Image.FLIP_TOP_BOTTOM))
+check("exposure: a flipped dim capture still fails the picture", r["home"]["ok"] is False and r["home"]["frame"]["home"] > 0.3)
+mx.MATRIX_REFS = TMP / "no-refs"
+
 import shutil; shutil.rmtree(TMP, ignore_errors=True)
 if fails:
     sys.exit("%d matrix-judge assertion(s) failed" % fails)
-print("matrix judge: home, GL (incl. shim software fallback), boot-2 shutdown, helpers and package verdicts all bite")
+print("matrix judge: home (incl. lock screen, silent agent, unknown frontmost, backlight exposure), GL (incl. shim software fallback), boot-2 shutdown, helpers and package verdicts all bite")
