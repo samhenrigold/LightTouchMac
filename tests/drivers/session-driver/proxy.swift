@@ -25,8 +25,8 @@ struct ProxyConfig: Decodable {
 
 /// The host the proof fetches ask for: one that cannot resolve (RFC 6761 `.invalid`), so only the proxy answers it, with
 /// its own 502 "Destination unavailable" (inside the TLS tunnel for https) once its upstream lookup fails. A real origin
-/// can't tell the proxy's answer from the PAC's DIRECT fallback: 4.2.1's CFNetwork, refusing the proxy's certificate,
-/// retried example.com DIRECT (over slirp's IPv6) and got its 200 before the trust (smoke #66, a wifi0 pcap).
+/// can't tell the proxy's answer from the PAC's DIRECT fallback: CFNetwork, refusing the proxy's certificate, retries
+/// DIRECT (3.1.3 and 4.2.1), and 4.2.1 got example.com's 200 that way before the trust (smoke #66, a wifi0 pcap).
 nonisolated enum ProxyProbe {
     static let host = "proxy-trust.invalid"
     static func answered(_ output: String) -> Bool { output.hasPrefix("HTTP 502") && output.contains("Destination unavailable") }

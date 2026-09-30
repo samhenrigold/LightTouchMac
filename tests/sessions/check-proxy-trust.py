@@ -121,10 +121,11 @@ def main():
         http = one("httpget", label="http")
         check(http.get("ok"), f"{b}: plain HTTP through the proxy (Wi-Fi up, the proxy answers): {http.get('output', '')[:60]!r}")
         before = one("httpget", label="untrusted")
-        # The proxy's untrusted chain: -1200 "secure connection failed" through the PAC (7E18 and 7B500 bases), -1202
-        # "untrusted server certificate" through itproxy's static proxy (the legacy image), -1003 "server with the
-        # specified hostname could not be found" on 4.2.1 (8C148): it refuses the proxy's certificate, then takes the
-        # PAC's DIRECT fallback, and the host (.invalid) has no origin to reach, so only the proxy could have answered.
+        # The proxy's certificate refused. Through the PAC the guest then takes its DIRECT fallback (3.1.3 7E18 and
+        # 4.2.1 8C148 both do, wifi0 pcap, smoke #66), and the host (.invalid) has no origin, so the error is that
+        # lookup's -1003 "can't find host"; the old example.com probe got -1200 there on 3.x (its TLS to the live
+        # origin) and a 200 on 4.2.1. -1202 "untrusted server certificate" through itproxy's static proxy (no fallback;
+        # the legacy image), -1200 where a guest fails the tunnel without falling back. No origin could have answered.
         check(before and not before.get("ok") and before.get("output", "").startswith("ERROR")
               and any(code in before.get("output", "") for code in ("-1200", "-1202", "-1003")),
               f"{b}: HTTPS through the proxy refused before the trust (untrusted certificate): {before.get('output', '')[:90]!r}")
