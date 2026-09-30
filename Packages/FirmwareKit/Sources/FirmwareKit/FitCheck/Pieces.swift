@@ -112,4 +112,31 @@ extension FitCheck {
         guard unread.isEmpty else { return Fit(piece, fits: false, "nothing in this firmware reads \(unread.joined(separator: ", ")): the firmware's default decides") }
         return Fit(piece, fits: true, "read: " + read.joined(separator: "; "))
     }
+
+    // MARK: boot-args
+
+    /// The code-signing boot-args the injected binaries are booted with: they are ad-hoc signed, so AMFI must allow any
+    /// signature (required: without it none of them runs), and the kernel should not enforce code signing (the AppSync
+    /// cache patch and the DYLD_INSERT hooks change signed pages).
+    public static let amfiArgs: Set<String> = ["amfi_allow_any_signature", "cs_enforcement_disable"]
+    static let requiredArgs: Set<String> = ["amfi_allow_any_signature"]
+
+    /// One Fit per boot-arg in `args` (flags like -v aside): fits when the kernel names it. A code-signing arg the kernel
+    /// does not read does not fit; any other is inert there (no effect), which is recorded, not assumed.
+    public static func bootArgs(_ kernel: Data?, _ args: String) -> [Fit] {
+        args.split(separator: " ").map { String($0.prefix { $0 != "=" }) }.filter { !$0.hasPrefix("-") }.map { name in
+            let piece = "boot-arg \(name)"
+            guard let kernel else { return Fit(piece, fits: false, "no decrypted kernelcache to check it against") }
+            if contains(kernel, cString(name)) { return Fit(piece, fits: true, "read by the kernel") }
+            return amfiArgs.contains(name) ? Fit(piece, fits: false, "the kernel does not read it as a boot-arg")
+                : Fit(piece, fits: true, "not read by this kernel: no effect here")
+        }
+    }
+
+    /// bootArgs, recorded in `log`: amfi_allow_any_signature is required; an unread cs_enforcement_disable is a warning.
+    static func checkBootArgs(_ log: Log, kernel: Data?, args: String) throws {
+        for f in bootArgs(kernel, args) {
+            try log.check(f, required: requiredArgs.contains(String(f.piece.dropFirst("boot-arg ".count))), outcome: "kept: inert here")
+        }
+    }
 }

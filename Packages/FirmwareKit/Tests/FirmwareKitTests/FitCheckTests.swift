@@ -320,4 +320,58 @@ enum FitFixture {
             }
         }
     }
+
+    /// The kernels read the boot-args the boards boot with: every iPad kernel at hand the code-signing pair (enable-hsic
+    /// only 4.2.1's); every iPod kernel amfi_allow_any_signature, but only 3.1.3's and 4.2.1's read cs_enforcement_disable
+    /// (2.x and 3.0 have just the _cs_enforcement_disable global): a recorded misfit, not a failure. A kernel copy with
+    /// amfi_allow_any_signature renamed does not fit and fails.
+    @Test func bootArgsReadByTheKernel() throws {
+        let pair = FitCheck.amfiArgs.sorted().map { $0 + "=1" }.joined(separator: " ")
+        let cases: [(URL, String, Bool?)] = [
+            ("172e8297af74b91971a802e6ad137c891f553099", false), ("68b613f78581d36eab96aa5a007001dff142baa3", false),
+            ("8717b3bedc925b587566442ad375aa65d857e79a", true), ("ad9b607439250f2337fe132890dadc4c487beca8", false)].map {
+                (Oracle.ipadCache.appendingPathComponent($0.0 + "/kernelcache.mach"), KBoot.defaultBootArgs, $0.1) }
+            + [("c3c700be49ad227d1152188e7c1e46b8958fd1e4", false), ("9af5625ea34acdd8abeb6fce71a72651d0c815d5", false), ("0f7fc76d9b9aa826b5ab14be9821a315d3d9dc42", false),
+               ("5f4f5c01eda2f811f73167e7d1f82dbeed82367b", true), ("b9efddc7bb4350c237a8d3846af61bbfc8a2f647", true)].map {
+                (Oracle.ipodCache.appendingPathComponent($0.0 + "/kernelcache.mach"), pair, $0.1 ? nil : false) }
+        for (u, args, hsic) in cases where Oracle.exists(u) {
+            let k = try Data(contentsOf: u, options: .alwaysMapped), f = FitCheck.bootArgs(k, args)
+            let cs = args == pair && hsic == false   // an iPod kernel without the cs_enforcement_disable boot-arg
+            #expect(f.first { $0.piece == "boot-arg amfi_allow_any_signature" }?.proof == "read by the kernel", "\(u.path)")
+            #expect(f.first { $0.piece == "boot-arg cs_enforcement_disable" }?.fits == !cs, "\(u.path): \(f)")
+            #expect(f.filter { !$0.fits }.count == (cs ? 1 : 0), "\(u.path): \(f)")
+            let quiet = FitCheck.Log()
+            try FitCheck.checkBootArgs(quiet, kernel: k, args: args)   // an unread cs_enforcement_disable does not fail
+            let hsic = args == pair ? nil : hsic
+            if let hsic { #expect(f.first { $0.piece == "boot-arg enable-hsic" }?.proof == (hsic ? "read by the kernel" : "not read by this kernel: no effect here")) }
+            var b = [UInt8](k)
+            while let at = b.firstRange(of: Array("\0amfi_allow_any_signature\0".utf8)) { b.replaceSubrange(at, with: Array("\0amfi_allow_any_signaturX\0".utf8)) }
+            let log = FitCheck.Log()
+            #expect(throws: FirmwareError.self) { try FitCheck.checkBootArgs(log, kernel: Data(b), args: args) }
+            #expect(log.fits.contains { $0.piece == "boot-arg amfi_allow_any_signature" && !$0.fits })
+        }
+    }
+
+    /// Both boards' boot-file steps record the boot-args' readers: N72Board.bootFiles on 7E18 and K48Board.bootFiles
+    /// (kboot) on 7B500, from the Python decrypt caches.
+    @Test func bootFilesRecordTheBootArgs() throws {
+        for (id, cache, ipsw) in [("n72ap-7E18", Oracle.ipodCache.appendingPathComponent("5f4f5c01eda2f811f73167e7d1f82dbeed82367b"), Oracle.firmware("n72ap-7E18").ipsw),
+                                  ("k48ap-7B500", Oracle.ipadCache.appendingPathComponent("68b613f78581d36eab96aa5a007001dff142baa3"), Oracle.firmware("k48ap-7B500").ipsw)] {
+            guard Oracle.exists(cache.appendingPathComponent("kernelcache.mach")), Oracle.exists(ipsw) else { continue }
+            try Oracle.withTemp { dir in
+                var entry = try Oracle.entry(id)
+                if id.hasPrefix("k48") { entry.recipe?.boot = "kboot" }
+                let o = Preparer.Options(entry: entry, ipsw: ipsw, out: dir, helper: nil, guestTools: dir)
+                let c = Recipe.Context(o, recipe: try #require(entry.recipe)) { _ in }
+                c.restore = try RestoreInfo(c.ipsw)
+                c.dec = cache
+                let board: Board = id.hasPrefix("k48") ? try K48Board(o) : try N72Board(o)
+                try board.inspect(c)
+                _ = try board.identity(seed: "fit")
+                try board.bootFiles(c)
+                #expect(c.fit.fits.filter { FitCheck.amfiArgs.contains(String($0.piece.dropFirst("boot-arg ".count))) }.count == 2, "\(id): \(c.fit.fits)")
+                #expect(c.fit.fits.contains { $0.piece == "boot-arg amfi_allow_any_signature" && $0.fits })
+            }
+        }
+    }
 }
