@@ -41,6 +41,10 @@ struct CatalogApp: Codable, Sendable {
     struct Compat: Codable, Sendable {
         let compatible: Bool
         let reasons: [String]
+        /// UIDeviceFamily: "1" iPhone/iPod touch, "2" iPad.
+        var deviceFamily: [String]? = nil
+
+        enum CodingKeys: String, CodingKey { case compatible, reasons, deviceFamily = "device_family" }
     }
 
     enum CodingKeys: String, CodingKey {
