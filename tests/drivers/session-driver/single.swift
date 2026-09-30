@@ -32,6 +32,10 @@ struct SingleConfig: Decodable {
     /// Where the icon is (normalized), for firmware whose SpringBoard has no springboardservices (2.x): the reorder
     /// is skipped, and a tap on the first-install "Edit Home Screen" tip's Dismiss goes first.
     var launchAt: [Double]?
+    /// An iPad's launch goes through the guest agent (as the app's sidebar launches); then a tap at this normalized panel
+    /// point (portrait top is x 0, portrait left is y 1) and screenshots tapped1-2, 3 s apart. tests/matrix.py --gl-tap
+    /// opens the Harness's "GL: rotating triangle" with it.
+    var tapAfterLaunch: [Double]?
 }
 
 @MainActor func runSingle(_ s: SingleConfig) async {
@@ -224,7 +228,9 @@ struct SingleConfig: Decodable {
     if s.install != false { await install(d) }
     try? await Task.sleep(for: .seconds(3))
     await wakeForShot(d, "installed")   // wake first: the panel may have slept during the install
-    if s.launch == true { await launch(d, at: s.launchAt) }
+    if s.launch == true {
+        if ipad { await launchIPad(d, tap: s.tapAfterLaunch) } else { await launch(d, at: s.launchAt) }
+    }
 
     // The persist marker: a file that must still be there after the clean shutdown and the second boot.
     let marker = "ltm-matrix-persist.bin"
@@ -259,6 +265,30 @@ struct SingleConfig: Decodable {
     d.serial?.finish()
     emit("done")
     exit(0)
+}
+
+/// The installed app (config.bundleID) opened through the guest agent, then `tap`: screenshots launched1, tapped1-2.
+@MainActor func launchIPad(_ d: Device, tap: [Double]?) async {
+    var event: [String: Any] = ["device": d.name, "bundleID": config.bundleID]
+    let agent = GuestAgent(link: d.process.link, cache: GuestAgentCache())
+    let guest = GuestServices(agent: agent, packaged: true)
+    event["agent"] = await agent.waitAlive(seconds: 60)
+    do { try await guest.launch(config.bundleID) } catch { event["launchError"] = "\(error)" }
+    try? await Task.sleep(for: .seconds(8))
+    event["foreground"] = (try? await guest.foregroundAppName()) ?? ""
+    if let path = d.screenshot("launched1") { event["shot1"] = path }
+    if let tap, tap.count >= 2 {
+        await d.tap(tap[0], tap[1])
+        for i in 1...2 {
+            try? await Task.sleep(for: .seconds(3))
+            if let path = d.screenshot("tapped\(i)") { event["tapped\(i)"] = path }
+        }
+    }
+    emit("launched", event)
+    d.process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))
+    d.process.link.send(.button(0, down: false))
+    try? await Task.sleep(for: .seconds(3))
+    d.screenshot("afterlaunch")
 }
 
 /// iOS 5's Setup Assistant on a fresh iPad, walked as qemu-ios tests/ipad1/regress.py's gles leg walks it (SETUP_5):

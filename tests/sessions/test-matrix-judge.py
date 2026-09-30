@@ -6,9 +6,9 @@ gaps the 2026-09-29 audit found are now caught:
   - a black/slept home screenshot FAILs the `home` check (audit finding 3 / gap #2);
   - a wrong frontmost app FAILs `home`;
   - a boot-2 quit that never confirms FAILs `shutdown` (finding 4 / gap #2);
-  - the `gl` column reports the render path instead of a hard-coded skip, and a software
-    fallback FAILs it where the pipeline installed the GL shim (k48's built GLEngine, n72's
-    gles_shim): the 4.3.x "no gldshim device" boots drew a correct home screen in software;
+  - the `gl` column reports the render path instead of a hard-coded skip, and a boot whose log never
+    says CoreAnimation took the GL path FAILs it where the pipeline installed the GL front end (k48's
+    built OpenGLES, n72's gles_shim): the 4.3.x boots that lost GL drew a correct home screen in software;
   - a clean lit-SpringBoard boot with both shutdowns confirmed passes all three;
   - (matrix-holes) a lock-screen home shot and an agent that never answers FAIL `home`; with no
     agent (2.x/3.0) the frontmost is reported unknown; a dim-backlight capture of the reference
@@ -31,9 +31,9 @@ def png(name, lum):
     Image.new("RGB", (32, 48), (lum, lum, lum)).save(p)
     return str(p)
 
-K48_SHIM = {"guest_package": None, "tool": {"built": {"GLEngine": "GLEngine"}}}   # K48Recipe's lock
-N72_SHIM = {"guest_package": None, "derived": {"gles_shim": True, "gles_engine": "MBXGLEngine"}}
-NO_SHIM = {"guest_package": None, "tool": {"built": {"GLEngine": None}}}
+K48_SHIM = {"guest_package": None, "tool": {"built": {"OpenGLES": "OpenGLES"}}}   # K48Recipe's lock
+N72_SHIM = {"guest_package": None, "derived": {"gles_shim": True, "gles_engine": "OpenGLES"}}
+NO_SHIM = {"guest_package": None, "tool": {"built": {"OpenGLES": None}}}
 
 def base_dir(lock=None):
     b = TMP / ("base-%d" % len(list(TMP.glob("base-*"))))
@@ -95,29 +95,29 @@ r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirme
 check("boot-2 unconfirmed fails shutdown", r["shutdown"]["ok"] is False and r["shutdown"]["second_ok"] is False)
 check("boot-1 shutdown still recorded", r["shutdown"]["seconds"] == 15.0)
 
-# 4. software-CA fallback with the GL shim installed: the home screen is lit and right (software CA
-#    draws it), so only the gl column can catch it, and it must FAIL, on k48 and n72 locks alike.
-SW = ("[glishim] gliInitializeLibrary\n"
-      "[glishim] libGFXShared registered no gldshim device (GLRendererFloatQEMU.bundle missing?): no GL\n") * 3
+# 4. software CA with the GL front end installed: the home screen is lit and right (software CA draws it), so only the
+#    gl column can catch it, and it must FAIL, on k48 and n72 locks alike. The front end's own startup lines are not
+#    the GL path: only CoreAnimation taking it is (contrib/gles-public fe_ca_path).
+SW = "[gles] OpenGLES front end (contrib/gles-public): 340 gl exports, 197 to hand thunks, 143 forwarded\n" * 3
+HW = SW + "[gles] CoreAnimation composites through the host (first attachImage:toCoreSurface:invertedRender:)\n"
 for name, lock in (("k48", K48_SHIM), ("n72", N72_SHIM)):
     r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True), serial_text=SW, lock=lock)
     check(f"{name}: home still passes (software CA draws it)", r["home"]["ok"] is True)
-    check(f"{name}: shim installed + software fallback FAILs gl", r["gl"]["ok"] is False and "software" in r["gl"]["path"])
-r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True),
-              serial_text="[glishim] libGFXShared lacks gfxPluginConnectAll/gfxGet*WithID: no GL\n")
-check("any glishim 'no GL' give-up FAILs gl", r["gl"]["ok"] is False)
+    check(f"{name}: front end installed, CA never on the GL path FAILs gl", r["gl"]["ok"] is False and "software" in r["gl"]["path"])
 check("gl not a hard-coded skip note", "gl-coverage not merged" not in json.dumps(r["gl"]))
-# no shim installed: software CA is the recipe's own choice; it shows, but the picture decides.
+# 2.x's EGL compositor says so through gles2x.c's first pixmap surface
+r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True), lock=N72_SHIM,
+              serial_text="[gles] egl: first pixmap surface 320x480: CoreAnimation renders through the host\n")
+check("n72 2.x: the EGL pixmap line is the GL path", r["gl"]["ok"] is True)
+# no front end installed: software CA is the recipe's own choice; it shows, but the picture decides.
 r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True), serial_text=SW, lock=NO_SHIM)
-check("no shim: software path shows, not failed by gl", "software" in r["gl"]["path"] and r["gl"]["ok"] is True)
+check("no front end: software path shows, not failed by gl", "software" in r["gl"]["path"] and r["gl"]["ok"] is True)
 
 # 5. clean lit-SpringBoard boot, both shutdowns confirmed: home / gl / shutdown all pass.
-r, _, first = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True),
-                  serial_text="[glishim] gliInitializeLibrary\n[glishim] gld plugin registered, device 0x1027000\n")
+r, _, first = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True), serial_text=HW)
 check("good boot: home ok", r["home"]["ok"] is True)
 check("good boot: shutdown ok (both boots)", r["shutdown"]["ok"] is True and r["shutdown"]["second_ok"] is True)
-check("good boot: gl ok on hardware path", r["gl"]["ok"] is True and r["gl"]["path"] == "hardware GL"
-      and r["gl"]["gld_registered"] == 1)
+check("good boot: gl ok on the hardware path", r["gl"]["ok"] is True and "composites through the host" in r["gl"]["path"])
 # (afc/persist aren't fabricated here, so the row's first failure is afc -- our three checks must not be it)
 check("good boot: home/gl/shutdown are not the failure", first not in ("home", "gl", "shutdown"))
 
@@ -223,4 +223,4 @@ check("md: the first failure carries the label", "stuck: serial silent for 200 s
 import shutil; shutil.rmtree(TMP, ignore_errors=True)
 if fails:
     sys.exit("%d matrix-judge assertion(s) failed" % fails)
-print("matrix judge: home (incl. lock screen, silent agent, unknown frontmost, backlight exposure), GL (incl. shim software fallback), boot-2 shutdown, helpers, package and deadline-triage (slow/stuck) verdicts all bite")
+print("matrix judge: home (incl. lock screen, silent agent, unknown frontmost, backlight exposure), GL (incl. software CA with the front end installed), boot-2 shutdown, helpers, package and deadline-triage (slow/stuck) verdicts all bite")

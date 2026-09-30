@@ -251,7 +251,8 @@ def boot(entry, base, a, helper, work, env, app):
            "ipadBase": str(base) if board == "ipad" else "", "timeout": a.boot_timeout - 20,
            "single": {"board": board, "base": str(base), "reboot": True, "lockdownTZ": str(a.lockdown_tz),
                       "install": (entry.get("recipe") or {}).get("options", {}).get("appsync", False), "launch": a.launch,
-                      **({"launchAt": [float(v) for v in a.launch_at.split(",")]} if a.launch_at else {})}}
+                      **({"launchAt": [float(v) for v in a.launch_at.split(",")]} if a.launch_at else {}),
+                      **({"tapAfterLaunch": [float(v) for v in a.gl_tap.split(",")]} if a.gl_tap else {})}}
     if a.frameworks:
         cfg["frameworks"] = str(a.frameworks)
     itpack = a.guest_tools / ("armv7.itpack" if board == "ipad" else "armv6.itpack")
@@ -392,23 +393,24 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base, ti
     # gl (audit gap #1/#2: this column was a hard-coded skip). The matrix boots with GL on, so its
     # home/installed screenshots ARE GL output -- a black/slept or wrong picture already fails `home`
     # above (and the framecheck diff there is the frame reference). Here we also record the render
-    # path and refusals. Where the pipeline installed the GL shim (the lock's built GLEngine on k48,
-    # derived.gles_shim on n72), the shim giving up on GL ("[glishim] ...: no GL", 4.3.x's "no gldshim
-    # device") is a FAIL: software CoreAnimation still draws a correct home screen, so the pictures
-    # cannot tell, and that fallback is the hollow pass the 09-29 test audit warned about.
+    # path and refusals. Software CoreAnimation still draws a correct home screen, so the pictures cannot
+    # tell the paths apart: where the pipeline installed the GL front end (the lock's built OpenGLES on k48,
+    # derived.gles_shim on n72), the log must say CoreAnimation took the GL path (qemu-ios contrib/gles-public
+    # fe_ca_path, 2.x gles2x.c's first pixmap surface), else a FAIL -- the hollow pass the 09-29 test audit warned about.
     serial_text = serial.read_text(errors="replace") if serial.exists() else ""
-    sw_fallback = bool(re.search(r"\[glishim\][^\n]*: no GL\r?$|no gldshim device", serial_text, re.M))
+    native_log = shots_from / "native.log"
+    host_text = native_log.read_text(errors="replace") if native_log.exists() else ""
+    gl_path = re.search(r"\[gles\][^\n]*CoreAnimation (composites|renders) through the host[^\n]*", serial_text + host_text)
     gl_rejects = len(re.findall(r"unsupported graphics hardware|gl[ie]s?[-_ ]?reject", serial_text, re.I))
     lock = json.loads((base / "device.lock.json").read_text())
-    shim = bool(((lock.get("tool") or {}).get("built") or {}).get("GLEngine") or (lock.get("derived") or {}).get("gles_shim"))
+    shim = bool(((lock.get("tool") or {}).get("built") or {}).get("OpenGLES") or (lock.get("derived") or {}).get("gles_shim"))
     home_ok = r["home"].get("ok")
-    r["gl"] = {"ok": False if shim and sw_fallback else (bool(home_ok) and gl_rejects == 0) if home_ok is not None else None,
-               "path": "software CA (no gldshim device)" if sw_fallback else "hardware GL",
-               "shim": shim, "gld_registered": serial_text.count("[glishim] gld plugin registered"),
-               "rejects": gl_rejects,
+    r["gl"] = {"ok": False if shim and not gl_path else (bool(home_ok) and gl_rejects == 0) if home_ok is not None else None,
+               "path": gl_path.group(0) if gl_path else "software CA (no GL path in the log)",
+               "shim": shim, "rejects": gl_rejects,
                "picture": {n: frame[n]["frac"] for n in frame} or None,
-               "note": (("the GL shim is installed but fell back to software CoreAnimation (no gldshim device, no GL)"
-                         if shim else "software-composited: the pipeline installed no GL shim") if sw_fallback else
+               "note": (("the GL front end is installed but CoreAnimation never took the GL path" if shim else
+                         "software-composited: the pipeline installed no GL front end") if not gl_path else
                         (None if home_ok is not None else "no home screenshot to judge"))}
     per = find("persist")
     r["persist"] = {"ok": bool(per) and per[0].get("kept") and per[0].get("same"), "error": per[0].get("error") if per else None}
@@ -567,6 +569,8 @@ def main():
     ap.add_argument("--bundle-id", help="with --ipa: its bundle id (default: its Info.plist's)")
     ap.add_argument("--launch-at", help="--launch on 2.x (no springboardservices): the icon's normalized X,Y")
     ap.add_argument("--launch", action="store_true", help="after the install, open the app from the Home screen (screenshots launched1-3)")
+    ap.add_argument("--gl-tap", help="--launch on an iPad: then tap this normalized panel X,Y (the Harness's GL row: 0.343,0.5) "
+                                     "and screenshot tapped1-2")
     ap.add_argument("--frameworks", type=Path, help="where libimobiledevice is loaded from (default Homebrew's)")
     ap.add_argument("--qemu-ios", type=Path, default=sources.path("qemu-ios"))
     ap.add_argument("--patcher", type=Path, default=Path(os.environ.get("FIRMWAREKIT_IBOOT_PATCHER", PATCHER)), help="iBoot32Patcher for the k48 recipe")
