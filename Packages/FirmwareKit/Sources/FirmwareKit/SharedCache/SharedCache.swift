@@ -147,9 +147,13 @@ public enum AppSyncCachePatch {
     public static let patch: [UInt8] = [0x00, 0x20, 0x70, 0x47]
 
     static func looksLikeThumbEntry(_ b: [UInt8]) -> Bool {
-        let hw = UInt16(b[0]) | UInt16(b[1]) << 8
-        if hw & 0xFF00 == 0xB500 { return true }                        // push {..., lr}
-        if hw == 0xE92D { return (UInt16(b[2]) | UInt16(b[3]) << 8) & 0x4000 != 0 }   // push.w with LR
+        let hw = UInt16(b[0]) | UInt16(b[1]) << 8, hw2 = UInt16(b[2]) | UInt16(b[3]) << 8
+        if hw & 0xFF00 == 0xB500 { return true }                        // push {..., lr}  (3.x/4.x, 5.0 beta 9A5220p)
+        if hw == 0xE92D { return hw2 & 0x4000 != 0 }                    // push.w with LR
+        // iOS 5.x libmis exports MISValidateSignature as a tail-thunk `movs rN,#imm ; b.w <impl>`
+        // (9A5288d..9B206: 0022 fff7). Overwriting its first word with `movs r0,#0 ; bx lr` returns
+        // success just as patching a framed entry does. Recognised by shape, not by build.
+        if hw & 0xF800 == 0x2000 { return hw2 & 0xF800 == 0xF000 }      // movs rN,#imm then a 32-bit branch
         return false
     }
 

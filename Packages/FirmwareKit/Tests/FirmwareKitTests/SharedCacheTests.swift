@@ -119,10 +119,46 @@ enum Fixtures {
 
 struct SharedCacheTests {
     @Test func thumbEntryCheck() {
-        #expect(AppSyncCachePatch.looksLikeThumbEntry([0x80, 0xb5, 0x00, 0xaf]))
-        #expect(AppSyncCachePatch.looksLikeThumbEntry([0x2d, 0xe9, 0xf0, 0x4f]))
-        #expect(!AppSyncCachePatch.looksLikeThumbEntry([0x2d, 0xe9, 0xf0, 0x0f]))
-        #expect(!AppSyncCachePatch.looksLikeThumbEntry([0x00, 0x20, 0x70, 0x47]))
+        #expect(AppSyncCachePatch.looksLikeThumbEntry([0x80, 0xb5, 0x00, 0xaf]))   // push {r7,lr}  (3.x/4.x/5.0b)
+        #expect(AppSyncCachePatch.looksLikeThumbEntry([0x2d, 0xe9, 0xf0, 0x4f]))   // push.w with lr
+        #expect(AppSyncCachePatch.looksLikeThumbEntry([0x00, 0x22, 0xff, 0xf7]))   // 5.x thunk: movs r2,#0 ; b.w
+        #expect(!AppSyncCachePatch.looksLikeThumbEntry([0x2d, 0xe9, 0xf0, 0x0f]))  // push.w without lr
+        #expect(!AppSyncCachePatch.looksLikeThumbEntry([0x00, 0x20, 0x70, 0x47]))  // movs r0,#0 ; bx lr (no branch)
+        #expect(!AppSyncCachePatch.looksLikeThumbEntry([0x00, 0x22, 0x00, 0x22]))  // movs ; movs (no branch)
+        #expect(!AppSyncCachePatch.looksLikeThumbEntry([0x00, 0x00, 0x00, 0x00]))  // data
+    }
+
+    /// The 5.x finder end to end: on a real 5.x cache MISValidateSignature is a `movs;b.w` thunk (0022 fff7);
+    /// the patch locates it by symbol and rewrites its first word, and a second run reports it done.
+    @Test(arguments: ["9B206"])
+    func patches5x(build: String) throws {
+        guard Fixtures.hasRootfs(build) else { return }
+        let dir = try Fixtures.tempDir("dsc5")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = try Fixtures.cache(build, to: dir)
+        let dry = try AppSyncCachePatch.patchCache(at: cache, apply: false)
+        #expect(dry.contains("0022fff7 -> 00207047"))   // the thunk word, becoming movs r0,#0 ; bx lr
+        let (va, _) = try DyldSharedCache(contentsOf: cache).findSymbol(AppSyncCachePatch.target)
+        #expect(try AppSyncCachePatch.patchCache(at: cache).hasPrefix("patched"))
+        let dsc = try DyldSharedCache(contentsOf: cache)
+        let off = dsc.fileOffset(of: va)!
+        #expect([UInt8](dsc.data[off..<off + 4]) == AppSyncCachePatch.patch)
+        #expect(try AppSyncCachePatch.patchCache(at: cache).contains("already patched"))
+    }
+
+    /// Must refuse: when the symbol's first word is not a Thumb function entry (here clobbered to data), the
+    /// patch throws rather than scribble on the wrong bytes — the guard that lets 5.x through must still
+    /// reject a cache whose entry it cannot recognise.
+    @Test func refusesNonEntry() throws {
+        guard Fixtures.hasRootfs("9B206") else { return }
+        let dir = try Fixtures.tempDir("dsc-refuse")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = try Fixtures.cache("9B206", to: dir)
+        let (va, _) = try DyldSharedCache(contentsOf: cache).findSymbol(AppSyncCachePatch.target)
+        let off = try DyldSharedCache(contentsOf: cache).fileOffset(of: va)!
+        let fh = try FileHandle(forUpdating: cache)
+        try fh.seek(toOffset: UInt64(off)); try fh.write(contentsOf: Data([0, 0, 0, 0])); try fh.close()
+        #expect(throws: FirmwareError.self) { try AppSyncCachePatch.patchCache(at: cache) }
     }
 
     /// Byte-identical patched cache vs appsync_cachepatch.py --patch, and the same status lines.
