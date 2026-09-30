@@ -5380,11 +5380,11 @@
   "version": "1.1",
   "board": "n45ap",
   "status": "experimental",
-  "when": "2026-09-30T01:21:22+00:00",
+  "when": "2026-09-30T02:30:19+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/ltm/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/qemu-ios/build/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/wifi1g-scratch/ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/wifi1g-scratch/qemu-ios/build-native/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
   },
   "keys": {
    "total": 1,
@@ -5393,7 +5393,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 110.5,
+   "seconds": 81.1,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -5406,7 +5406,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-scratch/n45ap-3A101a/firmwarekit.log",
+   "log": "/Users/shg/Developer/wifi1g-scratch/mx/scratch/n45ap-3A101a/firmwarekit.log",
    "lock": {
     "boot_strategy": null,
     "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
@@ -5416,10 +5416,16 @@
     "kernel": "Darwin Kernel Version 9.0.0d1: Thu Sep  6 23:26:45 PDT 2007; root:xnu-933.0.0.203.obj~6/RELEASE_ARM_S5L8900XRB"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/Developer/wifi1g-scratch/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "--ipa"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 11.9
+    "seconds": 8.0
    },
    "home": {
     "ok": true,
@@ -5428,17 +5434,17 @@
      "home2": 0.225,
      "installed": 0.225
     },
-    "frontmost": [
-     "",
-     ""
-    ],
+    "frontmost": "unknown (no guest agent on this build)",
     "dark": null,
     "wrongApp": null,
-    "frame": null
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 8.6,
+    "seconds": 6.5,
     "productType": "iPod1,1"
    },
    "activation": {
@@ -5465,9 +5471,15 @@
     "reported": 8,
     "result": 0
    },
+   "helpers": {
+    "ok": null,
+    "note": "no guest helpers baked"
+   },
    "gl": {
     "ok": true,
     "path": "hardware GL",
+    "shim": false,
+    "gld_registered": 0,
     "rejects": 0,
     "picture": null,
     "note": null
@@ -5476,16 +5488,16 @@
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 12.3,
-     "lockdown": 2.2
+     "lit": 8.8,
+     "lockdown": 4.4
     },
     "restartedApps": false
    },
    "shutdown": {
     "ok": true,
-    "seconds": 16.6,
+    "seconds": 15.1,
     "reason": "The iPod stopped.",
-    "second": 15.3,
+    "second": 15.2,
     "second_ok": true,
     "boot2_reason": "The iPod stopped."
    },
@@ -5493,14 +5505,13 @@
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/home2.png"
+   "lock": "/Users/shg/Developer/wifi1g-scratch/mx/results/n45ap-3A101a/lock.png",
+   "home": "/Users/shg/Developer/wifi1g-scratch/mx/results/n45ap-3A101a/home.png",
+   "installed": "/Users/shg/Developer/wifi1g-scratch/mx/results/n45ap-3A101a/installed.png",
+   "lock2": "/Users/shg/Developer/wifi1g-scratch/mx/results/n45ap-3A101a/lock2.png",
+   "home2": "/Users/shg/Developer/wifi1g-scratch/mx/results/n45ap-3A101a/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/driver.jsonl",
-  "triage": "ipod1g-buzzer 09-29 (qemu-ios ipod1g-buzzer: WM8758 on i2c1, I2S1 on dmac1 with host-output off, timers 0-3, the piezo on timer 1; N45Recipe keeps coreaudiod.plist, i.e. mediaserverd; --frameworks a fresh build-package-native prefix, the SSLv3 libimobiledevice): every check passes; mediaserverd runs on both boots with no crash and the WM8758's output attaches. The buzzer itself is judged outside the matrix: headless WAV, key taps and the lock sound give timer-1 tones at the guest's own START times (smoke #56, fidelity ledger N72 rows 57/58)."
+  "events": "/Users/shg/Developer/wifi1g-scratch/mx/results/n45ap-3A101a/driver.jsonl"
  },
  "n45ap-4B1": {
   "version": "1.1.5",

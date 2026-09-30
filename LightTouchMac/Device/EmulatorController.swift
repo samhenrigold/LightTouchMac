@@ -352,10 +352,14 @@ final class EmulatorController {
             guard try pinOverlay(overlay) else { return nil }
             let usbSession = usbmux.start(paths: instance.paths)
             openSerialLog()
+            // As the 2G: the web proxy's guestfwd rides on an explicit wifi0 (the machine's own has none).
+            let netdev = network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
             return BootRecipe.iPod1G(.init(bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Bundled.filesRoot),
                                            iBoot: files.boot.path, nand: files.nand.path, writableNOR: nor.path, overlay: overlay.path,
-                                           usbAddress: usbSession?.guestAddress, guestPackage: composeGuestOffer(), machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
-                                     serial: serialCapture?.argument ?? "null", audio: ["-audio", "driver=coreaudio,out.buffer-count=16"])
+                                           usbAddress: usbSession?.guestAddress, wifi: network, guestPackage: composeGuestOffer(),
+                                           machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
+                                     serial: serialCapture?.argument ?? "null", audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
+                                     netdev: netdev)
         } catch {
             failBoot(error)
             return nil

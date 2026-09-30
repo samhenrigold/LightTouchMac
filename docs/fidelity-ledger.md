@@ -43,8 +43,8 @@ the lower class in the summary.
 | Board | R | H | P | S | rows |
 |---|---|---|---|---|---|
 | K48 iPad 1 | 26 | 8 | 6 | 20 | 60 |
-| N72 iPod touch 2G (and the N45 1G parts it shares or adds) | 21 | 6 | 8 | 23 | 58 |
-| Guest side (both boards: boot-args, injected components, image edits, synthesised state) | 0 | 0 | 42 | 0 | 42 |
+| N72 iPod touch 2G (and the N45 1G parts it shares or adds) | 21 | 7 | 8 | 23 | 59 |
+| Guest side (both boards: boot-args, injected components, image edits, synthesised state) | 0 | 0 | 43 | 0 | 43 |
 
 The distance to "boots any iOS unchanged" is the H and P rows. The two that decided it were the IOP
 (every NAND and SDIO byte went through a C reimplementation of one specific firmware's mailbox ABI;
@@ -182,13 +182,14 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 49 | MBX register block (PowerVR MBX Lite) | `hw/arm/ipod_touch_mbx.c` | S | **The GPU is absent.** Fixed ID words, idle status; the interrupt block (mask read-back, status set by the driver's software interrupt, write-1-to-clear, the line) is register-level since `gles-1x`; `IT_MBX_COMPLETE` fakes completions. The 1G uses the same model (it was an id stub). | MBX TA/ISP/TSP with an undocumented command format, 120-250 d |
 | 50 | OpenGL ES path | `contrib/it-gles/mbxshim.c`, `gles2x.c`, `hw/arm/gles-host.c` | P | 3.x/4.x: MBXGLEngine.bundle replaced by a shim forwarding every dispatch slot to host GL (3.0, no shared cache and 2.x's dyld: the same source legacy-linked, `MBXGLEngine-30`, guest package `n72-ios30`; qemu-ios `gles-30`). 1.x/2.x: `OpenGLES.framework/OpenGLES` (the IMG MBX driver itself) replaced by `gles2x.c`, the same core under the firmware's 218 export names (guest package `n72-ios2`); SpringBoard composites through it with CA_ENABLE_OGL=1 (2.1.1: software-CA frame rates, about a quarter less host CPU on the launch zoom). 1.x (the 1G, 3A101a): the same file built without EAGL under 1.x's 186 names (`OpenGLES-1x`, guest package `n45-ios1`), LayerKit with LK_ENABLE_OGL=1 (software frame rates, a quarter less host CPU on the launch zoom). | Row 49 |
 | 51 | SWI | `hw/arm/ipod_touch_swi.c` | S | RAM; busy bit self-clears. | 1 d |
-| 52 | SDIO host controller | `hw/arm/ipod_touch_sdio.c:45-121, 983-1080` | R | CMD5/52/53, CCCR/FBR/CIS. | – |
+| 52 | SDIO host controller | `hw/arm/ipod_touch_sdio.c:45-121, 983-1080` | R | CMD5/52/53, CCCR/FBR/CIS. N45: the same controller at IRQ 0x2A with the 88W8686 as its card (row 59): function 1's CMD52/CMD53 and the card's DAT1 interrupt are the card's; the FBR interface code (7, WLAN) and one function come from its identity. | – |
 | 53 | BCM4325 Wi-Fi dongle | `ipod_touch_sdio.c:127-178, 296-440, 540-680` | H | Firmware stored, never run; CDC/BDC in C; fake BSS; off by default. | 60-120 d, infeasible |
 | 54 | Host input automation (keys→buttons, on-screen keyboard taps, power-off slide) | `ipod_touch_2g.c:2020-2145, 2435-2650` | H | Host synthesises GPIO/touch events. | None |
 | 55 | Guest services (agent, keyboard, pasteboard, package) | `hw/arm/guest-services.c:98-183`, `hw/arm/ipod-agent.c` | P | Injected daemons/dylibs over the hypercall. | USB lockdown/AFC tooling for what it covers, 10-20 d |
 | 56 | TCG `it-hle` | `target/arm/tcg/it-hle.c` | P (inert) | Opt-in memcpy hoist at fixed 7E18 addresses. | Delete, 0 d |
 | 57 | WM8758 codec (N45, i2c1 0x1a) | `hw/arm/ipod_touch_wm8758.c` | R/S | The write-only 2-wire control port (7-bit register, 9-bit value, register 0 resets): what AppleWM8758Audio's start needs. No analogue path (headphone jack, hp_detect), so no Beep reaches the host. | Output path + jack detect after smoke #56, 1-2 d |
 | 58 | Piezo buzzer (N45, timer 1) | `hw/arm/ipod_touch_piezo.c` | R | The stock chain drives it unmodified: mediaserverd (Celestial's Buzz, SystemSoundBuzzToneSequences.plist) → AppleS5L8900XTimerDevice → timer 1 registers (row 8). The pin's square wave is rendered into a 44.1 kHz host voice 40 ms behind the guest clock. The transducer is ideal (no resonance or filtering); `amplitude` is a loudness knob. | A piezo response curve, if anyone can measure one, 0.5 d |
+| 59 | Marvell 88W8686 Wi-Fi card (N45, SDIO) | `hw/arm/mrvl8686.c`, `ipod_touch_1g.c` (the `wifi` property) | R (SDIO) / H (firmware) | AppleMRVL868x-69 runs unmodified. Register level: function 1's registers and I/O port, the helper download, the helper's EEPROM read (Wi-Fi MAC, TX calibration), the main program's block-by-block download with the image's CRC-32 per header and block (a bad one sets the error bit), FIRMWARE_OK, the host interrupt status (write 0 to clear) under its mask, deep sleep and its wake event. The helper and the 120 KiB firmware the kext carries are accepted and never run: the running firmware's host commands, events and TxPD/RxPD data path are answered in C, with one open access point ("qemu-ios", channel 6) behind slirp. Invented: the EEPROM (MAC 00:1b:63:45:1e:01, calibration bytes) and the firmware version (9.70.3.p24). `tests/ipod/test_mrvl8686.py`. | Run the Marvell firmware (its ARM core, MAC and a radio model), 60-120 d, infeasible |
 
 ## Guest side: patches, shims, boot-args, synthesised state (both boards)
 
@@ -241,6 +242,7 @@ Everything here is class P. "Replaces" says what a real device has instead.
 | NAND: offline FTL/VFL writer ("restore + power cut before the CXT flush", first boot does a R/O restore) | `imgtools/ipad1_nand.py`, `imgtools/ipod2g_nand.py` | The on-flash state `restored`/asr leave. Bets on the FTL format (YaFTL 3.x/4.x; iOS 5 adds LwVM). | Stock restore, 1-2 d; then no format knowledge in the pipeline |
 | `gid-blobs.bin` (KBAG→key from the public key page) | `imgtools/ipad1_gid.py` | The fused GID key. | Impossible; this is the honest substitute |
 | Synthetic identity (serial, ECID, die-id, MACs) | `imgtools/ipad1_kboot.py synth_identity` | SysCfg of a real unit. | – (must stay synthetic) |
+| 1.x Wi-Fi preferences (N45): the en0 AirPort service in `preferences.plist` (carrying the web proxy's PAC, as on the 2G) and `com.apple.wifi.plist` with `AllowEnable` and "qemu-ios" in "List of known networks" | FirmwareKit `N45Recipe.wifiKnownNetwork` | A device that has joined the emulator's access point before, in configd's own format. 1.1.5 (4B1) auto-joins from it at boot; 1.1 (3A101a) shows Wi-Fi on and the network but needs one tap (smoke #61). | Let the user join once; nothing faithful to gain |
 | kboot DeviceTree fill (`chosen/*`, clocks, NAND geometry on `disk` and, for iBoot-1219's 5.x layout, on flash-controller0 with `ce-bitmap`, `display-rotation 270`, `lcd-panel-id`, baseband unmatched, `sgx` off) | `ipad1_kboot.py:284-331` | What iBoot writes into the DT before handoff. | The iBoot path already does most of it (default); kboot stays a debug path |
 
 ### Per-build assumptions still in the emulator and pipeline
