@@ -173,6 +173,12 @@ final class Delegate: DeviceLibraryDelegate {
         // A download started elsewhere (an IPSW dropped on the empty area) brings its entry in.
         FirmwareJobs.shared.jobs["n72ap-8B117"] = .downloading(fraction: 0.2)
         if !vc.entries.contains(where: { $0.id == "n72ap-8B117" }) { fail("a job's entry didn't join the sidebar") }
+        // A failed download leaves with Delete and stays gone.
+        FirmwareJobs.shared.jobs["n72ap-8B117"] = .failed("x")
+        vc.select(catalog.entry(id: "n72ap-8B117")!)
+        outline.keyDown(with: delete)
+        FirmwareJobs.shared.jobs["n72ap-8C148"] = nil   // the next state change
+        if vc.entries.contains(where: { $0.id == "n72ap-8B117" }) { fail("a failed download's row came back") }
         FirmwareJobs.shared.jobs = [:]
 
         // Empty: the sidebar's own Add Device….

@@ -155,7 +155,9 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
 
     /// A device prepared, a download started or an IPSW dropped for an entry not in the list: it joins the list.
     private func adoptOwned() {
-        let owned = host.library.instances.map(\.firmware) + FirmwareJobs.shared.jobs.keys
+        // A failed job stays listed for its row's error; it doesn't bring back a row the user removed.
+        let running = FirmwareJobs.shared.jobs.compactMap { id, job -> String? in if case .failed = job { nil } else { id } }
+        let owned = host.library.instances.map(\.firmware) + running
         if list.add(owned.filter { host.catalog.entry(id: $0) != nil }) { listDidChange() }
     }
 
