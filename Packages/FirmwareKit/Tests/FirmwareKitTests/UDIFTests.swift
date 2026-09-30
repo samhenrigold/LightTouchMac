@@ -19,8 +19,9 @@ import Testing
 
     /// The raw HFS volume against ipad1_rootfs.extract_rootfs. Input: the Python cache's rootfs.dmg (read
     /// only) when there is one, else our own vfdecrypt of the IPSW.
-    @Test(arguments: Oracle.firmwares.filter(\.available))
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: Oracle.firmwares)
     func rawVolumeMatchesPython(_ fw: Oracle.Firmware) throws {
+        guard fw.available else { try FixtureRequirements.missing(fw.ipsw.path) }
         try Oracle.withTemp { dir in
             var dmg = fw.cache?.appendingPathComponent("rootfs.dmg")
             if dmg == nil || !Oracle.exists(dmg!) {

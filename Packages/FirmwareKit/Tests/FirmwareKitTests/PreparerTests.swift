@@ -153,8 +153,8 @@ import Testing
         return Run(lines: lines.compactMap { $0 }, status: p.terminationStatus, staging: staging)
     }
 
-    @Test func streamOnError() throws {
-        guard Oracle.exists(Self.cli) else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func streamOnError() throws {
+        guard Oracle.exists(Self.cli) else { try FixtureRequirements.missing(#"PreparerTests.swift: Oracle.exists(Self.cli)"#) }
         try Oracle.withTemp { dir in
             let ipsw = dir.appendingPathComponent("fake.ipsw")
             try Data("not the pinned IPSW".utf8).write(to: ipsw)
@@ -175,8 +175,8 @@ import Testing
     }
 
     /// SIGTERM mid-step (hashing a sparse 8 GB "IPSW"): exits within 2 s, 143, staging left for the caller.
-    @Test func cancelWithinTwoSeconds() throws {
-        guard Oracle.exists(Self.cli) else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func cancelWithinTwoSeconds() throws {
+        guard Oracle.exists(Self.cli) else { try FixtureRequirements.missing(#"PreparerTests.swift: Oracle.exists(Self.cli)"#) }
         try Oracle.withTemp { dir in
             let ipsw = dir.appendingPathComponent("big.ipsw")
             FileManager.default.createFile(atPath: ipsw.path, contents: nil)

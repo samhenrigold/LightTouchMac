@@ -9,7 +9,7 @@ import Testing
 
     /// A fresh volume against ipad1_nand.make_hfs_image; files written through the mount land in the catalog,
     /// the junk is gone, fsck passed and nothing stays attached.
-    @Test func makeMountEdit() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func makeMountEdit() throws {
         try Oracle.withTemp { dir in
             let img = dir.appendingPathComponent("data.img"), mnt = dir.appendingPathComponent("mnt")
             try VolumeMount.makeHFS(img, size: 64 << 20 + 123)
@@ -36,7 +36,7 @@ import Testing
             try w.leaveJournalToDevice()
             #expect(try w.journal()?.needsInit == true && w.journalSnapshot()?.last?.bytes == Data(count: j.size))
 
-            guard HFSOracle.available else { return }
+            guard HFSOracle.available else { try FixtureRequirements.missing(#"VolumeMountTests.swift: HFSOracle.available"#) }
             let py = dir.appendingPathComponent("py.img")
             _ = try HFSOracle.python("import ipad1_nand; ipad1_nand.make_hfs_image(sys.argv[1], int(sys.argv[2]))", [py.path, String(64 << 20 + 123)])
             let a = try HFSPlusVolume(dir.appendingPathComponent("py.img"))
@@ -68,9 +68,9 @@ import Testing
 
     /// Growing the raw 7B500 / 8C148 system volume to partition 1 (1280 MiB) against grow_to_partition:
     /// same size, same volume-header geometry, same tree.
-    @Test(arguments: HFSOracle.ipads) func growMatchesPython(_ fw: Oracle.Firmware) throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: HFSOracle.ipads) func growMatchesPython(_ fw: Oracle.Firmware) throws {
         try Oracle.withTemp { dir in
-            guard HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir) else { return }
+            guard HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir) else { try FixtureRequirements.missing(#"VolumeMountTests.swift: HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir)"#) }
             let py = dir.appendingPathComponent("py.hfs")
             try FileManager.default.copyItem(at: raw, to: py)
             let blocks = 1280 << 20 / 4096

@@ -130,9 +130,9 @@ struct SharedCacheTests {
 
     /// The 5.x finder end to end: on a real 5.x cache MISValidateSignature is a `movs;b.w` thunk (0022 fff7);
     /// the patch locates it by symbol and rewrites its first word, and a second run reports it done.
-    @Test(arguments: ["9B206"])
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: ["9B206"])
     func patches5x(build: String) throws {
-        guard Fixtures.hasRootfs(build) else { return }
+        guard Fixtures.hasRootfs(build) else { try FixtureRequirements.missing(#"SharedCacheTests.swift: Fixtures.hasRootfs(build)"#) }
         let dir = try Fixtures.tempDir("dsc5")
         defer { try? FileManager.default.removeItem(at: dir) }
         let cache = try Fixtures.cache(build, to: dir)
@@ -149,8 +149,8 @@ struct SharedCacheTests {
     /// Must refuse: when the symbol's first word is not a Thumb function entry (here clobbered to data), the
     /// patch throws rather than scribble on the wrong bytes — the guard that lets 5.x through must still
     /// reject a cache whose entry it cannot recognise.
-    @Test func refusesNonEntry() throws {
-        guard Fixtures.hasRootfs("9B206") else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func refusesNonEntry() throws {
+        guard Fixtures.hasRootfs("9B206") else { try FixtureRequirements.missing(#"SharedCacheTests.swift: Fixtures.hasRootfs("9B206")"#) }
         let dir = try Fixtures.tempDir("dsc-refuse")
         defer { try? FileManager.default.removeItem(at: dir) }
         let cache = try Fixtures.cache("9B206", to: dir)
@@ -163,8 +163,8 @@ struct SharedCacheTests {
 
     /// The prepare-time fit (FitCheck.appSyncCache, required in checkAppSync): a volume holding 9B206's cache fits
     /// with the thunk named as its entry; the same cache with the entry clobbered misfits; no cache, no piece.
-    @Test func cacheFitCheck() throws {
-        guard Fixtures.hasRootfs("9B206") else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func cacheFitCheck() throws {
+        guard Fixtures.hasRootfs("9B206") else { try FixtureRequirements.missing(#"SharedCacheTests.swift: Fixtures.hasRootfs("9B206")"#) }
         let dir = try Fixtures.tempDir("dsc-fit")
         defer { try? FileManager.default.removeItem(at: dir) }
         let root = dir.appendingPathComponent("root"), rel = SystemEdits.dyldCache("armv7")
@@ -182,9 +182,9 @@ struct SharedCacheTests {
     }
 
     /// Byte-identical patched cache vs appsync_cachepatch.py --patch, and the same status lines.
-    @Test(arguments: ["7B500", "8C148", "7E18", "7B367"])
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: ["7B500", "8C148", "7E18", "7B367"])
     func patchMatchesPython(build: String) throws {
-        guard Fixtures.hasRootfs(build), Fixtures.hasPython else { return }
+        guard Fixtures.hasRootfs(build), Fixtures.hasPython else { try FixtureRequirements.missing(#"SharedCacheTests.swift: Fixtures.hasRootfs(build), Fixtures.hasPython"#) }
         let dir = try Fixtures.tempDir("dsc")
         defer { try? FileManager.default.removeItem(at: dir) }
         let mine = try Fixtures.cache(build, to: dir)

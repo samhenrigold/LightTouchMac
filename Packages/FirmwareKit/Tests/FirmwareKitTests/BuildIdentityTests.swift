@@ -20,7 +20,7 @@ struct BuildIdentityTests {
     // ipad1_fw.components on the same IPSWs.
     static let ipad = Oracle.firmware("k48ap-7B500"), ios2 = Oracle.firmware("n72ap-5F138")
 
-    @Test(.enabled(if: ipad.available)) func buildManifestComponents() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func buildManifestComponents() throws {
         let ipsw = IPSWArchive(Self.ipad.ipsw)
         let c = try BuildComponents.load(ipsw)
         let af = "Firmware/all_flash/all_flash.k48ap.production/"
@@ -46,7 +46,7 @@ struct BuildIdentityTests {
     /// one-shot's own, no sibling), and a catalog key for every component the k48 recipe decrypts.
     static let ios5 = Oracle.path("Developer/qemu-ios-files/ios5-spike/iPad1,1_5.1.1_9B206_Restore.ipsw")
 
-    @Test(.enabled(if: Oracle.exists(ios5))) func buildManifestComponentsOn5x() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func buildManifestComponentsOn5x() throws {
         let ipsw = IPSWArchive(Self.ios5)
         let c = try BuildComponents.load(ipsw), e = try Oracle.entry("k48ap-9B206")
         #expect(c["KernelCache"] == "kernelcache.release.k48" && c["OS"] == "038-4291-006.dmg")
@@ -59,7 +59,7 @@ struct BuildIdentityTests {
         try RestoreInfo(ipsw).verify(against: e)
     }
 
-    @Test(.enabled(if: ios2.available)) func restorePlistFallbackOn2x() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func restorePlistFallbackOn2x() throws {
         let ipsw = IPSWArchive(Self.ios2.ipsw)
         #expect(try !ipsw.contains("BuildManifest.plist"))
         let af = "Firmware/all_flash/all_flash.n72ap.production/"

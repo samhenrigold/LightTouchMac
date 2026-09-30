@@ -14,8 +14,8 @@ import Testing
     static let devos50 = UnitIdentity(fields: [("model-number", .string("MA623")), ("region-info", .string("B/LL")),
                                                ("serial-number", .string("ABCDEFG")), ("battery-serial", .string("690476146348"))])
 
-    @Test func norMatchesDevos50() throws {
-        guard Self.available else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func norMatchesDevos50() throws {
+        guard Self.available else { try FixtureRequirements.missing(#"N45Tests.swift: Self.available"#) }
         let a = IPSWArchive(Self.ipsw)
         var images: [String: Data] = [:]
         for n in try a.names() where n.hasPrefix(Self.prefix) && n.hasSuffix(".img2") {
@@ -41,8 +41,8 @@ import Testing
         #expect(!nvram(try N45NOR.build(identity: Self.devos50, images: images)).contains("wifiaddr"))
     }
 
-    @Test func iBootIsTheDecryptedComponent() throws {
-        guard Self.available else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func iBootIsTheDecryptedComponent() throws {
+        guard Self.available else { try FixtureRequirements.missing(#"N45Tests.swift: Self.available"#) }
         let body = try Apple8900.body(IPSWArchive(Self.ipsw).read(Self.prefix + "iBoot.n45ap.RELEASE.img2"))
         let h = try IMG2.Header(body)
         #expect(h.type == "ibot" && h.loadAddress == 0x1800_0000)
@@ -121,11 +121,15 @@ import Testing
 
     /// The NAND signature off each build's iBoot: C002 for 3A101a (so its store is today's), C003 for 4B1 (in the
     /// app's IPSW cache, smoke #52), and only that word differs between the two stores' metadata.
-    @Test func nandSignatureFromIBoot() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func nandSignatureFromIBoot() throws {
         let iboot = { (ipsw: URL) in try IMG2.payload(Apple8900.body(IPSWArchive(ipsw).read(Self.prefix + "iBoot.n45ap.RELEASE.img2"))) }
         let b4B1 = Oracle.path("Library/Caches/gold.samhenri.LightTouchMac/IPSW/1b818911316e4248ee01d3ec67f9d39afc3db240.ipsw")
-        if Self.available { #expect(try N45NAND.filID(iBoot: iboot(Self.ipsw)) == 0x4330_3032) }
-        if Oracle.exists(b4B1) { #expect(try N45NAND.filID(iBoot: iboot(b4B1)) == 0x4330_3033) }
+        guard Self.available, Oracle.exists(b4B1) else { try FixtureRequirements.missing("N45 3A101a and 4B1 IPSWs") }
+        #expect(try N45NAND.filID(iBoot: iboot(Self.ipsw)) == 0x4330_3032)
+        #expect(try N45NAND.filID(iBoot: iboot(b4B1)) == 0x4330_3033)
+    }
+
+    @Test func nandSignatureMetadataAndRejection() throws {
         #expect(throws: FirmwareError.self) { try N45NAND.filID(iBoot: Data(count: 64)) }
         let c2 = N45NAND.metadataPages(fsPages: 100, filID: 0x4330_3032), c3 = N45NAND.metadataPages(fsPages: 100, filID: 0x4330_3033)
         let page0 = N45NAND.Page(bank: 0, page: 0)
@@ -136,8 +140,8 @@ import Testing
     /// 3A101a's rootfs vfdecrypt key (022-3601-4.dmg).
     static let rootfsKey = "6f021b478cc21ff77f775850c0efc2e66fd015f6a6894be079ee1351dce9af069f915f3d"
 
-    @Test func stockUnsignedActivation() throws {
-        guard Self.available else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func stockUnsignedActivation() throws {
+        guard Self.available else { try FixtureRequirements.missing(#"N45Tests.swift: Self.available"#) }
         try Oracle.withTemp { dir in
             let enc = dir.appendingPathComponent("enc.dmg"), dmg = dir.appendingPathComponent("rootfs.dmg"), raw = dir.appendingPathComponent("rootfs.hfs")
             try IPSWArchive(Self.ipsw).extract("022-3601-4.dmg", to: enc)
@@ -161,10 +165,10 @@ import Testing
     /// an armv6.itpack at hand, N45Board.bake as ipod1g_device.bake on the same three stock files (OpenGLES,
     /// SpringBoard's job, SystemVersion), with the GL front end and without: the same paths written (all to be
     /// root-owned, the loader among them), the same record, the hook's and OpenGLES.baked's bytes and modes, the same LK_* job.
-    @Test func frontEndAndBakeMatchPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func frontEndAndBakeMatchPython() throws {
         let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles"), list = it.appendingPathComponent(N45Board.openGLESExports)
         let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
-        guard Self.available, Oracle.exists(list) else { return }
+        guard Self.available, Oracle.exists(list) else { try FixtureRequirements.missing(#"N45Tests.swift: Self.available, Oracle.exists(list)"#) }
         try Oracle.withTemp { dir in
             let fm = FileManager.default
             let enc = dir.appendingPathComponent("enc.dmg"), dmg = dir.appendingPathComponent("rootfs.dmg"), raw = dir.appendingPathComponent("rootfs.hfs")
@@ -195,7 +199,7 @@ import Testing
             #expect(try N72Board.frontEnd(gl, exports: short).0 == false)
             #expect(try N72Board.frontEnd(gl, exports: it.appendingPathComponent("opengles-2x.exports")).0 == false)   // 2.x's list is not 1.x's
 
-            guard Oracle.exists(itpack) else { return }
+            guard Oracle.exists(itpack) else { try FixtureRequirements.missing(#"N45Tests.swift: Oracle.exists(itpack)"#) }
             let helpers = dir.appendingPathComponent("helpers")
             try SystemEdits.mkdirs(helpers)
             for u in [itpack, list] { try fm.copyItem(at: u, to: helpers.appendingPathComponent(u.lastPathComponent)) }
@@ -251,8 +255,8 @@ import Testing
         }
     }
 
-    @Test func components() throws {
-        guard Self.available else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func components() throws {
+        guard Self.available else { try FixtureRequirements.missing(#"N45Tests.swift: Self.available"#) }
         let c = try BuildComponents.load(IPSWArchive(Self.ipsw))
         #expect(c["iBoot"] == Self.prefix + "iBoot.n45ap.RELEASE.img2" && c["AppleLogo"] == Self.prefix + "applelogo.img2")
         #expect(c["KernelCache"] == "kernelcache.release.s5l8900xrb" && c["OS"] == "022-3601-4.dmg")

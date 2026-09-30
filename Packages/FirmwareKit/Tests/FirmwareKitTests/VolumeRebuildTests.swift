@@ -99,10 +99,10 @@ struct VolumeRebuildTests {
     // MARK: fixtures
 
     /// The shipped bases rebuild into volumes fsck_hfs accepts (skips without them).
-    @Test(arguments: ["nand-current", "ipad1/userland/golden-pristine"])
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: ["nand-current", "ipad1/userland/golden-pristine"])
     func baseRebuildsClean(_ name: String) throws {
         let base = Fixtures.files.appendingPathComponent(name)
-        guard Fixtures.exists(base) else { return }
+        guard Fixtures.exists(base) else { try FixtureRequirements.missing(#"VolumeRebuildTests.swift: Fixtures.exists(base)"#) }
         let dir = try Fixtures.tempDir("rebuild-base")
         defer { try? FileManager.default.removeItem(at: dir) }
         let t0 = Date()
@@ -117,9 +117,9 @@ struct VolumeRebuildTests {
     }
 
     /// The pipeline on the iPod base: mount read-only (never-index marker, writes refused), unmount cleans up.
-    @Test func mountAndUnmount() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func mountAndUnmount() throws {
         let base = Fixtures.files.appendingPathComponent("nand-current")
-        guard Fixtures.exists(base) else { return }
+        guard Fixtures.exists(base) else { try FixtureRequirements.missing(#"VolumeRebuildTests.swift: Fixtures.exists(base)"#) }
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("fk-mount-\(UUID().uuidString)")
         defer { try? VolumeExport.unmount(out: out) }
         let vols = try VolumeExport.mount(.init(base: base, overlay: nil), out: out)
@@ -135,8 +135,8 @@ struct VolumeRebuildTests {
     /// U1 (FK_U1=DIR, written by tests/volume-rebuild-oracle.py or by hand for the iPod): the rebuilt volumes
     /// hold exactly the files the guest reported (size + sha256), none of the deleted ones, and each installed
     /// IPA's Payload; fsck_hfs -n passes; base and overlay are untouched.
-    @Test func guestOracle() throws {
-        guard let u1 = ProcessInfo.processInfo.environment["FK_U1"] else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func guestOracle() throws {
+        guard let u1 = ProcessInfo.processInfo.environment["FK_U1"] else { try FixtureRequirements.missing(#"VolumeRebuildTests.swift: let u1 = ProcessInfo.processInfo.environment["FK_U1"]"#) }
         struct Guest: Decodable {
             struct File: Decodable { var size: UInt64; var sha256: String }
             struct IPA: Decodable { var ipa: String; var app: String }

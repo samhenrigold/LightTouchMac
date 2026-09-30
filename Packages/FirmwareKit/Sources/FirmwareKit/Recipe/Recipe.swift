@@ -5,7 +5,7 @@
 //   create = verify -> decrypt -> identity + board.bootFiles -> board.volumes (the shared bake in SystemEdits)
 //            -> board.store -> [board.keybag if data protection] -> [board.seal if needsSeal] -> lock
 //
-// Shared here: the IPSW sha1 and Restore.plist checks, the decrypt cache (CACHE/<sha1>/ with a .done marker),
+// Shared here: the IPSW sha1 and Restore.plist checks, the decrypt cache (versioned immutable entries with a validated manifest),
 // the seed name ("<board.seedPrefix>-<build>-default"), the step/progress events, the read-only outputs, the
 // store listing hashes (built_listing_sha256 before any boot, listing_sha256 after) and the lock, whose
 // board-specific keys are merged in from `board.lock`. Helper file names and cache paths derive from
@@ -115,19 +115,11 @@ public enum Recipe {
         step()   // decrypt, once per IPSW
         try fm.createDirectory(at: c.work, withIntermediateDirectories: true)
         let cacheRoot = o.cache ?? c.work.appendingPathComponent("cache")
-        c.dec = cacheRoot.appendingPathComponent(sha1)
-        if !fm.fileExists(atPath: c.dec.appendingPathComponent(".done").path) {
-            let tmp = cacheRoot.appendingPathComponent(sha1 + ".tmp")
-            try? fm.removeItem(at: tmp)
-            try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
-            _ = try FirmwareDecryptor.decrypt(ipsw: o.ipsw, entry: e, into: tmp)
-            try JSONSerialization.data(withJSONObject: ["ipsw": o.ipsw.path, "entry": e.id, "tool": FirmwareKit.version])
-                .write(to: tmp.appendingPathComponent(".done"))
-            try? fm.removeItem(at: c.dec)
-            try fm.moveItem(at: tmp, to: c.dec)
-        } else {
-            c.log("decrypted components cached in \(c.dec.path)")
-        }
+        c.dec = try DecryptionCache.resolve(root: cacheRoot, identity: .init(ipsw: sha1, entry: e), produce: { tmp in
+            try FirmwareDecryptor.decrypt(ipsw: o.ipsw, entry: e, into: tmp).files
+        }, reused: {
+            c.log("reusing verified decrypt-cache manifest for \(e.id)")
+        })
 
         step()   // identity.json + the board's boot files
         c.seed = o.seed ?? "\(board.seedPrefix)-\(e.build)-default"

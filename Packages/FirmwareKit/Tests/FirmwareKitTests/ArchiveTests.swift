@@ -5,7 +5,7 @@ import Testing
 struct ArchiveTests {
     static let fw = Oracle.firmware("k48ap-7B500")
 
-    @Test(.enabled(if: fw.available)) func membersReadAndExtract() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func membersReadAndExtract() throws {
         let ipsw = IPSWArchive(Self.fw.ipsw)
         let names = try ipsw.names()
         #expect(names.contains("Restore.plist") && names.contains("kernelcache.release.k48"))
@@ -25,11 +25,11 @@ struct ArchiveTests {
 
     /// The largest cached IPSW (the biggest central directory; zip64 once a member passes 4 GiB, which none does
     /// yet): names, a large member and its stream match /usr/bin/unzip.
-    @Test func largestIPSWMatchesUnzip() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func largestIPSWMatchesUnzip() throws {
         let cache = Oracle.path("Library/Caches/gold.samhenri.LightTouchMac/IPSW")
         func size(_ u: URL) -> Int { (try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
         let files = ((try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: [.fileSizeKey])) ?? []).filter { $0.pathExtension == "ipsw" }
-        guard let largest = files.max(by: { size($0) < size($1) }) else { return }
+        guard let largest = files.max(by: { size($0) < size($1) }) else { try FixtureRequirements.missing(#"ArchiveTests.swift: let largest = files.max(by: { size($0) < size($1) })"#) }
         let ipsw = IPSWArchive(largest)
         let names = try ipsw.names()
         let unzip = try Fixtures.run(["/usr/bin/unzip", "-Z1", largest.path])

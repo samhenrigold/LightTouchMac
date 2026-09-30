@@ -15,8 +15,8 @@ import Testing
     }
 
     /// Every metadata page, byte for byte, for the 7E18 volume and epoch.
-    @Test func metadataMatchesPython() throws {
-        guard HFSOracle.available else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func metadataMatchesPython() throws {
+        guard HFSOracle.available else { try FixtureRequirements.missing(#"N72Tests.swift: HFSOracle.available"#) }
         let out = try HFSOracle.python("""
             import hashlib, ipod2g_nand
             for (cs, pg), d in sorted(ipod2g_nand.metadata_pages(1835008, 4).items()):
@@ -29,9 +29,9 @@ import Testing
     }
 
     /// build_nor.py --identity over the 7E18 IPSW's all_flash: the same 1 MiB.
-    @Test func norMatchesPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func norMatchesPython() throws {
         let fw = Oracle.firmware("n72ap-7E18")
-        guard fw.available, HFSOracle.available else { return }
+        guard fw.available, HFSOracle.available else { try FixtureRequirements.missing(#"N72Tests.swift: fw.available, HFSOracle.available"#) }
         try Oracle.withTemp { dir in
             let ipsw = IPSWArchive(fw.ipsw), prefix = "Firmware/all_flash/all_flash.n72ap.production/"
             let af = dir.appendingPathComponent("all_flash")
@@ -55,10 +55,10 @@ import Testing
     /// The GL front end on 2.x against the oracle, 5F138's stock OpenGLES: the export scan as gles2x_exports.scan and,
     /// with an armv6.itpack at hand, GuestPackage.seed as mkpkg.seed: n72-ios2's hook puts the one front end
     /// (contrib/gles-public) over OpenGLES, the stock binary kept as OpenGLES.baked, every stock name still exported.
-    @Test func frontEndMatchesPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func frontEndMatchesPython() throws {
         let fw = Oracle.firmware("n72ap-5F138"), dmg = fw.cache?.appendingPathComponent("rootfs.dmg")
         let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles")
-        guard let dmg, Oracle.exists(dmg) else { return }
+        guard let dmg, Oracle.exists(dmg) else { try FixtureRequirements.missing(#"N72Tests.swift: let dmg, Oracle.exists(dmg)"#) }
         try Oracle.withTemp { dir in
             let raw = dir.appendingPathComponent("rootfs.hfs"), stock = dir.appendingPathComponent("OpenGLES")
             try UDIF.extractRootfs(dmg: dmg, to: raw)
@@ -73,9 +73,9 @@ import Testing
             #expect(names.count > 200 && names == pyNames)
 
             let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
-            guard Oracle.exists(itpack) else { return }
+            guard Oracle.exists(itpack) else { try FixtureRequirements.missing(#"N72Tests.swift: Oracle.exists(itpack)"#) }
             // the firmware the seed's load checks read (5F138's own executables and libSystem)
-            guard let base = try FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138"), in: dir) else { return }
+            guard let base = try FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138"), in: dir) else { try FixtureRequirements.missing(#"N72Tests.swift: let base = try FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138"), in: dir)"#) }
             func volume(_ name: String) throws -> URL {
                 let m = dir.appendingPathComponent(name), sv = m.appendingPathComponent(GuestPackage.systemVersion)
                 try FileManager.default.copyItem(at: base, to: m)
@@ -108,7 +108,7 @@ import Testing
     /// Smoke #45: without helpers (2.x/3.0) the bake writes it_prefs' key itself, SBDidShowReorderText = <true/> in
     /// mobile's com.apple.springboard.plist, keeping the Sounds defaults already there; a SpringBoard that doesn't name
     /// the key is left alone. With the 5F138 cache at hand, its real SpringBoard names it.
-    @Test func reorderTipBakedWithoutHelpers() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func reorderTipBakedWithoutHelpers() throws {
         try Oracle.withTemp { m in
             let sb = m.appendingPathComponent(N72Board.springBoard), plist = m.appendingPathComponent(N72Board.prefs + "/com.apple.springboard.plist")
             try SystemEdits.mkdirs(sb.deletingLastPathComponent())
@@ -124,7 +124,7 @@ import Testing
             #expect(try N72Board.bakeReorderTip(m).hasSuffix("left alone") && !Oracle.exists(plist))
         }
         let fw = Oracle.firmware("n72ap-5F138")
-        guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { return }
+        guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { try FixtureRequirements.missing(#"N72Tests.swift: let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg)"#) }
         try Oracle.withTemp { dir in
             let raw = dir.appendingPathComponent("rootfs.hfs")
             try UDIF.extractRootfs(dmg: dmg, to: raw)

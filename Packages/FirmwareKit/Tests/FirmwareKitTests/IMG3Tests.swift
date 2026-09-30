@@ -22,8 +22,9 @@ struct IMG3Tests {
     }
 
     /// Every ipad1_fw.py output but rootfs.dmg (VFDecryptTests), byte for byte.
-    @Test(arguments: Oracle.firmwares.filter(\.available))
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: Oracle.firmwares)
     func decryptMatchesPython(_ fw: Oracle.Firmware) throws {
+        guard fw.available else { try FixtureRequirements.missing(fw.ipsw.path) }
         try Oracle.withTemp { dir in
             let r = try Oracle.time("decrypt components \(fw.entryID)") {
                 try FirmwareDecryptor.decrypt(ipsw: fw.ipsw, entry: Oracle.entry(fw.entryID), into: dir, rootfs: false)

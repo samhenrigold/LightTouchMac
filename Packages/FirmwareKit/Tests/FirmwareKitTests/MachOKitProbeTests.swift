@@ -10,8 +10,8 @@ import Testing
 /// patch), are why the cache reader stays ours. When MachOKit's section resolution agrees here, its symbol and
 /// image walks can replace forEachSymbol/findSymbol/cStrings.
 struct MachOKitProbeTests {
-    @Test(arguments: ["7B500", "7E18"]) func v1Cache(build: String) throws {
-        guard Fixtures.hasRootfs(build) else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: ["7B500", "7E18"]) func v1Cache(build: String) throws {
+        guard Fixtures.hasRootfs(build) else { try FixtureRequirements.missing(#"MachOKitProbeTests.swift: Fixtures.hasRootfs(build)"#) }
         let dir = try Fixtures.tempDir("mk")
         defer { try? FileManager.default.removeItem(at: dir) }
         let url = try Fixtures.cache(build, to: dir)

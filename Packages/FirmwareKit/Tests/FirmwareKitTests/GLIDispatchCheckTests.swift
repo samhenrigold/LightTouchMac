@@ -17,8 +17,8 @@ struct GLIDispatchCheckTests {
 
     /// Every firmware the catalog prepares with GL has its dispatch fields in the shipped name table (the MBX engine
     /// reads them at load; the front end's 5.x macro context does, and its fit check requires it).
-    @Test(arguments: ["7B500", "8C148", "9B206", "7E18", "8C148-ipod"]) func firmwareFieldsAreNamed(_ build: String) throws {
-        guard Fixtures.hasRootfs(build), Fixtures.exists(Self.names.appendingPathComponent(SystemEdits.Helpers.glesNames)) else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: ["7B500", "8C148", "9B206", "7E18", "8C148-ipod"]) func firmwareFieldsAreNamed(_ build: String) throws {
+        guard Fixtures.hasRootfs(build), Fixtures.exists(Self.names.appendingPathComponent(SystemEdits.Helpers.glesNames)) else { try FixtureRequirements.missing(#"GLIDispatchCheckTests.swift: Fixtures.hasRootfs(build), Fixtures.exists(Self.names.appendingPathComponent(SystemEdits.Helpers.glesNames))"#) }
         let dir = try Fixtures.tempDir("gli")
         defer { try? FileManager.default.removeItem(at: dir) }
         let cache = try DyldSharedCache(contentsOf: try Fixtures.cache(build, to: dir))
@@ -30,9 +30,9 @@ struct GLIDispatchCheckTests {
     /// A ca_ogl recipe on a firmware the GL front end does not fit (here: a front end with one of the stock OpenGLES's
     /// exports renamed away) fails the prepare instead of quietly producing a software-CoreAnimation device, and
     /// installs nothing.
-    @Test func caOGLRefusesAMisfitFrontEnd() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func caOGLRefusesAMisfitFrontEnd() throws {
         let real = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.openGLES)
-        guard Fixtures.hasRootfs("8C148"), Fixtures.exists(real) else { return }
+        guard Fixtures.hasRootfs("8C148"), Fixtures.exists(real) else { try FixtureRequirements.missing(#"GLIDispatchCheckTests.swift: Fixtures.hasRootfs("8C148"), Fixtures.exists(real)"#) }
         let dir = try Fixtures.tempDir("caogl")
         defer { try? FileManager.default.removeItem(at: dir) }
         let m = dir.appendingPathComponent("mnt"), helpers = dir.appendingPathComponent("helpers")

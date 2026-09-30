@@ -81,14 +81,14 @@ enum K48Oracle {
 
     /// GuestPackage.seed against mkpkg.seed on a plain directory with the real armv7.itpack: the same tree
     /// (paths, modes, bytes, symlinks) and the same record, for a shim image and a no-shim one.
-    @Test(arguments: [("7B500", true), ("8C148", false), ("9B206", true)]) func seedMatchesPython(_ build: String, _ gles: Bool) throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: [("7B500", true), ("8C148", false), ("9B206", true)]) func seedMatchesPython(_ build: String, _ gles: Bool) throws {
         let itpack = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
-        guard Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py")) else { return }
+        guard Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py")) else { try FixtureRequirements.missing(#"SystemEditsTests.swift: Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py"))"#) }
         try Oracle.withTemp { dir in
             // the firmware the seed's load checks read: its executables, libSystem, cache, and the mounter's job
             // inserting it_msmquiet as the bake leaves it
             let id = "k48ap-" + build
-            guard let stock = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter, SystemEdits.msmJob], in: dir) else { return }
+            guard let stock = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter, SystemEdits.msmJob], in: dir) else { try FixtureRequirements.missing(#"SystemEditsTests.swift: let stock = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter, SystemEdits.msmJob], in: dir)"#) }
             try FitFixture.insert("/usr/local/lib/it_msmquiet.dylib", into: SystemEdits.msmJob, at: stock)
             func volume(_ name: String) throws -> URL {
                 let v = dir.appendingPathComponent(name), sv = v.appendingPathComponent(GuestPackage.systemVersion)

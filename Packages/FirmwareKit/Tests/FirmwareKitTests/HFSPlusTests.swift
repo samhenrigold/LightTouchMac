@@ -104,9 +104,9 @@ enum HFSOracle {
 @Suite(.serialized) struct HFSPlusTests {
     /// Every catalog path, owner, mode, flags, size, content sha256 and symlink target against a listing of
     /// the same image through hdiutil mounts, and the (parent, name) -> CNID index against setowner.py.
-    @Test(arguments: HFSOracle.ipads) func readerMatchesMountAndSetowner(_ fw: Oracle.Firmware) throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: HFSOracle.ipads) func readerMatchesMountAndSetowner(_ fw: Oracle.Firmware) throws {
         try Oracle.withTemp { dir in
-            guard HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir) else { return }
+            guard HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir) else { try FixtureRequirements.missing(#"HFSPlusTests.swift: HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir)"#) }
             let vol = try HFSPlusVolume(raw)
             #expect(vol.signature == "HX" && vol.blockSize == 8192)
             let mine = try Oracle.time("HFSPlus listing \(fw.entryID)") { try vol.listing() }
@@ -133,9 +133,9 @@ enum HFSOracle {
     }
 
     /// In-place owner and mode edits: the image bytes after Swift's edits equal those after Python's.
-    @Test(arguments: HFSOracle.ipads) func ownershipEditsMatchPython(_ fw: Oracle.Firmware) throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: HFSOracle.ipads) func ownershipEditsMatchPython(_ fw: Oracle.Firmware) throws {
         try Oracle.withTemp { dir in
-            guard HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir) else { return }
+            guard HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir) else { try FixtureRequirements.missing(#"HFSPlusTests.swift: HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir)"#) }
             let py = dir.appendingPathComponent("py.hfs")
             try FileManager.default.copyItem(at: raw, to: py)
             let specs = ["private/var/mobile:0:0", "System/Library/LaunchDaemons/com.apple.SpringBoard.plist:501:20",

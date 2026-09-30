@@ -9,7 +9,7 @@
 //
 // STAGING_DIR gets the board's boot files, nand/ (sparse), identity.json (600), device.lock.json; scratch goes
 // to STAGING_DIR/work and is removed before `done`. Decrypted components are cached as CACHE/<ipsw sha1>/ (a
-// .done marker makes an entry valid).
+// version/key-specific manifest makes an entry valid).
 
 import CryptoKit
 import Foundation

@@ -46,21 +46,21 @@ struct K48IBootTests {
         return mine
     }
 
-    @Test(arguments: ["k48ap-7B367", "k48ap-7B500", "k48ap-8C148", "k48ap-8F190", "k48ap-8G4", "k48ap-8H7", "k48ap-8J3",
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: ["k48ap-7B367", "k48ap-7B500", "k48ap-8C148", "k48ap-8F190", "k48ap-8G4", "k48ap-8H7", "k48ap-8J3",
                       "k48ap-8K2", "k48ap-8L1", "k48ap-9A334", "k48ap-9A405", "k48ap-9B176", "k48ap-9B206", "k48ap-9A5288d"])
     func patcherMatchesReference(id: String) throws {
-        guard let mine = Self.mine, let ours = try Self.patched(id, by: mine) else { return }
+        guard let mine = Self.mine, let ours = try Self.patched(id, by: mine) else { try FixtureRequirements.missing(#"K48IBootTests.swift: let mine = Self.mine, let ours = try Self.patched(id, by: mine)"#) }
         let theirs = try Self.patched(id, by: Self.reference)
         #expect(ours == theirs, "\(id): \(mine.path) and the Legacy-iOS-Kit patcher differ")
     }
 
     /// 9A5220p (smoke #48): the unpatched tool takes the boot-args address at an unaligned 0x11f22 (two pool words)
     /// and fails; the aligned search finds the literal at 0x11f24 and patches it.
-    @Test func alignedXrefPatches9A5220p() throws {
-        guard let mine = Self.mine, let ours = try Self.patched("k48ap-9A5220p", by: mine) else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func alignedXrefPatches9A5220p() throws {
+        guard let mine = Self.mine, let ours = try Self.patched("k48ap-9A5220p", by: mine) else { try FixtureRequirements.missing(#"K48IBootTests.swift: let mine = Self.mine, let ours = try Self.patched("k48ap-9A5220p", by: mine)"#) }
         // Smoke #50: beta 1's call has no R3 output pointer. Retain the result-slot
         // initialization, bypass authentication, then resume normal DATA extraction.
-        guard let ipsw = try Self.cachedIPSW("k48ap-9A5220p") else { return }
+        guard let ipsw = try Self.cachedIPSW("k48ap-9A5220p") else { try FixtureRequirements.missing(#"K48IBootTests.swift: let ipsw = try Self.cachedIPSW("k48ap-9A5220p")"#) }
         try Oracle.withTemp { dir in
             _ = try FirmwareDecryptor.decrypt(ipsw: ipsw, entry: try Oracle.entry("k48ap-9A5220p"), into: dir, rootfs: false)
             let stock = try Data(contentsOf: dir.appendingPathComponent("iBoot.bin"))
@@ -73,9 +73,9 @@ struct K48IBootTests {
         #expect(throws: FirmwareError.self) { try Self.patched("k48ap-9A5220p", by: Self.reference) }
     }
 
-    @Test(arguments: ["k48ap-7B500", "k48ap-8C148"]) func iBootChainMatchesPython(id: String) throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: ["k48ap-7B500", "k48ap-8C148"]) func iBootChainMatchesPython(id: String) throws {
         let fw = Oracle.firmware(id)
-        guard fw.available, Fixtures.hasPython, let patcher = Self.patcher else { return }
+        guard fw.available, Fixtures.hasPython, let patcher = Self.patcher else { try FixtureRequirements.missing(#"K48IBootTests.swift: fw.available, Fixtures.hasPython, let patcher = Self.patcher"#) }
         try Oracle.withTemp { dir in
             let entry = try Oracle.entry(id)
             let dec = dir.appendingPathComponent("dec")

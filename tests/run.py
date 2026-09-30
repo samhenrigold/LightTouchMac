@@ -202,6 +202,7 @@ def main():
     ap.add_argument('tier', choices=('offline', 'sessions', 'release'))
     ap.add_argument('--only', action='append', default=[], help='run the checks whose name contains this (repeatable)')
     ap.add_argument('-j', type=int, default=int(os.environ.get('JOBS', 4)))
+    ap.add_argument('--require-inputs', action='store_true', help='fail if any selected check lacks prerequisites')
     ap.add_argument('--network', action='store_true', help='release: also test-dependency-sources.py')
     ap.add_argument('--out', type=Path, default=Path(os.environ.get('OUT') or tempfile.mkdtemp(prefix=f'ltm-{sys.argv[1] if len(sys.argv) > 1 else "run"}.')))
     args = ap.parse_args()
@@ -216,6 +217,9 @@ def main():
     if args.only:
         checks = [c for c in checks if any(o in name_of(c) for o in args.only)]
         skips = [s for s in skips if any(o in s[0] for o in args.only)]
+
+    if not checks and not skips:
+        ap.error('no checks match the selection')
 
     env = dict(os.environ)
     env['QEMU_IOS_DIR'] = str(sources.path('qemu-ios'))
@@ -233,7 +237,7 @@ def main():
     counts = {s: results.count(s) for s in ('PASS', 'FAIL', 'XFAIL', 'XPASS')}
     print(f"== {args.tier}: {counts['PASS']} passed, {counts['FAIL']} failed, {len(skips)} skipped, "
           f"{counts['XFAIL']} known failing, {counts['XPASS']} passing again; logs in {args.out}")
-    return 1 if counts['FAIL'] else 0
+    return 1 if counts['FAIL'] or (args.require_inputs and skips) else 0
 
 
 if __name__ == '__main__':

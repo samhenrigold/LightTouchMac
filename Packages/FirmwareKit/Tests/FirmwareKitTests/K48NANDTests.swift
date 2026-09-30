@@ -29,12 +29,12 @@ struct K48NANDTests {
     }
 
     /// make_mbr reproduces the 16 GB unit's sector 0 (ipad1_nand.py selfcheck's bytes).
-    @Test func mbrMatchesUnit() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func mbrMatchesUnit() throws {
         let head = [UInt8](K48NAND.makeMBR())
         let unit = Data(hex: "00010100affeffff3f00000000000500" + "00feffffaefeffff6d0005002fe53600" + "00feffffaffeffff4000050008000000")!
         #expect(Data(head[0x1be..<0x1ee]) == unit && head[510] == 0x55 && head[511] == 0xAA)
         #expect((head[..<0x1be] + head[0x1ee..<510] + head[512...]).allSatisfy { $0 == 0 })
-        guard Fixtures.hasPython else { return }
+        guard Fixtures.hasPython else { try FixtureRequirements.missing(#"K48NANDTests.swift: Fixtures.hasPython"#) }
         let dir = try Fixtures.tempDir("mbr")
         defer { try? FileManager.default.removeItem(at: dir) }
         let out = dir.appendingPathComponent("mbr.bin")
@@ -44,8 +44,8 @@ struct K48NANDTests {
 
     /// Small synthetic store (Python's selfcheck geometry): byte-identical files vs ipad1_nand.build on the same
     /// inputs, including a sparse data image and an fstab line, and both checkers accept the Swift store.
-    @Test func syntheticStoreMatchesPython() throws {
-        guard Fixtures.hasPython else { return }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func syntheticStoreMatchesPython() throws {
+        guard Fixtures.hasPython else { try FixtureRequirements.missing(#"K48NANDTests.swift: Fixtures.hasPython"#) }
         let dir = try Fixtures.tempDir("nand")
         defer { try? FileManager.default.removeItem(at: dir) }
         let ps = 4096
@@ -96,12 +96,12 @@ struct K48NANDTests {
 
     /// The real thing (FK_NAND_FULL=1): the 7B500 pristine system + 14.7 GB sparse data volume into a
     /// k48-16g store, every file compared with `ipad1_nand.py build` on the same inputs.
-    @Test func fullStoreMatchesPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func fullStoreMatchesPython() throws {
         let u = Fixtures.files.appendingPathComponent("ipad1/userland/pristine"), hw2 = Fixtures.files.appendingPathComponent("ipad1/hw2")
         let inputs = [hw2.appendingPathComponent("rdisk0-head4M.bin"), u.appendingPathComponent("system.img"),
                       hw2.appendingPathComponent("rdisk0s3.bin"), u.appendingPathComponent("data.img"),
                       Fixtures.files.appendingPathComponent("ipad1/7B500/dec/kernelcache.mach")]
-        guard ProcessInfo.processInfo.environment["FK_NAND_FULL"] == "1", Fixtures.hasPython, inputs.allSatisfy(Fixtures.exists) else { return }
+        guard ProcessInfo.processInfo.environment["FK_NAND_FULL"] == "1", Fixtures.hasPython, inputs.allSatisfy(Fixtures.exists) else { try FixtureRequirements.missing(#"K48NANDTests.swift: ProcessInfo.processInfo.environment["FK_NAND_FULL"] == "1", Fixtures.hasPython, inputs.allSatisfy(Fixtures.exists)"#) }
         let dir = try Fixtures.tempDir("nand-full")
         defer { try? FileManager.default.removeItem(at: dir) }
         let oracle = ProcessInfo.processInfo.environment["FK_NAND_ORACLE"]      // a prebuilt ipad1_nand.py store, if given

@@ -3,9 +3,9 @@ import Testing
 @testable import FirmwareKit
 
 struct EarlyAppSyncTests {
-    @Test(arguments: [true, false], [true, false])
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled || ProcessInfo.processInfo.environment["FK_EARLY_APPSYNC_HELPERS"] != nil, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: [true, false], [true, false])
     func preparesInstallationService(lockbot: Bool, sharedCache: Bool) throws {
-        guard let path = ProcessInfo.processInfo.environment["FK_EARLY_APPSYNC_HELPERS"] else { return }
+        guard let path = ProcessInfo.processInfo.environment["FK_EARLY_APPSYNC_HELPERS"] else { try FixtureRequirements.missing("FK_EARLY_APPSYNC_HELPERS") }
         let helpers = URL(fileURLWithPath: path)
         try Oracle.withTemp { root in
             let fm = FileManager.default

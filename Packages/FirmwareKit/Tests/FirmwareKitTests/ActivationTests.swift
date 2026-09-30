@@ -9,10 +9,10 @@ struct ActivationTests {
     }
 
     // Independently check every code-page hash and retained special blobs in real fixtures.
-    @Test func activationCorpus() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func activationCorpus() throws {
         let corpus = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Developer/qemu-ios-files/activation-native/corpus-stock")
-        guard FileManager.default.fileExists(atPath: corpus.path) else { return }
+        guard FileManager.default.fileExists(atPath: corpus.path) else { try FixtureRequirements.missing(#"ActivationTests.swift: FileManager.default.fileExists(atPath: corpus.path)"#) }
         let names = try FileManager.default.contentsOfDirectory(atPath: corpus.path)
         for name in names where name.hasSuffix(".lockdownd") {
             try Oracle.withTemp { dir in
