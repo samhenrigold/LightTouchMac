@@ -22,7 +22,7 @@ app was never launched.
 - **Drivers:**
   - `spikes/spike1.py`: rendezvous, validation, ring, lifetime.
   - `spikes/spike2.py ipad-boot | ipad-restore | ipod-boot | both`: spikes 2 and 3.
-  - `spikes/disk_peak.py BUILD [--activation-hook H]`: spike 5.
+  - `spikes/disk_peak.py`: spike 5 (deleted 09-30 with the Python device builders it drove).
 - **Signing:**
   - Every binary is signed **"Developer ID Application: Sam Gold (SM75355Y6R)"** with hardened runtime (`flags=0x10000(runtime)`). The keychain allowed it without a prompt. It used `--timestamp=none`, so this is not notarizable as-is.
   - The helper carries `qemu-ios-ipad1/contrib/macos-app/entitlements.plist`: allow-jit, allow-unsigned-executable-memory, disable-library-validation.

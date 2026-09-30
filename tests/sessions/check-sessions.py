@@ -35,7 +35,7 @@ install, and a clean shutdown; screenshots lock/home/installed in --work/<board>
 runs it with the bundle's helper, dylib, usbmuxd, Frameworks and Resources/device.
 
 --guest runs the no-shell guest-services scenario (tests/drivers/session-driver/guest.swift) on two
-iPods at once: the shipping image (nand-current) and a fresh device.py 7E18 (--ipod-device),
+iPods at once: the shipping image (nand-current) and a fresh firmwarekit 7E18 (--ipod-device),
 each through the app's GuestServices/GuestAgent, DeviceServices, lockdown-tz and GuestPackage:
 
   offer      the boot's guest-package offer from --itpack, passed as guest-package=
@@ -49,9 +49,9 @@ each through the app's GuestServices/GuestAgent, DeviceServices, lockdown-tz and
   rollback   (fresh) the package judged bad: after a clean halt and a fresh helper the loader reverts
   halt       the agent's halt, confirmed power-off, helper exit 0; the base is unchanged
 
---ipad-device is a fresh device from the qemu-ios device tool, e.g.
-  python3 $(scripts/sources.py qemu-ios)/imgtools/device.py create manifests/ipad1-7B500.json OUT \\
-      --activation-hook ~/Developer/qemu-ios-files/ipad1/offline-activation/patch_lockdownd.py
+--ipad-device is a fresh device from firmwarekit, e.g.
+  firmwarekit create --catalog LightTouchMac/Resources/firmware-catalog.json --id k48ap-7B500 --ipsw IPSW --out OUT \\
+      --helper LIGHTTOUCHDEVICE   # the LightTouchDevice executable
 --helper defaults to building the LightTouchDevice target (Debug). Boots use -audio driver=none.
 Run in the foreground; every process it starts is gone when it returns. Screenshots land in
 --work/<device>/*.png.
