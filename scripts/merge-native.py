@@ -77,13 +77,14 @@ def relink(path, pairs, scratch):
     return copy
 
 
-def files(root):
+def files(root, pairs):
+    """{name: path}; names are relocated too (glib installs share/gdb/auto-load/<its prefix>/lib/...)."""
     result = {}
     for path in root.rglob('*'):
         name = str(path.relative_to(root))
         if (path.is_file() or path.is_symlink()) and not (
                 name.startswith(SKIPPED) or name.endswith(SKIPPED_SUFFIXES)):
-            result[name] = path
+            result[relocated(name.encode(), pairs).decode()] = path
     return result
 
 
@@ -95,7 +96,7 @@ def merge(output, part, slices, scratch):
     for root, record in slices.values():
         source = Path(record[key]) / member if member else Path(record[key])
         pairs = relocations(root, record, output.resolve())
-        trees.append((pairs, {'': source} if source.is_file() else files(source)))
+        trees.append((pairs, {'': source} if source.is_file() else files(source, pairs)))
     names = set(trees[0][1])
     for _, tree in trees[1:]:
         if set(tree) != names:

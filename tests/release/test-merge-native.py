@@ -39,6 +39,9 @@ def slice_root(work, arch, staged):
     (prefix / 'share/where.txt').write_text(f'built in {prefix}\n')
     (prefix / 'lib/pkgconfig/value.pc').write_text(f'arch={arch}\n')   # per-slice build metadata: not merged
     (prefix / 'lib/libvalue.1.dylib').symlink_to('libvalue.dylib')
+    gdb = prefix / 'share/gdb/auto-load' / str(prefix.resolve()).lstrip('/') / 'lib/libvalue-gdb.py'   # as glib installs it
+    gdb.parent.mkdir(parents=True)
+    gdb.write_text('# gdb helper\n')
     record = {'schema_version': 1, 'architecture': arch, 'deps_prefix': str(root / 'prefix'), 'static_deps': str(static),
               'qemu_build': str(qemu), 'usbmuxd_binary': str(usbmuxd)}
     if staged:
@@ -61,6 +64,7 @@ with tempfile.TemporaryDirectory() as directory:
                  'build/usbmuxd/src/usbmuxd'):
         assert set(run('lipo', '-archs', out / name).split()) == {'arm64', 'x86_64'}, name
     assert (out / 'prefix/lib/libvalue.1.dylib').readlink() == Path('libvalue.dylib')
+    assert (out / 'prefix/share/gdb/auto-load' / str(out / 'prefix').lstrip('/') / 'lib/libvalue-gdb.py').is_file()
     assert not (out / 'prefix/lib/pkgconfig').exists(), 'per-slice pkg-config metadata was merged'
     assert (out / 'prefix/share/where.txt').read_text() == f'built in {out / "prefix"}\n'
     for arch in ('arm64', 'x86_64'):
