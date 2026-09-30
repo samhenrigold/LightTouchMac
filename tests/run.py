@@ -165,7 +165,7 @@ def session_checks():
             checks.append([S / 'check-sessions.py', '--ipad-device', ipad, '--dylib', dylib])
         # The shipping image has no loader, so --guest upgrades its components from the checkout's own builds.
         guest = 'sessions/check-sessions.py --guest'
-        missing = next((t for t in ('it-agent/it_agent', 'it-agent/it_typein.dylib', 'it-gles/MBXGLEngine', 'it-media/itphoto')
+        missing = next((t for t in ('it-agent/it_agent', 'it-agent/it_typein.dylib', 'it-media/itphoto')
                         if not (qemu_ios / 'contrib' / t).exists()), None)
         if not ipod:
             skips.append((guest, 'LTM_IPOD_DEVICE unset: a fresh device.py 7E18 iPod'))

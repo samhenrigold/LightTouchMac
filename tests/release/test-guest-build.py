@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix="lighttouch guest test ") as directory:
     assert f"LTM_GUEST_TOOLS_DIR={output}/guest-tools".replace(" ", "\\ ") in result.stdout, result.stdout
     build(output, error="use a new build directory")
 
-    build(root / "old export", error="predates gl-runtime", env=dict(environment, EXPORT_OLD="1"))
+    build(root / "old export", error="predates gles-public", env=dict(environment, EXPORT_OLD="1"))
 
     failed = root / "failed build"
     build(failed, error="intentional failure", env=dict(environment, EXPORT_FAIL="1"))

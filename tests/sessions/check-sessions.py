@@ -161,7 +161,7 @@ def main():
     ap.add_argument("--ipod-device", type=Path, help="--guest: a fresh device.py iPod (nand/, nor.bin, iBoot.bin, gid-blobs.bin)")
     ap.add_argument("--itpack", type=Path, default=sources.path("qemu-ios") / "build/guest-package/armv6.itpack")
     ap.add_argument("--guest-tools", type=Path, help="--guest: a flat build-guest-tools.sh guest-tools directory "
-                    "(it_agent, it_typein.dylib, MBXGLEngine, itphoto); default: the qemu-ios checkout's contrib binaries")
+                    "(it_agent, it_typein.dylib, itphoto); default: the qemu-ios checkout's contrib binaries")
     ap.add_argument("--contrib", type=Path, default=sources.path("qemu-ios") / "contrib")
     ap.add_argument("--time-zone", default="Asia/Tokyo")
     ap.add_argument("--helper")
@@ -210,7 +210,7 @@ def main():
         dev = args.ipod_device
         c, g = args.contrib, args.guest_tools
         tools = {n: str(g / n if g else c / sub / n) for n, sub in (("it_agent", "it-agent"), ("it_typein.dylib", "it-agent"),
-                                                                   ("MBXGLEngine", "it-gles"), ("itphoto", "it-media"))}
+                                                                   ("itphoto", "it-media"))}
         cfg["guest"] = {"itpack": str(args.itpack), "lockdownTZ": str(tz), "tools": tools, "timeZone": args.time_zone,
                         "devices": [{"name": "shipping", "nand": cfg["ipodNAND"], "nor": str(args.files / "ios3/nor_7E18.bin"),
                                      "iBoot": str(args.files / "ios3/iBoot.bin")},

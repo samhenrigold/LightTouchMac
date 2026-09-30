@@ -201,7 +201,6 @@ copy_guest() {
         copy_tool "$QEMU/contrib/$1" guest
     fi
 }
-copy_guest it-gles/MBXGLEngine
 copy_guest it-agent/it_agent
 copy_guest it-agent/it_typein.dylib
 copy_guest it-media/itmedia

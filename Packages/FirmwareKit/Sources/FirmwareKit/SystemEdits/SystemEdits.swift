@@ -63,8 +63,8 @@ public enum SystemEdits {
         public static let appsync = "libappsync.dylib", appsyncLauncher = "appsync-launch"
         /// The GL front end (qemu-ios contrib/gles-public: one fat armv6 + armv7 OpenGLES.framework/OpenGLES for
         /// every firmware), and the name table it and the host speak (the fit check proves a 5.x firmware's
-        /// dispatch fields are all rows of it). MBXGLEngine: the iPod's engine shim.
-        public static let openGLES = "OpenGLES", mbxEngine = "MBXGLEngine", glesNames = "gles-names.h"
+        /// dispatch fields are all rows of it).
+        public static let openGLES = "OpenGLES", glesNames = "gles-names.h"
     }
 
     public struct Result: Sendable {
