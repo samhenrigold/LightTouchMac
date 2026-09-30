@@ -22,7 +22,7 @@ if [ "${EXPORT_FAIL:-}" = 1 ]; then echo "intentional failure" >&2; exit 7; fi
 mkdir -p "$OUT/guest-tools" "$OUT/ipad-guest-tools"
 printf rebuilt > "$OUT/guest-tools/it_agent"
 printf rebuilt > "$OUT/ipad-guest-tools/it_pbd"
-[ "${EXPORT_OLD:-}" = 1 ] || for f in GLEngine MBXGLEngine gles-names.h; do printf rebuilt > "$OUT/ipad-guest-tools/$f"; done
+[ "${EXPORT_OLD:-}" = 1 ] || for f in OpenGLES gles-names.h; do printf rebuilt > "$OUT/ipad-guest-tools/$f"; done
 printf '{"schema": 1, "files": {"guest-tools/it_agent": "x", "ipad-guest-tools/it_pbd": "x"}}\n' > "$OUT/manifest.json"
 '''
 

@@ -24,13 +24,13 @@ GUEST_PAYLOADS = frozenset(('MBXGLEngine', 'sbdlicon', 'ithalt', 'it_agent', 'it
                           'com.qemu.it-agent.plist', 'itstatus', 'itmedia', 'itphoto',
                           'itproxy', 'ittrust', 'itorient'))
 # firmwarekit's --guest-tools set (SystemEdits.Helpers + it_keybag) and the n72/n45 recipes' inputs (N72Recipe,
-# N45Recipe): one GL shim per arch (GLEngine, MBXGLEngine: the dispatch layout is read at load) and the name table
-# they speak; the 2.x and 1.x GL front ends (OpenGLES-2x, OpenGLES-1x) and the export sets the recipes check the stock
-# OpenGLES against (opengles-2x.exports, opengles-1x.exports).
+# N45Recipe): the GL front end (OpenGLES: one fat binary every k48 and n72 build gets, qemu-ios contrib/gles-public)
+# and the name table it speaks; MBXGLEngine, OpenGLES-2x and opengles-2x.exports (still staged, no recipe installs
+# them now); 1.x's GL front end (OpenGLES-1x) and the export set N45 checks the stock OpenGLES against.
 IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquiet.dylib', 'it_seal', 'it_keybag',
                                  'libappsync.dylib', 'com.qemu.it-pbd.plist', 'com.qemu.it-ethlink.plist',
-                                 'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'GLEngine', 'gles-names.h',
-                                 'GLRendererFloatQEMU', 'armv6.itpack', 'armv7.itpack',
+                                 'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'OpenGLES', 'gles-names.h',
+                                 'armv6.itpack', 'armv7.itpack',
                                  'MBXGLEngine', 'sblaunch', 'sbdlicon', 'it_agent', 'it_typein.dylib',
                                  'com.qemu.it-agent.plist', 'it_keybag-armv6', 'it_prefs-armv6',
                                  'OpenGLES-2x', 'opengles-2x.exports', 'OpenGLES-1x', 'opengles-1x.exports'))

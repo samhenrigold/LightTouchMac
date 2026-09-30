@@ -275,7 +275,7 @@ class ReleaseTests(unittest.TestCase):
     def test_guest_required_payloads_are_required(self):
         manifest = self.guest_fixture()
         release.validate_guest(self.args, self.guest)
-        for name in ('guest-tools/it_agent', 'ipad-guest-tools/GLEngine', 'ipad-guest-tools/MBXGLEngine',
+        for name in ('guest-tools/it_agent', 'ipad-guest-tools/OpenGLES', 'ipad-guest-tools/MBXGLEngine',
                      'ipad-guest-tools/gles-names.h', 'ipad-guest-tools/OpenGLES-2x',
                      'ipad-guest-tools/OpenGLES-1x', 'ipad-guest-tools/opengles-1x.exports'):
             missing = dict(manifest, files={k: v for k, v in manifest['files'].items() if k != name})
