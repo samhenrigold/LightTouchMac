@@ -24,7 +24,7 @@ import Testing
         try Oracle.withTemp { dir in
             var dmg = fw.cache?.appendingPathComponent("rootfs.dmg")
             if dmg == nil || !Oracle.exists(dmg!) {
-                let ipsw = IPSWArchive(fw.ipsw), os = try BuildComponents.load(ipsw)["OS"]!
+                let ipsw = IPSWArchive(fw.ipsw), os = try BuildComponents.load(ipsw, board: Oracle.entry(fw.entryID).board)["OS"]!
                 let key = try #require(Data(hex: Oracle.entry(fw.entryID).key(forPath: os).key))
                 dmg = dir.appendingPathComponent("rootfs.dmg")
                 try ipsw.stream(os) { try VFDecrypt.decrypt(from: $0.fileDescriptor, output: dmg!, key: key) }

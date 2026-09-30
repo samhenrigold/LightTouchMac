@@ -98,7 +98,7 @@ final class K48Board: Board {
         let parts = K48NAND.partitions(mbr: [UInt8](try Data(contentsOf: mbr)))
         var kernelcacheImg3: Data?
         if iboot {
-            guard let kc = try BuildComponents.load(c.ipsw)["KernelCache"] else { throw FirmwareError(.unsupported, "\(c.e.id): the IPSW names no KernelCache") }
+            guard let kc = try BuildComponents.load(c.ipsw, board: c.e.board)["KernelCache"] else { throw FirmwareError(.unsupported, "\(c.e.id): the IPSW names no KernelCache") }
             kernelcacheImg3 = try c.ipsw.read(kc)
         }
         vols = try SystemEdits.buildK48(rootfs: c.decFile("rootfs.dmg"), work: c.work, systemBytes: parts[0].count * 4096,

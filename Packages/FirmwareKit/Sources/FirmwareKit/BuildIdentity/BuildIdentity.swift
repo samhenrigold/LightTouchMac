@@ -3,11 +3,11 @@
 //   let entry = try FirmwareEntry.load(from: entryJSON)     // one firmware-catalog.json entry, keys included
 //   let restore = try RestoreInfo(ipsw)                     // Restore.plist
 //   try restore.verify(against: entry)                      // ProductType / ProductBuildVersion / BoardConfig
-//   let comp = try BuildComponents.load(ipsw)               // {component: IPSW path}
+//   let comp = try BuildComponents.load(ipsw, board: entry.board)  // {component: IPSW path}
 //   comp["KernelCache"], comp["OS"], comp["UpdateRamDisk"]
 //   try entry.key(forPath: comp["iBoot"]!)                  // IV/key by the member's file name
 //
-// Ports ipad1_fw.components (BuildManifest's first identity plus the Update identity's RestoreRamDisk as
+// Ports ipad1_fw.components (BuildManifest's board identity plus the Update identity's RestoreRamDisk as
 // "UpdateRamDisk"; 2.x IPSWs have no BuildManifest, so the paths come from Restore.plist and the board's
 // all_flash/dfu naming) and device.py's verify step.
 
@@ -133,22 +133,24 @@ public struct RestoreInfo: Sendable, Equatable {
         boardConfig = board; platform = map["Platform"] as? String ?? ""
     }
 
-    /// device.py's check: (ProductType, ProductBuildVersion, BoardConfig) must be the entry's.
+    /// device.py's check: (ProductType, ProductBuildVersion, BoardConfig) must be the entry's. The 1.1.2 beta
+    /// (3B48b) gives ProductType as the board name ("N45AP"), which stands for the entry's product type.
     public func verify(against entry: FirmwareEntry) throws {
+        let type = productType.caseInsensitiveCompare(entry.board) == .orderedSame ? entry.productType : productType
         let found = [productType, productBuildVersion, boardConfig], want = [entry.productType, entry.build, entry.board]
-        guard found == want else {
+        guard [type, productBuildVersion, boardConfig] == want else {
             throw FirmwareError(.unsupported, "IPSW is \(found.joined(separator: " ")), \(entry.id) wants \(want.joined(separator: " "))")
         }
     }
 }
 
 public enum BuildComponents {
-    /// {component: IPSW path}. With a BuildManifest: its first (Customer Erase) identity, plus the Update
+    /// {component: IPSW path}. With a BuildManifest: `board`'s first (Erase) identity, plus its Update
     /// identity's RestoreRamDisk as "UpdateRamDisk". Without (2.x): derived from Restore.plist.
-    public static func load(_ ipsw: IPSWArchive) throws -> [String: String] {
+    public static func load(_ ipsw: IPSWArchive, board: String) throws -> [String: String] {
         let names = Set(try ipsw.names())
         if names.contains("BuildManifest.plist") {
-            return try fromBuildManifest(ipsw.read("BuildManifest.plist"))
+            return try fromBuildManifest(ipsw.read("BuildManifest.plist"), board: board)
         }
         let r = try RestoreInfo(ipsw), af = "Firmware/all_flash/all_flash.\(r.boardConfig).production/"
         let comp = try fromRestore(r, img2: names.contains(af + "iBoot.\(r.boardConfig).RELEASE.img2"))
@@ -159,15 +161,21 @@ public enum BuildComponents {
         return comp
     }
 
-    public static func fromBuildManifest(_ data: Data) throws -> [String: String] {
+    /// Only `board`'s identities (Info.DeviceClass): the 4.3 betas list the k48dev development board's first.
+    public static func fromBuildManifest(_ data: Data, board: String) throws -> [String: String] {
         guard let p = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let ids = p["BuildIdentities"] as? [[String: Any]], let first = ids.first,
-              let manifest = first["Manifest"] as? [String: [String: Any]] else {
+              let all = p["BuildIdentities"] as? [[String: Any]] else {
             throw FirmwareError(.unsupported, "BuildManifest.plist has no BuildIdentities")
+        }
+        func info(_ bi: [String: Any], _ k: String) -> String? { (bi["Info"] as? [String: Any])?[k] as? String }
+        let ids = all.filter { info($0, "DeviceClass")?.lowercased() == board.lowercased() }
+        guard let first = ids.first(where: { info($0, "RestoreBehavior") != "Update" }) ?? ids.first,
+              let manifest = first["Manifest"] as? [String: [String: Any]] else {
+            throw FirmwareError(.unsupported, "BuildManifest.plist has no \(board) identity")
         }
         func path(_ v: [String: Any]?) -> String? { (v?["Info"] as? [String: Any])?["Path"] as? String }
         var comp = manifest.compactMapValues { path($0) }
-        for bi in ids.dropFirst() where (bi["Info"] as? [String: Any])?["RestoreBehavior"] as? String == "Update" {
+        for bi in ids where info(bi, "RestoreBehavior") == "Update" {
             if let rd = path((bi["Manifest"] as? [String: [String: Any]])?["RestoreRamDisk"]) { comp["UpdateRamDisk"] = rd }
         }
         return comp
