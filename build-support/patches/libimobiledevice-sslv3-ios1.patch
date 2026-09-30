@@ -1,7 +1,18 @@
 diff -ru a/libimobiledevice-1.4.0/src/idevice.c b/libimobiledevice-1.4.0/src/idevice.c
 --- a/src/idevice.c	2025-09-16 04:00:09
 +++ b/src/idevice.c	2026-09-29 16:54:57
-@@ -1274,6 +1274,10 @@
+@@ -1261,6 +1261,10 @@
+ 	SSL_CTX_set_min_proto_version(ssl_ctx, TLS1_VERSION);
+ 	if (connection->device->version < IDEVICE_DEVICE_VERSION(10,0,0)) {
+ 		SSL_CTX_set_max_proto_version(ssl_ctx, TLS1_VERSION);
++		/* No ECDHE below 10.0: iOS 5.0 beta 1 (9A5220p) lockdownd answers any ClientHello that offers an ECDHE
++		   suite with a fatal alert, before ServerHello (smoke.md "9A5220p USB lockdown"); without ECDHE it negotiates AES256-SHA.
++		   The 4.2.1, 5.0 beta 5 and 5.1.1 iPad builds take RSA key exchange as well (matrix, 2026-09-29). */
++		SSL_CTX_set_cipher_list(ssl_ctx, "DEFAULT:!kECDHE");
+ 		if (connection->device->version == 0) {
+ 			/*
+ 				iOS 1 doesn't understand TLS1_VERSION, it can only speak SSL3_VERSION.
+@@ -1274,6 +1278,10 @@
  					or up to the highest version supported by the library, respectively.
  			*/
  			SSL_CTX_set_min_proto_version(ssl_ctx, 0);

@@ -4709,12 +4709,12 @@
   "version": "5.0",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T20:54:21+00:00",
+  "when": "2026-09-30T00:54:08+00:00",
   "prerelease": "beta",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-iboot-bootargs/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/fk-ios5/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ios5b1-usb/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/ltm-preflight/.build/releases/multidevice-preflight/Light Touch.app/Contents/Frameworks/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/ltm-preflight/.build/releases/multidevice-preflight/Light Touch.app/Contents/Resources/guest-tools"
   },
   "keys": {
    "total": 17,
@@ -4723,8 +4723,8 @@
    "error": null
   },
   "prepare": {
-   "seconds": 21.7,
-   "ok": false,
+   "seconds": 220.3,
+   "ok": true,
    "steps": [
     "Verifying the IPSW",
     "Decrypting the firmware",
@@ -4732,19 +4732,120 @@
     "Building the system and data volumes",
     "Writing the NAND",
     "Creating the data-protection keybag",
-    "Sealing the NAND"
+    "Sealing the NAND",
+    "Writing the lock"
    ],
    "warnings": [],
-   "error": "oneshot_failed: seal boot: QEMU exited without it_seal after 0 s",
-   "last_step": "Sealing the NAND",
-   "log": "/Users/shg/Developer/qemu-ios-files/iboot-bootargs/scratch/k48ap-9A5220p/firmwarekit.log"
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/scratch/k48ap-9A5220p/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios5",
+    "activation": true,
+    "kernel": null
+   }
   },
-  "first_failure": {
-   "check": "prepare",
-   "why": "oneshot_failed: seal boot: QEMU exited without it_seal after 0 s",
-   "excerpt": "firmwarekit: oneshot_failed: seal boot: QEMU exited without it_seal after 0 s"
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 92.9,
+    "setup": {
+     "ok": false,
+     "detail": "the location page did not answer tap 2 (after language, country)",
+     "frontmost": "com.apple.purplebuddy"
+    }
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.933,
+     "home2": 0.932,
+     "installed": 0.932
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": null
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 0.2,
+    "productType": "iPad1,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": null,
+    "note": "appsync off"
+   },
+   "package": {
+    "ok": true,
+    "offered": 8,
+    "reported": 8,
+    "result": 0
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": null,
+    "note": null
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 34.1,
+     "lockdown": 0.2
+    },
+    "restartedApps": false
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 11.3,
+    "reason": "The iPad stopped.",
+    "second": 12.6,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
   },
-  "triage": "iboot-bootargs 09-29: smoke #48 (boot-args iBoot32Patcher xref) fixed \u2014 the patcher now scans word-aligned literal-pool words only (build-support/patches/iBoot32Patcher-ltm.patch), and 9A5220p's lockdownd needed the activation matcher to skip an LDR-immediate between the log arguments (activation.c). prepare now clears the boot chain and activation and reaches 'Sealing the NAND'; the seal one-shot's iBoot-1219.35.80 then panics 'reset vector overwritten' because iBoot32Patcher's find_bl_verify_shsh_5_6_7 targets a verify_shsh call whose caller holds R3=0 on 9A5220p (new smoke #50). Byte-identity of the patched iBoot holds for every working k48 build (K48IBootTests); swift test / offline / release / app build green. Still untested pending #50."
+  "screenshots": {
+   "lock": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/lock.png",
+   "setup-language-0": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/setup-language-0.png",
+   "setup-country-0": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/setup-country-0.png",
+   "setup-country-1": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/setup-country-1.png",
+   "setup-location-0": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/setup-location-0.png",
+   "setup-location-1": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/setup-location-1.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/installed.png",
+   "powerdown1-7s": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/powerdown1-7s.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/home2.png",
+   "powerdown2-7s": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/powerdown2-12s.png"
+  },
+  "events": "/Users/shg/Developer/qemu-ios-files/ios5b1-usb/results/k48ap-9A5220p/driver.jsonl",
+  "triage": ""
  },
  "k48ap-9A5288d": {
   "version": "5.0",
