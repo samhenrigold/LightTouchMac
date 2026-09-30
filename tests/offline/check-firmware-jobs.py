@@ -19,6 +19,7 @@ reads or writes the real Application Support or Caches. Everything is deleted at
 """
 from pathlib import Path
 import os, shutil, signal, subprocess, sys, tempfile, time, uuid
+from firmwarekit_leaf import capacity_sources
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / 'LightTouchMac'
@@ -410,7 +411,7 @@ default: fatalError(args[1])
 def build(tmp):
     (tmp / 'stubs.swift').write_text(STUBS)
     (tmp / 'main.swift').write_text(CHECK)
-    subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'), str(APP / 'Device/BootRecipe.swift'),
+    subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', *capacity_sources(ROOT, tmp), '-module-cache-path', str(tmp / 'modules'), str(APP / 'Device/BootRecipe.swift'),
                     *[str(APP / s) for s in SOURCES], str(ROOT / 'Shared/DeviceLinkProtocol.swift'),
                     str(tmp / 'stubs.swift'), str(tmp / 'main.swift'),
                     '-o', str(tmp / 'check')], check=True)

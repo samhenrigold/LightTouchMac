@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1D0C0DE3100000000000021 /* StorageCapacity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3100000000000020 /* StorageCapacity.swift */; };
 		A1D0C0DE3100000000000002 /* LightTouchDevice in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3100000000000001 /* LightTouchDevice */; };
 		EA17D84D3023A55900BDF83E /* Subprocess in Frameworks */ = {isa = PBXBuildFile; productRef = EA17D84C3023A55900BDF83E /* Subprocess */; };
 		EA17D8503023A56800BDF83E /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = EA17D84F3023A56800BDF83E /* ArgumentParser */; };
@@ -35,6 +36,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A1D0C0DE3100000000000020 /* StorageCapacity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Packages/FirmwareKit/Sources/FirmwareKit/StorageCapacity/StorageCapacity.swift; sourceTree = SOURCE_ROOT; };
 		A1D0C0DE3100000000000001 /* LightTouchDevice */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LightTouchDevice; sourceTree = BUILT_PRODUCTS_DIR; };
 		EA17D83230239D9B00BDF83E /* Light Touch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Light Touch.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB72984030B2091100000001 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
@@ -78,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				EA17D83430239D9B00BDF83E /* LightTouchMac */,
+				A1D0C0DE3100000000000020 /* StorageCapacity.swift */,
 				A1D0C0DE3100000000000012 /* LightTouchDevice */,
 				A1D0C0DE3100000000000013 /* Shared */,
 				EB72984030B2091100000002 /* Configuration */,
@@ -209,6 +212,7 @@
 		EA17D82E30239D9B00BDF83E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				A1D0C0DE3100000000000021 /* StorageCapacity.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */

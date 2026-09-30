@@ -95,8 +95,7 @@ nonisolated struct IPSWStore: Sendable {
     }
 
     static func availableSpace(at url: URL) throws -> Int64 {
-        try existing(url).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-            .volumeAvailableCapacityForImportantUsage ?? 0
+        try StorageCapacity.available(at: existing(url))
     }
 
     /// Free space for `required` bytes on the volume holding `url` (or its nearest existing parent).

@@ -90,9 +90,8 @@ public enum Recipe {
             throw FirmwareError(.internal, "\(o.out.path) is not an empty directory")
         }
         try board.check(c)
-        if e.estimates.peakBytes > 0, let free = try? o.out.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-            .volumeAvailableCapacityForImportantUsage, free < e.estimates.peakBytes - (e.source.bytes ?? 0) {
-            throw FirmwareError(.diskFull, "needs \(e.estimates.peakBytes - (e.source.bytes ?? 0)) bytes, \(free) available")
+        if e.estimates.peakBytes > 0 {
+            try StorageCapacity.require(e.estimates.peakBytes - (e.source.bytes ?? 0), at: o.out)
         }
         let steps = ["Verifying the IPSW", "Decrypting the firmware", board.bootStep, board.volumesStep, "Writing the NAND"]
             + (board.dataProtection ? [board.keybagStep] : []) + (board.needsSeal ? ["Sealing the NAND"] : []) + ["Writing the lock"]
