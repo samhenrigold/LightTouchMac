@@ -116,6 +116,13 @@ final class DeviceModelView: NSView {
             finish.metallic = .init(floatLiteral: 0)
             finish.roughness = .init(floatLiteral: 0.5)
           }
+          // N45's graphite front frame ships as near-black (0.03 linear) metal, which reflects almost
+          // nothing of the studio IBL; Apple's shots show a medium-grey brushed anodised rim.
+          if name == "frameDark" {
+            finish.baseColor = .init(tint: NSColor(srgbRed: 0.74, green: 0.77, blue: 0.8, alpha: 1))
+            finish.metallic = .init(floatLiteral: 0.3)
+            finish.roughness = .init(floatLiteral: 0.42)
+          }
           if name.contains("Concave") {
             finish.specular = .init(floatLiteral: 0.5)
             finish.roughness = .init(floatLiteral: 0.18)
@@ -282,6 +289,9 @@ final class DeviceModelView: NSView {
       sampler.modify { descriptor in
         descriptor.sAddressMode = .clampToEdge
         descriptor.tAddressMode = .clampToEdge
+        // Upscaled LCD pixels stay square, like DisplayView's flat layer; shrunk ones still filter.
+        descriptor.magFilter = .nearest
+        descriptor.minFilter = .linear
       }
       screenMaterial.color = .init(tint: .white, texture: .init(screenTexture, sampler: sampler))
     } else {
