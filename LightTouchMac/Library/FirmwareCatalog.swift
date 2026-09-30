@@ -72,7 +72,7 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         var productType: String
         var version: String
         var build: String
-        /// Apple's release date ("2010-09-08"), or a developer build's; the listings' primary order.
+        /// Apple's release date ("2010-09-08"), or a developer build's; the order within a version.
         var released: String?
         var status: Status
         var statusNote: String?
@@ -107,31 +107,25 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         return catalog.sortedByVersion()
     }
 
-    /// Boards in the order the file introduces them; each board's entries chronologically. By
-    /// version ascending, and within a version its betas, then its GMs (by number), then the
-    /// release (4.1 beta 1–3, then 4.1), build as the last tiebreak; then the entries with a
-    /// `released` date take the dated positions in date order, so a beta of the next version
-    /// that came out before a point release (5.0 beta 1, then 4.3.4) lists where it happened.
+    /// Boards in the order the file introduces them; each board's entries in version order. By
+    /// marketing version ascending, and within a version its betas and GMs, then the release, by
+    /// `released` date (betas by number, then GMs by number, where undated), build as the last
+    /// tiebreak: 4.3.x stays together and 5.0 Beta 1 lists after 4.3.5, just before 5.0.
     /// Every listing (sidebar, settings) shows this order.
     func sortedByVersion() -> FirmwareCatalog {
         var boards: [String] = []
         for entry in entries where !boards.contains(entry.board) { boards.append(entry.board) }
         func board(_ e: Entry) -> Int { boards.firstIndex(of: e.board)! }
-        func rank(_ e: Entry) -> (Int, Int) { (e.prerelease.map { $0 == .beta ? 0 : 1 } ?? 2, e.prereleaseNumber ?? 1) }
-        func precedes(_ a: Entry, _ b: Entry) -> Bool {
-            if board(a) != board(b) { return board(a) < board(b) }
-            let (va, vb) = (a.version.split(separator: ".").map { Int($0) ?? 0 }, b.version.split(separator: ".").map { Int($0) ?? 0 })
-            if va != vb { return va.lexicographicallyPrecedes(vb) }
-            return rank(a) != rank(b) ? rank(a) < rank(b) : a.build < b.build
+        func version(_ e: Entry) -> [Int] { e.version.split(separator: ".").map { Int($0) ?? 0 } }
+        func within(_ e: Entry) -> (Int, String, Int, Int) {
+            (e.prerelease == nil ? 1 : 0, e.released ?? "", e.prerelease == .gm ? 1 : 0, e.prereleaseNumber ?? 1)
         }
         var sorted = self
-        sorted.entries = entries.sorted(by: precedes)
-        let slots = sorted.entries.indices.filter { sorted.entries[$0].released != nil }
-        let dated = slots.map { sorted.entries[$0] }.sorted {
-            if board($0) != board($1) { return board($0) < board($1) }
-            return $0.released != $1.released ? $0.released! < $1.released! : precedes($0, $1)
+        sorted.entries = entries.sorted { a, b in
+            if board(a) != board(b) { return board(a) < board(b) }
+            if version(a) != version(b) { return version(a).lexicographicallyPrecedes(version(b)) }
+            return within(a) != within(b) ? within(a) < within(b) : a.build < b.build
         }
-        for (slot, entry) in zip(slots, dated) { sorted.entries[slot] = entry }
         return sorted
     }
 

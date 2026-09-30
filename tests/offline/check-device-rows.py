@@ -187,6 +187,10 @@ import Foundation
         precondition(row(iPad).spaceShortage(available: needed - 1)?.hasPrefix("Not enough disk space: this needs ") == true)
         precondition(row(iPad, instance: id).spaceShortage(available: 0) == nil, "a prepared device needs no space")
         precondition(row(iPad32, job: .downloading(fraction: 0.5)).spaceShortage(available: 0) == nil, "nor does one already downloading")
+        // The sidebar lists in catalog order: version order, a version's betas right before its release.
+        let ids = catalog.entries.map(\.id)
+        precondition(ids.firstIndex(of: "k48ap-8L1")! < ids.firstIndex(of: "k48ap-9A5220p")! && ids.firstIndex(of: "k48ap-9A5288d")! < ids.firstIndex(of: "k48ap-9A334")!
+                     && ids.firstIndex(of: "n72ap-8A400")! < ids.firstIndex(of: "n72ap-8B5080c")!, "sidebar order: \(ids)")
         print("PASS: row states, accessories, primary buttons and commands for every catalog status")
     }
 }
