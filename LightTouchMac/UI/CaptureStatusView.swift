@@ -11,6 +11,8 @@ final class CaptureStatusView: NSView {
     private var fileMonitor: CaptureFileMonitor?
     private var presentationID = UUID()
     private var dismissesAutomatically = false
+    /// How long a capture banner stays up unhovered (check-capture-status holds it up while it removes files).
+    static var autoDismissal: Duration = .seconds(5)
     var fileURL: URL? { state.fileURL }
     var onPrimary: (() -> Void)?
     var onSecondary: (() -> Void)?
@@ -96,7 +98,7 @@ final class CaptureStatusView: NSView {
         guard dismissesAutomatically, !isHidden else { return }
         dismissal?.cancel()
         dismissal = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            do { try await Task.sleep(for: Self.autoDismissal) } catch { return }
             self?.dismissBanner()
         }
     }
