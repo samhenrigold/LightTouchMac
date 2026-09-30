@@ -124,6 +124,36 @@ nonisolated struct GuestServices: Sendable {
         return String(decoding: output, as: UTF8.self)
     }
 
+    // MARK: Time zone
+
+    /// 4.x's locationd applies an external zone (lockdown's TimeZone, as iTunes
+    /// wrote it) only while it has applied none: the first one is kept as
+    /// PreviousTimeZone in its cache and every later external zone is dropped
+    /// (CLTimeZoneManager::handleExternalTimeZoneUpdate, 4.2.1 locationd
+    /// 0x910e0), so the Mac's zone reached a device once and never followed the
+    /// Mac again. Clears that record with locationd unloaded (it writes the cache
+    /// as it exits), so its next external zone applies as on a fresh device.
+    /// False, touching nothing, when the cache holds no such record.
+    func forgetExternalTimeZone() async throws -> Bool {
+        let cache = "/var/root/Library/Caches/locationd/cache.plist", job = "/System/Library/LaunchDaemons/com.apple.locationd.plist"
+        func withoutRecord() async throws -> Data? {
+            guard let data = try await agent.get(cache),
+                  var plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                  plist.removeValue(forKey: "PreviousTimeZone") != nil else { return nil }
+            return try PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0)
+        }
+        guard try await withoutRecord() != nil else { return false }
+        try await agent.spawn([Self.launchctl, "unload", job])
+        do {
+            if let edited = try await withoutRecord() { try await agent.put(cache, mode: 0o644, edited) }
+        } catch {
+            _ = try? await agent.spawn([Self.launchctl, "load", job])
+            throw error
+        }
+        try await agent.spawn([Self.launchctl, "load", job])
+        return true
+    }
+
     // MARK: SpringBoard and launchd
 
     /// launchd's KeepAlive brings SpringBoard straight back.

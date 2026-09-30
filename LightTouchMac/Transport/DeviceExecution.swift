@@ -357,11 +357,14 @@ nonisolated enum DeviceError: Error, LocalizedError {
 nonisolated enum DeviceToolsError: LocalizedError {
     case toolMissing(String)
     case failed(String)
+    /// lockdown took the time zone, but the device kept this one (lockdown-tz's exit 4).
+    case zoneKept(String)
     var errorDescription: String? {
         switch self {
         case .toolMissing(let t):
             return "A component (\(t)) is missing from this copy of Light Touch. Reinstall Light Touch."
         case .failed(let msg): return msg
+        case .zoneKept(let zone): return "The device kept its time zone (\(zone))."
         }
     }
 }

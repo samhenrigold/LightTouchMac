@@ -58,8 +58,13 @@ struct SingleConfig: Decodable {
         await waitUSB(d, expecting: d.profile.productType, 300)
         if let tool = s.lockdownTZ {
             var zone: String?
+            // with the agent where the boot has one, as the app's (EmulatorController.guest): a zone 4.x kept is retried after it
+            let guest = agent || (ipad && offered)
+                ? GuestServices(agent: GuestAgent(link: d.process.link, cache: GuestAgentCache()), packaged: offered) : nil
             for _ in 0..<12 where zone == nil {   // services come up after lockdown answers; the app retries every 5 s
-                zone = try? await DeviceServices.setTimeZone(TimeZone.current.identifier, tool: tool, socket: d.mux.clientSocket)
+                do { zone = try await DeviceServices.setTimeZone(TimeZone.current.identifier, tool: tool, socket: d.mux.clientSocket, guest: guest) }
+                catch DeviceToolsError.zoneKept(let kept) { emit("timezoneKept", ["device": d.name, "generation": generation, "zone": kept]); break }
+                catch {}
                 if zone == nil { try? await Task.sleep(for: .seconds(5)) }
             }
             emit("timezone", ["device": d.name, "generation": generation, "zone": zone ?? ""])
