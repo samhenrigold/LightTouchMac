@@ -372,9 +372,8 @@ enum AppInstaller {
                 alert.alertStyle = .warning
                 alert.messageText = "“\(job.name)” installed, but may not launch"
                 let version = emulator.iosVersion
-                alert.informativeText = "It requires a newer version of iOS than \(version), "
-                    + "and iOS refuses to launch such apps. "
-                    + "Look for a version of this app built for iOS \(version.split(separator: ".").first ?? "3") or earlier."
+                alert.informativeText = "It needs a newer version of iOS than \(version). "
+                    + "Look for a version built for iOS \(version.split(separator: ".").first ?? "3") or earlier."
                 if let window { alert.beginSheetModal(for: window) { _ in } }
                 else { alert.runModal() }
             }

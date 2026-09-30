@@ -55,7 +55,7 @@ struct MediaPhoto: Sendable {
             context.fill(bounds)
             context.draw(thumbnail, in: bounds)
             guard let image = context.makeImage() else {
-                throw DeviceToolsError.failed("The photo could not be prepared.")
+                throw DeviceToolsError.failed("The photo couldn’t be prepared.")
             }
             let temporaryID = UUID().uuidString.lowercased()
             let directory = FileManager.default.temporaryDirectory

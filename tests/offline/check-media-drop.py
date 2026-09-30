@@ -19,7 +19,6 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = ["png", "j
 extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.catalog.app") }
 @MainActor final class DropView: NSView {
  let emulator: EmulatorController? = EmulatorController()
- var onDropUnsupportedFiles: (([URL]) -> Void)?
  var onDropIPA: ((URL) -> Void)?, onDropMedia: ((URL) -> Void)?, onDropCatalogApp: ((CatalogApp) -> Void)?
  var onDropIPSW: ((URL) -> Void)?
 ''' + drop + r'''
@@ -76,16 +75,26 @@ extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.ca
   _ = NSApplication.shared
   let view = DropView(), drag = Drag()
   defer { drag.draggingPasteboard.releaseGlobally() }
-  var apps: [String] = [], media: [String] = [], catalog: [Int] = [], omitted: [String] = [], ipsws: [String] = []
+  var apps: [String] = [], media: [String] = [], catalog: [Int] = [], ipsws: [String] = []
   view.onDropIPSW = { ipsws.append($0.lastPathComponent) }
   view.onDropIPA = { apps.append($0.lastPathComponent) }
   view.onDropMedia = { media.append($0.lastPathComponent) }
   view.onDropCatalogApp = { catalog.append($0.id) }
-  view.onDropUnsupportedFiles = { omitted.append(contentsOf: $0.map(\.lastPathComponent)) }
+  // The drop-target ring (HIG p.294) shows only while an accepted drag is over the screen.
+  func ring() -> NSView? { view.subviews.first { $0 is DropHighlight } }
+  drag.files(["Notes.txt"])
+  precondition(view.draggingEntered(drag).isEmpty && ring().map { $0.isHidden } != false, "a refused drag lights nothing")
+  // A mixed drop: the badge counts what's taken, the rest is left out without an alert (G3).
   drag.files(["App.IPA", "Photo.PNG", "Song.mp3", "Movie.MOV", "Notes.txt"])
   precondition(view.draggingEntered(drag) == .copy && drag.numberOfValidItemsForDrop == 4)
+  precondition(ring()?.isHidden == false && view.subviews.last === ring(), "an accepted drag highlights the screen")
+  view.draggingExited(drag)
+  precondition(ring()?.isHidden == true, "leaving clears the highlight")
+  precondition(view.draggingUpdated(drag) == .copy && ring()?.isHidden == false)
   precondition(view.performDragOperation(drag))
-  precondition(apps == ["App.IPA"] && media == ["Photo.PNG", "Song.mp3", "Movie.MOV"] && omitted == ["Notes.txt"])
+  view.draggingEnded(drag)
+  precondition(ring()?.isHidden == true, "a finished drop clears the highlight")
+  precondition(apps == ["App.IPA"] && media == ["Photo.PNG", "Song.mp3", "Movie.MOV"])
   // The install queue remains an acceptable destination while another job
   // owns the device; readiness is rechecked if it goes away during a drag.
   precondition(view.draggingEntered(drag) == .copy)
@@ -131,7 +140,7 @@ extension NSPasteboard.PasteboardType { static let ltmCatalogApp = Self("test.ca
   let queued = InstallJob()
   inspector.installStarted(Notification(name: .init("start"), object: queued))
   precondition(inspector.tableView.numberOfRows == 3 && inspector.tableView.lastVisibleRow == 2)
-  print("PASS: mixed Finder drops queue supported files, recheck readiness, reject missing handlers/internal IPA drags, route IPSWs to the library, preserve Store drags, and reveal external transfer progress")
+  print("PASS: accepted drags ring the screen until they leave or end, mixed Finder drops queue supported files, recheck readiness, reject missing handlers/internal IPA drags, route IPSWs to the library, preserve Store drags, and reveal external transfer progress")
  }
 }
 '''
@@ -139,6 +148,6 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-drop-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
     subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
-                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/UI/DroppedFiles.swift'),
+                    '-module-cache-path', str(work / 'modules'), str(root / 'LightTouchMac/UI/DroppedFiles.swift'), str(root / 'LightTouchMac/UI/DropHighlight.swift'),
                     str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=25)

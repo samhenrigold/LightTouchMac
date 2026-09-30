@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""Native capture preferences, options-panel actions, and notification payloads."""
+"""Native capture preferences, the Settings window (General, Capture, Storage) and its Capture and General
+panes' actions, and notification payloads. --out DIR keeps the panes' renders (settings-*.png); nothing is
+put on screen."""
 from pathlib import Path
-import subprocess, tempfile
+import argparse, subprocess, tempfile
+ap = argparse.ArgumentParser()
+ap.add_argument('--out')
+args = ap.parse_args()
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[2]
 fixture = r'''import Cocoa
@@ -12,6 +17,17 @@ func descendants(_ view: NSView) -> [NSView] {
   for child in stack.arrangedSubviews where !children.contains(where: { $0 === child }) { children.append(child) }
  }
  return [view] + children.flatMap(descendants)
+}
+/// Storage's stand-in: its own measuring needs the whole app; any pane with a size will do.
+final class StubPane: NSView, SettingsPane {
+ var onResize: (() -> Void)?
+ override var fittingSize: NSSize { NSSize(width: 520, height: 300) }
+}
+func render(_ view: NSView, _ name: String) throws {
+ guard CommandLine.arguments.count > 1 else { return }
+ let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+ view.cacheDisplay(in: view.bounds, to: rep)
+ try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[1]).appendingPathComponent(name))
 }
 @main struct Check {
  @MainActor static func main() async throws {
@@ -54,14 +70,33 @@ func descendants(_ view: NSView) -> [NSView] {
   var prompts = 0
   var permission = false
   let view = CaptureOptionsView(preferences: preferences, profile: .iPodTouch2G, authorizeNotifications: { prompts += 1; return permission })
-  let alert = NSAlert()
-  alert.messageText = "Capture Options"
-  alert.addButton(withTitle: "Done")
-  alert.accessoryView = view
-  view.onResize = { [weak alert] in alert?.layout() }
-  alert.layout()
+  // One Settings window: a toolbar tab per pane, titled after the pane, sized to it.
+  let general = GeneralSettingsView()
+  let settings = SettingsWindowController(general: general, capture: view, storage: StubPane())
+  let window = settings.window!
+  precondition(window.toolbar?.items.map(\.label) == ["General", "Capture", "Storage"], "\(window.toolbar?.items.map(\.label) ?? [])")
+  precondition(!window.isVisible && !window.isRestorable)
+  func fits(_ pane: NSView) -> Bool { window.contentRect(forFrameRect: window.frame).size == pane.fittingSize }
+  precondition(settings.pane == .general && fits(general), "General: \(window.frame) vs \(general.fittingSize)")
+  try render(general, "settings-general.png")
+  settings.pane = .capture
+  precondition(window.title == "Capture" && fits(view), "Capture: \(window.title) \(window.frame) vs \(view.fittingSize)")
   precondition(view.fittingSize == view.frame.size && view.fittingSize.width == 430,
-               "Capture Options must size correctly when used as a window's content view")
+               "the Capture pane must size correctly as the Settings window's content")
+  settings.pane = .storage
+  precondition(window.title == "Storage" && fits(settings.view(for: .storage)))
+  settings.pane = .capture
+  // General: internet access is Connect, Use Offline, or no saved answer (the device asks).
+  defer { UserDefaults.standard.removeObject(forKey: NetworkAccessPreference.key) }
+  let internet = descendants(general).compactMap { $0 as? NSPopUpButton }.first { $0.accessibilityLabel() == "Internet access" }!
+  for (tag, saved) in [(0, false as Bool?), (1, true), (-1, nil)] {
+   internet.selectItem(withTag: tag)
+   internet.sendAction(internet.action!, to: internet.target)
+   precondition(UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool == saved, "internet tag \(tag)")
+  }
+  UserDefaults.standard.set(false, forKey: NetworkAccessPreference.key)
+  general.reload()
+  precondition(internet.selectedTag() == 0)
   precondition(prompts == 0, "opening options must not request notification access")
   func button(_ title: String) -> NSButton { descendants(view).compactMap { $0 as? NSButton }.first { $0.title == title }! }
   button("Show captures in Finder").performClick(nil)
@@ -69,13 +104,13 @@ func descendants(_ view: NSView) -> [NSView] {
   button("Play sound effects").performClick(nil)
   precondition(!preferences.openFinderAfterCapture && preferences.copyOnCapture && !preferences.soundEffectsEnabled)
   let popups = descendants(view).compactMap { $0 as? NSPopUpButton }
-  let space = popups.first { $0.accessibilityLabel() == "Space bar" }!
+  let space = popups.first { $0.accessibilityLabel() == "Space bar captures" }!
   space.selectItem(withTag: CaptureSpaceBarAction.saveScreenshot.rawValue)
   space.sendAction(space.action!, to: space.target)
   precondition(preferences.spaceBarAction == .saveScreenshot)
-  let apps = popups.first { $0.accessibilityLabel() == "Open in application" }!
+  let apps = popups.first { $0.accessibilityLabel() == "Open screenshots in" }!
   precondition((apps.selectedItem!.representedObject as? URL)?.path == app.path, "chosen app retained even outside discovery")
-  let recovery = button("Notify when interrupted recordings are recovered")
+  let recovery = button("Notify when a recording is recovered")
   recovery.performClick(nil)
   while !recovery.isEnabled { try await Task.sleep(for: .milliseconds(10)) }
   precondition(prompts == 1 && !preferences.notifyOnRecordingRecovery)
@@ -97,6 +132,7 @@ func descendants(_ view: NSView) -> [NSView] {
    precondition(rect.minX >= -3 && rect.maxX <= view.bounds.width + 3, "horizontal overflow: \(control), \(rect)")
    precondition(rect.minY >= -3 && rect.maxY <= view.bounds.height + 3, "vertical overflow: \(control), \(rect)")
   }
+  try render(view, "settings-capture.png")
   let restored = CapturePreferences(defaults: defaults)
   precondition(restored.copyOnCapture && !restored.openFinderAfterCapture && !restored.soundEffectsEnabled)
   precondition(restored.spaceBarAction == .saveScreenshot)
@@ -108,7 +144,7 @@ func descendants(_ view: NSView) -> [NSView] {
   try FileManager.default.removeItem(at: app)
   precondition(preferences.openInApplicationURL == CapturePreferences.previewApplicationURL,
                "a deleted app must not remain selected through Bundle's metadata cache")
-  print("PASS: capture defaults/migration, recent folders, app fallback, panel actions/layout, notification opt-in and payload identity")
+  print("PASS: capture defaults/migration, recent folders, app fallback, Settings tabs, titles and sizing, General's internet choice, Capture pane actions/layout, notification opt-in and payload identity")
  }
 }
 '''
@@ -116,6 +152,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-capture-preferences-') as directory
  work = Path(directory)
  (work/'check.swift').write_text(fixture)
  subprocess.run(['swiftc', DEVICE_PROFILE, '-swift-version', '6', '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
-   *[str(root/'LightTouchMac'/name) for name in ['Features/CapturePreferences.swift', 'UI/CaptureOptionsView.swift', 'Features/CaptureNotifications.swift']],
+   *[str(root/'LightTouchMac'/name) for name in ['Features/CapturePreferences.swift', 'UI/CaptureOptionsView.swift', 'Features/CaptureNotifications.swift',
+                                                  'UI/SettingsWindowController.swift', 'App/WindowRestorationPolicy.swift', 'App/NetworkAccessPreference.swift']],
    str(work/'check.swift'), '-o', str(work/'check')], check=True)
- subprocess.run([str(work/'check')], check=True, timeout=25)
+ subprocess.run([str(work/'check'), *([args.out] if args.out else [])], check=True, timeout=25)

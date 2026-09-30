@@ -71,6 +71,6 @@ nonisolated enum ReadinessDeadline: Equatable, Sendable {
     }
 
     static func notice(shortName: String) -> String {
-        "The \(shortName) is running, but it isn’t connected over USB yet. Installing apps and transferring files aren’t available until it connects."
+        "Apps and files will be available when the \(shortName) connects."
     }
 }

@@ -85,7 +85,7 @@ actor ScreenMovieWriter {
         guard input.isReadyForMoreMediaData, let pool = adaptor.pixelBufferPool else { return }
         var buffer: CVPixelBuffer?
         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess,
-              let buffer else { throw CaptureError.failed("Couldn’t allocate a recording frame.") }
+              let buffer else { throw CaptureError.failed("Couldn’t record the screen.") }
         CVBufferSetAttachment(buffer, kCVImageBufferCGColorSpaceKey, CGColorSpace(name: CGColorSpace.sRGB)!, .shouldPropagate)
         CVBufferSetAttachment(buffer, kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
         CVBufferSetAttachment(buffer, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_sRGB, .shouldPropagate)
@@ -96,7 +96,7 @@ actor ScreenMovieWriter {
                                       bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.noneSkipFirst.rawValue) else {
-            throw CaptureError.failed("Couldn’t draw a recording frame.")
+            throw CaptureError.failed("Couldn’t record the screen.")
         }
         let output = CGRect(origin: .zero, size: outputSize)
         context.setFillColor(CGColor(gray: 0, alpha: 1))
@@ -119,7 +119,7 @@ actor ScreenMovieWriter {
                                           width: image.width, height: image.height))
         }
         guard adaptor.append(buffer, withPresentationTime: CMTime(seconds: seconds, preferredTimescale: 600)) else {
-            throw writer.error ?? CaptureError.failed("Couldn’t encode a recording frame.")
+            throw writer.error ?? CaptureError.failed("Couldn’t record the screen.")
         }
         let size = CGSize(width: image.width, height: image.height)
         if let firstFrameSize { changedFrameSize = changedFrameSize || firstFrameSize != size }
@@ -142,7 +142,7 @@ actor ScreenMovieWriter {
     private func appendAudio(_ data: Data, seconds: Double, through end: Double? = nil) async throws {
         guard audioInput != nil else { return }
         guard seconds.isFinite, seconds >= 0, seconds < Double(Int64.max / 44100), data.count % 4 == 0 else {
-            throw CaptureError.failed("Invalid guest audio packet.")
+            throw CaptureError.failed("Couldn’t record the device’s audio.")
         }
         let target = Int64((seconds * 44100).rounded())
         let limit = end.map { Int64(max(0, $0 * 44100)) } ?? Int64.max
@@ -163,7 +163,7 @@ actor ScreenMovieWriter {
         let deadline = ContinuousClock.now + .seconds(10)
         while !audioInput.isReadyForMoreMediaData {
             guard writer.status == .writing, ContinuousClock.now < deadline else {
-                throw writer.error ?? CaptureError.failed("Audio encoder did not become ready.")
+                throw writer.error ?? CaptureError.failed("Couldn’t record the device’s audio.")
             }
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -175,7 +175,7 @@ actor ScreenMovieWriter {
             guard CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: &format,
                 layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
                 extensions: nil, formatDescriptionOut: &audioFormat) == noErr else {
-                throw CaptureError.failed("Couldn’t describe guest audio.")
+                throw CaptureError.failed("Couldn’t record the device’s audio.")
             }
         }
         var block: CMBlockBuffer?
@@ -196,7 +196,7 @@ actor ScreenMovieWriter {
             sampleTimingEntryCount: 1, sampleTimingArray: &timing,
             sampleSizeEntryCount: 1, sampleSizeArray: &size, sampleBufferOut: &sample) == noErr,
             let sample, audioInput.append(sample) else {
-            throw writer.error ?? CaptureError.failed("Couldn’t encode guest audio.")
+            throw writer.error ?? CaptureError.failed("Couldn’t record the device’s audio.")
         }
         audioFrame += Int64(frames)
     }
@@ -273,7 +273,7 @@ actor ScreenMovieWriter {
                 if drained, capture?.isFinished ?? true { break }
                 guard ContinuousClock.now < deadline else {
                     if drained { break }   // the device never ended its audio: keep what arrived
-                    throw CaptureError.failed("Audio encoder did not finish in time.")
+                    throw CaptureError.failed("Couldn’t record the device’s audio.")
                 }
                 try await Task.sleep(for: .milliseconds(10))
             }
@@ -345,7 +345,7 @@ nonisolated final class GuestAudioCapture: @unchecked Sendable {
     func read() throws -> (data: Data, seconds: Double)? {
         try lock.withLock {
             if !packets.isEmpty { return packets.removeFirst() }
-            if ended, failed, !stopped { throw CaptureError.failed("Guest audio capture stopped or its buffer overflowed.") }
+            if ended, failed, !stopped { throw CaptureError.failed("Couldn’t record the device’s audio.") }
             return nil
         }
     }

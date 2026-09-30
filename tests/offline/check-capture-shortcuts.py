@@ -52,7 +52,7 @@ import UniformTypeIdentifiers
 }
 @MainActor final class TestAlert {
  static var last: TestAlert?
- var messageText = "", buttons: [NSButton] = []
+ var messageText = "", informativeText = "", buttons: [NSButton] = []
  var reply: ((NSApplication.ModalResponse) -> Void)?
  func addButton(withTitle title: String) { buttons.append(NSButton(title: title, target: nil, action: nil)) }
  func beginSheetModal(for window: NSWindow, completionHandler: @escaping (NSApplication.ModalResponse) -> Void) {
@@ -180,15 +180,14 @@ import UniformTypeIdentifiers
   for _ in 0..<20 where notifications.reminders.isEmpty { await Task.yield() }
   precondition(notifications.reminders.count == 1 && notifications.reminders[0].0 == 300)
   precondition(notifications.reminders[0].1 == recording.id)
-  // Discard confirmation can keep recording, save, or discard. A stale
-  // confirmation cannot stop a replacement recording.
+  // Discard confirmation: Discard (destructive, not the default) or Cancel, which keeps
+  // recording. A stale confirmation cannot stop a replacement recording.
   controller.discardRecording()
-  TestAlert.last!.reply?(.alertThirdButtonReturn)
+  let discard = TestAlert.last!
+  precondition(discard.buttons.map(\.title) == ["Discard", "Cancel"] && !discard.informativeText.isEmpty)
+  precondition(discard.buttons[0].keyEquivalent != "\r" && discard.buttons[1].keyEquivalent == "\u{1b}", "Return must not discard")
+  discard.reply?(.alertSecondButtonReturn)
   precondition(recording.stops.isEmpty)
-  controller.discardRecording()
-  TestAlert.last!.reply?(.alertSecondButtonReturn)
-  precondition(recording.stops == [false])
-  recording.reset()
   controller.discardRecording()
   TestAlert.last!.reply?(.alertFirstButtonReturn)
   precondition(recording.stops == [true])

@@ -378,16 +378,16 @@ import UniformTypeIdentifiers
         let recordingID = recording.id
         let alert = NSAlert()
         alert.messageText = "Discard this recording?"
+        alert.informativeText = "The recording so far is deleted."
+        // Destructive, so not the default: Return does nothing, Escape cancels.
         alert.addButton(withTitle: "Discard")
-        alert.addButton(withTitle: "Stop and Save")
         alert.addButton(withTitle: "Cancel")
         alert.buttons[0].hasDestructiveAction = true
         alert.buttons[0].keyEquivalent = ""
-        alert.buttons[2].keyEquivalent = "\u{1b}"
+        alert.buttons[1].keyEquivalent = "\u{1b}"
         alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self, recording.id == recordingID else { return }
-            if response == .alertFirstButtonReturn { recording.stop(discard: true) }
-            else if response == .alertSecondButtonReturn { recording.stop() }
+            guard let self, recording.id == recordingID, response == .alertFirstButtonReturn else { return }
+            recording.stop(discard: true)
         }
     }
 

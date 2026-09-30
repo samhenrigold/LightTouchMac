@@ -2,7 +2,10 @@
 """Exercise the real proxy panel's choices and transient status layout, and the
 per-device proxy files (each device's helper proxy reads its own routing)."""
 from pathlib import Path
-import subprocess, tempfile
+import argparse, subprocess, tempfile
+ap = argparse.ArgumentParser()
+ap.add_argument('--out', help='keep the sheet render (proxy-sheet.png)')
+args = ap.parse_args()
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[2]
 fixture = r'''import Cocoa
@@ -45,14 +48,21 @@ func descendants(_ view: NSView) -> [NSView] {
   for mode in [WebProxyConfiguration.Mode.off, .direct, .archive] {
    let initial = WebProxyConfiguration(mode: mode, archiveDate: "20090909")
    let panel = ProxySettingsView(configuration: initial, status: .ready, profile: .iPodTouch2G)
-   let alert = NSAlert()
-   alert.messageText = "Proxy"
-   alert.addButton(withTitle: "Apply")
-   alert.addButton(withTitle: "Cancel")
-   alert.accessoryView = panel
-   panel.onResize = { [weak alert] in alert?.layout() }
-   alert.layout()
+   // The production sheet (MainWindowController.configureWebProxy): Cancel, then OK as the default.
+   var answers: [Bool] = []
+   let sheet = ProxySettingsView.sheet(panel) { answers.append($0) }
+   let sheetButtons = descendants(sheet.contentView!).compactMap { $0 as? NSButton }.filter { $0.title == "OK" || $0.title == "Cancel" }
+   precondition(sheetButtons.map(\.title) == ["Cancel", "OK"] && sheetButtons[1].keyEquivalent == "\r" && sheetButtons[0].keyEquivalent == "\u{1b}")
+   sheetButtons[0].performClick(nil); sheetButtons[1].performClick(nil)
+   precondition(answers == [false, true])
    precondition(panel.configuration == initial)
+   if mode == .archive, CommandLine.arguments.count > 2 {
+    let content = sheet.contentView!
+    content.layoutSubtreeIfNeeded()
+    let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds)!
+    content.cacheDisplay(in: content.bounds, to: rep)
+    try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[2]).appendingPathComponent("proxy-sheet.png"))
+   }
    let all = descendants(panel)
    let buttons = all.compactMap { $0 as? NSButton }
    let enabled = buttons.first { $0.title == "Use HTTP proxy" }!
@@ -75,6 +85,7 @@ func descendants(_ view: NSView) -> [NSView] {
     else { precondition(!labels.contains(where: { $0.contains("proxy…") || $0.contains("Try again") })) }
     precondition(panel.frame.height >= readyHeight)
     precondition(panel.frame.width == 300)
+    precondition(sheet.contentView!.frame.height >= panel.frame.height + 60, "the sheet grows with its panel")
     for view in visible where view is NSControl {
      let rect = view.convert(view.bounds, to: panel)
      precondition(rect.minX >= -3 && rect.maxX <= panel.bounds.width + 3, "horizontal overflow: \(view) \(rect)")
@@ -97,7 +108,7 @@ func descendants(_ view: NSView) -> [NSView] {
    date.dateValue = localCalendar.date(byAdding: .day, value: 1, to: date.dateValue)!
    precondition(panel.configuration.archiveDate == "20091102", "day stepping across daylight saving time")
   }
-  print("PASS: proxy choices, local archive dates, day stepping, changing status and native alert layout (\(NSTimeZone.default.identifier))")
+  print("PASS: proxy choices, local archive dates, day stepping, changing status and the Cancel/OK sheet's layout (\(NSTimeZone.default.identifier))")
  }
 }
 '''
@@ -105,7 +116,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-proxy-panel-') as directory:
  work = Path(directory)
  (work/'check.swift').write_text(fixture)
  subprocess.run(['swiftc', DEVICE_PROFILE, '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
-   str(root/'LightTouchMac/Device/WebProxyConfiguration.swift'), str(root/'LightTouchMac/UI/ProxySettingsView.swift'),
+   str(root/'LightTouchMac/Device/WebProxyConfiguration.swift'), str(root/'LightTouchMac/UI/ProxySettingsView.swift'), str(root/'LightTouchMac/UI/InlineActionButton.swift'),
    str(work/'check.swift'), '-o', str(work/'check')], check=True)
  for zone in ['America/New_York', 'America/Los_Angeles', 'Asia/Tokyo']:
-  subprocess.run([str(work/'check'), zone], check=True, timeout=15)
+  subprocess.run([str(work/'check'), zone, *([args.out] if args.out else [])], check=True, timeout=15)

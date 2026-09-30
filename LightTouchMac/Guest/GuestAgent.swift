@@ -14,7 +14,7 @@ nonisolated struct GuestAgentError: LocalizedError, CustomStringConvertible {
     let output: Data
     static let notFound = -2, tooBig = -27, again = -35, connectionReset = -54, notImplemented = -78
     /// The alert's words; `description` (what logs interpolate) keeps the status and output.
-    var errorDescription: String? { "The device couldn’t complete the request. Open Device Logs for details." }
+    var errorDescription: String? { "The device couldn’t do that. Try again." }
     var description: String { "agent \(operation) failed (\(status)): \(String(decoding: output.prefix(4096), as: UTF8.self))" }
 }
 

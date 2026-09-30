@@ -14,7 +14,7 @@ enum NetworkAccessPreference {
         if let enabled = UserDefaults.standard.object(forKey: key) as? Bool { return enabled }
         let alert = NSAlert()
         alert.messageText = "Connect your \(profile.shortName) to the internet?"
-        alert.informativeText = "Your \(profile.shortName) can use your Mac’s internet connection. macOS may ask for Local Network access.\n\nOffline mode still lets you install apps and capture the screen. Change this later in the Device menu."
+        alert.informativeText = "Your \(profile.shortName) can use your Mac’s internet connection. You can change this later in the Device menu."
         alert.addButton(withTitle: "Connect")
         alert.addButton(withTitle: "Use Offline")
         let enabled = alert.runModal() == .alertFirstButtonReturn

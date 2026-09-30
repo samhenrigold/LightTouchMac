@@ -26,16 +26,6 @@ final class DeviceViewController: NSViewController {
                 AppInstaller.startMedia(url, with: self.emulator, presenting: self.view.window)
             }
         }
-        displayView.onDropUnsupportedFiles = { [weak self] urls in
-            guard let self else { return }
-            let alert = NSAlert()
-            alert.alertStyle = .informational
-            alert.messageText = urls.count == 1
-                ? "“\(urls[0].lastPathComponent)” wasn’t imported"
-                : "\(urls.count) files weren’t imported"
-            alert.informativeText = "Choose IPA apps, JPEG, PNG or HEIC photos, MP3, M4A, AAC or WAV audio, or MP4, M4V or QuickTime videos."
-            if let window = self.view.window { alert.beginSheetModal(for: window) }
-        }
         displayView.onDropCatalogApp = { [weak self] app in
             guard let self, self.emulator.canQueueInstall else { return }
             AppInstaller.startCatalog(app, with: self.emulator, presenting: self.view.window)
@@ -70,9 +60,8 @@ final class DeviceViewController: NSViewController {
         // point of accepting multiple files.
         guard emulator.canQueueInstall else {
             let alert = NSAlert()
-            alert.messageText = "The device isn’t ready yet"
-            alert.informativeText =
-                "Apps can be installed once the device has finished starting up and USB is connected."
+            alert.messageText = "The \(emulator.profile.shortName) isn’t ready yet"
+            alert.informativeText = "Try again when it has finished starting up."
             if let window = view.window { alert.beginSheetModal(for: window) { _ in } }
             else { alert.runModal() }
             return

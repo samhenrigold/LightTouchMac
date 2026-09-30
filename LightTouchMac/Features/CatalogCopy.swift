@@ -46,7 +46,7 @@ nonisolated struct CatalogCopy: Decodable, Sendable {
             return Int(part)
         }
         guard numbers.count == parts.count, !numbers.isEmpty, numbers.count <= 3,
-              numbers[0] > 0 else { return "The minimum iOS version could not be verified." }
+              numbers[0] > 0 else { return "The minimum iOS version couldn’t be verified." }
         let padded = numbers + Array(repeating: 0, count: 3 - numbers.count)
         let device = deviceOS.split(separator: ".").compactMap { Int($0) }
         let devicePadded = device + Array(repeating: 0, count: max(0, 3 - device.count))

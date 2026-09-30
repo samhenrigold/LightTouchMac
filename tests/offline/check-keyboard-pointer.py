@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production keyboard pointer gesture sequencing and bounds."""
+"""Production keyboard pointer gesture sequencing and bounds, and Tab out of the screen (no keyboard trap)."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
@@ -7,7 +7,13 @@ s=(root/'LightTouchMac/UI/DisplayView.swift').read_text()
 a=s.index('    private func endKeyboardTouch()');b=s.index('    private func updateKeyboardPointer()',a)
 code=r"""import Cocoa
 enum TouchPhase { static let begin: Int32 = 0, update: Int32 = 1, end: Int32 = 2 }
+@MainActor final class FocusWindow:NSWindow {
+ var moves:[String]=[]
+ override func selectNextKeyView(_ sender:Any?) { moves.append("next") }
+ override func selectPreviousKeyView(_ sender:Any?) { moves.append("previous") }
+}
 @MainActor final class Check {
+ let window:FocusWindow?=FocusWindow(contentRect:.zero,styleMask:[],backing:.buffered,defer:true)
  final class Emulator {var keyboardInputEnabled=false}
  let emulator:Emulator?=Emulator()
  var keyboardPoint=CGPoint(x:0.5,y:0.5),keyboardTouchKeys=Set<UInt16>(),hasKeyboardPointer=false
@@ -46,7 +52,19 @@ enum TouchPhase { static let begin: Int32 = 0, update: Int32 = 1, end: Int32 = 2
   }
   touchDown=false;pinchingGuest=false;scrollPoint=nil;touchInteractionEnabled=false
   _=key(49);precondition(sent.isEmpty)
-  print("PASS: pointer bounds, Space hold/repeat, Shift-arrow drag, release, modifier and input-ownership gates")
+  // Tab: out of the screen while the arrows drive the pointer; to the device while typing,
+  // except Control-Tab, which always leaves. Command/Option-Tab are the system's.
+  func tab(_ flags:NSEvent.ModifierFlags)->Bool {
+   let event=NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:flags,timestamp:0,windowNumber:0,context:nil,characters:"\t",charactersIgnoringModifiers:"\t",isARepeat:false,keyCode:48)!
+   return moveFocusOut(event)
+  }
+  emulator!.keyboardInputEnabled=false
+  precondition(tab([]) && tab(.shift) && window!.moves==["next","previous"],"Tab must leave the screen when typing is off")
+  emulator!.keyboardInputEnabled=true
+  precondition(!tab([]) && !tab(.shift),"typing sends Tab to the device")
+  precondition(tab(.control) && tab([.control,.shift]) && window!.moves==["next","previous","next","previous"],"Control-Tab always leaves")
+  precondition(!tab(.command) && !tab(.option) && window!.moves.count==4)
+  print("PASS: pointer bounds, Space hold/repeat, Shift-arrow drag, release, modifier and input-ownership gates, Tab and Control-Tab out of the screen")
  }
 }
 @main struct Main {@MainActor static func main(){Check().run()}}

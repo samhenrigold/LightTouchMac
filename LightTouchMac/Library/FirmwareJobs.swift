@@ -1,7 +1,7 @@
 // Downloads and preparations per catalog entry, for the sidebar rows and the
 // placeholder (DeviceSession.swift's DeviceRow reads `jobs`).
 //
-// Download & Prepare: an IPSW either store already has, else a CDN download;
+// Download and Prepare: an IPSW either store already has, else a CDN download;
 // then `firmwarekit create` (PreparationJob), then a device in the library.
 // Import: hash, match, clone into State/IPSW, then the same preparation.
 
@@ -90,7 +90,7 @@ import Cocoa
     /// True once a download and preparation can run: the preparer is present.
     var canDownload: Bool { Self.preparer != nil }
 
-    /// Why Download & Prepare is off, for the placeholder.
+    /// Why Download and Prepare is off, for the placeholder.
     var unavailableReason: String? {
         canDownload ? nil : "This copy of Light Touch can’t prepare devices because a component is missing. Reinstall Light Touch."
     }
