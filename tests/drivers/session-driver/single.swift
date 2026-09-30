@@ -267,7 +267,7 @@ struct SingleConfig: Decodable {
 /// framebuffer pixels (1024x768, the panel's landscape scan; portrait top is x 0). A tap counts as answered when
 /// its box changes, or, for an alert's button, once an alert's navy buttons fill ALERT; only those taps are
 /// retried (behind a modal alert a second tap does nothing). When Wi-Fi has not joined by its page, Setup asks
-/// "Continue without Wi-Fi?" and then skips the Apple ID page, so the walk does too (smoke #39).
+/// "Continue without Wi-Fi?"; 5.1.1 then skips the Apple ID page and 5.0.1 does not, so the walk looks (smoke #39).
 @MainActor enum Setup5 {
     static let bundleID = "com.apple.purplebuddy"
     typealias Box = (x0: Int, y0: Int, x1: Int, y1: Int)
@@ -311,6 +311,30 @@ struct SingleConfig: Decodable {
         return navy * 100 > 15 * n
     }
 
+    /// A panel that slept during the walk (idle under host load: 9A5288d went dark before the country page) is
+    /// woken with Home and slid back into Setup, as the driver's own unlock does; a lit panel is left alone.
+    static func wake(_ d: Device) async {
+        for _ in 0..<3 where (d.brightness() ?? 1) < 0.05 {
+            d.process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))
+            d.process.link.send(.button(0, down: false))
+            try? await Task.sleep(for: .seconds(2))
+            await d.drag(0.9365, 0.621, 0.9365, 0.0612)
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
+
+    /// The Apple ID page is up: its two white buttons ("Sign In with an Apple ID", "Create a Free Apple ID") fill
+    /// APPLE_ID's two columns. Terms, Diagnostics and Thank You leave at least one of them dark.
+    static let appleID: [Box] = [(795, 170, 830, 600), (860, 170, 895, 600)]
+    static func appleIDUp(_ d: Device) -> Bool {
+        appleID.allSatisfy { b in
+            guard let px = region(d, b) else { return false }
+            var white = 0, n = 0
+            for i in stride(from: 0, to: px.count, by: 16) { n += 1; if px[i] > 225 && px[i + 1] > 225 && px[i + 2] > 225 { white += 1 } }
+            return white * 100 > 85 * n
+        }
+    }
+
     /// The box once it holds still for a second (a page still sliding in under load).
     static func settled(_ d: Device, _ box: Box, timeout: Double = 20) async -> [UInt8]? {
         var last = region(d, box)
@@ -332,35 +356,77 @@ struct SingleConfig: Decodable {
     }
 
     /// From the first Setup page (the driver has already slid "slide to set up"): (walked, detail).
+    /// Taps until `answered` (polled every second) or `budget` runs out, tapping again every `every` seconds while
+    /// nothing answered. A lost tap (a page still sliding in, a frame the host was too loaded to deliver) is retried
+    /// instead of failing the walk; a tap that did land is not repeated, because the page it answered has changed.
+    static func tapUntil(budget: Double, every: Double, tap: () async -> Void, answered: () -> Bool) async -> Bool {
+        let t0 = Date()
+        while Date().timeIntervalSince(t0) < budget {
+            await tap()
+            let t1 = Date()
+            while Date().timeIntervalSince(t1) < every, Date().timeIntervalSince(t0) < budget {
+                if answered() { return true }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        return answered()
+    }
+
+    /// tapUntil's contract, with a fake page: a lost tap is retried, a landed tap is not repeated, a page that never
+    /// answers gives up once the budget is spent (one tap per `every`).
+    static func selfTest() async -> Bool {
+        var ok = true
+        func expect(_ label: String, _ cond: Bool) { print((cond ? "PASS " : "FAIL ") + label); ok = ok && cond }
+        var taps = 0
+        var r = await tapUntil(budget: 6, every: 1.5, tap: { taps += 1 }, answered: { taps >= 2 })
+        expect("the first tap lost: tapped again, answered", r && taps == 2)
+        taps = 0
+        r = await tapUntil(budget: 6, every: 1.5, tap: { taps += 1 }, answered: { taps >= 1 })
+        expect("a landed tap is not repeated", r && taps == 1)
+        taps = 0
+        r = await tapUntil(budget: 5, every: 2, tap: { taps += 1 }, answered: { false })
+        expect("a page that never answers fails after the budget, one tap per interval", !r && taps == 3)
+        return ok
+    }
+
+    /// From the first Setup page (the driver has already slid "slide to set up"): (walked, detail). Each page is
+    /// entered only once its title bar has settled and differs from the page before (the previous Next landed);
+    /// each tap is retried inside a per-page budget scaled from the board's boot budget (the iPad's 300 s: 120 s).
     static func walk(_ d: Device) async -> (Bool, String) {
-        var skipAppleID = false, walked: [String] = []
+        var walked: [String] = [], lastTitle: [UInt8]? = nil
+        let budget = d.profile.bootBudget / 2.5
         page: for (name, taps) in pages {
-            if name == "apple id", skipAppleID { continue }
+            await wake(d)
+            if let lastTitle {   // the previous page's Next took: wait for this page's title to replace it
+                let t0 = Date()
+                while Date().timeIntervalSince(t0) < budget, await settled(d, title) == lastTitle { await wake(d) }
+            }
+            // Whether the Apple ID page follows is read off the screen: 5.1.1 skips it after "Continue without
+            // Wi-Fi?", 5.0.1 (9A405) shows it anyway, and there its taps would land on the next pages.
+            if name == "apple id" {
+                _ = await settled(d, title)
+                if !appleIDUp(d) { walked.append("apple id (absent)"); continue }
+            }
             if name == "wi-fi" { try? await Task.sleep(for: .seconds(15)) }   // give the join time before Next
             for (i, t) in taps.enumerated() {
-                _ = await settled(d, title)
+                let pageTitle = await settled(d, title)
                 let isAlert = t.box == alert
-                var ref: [UInt8]?
-                if !isAlert { ref = await settled(d, t.box) }
+                let ref = isAlert ? nil : await settled(d, t.box)
                 let answered = { isAlert ? alertUp(d) : region(d, t.box) != ref }
                 d.screenshot("setup-\(name.replacingOccurrences(of: " ", with: "-"))-\(i)")
-                var ok = false
-                for _ in 0..<(isAlert ? 3 : 1) where !ok {
-                    await tap(d, t.x, t.y, hold: t.hold)
-                    let t0 = Date()
-                    while Date().timeIntervalSince(t0) < (isAlert ? 20 : 60), !answered() { try? await Task.sleep(for: .seconds(1)) }
-                    ok = answered()
-                }
+                // behind a modal alert a second tap does nothing, so an alert tap is retried sooner
+                let ok = await tapUntil(budget: isAlert ? 60 : budget, every: 20, tap: { await tap(d, t.x, t.y, hold: t.hold) },
+                                        answered: answered)
                 // 5.0 beta 5 has no Terms page: its Agree tap (an empty corner elsewhere) raises no alert
                 if !ok, name == "terms", i == 0 { walked.append("terms (absent)"); continue page }
-                guard ok else { return (false, "the \(name) page did not answer tap \(i + 1) (after \(walked.joined(separator: ", ")))") }
+                guard ok else { return (false, "the \(name) page did not answer tap \(i + 1) in \(Int(isAlert ? 60 : budget)) s (after \(walked.joined(separator: ", ")))") }
+                if t.box == title { lastTitle = pageTitle }
             }
-            if name == "wi-fi", alertUp(d) {   // "Continue without Wi-Fi?": no join, so no Apple ID page follows
+            if name == "wi-fi", alertUp(d) {   // "Continue without Wi-Fi?": no join (the Apple ID page may still follow)
                 let ref = await settled(d, title)
-                await tap(d, wifiContinue.0, wifiContinue.1)
-                let t0 = Date()
-                while Date().timeIntervalSince(t0) < 60, region(d, title) == ref { try? await Task.sleep(for: .seconds(1)) }
-                skipAppleID = true
+                _ = await tapUntil(budget: budget, every: 20, tap: { await tap(d, wifiContinue.0, wifiContinue.1) },
+                                   answered: { region(d, title) != ref })
+                lastTitle = ref
                 walked.append("wi-fi (not joined: continued without)")
             } else {
                 walked.append(name)

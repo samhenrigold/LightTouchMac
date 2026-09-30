@@ -120,6 +120,7 @@ def offline_checks():
     checks.append([TESTS / 'sessions/check-activation-gate.py', '--offline'])
     checks.append([TESTS / 'sessions/check-boot-deadline.py', '--offline'])
     checks.append([TESTS / 'sessions/test-matrix-judge.py'])   # the matrix's verdicts on fabricated event streams
+    checks.append([TESTS / 'sessions/check-setup-walk.py'])   # the 5.x Setup walk's tap-retry core, fake taps
     skips = []
     # Opt-in (Sam, 09-29): nothing on screen by default. LTM_DISPLAY_CHECKS=1 runs them.
     if os.environ.get('LTM_DISPLAY_CHECKS') != '1':
