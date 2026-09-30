@@ -641,7 +641,7 @@
    "RestoreRamDisk": {"file": "038-1678-023.dmg", "iv": "7d5195f9216c7327b15cea6c0abb5637", "key": "d6a218cc74805143d960fdbde7a16bbea497d4aad753af85b7cd7c887c987692"},
    "rootfs": {"file": "038-1724-015.dmg", "key": "7fc183f7b7fe6f1d27783e2608b7f4df74acc9d9416382d419484c66ed16b18fe2d6a3b0"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": false, "web_proxy": true, "usb_net": true, "writable_nor": true}},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },
@@ -676,7 +676,7 @@
    "RestoreRamDisk": {"file": "038-2330-007.dmg", "iv": "b97ce283684bcd72b65c28419841082f", "key": "7a6d06ac64257eac035d74ea433a2b95b320544d603d343c8b9905413713c1c6"},
    "rootfs": {"file": "038-2335-006.dmg", "key": "ce04ccd3ef4d97d44c3356bb23f95b49f2240ffd0d939b38e93ad63bad4e5e4a4fe484a2"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": false, "web_proxy": true, "usb_net": true, "writable_nor": true}},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },
@@ -708,7 +708,7 @@
    "RestoreRamDisk": {"file": "018-7923-347.dmg", "iv": "277d39cbbf681df205db5808396baa44", "key": "e70dfb6d3b6cf2e05366afcf328385425500e67b212e59a6d08b52bb35732da6"},
    "rootfs": {"file": "018-7877-729.dmg", "key": "c7e01f3db404f325eee5062368fc6a795487d859518ee498b4d7f4950a281c5421ffbebf"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": false, "web_proxy": true, "usb_net": true, "writable_nor": true}},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },
@@ -741,7 +741,7 @@
    "rootfs": {"file": "038-3699-001.dmg", "key": "e4b60a747ab372bc047b8a7ca08b62f7524fa5888c76f0db709fd1aa9bcea79076952639"},
    "UpdateRamDisk": {"file": "038-3711-001.dmg", "iv": "cf48dcfb36a2ae968e582b87a3d9dd55", "key": "847dab97608a8b04607122bf269b4c1c74c5d582f78efe84936e3898ce1f1727"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": false, "web_proxy": true, "usb_net": true, "writable_nor": true}},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },
@@ -774,7 +774,7 @@
    "rootfs": {"file": "038-1767-167.dmg", "key": "be9d3af82b127eecaabe0eebe712a16a9b1b30de73ee640855479fb93b4387b3f388508c"},
    "UpdateRamDisk": {"file": "038-1800-166.dmg", "iv": "a75448aa93377ff9a75fb3f8f190718e", "key": "aec84be135a56785cfad1da02077fad4e6e3071ecf5344b11d62239e0b163f81"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": false, "web_proxy": true, "usb_net": true, "writable_nor": true}},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },
@@ -807,7 +807,7 @@
    "rootfs": {"file": "038-4291-006.dmg", "key": "f7bb9fd8aa3102484ab9c847dacfd3d73f1f430acb49ed7a422226f2410acee17664c91b"},
    "UpdateRamDisk": {"file": "038-4304-027.dmg", "iv": "8bf7f31c6ffae902825f91873c3391ae", "key": "b4c9cc707bd27ed05d1db142ea335849b2ecd0670563e1e61477da81eadcc99c"}
   },
-  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": false, "web_proxy": true, "usb_net": true, "writable_nor": true}},
+  "recipe": {"name": "k48", "version": 1, "storage": "16g", "system_mib": 1280, "data_size": "partition", "options": {"ca_ogl": true, "appsync": true, "web_proxy": true, "usb_net": true, "writable_nor": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1503238554, "peak_bytes": 3799310312, "seconds": 90}
  },

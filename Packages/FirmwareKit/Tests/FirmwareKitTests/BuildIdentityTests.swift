@@ -55,7 +55,7 @@ struct BuildIdentityTests {
         for n in ["KernelCache", "OS", "RestoreRamDisk", "UpdateRamDisk", "iBoot", "LLB", "DeviceTree"] {
             #expect(throws: Never.self) { try e.key(forPath: c[n]!) }
         }
-        #expect(e.recipe?.keybagRamdiskFrom == nil && e.recipe?.options["appsync"] == false)
+        #expect(e.recipe?.keybagRamdiskFrom == nil && e.recipe?.options["appsync"] == true)
         try RestoreInfo(ipsw).verify(against: e)
     }
 
