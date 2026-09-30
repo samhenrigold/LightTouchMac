@@ -5,6 +5,8 @@ and [reuse survey](reuse-survey-2026-09-30.md). Those documents describe the
 inspection states at the time of the review; their checkout table is historical.
 The implementation starts from multidevice `eac0793` and emulator `2ece77c080`,
 including the consolidation and guest package 9 that landed before this work.
+The candidates also include the later multidevice UI tip `e9fcfc3` and emulator
+CoreAudio tip `66bbf69862`; those changes are integrated only in these candidates.
 The app and emulator candidates are isolated on `codex/reuse-implementation`
 worktrees. A matching usbmuxd candidate is on `codex/stock-control-transfer`.
 None has been merged into the target branches.
@@ -72,13 +74,14 @@ cannot be assigned to another firmware, and missing coverage explicitly fails.
 
 ## Verification and evidence
 
-The app offline tier passes 87 checks, with two display checks explicitly
+The app offline tier passes 91 checks, with two display checks explicitly
 skipped. The app release tier passes eight checks, with its network fetch check
-explicitly skipped. The emulator host tier passes 106 checks, with 26 input/guest-dependent
+explicitly skipped. The emulator host tier passes 106 checks, with 27 input/guest-dependent
 checks explicitly skipped; targeted native acceptance runs cover the changes
 listed above. All three model qtest suites pass, including the existing
 CDMA/AES/SHA suite. Xcode builds the GUI and helper against the final emulator
-library. These results do not imply that every catalog firmware or the full
+library. The incoming CoreAudio fake-HAL check passes all six device-rate and
+device-switch cases after integration. These results do not imply that every catalog firmware or the full
 native corpus has been rerun.
 
 Logs, full independent renderer captures, preparation metadata, restore input
