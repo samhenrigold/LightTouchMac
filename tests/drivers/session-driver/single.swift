@@ -342,8 +342,32 @@ struct SingleConfig: Decodable {
         for i in stride(from: 0, to: px.count, by: 16) { n += 1; if px[i] > 225 && px[i + 1] > 225 && px[i + 2] > 225 { white += 1 } }
         return n == 0 ? 0 : Double(white) / Double(n)
     }
-    static func appleIDUp(_ d: Device) -> Bool {
-        appleID.allSatisfy { whiteFraction(d, $0) > 0.85 } && whiteFraction(d, appleIDGap) < 0.2
+    static func appleIDUp(_ d: Device) -> Bool { kind(fingerprint(d)) == "apple id" }
+
+    /// A Setup page's fingerprint: the white fraction of six boxes (the two button columns and the gap between them,
+    /// a strip left of the centre art, the iPad outline's left edge, the centre), measured on 5.0 beta 1 to 5.1.1.
+    static let printBoxes: [Box] = [(795, 170, 830, 600), (860, 170, 895, 600), (840, 170, 852, 600),
+                                    (180, 300, 230, 450), (255, 300, 285, 450), (330, 300, 560, 450)]
+    static func fingerprint(_ d: Device) -> [Double] { printBoxes.map { whiteFraction(d, $0) } }
+
+    /// Which kind of Setup page a fingerprint is: "list" (language, country), "location", "wi-fi", "set up",
+    /// "apple id", "diagnostics", "thank you"; nil for anything else (Terms, a page mid-transition, a dark panel).
+    static func kind(_ f: [Double]) -> String? {
+        guard f.count == 6 else { return nil }
+        let (b1, b2, gap, left, frame, mid) = (f[0], f[1], f[2], f[3], f[4], f[5])
+        if b1 > 0.85, b2 > 0.85, gap < 0.2, frame < 0.1 { return "apple id" }
+        if b1 > 0.85, b2 > 0.85, gap > 0.9, left < 0.1, frame > 0.9, mid < 0.1 { return "set up" }
+        if b1 > 0.85, gap > 0.7, left > 0.8, frame > 0.9, mid > 0.8 { return "list" }
+        if b1 > 0.85, b2 < 0.1, gap > 0.85 { return "location" }
+        if b1 < 0.1, b2 < 0.1, left > 0.9, frame > 0.15, frame < 0.45 { return "diagnostics" }
+        if b1 < 0.1, b2 > 0.7 { return "thank you" }
+        if b1 < 0.1, b2 < 0.1, gap < 0.1, left > 0.15, left < 0.45, frame < 0.1, mid < 0.1 { return "wi-fi" }
+        return nil
+    }
+    /// The page kind each walk step shows (Terms has no fingerprint of its own).
+    static func kind(of page: String) -> String? {
+        ["language": "list", "country": "list", "location": "location", "wi-fi": "wi-fi", "set up": "set up",
+         "apple id": "apple id", "diagnostics": "diagnostics", "thank you": "thank you"][page]
     }
 
     /// The box once it holds still for a second (a page still sliding in under load).
@@ -404,6 +428,16 @@ struct SingleConfig: Decodable {
         var polls = 0
         r = await tapUntil(budget: 12, every: 3, tap: { taps += 1; polls = 0 }, answered: { polls += 1; return taps >= 2 || polls == 1 })
         expect("a one-poll flash is not an answer: tapped again", r && taps == 2)
+        // fingerprints measured off real Setup screenshots (9A5220p, 9A334, 9A405, 9B176, 9B206)
+        let measured: [(String?, [Double])] = [
+            ("list", [0.97, 0.92, 0.83, 0.92, 1.0, 0.95]), ("list", [0.98, 0.92, 0.83, 0.92, 1.0, 0.96]),
+            ("location", [0.97, 0.0, 0.95, 0.05, 0.0, 0.34]), ("wi-fi", [0.0, 0.0, 0.0, 0.28, 0.0, 0.0]),
+            ("set up", [0.93, 0.92, 0.99, 0.0, 1.0, 0.0]), ("set up", [0.94, 0.92, 0.99, 0.0, 1.0, 0.0]),
+            ("apple id", [0.92, 0.92, 0.0, 0.07, 0.0, 0.09]), ("apple id", [0.92, 0.92, 0.0, 0.04, 0.0, 0.1]),
+            ("diagnostics", [0.0, 0.0, 0.0, 1.0, 0.27, 0.01]), ("diagnostics", [0.0, 0.0, 0.0, 1.0, 0.29, 0.0]),
+            ("thank you", [0.0, 0.83, 0.17, 0.05, 0.0, 0.18]),
+            (nil, [0.0, 0.0, 0.0, 0.0, 0.0, 0.04]), (nil, [0.78, 0.69, 0.86, 1.0, 1.0, 0.74])]
+        for (want, f) in measured { expect("page \(want ?? "unrecognised") from \(f)", kind(f) == want) }
         return ok
     }
 
@@ -413,17 +447,39 @@ struct SingleConfig: Decodable {
     static func walk(_ d: Device) async -> (Bool, String) {
         var walked: [String] = [], lastTitle: [UInt8]? = nil
         let budget = d.profile.bootBudget / 2.5
-        page: for (name, taps) in pages {
+        var skipTo: Int? = nil
+        page: for (index, (name, taps)) in pages.enumerated() {
+            if let skipTo, index < skipTo { walked.append("\(name) (absent)"); continue }
             await wake(d)
             if let lastTitle {   // the previous page's Next took: wait for this page's title to replace it
                 let t0 = Date()
                 while Date().timeIntervalSince(t0) < budget, await settled(d, title) == lastTitle { await wake(d) }
             }
-            // Whether the Apple ID page follows is read off the screen: 5.1.1 skips it after "Continue without
-            // Wi-Fi?", 5.0.1 (9A405) shows it anyway, and there its taps would land on the next pages.
-            if name == "apple id" {
-                _ = await settled(d, title)
-                if !appleIDUp(d) { walked.append("apple id (absent)"); continue }
+            // The page on screen decides, not the list's order: 5.0 beta 1 opens on Set Up iPad (no language,
+            // country, location or Wi-Fi pages), 5.1.1 drops Apple ID after "Continue without Wi-Fi?" and 5.0.1 keeps it.
+            // Wait for this step's page, or skip ahead to a later step whose page is showing.
+            if let want = kind(of: name) {
+                let t0 = Date()
+                var seen: String? = nil, unknown = 0
+                while Date().timeIntervalSince(t0) < budget {
+                    _ = await settled(d, title)
+                    seen = kind(fingerprint(d))
+                    if seen == want { break }
+                    if let seen, let later = pages.indices.first(where: { $0 > index && kind(of: pages[$0].0) == seen }) {
+                        walked.append("\(name) (absent)"); skipTo = later; continue page
+                    }
+                    // Terms has no fingerprint: a lit, settled page nothing recognises, read twice, is it when it is the
+                    // next step (5.1.1 goes Wi-Fi -> Terms without Apple ID)
+                    unknown = seen == nil && (d.brightness() ?? 0) > 0.05 ? unknown + 1 : 0
+                    if unknown >= 2, index + 1 < pages.count, kind(of: pages[index + 1].0) == nil {
+                        walked.append("\(name) (absent)"); continue page
+                    }
+                    await wake(d); try? await Task.sleep(for: .seconds(2))
+                }
+                guard seen == want else {
+                    d.screenshot("setup-\(name.replacingOccurrences(of: " ", with: "-"))-unknown")
+                    return (false, "the \(name) page never showed in \(Int(budget)) s (screen: \(seen ?? "unrecognised"); after \(walked.joined(separator: ", ")))")
+                }
             }
             if name == "wi-fi" { try? await Task.sleep(for: .seconds(15)) }   // give the join time before Next
             for (i, t) in taps.enumerated() {
