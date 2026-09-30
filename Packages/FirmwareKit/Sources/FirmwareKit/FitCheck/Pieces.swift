@@ -100,7 +100,7 @@ extension FitCheck {
 
     /// SpringBoard's environment edits fit when every switch (a name, or the same switch under its CoreAnimation and
     /// LayerKit names) is read by an image of this firmware (readers) or by a binary the bake injects with it (`also`:
-    /// the GL shim reads GLI_ACCELERATED). A switch nothing reads has no effect: the firmware's default decides.
+    /// empty for the GL front end, which reads no switch). A switch nothing reads has no effect: the firmware's default decides.
     public static func environment(_ fw: Firmware, _ switches: [[String]], also: [(String, Data)] = []) -> Fit {
         named("SpringBoard environment", fw, switches, also: also)
     }
@@ -245,5 +245,120 @@ extension FitCheck {
         }
         try log.check(appSync(fw, host: host, dylib: dylib), required: true)
         try log.check(appSyncLauncher(fw, program: host, launcher: piece(SystemEdits.Helpers.appsyncLauncher)), required: true)
+    }
+}
+
+// MARK: the GL front end (qemu-ios contrib/gles-public: OpenGLES.framework/OpenGLES replaced whole)
+
+extension FitCheck {
+    public static let openGLES = "System/Library/Frameworks/OpenGLES.framework/OpenGLES"
+    static let quartzCore = "System/Library/Frameworks/QuartzCore.framework/QuartzCore"
+    static let coreImage = "System/Library/Frameworks/CoreImage.framework/CoreImage"
+    static let ioSurface = "System/Library/PrivateFrameworks/IOSurface.framework/IOSurface"
+    static let coreSurfaces = ["System/Library/Frameworks/CoreSurface.framework/CoreSurface",
+                               "System/Library/PrivateFrameworks/CoreSurface.framework/CoreSurface"]
+    static let ioMobileFramebuffer = "System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer"
+    static let sgxEngine = "System/Library/Frameworks/OpenGLES.framework/GLEngine.bundle"
+    /// The surface calls the front end (mbxshim.c iosurface_init) takes by name: IOSurface's, or CoreSurface's
+    /// CoreSurfaceBuffer* equivalents (2.x; GetPixelFormatType there).
+    static let surfaceCalls = ["GetBaseAddress", "GetBytesPerRow", "GetWidth", "GetHeight", "GetPixelFormat", "Lock", "Unlock"]
+
+    /// Does the image installed as `install` name the C string `s` (a selector it sends or implements, an @encode)?
+    /// Cached images: their own __cstring / __objc_methname / __objc_methtype sections; files: anywhere in the file.
+    static func names(_ fw: Firmware, _ install: String, _ s: String) -> Bool {
+        if let cache = fw.cache, let img = cache.image("/" + install) {
+            return ["__objc_methname", "__cstring", "__objc_methtype"].contains { cache.cStrings(in: img, section: $0).contains(s) }
+        }
+        return fw.data(install).map { contains($0, cString(s)) } ?? false
+    }
+
+    /// The text from `prefix` to the end of the first C string holding it (an @encode sits inside a method's type
+    /// string) in the image's __cstring / __objc_methtype (cached) or its file.
+    static func string(_ fw: Firmware, _ install: String, prefix: String) -> String? {
+        if let cache = fw.cache, let img = cache.image("/" + install) {
+            for sec in ["__cstring", "__objc_methtype"] {
+                if let hit = cache.cStrings(in: img, section: sec).first(where: { $0.contains(prefix) }), let r = hit.range(of: prefix) {
+                    return String(hit[r.lowerBound...])
+                }
+            }
+            return nil
+        }
+        guard let d = fw.data(install), let r = d.range(of: Data(prefix.utf8)) else { return nil }
+        let end = d[r.lowerBound...].firstIndex(of: 0) ?? d.endIndex
+        return String(decoding: d[r.lowerBound..<end], as: UTF8.self)
+    }
+
+    /// The defined external symbols of a Mach-O's slice for this firmware's CPU.
+    static func exported(_ bin: Data, arch: String) -> Set<String> {
+        guard let m = MachO32.slice(bin, arch: arch)?.image else { return [] }
+        return Set(m.symbols().filter { MachO32.isExport($0.type) }.map(\.name))
+    }
+
+    /// The one OpenGLES replacement fits when everything it looks up at run time is in this (pristine) firmware
+    /// (qemu-ios docs/ipad1/gles-public-seam.md, "What the replacement must find at run time"):
+    ///   - it loads (FitCheck.loads), and exports every name the stock OpenGLES exports (dyld binds each cached
+    ///     consumer's imports by name once the cached image is overridden);
+    ///   - CAEAGLLayer's drawable: QuartzCore implements nativeWindow and drawableProperties, and the window object's
+    ///     @encode is a version word and at least five callbacks (attach, detach, begin, swap, collect);
+    ///   - surfaces: IOSurface exports the calls the core makes, else CoreSurface its CoreSurfaceBuffer* ones;
+    ///   - the swap, where QuartzCore sends swapNotification:/sendNotification:: IOMobileFramebuffer's SwapSignal (and
+    ///     GetMainDisplay + GetID for sendNotification:, which names the framebuffer by ID);
+    ///   - the 5.x macro context, where QuartzCore or CoreImage sends GetMacroContextPrivate: the stock OpenGLES's
+    ///     __GLIFunctionDispatchRec @encode (read from the shared cache at run time), every field a row of the name
+    ///     table `names` (gles-names.h) knows.
+    public static func glesFrontEnd(_ fw: Firmware, binary: Data, names table: String) -> Fit {
+        let piece = "OpenGLES front end (contrib/gles-public)"
+        let l = loads(piece, binary, on: fw)
+        guard l.fits else { return l }
+        guard let stock = fw.exports("/" + openGLES) else { return Fit(piece, fits: false, "this firmware has no OpenGLES.framework") }
+        let lost = stock.subtracting(exported(binary, arch: fw.arch)).sorted()
+        guard lost.isEmpty else {
+            return Fit(piece, fits: false, "the stock OpenGLES exports \(lost.prefix(6).joined(separator: ", "))\(lost.count > 6 ? " (+\(lost.count - 6))" : "") that the front end does not")
+        }
+        var proof = ["exports all \(stock.count) of the stock OpenGLES's names"]
+        for sel in ["nativeWindow", "drawableProperties"] where !names(fw, quartzCore, sel) {
+            return Fit(piece, fits: false, "QuartzCore does not name \(sel): no CAEAGLLayer drawable to bind")
+        }
+        let tag = "{_EAGLNativeWindowObject="
+        let window = [quartzCore, openGLES].lazy.compactMap { string(fw, $0, prefix: tag) }.first
+        guard let window else { return Fit(piece, fits: false, "no _EAGLNativeWindowObject @encode in QuartzCore or OpenGLES") }
+        let body = window.dropFirst(tag.count).prefix { $0 != "}" }
+        let callbacks = body.components(separatedBy: "^?").count - 1
+        guard body.hasPrefix("\"version\"i") || body.hasPrefix("i"), callbacks >= 5 else {
+            return Fit(piece, fits: false, "the native window is \(window), not a version word and five callbacks")
+        }
+        proof.append("native window: version + \(callbacks) callbacks")
+        let calls: [String]
+        if let s = fw.exports("/" + ioSurface), surfaceCalls.allSatisfy({ s.contains("_IOSurface" + $0) }) {
+            calls = ["IOSurface"]
+        } else if let lib = coreSurfaces.first(where: { fw.exports("/" + $0) != nil }), let s = fw.exports("/" + lib),
+                  surfaceCalls.allSatisfy({ s.contains("_CoreSurfaceBuffer" + ($0 == "GetPixelFormat" ? "GetPixelFormatType" : $0)) }) {
+            calls = ["CoreSurface"]
+        } else {
+            return Fit(piece, fits: false, "neither IOSurface nor CoreSurface exports the surface calls (\(surfaceCalls.joined(separator: ", ")))")
+        }
+        proof.append("surfaces through \(calls[0])")
+        let fb = fw.exports("/" + ioMobileFramebuffer) ?? []
+        for (sel, want) in [("swapNotification:forTransaction:onLayer:", ["_IOMobileFramebufferSwapSignal"]),
+                            ("sendNotification:forTransaction:onLayer:", ["_IOMobileFramebufferSwapSignal", "_IOMobileFramebufferGetMainDisplay", "_IOMobileFramebufferGetID"])]
+            where names(fw, quartzCore, sel) {
+            let missing = want.filter { !fb.contains($0) }
+            guard missing.isEmpty else { return Fit(piece, fits: false, "QuartzCore sends \(sel) and IOMobileFramebuffer lacks \(missing.joined(separator: ", "))") }
+            proof.append(String(sel.prefix { $0 != ":" }) + " signals through IOMobileFramebufferSwapSignal")
+        }
+        if names(fw, quartzCore, "GetMacroContextPrivate") || names(fw, coreImage, "GetMacroContextPrivate") {
+            guard fw.cache != nil, let enc = string(fw, openGLES, prefix: "{__GLIFunctionDispatchRec="),
+                  let fields = GLIDispatch.fields(in: Data((enc + "}").utf8)), !fields.isEmpty else {
+                return Fit(piece, fits: false, "QuartzCore or CoreImage asks for a macro context and the shared cache's OpenGLES carries no __GLIFunctionDispatchRec @encode")
+            }
+            let known = Set(table.matches(of: /(?m)^GLES_FN\(\w+,\s*(\w+),/).map { String($0.1) })
+            let unknown = fields.filter { !known.contains($0) }
+            guard unknown.isEmpty else {
+                return Fit(piece, fits: false, "the macro context's dispatch fields \(unknown.prefix(6).joined(separator: ", "))\(unknown.count > 6 ? " (+\(unknown.count - 6))" : "") are no rows of gles-names.h")
+            }
+            proof.append("macro context: \(fields.count) dispatch fields, all named")
+        }
+        proof.append(fw.resolve(sgxEngine) != nil ? "ES 1.1 + 2.0 (GLEngine.bundle)" : "ES 1.1 only (no GLEngine.bundle)")
+        return Fit(piece, fits: true, (proof + [l.proof]).joined(separator: "; "))
     }
 }

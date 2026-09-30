@@ -201,7 +201,6 @@ copy_guest() {
         copy_tool "$QEMU/contrib/$1" guest
     fi
 }
-copy_guest it-gles/MBXGLEngine
 copy_guest it-agent/it_agent
 copy_guest it-agent/it_typein.dylib
 copy_guest it-media/itmedia
@@ -217,10 +216,9 @@ if [ -n "$IPAD_GUEST" ] && [ -d "$IPAD_GUEST" ]; then
     echo "embedding iPad guest helpers…"
     mkdir -p "$GUEST_TOOLS_DST"
     cp -p "$IPAD_GUEST"/* "$GUEST_TOOLS_DST/"
-    # one GL shim per arch (the dispatch layout is read at load) and the name table they speak; the 1.x/2.x front
-    # ends and the export sets N45Board/N72Board check the stock OpenGLES against before the seed package's hook
-    # replaces it
-    for f in it_pbd GLEngine MBXGLEngine gles-names.h OpenGLES-2x opengles-2x.exports OpenGLES-1x opengles-1x.exports; do
+    # the GL front end (every k48/n72 build) and the name table it speaks; 1.x's front end and the export set
+    # N45Board checks the stock OpenGLES against before the seed package's hook replaces it
+    for f in it_pbd OpenGLES gles-names.h OpenGLES-1x opengles-1x.exports; do
         [ -s "$GUEST_TOOLS_DST/$f" ] || { echo "incomplete iPad guest tools: $IPAD_GUEST (no $f)" >&2; exit 1; }
     done
 elif [ ${#FIRMWAREKIT[@]} -gt 0 ]; then

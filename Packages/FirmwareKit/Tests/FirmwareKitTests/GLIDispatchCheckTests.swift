@@ -15,8 +15,8 @@ struct GLIDispatchCheckTests {
         #expect(SystemEdits.glesSanity(cache, helpers: dir) == "GLI dispatch: 2 slots, 1 unknown to the name table (bar)")
     }
 
-    /// Every firmware the catalog prepares with a shim has its dispatch fields in the shipped name table, and the
-    /// gld plugin check still sees what 4.x's libGFXShared wants (a stand-in lacking the first name).
+    /// Every firmware the catalog prepares with GL has its dispatch fields in the shipped name table (the MBX engine
+    /// reads them at load; the front end's 5.x macro context does, and its fit check requires it).
     @Test(arguments: ["7B500", "8C148", "9B206", "7E18", "8C148-ipod"]) func firmwareFieldsAreNamed(_ build: String) throws {
         guard Fixtures.hasRootfs(build), Fixtures.exists(Self.names.appendingPathComponent(SystemEdits.Helpers.glesNames)) else { return }
         let dir = try Fixtures.tempDir("gli")
@@ -25,24 +25,14 @@ struct GLIDispatchCheckTests {
         let line = SystemEdits.glesSanity(cache.data, helpers: Self.names)
         print("\(build): \(line)")
         #expect(line.hasSuffix(" 0 unknown to the name table"))
-        let wanted = cache.image(GLIDispatch.libGFXShared).map { cache.cStrings(in: $0, section: "__cstring") }?
-            .filter { $0.wholeMatch(of: /gld[A-Z]\w+/) != nil } ?? []
-        let fake = dir.appendingPathComponent("fake-gld")
-        try Data(wanted.dropFirst().map { "\0_" + $0 + "\0" }.joined().utf8).write(to: fake)
-        let gld = GLIDispatch.gldProblem(cache, plugin: fake)
-        let needed = build.hasPrefix("8C148") || build.hasPrefix("9")
-        #expect(gld.needed == needed)
-        if needed { #expect(gld.why == "gldshim lacks " + wanted[0]) }
-        // 5.x's libGFXShared (gld interface 4.0.44) names 113 gld* strings, and the shipped plugin exports each
-        if build.hasPrefix("9") { #expect(wanted.count == 113, "\(wanted.count): \(wanted)") }
-        let plugin = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.gld)
-        if needed, Fixtures.exists(plugin) { #expect(GLIDispatch.gldProblem(cache, plugin: plugin).why == nil) }
     }
 
-    /// A ca_ogl recipe on a firmware whose gld plugin does not fit fails the prepare (as ipad1_rootfs.py build
-    /// does) instead of quietly producing a software-CoreAnimation device, and installs nothing.
-    @Test func caOGLRefusesAMisfitGldPlugin() throws {
-        guard Fixtures.hasRootfs("8C148") else { return }
+    /// A ca_ogl recipe on a firmware the GL front end does not fit (here: a front end with one of the stock OpenGLES's
+    /// exports renamed away) fails the prepare instead of quietly producing a software-CoreAnimation device, and
+    /// installs nothing.
+    @Test func caOGLRefusesAMisfitFrontEnd() throws {
+        let real = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.openGLES)
+        guard Fixtures.hasRootfs("8C148"), Fixtures.exists(real) else { return }
         let dir = try Fixtures.tempDir("caogl")
         defer { try? FileManager.default.removeItem(at: dir) }
         let m = dir.appendingPathComponent("mnt"), helpers = dir.appendingPathComponent("helpers")
@@ -50,13 +40,16 @@ struct GLIDispatchCheckTests {
         try FileManager.default.createDirectory(at: at.deletingLastPathComponent(), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: helpers, withIntermediateDirectories: true)
         try FileManager.default.moveItem(at: try Fixtures.cache("8C148", to: dir), to: at)
-        try Data("engine".utf8).write(to: helpers.appendingPathComponent(SystemEdits.Helpers.glEngine))
-        try Data("\0_gldGetVersion\0".utf8).write(to: helpers.appendingPathComponent(SystemEdits.Helpers.gld))
+        var b = [UInt8](try Data(contentsOf: real))
+        while let r = b.firstRange(of: Array("\0_glClear\0".utf8)) { b.replaceSubrange(r, with: Array("\0_glClxar\0".utf8)) }
+        try Data(b).write(to: helpers.appendingPathComponent(SystemEdits.Helpers.openGLES))
+        let log = FitCheck.Log()
         #expect {
-            try SystemEdits.installCAOGL(m, helpers: helpers) { _ in }
+            try SystemEdits.installCAOGL(m, helpers: helpers, arch: "armv7", fw: FitCheck.Firmware(root: m, arch: "armv7"), fit: log) { _ in }
         } throws: { e in
-            (e as? FirmwareError)?.code == .unsupported && "\(e)".contains("ca_ogl") && "\(e)".contains("gldshim lacks")
+            (e as? FirmwareError)?.code == .unsupported && "\(e)".contains("ca_ogl") && "\(e)".contains("_glClear")
         }
-        #expect(!FileManager.default.fileExists(atPath: m.appendingPathComponent(SystemEdits.glEngine).path))
+        #expect(log.fits.first.map { !$0.fits } == true)
+        #expect(!FileManager.default.fileExists(atPath: m.appendingPathComponent(FitCheck.openGLES).path))
     }
 }

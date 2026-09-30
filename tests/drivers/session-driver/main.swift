@@ -331,7 +331,7 @@ extension String {
 /// Apps inspector's reorder), then tapped there (iPhone OS 2.x/3.x 320x480 grid: slot 0 centred at 47,62). With
 /// `point` (2.x: no springboardservices) the icon is tapped where the caller says it is. The first install's
 /// "Edit Home Screen" tip is dismissed first (its button sits in a gap between icons when there is no tip).
-@MainActor func launch(_ d: Device, at point: [Double]? = nil, glTap: [Double]? = nil) async {
+@MainActor func launch(_ d: Device, at point: [Double]? = nil, tap: [Double]? = nil) async {
     var event: [String: Any] = ["device": d.name, "bundleID": config.bundleID]
     // Where it_agent answers, launch as the app does (GuestAgent.launch) and ask it what is frontmost: the
     // tap below assumes the iPhone 320x480 grid, which misses on the iPad's home screen.
@@ -344,8 +344,8 @@ extension String {
             if let path = d.screenshot("launched\(i + 1)") { event["shot\(i + 1)"] = path }
             if let f = try? await agent.frontmost() { event["frontmost\(i + 1)"] = f.bundleID }
         }
-        if let glTap, glTap.count >= 2 {   // a row of the launched app (Harness: "GL: rotating triangle"), two frames apart
-            await d.tap(glTap[0], glTap[1])
+        if let tap, tap.count >= 2 {   // a row of the launched app (Harness: "GL: rotating triangle"), two frames apart
+            await d.tap(tap[0], tap[1])
             try? await Task.sleep(for: .seconds(8))
             if let path = d.screenshot("gl1") { event["gl1"] = path }
             try? await Task.sleep(for: .seconds(5))
@@ -382,6 +382,13 @@ extension String {
     for (i, wait) in [8, 12, 20].enumerated() {
         try? await Task.sleep(for: .seconds(wait))
         if let path = d.screenshot("launched\(i + 1)") { event["shot\(i + 1)"] = path }
+    }
+    if let tap, tap.count >= 2 {   // single.swift tapAfterLaunch (normalized portrait on the iPod)
+        await d.tap(tap[0], tap[1])
+        for i in 1...2 {
+            try? await Task.sleep(for: .seconds(3))
+            if let path = d.screenshot("tapped\(i)") { event["tapped\(i)"] = path }
+        }
     }
     emit("launched", event)
     d.process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))

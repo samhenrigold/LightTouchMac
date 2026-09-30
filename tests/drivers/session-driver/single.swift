@@ -32,8 +32,10 @@ struct SingleConfig: Decodable {
     /// Where the icon is (normalized), for firmware whose SpringBoard has no springboardservices (2.x): the reorder
     /// is skipped, and a tap on the first-install "Edit Home Screen" tip's Dismiss goes first.
     var launchAt: [Double]?
-    /// With launch: a point (normalized) tapped in the launched app, then screenshots gl1/gl2 five seconds apart.
-    var glTap: [Double]?
+    /// A launch goes through the guest agent where the bake installed it (as the app's sidebar launches); then a tap at this
+    /// normalized point (the iPad's panel: portrait top is x 0, portrait left is y 1; the iPod's portrait screen) and
+    /// screenshots tapped1-2, 3 s apart. tests/matrix.py --gl-tap opens the Harness's "GL: rotating triangle" with it.
+    var tapAfterLaunch: [Double]?
 }
 
 @MainActor func runSingle(_ s: SingleConfig) async {
@@ -235,7 +237,8 @@ struct SingleConfig: Decodable {
     if s.install != false { await install(d) }
     try? await Task.sleep(for: .seconds(3))
     await wakeForShot(d, "installed")   // wake first: the panel may have slept during the install
-    if s.launch == true { await launch(d, at: s.launchAt, glTap: s.glTap) }
+    // launch() goes through the guest agent wherever it answers (judged on the frontmost app), else taps the icon.
+    if s.launch == true { await launch(d, at: s.launchAt, tap: s.tapAfterLaunch) }
 
     // The persist marker: a file that must still be there after the clean shutdown and the second boot.
     let marker = "ltm-matrix-persist.bin"
@@ -271,6 +274,7 @@ struct SingleConfig: Decodable {
     emit("done")
     exit(0)
 }
+
 
 /// iOS 5's Setup Assistant on a fresh iPad, walked as qemu-ios tests/ipad1/regress.py's gles leg walks it (SETUP_5):
 /// framebuffer pixels (1024x768, the panel's landscape scan; portrait top is x 0). A tap counts as answered when

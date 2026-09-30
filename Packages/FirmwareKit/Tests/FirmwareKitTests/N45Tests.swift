@@ -193,7 +193,7 @@ import Testing
             let short = dir.appendingPathComponent("short.exports")
             try (String(contentsOf: list, encoding: .utf8).replacingOccurrences(of: "\nglFlush\n", with: "\n")).write(to: short, atomically: true, encoding: .utf8)
             #expect(try N72Board.frontEnd(gl, exports: short).0 == false)
-            #expect(try N72Board.frontEnd(gl, exports: it.appendingPathComponent(N72Board.openGLESExports)).0 == false)   // 2.x's list is not 1.x's
+            #expect(try N72Board.frontEnd(gl, exports: it.appendingPathComponent("opengles-2x.exports")).0 == false)   // 2.x's list is not 1.x's
 
             guard Oracle.exists(itpack) else { return }
             let helpers = dir.appendingPathComponent("helpers")

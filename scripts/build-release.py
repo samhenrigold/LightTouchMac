@@ -20,20 +20,20 @@ import sources as pins  # noqa: E402  (build-support/sources.json: the pinned qe
 # The guest tools come from qemu-ios contrib/export-guest-artifacts.sh (build-guest-tools.sh calls it) with a
 # manifest naming every staged file; these are the names the app and firmwarekit need to find in it, whatever
 # else the export stages.
-GUEST_PAYLOADS = frozenset(('MBXGLEngine', 'sbdlicon', 'ithalt', 'it_agent', 'it_typein.dylib',
+GUEST_PAYLOADS = frozenset(('sbdlicon', 'ithalt', 'it_agent', 'it_typein.dylib',
                           'com.qemu.it-agent.plist', 'itstatus', 'itmedia', 'itphoto',
                           'itproxy', 'ittrust', 'itorient'))
 # firmwarekit's --guest-tools set (SystemEdits.Helpers + it_keybag) and the n72/n45 recipes' inputs (N72Recipe,
-# N45Recipe): one GL shim per arch (GLEngine, MBXGLEngine: the dispatch layout is read at load) and the name table
-# they speak; the 2.x and 1.x GL front ends (OpenGLES-2x, OpenGLES-1x) and the export sets the recipes check the stock
-# OpenGLES against (opengles-2x.exports, opengles-1x.exports).
+# N45Recipe): the GL front end (OpenGLES: one fat binary every k48 and n72 build gets, qemu-ios contrib/gles-public)
+# and the name table it speaks; 1.x's GL front end (OpenGLES-1x) and the export set N45 checks the stock OpenGLES
+# against.
 IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquiet.dylib', 'it_seal', 'it_keybag',
                                  'libappsync.dylib', 'com.qemu.it-pbd.plist', 'com.qemu.it-ethlink.plist',
-                                 'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'GLEngine', 'gles-names.h',
-                                 'GLRendererFloatQEMU', 'armv6.itpack', 'armv7.itpack',
-                                 'MBXGLEngine', 'sblaunch', 'sbdlicon', 'it_agent', 'it_typein.dylib',
+                                 'com.qemu.it-prefs.plist', 'com.qemu.it-seal.plist', 'OpenGLES', 'gles-names.h',
+                                 'armv6.itpack', 'armv7.itpack',
+                                 'sblaunch', 'sbdlicon', 'it_agent', 'it_typein.dylib',
                                  'com.qemu.it-agent.plist', 'it_keybag-armv6', 'it_prefs-armv6',
-                                 'OpenGLES-2x', 'opengles-2x.exports', 'OpenGLES-1x', 'opengles-1x.exports'))
+                                 'OpenGLES-1x', 'opengles-1x.exports'))
 # The oldest guest package the bundle may carry: serial 7 is the first with the n45-ios1 family (1.x's OpenGLES
 # front-end hook, no loader), which N45Board refuses to bake 1.x GL without (serial 5 brought n72-ios2's).
 GUEST_PACKAGE_MIN_SERIAL = 8

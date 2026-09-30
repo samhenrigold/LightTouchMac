@@ -22,9 +22,8 @@ enum K48Oracle {
             m[j] = contrib.appendingPathComponent("\(d)/\(j)")
         }
         m["libappsync.dylib"] = qemu.appendingPathComponent("build/appsync/libappsync.dylib")
-        m["GLEngine"] = contrib.appendingPathComponent("ipad1-gles/GLEngine")
+        m["OpenGLES"] = contrib.appendingPathComponent("gles-public/OpenGLES")
         m["gles-names.h"] = qemu.appendingPathComponent("include/hw/arm/guest-services/gles-names.h")
-        m["GLRendererFloatQEMU"] = contrib.appendingPathComponent("ipad1-gles/GLRendererFloatQEMU.bundle/GLRendererFloatQEMU")
         m[SystemEdits.Helpers.itpack] = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
         return m
     }
@@ -94,7 +93,7 @@ enum K48Oracle {
             func volume(_ name: String) throws -> URL {
                 let v = dir.appendingPathComponent(name), sv = v.appendingPathComponent(GuestPackage.systemVersion)
                 try FileManager.default.copyItem(at: stock, to: v)
-                for rel in [SystemEdits.glEngine, SystemEdits.gldPath, "usr/local/lib/it_msmquiet.dylib"] {
+                for rel in [FitCheck.openGLES, "usr/local/lib/it_msmquiet.dylib"] {   // the front end is installed before the seed
                     try SystemEdits.mkdirs(v.appendingPathComponent(rel).deletingLastPathComponent())
                     try SystemEdits.put(Data("stock".utf8), v.appendingPathComponent(rel), mode: 0o755)
                 }
@@ -116,7 +115,7 @@ enum K48Oracle {
             let py = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as! NSDictionary
             #expect(written == py["written"] as? [String])
             #expect(NSDictionary(dictionary: record.object) == py["record"] as? NSDictionary)
-            #expect(record.gles == gles && record.hooks.contains("/" + SystemEdits.glEngine) == gles)
+            #expect(record.gles == gles && record.hooks.contains("/" + FitCheck.openGLES) == gles)
             if build.hasPrefix("9") { #expect(record.family == "k48-ios5" && record.seed >= 8) }   // "9*": 5.x's own family
             func tree(_ v: URL) throws -> [String: String] {
                 var t: [String: String] = [:]
@@ -188,7 +187,7 @@ enum K48Oracle {
             var record = try #require(r.guestPackage?.object)
             record["itpack"] = pyRecord["itpack"]
             #expect(NSDictionary(dictionary: record) == pyRecord)
-            #expect(r.guestPackage?.gles == true && r.engine == SystemEdits.Helpers.glEngine)
+            #expect(r.guestPackage?.gles == true && r.engine == SystemEdits.Helpers.openGLES)
 
             // lockdownd: different ad-hoc signature representation; .journal: each volume's own journal
             for (vol, expected) in [("system.img", ["usr/libexec/lockdownd"]), ("data.img", [".journal"])] {
@@ -227,8 +226,8 @@ enum K48Oracle {
             #expect(tree["usr/local/bin/it_boot"]?.mode == 0o100755 && tree["usr/local/bin/it_boot"]?.uid == 0)
             #expect(tree["usr/local/lighttouch/current"]?.link == "pkgs/\(seed.seed)")
             #expect(tree["usr/local/lighttouch/pkgs/\(seed.seed)/offer"]?.uid == 0)
-            #expect(seed.hooks.contains("/" + SystemEdits.glEngine))
-            let engine = try sv.listing(under: SystemEdits.glEngine).first, baked = try sv.listing(under: SystemEdits.glEngine + ".baked").first
+            #expect(seed.hooks.contains("/" + FitCheck.openGLES))
+            let engine = try sv.listing(under: FitCheck.openGLES).first, baked = try sv.listing(under: FitCheck.openGLES + ".baked").first
             #expect(engine?.sha256 != nil && engine?.sha256 == baked?.sha256 && baked?.uid == 0)
             #expect(try sv.listing(under: SystemEdits.daemons + "/com.qemu.it-pbd.plist").isEmpty)
             #expect(try sv.listing(under: SystemEdits.daemons + "/com.qemu.it-boot.plist").first?.uid == 0)
