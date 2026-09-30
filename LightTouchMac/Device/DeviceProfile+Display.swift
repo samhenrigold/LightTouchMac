@@ -30,26 +30,31 @@ nonisolated extension DeviceProfile {
     // MARK: - Device art (shell-native pixels, top-left origin)
 
     /// Each board has a 3D model (<name>.usdz, revision 7 for K48 and N45).
-    /// The flat art is the fallback while it loads or where RealityKit can't:
-    /// the iPod has shell.png, and the iPad borrows the iPad chrome from the
-    /// iPhone Simulator in Xcode 3.2.4 (iPad.deviceinfo: portrait.png,
-    /// 852x1108, with the 768x1024 screen centred in it).
-    var shellImageName: String { self == .iPad1 ? "ipad-frame" : "shell" }
+    /// The flat art is the prepare screen's picture and the fallback while the
+    /// model loads or where RealityKit can't: the 2G has shell.png (a product
+    /// photo), the 1G shell-1g.png (its N45 model rendered face-on, screen off,
+    /// by scripts/render-shell-art.py, which prints the numbers below), and the
+    /// iPad borrows the iPad chrome from the iPhone Simulator in Xcode 3.2.4
+    /// (iPad.deviceinfo: portrait.png, 852x1108, with the 768x1024 screen centred in it).
+    var shellImageName: String {
+        switch self { case .iPodTouch2G: "shell"; case .iPad1: "ipad-frame"; case .iPodTouch1G: "shell-1g" }
+    }
     var deviceModelName: String? {
         switch self { case .iPodTouch2G: "N72"; case .iPad1: "K48"; case .iPodTouch1G: "N45" }
     }
 
     var shellPixels: CGSize {
         switch self {
-        // ponytail: the 1G wears the 2G's shell art (same screen and button layout) until it has its own.
-        case .iPodTouch2G, .iPodTouch1G: CGSize(width: 737, height: 1318)
+        case .iPodTouch2G: CGSize(width: 737, height: 1318)
+        case .iPodTouch1G: CGSize(width: 734, height: 1311)
         case .iPad1: CGSize(width: 852, height: 1108)
         }
     }
 
     var screenCutout: CGRect {
         switch self {
-        case .iPodTouch2G, .iPodTouch1G: CGRect(x: 74, y: 213, width: 594, height: 891)
+        case .iPodTouch2G: CGRect(x: 74, y: 213, width: 594, height: 891)
+        case .iPodTouch1G: CGRect(x: 70, y: 211, width: 594, height: 891)
         // (852 - 768) / 2 and (1108 - 1024) / 2: the Simulator centres its screen.
         case .iPad1: CGRect(x: 42, y: 42, width: 768, height: 1024)
         }
@@ -58,8 +63,12 @@ nonisolated extension DeviceProfile {
     /// The Home button's hit circle: diameter, and its gap to the shell's
     /// bottom edge. The iPad's comes from iPad.deviceinfo's homeOriginX/Y
     /// (412, 9, bottom-left origin) and its 29x31 home.png.
-    var homeButtonDiameter: CGFloat { self == .iPad1 ? 31 : 122 }
-    var homeButtonBottomInset: CGFloat { self == .iPad1 ? 9 : 54 }
+    var homeButtonDiameter: CGFloat {
+        switch self { case .iPodTouch2G: 122; case .iPad1: 31; case .iPodTouch1G: 112 }
+    }
+    var homeButtonBottomInset: CGFloat {
+        switch self { case .iPodTouch2G: 54; case .iPad1: 9; case .iPodTouch1G: 59 }
+    }
 
     /// Height of the real device, for Actual Size zoom.
     var physicalHeightMillimeters: CGFloat { self == .iPad1 ? 242.8 : 110 }

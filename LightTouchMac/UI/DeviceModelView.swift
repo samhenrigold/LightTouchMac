@@ -116,6 +116,18 @@ final class DeviceModelView: NSView {
             finish.metallic = .init(floatLiteral: 0)
             finish.roughness = .init(floatLiteral: 0.5)
           }
+          // N45's graphite front frame ships as near-black (0.03 linear) metal, which reflects almost
+          // nothing; Apple's shots show a lighter brushed anodised rim. It and N45's cover glass take
+          // their gradient and highlight from N45Rim (below); the glass is a blue-black with a sheen.
+          if name == "frameDark" {
+            finish.baseColor = .init(tint: NSColor(srgbRed: 0.72, green: 0.75, blue: 0.78, alpha: 1))
+            finish.metallic = .init(floatLiteral: 0.7)
+            finish.roughness = .init(floatLiteral: 0.36)
+          }
+          if profile == .iPodTouch1G && (name == "glass" || name.contains("inactive_LCD_perimeter")) {
+            finish.baseColor = .init(tint: NSColor(srgbRed: 0.07, green: 0.08, blue: 0.1, alpha: 1))
+            finish.specular = .init(floatLiteral: 0.5)
+          }
           if name.contains("Concave") {
             finish.specular = .init(floatLiteral: 0.5)
             finish.roughness = .init(floatLiteral: 0.18)
@@ -134,6 +146,17 @@ final class DeviceModelView: NSView {
     homeLight.inheritsRotation = true
     homeLighting.components.set(homeLight)
     home.components.set(ImageBasedLightReceiverComponent(imageBasedLight: homeLighting))
+    if profile == .iPodTouch1G {
+      // World-fixed like a studio light: the rim's gradient stays upper-left as the device turns.
+      let rimLighting = Entity()
+      anchor.addChild(rimLighting)
+      rimLighting.components.set(ImageBasedLightComponent(
+        source: .single(try await EnvironmentResource(named: "N45Rim", in: .main)), intensityExponent: 2))
+      for name in ["Front_frame___broad_graphite_bevel", "Cover_glass___opaque_masked_surround",
+                   "Display___inactive_optical_border", "Ambient_proximity_sensor___1"] {
+        loaded.findEntity(named: name)?.components.set(ImageBasedLightReceiverComponent(imageBasedLight: rimLighting))
+      }
+    }
     wantsLayer = true
     layer?.insertSublayer(chassisShadow, at: 0)
     chassisShadow.shadowColor = NSColor.black.cgColor
@@ -282,6 +305,9 @@ final class DeviceModelView: NSView {
       sampler.modify { descriptor in
         descriptor.sAddressMode = .clampToEdge
         descriptor.tAddressMode = .clampToEdge
+        // Upscaled LCD pixels stay square, like DisplayView's flat layer; shrunk ones still filter.
+        descriptor.magFilter = .nearest
+        descriptor.minFilter = .linear
       }
       screenMaterial.color = .init(tint: .white, texture: .init(screenTexture, sampler: sampler))
     } else {

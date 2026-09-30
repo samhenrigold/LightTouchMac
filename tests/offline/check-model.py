@@ -290,7 +290,47 @@ func pattern(_ profile: DeviceProfile, rotation: Int) -> CGImage {
   model.advanceAnimations()
   precondition(abs(model.projectedPoint(CGPoint(x:0.5,y:0.5)).x-centre.x)<0.01)
   model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
-  try save(try await render(model), out+"/\(lower)-pattern.png")
+  let face = try await render(model)
+  try save(face, out+"/\(lower)-pattern.png")
+  // N45 against Apple's product shot (touch_topsongs.jpg, colour-managed from its CMYK): a brushed graphite
+  // frame lit from the upper left, sRGB ~150-175 there falling to ~85-100 at the lower right (the asset's
+  // near-black frameDark alone gives ~0.03 everywhere; flat grey paint gives no gradient), and blue-black
+  // glass, ~25, with a faint sheen (~43) to the upper right of a diagonal (N45Rim).
+  if profile == .iPodTouch1G {
+    func level(_ p: CGPoint) -> CGFloat {
+      let c = color(face, model.projectedPoint(p), in: model.bounds.size)
+      return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent
+    }
+    let lit = [CGPoint(x: -0.095, y: 0.2), CGPoint(x: 0.5, y: -0.217)].map(level)
+    let shade = [CGPoint(x: 1.095, y: 0.8), CGPoint(x: 0.5, y: 1.217)].map(level)
+    let sheen = level(CGPoint(x: 0.85, y: -0.1)), glass = [CGPoint(x: 0.05, y: -0.2), CGPoint(x: 0.15, y: 1.1)].map(level)
+    print("N45: graphite frame lit \(lit) shaded \(shade); glass \(glass) sheen \(sheen)")
+    precondition(lit.allSatisfy { $0 > 0.5 && $0 < 0.75 }, "N45 frame's upper left is not a light graphite: \(lit)")
+    precondition(shade.allSatisfy { $0 > 0.28 && $0 < 0.45 }, "N45 frame's lower right is not a darker graphite: \(shade)")
+    precondition(glass.allSatisfy { $0 > 0.06 && $0 < 0.15 } && sheen - glass.max()! > 0.05, "N45 glass is not blue-black with a sheen: \(glass) \(sheen)")
+  }
+  // Nearest-neighbour upscaling: a 4x6 black/white checker blown up to ~600 px must keep hard edges.
+  // A linear mag filter ramps across each ~150 px cell, leaving a third or more of a scan mid-grey.
+  do {
+    let cw = 4, ch = 6
+    let checker = CGContext(data: nil, width: cw, height: ch, bitsPerComponent: 8, bytesPerRow: cw * 4,
+      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    for y in 0..<ch { for x in 0..<cw where (x + y) % 2 == 0 {
+      checker.setFillColor(.white); checker.fill(CGRect(x: x, y: y, width: 1, height: 1))
+    } }
+    model.updateFrame(checker.makeImage()!)
+    let shot = try await render(model)
+    var mid = 0, total = 0
+    for i in 0..<400 {
+      let q = model.projectedPoint(CGPoint(x: 0.02 + 0.96 * Double(i) / 399, y: 0.25))
+      let c = color(shot, q, in: model.bounds.size)
+      if c.greenComponent > 0.15 && c.greenComponent < 0.85 { mid += 1 }
+      total += 1
+    }
+    print("\(name): \(mid)/\(total) mid-grey samples across the upscaled checker")
+    precondition(mid * 100 < total * 3, "LCD upscaling is not nearest-neighbour: \(mid)/\(total) blurred samples")
+    model.updateFrame(pattern(profile, rotation: 0))
+  }
   model.setScreenOff(true)
   let dark = color(try await render(model), model.projectedPoint(CGPoint(x: 0.5, y: 0.5)), in: model.bounds.size)
   precondition(dark.redComponent<0.05 && dark.greenComponent<0.05 && dark.blueComponent<0.05)
@@ -428,6 +468,22 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
  }
 }
 '''
+# DisplayView's flat LCD layer, built without a window: its framebuffer upscales nearest-neighbour too.
+layer_source = display_source.split('@main')[0] + r'''@main struct Check {
+ @MainActor static func main() {
+  let profile: DeviceProfile = ["N72": .iPodTouch2G, "K48": .iPad1, "N45": .iPodTouch1G][CommandLine.arguments[3]]!
+  let display = DisplayView(frame: NSRect(x: 0, y: 0, width: 800, height: 800), profile: profile)
+  func all(_ l: CALayer) -> [CALayer] { [l] + (l.sublayers ?? []).flatMap(all) }
+  // The LCD layer: black-backed, stretched to the cutout (it takes each frame's IOSurface as contents).
+  let lcds = all(display.layer!).filter { $0.backgroundColor == NSColor.black.cgColor && $0.contentsGravity == .resize }
+  precondition(lcds.count == 1, "expected one LCD layer, found \(lcds.count)")
+  let lcd = lcds[0]
+  precondition(lcd.magnificationFilter == .nearest, "DisplayView's LCD upscales with \(lcd.magnificationFilter.rawValue)")
+  precondition(lcd.minificationFilter != .nearest, "DisplayView's LCD minification should filter")
+  print("PASS: DisplayView LCD layer magnifies nearest, minifies \(lcd.minificationFilter.rawValue)")
+ }
+}
+'''
 # The model half renders headless (RealityRenderer, no window) for every board.
 # The DisplayView half needs a presented ARView, which renders only in a visible
 # window: it runs with LTM_DISPLAY_CHECKS=1. `check-model.py DIR` keeps the renders.
@@ -443,6 +499,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
     for model in MODELS:
         (app/f"Resources/{model}.usdz").symlink_to(root/f"LightTouchMac/{model}.usdz")
     (app/"Resources/N72Studio.realityenv").symlink_to(root/"LightTouchMac/N72Studio.realityenv")
+    (app/"Resources/N45Rim.realityenv").symlink_to(root/"LightTouchMac/N45Rim.realityenv")
     sources=root/"LightTouchMac"
     qemu=Path(os.environ["QEMU_SRC"]) if os.environ.get("QEMU_SRC") else pins.path("qemu-ios")
     attitude_header=qemu/"include/hw/arm/ipod-attitude.h"
@@ -451,6 +508,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
     profile=["Device/DeviceProfile", "Device/DeviceProfile+Display"]
     for name,source,extra in [
         ("model",model_source,profile),
+        ("layer",layer_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "../Shared/DeviceLinkProtocol"]),
         *([("display",display_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "../Shared/DeviceLinkProtocol"])] if windowed else [])
     ]:
         swift=work/(name+".swift");swift.write_text(source)
