@@ -24,6 +24,14 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import sources  # the pinned checkouts (build-support/sources.json)
 
 
+def home_screen(front):
+    """A `front` event (the driver's GuestServices.foregroundAppName and GuestAgent.frontmost) on the unlocked home
+    screen. The lock screen is SpringBoard too (it_agent answers `com.apple.springboard / Lock Screen`), so the bundle
+    id alone passed a run whose every frame was dark (smoke #65/#66); as tests/sessions/matrix.py judges a home shot."""
+    return front.get("bundleID") == "com.apple.springboard" and front.get("name") == "Home Screen"
+
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--board", choices=("ipod", "ipad"), required=True)
@@ -133,7 +141,8 @@ def main():
     check(one("agent", generation=2).get("alive"), f"{b}: restarted on the same overlay, agent up")
     check(one("trust", generation=2).get("ok"), f"{b}: the trust runs again after the restart, silently")
     rebooted = one("front", label="rebooted")
-    check(rebooted.get("bundleID") == "com.apple.springboard", f"{b}: unlocked after the restart: the home screen, no profile screen (front: {rebooted.get('bundleID')})")
+    check(home_screen(rebooted), f"{b}: unlocked after the restart: the home screen, no profile screen "
+          f"(front: {rebooted.get('bundleID')} / {rebooted.get('name')})")
     if args.httpget:
         again = one("httpget", label="rebooted")
         check(again.get("ok"), f"{b}: HTTPS still answers after the restart: {again.get('output', '')[:40]!r}")
