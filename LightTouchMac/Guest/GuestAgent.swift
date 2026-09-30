@@ -218,10 +218,10 @@ nonisolated struct GuestAgent: Sendable {
     /// Wait for a (re)started agent to claim the channel.
     func waitAlive(seconds: Double) async -> Bool {
         let deadline = Date().addingTimeInterval(seconds)
-        while Date() < deadline {
+        while !Task.isCancelled, Date() < deadline {
             if isAlive { return true }
             try? await Task.sleep(for: .milliseconds(250))
         }
-        return isAlive
+        return !Task.isCancelled && isAlive
     }
 }

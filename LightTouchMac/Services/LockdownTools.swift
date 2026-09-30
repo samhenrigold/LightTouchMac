@@ -4,6 +4,8 @@
 // lockdown-mcinstall for the proxy's profile.
 
 import Foundation
+import Subprocess
+import System
 
 extension DeviceServices {
     /// lockdownd's ActivationState: "Activated", "Unactivated", "FactoryActivated".
@@ -64,11 +66,19 @@ extension DeviceServices {
     /// guest kept its own zone (4.x's locationd applies only the first external one) and there is
     /// a guest agent, once more after it clears locationd's record of that one.
     static func setTimeZone(_ identifier: String, tool: String, socket: String, guest: GuestServices? = nil) async throws -> String {
+        try Task.checkCancellation()
         do { return try await lockdownTZ(identifier, tool: tool, socket: socket) }
         catch DeviceToolsError.zoneKept(let zone) {
-            guard let guest, await guest.agent.waitAlive(seconds: 60), try await guest.forgetExternalTimeZone() else {
+            try Task.checkCancellation()
+            guard let guest, await guest.agent.waitAlive(seconds: 60) else {
+                try Task.checkCancellation()
                 throw DeviceToolsError.zoneKept(zone)
             }
+            try Task.checkCancellation()
+            guard try await guest.forgetExternalTimeZone() else {
+                throw DeviceToolsError.zoneKept(zone)
+            }
+            try Task.checkCancellation()
             logEvent("timezone: the device kept \(zone); cleared locationd's first zone, setting again")
             return try await lockdownTZ(identifier, tool: tool, socket: socket)
         }
@@ -106,21 +116,30 @@ extension DeviceServices {
     /// status and the first KB of each stream.
     private static func lockdownChild(_ tool: String, _ arguments: [String], socket: String) async throws
         -> (status: Int32, output: String, error: String) {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: tool)
-        task.arguments = arguments
-        task.environment = ProcessInfo.processInfo.environment.merging(["USBMUXD_SOCKET_ADDRESS": socket]) { $1 }
-        let output = Pipe(), error = Pipe()
-        task.standardOutput = output
-        task.standardError = error
-        task.standardInput = FileHandle.nullDevice
-        let status: Int32 = try await withCheckedThrowingContinuation { done in
-            task.terminationHandler = { done.resume(returning: $0.terminationStatus) }
-            do { try task.run() } catch { task.terminationHandler = nil; done.resume(throwing: error) }
+        try Task.checkCancellation()
+        // The existing subprocess library owns spawn, output draining and reaping.
+        // Cancellation (including the deadline) tears down the child before this
+        // returns, so a replaced boot cannot leave a timezone writer running.
+        let result = try await withThrowingTaskGroup(of: (Int32, String, String).self) { group in
+            group.addTask {
+                let child = try await Subprocess.run(.path(FilePath(tool)), arguments: Arguments(arguments),
+                    environment: .inherit.updating(["USBMUXD_SOCKET_ADDRESS": socket]),
+                    input: .none, output: .string(limit: 1024), error: .string(limit: 1024))
+                let status: Int32 = switch child.terminationStatus {
+                    case .exited(let code): code
+                    case .signaled(let signal): -signal
+                }
+                return (status, child.standardOutput, child.standardError)
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(Timeouts.query))
+                throw DeviceToolsError.failed("The device did not answer the lockdown helper in time.")
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
         }
-        let out = String(decoding: output.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
-        let err = String(decoding: error.fileHandleForReading.readDataToEndOfFile().prefix(1024), as: UTF8.self)
-        return (status, out, err)
+        try Task.checkCancellation()
+        return (result.0, result.1, result.2)
     }
 
     /// A development build has no bundled lockdown helpers (package.sh builds
