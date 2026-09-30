@@ -480,6 +480,16 @@ struct SingleConfig: Decodable {
                 // behind a modal alert a second tap does nothing, so an alert tap is retried sooner
                 let ok = await tapUntil(budget: isAlert || optional ? 60 : budget, every: 20, tap: { await tap(d, t.x, t.y, hold: t.hold) },
                                         answered: answered)
+                // Terms' button highlight can look like a page transition. Let
+                // it settle before deciding that Agree advanced without an alert.
+                if name == "terms", i == 0, ok {
+                    try? await Task.sleep(for: .seconds(3))
+                    if !alertUp(d), kind(fingerprint(d)) == nil {
+                        await tap(d, t.x, t.y, hold: 0.3)
+                        try? await Task.sleep(for: .seconds(3))
+                    }
+                    d.screenshot("terms-retry")
+                }
                 if isAlert, ok, !alertUp(d) { lastTitle = pageTitle; walked.append(name + " (no alert)"); continue page }
                 if !ok, optional { continue }
                 // 5.0 beta 5 has no Terms page: its Agree tap (an empty corner elsewhere) raises no alert

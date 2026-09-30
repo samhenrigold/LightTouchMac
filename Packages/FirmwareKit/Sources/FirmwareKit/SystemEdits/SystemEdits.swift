@@ -4,8 +4,8 @@
 // bake --seal as ipad1_device.build drives them, in one mount of the system volume:
 //
 //   system.img  the IPSW rootfs, grown to partition 1; rw fstab; SpringBoard env (GL CoreAnimation or
-//               CA_ENABLE_OGL=0) + stdio on /dev/console; [appsync] libappsync.dylib injected into installd +
-//               the shared-cache MISValidateSignature patch; [ca_ogl] the GL front end as OpenGLES.framework/OpenGLES
+//               CA_ENABLE_OGL=0) + stdio on /dev/console; [appsync] process-local libappsync.dylib injected into installd;
+//               [ca_ogl] the GL front end as OpenGLES.framework/OpenGLES
 //               (+ dyld's override switch: OpenGLES is cached); [web_proxy] the PAC; the guest helpers; storage_mounter loads
 //               it_msmquiet; BTServer Disabled; lockdownd activated (Activation); the guest-package loader and
 //               seed package from armv7.itpack (GuestPackage.seed), whose jobs it_boot loads.
@@ -289,16 +289,15 @@ public enum SystemEdits {
         return owned + [pacPath]
     }
 
-    /// Patch cached signature validation where available, then inject the
-    /// helper into the firmware's installation service (installd or mobile_installation_proxy).
+    /// Inject the helper into the firmware's installation service
+    /// (installd or mobile_installation_proxy), retaining stock libmis and its cache.
     static func installAppSync(_ m: URL, helper: URL, cache: String, log: (String) -> Void) throws -> (status: String, job: String) {
         let fm = FileManager.default
         let cached = fm.fileExists(atPath: m.appendingPathComponent(cache).path)
         if !cached, let why = MachOSignature.earlyARMProblem(helper) {
             throw FirmwareError(.unsupported, "AppSync: \(why)")
         }
-        let line = cached ? try AppSyncCachePatch.patchCache(at: m.appendingPathComponent(cache))
-            : "standalone libmis retained; installation-service interposition"
+        let line = "stock libmis retained; installation-service interposition"
         log(line)
         try mkdirs(m.appendingPathComponent(appsyncPath).deletingLastPathComponent())
         try put(Data(contentsOf: helper), m.appendingPathComponent(appsyncPath), mode: 0o644)
