@@ -4,7 +4,7 @@ How Light Touch talks to the user. Check new strings against this; change this f
 
 ## Rules
 
-- Say what happened and what to do next. If the user can't act on a detail (an exit code, a signal, a package serial, a lockdown code, a file inside an IPA), it goes to the log line (`logEvent`) and the text says "Open Device Logs for details." at most.
+- Say what happened and what to do next. If the user can't act on a detail (an exit code, a signal, a package serial, a lockdown code, a file inside an IPA), it goes to the log line (`logEvent`) and the text doesn’t point at it: a Show Logs button beside the message does.
 - Cut copy that answers a question the user wouldn't ask: no reassurance about fixed bugs, no captions that repeat a label, no "use Find to search".
 - Calm: no exclamation marks, no "Oops", no blame.
 - Sentence case for status lines, badges, labels, alert titles and messages. Title case for menu items, buttons and toolbar labels (macOS convention).
@@ -21,7 +21,7 @@ How Light Touch talks to the user. Check new strings against this; change this f
 | Light Touch | the app | LightTouchMac, "this build" (say "this copy of Light Touch") |
 | prepare, preparing, prepared | turning an IPSW into a device (`firmwarekit create`) | preparer, bake, build, create |
 | download | fetching an IPSW | prepare |
-| Download & Prepare / Prepare | the row's button: Prepare when the IPSW is already here | |
+| Download and Prepare / Prepare | the row's button: Prepare when the IPSW is already here | |
 | Import IPSW… | using an IPSW from disk | |
 | IPSW | the firmware file, in user text | firmware image, restore image |
 | guest tools | the in-device helpers (agent, loader, packages) | agent, it_agent, package, serial, itpack |
@@ -41,7 +41,7 @@ The same state has the same words on every surface (sidebar accessory, placehold
 
 ### Device (sidebar row: `DeviceRow.stateDescription`; placeholder: `DevicePlaceholderViewController`)
 
-The placeholder is one centred column in three tiers, the same slots in every state: the device's name (Title 1, semibold) over the version (Title 3, secondary, ⓘ beside it); the state (Headline) over its detail (the reason, or the bar and its line); one row of large buttons, the default button last, Device Logs to its left on an error. Return presses the default button; on Cancel it's Escape.
+The placeholder is one centred column in three tiers, the same slots in every state: the device's name (Title 1, semibold) over the version (Title 3, secondary, ⓘ beside it); the state (Headline) over its detail (the reason, or the bar and its line); one row of large buttons, the default button last, Show Logs to its left on an error. Return presses the default button; on Cancel it's Escape.
 
 | State | Words | Notes |
 |---|---|---|
@@ -52,7 +52,7 @@ The placeholder is one centred column in three tiers, the same slots in every st
 | ready | Ready | |
 | running | Running | |
 | stopping | Stopping / Stopping… | |
-| error | Error, with the reason below | reason is the failure or stop text |
+| error | Couldn’t prepare / Couldn’t start / Stopped unexpectedly, with the reason below | reason is the failure or stop text; the sidebar’s VoiceOver still says Error |
 | comingSoon | Coming soon | |
 | untested (note) | Untested (row tooltip and VoiceOver, never drawn in the row) / the placeholder’s info popover (ⓘ beside the version): “Untested”, “Light Touch hasn’t run this build yet. It may not prepare or start.”, the catalog note, “Released June 7, 2011” | not a state: an untested build downloads and prepares like any other |
 | requiresIPSW | Requires an IPSW | |
@@ -70,7 +70,7 @@ The placeholder is one centred column in three tiers, the same slots in every st
 | powered off | Powered off |
 | not started | Starting… |
 | booting | Starting iOS… |
-| boot toast | Starting iOS… over the stage and the session’s counter, “Loading iOS · 42 s”, with a Device Logs button throughout. Stages (`BootStage`, from serial lines, the guest tools and USB, never a timer): Powering on, Loading iOS, Starting the system, Connecting over USB, Waiting for the Home screen |
+| boot toast | Starting iOS… over the stage and the session’s counter, “Loading iOS · 42 s”, with a Show Logs button once it passes the boot budget. Stages (`BootStage`, from serial lines, the guest tools and USB, never a timer): Powering on, Loading iOS, Starting the system, Connecting over USB, Waiting for the Home screen |
 | readiness wait | Starting iOS… then Waiting for the Home screen… (`preparationStatus`) |
 | running | Running (the window subtitle shows the foreground app instead when there is one) |
 | running, guest tools need attention (out of date, reverted, not responding) | Running — Guest tools: *state* |
@@ -82,7 +82,7 @@ The placeholder is one centred column in three tiers, the same slots in every st
 | dead | Stopped (overlay: the stop reason) |
 | a persistent connection issue | the issue's summary |
 
-Stop reasons (`DeviceSession`): "The iPod stopped." (asked for), "The iPod stopped unexpectedly. Open Device Logs for details." (not asked for), "The iPod didn’t start. Open Device Logs for details.", "This device is in use by another copy of Light Touch.", "The iPod didn’t start within N seconds. Open Device Logs for details." (only when iOS never showed a picture: `ReadinessDeadline`), "The iPod entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
+Stop reasons (`DeviceSession`): "The iPod stopped." (asked for), "The iPod stopped unexpectedly." (not asked for), "The iPod didn’t start.", "This device is in use by another copy of Light Touch.", "The iPod didn’t start within N seconds." (only when iOS never showed a picture: `ReadinessDeadline`), "The iPod started in recovery mode. Delete it and prepare it again."
 
 ### Guest tools (`GuestPackage.Status.text`, after "Guest tools: ")
 
@@ -122,7 +122,7 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 
 | Condition | Words |
 |---|---|
-| storage writes failed (notice) | Couldn’t save to disk. The device stopped and recent changes weren’t saved. Free disk space, then reopen Light Touch. Open Device Logs for details. |
+| storage writes failed (notice) | Couldn’t save to disk, so the iPod stopped and recent changes were lost. Free up space, then reopen Light Touch. |
 | low disk space | Your Mac is almost out of disk space: X is available, and Light Touch needs at least Y to save changes reliably. |
 | not enough space to prepare | Not enough disk space: this needs X, and Y is available. (placeholder: only when the volume is short; no sizes otherwise) |
 | iOS on screen, USB not answering by the boot budget (the device keeps running) | The iPod is running, but it isn’t connected over USB yet. Installing apps and transferring files aren’t available until it connects. |
@@ -139,7 +139,7 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | ready | (nothing) |
 | failed | Couldn’t update the proxy. Try again. |
 | needsTap (no guest agent: the profile was offered) | Tap Install on the iPod to trust the proxy certificate. |
-| Settings ▸ Storage | Devices (Base · Data · Snapshot), IPSWs (Downloaded / Imported IPSW), Caches and logs, Library (N IPAs · size · size on no device) |
+| Settings ▸ Storage | Devices (System · Data), IPSWs (Downloaded / Imported IPSW), Caches and Logs, Library (N IPAs · size · size unused, Remove Unused Apps) |
 
 ### Preparation failures (`PreparationJob.message`)
 
