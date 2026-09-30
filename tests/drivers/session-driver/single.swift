@@ -32,9 +32,9 @@ struct SingleConfig: Decodable {
     /// Where the icon is (normalized), for firmware whose SpringBoard has no springboardservices (2.x): the reorder
     /// is skipped, and a tap on the first-install "Edit Home Screen" tip's Dismiss goes first.
     var launchAt: [Double]?
-    /// An iPad's launch goes through the guest agent (as the app's sidebar launches); then a tap at this normalized panel
-    /// point (portrait top is x 0, portrait left is y 1) and screenshots tapped1-2, 3 s apart. tests/matrix.py --gl-tap
-    /// opens the Harness's "GL: rotating triangle" with it.
+    /// An iPad's launch goes through the guest agent (as the app's sidebar launches); then (either board) a tap at this
+    /// normalized point (the iPad's panel: portrait top is x 0, portrait left is y 1; the iPod's portrait screen) and
+    /// screenshots tapped1-2, 3 s apart. tests/matrix.py --gl-tap opens the Harness's "GL: rotating triangle" with it.
     var tapAfterLaunch: [Double]?
 }
 
@@ -229,7 +229,7 @@ struct SingleConfig: Decodable {
     try? await Task.sleep(for: .seconds(3))
     await wakeForShot(d, "installed")   // wake first: the panel may have slept during the install
     if s.launch == true {
-        if ipad { await launchIPad(d, tap: s.tapAfterLaunch) } else { await launch(d, at: s.launchAt) }
+        if ipad { await launchIPad(d, tap: s.tapAfterLaunch) } else { await launch(d, at: s.launchAt, tap: s.tapAfterLaunch) }
     }
 
     // The persist marker: a file that must still be there after the clean shutdown and the second boot.

@@ -325,7 +325,7 @@ extension String {
 /// Apps inspector's reorder), then tapped there (iPhone OS 2.x/3.x 320x480 grid: slot 0 centred at 47,62). With
 /// `point` (2.x: no springboardservices) the icon is tapped where the caller says it is. The first install's
 /// "Edit Home Screen" tip is dismissed first (its button sits in a gap between icons when there is no tip).
-@MainActor func launch(_ d: Device, at point: [Double]? = nil) async {
+@MainActor func launch(_ d: Device, at point: [Double]? = nil, tap: [Double]? = nil) async {
     var event: [String: Any] = ["device": d.name, "bundleID": config.bundleID]
     var target = (47.0 / 320, 62.0 / 480)
     try? await Task.sleep(for: .seconds(3))
@@ -355,6 +355,13 @@ extension String {
     for (i, wait) in [8, 12, 20].enumerated() {
         try? await Task.sleep(for: .seconds(wait))
         if let path = d.screenshot("launched\(i + 1)") { event["shot\(i + 1)"] = path }
+    }
+    if let tap, tap.count >= 2 {   // single.swift tapAfterLaunch (normalized portrait on the iPod)
+        await d.tap(tap[0], tap[1])
+        for i in 1...2 {
+            try? await Task.sleep(for: .seconds(3))
+            if let path = d.screenshot("tapped\(i)") { event["tapped\(i)"] = path }
+        }
     }
     emit("launched", event)
     d.process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))

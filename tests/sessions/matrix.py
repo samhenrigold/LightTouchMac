@@ -569,8 +569,8 @@ def main():
     ap.add_argument("--bundle-id", help="with --ipa: its bundle id (default: its Info.plist's)")
     ap.add_argument("--launch-at", help="--launch on 2.x (no springboardservices): the icon's normalized X,Y")
     ap.add_argument("--launch", action="store_true", help="after the install, open the app from the Home screen (screenshots launched1-3)")
-    ap.add_argument("--gl-tap", help="--launch on an iPad: then tap this normalized panel X,Y (the Harness's GL row: 0.343,0.5) "
-                                     "and screenshot tapped1-2")
+    ap.add_argument("--gl-tap", help="--launch: then tap this normalized X,Y (the Harness's GL row: iPad panel 0.343,0.5; "
+                                     "iPod screen 0.5,0.165) and screenshot tapped1-2")
     ap.add_argument("--frameworks", type=Path, help="where libimobiledevice is loaded from (default Homebrew's)")
     ap.add_argument("--qemu-ios", type=Path, default=sources.path("qemu-ios"))
     ap.add_argument("--patcher", type=Path, default=Path(os.environ.get("FIRMWAREKIT_IBOOT_PATCHER", PATCHER)), help="iBoot32Patcher for the k48 recipe")
