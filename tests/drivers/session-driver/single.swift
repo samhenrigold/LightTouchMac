@@ -56,7 +56,7 @@ struct SingleConfig: Decodable {
 
     func boot(_ generation: Int) async {
         do { try d.boot(generation: generation, guestPackage: offer) } catch { fail("boot \(generation): \(error)") }
-        await waitLit(d, ipad ? 0.2 : 0.03, 240)
+        await waitLit(d, ipad ? 0.2 : 0.03, d.profile.bootBudget)   // the app's own boot budget (iPad 300 s)
         await waitUSB(d, expecting: d.profile.productType, 300)
         if let tool = s.lockdownTZ {
             var zone: String?
