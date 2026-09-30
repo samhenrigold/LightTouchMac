@@ -302,6 +302,10 @@ def main():
         check(lit, f"{d}: lit in {lit.get('seconds', -1):.1f} s")
         usb = (find("usb", device=d) or [{}])[0]
         check(usb.get("productType") == ("iPad1,1" if d == "ipad" else "iPod2,1"), f"{d}: lockdown over its usbmuxd: {usb.get('productType')}")
+        if d == "ipod":
+            ids = find("identity", device=d)
+            check(ids and all(e["bt"] == e["want"] for e in ids),
+                  f"{d}: lockdown's BluetoothAddress is the identity's bt-mac: " + ", ".join(f"{e['bt']} (want {e['want']})" for e in ids))
         for a in find("afc", device=d):
             check(a.get("same") and a.get("listed") == a["bytes"], f"{d}: AFC round trip of {a['bytes']} bytes"
                   + (f" ({a.get('seconds', 0):.1f} s)" if a.get("same") else f": {a.get('error', 'content differs')}"))

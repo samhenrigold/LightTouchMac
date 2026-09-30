@@ -54,6 +54,7 @@ struct SingleConfig: Decodable {
     let offered = offer != nil || (ipad && config.ipadItpack != nil)
     // The lock says whether the bake installed it_agent (3.1+); 2.x and 3.0 have none to halt the guest.
     let lock = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("device.lock.json")))) as? [String: Any]
+    let identity = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("identity.json")))) as? [String: Any]
     let agent = d.profile.hasGuestTools && (((lock?["derived"] as? [String: Any])?["guest_tools"] as? String)?.hasPrefix("installed") ?? true)
 
     func boot(_ generation: Int) async {
@@ -74,6 +75,10 @@ struct SingleConfig: Decodable {
             emit("timezone", ["device": d.name, "generation": generation, "zone": zone ?? ""])
         }
         emit("activation", ["device": d.name, "generation": generation, "state": await d.lockdownValue("ActivationState") ?? ""])
+        if s.board == "ipod", let want = identity?["bt-mac"] as? String {   // the n72 iBoot fills the DT's Bluetooth node from it
+            emit("identity", ["device": d.name, "generation": generation, "want": want.lowercased(),
+                              "bt": (await d.lockdownValue("BluetoothAddress") ?? "").lowercased()])
+        }
         if offered {   // the loader's report: it_boot reports the serial it ran and R_* (GuestPackage.ReportCode)
             let start = Date()
             while d.process.status?.guestPackage == nil, Date().timeIntervalSince(start) < 60 { try? await Task.sleep(for: .seconds(1)) }
