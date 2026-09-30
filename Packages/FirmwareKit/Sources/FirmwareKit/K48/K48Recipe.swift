@@ -41,6 +41,18 @@ final class K48Board: Board {
         patcher = K48IBoot.patcher(helper: helper)
     }
 
+    /// The iBoot names exactly one kernelcache path (N72Board.kernelcachePath) and it is SystemEdits.kernelcachePath.
+    static func kernelcacheFit(iboot: Data) -> FitCheck.Fit {
+        let piece = "kernelcache at the path iBoot loads"
+        do {
+            let path = try N72Board.kernelcachePath(iboot)
+            return FitCheck.Fit(piece, fits: path == SystemEdits.kernelcachePath,
+                                path == SystemEdits.kernelcachePath ? "iBoot names /\(path)" : "iBoot names /\(path), the bake installs /\(SystemEdits.kernelcachePath)")
+        } catch {
+            return FitCheck.Fit(piece, fits: false, "\(error)")
+        }
+    }
+
     func identity(seed: String) throws -> UnitIdentity {
         ident = try UnitIdentity.synthesize(seed: seed, storage: recipe.storage)
         return ident
@@ -53,6 +65,8 @@ final class K48Board: Board {
         try FitCheck.checkBootArgs(c.fit, kernel: kernel, args: bootArgs)
         try c.fit.check(FitCheck.deviceTreeProperty(kernel, "arm-io/usb-complex", "hsic-enabled"), required: false)   // both chains add it
         if iboot {
+            // fsboot: the kernelcache goes where this iBoot loads it from, which must be the path the volumes step installs to
+            try c.fit.check(Self.kernelcacheFit(iboot: try Data(contentsOf: c.decFile("iBoot.bin"))), required: true)
             // The real iBoot chain: catalog GID records, a re-encrypted hsic-enabled DeviceTree, the pattern-patched
             // iBoot, and the packed NOR (ipad1_device build's "iBoot + NOR" step; ipad1_gid + ipad1_iboot).
             let (blobs, names) = try K48IBoot.gidBlobs(ipsw, entry: e)

@@ -411,4 +411,38 @@ enum FitFixture {
         let f = N45Board.keptDaemonsFit(all.filter { $0 != "com.apple.usbptpd.plist" })
         #expect(!f.fits && f.proof.contains("usbptpd"))
     }
+
+    /// The iPad's iBoots (3.2, 3.2.2, 4.2.1, 5.1.1) load the kernelcache from the path the bake installs it to; an
+    /// iBoot copy naming another does not fit, and the iboot strategy's boot-file step refuses it.
+    @Test func iPadKernelcacheWhereIBootLoadsIt() throws {
+        for sha in ["172e8297af74b91971a802e6ad137c891f553099", "68b613f78581d36eab96aa5a007001dff142baa3",
+                    "8717b3bedc925b587566442ad375aa65d857e79a", "ad9b607439250f2337fe132890dadc4c487beca8"] {
+            let u = Oracle.ipadCache.appendingPathComponent(sha + "/iBoot.bin")
+            guard Oracle.exists(u) else { continue }
+            let d = try Data(contentsOf: u)
+            #expect(K48Board.kernelcacheFit(iboot: d).fits, "\(sha)")
+            var b = [UInt8](d)
+            let from = Array("com.apple.kernelcaches/kernelcache".utf8), to = Array("com.apple.kernelcaches/kernelcachX".utf8)
+            while let at = b.firstRange(of: from) { b.replaceSubrange(at, with: to) }
+            let f = K48Board.kernelcacheFit(iboot: Data(b))
+            #expect(!f.fits && f.proof.contains("kernelcachX"), "\(f.proof)")
+        }
+        // the iboot strategy's boot-file step on 7B500 records it (the patcher from FIRMWAREKIT_IBOOT_PATCHER)
+        let patcher = Oracle.path("Downloads/Legacy-iOS-Kit_complete_v25.09.01/bin/macos/arm64/iBoot32Patcher")
+        let cache = Oracle.ipadCache.appendingPathComponent("68b613f78581d36eab96aa5a007001dff142baa3"), ipsw = Oracle.firmware("k48ap-7B500").ipsw
+        guard Oracle.exists(patcher), Oracle.exists(ipsw), Oracle.exists(cache) else { return }
+        setenv("FIRMWAREKIT_IBOOT_PATCHER", patcher.path, 1)
+        try Oracle.withTemp { dir in
+            let entry = try Oracle.entry("k48ap-7B500")
+            let o = Preparer.Options(entry: entry, ipsw: ipsw, out: dir, helper: URL(fileURLWithPath: "/usr/bin/true"), guestTools: dir)
+            let c = Recipe.Context(o, recipe: try #require(entry.recipe)) { _ in }
+            c.restore = try RestoreInfo(c.ipsw)
+            c.dec = cache
+            let board = try K48Board(o)
+            try board.check(c)
+            _ = try board.identity(seed: "fit")
+            try board.bootFiles(c)
+            #expect(c.fit.fits.contains { $0.piece == "kernelcache at the path iBoot loads" && $0.fits }, "\(c.fit.fits)")
+        }
+    }
 }
