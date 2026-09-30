@@ -520,7 +520,7 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 {"event":"progress","fraction":0.42,"detail":"Booting to seal the flash — 42 s"}   // fraction within the current step; detail optional
 {"event":"warning","message":"…"}
 {"event":"done","lock":"device.lock.json"}      // relative to STAGING_DIR
-{"event":"error","code":"key_missing|sha_mismatch|unsupported|activation_failed|oneshot_failed|disk_full|internal","message":"…"}
+{"event":"error","code":"key_missing|sha_mismatch|unsupported|activation_failed|oneshot_failed|disk_full|internal","message":"…","piece":"…"}   // piece: only when a required fit check failed (FitCheck.Fit.piece)
 ```
 
 **Progress (2026-09-28, prep-ux):** during every step firmwarekit emits a `progress` event about once a second, and a final `fraction` 1.0 just before the next `step` (or `done`).

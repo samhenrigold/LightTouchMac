@@ -181,6 +181,18 @@ case "unit":
     expect(PreparationJob.message(code: "disk_full", detail: "") == "Not enough disk space to prepare this device.", "disk_full")
     expect(PreparationJob.message(code: "internal", detail: "boom") == "Preparation failed: boom", "internal")
     expect(PreparationJob.message(code: "whatever", detail: "") == "Preparation failed.", "unknown code")
+    // A required piece that doesn't fit: what, in plain words (5.0 beta 1's OpenGLES front end in RC1); the proof is the log's.
+    expect(L(#"{"event":"error","code":"unsupported","message":"OpenGLES front end (contrib/gles-public) does not fit this firmware: x","piece":"OpenGLES front end (contrib/gles-public)"}"#)
+           == .error(code: "unsupported", message: "OpenGLES front end (contrib/gles-public) does not fit this firmware: x", piece: "OpenGLES front end (contrib/gles-public)"), "error with piece")
+    let gl = PreparationJob.message(code: "unsupported", detail: "OpenGLES front end (contrib/gles-public) does not fit this firmware: x",
+                                    piece: "OpenGLES front end (contrib/gles-public)", beta: true)
+    expect(gl == "Light Touch can’t prepare this beta yet: its graphics library isn’t supported.", gl)
+    for (piece, words) in [("kernelcache at the path iBoot loads", "the way it starts up isn’t supported"), ("boot-arg rd", "the way it starts up isn’t supported"),
+                           ("libappsync.dylib (in installd)", "installing apps on it isn’t supported"), ("it_boot (guest-package loader)", "the guest tools don’t run on it")] {
+        let m = PreparationJob.message(code: "unsupported", detail: "", piece: piece)
+        expect(m == "Light Touch can’t prepare this version yet: \(words).", m)
+    }
+    expect(PreparationJob.message(code: "unsupported", detail: "not a zip archive") == "This IPSW isn’t supported.", "unsupported without a piece")
     let identity = PreparationJob.identity(identityJSON: Data(#"{"udid":"u1","die-id":["0x1","0x2"]}"#.utf8),
                                            lock: Data(#"{"identity":{"seed":"s","udid":"u2","die_id":"0x3:0x4"}}"#.utf8), seed: "x")
     expect(identity == .init(seed: "s", udid: "u1", dieID: "0x1:0x2"), "\(identity)")
@@ -254,7 +266,7 @@ case "unit":
     expect(run.events.last == .failed("This IPSW doesn’t match the one Light Touch knows.") && !fm.fileExists(atPath: ipsw.path),
            "a sha_mismatch deletes the IPSW: \(run.events)")
     run = prepare(iPad32, state: state, cache: cache, mode: "crash")
-    expect(run.events.last == .failed("Preparation stopped unexpectedly. Show the log for details."), "\(run.events)")
+    expect(run.events.last == .failed("Preparation stopped unexpectedly. Open Device Logs for details."), "\(run.events)")
     run = prepare(iPad32, state: state, cache: cache, mode: "incomplete")
     expect(run.events.last == .failed("Couldn’t save the prepared device: The prepared device is incomplete (device.lock.json is missing)."), "\(run.events)")
     expect(Set(devices()) == before && leftovers().isEmpty, "failures leave nothing: \(devices()) \(leftovers())")

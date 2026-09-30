@@ -141,6 +141,10 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | needsTap (no guest agent: the profile was offered) | Tap Install on the iPod to trust the proxy certificate. |
 | Settings ▸ Storage | Devices (Base · Data · Snapshot), IPSWs (Downloaded / Imported IPSW), Caches and logs, Library (N IPAs · size · size on no device) |
 
+### Preparation failures (`PreparationJob.message`)
+
+A required piece that doesn’t fit the firmware (the error event’s `piece`) says what, plainly: “Light Touch can’t prepare this beta yet: its graphics library isn’t supported.” (“this version” for a release). Pieces: the OpenGLES front end → its graphics library isn’t supported; kernelcache, boot-args, DeviceTree → the way it starts up isn’t supported; AppSync → installing apps on it isn’t supported; anything else → the guest tools don’t run on it. The fit check’s proof stays in the preparation log. An unsupported IPSW without a piece: “This IPSW isn’t supported.”
+
 ### Install failures
 
 Every failed install, download or removal writes its whole error to app.log (`install: <name> failed: …`, with a DecodingError's coding path; `Legacy Store: HTTP <code> for <path>`). A Legacy Store response that doesn’t decode reads “Legacy Store sent a response Light Touch couldn’t read.”, never Foundation’s “isn’t in the correct format”. A server error (HTTP 5xx) reads “Legacy Store isn’t responding. Try again in a moment.”, any other status “Legacy Store couldn’t answer that request. Try again later.”; the code stays in the log. Only a network error (no answer at all) says “Couldn’t reach Legacy Store — …”. The Apps pane’s messages wrap to its width; they never widen or clip it.

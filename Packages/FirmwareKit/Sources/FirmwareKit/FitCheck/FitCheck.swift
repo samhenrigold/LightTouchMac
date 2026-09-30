@@ -31,7 +31,7 @@ public enum FitCheck {
         public func check(_ f: Fit, required: Bool, outcome: String = "left out") throws -> Bool {
             fits.append(f)
             if f.fits { return true }
-            if required { throw FirmwareError(.unsupported, "\(f.piece) does not fit this firmware: \(f.proof)") }
+            if required { throw FirmwareError(.unsupported, "\(f.piece) does not fit this firmware: \(f.proof)", piece: f.piece) }
             warn(f.warning(outcome))
             return false
         }

@@ -18,7 +18,7 @@ import Foundation
 public enum PrepareEvent: Equatable, Sendable {
     /// `seconds`: each step's expected duration, for weighting the overall bar (omitted when empty).
     case begin(steps: Int, seconds: [Double] = []), step(index: Int, name: String), progress(Double, detail: String? = nil), warning(String)
-    case done(lock: String), error(code: String, message: String)
+    case done(lock: String), error(code: String, message: String, piece: String? = nil)
 
     public var json: String {
         let o: [String: Any] = switch self {
@@ -27,7 +27,7 @@ public enum PrepareEvent: Equatable, Sendable {
         case .progress(let f, let detail): ["event": "progress", "fraction": f].merging(detail.map { ["detail": $0] } ?? [:]) { a, _ in a }
         case .warning(let m): ["event": "warning", "message": m]
         case .done(let lock): ["event": "done", "lock": lock]
-        case .error(let code, let m): ["event": "error", "code": code, "message": m]
+        case .error(let code, let m, let piece): ["event": "error", "code": code, "message": m].merging(piece.map { ["piece": $0] } ?? [:]) { a, _ in a }
         }
         return String(decoding: try! JSONSerialization.data(withJSONObject: o, options: [.sortedKeys, .withoutEscapingSlashes]), as: UTF8.self)
     }
@@ -77,7 +77,7 @@ public enum Preparer {
         switch error {
         case let f as FirmwareError:
             return .error(code: f.message.contains(String(cString: strerror(ENOSPC))) ? FirmwareError.Code.diskFull.rawValue : f.code.rawValue,
-                          message: f.message)
+                          message: f.message, piece: f.piece)
         case let a as ActivationFailure: return .error(code: a.code, message: a.message)
         default:
             let ns = error as NSError
