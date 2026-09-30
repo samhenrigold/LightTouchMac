@@ -251,7 +251,8 @@ def boot(entry, base, a, helper, work, env, app):
            "ipadBase": str(base) if board == "ipad" else "", "timeout": a.boot_timeout - 20,
            "single": {"board": board, "base": str(base), "reboot": True, "lockdownTZ": str(a.lockdown_tz),
                       "install": (entry.get("recipe") or {}).get("options", {}).get("appsync", False), "launch": a.launch,
-                      **({"launchAt": [float(v) for v in a.launch_at.split(",")]} if a.launch_at else {})}}
+                      **({"launchAt": [float(v) for v in a.launch_at.split(",")]} if a.launch_at else {}),
+                      **({"glTap": [float(v) for v in a.gl_tap.split(",")]} if a.gl_tap else {})}}
     if a.frameworks:
         cfg["frameworks"] = str(a.frameworks)
     itpack = a.guest_tools / ("armv7.itpack" if board == "ipad" else "armv6.itpack")
@@ -351,6 +352,9 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base, ti
                         "apps": [x for x in (inst[0].get("apps") or []) if not x.startswith("com.apple.")] if inst else None}
         if launched := find("launched"):   # --launch: the launched1-3 screenshots are the evidence
             r["install"]["launch"] = {k: v for k, v in launched[0].items() if k not in ("event", "t", "device")}
+            if launched[0].get("via") == "agent":   # the agent names the frontmost app: the launch must have reached it
+                fronts = [launched[0].get(f"frontmost{i}") for i in (1, 2, 3)]
+                r["install"]["ok"] = bool(r["install"]["ok"]) and launched[0]["bundleID"] in fronts
     else:
         r["install"] = {"ok": None, "note": "appsync off"}
     pkg = find("guestPackage", generation=1)
@@ -566,6 +570,7 @@ def main():
     ap.add_argument("--ipa", type=Path, help="the install check's IPA (default: per the entry's iOS, see test_app)")
     ap.add_argument("--bundle-id", help="with --ipa: its bundle id (default: its Info.plist's)")
     ap.add_argument("--launch-at", help="--launch on 2.x (no springboardservices): the icon's normalized X,Y")
+    ap.add_argument("--gl-tap", help="--launch: a normalized X,Y tapped in the launched app, then screenshots gl1/gl2")
     ap.add_argument("--launch", action="store_true", help="after the install, open the app from the Home screen (screenshots launched1-3)")
     ap.add_argument("--frameworks", type=Path, help="where libimobiledevice is loaded from (default Homebrew's)")
     ap.add_argument("--qemu-ios", type=Path, default=sources.path("qemu-ios"))

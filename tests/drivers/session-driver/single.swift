@@ -32,6 +32,8 @@ struct SingleConfig: Decodable {
     /// Where the icon is (normalized), for firmware whose SpringBoard has no springboardservices (2.x): the reorder
     /// is skipped, and a tap on the first-install "Edit Home Screen" tip's Dismiss goes first.
     var launchAt: [Double]?
+    /// With launch: a point (normalized) tapped in the launched app, then screenshots gl1/gl2 five seconds apart.
+    var glTap: [Double]?
 }
 
 @MainActor func runSingle(_ s: SingleConfig) async {
@@ -224,7 +226,7 @@ struct SingleConfig: Decodable {
     if s.install != false { await install(d) }
     try? await Task.sleep(for: .seconds(3))
     await wakeForShot(d, "installed")   // wake first: the panel may have slept during the install
-    if s.launch == true { await launch(d, at: s.launchAt) }
+    if s.launch == true { await launch(d, at: s.launchAt, glTap: s.glTap) }
 
     // The persist marker: a file that must still be there after the clean shutdown and the second boot.
     let marker = "ltm-matrix-persist.bin"
