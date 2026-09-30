@@ -74,16 +74,17 @@ public struct UnitIdentity: Equatable, Sendable {
     }
 
     /// The iPod touch 2G identity: the iPad's serial and MACs plus a 12-digit battery serial; model and
-    /// region are the recipe's.
-    public static func synthesizeIPod(seed: String, modelNumber: String, regionInfo: String) throws -> UnitIdentity {
+    /// region are the recipe's. `bluetooth: false` is the 1G, which has no Bluetooth: no bt-mac, and lockdownd's
+    /// UDID hashes an empty BT address (SHA1(serial + Wi-Fi MAC)).
+    public static func synthesizeIPod(seed: String, modelNumber: String, regionInfo: String, bluetooth: Bool = true) throws -> UnitIdentity {
         let base = try synthesize(seed: seed)
         let h = Array(SHA256.hash(data: Data(("battery:" + seed).utf8)))
-        var id = UnitIdentity(fields: [
-            ("serial-number", .string(base["serial-number"]!)), ("wifi-mac", .string(base["wifi-mac"]!)),
-            ("bt-mac", .string(base["bt-mac"]!)), ("battery-serial", .string(h[0..<12].map { String($0 % 10) }.joined())),
+        var id = UnitIdentity(fields: [("serial-number", .string(base["serial-number"]!)), ("wifi-mac", .string(base["wifi-mac"]!))]
+            + (bluetooth ? [("bt-mac", .string(base["bt-mac"]!))] : []) + [
+            ("battery-serial", .string(h[0..<12].map { String($0 % 10) }.joined())),
             ("model-number", .string(modelNumber)), ("region-info", .string(regionInfo)), ("seed", .string(seed)),
         ])
-        id.fields.append(("udid", .string(base["udid"]!)))
+        id.fields.append(("udid", .string(bluetooth ? base["udid"]! : udid(serial: base["serial-number"]!, wifiMAC: base["wifi-mac"]!, btMAC: ""))))
         return id
     }
 

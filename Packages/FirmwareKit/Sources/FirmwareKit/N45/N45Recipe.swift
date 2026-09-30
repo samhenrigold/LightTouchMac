@@ -72,7 +72,7 @@ final class N45Board: Board {
     }
 
     func identity(seed: String) throws -> UnitIdentity {
-        ident = try UnitIdentity.synthesizeIPod(seed: seed, modelNumber: model, regionInfo: UnitIdentity.iPadRegion)
+        ident = try UnitIdentity.synthesizeIPod(seed: seed, modelNumber: model, regionInfo: UnitIdentity.iPadRegion, bluetooth: false)
         return ident
     }
 
@@ -205,6 +205,9 @@ final class N45Board: Board {
             "inputs": ["kernelcache": kcMember, "iboot": prefix + "iBoot.\(c.e.board).RELEASE.img2", "all_flash": prefix],
             "outputs": ["nand": ["pages": c.nandHashes.count], "nor": try Recipe.fileRecord(c, "nor.bin"), "iboot": try Recipe.fileRecord(c, "iBoot.bin")],
             "derived": derived,
+            // The 88W8686's EEPROM MAC (qemu-ios iPod-Touch-1G wifi-mac): the card the driver reads it from is
+            // the same unit whose nvram wifiaddr iBoot copies into the DT (N45NOR), so both carry the identity's.
+            "machine": ["wifi-mac": ident["wifi-mac"] ?? ""],
         ]
     }
 }
