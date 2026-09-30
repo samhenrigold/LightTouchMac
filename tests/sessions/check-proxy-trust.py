@@ -7,7 +7,7 @@ the guest agent is up: GuestServices.trustCertificate, which runs the package's 
 trust-store API) or the app's copy out of the armv6 itpack. Checked: the guest's own HTTPS client through
 the proxy (httpget, to proxy-trust.invalid: only the proxy answers it, so the PAC's DIRECT fallback can't) fails
 before the trust and gets the proxy's own answer after; Safari stays the front app with the
-HTTPS page open (safari-https.png); a restart on the same overlay, unlocked, shows the home screen and no
+HTTPS page open (safari-https.png) and its page request reached the proxy (the helper's LTM_WEB_PROXY_TRACE lines); a restart on the same overlay, unlocked, shows the home screen and no
 profile screen (rebooted-unlocked.png) after the trust runs again; the fetch still gets the proxy's answer.
 
     tests/sessions/check-proxy-trust.py --board ipod|ipad [--base DIR] --itpack armv6.itpack
@@ -17,6 +17,7 @@ profile screen (rebooted-unlocked.png) after the trust runs again; the fetch sti
 --base empty (the default) with --board ipod boots the shipping image (qemu-ios-files/nand-current).
 """
 import argparse, importlib.util, json, os, signal, subprocess, sys, tempfile
+from urllib.parse import urlparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,7 +74,7 @@ def main():
         cfg["ipadItpack"] = str(args.ipad_itpack)
     (work / "config.json").write_text(json.dumps(cfg, indent=1))
     driver = subprocess.Popen([work / "session-driver", work / "config.json"], stdout=open(work / "driver.jsonl", "w"),
-                              stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=dict(os.environ, LTM_QEMU_DYLIB=args.dylib))
+                              stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=dict(os.environ, LTM_QEMU_DYLIB=args.dylib, LTM_WEB_PROXY_TRACE="1"))
     events = []
     try:
         try:
@@ -140,6 +141,13 @@ def main():
     check(one("safari").get("launched") == "Safari", f"{b}: Safari launched")
     front = one("front", label="safari")
     check(front.get("bundleID") == "com.apple.mobilesafari", f"{b}: Safari still in front after the page load (front: {front.get('bundleID')})")
+    # Safari's own page request in the helper's LTM_WEB_PROXY_TRACE lines (nothing else here asks for that host). 4.x's
+    # MobileSafari is sandboxed: with the PAC under /usr/local it couldn't read it and went DIRECT, the page loading
+    # from the live site while every unsandboxed client (httpget included) used the proxy.
+    page_host = "www.apple.com" if b == "ipod" else urlparse(args.url).hostname
+    native = work / b / "native.log"
+    seen = [l for l in (native.read_text(errors="replace") if native.exists() else "").splitlines() if "web-proxy: " in l and page_host in l]
+    check(seen, f"{b}: Safari's page ({page_host}) came through the proxy: {seen[0][seen[0].index('web-proxy: '):][:80] if seen else None!r}")
     check(one("quit").get("exited"), f"{b}: clean halt, helper exited in {one('quit').get('seconds', -1):.1f} s")
     check(one("agent", generation=2).get("alive"), f"{b}: restarted on the same overlay, agent up")
     check(one("trust", generation=2).get("ok"), f"{b}: the trust runs again after the restart, silently")

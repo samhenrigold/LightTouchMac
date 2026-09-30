@@ -94,20 +94,22 @@ nonisolated struct GuestServices: Sendable {
         }
     }
 
-    /// The image's baked PAC (/usr/local/share/ltm/proxy.pac: every request to the web proxy guestfwd,
-    /// DIRECT as fallback) routes the guest through the proxy. An image without it (the legacy iPod
+    /// The image's baked PAC (/usr/share/ltm/proxy.pac, /usr/local/share/ltm/ before 09-30: every request to the
+    /// web proxy guestfwd, DIRECT as fallback) routes the guest through the proxy. An image without it (the legacy iPod
     /// image) goes straight out through slirp, so the trusted CA never sees a request: itproxy points
     /// the Wi-Fi service's HTTP and HTTPS proxies at the guestfwd through configd (idempotent; it keeps
     /// a backup of the keys it owns). The host's "off" mode passes those connections straight through.
     func routeThroughProxy(localTool: (String) throws -> Data) async throws {
-        guard try await agent.get(Self.proxyPAC) == nil else { return }
+        for pac in [Self.proxyPAC, Self.legacyProxyPAC] { if try await agent.get(pac) != nil { return } }
         let output = try await runTool("itproxy", ["on"], localTool: localTool)
         guard output.contains("Proxy enabled") else {
             throw DeviceToolsError.failed("The device did not accept the proxy setting: \(output)")
         }
     }
 
-    static let proxyPAC = "/usr/local/share/ltm/proxy.pac"
+    static let proxyPAC = "/usr/share/ltm/proxy.pac"
+    /// Where earlier preparations baked it; 4.x's Safari sandbox can't read it there (re-prepare to fix Safari).
+    static let legacyProxyPAC = "/usr/local/share/ltm/proxy.pac"
 
     /// A guest tool's output: the package's copy, or the app's uploaded to /tmp for the one run.
     private func runTool(_ name: String, _ arguments: [String], localTool: (String) throws -> Data) async throws -> String {
