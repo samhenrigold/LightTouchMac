@@ -53,9 +53,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-guest-package-') as t:
     package(tree, 'n72-ios2', ['5F138'], 3, stub=True)
     good = package(tree, 'n72-ios3', ['7E18'], 7)
     package(tree, 'n72-ios9', ['9A1'], 7, host={'guest-package': [2, 3], 'gles': [0, 0]})
-    package(tree, 'n72-ios1', ['3*'], 7, loader=False)
     entries = []
-    for family in ('n72-ios2', 'n72-ios3', 'n72-ios9', 'n72-ios1'):
+    for family in ('n72-ios2', 'n72-ios3', 'n72-ios9'):
         m = json.loads((tree / family / 'manifest.json').read_text())
         entries.append((family + '/manifest.json', (tree / family / 'manifest.json').read_bytes()))
         entries += [(family + '/' + f['name'], (tree / family / f['name']).read_bytes()) for f in m['files']]
@@ -86,7 +85,7 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   let t = URL(fileURLWithPath: CommandLine.arguments[1])
   let pack = t.appendingPathComponent("armv6.itpack")
   let entries = try GuestPackage.read(pack)
-  check(entries.count == 26 && entries.last?.name == "loader/com.qemu.it-boot.plist")
+  check(entries.count == ENTRY_COUNT && entries.last?.name == "loader/com.qemu.it-boot.plist")
   // The same offer and payloads as mkpkg.py offer, with the record's verdicts.
   var record = DeviceInstance.Guest(); record.lastGood = 5; record.bad = [6]
   let dir = t.appendingPathComponent("work/guest-offer")
@@ -118,9 +117,9 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   record.builtIn = 6
   check(try GuestPackage.compose(itpack: pack, board: "n72ap", build: "7E18", lock: nil, guest: record, into: dir)!.serial == 7,
                "a newer bundled package ends the built-in choice")
-  // Nothing for a stub, another build, another board, an unspoken host protocol or a family with no loader to
-  // pull it ("loader": false, 1.x); no directory either.
-  for (board, build) in [("n72ap", "5F138"), ("n72ap", "8C148"), ("k48ap", "7E18"), ("n72ap", "9A1"), ("n72ap", "3A101a")] {
+  // Nothing for a stub, another build, another board or an unspoken host protocol; no directory either.
+  // (1.x has a loader since a71b473: it_boot runs there, so no family opts out any more.)
+  for (board, build) in [("n72ap", "5F138"), ("n72ap", "8C148"), ("k48ap", "7E18"), ("n72ap", "9A1")] {
    let none = try GuestPackage.compose(itpack: pack, board: board, build: build, lock: nil, guest: nil, into: dir)
    check(none == nil, build)
    check(!FileManager.default.fileExists(atPath: dir.path))
@@ -192,7 +191,7 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   } catch {}
   precondition(!FileManager.default.fileExists(atPath: dir.path))
   // UI status.''')
-    (t / 'check.swift').write_text(check.replace('GuestPackage.Manifest.mbx', '"%s"' % MBX))
+    (t / 'check.swift').write_text(check.replace('GuestPackage.Manifest.mbx', '"%s"' % MBX).replace('ENTRY_COUNT', str(len(entries))))
     app = root / 'LightTouchMac'
     subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
                     '-module-cache-path', str(t / 'modules'), str(app / 'Guest/GuestPackage.swift'), str(app / 'Library/DeviceInstance.swift'),
