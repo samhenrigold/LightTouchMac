@@ -112,3 +112,40 @@ final class ProxySettingsView: NSView {
         return result
     }
 }
+
+extension ProxySettingsView {
+    /// The editor as a sheet: a title, the choices, then Cancel and OK (the default).
+    /// `finish` gets true for OK; the caller ends the sheet.
+    static func sheet(_ editor: ProxySettingsView, finish: @escaping (Bool) -> Void) -> NSWindow {
+        let title = NSTextField(labelWithString: "Web Proxy")
+        title.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        let cancel = InlineActionButton(title: "Cancel") { finish(false) }
+        let ok = InlineActionButton(title: "OK") { finish(true) }
+        for button in [cancel, ok] {
+            button.controlSize = .regular
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
+        }
+        cancel.keyEquivalent = "\u{1b}"
+        ok.keyEquivalent = "\r"
+        let buttons = NSStackView(views: [cancel, ok])
+        buttons.spacing = 12
+        let stack = NSStackView(views: [title, editor, buttons])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 16
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.setCustomSpacing(20, after: editor)
+        buttons.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -20).isActive = true
+        let sheet = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
+        sheet.contentView = stack
+        let fit = { [weak sheet, weak stack] in
+            guard let sheet, let stack else { return }
+            stack.layoutSubtreeIfNeeded()
+            sheet.setContentSize(stack.fittingSize)
+        }
+        editor.onResize = fit
+        fit()
+        return sheet
+    }
+}
+

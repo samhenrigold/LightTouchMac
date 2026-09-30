@@ -63,8 +63,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let capture = CaptureController()
     private var recording: ScreenRecordingSession { capture.recording }
     private var capturePreferences: CapturePreferences { capture.capturePreferences }
-    private var captureOptionsWindow: NSWindowController?
-    private var storageWindow: NSWindowController?
+    private var settingsWindow: SettingsWindowController?
     private var canTakeScreenshot: Bool { capture.canTakeScreenshot }
     private var canToggleRecording: Bool { capture.canToggleRecording }
     private let fileStatus = CaptureStatusView()
@@ -264,7 +263,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         guard let workspace = session?.workspace else {
             detail.show(placeholder)
             inspectorContainer.show(noInspector)
-            NSApp.mainMenu?.item(withTitle: "Apps")?.submenu?.delegate = nil
+            MainMenuBuilder.resetAppsMenu()
             return
         }
         detail.show(workspace.deviceVC)
@@ -292,7 +291,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         MainMenuBuilder.install(profile: profile)
         attachInspectorMenus()
         if !hasFileTransfer { filesWindow?.close(); filesWindow = nil }
-        if captureOptionsWindow?.window?.isVisible != true { captureOptionsWindow = nil }
+        // The Capture pane names the board (its Space bar choices).
+        if settingsWindow?.window?.isVisible != true { settingsWindow = nil }
         if let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == .files }) {
             item.label = "\(profile.shortName) Files"
             item.paletteLabel = item.label
@@ -431,6 +431,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
         updateDeviceNotice()
         updateStartupStatus()
+        updateGuestToolsMenu()
         refreshLockItem()
         window?.toolbar?.validateVisibleItems()
         validateCaptureToolbar()
@@ -448,6 +449,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         if emulator.isPoweredOff || emulator.isDead { deviceVC.screen.endLiveText() }
         deviceVC.screen.updatePowerPresentation()
         if emulator.isDead || emulator.isPoweredOff { recording.stop() }
+    }
+
+    /// Device ▸ Restart with Guest Tools appears only while a loader offers a choice.
+    private func updateGuestToolsMenu() {
+        let item = NSApp.mainMenu?.item(withTitle: "Device")?.submenu?.item(withTitle: MainMenuBuilder.guestToolsTitle)
+        item?.isHidden = emulator.map { $0.guestOffer == nil && !$0.canRestart(with: .latest) } ?? true
     }
 
     private func refreshLockItem() {
@@ -825,18 +832,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @objc func configureWebProxy(_ sender: Any?) {
-        guard let window, let emulator else { return }
-        let alert = NSAlert()
-        alert.messageText = "Proxy"
-        alert.addButton(withTitle: "Apply")
-        alert.addButton(withTitle: "Cancel")
+        guard let window, window.attachedSheet == nil, let emulator else { return }
         let editor = ProxySettingsView(configuration: emulator.webProxy, status: emulator.webProxyStatus, profile: emulator.profile)
         proxySettingsEditor = editor
-        editor.onResize = { [weak alert] in alert?.layout() }
-        alert.accessoryView = editor
-        alert.beginSheetModal(for: window) { [weak self] response in
+        weak var presented: NSWindow?
+        let sheet = ProxySettingsView.sheet(editor) { apply in
+            presented.map { window.endSheet($0, returnCode: apply ? .OK : .cancel) }
+        }
+        presented = sheet
+        window.beginSheet(sheet) { [weak self] response in
             self?.proxySettingsEditor = nil
-            guard response == .alertFirstButtonReturn else { return }
+            guard response == .OK else { return }
             do { try emulator.configureWebProxy(editor.configuration) }
             catch { NSAlert(error: error).beginSheetModal(for: window) }
         }
@@ -1031,50 +1037,28 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         copyScreen(sender)
     }
 
-    /// Settings… (Storage): sizes per device and store, Remove IPSW, Clear Caches, Delete Device.
-    @objc func showStorageSettings(_ sender: Any?) {
-        if storageWindow == nil {
-            let pane = StorageSettingsView(catalog: host.catalog,
-                                           delete: { [weak self] entry in self?.perform(.delete, for: entry) },
-                                           canDelete: { [weak self] entry in self?.canPerform(.delete, for: entry) ?? false })
-            pane.layoutSubtreeIfNeeded()
-            let panel = NSWindow(contentRect: NSRect(origin: .zero, size: pane.fittingSize), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            panel.title = "Storage"
-            WindowRestorationPolicy.configure(panel)
-            panel.contentView = pane
-            pane.onResize = { [weak panel, weak pane] in
-                guard let panel, let pane else { return }
-                panel.setContentSize(pane.fittingSize)
-            }
-            panel.isReleasedWhenClosed = false
-            panel.center()
-            storageWindow = NSWindowController(window: panel)
-        }
-        (storageWindow?.window?.contentView as? StorageSettingsView)?.reload()
-        storageWindow?.showWindow(sender)
-        storageWindow?.window?.makeKeyAndOrderFront(sender)
-    }
+    /// Settings…: General, Capture (the save folder, screenshot app, sounds…) and Storage
+    /// (sizes per device and store, Remove IPSW, Clear Caches, Delete Device).
+    @objc func showSettings(_ sender: Any?) { openSettings(at: nil) }
+    /// The toolbar's Capture Options: Settings, at its Capture pane.
+    @objc func showCaptureOptions(_ sender: Any?) { openSettings(at: .capture) }
 
-    @objc func showCaptureOptions(_ sender: Any?) {
-        if captureOptionsWindow == nil {
-            let editor = CaptureOptionsView(preferences: capturePreferences, profile: currentProfile)
-            editor.onChange = { [weak self] in self?.validateCaptureToolbar() }
-            editor.layoutSubtreeIfNeeded()
-            let panel = NSWindow(contentRect: NSRect(origin: .zero, size: editor.fittingSize), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            panel.title = "Capture Options"
-            WindowRestorationPolicy.configure(panel)
-            panel.contentView = editor
-            editor.onResize = { [weak panel, weak editor] in
-                guard let panel, let editor else { return }
-                panel.setContentSize(editor.fittingSize)
-            }
-            panel.isReleasedWhenClosed = false
-            panel.center()
-            captureOptionsWindow = NSWindowController(window: panel)
+    private func openSettings(at pane: SettingsWindowController.Pane?) {
+        if settingsWindow == nil {
+            let capture = CaptureOptionsView(preferences: capturePreferences, profile: currentProfile)
+            capture.onChange = { [weak self] in self?.validateCaptureToolbar() }
+            let storage = StorageSettingsView(catalog: host.catalog,
+                                              delete: { [weak self] entry in self?.perform(.delete, for: entry) },
+                                              canDelete: { [weak self] entry in self?.canPerform(.delete, for: entry) ?? false })
+            settingsWindow = SettingsWindowController(general: GeneralSettingsView(), capture: capture, storage: storage)
         }
-        (captureOptionsWindow?.window?.contentView as? CaptureOptionsView)?.reload()
-        captureOptionsWindow?.showWindow(sender)
-        captureOptionsWindow?.window?.makeKeyAndOrderFront(sender)
+        guard let settingsWindow else { return }
+        if let pane { settingsWindow.pane = pane }
+        (settingsWindow.view(for: .general) as? GeneralSettingsView)?.reload()
+        (settingsWindow.view(for: .capture) as? CaptureOptionsView)?.reload()
+        (settingsWindow.view(for: .storage) as? StorageSettingsView)?.reload()
+        settingsWindow.showWindow(nil)
+        settingsWindow.window?.makeKeyAndOrderFront(nil)
     }
 
     @objc func toggleCaptureScreenOnly(_ sender: Any?) { capture.toggleCaptureScreenOnly() }
@@ -1313,7 +1297,7 @@ extension MainWindowController: NSMenuItemValidation {
             menuItem.title = console.split.layout.isCollapsed ? "Show Console" : "Hide Console"
             return true
         case #selector(showDeviceLogs(_:)), #selector(exportDiagnostics(_:)), #selector(showRecordingRecovery(_:)),
-             #selector(showCaptureOptions(_:)), #selector(focusDeviceScreen(_:)):
+             #selector(showSettings(_:)), #selector(focusDeviceScreen(_:)):
             return true
         default: break
         }

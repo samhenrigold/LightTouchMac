@@ -29,7 +29,9 @@ enum MainMenuBuilder {
         main.addItem(submenu(editMenu(profile), title: "Edit"))
         main.addItem(submenu(viewMenu(), title: "View"))
         main.addItem(submenu(deviceMenu(profile), title: "Device"))
-        main.addItem(submenu(NSMenu(title: "Apps"), title: "Apps"))
+        let apps = NSMenu(title: "Apps")
+        resetAppsMenu(apps)
+        main.addItem(submenu(apps, title: "Apps"))
         main.addItem(submenu(captureMenu(), title: "Capture"))
         main.addItem(submenu(windowMenu(profile), title: "Window"))
         main.addItem(submenu(helpMenu(appName), title: "Help"))
@@ -45,7 +47,7 @@ enum MainMenuBuilder {
         let menu = NSMenu(title: appName)
         menu.addItem(item("About \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
         menu.addItem(.separator())
-        menu.addItem(item("Settings…", #selector(MainWindowController.showStorageSettings(_:)), ","))
+        menu.addItem(item("Settings…", #selector(MainWindowController.showSettings(_:)), ","))
         menu.addItem(.separator())
         let services = NSMenu(title: "Services")
         menu.addItem(submenu(services, title: "Services"))
@@ -64,24 +66,36 @@ enum MainMenuBuilder {
         menu.addItem(item("Save Screenshot", #selector(MainWindowController.saveScreenshot(_:)), "s"))
         menu.addItem(item("Save Screenshot As…", #selector(MainWindowController.saveScreenshotAs(_:)), "s", [.shift, .command]))
         menu.addItem(item("Copy Screenshot", #selector(MainWindowController.copyScreen(_:))))
-        menu.addItem(item("Open Screenshot in Preview", #selector(MainWindowController.openScreenshot(_:)), "o"))
+        menu.addItem(item("Open Screenshot in Preview", #selector(MainWindowController.openScreenshot(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Start Recording", #selector(MainWindowController.toggleRecording(_:)), "r"))
         menu.addItem(item("Discard Recording…", #selector(MainWindowController.discardRecording(_:)), "."))
         menu.addItem(.separator())
         menu.addItem(item("Capture Screen Only", #selector(MainWindowController.toggleCaptureScreenOnly(_:))))
-        menu.addItem(item("Capture Options…", #selector(MainWindowController.showCaptureOptions(_:))))
+        menu.addItem(.separator())
+        menu.addItem(item("Show Unfinished Recordings", #selector(MainWindowController.showRecordingRecovery(_:))))
         return menu
     }
 
     private static func fileMenu(_ profile: DeviceProfile) -> NSMenu {
-        // Transfers belong to the active Files window, through its responder
-        // chain. Opening that window belongs to Window; captures to Capture.
+        // The sidebar selection's library commands, as in its context menu, act
+        // on a device the way File acts on documents. Transfers belong to the
+        // active Files window, through its responder chain.
         let menu = NSMenu(title: "File")
+        menu.addItem(item("Add Device…", #selector(MainWindowController.addDevice(_:)), "n"))
+        menu.addItem(.separator())
+        menu.addItem(item("Import IPSW…", #selector(MainWindowController.importIPSW(_:))))
+        menu.addItem(item("Download and Prepare", #selector(MainWindowController.downloadAndPrepare(_:))))
+        menu.addItem(item("Cancel Download", #selector(MainWindowController.cancelFirmwareJob(_:))))
+        menu.addItem(.separator())
+        menu.addItem(item("Start", #selector(MainWindowController.toggleDeviceRunning(_:))))
+        menu.addItem(.separator())
+        menu.addItem(item("Show in Finder", #selector(MainWindowController.showDeviceInFinder(_:))))
+        menu.addItem(item("Delete Device…", #selector(MainWindowController.deleteDevice(_:))))
+        menu.addItem(.separator())
         menu.addItem(item("Copy to \(profile.shortName)…", #selector(DeviceFilesViewController.importFile)))
         menu.addItem(item("Save to Mac…", #selector(DeviceFilesViewController.exportFile)))
         menu.addItem(item("Cancel Transfer", #selector(DeviceFilesViewController.cancelTransfer)))
-        menu.addItem(.separator())
         menu.addItem(item("Refresh Files", #selector(DeviceFilesViewController.refreshFiles(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Close", #selector(NSWindow.performClose(_:)), "w"))
@@ -101,18 +115,27 @@ enum MainMenuBuilder {
         menu.addItem(item("Delete", #selector(NSText.delete(_:))))
         menu.addItem(item("Select All", #selector(NSResponder.selectAll(_:)), "a"))
         menu.addItem(.separator())
-        // Find searches the front window; Search Apps explicitly focuses the
-        // device window's search field (HIG's recommended ⌥⌘F).
+        menu.addItem(item("Paste Text to \(profile.shortName)", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
+        menu.addItem(.separator())
+        // Find searches the front window (the device window's is its app
+        // search); Search Apps is its Option alternate, always the device window's field.
         menu.addItem(item("Find…", #selector(NSTextView.performFindPanelAction(_:)), "f", tag: NSTextFinder.Action.showFindInterface.rawValue))
-        menu.addItem(item("Search Apps", #selector(MainWindowController.findCatalog(_:)), "f", [.option, .command]))
+        let searchApps = item("Search Apps", #selector(MainWindowController.findCatalog(_:)), "f", [.option, .command])
+        searchApps.isAlternate = true
+        menu.addItem(searchApps)
         menu.addItem(.separator())
         menu.addItem(item("Select Text on Screen", #selector(MainWindowController.showLiveText(_:))))
-        menu.addItem(item("Paste Text to \(profile.shortName)", #selector(MainWindowController.pasteToGuest(_:)), "v", [.control, .command]))
         return menu
     }
 
     private static func viewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
+        // Panes first: NSSplitViewController answers Toggle Sidebar and titles it.
+        menu.addItem(item("Show Sidebar", #selector(NSSplitViewController.toggleSidebar(_:)), "s", [.control, .command]))
+        menu.addItem(item("Show Inspector", #selector(MainWindowController.toggleAppInspector(_:)), "i", [.option, .command]))
+        // Xcode's Show Debug Area key.
+        menu.addItem(item("Show Console", #selector(MainWindowController.toggleConsole(_:)), "y", [.shift, .command]))
+        menu.addItem(.separator())
         // The standard zoom commands, same ones the toolbar buttons drive.
         //
         // Zoom In is listed as ⌘+ because that is what every Mac app shows and
@@ -130,9 +153,6 @@ enum MainMenuBuilder {
         menu.addItem(unshiftedZoomIn)
         menu.addItem(item("Zoom Out", #selector(MainWindowController.zoomOut(_:)), "-"))
         menu.addItem(.separator())
-        menu.addItem(item("Show Inspector", #selector(MainWindowController.toggleAppInspector(_:)), "i", [.option, .command]))
-        // Xcode's Show Debug Area key.
-        menu.addItem(item("Show Console", #selector(MainWindowController.toggleConsole(_:)), "y", [.shift, .command]))
         menu.addItem(item("Show Finger Dots", #selector(MainWindowController.toggleTouchOverlay(_:))))
         menu.addItem(item("Show Hidden Files", #selector(DeviceFilesViewController.toggleHidden(_:))))
         menu.addItem(.separator())
@@ -144,33 +164,28 @@ enum MainMenuBuilder {
     }
     
     private static func deviceMenu(_ profile: DeviceProfile) -> NSMenu {
-        // Nil targets route through the active window's responder chain.
+        // Emulated hardware only; nil targets route through the active window's responder chain.
         let menu = NSMenu(title: "Device")
         menu.addItem(item("Home Screen", #selector(MainWindowController.deviceHome(_:)), "h", [.shift, .command]))
         menu.addItem(item("Lock", #selector(MainWindowController.deviceLock(_:)), "l"))
         menu.addItem(.separator())
-        let orientation = NSMenu(title: "Orientation")
-        orientation.addItem(item("Rotate Left", #selector(MainWindowController.deviceRotateLeft(_:)),
-                                 String(UnicodeScalar(NSLeftArrowFunctionKey)!)))
-        orientation.addItem(item("Rotate Right", #selector(MainWindowController.deviceRotateRight(_:)),
-                                 String(UnicodeScalar(NSRightArrowFunctionKey)!)))
-        orientation.addItem(.separator())
-        orientation.addItem(item("Rotate Automatically", #selector(AppDelegate.toggleAutomaticRotation(_:))))
-        orientation.addItem(.separator())
-        appendMotionPoseItems(to: orientation)
+        menu.addItem(item("Rotate Left", #selector(MainWindowController.deviceRotateLeft(_:)),
+                          String(UnicodeScalar(NSLeftArrowFunctionKey)!)))
+        menu.addItem(item("Rotate Right", #selector(MainWindowController.deviceRotateRight(_:)),
+                          String(UnicodeScalar(NSRightArrowFunctionKey)!)))
+        menu.addItem(item("Rotate Automatically", #selector(AppDelegate.toggleAutomaticRotation(_:))))
+        menu.addItem(.separator())
+        let motion = motionMenu()
+        motion.addItem(item("Special Trick", #selector(MainWindowController.specialTrick(_:))))
+        menu.addItem(submenu(motion, title: "Motion"))
         if profile.hasCompass {
-            orientation.addItem(.separator())
             let compass = NSMenu(title: "Compass Heading")
             for (degrees, title) in [(0, "North"), (90, "East"), (180, "South"), (270, "West")] {
                 compass.addItem(item(title, #selector(MainWindowController.setCompassHeading(_:)), tag: degrees))
             }
-            orientation.addItem(submenu(compass, title: "Compass Heading"))
+            menu.addItem(submenu(compass, title: "Compass Heading"))
         }
-        menu.addItem(submenu(orientation, title: "Orientation"))
         let input = NSMenu(title: "Input")
-        input.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
-        input.addItem(item("Special Trick", #selector(MainWindowController.specialTrick(_:))))
-        input.addItem(.separator())
         input.addItem(item("Volume Up", #selector(MainWindowController.deviceVolumeUp(_:)), String(UnicodeScalar(NSUpArrowFunctionKey)!), [.option, .command]))
         input.addItem(item("Volume Down", #selector(MainWindowController.deviceVolumeDown(_:)), String(UnicodeScalar(NSDownArrowFunctionKey)!), [.option, .command]))
         input.addItem(.separator())
@@ -196,27 +211,43 @@ enum MainMenuBuilder {
         menu.addItem(submenu(battery, title: "Battery"))
         menu.addItem(.separator())
         menu.addItem(item("Pause", #selector(MainWindowController.toggleDevicePause(_:))))
-        // Keep restart and erase together at the bottom, away from routine input.
+        menu.addItem(.separator())
         menu.addItem(item("Restart…", #selector(MainWindowController.deviceReset(_:))))
-        // Guest-package recovery (GuestPackage); enabled only when a loader reported.
-        menu.addItem(item("Restart with Previous Guest Tools", #selector(MainWindowController.restartWithPreviousGuestTools(_:))))
-        menu.addItem(item("Restart with Built-in Guest Tools", #selector(MainWindowController.restartWithBuiltInGuestTools(_:))))
-        menu.addItem(item("Restart with Latest Guest Tools", #selector(MainWindowController.restartWithLatestGuestTools(_:))))
+        // Guest-package recovery (GuestPackage): shown only while a loader offers it
+        // (MainWindowController.updateGuestToolsMenu); each choice validates itself.
+        let tools = NSMenu(title: guestToolsTitle)
+        tools.addItem(item("Previous", #selector(MainWindowController.restartWithPreviousGuestTools(_:))))
+        tools.addItem(item("Built-in", #selector(MainWindowController.restartWithBuiltInGuestTools(_:))))
+        tools.addItem(item("Latest", #selector(MainWindowController.restartWithLatestGuestTools(_:))))
+        let toolsItem = submenu(tools, title: guestToolsTitle)
+        toolsItem.isHidden = true
+        menu.addItem(toolsItem)
         menu.addItem(item("Power Off", #selector(MainWindowController.devicePowerOff(_:))))
+        // Kept at the bottom, away from routine input.
+        menu.addItem(.separator())
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
-        // The sidebar selection's library commands, as in its context menu.
-        menu.addItem(.separator())
-        menu.addItem(item("Add Device…", #selector(MainWindowController.addDevice(_:))))
-        menu.addItem(item("Start", #selector(MainWindowController.toggleDeviceRunning(_:))))
-        menu.addItem(item("Download & Prepare", #selector(MainWindowController.downloadAndPrepare(_:))))
-        menu.addItem(item("Import IPSW…", #selector(MainWindowController.importIPSW(_:))))
-        menu.addItem(item("Cancel Download", #selector(MainWindowController.cancelFirmwareJob(_:))))
-        menu.addItem(.separator())
-        menu.addItem(item("Show in Finder", #selector(MainWindowController.showDeviceInFinder(_:))))
-        menu.addItem(item("Delete Device…", #selector(MainWindowController.deleteDevice(_:))))
         return menu
     }
-    
+
+    static let guestToolsTitle = "Restart with Guest Tools"
+
+    /// The Apps menu with no device to ask: its commands, dimmed. A device's
+    /// inspector rebuilds it as its delegate (AppsInspectorViewController).
+    static func resetAppsMenu(_ menu: NSMenu? = nil) {
+        guard let menu = menu ?? NSApp.mainMenu?.item(withTitle: "Apps")?.submenu else { return }
+        menu.delegate = nil
+        menu.autoenablesItems = false
+        menu.removeAllItems()
+        menu.addItem(item("Install App…", #selector(MainWindowController.installApp(_:)), "i", [.shift, .command]))
+        menu.addItem(item("Import Media…", #selector(MainWindowController.syncMedia(_:))))
+        menu.addItem(.separator())
+        menu.addItem(item("Open", nil))
+        menu.addItem(item("Uninstall…", nil))
+        menu.addItem(.separator())
+        menu.addItem(item("Refresh Apps", nil))
+        for item in menu.items { item.isEnabled = false }
+    }
+
     private static func windowMenu(_ profile: DeviceProfile) -> NSMenu {
         let menu = NSMenu(title: "Window")
         menu.addItem(item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"))
@@ -224,6 +255,7 @@ enum MainMenuBuilder {
         menu.addItem(.separator())
         menu.addItem(item("Show Device", #selector(AppDelegate.showDeviceWindow(_:)), "1"))
         menu.addItem(item("Show \(profile.shortName) Files", #selector(AppDelegate.showFilesWindow(_:)), "2"))
+        menu.addItem(item("Device Logs", #selector(MainWindowController.showDeviceLogs(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         return menu
@@ -233,13 +265,11 @@ enum MainMenuBuilder {
         let menu = NSMenu(title: "Help")
         menu.addItem(item("\(appName) Help", #selector(AppDelegate.showHelp(_:)), "?"))
         menu.addItem(.separator())
-        menu.addItem(item("Show Unfinished Recordings", #selector(MainWindowController.showRecordingRecovery(_:))))
-        menu.addItem(item("Device Logs", #selector(MainWindowController.showDeviceLogs(_:))))
         menu.addItem(item("Export Diagnostics…", #selector(MainWindowController.exportDiagnostics(_:))))
         return menu
     }
 
-    /// Both the toolbar pop-up and Device menu expose the same motion commands.
+    /// Both the toolbar pop-up and Device ▸ Motion expose the same motion commands.
     static func motionMenu(target: AnyObject? = nil) -> NSMenu {
         let menu = NSMenu(title: "Motion")
         appendMotionPoseItems(to: menu, target: target)

@@ -46,8 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return emulator != nil
         } else if item.action == #selector(toggleInternetAccess(_:)) {
             let desired = UserDefaults.standard.object(forKey: NetworkAccessPreference.key) as? Bool ?? emulator?.network ?? true
+            // The title stays put; a choice the running device doesn't have yet says when it applies.
             item.state = desired ? .on : .off
-            item.title = "Connect to the Internet" + (desired != emulator?.network ? " (After Reopening)" : "")
+            item.toolTip = emulator.map { desired != $0.network ? "Takes effect the next time Light Touch opens the \($0.profile.shortName)." : nil } ?? nil
         }
         return true
     }
@@ -117,14 +118,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         do { try Bundled.requireStorage() }
         catch {
             let alert = NSAlert()
-            alert.alertStyle = .critical
             if (error as? CocoaError)?.code == .fileLocking {
                 alert.messageText = Bundled.appLockMessage
-                alert.informativeText = "Quit the other copy of Light Touch first. This one will quit."
+                alert.informativeText = "Quit the other copy first."
             } else {
+                alert.alertStyle = .critical
                 alert.messageText = "Couldn’t open device storage"
                 alert.informativeText = error.localizedDescription
             }
+            // Either way this copy can't go on.
+            alert.addButton(withTitle: "Quit")
             alert.runModal()
             Self.requestTermination()
             return
@@ -139,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let alert = NSAlert()
                 alert.messageText = LegacyState.message
                 alert.informativeText = LegacyState.detail
-                alert.addButton(withTitle: "Erase & Continue")
+                alert.addButton(withTitle: "Erase and Continue")
                 alert.addButton(withTitle: "Quit")
                 alert.buttons.first?.hasDestructiveAction = true
                 guard alert.runModal() == .alertFirstButtonReturn else { Self.requestTermination(); return }
