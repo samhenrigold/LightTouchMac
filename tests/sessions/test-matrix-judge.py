@@ -20,6 +20,7 @@ spec = importlib.util.spec_from_file_location("matrix", HERE / "matrix.py")
 mx = importlib.util.module_from_spec(spec); spec.loader.exec_module(mx)
 
 TMP = Path(tempfile.mkdtemp(prefix="judge-"))
+mx.MATRIX_REFS = TMP / "no-refs"   # the fabricated flat frames judge brightness/frontmost, not a committed picture ref
 def png(name, lum):
     p = TMP / name
     Image.new("RGB", (32, 48), (lum, lum, lum)).save(p)
