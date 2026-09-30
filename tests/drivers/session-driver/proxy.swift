@@ -2,7 +2,7 @@
 // base (or the shipping iPod image) booted with the helper's web proxy on the wifi guestfwd, the CA from WebProxyCA
 // trusted through the guest agent (GuestServices.trustCertificate: the package's ittrust or the app's copy
 // out of the armv6 itpack), never the MCInstall profile screen. Proof: httpget (the guest's own CFNetwork
-// over the proxy) fails before the trust and answers HTTP 200 after; Safari opens the HTTPS page
+// over the proxy, to a host only the proxy answers) fails before the trust and gets the proxy's answer after; Safari opens the HTTPS page
 // (screenshot); a reboot on the same overlay, unlocked, shows the home screen and no profile screen after
 // the trust runs again.
 
@@ -16,10 +16,20 @@ struct ProxyConfig: Decodable {
     var itpack: String
     /// contrib/it-proxy/httpget, built for armv6; optional.
     var httpget: String?
+    /// Safari's page (the httpget fetches use `ProxyProbe`, a host only the proxy answers).
     var url: String
     /// Extra pages for Safari after the trust: "ADDRESS" (direct), "archive:yyyyMMdd ADDRESS" (archive), "search:WORDS"
     /// (Safari's Google field); an address without a scheme (typeURL); iPad only.
     var pages: [String]?
+}
+
+/// The host the proof fetches ask for: one that cannot resolve (RFC 6761 `.invalid`), so only the proxy answers it, with
+/// its own 502 "Destination unavailable" (inside the TLS tunnel for https) once its upstream lookup fails. A real origin
+/// can't tell the proxy's answer from the PAC's DIRECT fallback: 4.2.1's CFNetwork, refusing the proxy's certificate,
+/// retried example.com DIRECT (over slirp's IPv6) and got its 200 before the trust (smoke #66, a wifi0 pcap).
+nonisolated enum ProxyProbe {
+    static let host = "proxy-trust.invalid"
+    static func answered(_ output: String) -> Bool { output.hasPrefix("HTTP 502") && output.contains("Destination unavailable") }
 }
 
 @MainActor func runProxy(_ p: ProxyConfig) async {
@@ -68,11 +78,12 @@ struct ProxyConfig: Decodable {
         d.screenshot("home\(generation)")
     }
 
-    /// The guest's own HTTPS client through the proxy: "HTTP 200" once the CA is trusted, a certificate
-    /// error (-1200 on iOS 3/4) before. Wi-Fi associates a while after lockdown answers: "offline" (-1009) is retried.
-    func fetch(_ label: String, url: String? = nil) async {
+    /// The guest's own HTTP(S) client through the proxy, to `ProxyProbe.host`: the proxy's own answer once the CA is
+    /// trusted, a certificate error (-1200/-1202 on iOS 3/4) before. Wi-Fi associates a while after lockdown answers:
+    /// "offline" (-1009) is retried.
+    func fetch(_ label: String, scheme: String = "https") async {
         guard let httpget = p.httpget, let bytes = try? Data(contentsOf: URL(fileURLWithPath: httpget)) else { return }
-        let url = url ?? p.url
+        let url = "\(scheme)://\(ProxyProbe.host)/"
         let remote = "/tmp/ltm-httpget"
         var status = -1, text = ""
         for attempt in 0..<8 {
@@ -86,7 +97,7 @@ struct ProxyConfig: Decodable {
             } catch { status = -1; text = "\(error)" }
             if !text.contains("-1009") { break }
         }
-        emit("httpget", ["device": d.name, "label": label, "status": status, "output": text, "ok": status == 0 && text.hasPrefix("HTTP 200")])
+        emit("httpget", ["device": d.name, "label": label, "status": status, "output": text, "ok": status == 0 && ProxyProbe.answered(text)])
     }
 
     func trust(_ generation: Int) async {
@@ -141,7 +152,7 @@ struct ProxyConfig: Decodable {
         emit("route", ["device": d.name, "ok": true])
     } catch { emit("route", ["device": d.name, "ok": false, "error": "\(error)"]) }
     // Plain HTTP through the proxy first: whether the guest has a network at all (no certificate involved).
-    await fetch("http", url: p.url.replacingOccurrences(of: "https://", with: "http://"))
+    await fetch("http", scheme: "http")
     await fetch("untrusted")
     await trust(1)
     await fetch("trusted")

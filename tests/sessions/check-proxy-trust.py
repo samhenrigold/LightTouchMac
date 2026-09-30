@@ -5,9 +5,10 @@ The session driver (tests/drivers/session-driver/proxy.swift) boots one device a
 proxy (LightTouchDevice/WebProxy.swift) on the wifi guestfwd, and trusts its WebProxyCA certificate the way WebProxySetup.configure does when
 the guest agent is up: GuestServices.trustCertificate, which runs the package's ittrust (securityd's own
 trust-store API) or the app's copy out of the armv6 itpack. Checked: the guest's own HTTPS client through
-the proxy (httpget) fails before the trust and answers HTTP 200 after; Safari stays the front app with the
+the proxy (httpget, to proxy-trust.invalid: only the proxy answers it, so the PAC's DIRECT fallback can't) fails
+before the trust and gets the proxy's own answer after; Safari stays the front app with the
 HTTPS page open (safari-https.png); a restart on the same overlay, unlocked, shows the home screen and no
-profile screen (rebooted-unlocked.png) after the trust runs again; the fetch still answers 200.
+profile screen (rebooted-unlocked.png) after the trust runs again; the fetch still gets the proxy's answer.
 
     tests/sessions/check-proxy-trust.py --board ipod|ipad [--base DIR] --itpack armv6.itpack
                                [--ipad-itpack armv7.itpack] [--httpget PATH] [--url https://example.com/]
@@ -31,7 +32,6 @@ def home_screen(front):
     return front.get("bundleID") == "com.apple.springboard" and front.get("name") == "Home Screen"
 
 
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--board", choices=("ipod", "ipad"), required=True)
@@ -39,7 +39,7 @@ def main():
     ap.add_argument("--itpack", type=Path, default=sources.path("qemu-ios") / "build/guest-package/armv6.itpack")
     ap.add_argument("--httpget", type=Path, help="contrib/it-proxy/httpget built for armv6 (the guest-side fetch proof)")
     ap.add_argument("--ipad-itpack", type=Path, help="--board ipad: the armv7.itpack whose offer brings it_agent up (as the app boots an iPad)")
-    ap.add_argument("--url", default="https://example.com/")
+    ap.add_argument("--url", default="https://example.com/", help="Safari's page")
     ap.add_argument("--page", action="append", help="--board ipad: another Safari page after the trust, 'URL' or "
                     "'archive:yyyyMMdd URL' (page-N.png; looked at, not scored)")
     ap.add_argument("--helper")
@@ -119,12 +119,14 @@ def main():
           + ("" if route.get("ok") else f": {route.get('error')}"))
     if args.httpget:
         http = one("httpget", label="http")
-        check(http.get("ok"), f"{b}: plain HTTP through the proxy (the guest's Wi-Fi is up): {http.get('output', '')[:60]!r}")
+        check(http.get("ok"), f"{b}: plain HTTP through the proxy (Wi-Fi up, the proxy answers): {http.get('output', '')[:60]!r}")
         before = one("httpget", label="untrusted")
         # The proxy's untrusted chain: -1200 "secure connection failed" through the PAC (7E18 and 7B500 bases), -1202
-        # "untrusted server certificate" through itproxy's static proxy (the legacy image). The route check above
-        # makes sure it is the proxy's certificate being refused, not 3.1.3's TLS against the real origin (-1200 too).
-        check(before and not before.get("ok") and any(code in before.get("output", "") for code in ("-1200", "-1202")),
+        # "untrusted server certificate" through itproxy's static proxy (the legacy image), -1003 "server with the
+        # specified hostname could not be found" on 4.2.1 (8C148): it refuses the proxy's certificate, then takes the
+        # PAC's DIRECT fallback, and the host (.invalid) has no origin to reach, so only the proxy could have answered.
+        check(before and not before.get("ok") and before.get("output", "").startswith("ERROR")
+              and any(code in before.get("output", "") for code in ("-1200", "-1202", "-1003")),
               f"{b}: HTTPS through the proxy refused before the trust (untrusted certificate): {before.get('output', '')[:90]!r}")
     trust = one("trust", generation=1)
     check(trust.get("ok"), f"{b}: certificate trusted through the agent in {trust.get('seconds', -1):.1f} s"
