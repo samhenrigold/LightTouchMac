@@ -7,7 +7,8 @@ gaps the 2026-09-29 audit found are now caught:
   - a wrong frontmost app FAILs `home`;
   - a boot-2 quit that never confirms FAILs `shutdown` (finding 4 / gap #2);
   - the `gl` column reports the render path instead of a hard-coded skip, and a software
-    fallback shows rather than passing silently;
+    fallback FAILs it where the pipeline installed the GL shim (k48's built GLEngine, n72's
+    gles_shim): the 4.3.x "no gldshim device" boots drew a correct home screen in software;
   - a clean lit-SpringBoard boot with both shutdowns confirmed passes all three.
 """
 import importlib.util, json, os, sys, tempfile
@@ -24,17 +25,21 @@ def png(name, lum):
     Image.new("RGB", (32, 48), (lum, lum, lum)).save(p)
     return str(p)
 
-def base_dir():
+K48_SHIM = {"guest_package": None, "tool": {"built": {"GLEngine": "GLEngine"}}}   # K48Recipe's lock
+N72_SHIM = {"guest_package": None, "derived": {"gles_shim": True, "gles_engine": "MBXGLEngine"}}
+NO_SHIM = {"guest_package": None, "tool": {"built": {"GLEngine": None}}}
+
+def base_dir(lock):
     b = TMP / ("base-%d" % len(list(TMP.glob("base-*"))))
     b.mkdir()
-    (b / "device.lock.json").write_text(json.dumps({"guest_package": None}))
+    (b / "device.lock.json").write_text(json.dumps(lock))
     return b
 
 ENTRY = {"id": "k48ap-8L1", "product_type": "iPad1,1", "board": "k48ap", "version": "4.3.5",
          "recipe": {"options": {"appsync": False}}}
 
-def run(events, serial_text=""):
-    b = base_dir()
+def run(events, serial_text="", lock=K48_SHIM):
+    b = base_dir(lock)
     serial = TMP / ("serial-%d.log" % len(list(TMP.glob("serial-*"))))
     serial.write_text(serial_text)
     shots_to = TMP / ("shots-%d" % len(list(TMP.glob("shots-*"))))
@@ -82,21 +87,33 @@ r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirme
 check("boot-2 unconfirmed fails shutdown", r["shutdown"]["ok"] is False and r["shutdown"]["second_ok"] is False)
 check("boot-1 shutdown still recorded", r["shutdown"]["seconds"] == 15.0)
 
-# 4. software-CA fallback shows in the GL column, does not pass silently.
+# 4. software-CA fallback with the GL shim installed: the home screen is lit and right (software CA
+#    draws it), so only the gl column can catch it, and it must FAIL, on k48 and n72 locks alike.
+SW = ("[glishim] gliInitializeLibrary\n"
+      "[glishim] libGFXShared registered no gldshim device (GLRendererFloatQEMU.bundle missing?): no GL\n") * 3
+for name, lock in (("k48", K48_SHIM), ("n72", N72_SHIM)):
+    r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True), serial_text=SW, lock=lock)
+    check(f"{name}: home still passes (software CA draws it)", r["home"]["ok"] is True)
+    check(f"{name}: shim installed + software fallback FAILs gl", r["gl"]["ok"] is False and "software" in r["gl"]["path"])
 r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True),
-              serial_text="glishim ... no gldshim device (GLRendererFloatQEMU.bundle missing?): no GL\n" * 3)
-check("gl column reports software fallback", "software" in r["gl"]["path"])
+              serial_text="[glishim] libGFXShared lacks gfxPluginConnectAll/gfxGet*WithID: no GL\n")
+check("any glishim 'no GL' give-up FAILs gl", r["gl"]["ok"] is False)
 check("gl not a hard-coded skip note", "gl-coverage not merged" not in json.dumps(r["gl"]))
+# no shim installed: software CA is the recipe's own choice; it shows, but the picture decides.
+r, _, _ = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True), serial_text=SW, lock=NO_SHIM)
+check("no shim: software path shows, not failed by gl", "software" in r["gl"]["path"] and r["gl"]["ok"] is True)
 
 # 5. clean lit-SpringBoard boot, both shutdowns confirmed: home / gl / shutdown all pass.
-r, _, first = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True))
+r, _, first = run(boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True),
+                  serial_text="[glishim] gliInitializeLibrary\n[glishim] gld plugin registered, device 0x1027000\n")
 check("good boot: home ok", r["home"]["ok"] is True)
 check("good boot: shutdown ok (both boots)", r["shutdown"]["ok"] is True and r["shutdown"]["second_ok"] is True)
-check("good boot: gl ok on hardware path", r["gl"]["ok"] is True and r["gl"]["path"] == "hardware GL")
+check("good boot: gl ok on hardware path", r["gl"]["ok"] is True and r["gl"]["path"] == "hardware GL"
+      and r["gl"]["gld_registered"] == 1)
 # (afc/persist aren't fabricated here, so the row's first failure is afc -- our three checks must not be it)
 check("good boot: home/gl/shutdown are not the failure", first not in ("home", "gl", "shutdown"))
 
 import shutil; shutil.rmtree(TMP, ignore_errors=True)
 if fails:
     sys.exit("%d matrix-judge assertion(s) failed" % fails)
-print("matrix judge: home, GL and boot-2 shutdown verdicts all bite")
+print("matrix judge: home, GL (incl. shim software fallback) and boot-2 shutdown verdicts all bite")
