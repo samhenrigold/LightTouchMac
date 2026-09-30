@@ -48,6 +48,10 @@ nonisolated enum DeviceProfile: Equatable {
     var marketingName: String {
         switch self { case .iPad1: "iPad"; case .iPodTouch2G: "iPod touch (2nd generation)"; case .iPodTouch1G: "iPod touch" }
     }
+    /// The sidebar's short name: a mixed sidebar's row title and a renamed row's subtitle.
+    var sidebarName: String {
+        switch self { case .iPad1: "iPad"; case .iPodTouch2G: "iPod touch 2G"; case .iPodTouch1G: "iPod touch 1G" }
+    }
     /// The SecureROM image the machine boots, looked up under Bundled.filesRoot (DeviceProfile.bootrom).
     var bootromName: String { self == .iPodTouch1G ? "bootrom_s5l8900" : "bootrom_240_4" }
 

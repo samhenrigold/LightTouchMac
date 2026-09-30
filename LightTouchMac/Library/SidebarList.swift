@@ -57,7 +57,7 @@ nonisolated struct SidebarList: Equatable {
         names[id] = name.isEmpty || name == defaultTitle ? nil : name
     }
 
-    /// What one row says. With a custom name, the name over "iPad, iOS 4.2.1"; among one kind of device, the version
+    /// What one row says. With a custom name, the name over "iPod touch 2G, iOS 4.1"; among one kind of device, the version
     /// ("iOS 4.2.1", with its Beta/GM badge beside it); among several, the device over its version.
     struct Label: Equatable {
         var title: String
@@ -72,7 +72,7 @@ nonisolated struct SidebarList: Equatable {
     static func label(for entry: FirmwareCatalog.Entry, name: String?, mixed: Bool) -> Label {
         let version = "iOS \(entry.version)"
         let tagged = ([version] + [entry.prereleaseBadge].compactMap { $0 }).joined(separator: " ")
-        let device = entry.profile?.marketingName ?? entry.productType
+        let device = entry.profile?.sidebarName ?? entry.productType
         if let name { return Label(title: name, subtitle: "\(device), \(tagged)") }
         if mixed { return Label(title: device, subtitle: tagged) }
         return Label(title: version, badge: entry.prereleaseBadge)

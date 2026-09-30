@@ -7,7 +7,8 @@ never ordered front: nothing appears on screen. PNGs land in --out (default a te
 sidebar-{one-kind,mixed,renamed,empty}.png and add-device.png.
 
 Checks what the user sees, from the rendered cells: one kind of device titles rows by version; mixed kinds show
-the product name over the version; a custom name shows over "iPad, iOS 3.2.2". Renaming in place (the context
+the short sidebar name ("iPod touch 2G", not the marketing name) over the version; a custom name shows over
+"iPad, iOS 3.2.2" / "iPod touch 2G, iOS 4.2.1". Renaming in place (the context
 menu's Rename, typing, ending the edit) saves the name to defaults; Delete on a row with nothing on disk removes
 it (saved), on a prepared one it asks the delegate to delete instead; an empty sidebar shows Add Device…. A
 download starting for an entry not in the list adds it. The sheet lists every catalog entry once.
@@ -131,10 +132,10 @@ final class Delegate: DeviceLibraryDelegate {
         if seen != [["iOS 3.1.3", "Requires an IPSW"], ["iOS 4.1", "Beta 1"], ["iOS 4.1"], ["iOS 4.2.1"]] { fail("one kind: \(seen)") }
         try render(vc.view, "sidebar-one-kind")
 
-        // Mixed: product names over versions.
-        (vc, w) = sidebar(["n72ap-8C148", "k48ap-7B500", "n72ap-8B5080c"], host: host)
+        // Mixed: short sidebar names over versions.
+        (vc, w) = sidebar(["n72ap-8C148", "k48ap-7B500", "n72ap-8B5080c", "n45ap-4B1"], host: host)
         seen = rows(vc)
-        if seen != [["iPad", "iOS 3.2.2"], ["iPod touch (2nd generation)", "iOS 4.1 Beta 1"], ["iPod touch (2nd generation)", "iOS 4.2.1"]] { fail("mixed: \(seen)") }
+        if seen != [["iPad", "iOS 3.2.2"], ["iPod touch 1G", "iOS 1.1.5"], ["iPod touch 2G", "iOS 4.1 Beta 1"], ["iPod touch 2G", "iOS 4.2.1"]] { fail("mixed: \(seen)") }
         try render(vc.view, "sidebar-mixed")
 
         // Rename in place through the context menu's Rename: the title turns into a field; ending the edit saves.
@@ -152,6 +153,15 @@ final class Delegate: DeviceLibraryDelegate {
         seen = rows(vc)
         if seen.first != ["Lab iPad", "iPad, iOS 3.2.2"] { fail("renamed: \(seen)") }
         if field.isEditable { fail("the title stays editable after renaming") }
+        // And an iPod: its subtitle names the model by its short name.
+        vc.select(catalog.entry(id: "n72ap-8C148")!)
+        vc.perform(NSSelectorFromString("renameFromMenu:"), with: nil)
+        if let editor = w.firstResponder as? NSTextView {
+            editor.string = "Test iPod"
+            w.makeFirstResponder(nil)
+        } else { fail("Rename didn't start an edit on the iPod row") }
+        seen = rows(vc)
+        if seen.last != ["Test iPod", "iPod touch 2G, iOS 4.2.1"] { fail("renamed iPod: \(seen)") }
         // Offscreen, a selected source-list row draws its material black: render unselected.
         all(vc.view).compactMap { $0 as? NSOutlineView }.first!.deselectAll(nil)
         try render(vc.view, "sidebar-renamed")

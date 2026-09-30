@@ -4,7 +4,7 @@
 Compiles SidebarList.swift with the real FirmwareCatalog and DeviceRow against the shipped catalog, on a throwaway
 UserDefaults suite. Checks:
 - titles: one kind of device -> "iOS 4.1" (Beta tag beside it); several -> the product name over the version; a
-  custom name -> the name over "iPod touch (2nd generation), iOS 4.1";
+  custom name -> the name over "iPod touch 2G, iOS 4.1";
 - rename: saved and read back by a fresh load; an empty name or the default title clears it; removing forgets it;
 - migration: no saved list -> the entries the user owns (prepared / downloaded / in flight), else first_run;
   a saved list (even empty) is kept as saved, entries the catalog dropped are skipped;
@@ -61,15 +61,18 @@ import Foundation
         precondition(list.label(for: entry("n72ap-8B5080c"), in: catalog) == .init(title: "iOS 4.1", badge: "Beta 1"), "same kind beta")
         // Several kinds: the product name the app uses, the version under it.
         list.add(["k48ap-7B500"])
-        precondition(list.label(for: entry("n72ap-8B117"), in: catalog) == .init(title: "iPod touch (2nd generation)", subtitle: "iOS 4.1"), "mixed: \(list.label(for: entry("n72ap-8B117"), in: catalog))")
-        precondition(list.label(for: entry("n72ap-8B5080c"), in: catalog) == .init(title: "iPod touch (2nd generation)", subtitle: "iOS 4.1 Beta 1"), "mixed beta")
+        precondition(list.label(for: entry("n72ap-8B117"), in: catalog) == .init(title: "iPod touch 2G", subtitle: "iOS 4.1"), "mixed: \(list.label(for: entry("n72ap-8B117"), in: catalog))")
+        precondition(list.label(for: entry("n72ap-8B5080c"), in: catalog) == .init(title: "iPod touch 2G", subtitle: "iOS 4.1 Beta 1"), "mixed beta")
         precondition(list.label(for: entry("k48ap-7B500"), in: catalog) == .init(title: "iPad", subtitle: "iOS 3.2.2"), "mixed iPad")
+        list.add(["n45ap-4B1"])
+        precondition(list.label(for: entry("n45ap-4B1"), in: catalog) == .init(title: "iPod touch 1G", subtitle: "iOS 1.1.5"), "mixed 1G")
+        list.remove("n45ap-4B1")
 
         // Rename, and the subtitle a custom name gets, in either mode.
-        list.rename("n72ap-8B117", to: "  Test Rig ", defaultTitle: "iPod touch (2nd generation)")
-        precondition(list.label(for: entry("n72ap-8B117"), in: catalog) == .init(title: "Test Rig", subtitle: "iPod touch (2nd generation), iOS 4.1"), "renamed")
+        list.rename("n72ap-8B117", to: "  Test Rig ", defaultTitle: "iPod touch 2G")
+        precondition(list.label(for: entry("n72ap-8B117"), in: catalog) == .init(title: "Test Rig", subtitle: "iPod touch 2G, iOS 4.1"), "renamed")
         list.remove("k48ap-7B500")
-        precondition(list.label(for: entry("n72ap-8B117"), in: catalog) == .init(title: "Test Rig", subtitle: "iPod touch (2nd generation), iOS 4.1"), "renamed, one kind")
+        precondition(list.label(for: entry("n72ap-8B117"), in: catalog) == .init(title: "Test Rig", subtitle: "iPod touch 2G, iOS 4.1"), "renamed, one kind")
         list.save(defaults)
         var reloaded = SidebarList.load(defaults, catalog: catalog) { _ in false }
         precondition(reloaded.names == ["n72ap-8B117": "Test Rig"] && reloaded == list, "names not persisted: \(reloaded)")
