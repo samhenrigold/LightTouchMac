@@ -32,7 +32,7 @@ struct SingleConfig: Decodable {
     /// Where the icon is (normalized), for firmware whose SpringBoard has no springboardservices (2.x): the reorder
     /// is skipped, and a tap on the first-install "Edit Home Screen" tip's Dismiss goes first.
     var launchAt: [Double]?
-    /// An iPad's launch goes through the guest agent (as the app's sidebar launches); then (either board) a tap at this
+    /// A launch goes through the guest agent where the bake installed it (as the app's sidebar launches); then a tap at this
     /// normalized point (the iPad's panel: portrait top is x 0, portrait left is y 1; the iPod's portrait screen) and
     /// screenshots tapped1-2, 3 s apart. tests/matrix.py --gl-tap opens the Harness's "GL: rotating triangle" with it.
     var tapAfterLaunch: [Double]?
@@ -229,7 +229,8 @@ struct SingleConfig: Decodable {
     try? await Task.sleep(for: .seconds(3))
     await wakeForShot(d, "installed")   // wake first: the panel may have slept during the install
     if s.launch == true {
-        if ipad { await launchIPad(d, tap: s.tapAfterLaunch) } else { await launch(d, at: s.launchAt, tap: s.tapAfterLaunch) }
+        // through the guest agent wherever the bake installed it (the iPad; the iPod from 3.1); else a tap on the icon
+        if agent && s.launchAt == nil { await launchByAgent(d, tap: s.tapAfterLaunch) } else { await launch(d, at: s.launchAt, tap: s.tapAfterLaunch) }
     }
 
     // The persist marker: a file that must still be there after the clean shutdown and the second boot.
@@ -268,10 +269,10 @@ struct SingleConfig: Decodable {
 }
 
 /// The installed app (config.bundleID) opened through the guest agent, then `tap`: screenshots launched1, tapped1-2.
-@MainActor func launchIPad(_ d: Device, tap: [Double]?) async {
+@MainActor func launchByAgent(_ d: Device, tap: [Double]?) async {
     var event: [String: Any] = ["device": d.name, "bundleID": config.bundleID]
     let agent = GuestAgent(link: d.process.link, cache: GuestAgentCache())
-    let guest = GuestServices(agent: agent, packaged: true)
+    let guest = GuestServices(agent: agent, packaged: d.process.status?.guestPackage != nil)
     event["agent"] = await agent.waitAlive(seconds: 60)
     do { try await guest.launch(config.bundleID) } catch { event["launchError"] = "\(error)" }
     try? await Task.sleep(for: .seconds(8))
