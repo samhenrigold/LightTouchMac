@@ -272,7 +272,7 @@ final class DisplayView: NSView {
         registerForDraggedTypes([.fileURL, .ltmCatalogApp])
         setAccessibilityLabel("\(profile.displayName) screen")
         setAccessibilityRole(.image)
-        setAccessibilityHelp("Disable Keyboard Input in the Device menu to move a pointer with arrow keys. Hold Space to touch, or Shift-arrow to drag. Home is also available in the Device menu.")
+        setAccessibilityHelp("Turn off Send Keyboard Input (Device > Input) to move a pointer with the arrow keys. Hold Space to touch; Shift-arrow drags.")
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -1317,6 +1317,15 @@ final class DisplayView: NSView {
         sendVisualTouch(0, TouchPhase.end, keyboardPoint.x, keyboardPoint.y, keyboard: true)
     }
 
+    /// Tab leaves the screen while the arrow keys drive the pointer, and Control-Tab (with Shift,
+    /// backwards) always does, so a keyboard user is never trapped here (HIG p.266). Typing sends Tab to the device.
+    private func moveFocusOut(_ event: NSEvent) -> Bool {
+        guard event.keyCode == 48, event.modifierFlags.intersection([.command, .option]).isEmpty,
+              event.modifierFlags.contains(.control) || emulator?.keyboardInputEnabled == false else { return false }
+        if event.modifierFlags.contains(.shift) { window?.selectPreviousKeyView(self) } else { window?.selectNextKeyView(self) }
+        return true
+    }
+
     private func keyboardPointerKey(_ event: NSEvent, down: Bool) -> Bool {
         let code = event.keyCode
         guard [49, 123, 124, 125, 126].contains(code) else { return false }
@@ -1375,6 +1384,7 @@ final class DisplayView: NSView {
             else { super.keyDown(with: event) }
             return
         }
+        if moveFocusOut(event) { return }
         // Command combinations belong to the menu bar; let them pass.
         if !event.modifierFlags.intersection([.command, .control]).isEmpty {
             super.keyDown(with: event)

@@ -116,6 +116,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.setContentSize(Self.contentSize(for: profile))
         window.contentMinSize = NSSize(width: 360, height: 380)
+        // Panes come and go with the selection; Tab follows whatever is there now.
+        window.autorecalculatesKeyViewLoop = true
         // The frame is remembered (HIG: reopen where the user left it); a saved size is the user's, not the device's.
         let restored = WindowRestorationPolicy.configure(window, frameAutosaveName: "Main")
         if !restored { window.center() }

@@ -104,11 +104,8 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
         log.borderType = .bezelBorder
         let controls = NSStackView(views: [picker, pause])
         controls.spacing = 12
-        let hint = NSTextField(labelWithString: "Latest 64 KB. Selecting text pauses updates.")
-        hint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        hint.textColor = .secondaryLabelColor
         let content = window.contentView!
-        for view in [controls, log, hint] {
+        for view in [controls, log] {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
         }
@@ -119,10 +116,7 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
             log.topAnchor.constraint(equalTo: controls.bottomAnchor, constant: 12),
             log.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
             log.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-            hint.topAnchor.constraint(equalTo: log.bottomAnchor, constant: 8),
-            hint.leadingAnchor.constraint(equalTo: log.leadingAnchor),
-            hint.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -16),
-            hint.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
+            log.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16),
         ])
     }
 
@@ -191,11 +185,11 @@ final class DeviceNoticeViewController: NSTitlebarAccessoryViewController {
         let buttons = NSStackView(views: [action, logs])
         buttons.spacing = 8
         buttons.detachesHiddenViews = true
-        dismiss.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Dismiss status")
+        dismiss.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Dismiss")
         dismiss.isBordered = false
         dismiss.target = self; dismiss.action = #selector(dismissNotice)
-        dismiss.toolTip = "Dismiss this status message"
-        dismiss.setAccessibilityLabel("Dismiss status")
+        dismiss.toolTip = "Dismiss"
+        dismiss.setAccessibilityLabel("Dismiss")
         for child in [icon, message, buttons, dismiss] {
             child.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(child)
