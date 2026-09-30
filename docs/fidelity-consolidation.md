@@ -36,8 +36,10 @@ Nothing from these worktrees is merged to the primary branches.
   kernel; incidental keys no longer choose the boot path.
 - FMSS transfers NAND pages and reports a pre-read notification; firmware policy
   and its state are owned by the iPod board. The iBoot Bluetooth string rewrite
-  is removed after the six-device regressions. A remaining boot-argument
-  compatibility write is described below.
+  was removed here, then restored by the audit (qemu-ios a7f7fe98b1): without it
+  an existing 7E18 device reported a Bluetooth address and UDID that are not its
+  identity's (docs/STATUS.md, fidelity consolidation row). A remaining
+  boot-argument compatibility write is described below.
 - PMGR watchdog countdown advances on virtual time and schedules resets without
   waiting for another MMIO write. Feed, disable/re-enable and compare changes
   reschedule it; migration v2 retains the deadline and reads v1 state. Timer
