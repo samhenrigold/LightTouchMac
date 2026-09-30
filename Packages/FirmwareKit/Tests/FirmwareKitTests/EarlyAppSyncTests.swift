@@ -3,8 +3,8 @@ import Testing
 @testable import FirmwareKit
 
 struct EarlyAppSyncTests {
-    @Test(arguments: [true, false])
-    func preparesInstallationService(lockbot: Bool) throws {
+    @Test(arguments: [true, false], [true, false])
+    func preparesInstallationService(lockbot: Bool, sharedCache: Bool) throws {
         guard let path = ProcessInfo.processInfo.environment["FK_EARLY_APPSYNC_HELPERS"] else { return }
         let helpers = URL(fileURLWithPath: path)
         try Oracle.withTemp { root in
@@ -14,6 +14,11 @@ struct EarlyAppSyncTests {
             try fm.createDirectory(at: libmis.deletingLastPathComponent(), withIntermediateDirectories: true)
             let untouched = Data("stock system trust library".utf8)
             try untouched.write(to: libmis)
+            let cache = root.appendingPathComponent("System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv7")
+            if sharedCache {
+                try fm.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try untouched.write(to: cache) // opaque cache must not be parsed or patched by AppSync.
+            }
             let relative = lockbot ? "System/Library/Lockdown/Services.plist" : SystemEdits.installdJob
             let plist = root.appendingPathComponent(relative)
             try fm.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -22,7 +27,7 @@ struct EarlyAppSyncTests {
                                       "EnvironmentVariables": ["EXISTING": "keep"]]
             let original: [String: Any] = lockbot ? ["com.apple.mobile.installation_proxy": job, "unrelated": ["Label": "keep"]] : job
             try PropertyListSerialization.data(fromPropertyList: original, format: .xml, options: 0).write(to: plist)
-            _ = try SystemEdits.installAppSync(root, helper: helpers.appendingPathComponent(SystemEdits.Helpers.appsync), cache: "absent-cache", log: { _ in })
+            _ = try SystemEdits.installAppSync(root, helper: helpers.appendingPathComponent(SystemEdits.Helpers.appsync), cache: sharedCache ? "System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv7" : "absent-cache", log: { _ in })
             let output = try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as! [String: Any]
             let service = lockbot ? output["com.apple.mobile.installation_proxy"] as! [String: Any] : output
             #expect(service["UserName"] as? String == "mobile")
@@ -38,6 +43,7 @@ struct EarlyAppSyncTests {
                 #expect(!fm.fileExists(atPath: root.appendingPathComponent(SystemEdits.appsyncLauncherPath).path))
             }
             #expect(try Data(contentsOf: libmis) == untouched)
+            if sharedCache { #expect(try Data(contentsOf: cache) == untouched) }
         }
     }
 
