@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-window-restoration-') as directory:
  subprocess.run([str(work/'check')], check=True, timeout=15)
 # These construction paths must opt out before displaying a window. The native
 # check above validates the shared policy; guard against an accidental bypass.
-for path in ['App/AppDelegate.swift', 'UI/MainWindowController.swift', 'UI/DeviceFilesWindowController.swift', 'UI/LogWindowController.swift']:
+for path in ['UI/HelpWindowController.swift', 'UI/SettingsWindowController.swift', 'UI/MainWindowController.swift', 'UI/DeviceFilesWindowController.swift', 'UI/LogWindowController.swift']:
  text = (root/'LightTouchMac'/path).read_text()
  assert 'WindowRestorationPolicy.configure(' in text, path
  assert 'setFrameAutosaveName(' not in text and 'setFrameUsingName(' not in text, path

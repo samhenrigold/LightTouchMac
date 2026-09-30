@@ -25,6 +25,8 @@ nonisolated func logEvent(_ s:String){}
  enum Notice {case erase,activation}
  struct Instance { let id=UUID() }
  let instance=Instance()
+ struct Profile { let shortName="iPod" }
+ let profile=Profile()
  var isErasing=false,isInstalling=false,isDead=false
  var state=State.running
  var started=true
