@@ -164,7 +164,8 @@ extension String {
             config = BootRecipe.iPod1G(.init(bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Self.files), iBoot: files.boot.path,
                                              nand: files.nand.path, writableNOR: files.writableNOR!.path, overlay: overlay.path,
                                              usbAddress: mux.guestAddress, guestPackage: guestPackage, machineOptions: ipod!.machine),
-                                       serial: serial!.argument, audio: ["-audio", "driver=none"])
+                                       serial: serial!.argument, audio: ["-audio", "driver=none"],
+                                       netdev: "user,id=wifi0" + (netdevExtra ?? ""))
         } else {
             let files = ipod ?? IPodFiles(nand: Self.ipodNAND, nor: Self.files + "/ios3/nor_7E18.bin", iBoot: Self.files + "/ios3/iBoot.bin")
             let nor = try DeviceStateStorage.writableNOR(base: URL(fileURLWithPath: files.nor), overlay: overlay)
