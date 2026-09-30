@@ -46,7 +46,6 @@ final class DisplayView: NSView {
     /// An IPSW from outside: the library's, whatever this device is doing.
     var onDropIPSW: ((URL) -> Void)?
     var onDropMedia: ((URL) -> Void)?
-    var onDropUnsupportedFiles: (([URL]) -> Void)?
     /// Called when a Legacy Store row is dropped on the screen.
     var onDropCatalogApp: ((CatalogApp) -> Void)?
 
@@ -1421,7 +1420,13 @@ final class DisplayView: NSView {
 
     // MARK: - Drag & drop
 
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { dropHighlight.show(for: dropOperation(sender)) }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { dropHighlight.show(for: dropOperation(sender)) }
+    override func draggingExited(_ sender: NSDraggingInfo?) { dropHighlight.show(for: []) }
+    override func draggingEnded(_ sender: NSDraggingInfo) { dropHighlight.show(for: []) }
+    private lazy var dropHighlight = DropHighlight.install(in: self)
+
+    private func dropOperation(_ sender: NSDraggingInfo) -> NSDragOperation {
         // Refuse at the drag system, not with an alert per file. During the boot
         // the menu and toolbar items for this same operation are correctly
         // greyed out, but the drop still showed the green copy badge, accepted,
@@ -1449,14 +1454,10 @@ final class DisplayView: NSView {
         return .copy
     }
 
-    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        draggingEntered(sender)
-    }
-
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         // Readiness can change after the drag entered. Never animate a
         // successful drop when its owner will reject the import.
-        guard draggingEntered(sender) == .copy else { return false }
+        guard dropOperation(sender) == .copy else { return false }
         let ipsws = dropped(sender, .ipsw)
         if sender.draggingSource == nil, let onDropIPSW, !ipsws.isEmpty {
             ipsws.forEach(onDropIPSW)
@@ -1473,8 +1474,6 @@ final class DisplayView: NSView {
         guard !ipas.isEmpty || !media.isEmpty else { return false }
         ipas.forEach { onDropIPA?($0) }   // AppInstaller queues them
         media.forEach { onDropMedia?($0) }
-        let omitted = dropped(sender, .unsupported)
-        if !omitted.isEmpty { onDropUnsupportedFiles?(omitted) }
         return true
     }
 
