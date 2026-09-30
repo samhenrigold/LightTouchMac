@@ -175,6 +175,22 @@ func pattern(_ profile: DeviceProfile, rotation: Int) -> CGImage {
       let level = color(snapshot, p, in: model.bounds.size)
       homeLevels.append(level.redComponent)
       precondition(level.redComponent < 0.35, "Home button washed out: \(rotation) \(level)")
+      // The glyph's rounded square reads as a light ring on the black cap (K48's and N45's steel glyph vanished).
+      if rotation == 0 {
+        let rep = NSBitmapImageRep(cgImage: snapshot)
+        var levels: [CGFloat] = []
+        for i in 0..<40 { for j in 0..<40 {
+          let q = CGPoint(x: rect.minX + rect.width * (CGFloat(i) + 0.5) / 40, y: rect.minY + rect.height * (CGFloat(j) + 0.5) / 40)
+          guard hypot(q.x - rect.midX, q.y - rect.midY) < rect.width * 0.4 else { continue }
+          var px = [Int](repeating: 0, count: 4)
+          rep.getPixel(&px, atX: Int(q.x / model.bounds.width * CGFloat(rep.pixelsWide)), y: Int((1 - q.y / model.bounds.height) * CGFloat(rep.pixelsHigh)))
+          levels.append((0.2126 * CGFloat(px[0]) + 0.7152 * CGFloat(px[1]) + 0.0722 * CGFloat(px[2])) / 255)
+        } }
+        levels.sort()
+        let cap = levels[levels.count / 2], glyph = levels.last!
+        print("\(name): Home glyph \(glyph) on cap \(cap)")
+        precondition(glyph - cap > 0.25, "Home glyph barely visible: \(glyph) on \(cap)")
+      }
     }
    }
   }
