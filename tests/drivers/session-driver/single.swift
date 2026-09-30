@@ -344,22 +344,24 @@ struct SingleConfig: Decodable {
     }
     static func appleIDUp(_ d: Device) -> Bool { kind(fingerprint(d)) == "apple id" }
 
-    /// A Setup page's fingerprint: the white fraction of six boxes (the two button columns and the gap between them,
-    /// a strip left of the centre art, the iPad outline's left edge, the centre), measured on 5.0 beta 1 to 5.1.1.
+    /// A Setup page's fingerprint: the white fraction of seven boxes (the two button columns and the gap between them,
+    /// a strip left of the centre art, the iPad outline's left edge, the centre, the left list column), measured on
+    /// 5.0 beta 1 to 5.1.1.
     static let printBoxes: [Box] = [(795, 170, 830, 600), (860, 170, 895, 600), (840, 170, 852, 600),
-                                    (180, 300, 230, 450), (255, 300, 285, 450), (330, 300, 560, 450)]
+                                    (180, 300, 230, 450), (255, 300, 285, 450), (330, 300, 560, 450), (100, 150, 135, 700)]
     static func fingerprint(_ d: Device) -> [Double] { printBoxes.map { whiteFraction(d, $0) } }
 
     /// Which kind of Setup page a fingerprint is: "list" (language, country), "location", "wi-fi", "set up",
     /// "apple id", "diagnostics", "thank you"; nil for anything else (Terms, a page mid-transition, a dark panel).
     static func kind(_ f: [Double]) -> String? {
-        guard f.count == 6 else { return nil }
-        let (b1, b2, gap, left, frame, mid) = (f[0], f[1], f[2], f[3], f[4], f[5])
+        guard f.count == 7 else { return nil }
+        let (b1, b2, gap, left, frame, mid, list) = (f[0], f[1], f[2], f[3], f[4], f[5], f[6])
         if b1 > 0.85, b2 > 0.85, gap < 0.2, frame < 0.1 { return "apple id" }
         if b1 > 0.85, b2 > 0.85, gap > 0.9, left < 0.1, frame > 0.9, mid < 0.1 { return "set up" }
         if b1 > 0.85, gap > 0.7, left > 0.8, frame > 0.9, mid > 0.8 { return "list" }
         if b1 > 0.85, b2 < 0.1, gap > 0.85 { return "location" }
         if b1 < 0.1, b2 < 0.1, left > 0.9, frame > 0.15, frame < 0.45 { return "diagnostics" }
+        if b1 < 0.1, b2 < 0.1, left < 0.2, frame < 0.1, mid < 0.1, list > 0.9 { return "diagnostics" }   // 5.0 beta 1
         if b1 < 0.1, b2 > 0.7 { return "thank you" }
         if b1 < 0.1, b2 < 0.1, gap < 0.1, left > 0.15, left < 0.45, frame < 0.1, mid < 0.1 { return "wi-fi" }
         return nil
@@ -430,13 +432,13 @@ struct SingleConfig: Decodable {
         expect("a one-poll flash is not an answer: tapped again", r && taps == 2)
         // fingerprints measured off real Setup screenshots (9A5220p, 9A334, 9A405, 9B176, 9B206)
         let measured: [(String?, [Double])] = [
-            ("list", [0.97, 0.92, 0.83, 0.92, 1.0, 0.95]), ("list", [0.98, 0.92, 0.83, 0.92, 1.0, 0.96]),
-            ("location", [0.97, 0.0, 0.95, 0.05, 0.0, 0.34]), ("wi-fi", [0.0, 0.0, 0.0, 0.28, 0.0, 0.0]),
-            ("set up", [0.93, 0.92, 0.99, 0.0, 1.0, 0.0]), ("set up", [0.94, 0.92, 0.99, 0.0, 1.0, 0.0]),
-            ("apple id", [0.92, 0.92, 0.0, 0.07, 0.0, 0.09]), ("apple id", [0.92, 0.92, 0.0, 0.04, 0.0, 0.1]),
-            ("diagnostics", [0.0, 0.0, 0.0, 1.0, 0.27, 0.01]), ("diagnostics", [0.0, 0.0, 0.0, 1.0, 0.29, 0.0]),
-            ("thank you", [0.0, 0.83, 0.17, 0.05, 0.0, 0.18]),
-            (nil, [0.0, 0.0, 0.0, 0.0, 0.0, 0.04]), (nil, [0.78, 0.69, 0.86, 1.0, 1.0, 0.74])]
+            ("list", [0.97, 0.92, 0.83, 0.92, 1.0, 0.95, 0.8]), ("list", [0.98, 0.92, 0.83, 0.92, 1.0, 0.96, 0.79]),
+            ("location", [0.97, 0.0, 0.95, 0.05, 0.0, 0.34, 0.0]), ("wi-fi", [0.0, 0.0, 0.0, 0.28, 0.0, 0.0, 0.75]),
+            ("set up", [0.93, 0.92, 0.99, 0.0, 1.0, 0.0, 0.0]), ("set up", [0.94, 0.92, 0.99, 0.0, 1.0, 0.0, 0.0]),
+            ("apple id", [0.92, 0.92, 0.0, 0.07, 0.0, 0.09, 0.0]), ("apple id", [0.92, 0.92, 0.0, 0.04, 0.0, 0.1, 0.0]),
+            ("diagnostics", [0.0, 0.0, 0.0, 1.0, 0.27, 0.01, 0.0]), ("diagnostics", [0.0, 0.0, 0.0, 1.0, 0.29, 0.0, 0.0]),
+            ("diagnostics", [0.0, 0.0, 0.0, 0.12, 0.0, 0.0, 0.95]), ("thank you", [0.0, 0.83, 0.17, 0.05, 0.0, 0.18, 0.0]),
+            (nil, [0.0, 0.0, 0.0, 0.0, 0.0, 0.04, 0.0]), (nil, [0.78, 0.69, 0.86, 1.0, 1.0, 0.74, 0.92])]
         for (want, f) in measured { expect("page \(want ?? "unrecognised") from \(f)", kind(f) == want) }
         return ok
     }
@@ -486,11 +488,18 @@ struct SingleConfig: Decodable {
                 let pageTitle = await settled(d, title)
                 let isAlert = t.box == alert
                 let ref = isAlert ? nil : await settled(d, t.box)
-                let answered = { isAlert ? alertUp(d) : region(d, t.box) != ref }
+                // An alert tap is also answered when the page itself moves on: 5.0 beta 1's "Skip this step" goes
+                // straight to the next page with no confirmation; the page's remaining (alert) taps are then moot.
+                let answered = { isAlert ? alertUp(d) || region(d, title) != pageTitle : region(d, t.box) != ref }
                 d.screenshot("setup-\(name.replacingOccurrences(of: " ", with: "-"))-\(i)")
+                // A choice the emulator does not care about (Diagnostics' "Don't Send") is best-effort: 5.0 beta 1
+                // lays that page out differently, and its Next still has to be taken.
+                let optional = name == "diagnostics" && t.box != title
                 // behind a modal alert a second tap does nothing, so an alert tap is retried sooner
-                let ok = await tapUntil(budget: isAlert ? 60 : budget, every: 20, tap: { await tap(d, t.x, t.y, hold: t.hold) },
+                let ok = await tapUntil(budget: isAlert || optional ? 60 : budget, every: 20, tap: { await tap(d, t.x, t.y, hold: t.hold) },
                                         answered: answered)
+                if isAlert, ok, !alertUp(d) { lastTitle = pageTitle; walked.append(name + " (no alert)"); continue page }
+                if !ok, optional { continue }
                 // 5.0 beta 5 has no Terms page: its Agree tap (an empty corner elsewhere) raises no alert
                 if !ok, name == "terms", i == 0 { walked.append("terms (absent)"); continue page }
                 guard ok else { return (false, "the \(name) page did not answer tap \(i + 1) in \(Int(isAlert ? 60 : budget)) s (after \(walked.joined(separator: ", ")))") }
