@@ -267,6 +267,10 @@ fi
 LICENSES="$APP/Contents/Resources/licenses"
 mkdir -p "$LICENSES/qemu"
 cp "$QEMU/LICENSE" "$QEMU/COPYING" "$QEMU/COPYING.LIB" "$LICENSES/qemu/"
+if [ -f "$QEMU/hw/arm/powervr/LICENSE.md" ]; then
+    mkdir -p "$LICENSES/powervr"
+    cp "$QEMU/hw/arm/powervr/LICENSE.md" "$QEMU/hw/arm/powervr/README.md" "$LICENSES/powervr/"
+fi
 QEMU_BRANCH="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["qemu-ios"]["branch"])' "$SRC/build-support/sources.json")"
 printf '%s\n' "QEMU $(cat "$QEMU/VERSION") for iOS devices (qemu-ios): https://github.com/samhenrigold/qemu-ios, branch $QEMU_BRANCH." \
     'The public commit this build matches is published with this Light Touch release.' \
