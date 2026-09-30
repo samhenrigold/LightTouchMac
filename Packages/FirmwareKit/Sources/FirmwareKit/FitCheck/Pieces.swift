@@ -14,15 +14,15 @@ extension FitCheck {
 
     // MARK: it_msmquiet
 
-    /// The keys MobileStorageMounter's "USB device is not supported" notice uses (contrib/it-msmquiet keys[]:
-    /// 3.2.x UNSUPPORTED_FAILURE, 4.x UNSUPPORTED_FAILURE_BODY) and the calls it_msmquiet interposes.
+    /// The keys the "USB device is not supported" notice uses (contrib/it-msmquiet keys[]: 3.2.x UNSUPPORTED_FAILURE,
+    /// 4.x UNSUPPORTED_FAILURE_BODY; 5.x's USBDeviceArbitrator the 4.x keys) and the calls it_msmquiet interposes.
     static let msmKeys = ["UNSUPPORTED_FAILURE", "UNSUPPORTED_FAILURE_BODY"]
     static let msmCalls = ["_CFUserNotificationDisplayNotice", "_CFUserNotificationCreate"]
 
     /// it_msmquiet fits when the mounter (`program`, the stock job's) raises the notice it recognises: its binary
     /// names one of the notice's keys and imports one of the calls it interposes, and the dylib loads in it.
     public static func msmQuiet(_ fw: Firmware, program: String, dylib: Data) -> Fit {
-        let piece = "it_msmquiet (storage_mounter's USB \"not supported\" notice)", name = (program as NSString).lastPathComponent
+        let name = (program as NSString).lastPathComponent, piece = "it_msmquiet (\(name)'s USB \"not supported\" notice)"
         guard let bin = fw.data(program), let m = MachO32.slice(bin, arch: fw.arch)?.image else {
             return Fit(piece, fits: false, "no \(program) on this firmware")
         }

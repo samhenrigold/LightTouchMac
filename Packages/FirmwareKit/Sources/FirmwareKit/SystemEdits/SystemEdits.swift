@@ -83,6 +83,10 @@ public enum SystemEdits {
     static let daemons = "System/Library/LaunchDaemons"
     static let springBoardJob = daemons + "/com.apple.SpringBoard.plist"
     static let msmJob = daemons + "/com.apple.mobile.storage_mounter.plist"
+    /// The stock jobs that raise the USB "not supported" notice for a device nothing claims (the emulated keyboard):
+    /// MobileStorageMounter through 4.x; 5.x moved it to USBDeviceArbitrator, LaunchBuddy's catch-all for IOUSBDevice.
+    static let noticeJobs = [(msmJob, "com.apple.mobile.storage_mounter"),
+                             (daemons + "/com.apple.mobile.usb_device_arbitrator.plist", "com.apple.mobile.usb_device_arbitrator")]
     static let btJob = daemons + "/com.apple.BTServer.plist"
     static let installdJob = daemons + "/com.apple.mobile.installd.plist"
     static let appsyncPath = "usr/lib/libappsync.dylib", appsyncLauncherPath = "usr/libexec/appsync-launch"
@@ -166,8 +170,14 @@ public enum SystemEdits {
             _ = fw.precedent
             // it_msmquiet only where the mounter raises the notice it recognises; else left out, job untouched
             let msm = Helpers.tools[3]
-            let quiet = try fit.check(FitCheck.msmQuiet(fw, program: try stockProgram(m, msmJob, label: "com.apple.mobile.storage_mounter"),
-                                                        dylib: Data(contentsOf: try helper(msm.name))), required: false)
+            var quietJobs: [(String, String)] = []
+            for (job, label) in noticeJobs where job == msmJob || fm.fileExists(atPath: at(job).path) {
+                if try fit.check(FitCheck.msmQuiet(fw, program: try stockProgram(m, job, label: label),
+                                                   dylib: Data(contentsOf: try helper(msm.name))), required: false) {
+                    quietJobs.append((job, label))
+                }
+            }
+            let quiet = !quietJobs.isEmpty
             if !quiet { tools.removeAll { $0.name == msm.name } }
             for f in FitCheck.prefs(fw, FitCheck.itPrefs) { try fit.check(f, required: false, outcome: "kept: it_prefs skips the key at boot") }
             if o.usbNet { try fit.check(FitCheck.usbEthernet(fw, path: usbEthPath), required: false, outcome: "kept: the link stays down and en1 unpinned") }
@@ -210,9 +220,9 @@ public enum SystemEdits {
                 try put(Data(contentsOf: try helper(t.name)), at(t.path), mode: t.mode)
             }
             for j in jobs { try put(Data(contentsOf: try helper(j)), at(daemons + "/" + j), mode: 0o644) }
-            if quiet {
-                try rewritePlist(at(msmJob)) { d in
-                    guard d["Label"] as? String == "com.apple.mobile.storage_mounter" else { throw FirmwareError(.unsupported, "\(msmJob): not storage_mounter's job") }
+            for (job, label) in quietJobs {
+                try rewritePlist(at(job)) { d in
+                    guard d["Label"] as? String == label else { throw FirmwareError(.unsupported, "\(job): not \(label)'s job") }
                     dict(d, "EnvironmentVariables")["DYLD_INSERT_LIBRARIES"] = "/" + msm.path
                 }
             }
