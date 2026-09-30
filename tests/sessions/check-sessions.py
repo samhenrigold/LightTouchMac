@@ -165,6 +165,7 @@ def main():
     ap.add_argument("--contrib", type=Path, default=sources.path("qemu-ios") / "contrib")
     ap.add_argument("--time-zone", default="Asia/Tokyo")
     ap.add_argument("--helper")
+    ap.add_argument("--helper-requirement", default=TEAM_REQ, help="explicit signing requirement for a supplied test helper (default: project team)")
     ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(sources.qemu_build() / "libqemu-arm.dylib")))
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
     ap.add_argument("--usbmuxd", default=str(sources.path("usbmuxd") / "src/usbmuxd"))
@@ -179,6 +180,14 @@ def main():
     ap.add_argument("--ipad-itpack", type=Path, help="boot the iPad with the app's offer from this armv7.itpack and check "
                     "the loader's report and the agent (foreground app, lock state, launch)")
     args = ap.parse_args()
+    if args.helper_requirement != TEAM_REQ and not args.helper:
+        ap.error("--helper-requirement needs an explicitly supplied --helper")
+    if args.helper and not os.access(args.helper, os.X_OK):
+        ap.error("test helper is not executable: " + args.helper)
+    if not Path(args.dylib).is_file():
+        ap.error("emulator dylib is missing: " + args.dylib)
+    if not args.ipa.is_file():
+        ap.error("test IPA is missing: " + str(args.ipa))
     if args.single and not args.board:
         ap.error("--single needs --board")
     if not args.guest and not args.ipad_device and not args.single:
@@ -192,7 +201,7 @@ def main():
     base_dir = args.single or (args.ipod_device if args.guest else args.ipad_device)
     base_before = tree(base_dir)
     nand_current = args.files / "nand-current"
-    cfg = {"helper": str(helper), "requirement": TEAM_REQ, "usbmuxd": args.usbmuxd, "ipa": str(args.ipa),
+    cfg = {"helper": str(helper), "requirement": args.helper_requirement, "usbmuxd": args.usbmuxd, "ipa": str(args.ipa),
            "bundleID": args.bundle_id, "work": str(work), "files": str(args.files),
            "ipodNAND": str(args.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(args.single if args.board == "ipad" else args.ipad_device or "")}
