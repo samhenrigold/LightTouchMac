@@ -68,7 +68,7 @@ def display_asleep():
 
 # Put windows on screen. check-model and check-model-startup render headless and run their windowed
 # halves only with LTM_DISPLAY_CHECKS=1 themselves.
-NEEDS_DISPLAY = ('check-canvas-capture.py',)
+NEEDS_DISPLAY = ('check-canvas-capture.py', 'check-log-view.py')   # put a window on screen: LTM_DISPLAY_CHECKS=1
 
 
 def module_cache_shims(out):
