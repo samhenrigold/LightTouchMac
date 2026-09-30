@@ -49,7 +49,9 @@ final class K48Board: Board {
     /// iboot: iBoot.bin, nor.bin, gid-blobs.bin; kboot: kboot.bin.
     func bootFiles(_ c: Recipe.Context) throws {
         let e = c.e, ipsw = c.ipsw, bootArgs = KBoot.defaultBootArgs
-        try FitCheck.checkBootArgs(c.fit, kernel: try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped), args: bootArgs)
+        let kernel = try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped)
+        try FitCheck.checkBootArgs(c.fit, kernel: kernel, args: bootArgs)
+        try c.fit.check(FitCheck.deviceTreeProperty(kernel, "arm-io/usb-complex", "hsic-enabled"), required: false)   // both chains add it
         if iboot {
             // The real iBoot chain: catalog GID records, a re-encrypted hsic-enabled DeviceTree, the pattern-patched
             // iBoot, and the packed NOR (ipad1_device build's "iBoot + NOR" step; ipad1_gid + ipad1_iboot).

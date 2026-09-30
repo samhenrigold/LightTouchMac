@@ -350,7 +350,13 @@ enum FitFixture {
             let quiet = FitCheck.Log()
             try FitCheck.checkBootArgs(quiet, kernel: k, args: args)   // an unread cs_enforcement_disable does not fail
             let hsic = args == pair ? nil : hsic
-            if let hsic { #expect(f.first { $0.piece == "boot-arg enable-hsic" }?.proof == (hsic ? "read by the kernel" : "not read by this kernel: no effect here")) }
+            if let hsic {
+                #expect(f.first { $0.piece == "boot-arg enable-hsic" }?.proof == (hsic ? "read by the kernel" : "not read by this kernel: no effect here"))
+                // the DeviceTree property: 4.2.1 and 5.1.1 read it, 3.2.x do not
+                let dt = FitCheck.deviceTreeProperty(k, "arm-io/usb-complex", "hsic-enabled")
+                #expect(dt.fits)
+                #expect(dt.proof == ((u.path.contains("/172e") || u.path.contains("/68b6")) ? "not read by this kernel: no effect here" : "read by the kernel"), "\(u.path)")
+            }
             var b = [UInt8](k)
             while let at = b.firstRange(of: Array("\0amfi_allow_any_signature\0".utf8)) { b.replaceSubrange(at, with: Array("\0amfi_allow_any_signaturX\0".utf8)) }
             let log = FitCheck.Log()
@@ -378,6 +384,7 @@ enum FitFixture {
                 try board.bootFiles(c)
                 #expect(c.fit.fits.filter { FitCheck.amfiArgs.contains(String($0.piece.dropFirst("boot-arg ".count))) }.count == 2, "\(id): \(c.fit.fits)")
                 #expect(c.fit.fits.contains { $0.piece == "boot-arg amfi_allow_any_signature" && $0.fits })
+                if id.hasPrefix("k48") { #expect(c.fit.fits.contains { $0.piece == "DeviceTree arm-io/usb-complex/hsic-enabled" }) }
             }
         }
     }

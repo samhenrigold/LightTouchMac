@@ -146,6 +146,14 @@ extension FitCheck {
         }
     }
 
+    /// A DeviceTree property the boot chain adds (hsic-enabled on arm-io/usb-complex): read when the kernel names it,
+    /// else inert there. Recorded, never required: which kernels need it is what the record shows.
+    public static func deviceTreeProperty(_ kernel: Data?, _ node: String, _ name: String) -> Fit {
+        let piece = "DeviceTree \(node)/\(name)"
+        guard let kernel else { return Fit(piece, fits: false, "no decrypted kernelcache to check it against") }
+        return contains(kernel, cString(name)) ? Fit(piece, fits: true, "read by the kernel") : Fit(piece, fits: true, "not read by this kernel: no effect here")
+    }
+
     /// bootArgs, recorded in `log`: amfi_allow_any_signature is required; an unread cs_enforcement_disable is a warning.
     static func checkBootArgs(_ log: Log, kernel: Data?, args: String) throws {
         for f in bootArgs(kernel, args) {
