@@ -173,6 +173,21 @@ func expectFailure(_ what: String, _ body: () async throws -> Void) async {
   try await legacy.respring(); precondition(link.spawns.last == ["/bin/launchctl", "stop", "com.apple.SpringBoard"])
   try await legacy.reconnectManagement(); precondition(link.spawns.last == ["/bin/launchctl", "stop", "com.apple.mobile.lockdown"])
 
+  // Time zone: 4.x locationd's record of its first external zone is cleared with locationd unloaded, the rest
+  // of its cache kept; no record, no cache: nothing touched (smoke #58).
+  let tzCache = "/var/root/Library/Caches/locationd/cache.plist", tzJob = "/System/Library/LaunchDaemons/com.apple.locationd.plist"
+  link.files[tzCache] = try PropertyListSerialization.data(fromPropertyList: ["PreviousTimeZone": "America/New_York", "TimeZoneBorderDistance": 12.5], format: .binary, options: 0)
+  let spawnsBefore = link.spawns.count, opsBefore = link.ops.count
+  check(try await legacy.forgetExternalTimeZone(), "a record to clear")
+  precondition(Array(link.spawns.dropFirst(spawnsBefore)) == [["/bin/launchctl", "unload", tzJob], ["/bin/launchctl", "load", tzJob]], "\(link.spawns)")
+  let tzOps = Array(link.ops.dropFirst(opsBefore))
+  precondition(tzOps.firstIndex(of: "put")! > tzOps.firstIndex(of: "spawn")! && tzOps.lastIndex(of: "spawn")! > tzOps.firstIndex(of: "put")!, "written while locationd is unloaded: \(tzOps)")
+  let cleared = try PropertyListSerialization.propertyList(from: link.files[tzCache]!, format: nil) as! [String: Any]
+  precondition(cleared["PreviousTimeZone"] == nil && cleared["TimeZoneBorderDistance"] as? Double == 12.5, "\(cleared)")
+  check(try await legacy.forgetExternalTimeZone() == false && link.spawns.count == spawnsBefore + 2, "no record: locationd left running")
+  link.files[tzCache] = nil
+  check(try await legacy.forgetExternalTimeZone() == false && link.spawns.count == spawnsBefore + 2, "no cache: nothing")
+
   // Halt: submitted with deadline 0; absent and stale agents.
   check(await agent.requestHalt() && link.halts == 1)
   link.agent = 0
@@ -192,7 +207,7 @@ func expectFailure(_ what: String, _ body: () async throws -> Void) async {
   precondition(link.cancelled.count == 1)
   precondition(GuestAgentCapabilities.parse("it_agent v1\n") == GuestAgentCapabilities(version: 1, ops: []))
   precondition(GuestAgentCapabilities.parse("nonsense") == nil)
-  print("PASS: v2 typed ops and cached capabilities, v1 exec fallback with quoting, media commit (package, upload, cleanup), launch/lock, component upgrade (job path, no downgrade, SpringBoard reload even after a failed write, it-pbd, packaged no-op), halt, stale/absent, cancellation")
+  print("PASS: v2 typed ops and cached capabilities, v1 exec fallback with quoting, media commit (package, upload, cleanup), launch/lock, component upgrade (job path, no downgrade, SpringBoard reload even after a failed write, it-pbd, packaged no-op), locationd's first-zone record cleared, halt, stale/absent, cancellation")
  }
 }
 '''

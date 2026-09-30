@@ -4,7 +4,7 @@
  *
  * Point the device's lockdown TimeZone at the given zone — the same call
  * iTunes used; the guest's lockdownd rewrites /var/db/timezone/localtime and
- * SpringBoard follows live.
+ * SpringBoard follows live, the lock screen once refresh_clocks pokes it.
  *
  * A separate process ON PURPOSE, not a call inside LightTouchMac:
  * lockdownd_set_value invoked in-process against iOS 3.1.3's lockdownd
@@ -25,8 +25,10 @@
  * (the zone re-sync after a pin must not jump the guest back).
  *
  * Reads before writing, so a matching zone costs no set. Prints the zone in
- * effect; exits 0 only when it matches the request. Finds the device via
- * USBMUXD_SOCKET_ADDRESS, like every other bundled tool.
+ * effect; exits 0 only when it matches the request, 4 when lockdownd took the
+ * write but the guest kept its own zone (4.x's locationd applies only the
+ * first external zone: GuestServices.forgetExternalTimeZone). Finds the device
+ * via USBMUXD_SOCKET_ADDRESS, like every other bundled tool.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,6 +167,53 @@ static int finish_activation(lockdownd_client_t cli)
     return ok ? 0 : 4;
 }
 
+/* The lock screen's clock keeps the zone its formatters were built with. A
+ * TimeZone write (lockdownd -> locationd, or timed on 5.x: the localtime link,
+ * then SignificantTimeChangeNotification) refreshes the status bar, but
+ * SpringBoard rebuilds the lock clock only on a locale change
+ * (-[SpringBoard localeChanged] -> -[SBAwayController updateClockFormat],
+ * 4.2.1): on a first boot the lock screen, drawn before the write, stayed in
+ * the restore's Pacific zone (smoke #58). Writing Uses24HourClock back with the
+ * value it holds makes lockdownd post AppleTimePreferencesChangedNotification,
+ * as Settings' 24-Hour Time switch does, and the lock clock redraws in the new
+ * zone. No value changes; a lockdownd without the key is left alone. */
+static void refresh_clocks(lockdownd_client_t cli)
+{
+    int h24 = bool_value(cli, "Uses24HourClock");
+    if (h24 >= 0 && lockdownd_set_value(cli, NULL, "Uses24HourClock", plist_new_bool(h24)) != LOCKDOWN_E_SUCCESS)
+        fprintf(stderr, "clock refresh failed\n");
+}
+
+/* The zone in effect after asking for `want` (caller frees). lockdownd hands
+ * the zone to locationd/timed, which relinks /var/db/timezone/localtime a
+ * moment later, so a changed zone is polled until it reads back; the clocks
+ * are refreshed only once it has, and only when it changed. */
+static char *set_zone(lockdownd_client_t cli, const char *want)
+{
+    char *zone = current_zone(cli);
+    if (zone && strcmp(zone, want) == 0)
+        return zone;
+    free(zone);
+    /* set_value takes ownership of the plist and frees it; freeing it
+     * here too is the double-free that first exposed all of this. */
+    lockdownd_error_t e = lockdownd_set_value(cli, NULL, "TimeZone", plist_new_string(want));
+    if (e != LOCKDOWN_E_SUCCESS) {
+        fprintf(stderr, "SetValue failed: %d\n", e);
+        return NULL;
+    }
+    for (int i = 0;; i++) {
+        zone = current_zone(cli);
+        if (zone && strcmp(zone, want) == 0) {
+            refresh_clocks(cli);
+            return zone;
+        }
+        if (i == 19)
+            return zone;
+        free(zone);
+        usleep(250000);
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2 || argc > 3) {
@@ -212,27 +261,11 @@ int main(int argc, char **argv)
         }
     }
 
-    char *zone = current_zone(cli);
-    if (!zone || strcmp(zone, argv[1]) != 0) {
-        /* set_value takes ownership of the plist and frees it; freeing it
-         * here too is the double-free that first exposed all of this. */
-        lockdownd_error_t e = lockdownd_set_value(cli, NULL, "TimeZone",
-                                                  plist_new_string(argv[1]));
-        if (e != LOCKDOWN_E_SUCCESS) {
-            fprintf(stderr, "SetValue failed: %d\n", e);
-            free(zone);
-            lockdownd_client_free(cli);
-            idevice_free(dev);
-            return 1;
-        }
-        free(zone);
-        zone = current_zone(cli);
-    }
-
+    char *zone = set_zone(cli, argv[1]);
     printf("%s\n", zone ? zone : "(unset)");
-    int ok = zone && strcmp(zone, argv[1]) == 0;
+    int status = !zone ? 1 : strcmp(zone, argv[1]) ? 4 : 0;
     free(zone);
     lockdownd_client_free(cli);
     idevice_free(dev);
-    return ok ? 0 : 1;
+    return status;
 }

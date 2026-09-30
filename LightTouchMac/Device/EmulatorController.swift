@@ -629,8 +629,11 @@ final class EmulatorController {
     /// first answers after this boot, and again whenever the host's zone
     /// changes (travel). Set through lockdown's TimeZone value — lockdownd
     /// rewrites /var/db/timezone/localtime and SpringBoard follows live, so
-    /// no respring. The guest's clock itself is UTC from the RTC model; only
-    /// the zone needs the host's help.
+    /// no respring (the lock screen's clock too: lockdown-tz refreshes it).
+    /// The link persists, so later boots start in the zone; a fresh device's
+    /// first lock screen is drawn before lockdown answers and shows the
+    /// restore's Pacific zone until this lands (smoke #58). The guest's clock
+    /// itself is UTC from the RTC model; only the zone needs the host's help.
     private func startTimeZoneSync() {
         NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange,
                                                object: nil, queue: nil) { [weak self] _ in
@@ -641,14 +644,20 @@ final class EmulatorController {
 
     /// Wait out the boot (services come up well after lockdown answers), then
     /// set until one attempt sticks — a transient "Invalid service" right
-    /// after boot just means the next 5 s tick tries again. Idempotent, so an
-    /// overlapping run is harmless.
+    /// after boot just means the next 5 s tick tries again. A zone the device
+    /// keeps whatever lockdown says stays until the Mac's zone changes again.
+    /// Idempotent, so an overlapping run is harmless.
     private func syncTimeZoneWhenReady() async {
         while !Task.isCancelled {
             guard !shuttingDown, !isDead, !isPoweredOff else { return }
-            if state == .running, !preparingDevice, canManageApps, await deviceReady(),
-               (try? await services.setTimeZone(TimeZone.current.identifier)) != nil {
-                return
+            if state == .running, !preparingDevice, canManageApps, await deviceReady() {
+                do {
+                    try await services.setTimeZone(TimeZone.current.identifier, guest: guest)
+                    return
+                } catch DeviceToolsError.zoneKept(let zone) {
+                    logEvent("timezone: the device keeps \(zone)")
+                    return
+                } catch {}
             }
             try? await Task.sleep(for: .seconds(5))
         }
