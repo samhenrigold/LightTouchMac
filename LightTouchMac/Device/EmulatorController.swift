@@ -1785,7 +1785,7 @@ final class EmulatorController {
 
     private func waitForSpringBoard() async throws {
         guard hasSpringBoardServices else { return }
-        let deadline = ContinuousClock.now + .seconds(45)
+        let deadline = ContinuousClock.now + .seconds(45 * DeviceProfile.hostSlowdown)
         while ContinuousClock.now < deadline {
             try Task.checkCancellation()
             if (try? await services.homeScreenOrder()) != nil { return }

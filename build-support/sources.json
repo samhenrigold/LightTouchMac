@@ -4,7 +4,7 @@
   "qemu-ios": {
     "repository": "https://github.com/samhenrigold/qemu-ios",
     "branch": "ipad1",
-    "commit": "c9bcca8cb329e4350cdc54466d279c695261d57b",
+    "commit": "0a7cba1e65383a774dbf6e3b2fab26233afcf194",
     "path": "~/Developer/qemu-ios-ipad1",
     "build_dir": "build-w1-native",
     "provides": "contrib/export-guest-artifacts.sh (guest tools, tables, entitlements, headers, dylib); build_dir is the development build (the helper's dylib for Xcode and the checks), never the release's --qemu-build"

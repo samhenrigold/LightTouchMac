@@ -48,8 +48,16 @@ if otool -L "$APP_BIN" | grep -q '\.debug\.dylib'; then
 fi
 
 MINOS="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
+# Every host Mach-O carries the app's slices (arm64, or arm64 + x86_64 from build-release.py --universal):
+# helpers built here are compiled for them, and every check requires them.
+ARCH_FLAGS=()
+CHECK_ARCHS=()
+for arch in $(lipo -archs "$APP_BIN"); do
+    ARCH_FLAGS+=(-arch "$arch")
+    CHECK_ARCHS+=(--arch "$arch")
+done
 # Check the emulator closure before modifying the app. The app is checked after embedding.
-python3 "$CHECK" --no-weak-imports --minos "$MINOS" "$DYLIB"
+python3 "$CHECK" --no-weak-imports --minos "$MINOS" "${CHECK_ARCHS[@]}" "$DYLIB"
 
 FRAMEWORKS="$APP/Contents/Frameworks"
 mkdir -p "$FRAMEWORKS"
@@ -67,7 +75,7 @@ copy_with_deps() {
     case "$COPIED" in *" $base "*) return ;; esac
     COPIED="$COPIED$base "
 
-    python3 "$CHECK" --no-weak-imports --minos "$MINOS" "$src"
+    python3 "$CHECK" --no-weak-imports --minos "$MINOS" "${CHECK_ARCHS[@]}" "$src"
     local dst="$FRAMEWORKS/$base"
     if [ "$src" != "$dst" ]; then cp -f "$src" "$dst"; chmod u+w "$dst"; fi
     install_name_tool -id "@rpath/$base" "$dst"
@@ -102,12 +110,12 @@ APP_BIN="$APP/Contents/MacOS/$APP_EXECUTABLE"
 # closure is embedded above; its build-tree rpath is dropped below.
 DEVICE_HELPER="$APP/Contents/MacOS/LightTouchDevice"
 [ -f "$DEVICE_HELPER" ] || { echo "missing $DEVICE_HELPER; build the LightTouchMac scheme (it embeds the helper)" >&2; exit 1; }
-python3 "$CHECK" --minos "$MINOS" "$DEVICE_HELPER"   # Swift binaries weak-import their FORCE_LOAD markers
+python3 "$CHECK" --minos "$MINOS" "${CHECK_ARCHS[@]}" "$DEVICE_HELPER"   # Swift binaries weak-import their FORCE_LOAD markers
 # The firmware preparer (Packages/FirmwareKit's CLI), when built: hardened
 # runtime only, no entitlements. Signed with the other Contents/MacOS tools.
 FIRMWAREKIT=()
 if [ -n "${LTM_FIRMWAREKIT:-}" ]; then
-    python3 "$CHECK" --minos "$MINOS" "$LTM_FIRMWAREKIT"
+    python3 "$CHECK" --minos "$MINOS" "${CHECK_ARCHS[@]}" "$LTM_FIRMWAREKIT"
     cp -f "$LTM_FIRMWAREKIT" "$APP/Contents/MacOS/firmwarekit"
     chmod u+rwx "$APP/Contents/MacOS/firmwarekit"
     FIRMWAREKIT=("$APP/Contents/MacOS/firmwarekit")
@@ -131,7 +139,7 @@ copy_tool() {
     [ -f "$src" ] || { echo "missing required tool: $src" >&2; exit 1; }
     dst="$TOOLS/$base"
     if [ "${2:-host}" = host ] && file "$src" | grep -q Mach-O; then
-        python3 "$CHECK" --no-weak-imports --minos "$MINOS" "$src"
+        python3 "$CHECK" --no-weak-imports --minos "$MINOS" "${CHECK_ARCHS[@]}" "$src"
         dst="$APP/Contents/MacOS/$base"
         HOST_TOOLS+=("$dst")
         # Remove the previous packaging layout's copy on incremental runs.
@@ -155,7 +163,7 @@ copy_tool() {
 
 # The dlopened device libraries (IMobileDevice.swift); no libimobiledevice command-line tool ships.
 for stem in libimobiledevice-1.0 libplist-2.0; do
-    python3 "$CHECK" --no-weak-imports --minos "$MINOS" "$DEPS/lib/$stem.dylib"
+    python3 "$CHECK" --no-weak-imports --minos "$MINOS" "${CHECK_ARCHS[@]}" "$DEPS/lib/$stem.dylib"
     copy_with_deps "$DEPS/lib/$stem.dylib"
     canonical="$(python3 -c 'import os,sys; print(os.path.basename(os.path.realpath(sys.argv[1])))' "$DEPS/lib/$stem.dylib")"
     if [ "$canonical" != "$stem.dylib" ]; then
@@ -163,11 +171,11 @@ for stem in libimobiledevice-1.0 libplist-2.0; do
     fi
 done
 TZ_BIN="$WORK/lockdown-tz"
-cc -O2 -mmacosx-version-min="$MINOS" -o "$TZ_BIN" "$SRC/scripts/lockdown-tz.c" \
+cc -O2 "${ARCH_FLAGS[@]}" -mmacosx-version-min="$MINOS" -o "$TZ_BIN" "$SRC/scripts/lockdown-tz.c" \
    -I"$DEPS/include" -L"$DEPS/lib" -limobiledevice-1.0 -lplist-2.0
 copy_tool "$TZ_BIN"
 MC_BIN="$WORK/lockdown-mcinstall"
-cc -O2 -mmacosx-version-min="$MINOS" -o "$MC_BIN" "$SRC/scripts/lockdown-mcinstall.c" \
+cc -O2 "${ARCH_FLAGS[@]}" -mmacosx-version-min="$MINOS" -o "$MC_BIN" "$SRC/scripts/lockdown-mcinstall.c" \
    -I"$DEPS/include" -L"$DEPS/lib" -limobiledevice-1.0 -lplist-2.0
 copy_tool "$MC_BIN"
 copy_tool "${USBMUXD_BIN:-$(python3 "$SRC/scripts/sources.py" usbmuxd)/src/usbmuxd}"
@@ -220,7 +228,7 @@ elif [ ${#FIRMWAREKIT[@]} -gt 0 ]; then
     exit 1
 fi
 # Build directly from source; the old launcher app is no longer a dependency.
-cc -O2 -Wall -mmacosx-version-min="$MINOS" \
+cc -O2 -Wall "${ARCH_FLAGS[@]}" -mmacosx-version-min="$MINOS" \
     "$QEMU/contrib/macos-app/ipod-helper.c" -lz -o "$WORK/ipod-helper"
 copy_tool "$WORK/ipod-helper"
 
@@ -285,7 +293,7 @@ done
 # Check all host Mach-Os, including the app and its complete load closure.
 # Guest ARMv6 helpers are resources, not executable on macOS.
 echo "sealing…"
-python3 "$CHECK" --minos "$MINOS" --bundle "$APP" \
+python3 "$CHECK" --minos "$MINOS" "${CHECK_ARCHS[@]}" --bundle "$APP" \
     "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}
 
 # Ad-hoc signatures have no Team ID, so hardened library validation cannot

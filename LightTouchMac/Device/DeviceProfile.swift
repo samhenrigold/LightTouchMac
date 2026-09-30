@@ -52,7 +52,18 @@ nonisolated enum DeviceProfile: Equatable {
     /// (iPod) / 40 s (iPad) and lockdown ~40 s later; a first boot after an
     /// erase replays journals, rebuilds caches and re-enumerates USB for minutes.
     // ponytail: fixed per board; make it per firmware in the catalog if 4.x first boots need more.
-    var bootBudget: TimeInterval { self == .iPad1 ? 300 : 240 }
+    var bootBudget: TimeInterval { (self == .iPad1 ? 300 : 240) * Self.hostSlowdown }
+
+    /// Emulation on an Intel Mac (this app's x86_64 slice, native or under Rosetta) takes several times the
+    /// CPU time of Apple silicon for the same boot. 2026-09-30, iPod 3.1.3 to its Home screen: 28–34 s of
+    /// CPU on an M4 Max, 124 s for the x86_64 slice under Rosetta on it, 122–309 s to the first lit frame on
+    /// a 2018 Intel MacBook Pro. The boot's wall-clock budgets scale by it, or an Intel Mac's boot is
+    /// stopped while it's still starting.
+    #if arch(x86_64)
+    static let hostSlowdown: TimeInterval = 5
+    #else
+    static let hostSlowdown: TimeInterval = 1
+    #endif
 
     /// The iPod image carries our guest shell and agent; the stock iPad has none, nor has 1.x (smoke.md #31).
     var hasGuestTools: Bool { self == .iPodTouch2G }
