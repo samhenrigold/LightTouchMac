@@ -60,7 +60,34 @@ nonisolated final class Blocked: @unchecked Sendable {
   held.resume(.success(()));try await owner.value
   let next=try await gate.serialized {13}
   precondition(next==13)
-  print("PASS: timeout/cancellation balance, prompt queued cancellation, cancelled soft deadlines, gate reuse")
+  // A timed-out C operation can connect again after the caller has returned.
+  // Keep its endpoint unchanged, including when another device is queued.
+  let routed=Blocked()
+  let endpointA="UNIX:/tmp/ltm-deadline-device-a"
+  let endpointB="UNIX:/tmp/ltm-deadline-device-b"
+  let late=Task {
+   try await DeviceGate.shared.serialized(socket:endpointA) {
+    try await withDeadline(0.03,"late connection") {
+     _=routed.run()
+     precondition(String(cString:getenv("USBMUXD_SOCKET_ADDRESS"))==endpointA,
+                  "late C connection was routed to another device")
+     return 1
+    }
+   }
+  }
+  await Task.detached {routed.waitForEntry()}.value
+  do {_=try await late.value;preconditionFailure("missing timeout")} catch DeviceError.timedOut {}
+  do {
+   _=try await DeviceGate.shared.serialized(socket:endpointB) {99}
+   preconditionFailure("switched endpoint with live abandoned work")
+  } catch DeviceError.endpointBusy {}
+  precondition(String(cString:getenv("USBMUXD_SOCKET_ADDRESS"))==endpointA)
+  let same=try await DeviceGate.shared.serialized(socket:endpointA) {17}
+  precondition(same==17,"same-device recovery was blocked")
+  routed.release.signal();await drain()
+  let other=try await DeviceGate.shared.serialized(socket:endpointB) {23}
+  precondition(other==23 && String(cString:getenv("USBMUXD_SOCKET_ADDRESS"))==endpointB)
+  print("PASS: timeout/cancellation balance, prompt queued cancellation, cancelled soft deadlines, gate reuse, late-connect endpoint isolation")
  }
 }
 '''

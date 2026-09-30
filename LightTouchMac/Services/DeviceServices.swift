@@ -21,8 +21,9 @@
 //   2. One process-wide serial gate. setenv(USBMUXD_SOCKET_ADDRESS) is global
 //      and the guest serves ~one lockdown session, so all of this is one at a
 //      time — across devices too: with several running, the gate is what keeps
-//      each operation on its own device's usbmuxd (DeviceGate.point(at:)).
-//      Correct, but the devices wait for each other; the phase-4 option is to
+//      each operation on its own device's usbmuxd (DeviceGate.serialized(socket:)).
+//      An abandoned call also prevents switching to another device until it returns.
+//      The devices wait for each other; the phase-4 option is to
 //      run these services inside each device's helper, one process per daemon. The gate does NOT bound the leaked threads on its own — what
 //      releases it is the deadline, not the thread — so they are counted
 //      (AbandonedWork) and the gate refuses new work past the cap.
@@ -45,7 +46,7 @@ nonisolated struct DeviceServices: Sendable {
         async throws -> T
     {
         let socket = clientSocket
-        return try await DeviceGate.shared.serialized {
+        return try await DeviceGate.shared.serialized(socket: socket) {
             let started = ContinuousClock.now
             do {
                 return try await withDeadline(seconds, label) {
@@ -53,9 +54,6 @@ nonisolated struct DeviceServices: Sendable {
                     guard imd.isAvailable, let idevice_new = imd.idevice_new else {
                         throw DeviceError.unavailable
                     }
-                    // Points the whole library at OUR emulator's usbmuxd rather than
-                    // a real device or another instance (they share a UDID).
-                    DeviceGate.point(at: socket)
                     var device: OpaquePointer?
                     guard idevice_new(&device, nil) == imd.success, let device else {
                         throw DeviceError.notAttached
@@ -89,9 +87,9 @@ nonisolated struct DeviceServices: Sendable {
         // silent device as "could not prove it is alive", not "it is dead".
         let result: Result<Void, Error>? = await withSoftDeadline(Timeouts.serviceProbe * 2) {
             do {
-                try await DeviceGate.shared.serialized {
+                try await DeviceGate.shared.serialized(socket: socket) {
                     try await withDeadline(Timeouts.serviceProbe, "USB connection") {
-                        try IMobileDevice.checkAttachment(socket: socket)
+                        try IMobileDevice.checkAttachment()
                     }
                 }
                 return .success(())

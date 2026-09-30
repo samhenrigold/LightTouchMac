@@ -230,21 +230,20 @@ nonisolated final class SyncBox: @unchecked Sendable {
 actor DeviceGate {
     static let shared = DeviceGate()
 
-    /// Points libimobiledevice at one device's usbmuxd. libusbmuxd reads
-    /// USBMUXD_SOCKET_ADDRESS on every connect and the variable is
-    /// process-wide, so this is only called inside `serialized`: the gate is
-    /// what keeps two running devices off each other's daemon.
-    /// ponytail: one gate for every device, so a long operation on one delays
-    /// the other; phase 4 can move the services into each device's helper.
-    /// The one way left to reach the wrong daemon is a thread abandoned past
-    /// its deadline that connects again after the switch; that is logged.
-    nonisolated static func point(at socket: String) {
-        let previous: String? = socketLock.withLock { defer { currentSocket = socket }; return currentSocket }
-        let abandoned = AbandonedWork.count
-        if let previous, previous != socket, abandoned > 0 {
-            logEvent("device: usbmuxd switched from \(previous) to \(socket) with \(abandoned) abandoned operation(s) outstanding; a late connect could reach the other device")
+    /// Select the endpoint before a worker can enter the C library. After a
+    /// timeout, that worker may still make additional usbmuxd connections, so
+    /// its endpoint must stay selected until every abandoned worker returns.
+    /// Same-device work remains available below the abandonment cap.
+    private static func point(at socket: String) throws {
+        try socketLock.withLock {
+            if let currentSocket, currentSocket != socket, AbandonedWork.count > 0 {
+                throw DeviceError.endpointBusy
+            }
+            guard setenv("USBMUXD_SOCKET_ADDRESS", socket, 1) == 0 else {
+                throw DeviceError.failed("Could not select the device’s USB connection.")
+            }
+            currentSocket = socket
         }
-        setenv("USBMUXD_SOCKET_ADDRESS", socket, 1)
     }
     private static let socketLock = NSLock()
     nonisolated(unsafe) private static var currentSocket: String?
@@ -273,7 +272,7 @@ actor DeviceGate {
         if waiters.isEmpty { busy = false } else { waiters.removeFirst().continuation.resume() }
     }
 
-    func serialized<T: Sendable>(_ body: @Sendable () async throws -> T) async throws -> T {
+    func serialized<T: Sendable>(socket: String? = nil, _ body: @Sendable () async throws -> T) async throws -> T {
         // Refuse rather than pile on: every one of those outstanding threads is
         // still holding a lockdown session against a guest that serves about
         // one, so starting another is what keeps it from recovering.
@@ -282,6 +281,7 @@ actor DeviceGate {
         do {
             try Task.checkCancellation()
             guard AbandonedWork.count < AbandonedWork.cap else { throw DeviceError.recovering }
+            if let socket { try Self.point(at: socket) }
             let r = try await body()
             release()
             return r
@@ -301,6 +301,7 @@ nonisolated enum DeviceError: Error, LocalizedError {
     case diskFull(free: Int64, needed: Int64)
     case timedOut(operation: String)
     case recovering                                    // earlier requests still stuck
+    case endpointBusy                                  // another device still owns blocked calls
     case preflight(String)                             // ipod-helper findings
     case failed(String)
 
@@ -309,7 +310,7 @@ nonisolated enum DeviceError: Error, LocalizedError {
     /// full disk fails the same way every time and must not loop.
     var shouldPauseInstallQueue: Bool {
         switch self {
-        case .notAttached, .lockdown, .afc, .upload, .timedOut, .recovering: return true
+        case .notAttached, .lockdown, .afc, .upload, .timedOut, .recovering, .endpointBusy: return true
         case .instproxy(let error, _): return error.isTransient
         default: return false
         }
@@ -323,7 +324,7 @@ nonisolated enum DeviceError: Error, LocalizedError {
         // — turning a single wedged install into a session with no working app
         // management at all. Only failures that left nothing behind retry.
         case .timedOut: return false
-        case .recovering: return true
+        case .recovering, .endpointBusy: return true
         case .lockdown: return true
         case .instproxy(let e, _): return e.isTransient
         case .afc(let e): return e.isTransient
@@ -347,6 +348,8 @@ nonisolated enum DeviceError: Error, LocalizedError {
         case .timedOut(let op): return "The device stopped responding during \(op)."
         case .recovering:
             return "The device stopped responding; still waiting for earlier requests to finish."
+        case .endpointBusy:
+            return "Another device’s USB request is still running. Wait for it to finish before connecting to this device."
         case .preflight(let m): return m
         case .failed(let m): return m
         }

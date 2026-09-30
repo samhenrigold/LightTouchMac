@@ -17,8 +17,8 @@ def patched(text, old, new):
 
 
 install = patched((app / "Services/InstallationProxy.swift").read_text(),
-                  "let connection = try await Self.installConnection(socket: socket)",
-                  "let connection = try await Self.installConnection(socket: socket)\n                await Fixture.shared.afterConnection()")
+                  "let connection = try await Self.installConnection()",
+                  "let connection = try await Self.installConnection()\n                await Fixture.shared.afterConnection()")
 # openBeforeDeadline is the install connection's only user in this build.
 execution = patched((app / "Transport/DeviceExecution.swift").read_text(),
                     "if let opened = try open() { late.store(opened) }",
@@ -78,6 +78,7 @@ nonisolated enum IMobileDevice {
     typealias StatusName = @convention(c) (OpaquePointer?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Void
     typealias StatusPercent = @convention(c) (OpaquePointer?, UnsafeMutablePointer<Int32>) -> Void
     static let idevice_new: NewDevice? = { output, _ in
+        precondition(String(cString: getenv("USBMUXD_SOCKET_ADDRESS")) == "127.0.0.1:1", "gate did not select the install endpoint before startup")
         let state = Fixture.shared
         let blocked = state.lock.withLock { state.deviceEntered = true; return state.blockDevice }
         if blocked { state.deviceRelease.wait() }

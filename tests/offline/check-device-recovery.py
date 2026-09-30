@@ -40,11 +40,14 @@ struct Instance { let id=UUID() }
   let c=Controller()
   c.reportConnectionFailure(DeviceError.instproxy(.opInProgress,phase:"browse"),operation:"Refreshing apps")
   precondition(c.connectionIssue?.summary=="Updating apps…" && c.deviceReachable==nil)
-  for error:DeviceError in [.notAttached,.unavailable,.timedOut(operation:"USB connection"),.instproxy(.opFailed,phase:"browse"),.lockdown(-17),.lockdown(-4),.lockdown(-27),.lockdown(-32)] {
+  for error:DeviceError in [.endpointBusy,.notAttached,.unavailable,.timedOut(operation:"USB connection"),.instproxy(.opFailed,phase:"browse"),.lockdown(-17),.lockdown(-4),.lockdown(-27),.lockdown(-32)] {
    c.reportConnectionFailure(error,operation:"Checking connection")
    c.deviceReachable=false;c.deviceReachable=false
    try await Task.sleep(for:.milliseconds(10));precondition(Recoveries.count==0,"do not restart lockdownd for a different failure")
   }
+  c.reportConnectionFailure(DeviceError.endpointBusy,operation:"Checking connection")
+  precondition(c.connectionIssue?.summary=="Waiting for another device’s USB request…")
+  precondition(c.connectionIssue?.reconnectManagement==false)
   let previous=c.connectionIssue
   c.reportConnectionFailure(CancellationError(),operation:"Closing inspector")
   precondition(c.connectionIssue==previous,"cancellation is not a connection failure")

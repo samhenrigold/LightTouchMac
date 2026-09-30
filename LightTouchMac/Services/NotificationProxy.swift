@@ -154,12 +154,12 @@ final class NotificationProxy {
         // retained callback context freed (openBeforeDeadline).
         let handles: Session?
         do {
-            handles = try await DeviceGate.shared.serialized {
+            handles = try await DeviceGate.shared.serialized(socket: socket) {
                 // An install may have started while this task waited for the
                 // gate. Do not introduce another handshake between its stages.
                 guard await attachAllowed() else { return nil }
                 return try await openBeforeDeadline(Timeouts.serviceProbe * 2, "notification watcher") {
-                    connect(socket: socket, onChange: onChange)
+                    connect(onChange: onChange)
                 }
             }
         } catch {
@@ -184,8 +184,7 @@ final class NotificationProxy {
     }
 
     /// The blocking half: open the session and arm the callback.
-    private nonisolated static func connect(socket: String,
-                                            onChange: @escaping @Sendable () -> Void)
+    private nonisolated static func connect(onChange: @escaping @Sendable () -> Void)
         -> Session?
     {
         let imd = IMobileDevice.self
@@ -193,7 +192,6 @@ final class NotificationProxy {
               let start = imd.np_client_start_service,
               let observe = imd.np_observe_notification,
               let setCB = imd.np_set_notify_callback else { return nil }
-        DeviceGate.point(at: socket)
 
         var device: OpaquePointer?
         guard idevice_new(&device, nil) == imd.success, let device else { return nil }

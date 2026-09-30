@@ -67,6 +67,10 @@ nonisolated struct DeviceConnectionIssue: Equatable, Sendable {
             summary = "\(profile.shortName) activation unavailable"
             blocksCommands = true
             reconnectManagement = false
+        case DeviceError.endpointBusy:
+            summary = "Waiting for another device’s USB request…"
+            blocksCommands = true
+            reconnectManagement = false
         case DeviceError.notAttached:
             summary = "USB connection lost — retrying…"
             blocksCommands = true

@@ -243,9 +243,9 @@ nonisolated enum IMobileDevice {
 
     /// Preserve the failure for the inspector and diagnostics. Attachment is
     /// only the USB bridge check; it says nothing about app-service readiness.
-    static func checkAttachment(socket: String) throws {
+    /// The caller must select the endpoint through DeviceGate before opening.
+    static func checkAttachment() throws {
         guard let idevice_new else { throw DeviceError.unavailable }
-        DeviceGate.point(at: socket)
         var device: OpaquePointer?
         guard idevice_new(&device, nil) == success, let device else { throw DeviceError.notAttached }
         _ = idevice_free?(device)

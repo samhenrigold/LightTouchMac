@@ -75,11 +75,11 @@ extension DeviceServices {
     /// resets mid-install nothing arrives at all — so the idle timer, not the
     /// library, is what ends the wait.
     func install(stagedPath: String, progress: @escaping @Sendable (Int, String) -> Void) async throws {
-        try await DeviceGate.shared.serialized {
-            let socket = self.clientSocket
+        let socket = self.clientSocket
+        try await DeviceGate.shared.serialized(socket: socket) {
             let cancellation = InstallCancellation()
             try await withTaskCancellationHandler {
-                let connection = try await Self.installConnection(socket: socket)
+                let connection = try await Self.installConnection()
                 // Once the guest mutation begins, retain the gate until its
                 // existing callback watchdog finishes. Cancelling before that
                 // point closes the connection without submitting an install.
@@ -118,19 +118,18 @@ extension DeviceServices {
 
     /// A deadline may win immediately after connection succeeds; openBeforeDeadline
     /// frees the late handles then.
-    private nonisolated static func installConnection(socket: String) async throws -> InstallConnection {
+    private nonisolated static func installConnection() async throws -> InstallConnection {
         // A successful startup always stores before completing the deadline.
         guard let connection = try await openBeforeDeadline(Timeouts.serviceProbe * 2, "install connection", {
-            try openInstallConnection(socket: socket)
+            try openInstallConnection()
         }) else { throw DeviceError.unavailable }
         return connection
     }
 
-    private nonisolated static func openInstallConnection(socket: String) throws -> InstallConnection {
+    private nonisolated static func openInstallConnection() throws -> InstallConnection {
         let imd = IMobileDevice.self
         guard imd.isAvailable, let idevice_new = imd.idevice_new,
               imd.instproxy_install != nil else { throw DeviceError.unavailable }
-        DeviceGate.point(at: socket)
         var device: OpaquePointer?
         guard idevice_new(&device, nil) == imd.success, let device else { throw DeviceError.notAttached }
         let client: OpaquePointer

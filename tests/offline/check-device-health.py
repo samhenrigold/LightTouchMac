@@ -21,8 +21,8 @@ nonisolated enum IMobileDevice {
  static let lock = NSLock()
  nonisolated(unsafe) static var failure: DeviceError?
  static func setFailure(_ error: DeviceError?) { lock.withLock { failure = error } }
- static func checkAttachment(socket: String) throws {
-  precondition(socket == "fixture")
+ static func checkAttachment() throws {
+  precondition(String(cString: getenv("USBMUXD_SOCKET_ADDRESS")) == "fixture", "gate did not select the endpoint before the attachment call")
   try lock.withLock { if let failure { throw failure } }
  }
 }
