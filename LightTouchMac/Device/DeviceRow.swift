@@ -217,8 +217,16 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     }
 
     /// `canDownload` is FirmwareJobs.canDownload: whether the preparer is present.
+    private var working: Bool { switch state { case .downloading, .preparing, .stopping: true; default: false } }
+
+    /// Whether the sidebar may drop this row now: a prepared device when it may be deleted (which asks first),
+    /// any other when nothing is running or in flight for it.
+    var canRemoveFromSidebar: Bool { instanceID != nil ? allows(.delete, canDownload: false) : !hasSession && !working }
+
+    /// A prepared device's data goes with it, after asking; a row with nothing on disk just leaves the list.
+    var removeTitle: String { instanceID != nil ? "Delete Device…" : "Remove Device" }
+
     func allows(_ action: DeviceAction, canDownload: Bool) -> Bool {
-        let working = switch state { case .downloading, .preparing, .stopping: true; default: false }
         switch action {
         // A dead session's Start is a restart (DeviceSessionHost.restart).
         case .start: return isStartable && (state == .ready || isError)
