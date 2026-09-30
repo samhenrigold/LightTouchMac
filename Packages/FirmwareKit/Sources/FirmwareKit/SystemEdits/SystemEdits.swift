@@ -179,7 +179,10 @@ public enum SystemEdits {
                 try put(kernelcache, at(kernelcachePath), mode: 0o644)
             }
             try put(Data(fstabRW.utf8), at(fstab))
-            if o.webProxy { rootOwned += try installPAC(m) }
+            if o.webProxy {
+                try fit.check(FitCheck.webProxy(FitCheck.Firmware(root: m, arch: "armv7")), required: false, outcome: "kept: the PAC is unused")
+                rootOwned += try installPAC(m)
+            }
             // GL first: a firmware whose gld plugin does not fit boots the stock engine with software CoreAnimation,
             // as the iPod recipe does, rather than refusing the build (docs/matrix.md).
             var caOGL = o.caOGL

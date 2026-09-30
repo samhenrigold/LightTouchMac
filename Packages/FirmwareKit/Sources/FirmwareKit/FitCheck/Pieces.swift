@@ -102,7 +102,20 @@ extension FitCheck {
     /// LayerKit names) is read by an image of this firmware (readers) or by a binary the bake injects with it (`also`:
     /// the GL shim reads GLI_ACCELERATED). A switch nothing reads has no effect: the firmware's default decides.
     public static func environment(_ fw: Firmware, _ switches: [[String]], also: [(String, Data)] = []) -> Fit {
-        let piece = "SpringBoard environment (\(switches.map { $0.joined(separator: "/") }.joined(separator: ", ")))"
+        named("SpringBoard environment", fw, switches, also: also)
+    }
+
+    /// The keys the web-proxy edit writes into the Wi-Fi service's Proxies (the PAC's), which SystemConfiguration and
+    /// CFNetwork must name for the PAC to be used.
+    public static let proxyKeys = ["ProxyAutoConfigEnable", "ProxyAutoConfigURLString", "ExceptionsList", "FTPPassive"]
+
+    /// The web proxy's PAC fits when the firmware names every key the edit sets.
+    public static func webProxy(_ fw: Firmware) -> Fit { named("web proxy PAC", fw, proxyKeys.map { [$0] }) }
+
+    /// `piece (a, b/c, ...)` fits when each group of names (one name, or alternatives) is named as a C string by an
+    /// image of this firmware (readers) or by `also`.
+    static func named(_ label: String, _ fw: Firmware, _ switches: [[String]], also: [(String, Data)] = []) -> Fit {
+        let piece = "\(label) (\(switches.map { $0.joined(separator: "/") }.joined(separator: ", ")))"
         let images = readers(fw) + also
         var read: [String] = [], unread: [String] = []
         for names in switches {

@@ -351,6 +351,7 @@ final class N72Board: Board {
             report["prefs"] = try Self.bakeReorderTip(m)
         }
         if opt["web_proxy"] ?? true {   // install_web_proxy: the PAC, and the Wi-Fi service on the system volume's /private/var
+            try c.fit.check(FitCheck.webProxy(fw), required: false, outcome: "kept: the PAC is unused")
             let sc = "private/var/preferences/SystemConfiguration"
             owners += try SystemEdits.installPAC(m, dirs: [sc]).map { (UInt32(0), $0) }
             try SystemEdits.seedPlist(at(sc + "/preferences.plist"), SystemEdits.wifiProxyPrefs)

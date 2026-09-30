@@ -199,6 +199,7 @@ enum FitFixture {
             #expect(log.fits.contains { $0.piece.hasPrefix("USB Ethernet") && $0.fits }, "\(log.fits.map(\.piece))")
             #expect(log.fits.filter { $0.piece.hasPrefix("it_prefs ") && $0.fits }.count == 3)
             #expect(log.fits.contains { $0.piece.hasPrefix("SpringBoard environment") && $0.fits })
+            #expect(log.fits.contains { $0.piece.hasPrefix("web proxy PAC") && $0.fits })
             let sv = try HFSPlusVolume(r.system)
             #expect((try? sv.record(at: SystemEdits.Helpers.tools[3].path)) == nil)
             let job = try #require(PropertyListSerialization.propertyList(from: sv.contents(sv.record(at: SystemEdits.msmJob)), format: nil) as? [String: Any])
@@ -261,6 +262,7 @@ enum FitFixture {
             #expect(c.fit.fits.contains { $0.piece.hasPrefix("guest tools") && !$0.fits })
             #expect(c.fit.fits.contains { $0.piece == "it_prefs SBDidShowReorderText" && $0.fits })
             #expect(c.fit.fits.contains { $0.piece.hasPrefix("SpringBoard environment (CA_ENABLE_OGL/LK_ENABLE_OGL") && $0.fits })
+            #expect(c.fit.fits.contains { $0.piece.hasPrefix("web proxy PAC") && $0.fits })
         }
     }
 
@@ -314,9 +316,14 @@ enum FitFixture {
             try Oracle.withTemp { dir in
                 let files = FitFixture.stock(id) + [FitCheck.itPrefs[0].1] + (try FitFixture.frameworks(id, in: dir))
                 guard let v = try FitFixture.volume(id, files, in: dir) else { return }
-                let f = FitCheck.environment(FitCheck.Firmware(root: v, arch: FitFixture.arch(id)), switches, also: also)
+                let fw = FitCheck.Firmware(root: v, arch: FitFixture.arch(id))
+                let f = FitCheck.environment(fw, switches, also: also)
                 #expect(f.fits == fits, "\(id) \(switches): \(f.proof)")
                 if !fits { #expect(f.proof.contains(switches == ipad ? "GLI_ACCELERATED" : "LK_ENABLE_OGL")) }
+                // the web proxy's keys are named by every firmware at hand (SystemConfiguration / CFNetwork)
+                let pac = FitCheck.webProxy(fw)
+                #expect(pac.fits, "\(id): \(pac.proof)")
+                #expect(!FitCheck.named("web proxy PAC", fw, [["ProxyAutoConfigURLStrinX"]]).fits)
             }
         }
     }
