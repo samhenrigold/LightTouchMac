@@ -44,7 +44,7 @@ public struct FirmwareEntry: Codable, Sendable, Equatable {
         public var dataSize: String
         public var options: [String: Bool]
         public var guest: Guest?
-        /// The k48 boot chain: "iboot" (SecureROM -> LLB -> iBoot -> kernel; default when absent) or "kboot"
+        /// The k48 boot chain: "iboot" (iBoot -> kernel; default when absent) or "kboot"
         /// (direct-kernel, for debugging). Ignored by n72ap.
         public var boot: String?
         /// A sibling entry (same iOS major, ramdisk keys known) whose restore ramdisk boots the data-protection
@@ -89,6 +89,16 @@ public struct FirmwareEntry: Codable, Sendable, Equatable {
 
     public static func load(from url: URL) throws -> FirmwareEntry {
         try JSONDecoder().decode(FirmwareEntry.self, from: Data(contentsOf: url))
+    }
+
+    /// Resolve one entry from the shared catalog, rejecting ambiguous or unknown ids.
+    public static func load(id: String, fromCatalog url: URL) throws -> FirmwareEntry {
+        struct Catalog: Decodable { var format: Int; var entries: [FirmwareEntry] }
+        let catalog = try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: url))
+        guard catalog.format == 1 else { throw FirmwareError(.unsupported, "unknown catalog format \(catalog.format)") }
+        let matches = catalog.entries.filter { $0.id == id }
+        guard matches.count == 1 else { throw FirmwareError(.unsupported, "catalog must contain exactly one entry named \(id)") }
+        return matches[0]
     }
 
     /// The key for an IPSW member, looked up by its file name (as qemu-ios' key pages are).

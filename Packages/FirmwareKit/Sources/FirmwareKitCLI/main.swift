@@ -42,6 +42,8 @@ guard command == "create" else {
                                   [--helper PATH] [--cache DIR] [--guest-tools DIR]
                                   [--sibling-entry ENTRY.json --sibling-ipsw IPSW]   (recipe.keybag_ramdisk_from)
                                   [--stop-after volumes]   (fit.json: the fit checks' survey, no device)
+               firmwarekit create --catalog CATALOG.json --id ENTRY_ID --ipsw IPSW --out DIR [create options]
+               --gl-test adds the GL fixture job to a test device
                firmwarekit mount|export --device DIR [--volume system|data|all] [--out DIR]
                firmwarekit unmount --out DIR
                firmwarekit verify-keys --entry ENTRY.json --ipsw IPSW
@@ -51,13 +53,16 @@ guard command == "create" else {
     exit(64)
 }
 var flags: [String: String] = [:]
-let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools", "--sibling-entry", "--sibling-ipsw", "--stop-after"]
+let known: Set = ["--catalog", "--id", "--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools", "--sibling-entry", "--sibling-ipsw", "--stop-after"]
 while let a = args.popFirst() {
+    if a == "--gl-test" { flags[a] = "1"; continue }
     guard known.contains(a), let v = args.popFirst() else { emit(.error(code: "internal", message: "bad argument \(a)")); exit(1) }
     flags[a] = v
 }
-guard let entryPath = flags["--entry"], let ipsw = flags["--ipsw"], let out = flags["--out"] else {
-    emit(.error(code: "internal", message: "--entry, --ipsw and --out are required")); exit(1)
+guard let ipsw = flags["--ipsw"], let out = flags["--out"],
+      (flags["--entry"] != nil && flags["--catalog"] == nil && flags["--id"] == nil)
+        || (flags["--entry"] == nil && flags["--catalog"] != nil && flags["--id"] != nil) else {
+    emit(.error(code: "internal", message: "use --entry or --catalog with --id; --ipsw and --out are required")); exit(1)
 }
 let url = { (p: String) in URL(fileURLWithPath: (p as NSString).expandingTildeInPath).standardizedFileURL }
 let staging = url(out)
@@ -91,7 +96,10 @@ var options: Preparer.Options
 do {
     let bundled = Bundle.main.executableURL!.resolvingSymlinksInPath().deletingLastPathComponent()
         .appendingPathComponent("../Resources/guest-tools").standardizedFileURL
-    options = .init(entry: try FirmwareEntry.load(from: url(entryPath)), ipsw: url(ipsw), out: staging, seed: flags["--seed"],
+    var entry = try flags["--entry"].map { try FirmwareEntry.load(from: url($0)) }
+        ?? FirmwareEntry.load(id: flags["--id"]!, fromCatalog: url(flags["--catalog"]!))
+    if flags["--gl-test"] != nil { entry.recipe?.options["gl_test"] = true }
+    options = .init(entry: entry, ipsw: url(ipsw), out: staging, seed: flags["--seed"],
                     helper: flags["--helper"].map(url),
                     guestTools: flags["--guest-tools"].map(url) ?? bundled, cache: flags["--cache"].map(url),
                     sibling: try flags["--sibling-entry"].map { (try FirmwareEntry.load(from: url($0)), url(flags["--sibling-ipsw"] ?? "")) })
@@ -100,6 +108,9 @@ if let stop = flags["--stop-after"] {
     guard stop == "volumes" else { emit(.error(code: "internal", message: "--stop-after takes only volumes")); exit(1) }
     options.stopAfterVolumes = true
 }
+
+do { try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true) }
+catch { fail(error) }
 
 Thread.detachNewThread { [options] in
     do { try Preparer.create(options, emit: emit); exit(0) } catch { fail(error) }
