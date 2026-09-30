@@ -48,6 +48,13 @@ final class N45Board: Board {
 
     func check(_ c: Recipe.Context) throws {}
 
+    /// The jobs this machine keeps must all be among the firmware's (usbptpd: no usbmux without it).
+    static func keptDaemonsFit(_ jobs: [String]) -> FitCheck.Fit {
+        let absent = keptDaemons.subtracting(jobs).sorted()
+        return FitCheck.Fit("LaunchDaemons kept on 1.x (\(keptDaemons.count))", fits: absent.isEmpty,
+                            absent.isEmpty ? "all shipped by this firmware" : "this firmware ships no \(absent.joined(separator: ", "))")
+    }
+
     func identity(seed: String) throws -> UnitIdentity {
         ident = try UnitIdentity.synthesizeIPod(seed: seed, modelNumber: model, regionInfo: UnitIdentity.iPadRegion)
         return ident
@@ -98,8 +105,9 @@ final class N45Board: Board {
             try SystemEdits.put(Data(N72Board.fstabRW.utf8), at(SystemEdits.fstab))
             try SystemEdits.mkdirs(at(kcPath).deletingLastPathComponent())
             try c.ipsw.extract(kcMember, to: at(kcPath))
-            let removed = try fm.contentsOfDirectory(atPath: at(SystemEdits.daemons).path)
-                .filter { $0.hasSuffix(".plist") && !Self.keptDaemons.contains($0) }.sorted()
+            let jobs = try fm.contentsOfDirectory(atPath: at(SystemEdits.daemons).path).filter { $0.hasSuffix(".plist") }
+            try c.fit.check(Self.keptDaemonsFit(jobs), required: false, outcome: "the rest removed as planned")
+            let removed = jobs.filter { !Self.keptDaemons.contains($0) }.sorted()
             for n in removed { try fm.removeItem(at: at(SystemEdits.daemons + "/" + n)) }
             for d in ["", "/AddressBook", "/Lockdown", "/Preferences"] {
                 try SystemEdits.mkdirs(at(Self.rootLibrary + d))

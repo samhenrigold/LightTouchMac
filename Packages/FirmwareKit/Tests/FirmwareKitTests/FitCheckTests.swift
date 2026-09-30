@@ -374,4 +374,27 @@ enum FitFixture {
             }
         }
     }
+
+    /// The 1.x recipe through `create --stop-after volumes` on 3A101a (the survey mode): fit.json records the kept
+    /// LaunchDaemons present, the loader and the LayerKit switches; without usbptpd's job the keep-list does not fit.
+    @Test func n45SurveyRecordsTheKeptJobs() throws {
+        let ipsw = N45Tests.ipsw
+        guard Oracle.exists(ipsw), let helpers = K48Oracle.guestTools else { return }
+        try Oracle.withTemp { dir in
+            var o = Preparer.Options(entry: try Oracle.entry("n45ap-3A101a"), ipsw: ipsw, out: dir.appendingPathComponent("out"), helper: nil,
+                                     guestTools: helpers, cache: dir.appendingPathComponent("cache"))
+            o.stopAfterVolumes = true
+            try FileManager.default.createDirectory(at: o.out, withIntermediateDirectories: true)
+            try Preparer.create(o) { _ in }
+            let survey = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: o.out.appendingPathComponent("fit.json"))) as? [String: Any])
+            let fits = try #require(survey["fit"] as? [[String: Any]])
+            #expect(fits.contains { ($0["piece"] as? String)?.hasPrefix("LaunchDaemons kept on 1.x") == true && $0["fits"] as? Bool == true }, "\(fits)")
+            #expect(fits.contains { ($0["piece"] as? String)?.hasPrefix("it_boot") == true && $0["fits"] as? Bool == true })
+            #expect(!FileManager.default.fileExists(atPath: o.out.appendingPathComponent("nand").path))
+        }
+        let all = Array(N45Board.keptDaemons)
+        #expect(N45Board.keptDaemonsFit(all).fits)
+        let f = N45Board.keptDaemonsFit(all.filter { $0 != "com.apple.usbptpd.plist" })
+        #expect(!f.fits && f.proof.contains("usbptpd"))
+    }
 }
