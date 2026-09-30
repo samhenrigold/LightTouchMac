@@ -88,9 +88,12 @@ struct CatalogApp: Codable, Sendable {
 nonisolated enum CatalogError: LocalizedError {
     case badStatus(Int)
     case invalidCopy(String)
+    /// A response that didn't decode; the DecodingError (its coding path) is in app.log.
+    case unreadable
     var errorDescription: String? {
         switch self {
         case .invalidCopy(let message): message
+        case .unreadable: "Legacy Store sent a response Light Touch couldn’t read."
         case .badStatus(503): "The Internet Archive is busy — try again in a minute."
         case .badStatus(let code): "Legacy Store returned an error (HTTP \(code))."
         }
@@ -137,10 +140,11 @@ enum CatalogClient {
             + target(device: device, os: os)
         let (data, response) = try await URLSession.shared.data(for: request(components.url!))
         if let code = (response as? HTTPURLResponse)?.statusCode, code != 200 {
+            logEvent("Legacy Store: HTTP \(code) for \(components.url!.path)?\(components.url!.query ?? "")")
             throw CatalogError.badStatus(code)
         }
         struct Envelope: Decodable { let apps: [CatalogApp] }
-        return try JSONDecoder().decode(Envelope.self, from: data).apps
+        return try decode(Envelope.self, data, from: components.url!).apps
     }
 
     /// The copy, if it runs on this device (a 2.1 server 404s it otherwise).
@@ -178,10 +182,22 @@ enum CatalogClient {
     private static func get<T: Decodable>(_ url: URL) async throws -> T {
         let (data, response) = try await URLSession.shared.data(for: request(url))
         guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
-            throw CatalogError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            logEvent("Legacy Store: HTTP \(code) for \(url.path)?\(url.query ?? "")")
+            throw CatalogError.badStatus(code)
         }
         try Task.checkCancellation()
-        return try JSONDecoder().decode(T.self, from: data)
+        return try decode(T.self, data, from: url)
+    }
+
+    /// A DecodingError goes to app.log whole (type, coding path, the decoder's words) and reaches
+    /// the user as CatalogError.unreadable, not Foundation's "isn't in the correct format".
+    private static func decode<T: Decodable>(_ type: T.Type, _ data: Data, from url: URL) throws -> T {
+        do { return try JSONDecoder().decode(type, from: data) }
+        catch let error as DecodingError {
+            logEvent("Legacy Store: couldn’t read \(url.path)?\(url.query ?? "") (\(data.count) bytes) as \(T.self): \(String(reflecting: error))")
+            throw CatalogError.unreadable
+        }
     }
 
     /// Revalidate each selection, then let URLSession stream the transfer to

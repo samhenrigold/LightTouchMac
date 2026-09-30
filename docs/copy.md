@@ -42,21 +42,21 @@ The same state has the same words on every surface (sidebar accessory, placehold
 
 | State | Words | Notes |
 |---|---|---|
-| notDownloaded | Not downloaded (, 580 MB) | size only in VoiceOver/row |
-| downloaded | Downloaded | |
-| bundled | Built in | |
-| downloading | Downloading, 43% / Downloading… | a build that also fetches its keybag sibling: Downloading, 2 IPSWs · 43% / “2 IPSWs” below the bar |
-| preparing | Preparing, Step 6 of 7 · 48% / Preparing… | step name below the bar |
+| notDownloaded | Not downloaded (, 580 MB) | row: a tertiary download glyph (`arrow.down.circle`), the words and size in its tooltip and VoiceOver |
+| downloaded | Downloaded | VoiceOver only; the row shows nothing (the usual state) |
+| bundled | Built in | VoiceOver only; the row shows nothing |
+| downloading | Downloading, 43% / Downloading… (row: ring and “43%”) | placeholder: one line under the bar, “43% · About 1 min remaining”; a build that also fetches its keybag sibling says “2 IPSWs” in the bar’s tooltip |
+| preparing | Preparing, 48% / Preparing… (row: ring and “48%”) | placeholder: the same one line; the step and the preparer’s words are the bar’s tooltip |
 | ready | Ready | |
 | running | Running | |
 | stopping | Stopping / Stopping… | |
 | error | Error, with the reason below | reason is the failure or stop text |
 | comingSoon | Coming soon | |
-| untested (note) | Untested (row, instead of the size) / “Untested.” before the catalog note (placeholder) | not a state: an untested build downloads and prepares like any other |
+| untested (note) | Untested (row tooltip and VoiceOver, never drawn in the row) / “Untested.” before the catalog note in the placeholder’s info popover (ⓘ beside the version) | not a state: an untested build downloads and prepares like any other |
 | requiresIPSW | Requires an IPSW | |
-| experimental (tag) | Experimental | catalog `status_note` replaces the placeholder note only when it adds something |
+| experimental (tag) | Experimental | row tooltip and VoiceOver, no capsule; placeholder: “Experimental.” and the catalog `status_note` in the info popover |
 | prepared without activation (note) | Prepared without activation | |
-| beta / GM (tag) | Beta 1, Beta 3, GM 1, GM 2 | always numbered |
+| beta / GM (tag) | Beta 1, Beta 3, GM 1, GM 2 | always numbered; secondary text after the version, no capsule |
 
 ### Status line (`EmulatorController.statusLine`, window subtitle and dead overlay)
 
@@ -68,8 +68,10 @@ The same state has the same words on every surface (sidebar accessory, placehold
 | powered off | Powered off |
 | not started | Starting… |
 | booting | Starting iOS… |
+| boot toast | Starting iOS… over the stage and the session’s counter, “Loading iOS · 42 s”, with a Device Logs button throughout. Stages (`BootStage`, from serial lines, the guest tools and USB, never a timer): Powering on, Loading iOS, Starting the system, Connecting over USB, Waiting for the Home screen |
 | readiness wait | Starting iOS… then Waiting for the Home screen… (`preparationStatus`) |
-| running | Running — Guest tools: *state* |
+| running | Running (the window subtitle shows the foreground app instead when there is one) |
+| running, guest tools need attention (out of date, reverted, not responding) | Running — Guest tools: *state* |
 | running, no USB | Running — USB unavailable |
 | sleeping | Sleeping |
 | restarting SpringBoard | Restarting the Home screen… |
@@ -78,7 +80,7 @@ The same state has the same words on every surface (sidebar accessory, placehold
 | dead | Stopped (overlay: the stop reason) |
 | a persistent connection issue | the issue's summary |
 
-Stop reasons (`DeviceSession`): "The iPod stopped." (asked for), "The iPod stopped unexpectedly. Open Device Logs for details." (not asked for), "The iPod didn’t start. Open Device Logs for details.", "This device is in use by another copy of Light Touch.", "The iPod didn’t start within N seconds. Open Device Logs for details.", "The iPod entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
+Stop reasons (`DeviceSession`): "The iPod stopped." (asked for), "The iPod stopped unexpectedly. Open Device Logs for details." (not asked for), "The iPod didn’t start. Open Device Logs for details.", "This device is in use by another copy of Light Touch.", "The iPod didn’t start within N seconds. Open Device Logs for details." (only when iOS never showed a picture: `ReadinessDeadline`), "The iPod entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
 
 ### Guest tools (`GuestPackage.Status.text`, after "Guest tools: ")
 
@@ -120,7 +122,8 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 |---|---|
 | storage writes failed (notice) | Couldn’t save to disk. The device stopped and recent changes weren’t saved. Free disk space, then reopen Light Touch. Open Device Logs for details. |
 | low disk space | Your Mac is almost out of disk space: X is available, and Light Touch needs at least Y to save changes reliably. |
-| not enough space to prepare | Not enough disk space: this needs X, and Y is available. |
+| not enough space to prepare | Not enough disk space: this needs X, and Y is available. (placeholder: only when the volume is short; no sizes otherwise) |
+| iOS on screen, USB not answering by the boot budget (the device keeps running) | The iPod is running, but it isn’t connected over USB yet. Installing apps and transferring files aren’t available until it connects. |
 | files changed under a running device | Files of this iPod were changed while it was running. Stop and start it again; unsaved changes may be lost. |
 | older data | This iPod’s data was made with an older system image. |
 | legacy erase and the unpack after it (window, then sheet) | Updating the built-in iPod… |
@@ -135,6 +138,14 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | failed | Couldn’t update the proxy. Try again. |
 | needsTap (no guest agent: the profile was offered) | Tap Install on the iPod to trust the proxy certificate. |
 | Settings ▸ Storage | Devices (Base · Data · Snapshot), IPSWs (Downloaded / Imported IPSW), Caches and logs, Library (N IPAs · size · size on no device) |
+
+### Install failures
+
+Every failed install, download or removal writes its whole error to app.log (`install: <name> failed: …`, with a DecodingError's coding path; `Legacy Store: HTTP <code> for <path>`). A Legacy Store response that doesn’t decode reads “Legacy Store sent a response Light Touch couldn’t read.”, never Foundation’s “isn’t in the correct format”.
+
+### Store on iPhone OS 1.x
+
+The suggested list isn’t asked for: “iPhone OS 1.1 has no App Store.” A search still lists apps greyed with “Requires iOS 2.0”.
 
 ### Store rows the device can't run (`CatalogApp.incompatibility`, Legacy Store `compat.reasons`)
 

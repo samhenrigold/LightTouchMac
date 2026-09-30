@@ -16,7 +16,10 @@ import Foundation
 }
 
 struct CatalogApp { let bundleID: String?, name: String, ipaID: Int, iconURL: URL?, size: Int64? }
-enum CatalogError: Error { case invalidCopy(String) }
+enum CatalogError: LocalizedError {
+    case invalidCopy(String), unreadable
+    var errorDescription: String? { if case .unreadable = self { "Legacy Store sent a response Light Touch couldn’t read." } else { nil } }
+}
 enum CatalogClient {
     static func download(_ app: CatalogApp, device: String?, deviceOS: String, arch: String,
                          progress: @escaping @MainActor @Sendable (Double) -> Void) async throws -> URL {

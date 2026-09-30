@@ -93,6 +93,13 @@ final class EmulatorController {
         didSet { trackStartup(was: isErasing || state == .booting || oldValue); onStatusChange?() }
     }
     private(set) var preparationStatus = "Starting iOS…" { didSet { onStatusChange?() } }
+    /// How far this boot has provably got (BootStage): the boot toast's subtitle.
+    private(set) var bootStage = BootStage.poweringOn {
+        didSet { if oldValue != bootStage { logEvent("boot: \(bootStage.text)"); onStatusChange?() } }
+    }
+    private func noteBoot(_ event: BootStage.Event) { bootStage = bootStage.after(event) }
+    /// The loader's report when this boot began: a reset keeps the last boot's, which proves nothing now.
+    private var reportAtBootStart: GuestPackageReport?
     private var readinessFailure: String?
 
 
@@ -390,12 +397,19 @@ final class EmulatorController {
     private func openSerialLog() {
         do {
             serialCapture = try SerialLogCapture(url: instance.paths.logs.appendingPathComponent("serial.log"),
-                                                 watch: [Self.recoveryMarker, Self.ethlinkMarker]) { [weak self] phrase in
+                                                 watch: [Self.recoveryMarker, Self.ethlinkMarker] + BootStage.serialMarkers.keys) { [weak self] phrase in
                 Task { @MainActor in
                     guard let self else { return }
-                    if phrase == Self.ethlinkMarker { self.ethlinkUp = true; self.onStatusChange?(); return }
-                    self.inRecovery = true
-                    self.abortBoot(Self.recoveryReason(self.profile))
+                    switch phrase {
+                    case Self.ethlinkMarker:
+                        self.ethlinkUp = true
+                        self.noteBoot(.guestTools)
+                        self.onStatusChange?()
+                    case Self.recoveryMarker:
+                        self.inRecovery = true
+                        self.abortBoot(Self.recoveryReason(self.profile))
+                    default: self.noteBoot(.serial(phrase))
+                    }
                 }
             }
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
@@ -461,15 +475,23 @@ final class EmulatorController {
     /// by iBoot too). Without a USB bridge (--no-appsync) painting has to do.
     private var bootFinished: Bool { deviceReachable == true || (usbmux.session == nil && state == .running) }
 
+    /// The readiness deadline's verdict now (ReadinessDeadline): frames painted, and how far the boot got.
+    private var deadlineVerdict: ReadinessDeadline { ReadinessDeadline.verdict(painted: state == .running, stage: bootStage) }
+
     /// Never "Booting…" forever: no answer within the board's budget ends the
-    /// boot as a named error, with the helper halted. Per boot (also after
-    /// Power On and Restart).
+    /// boot as a named error, with the helper halted, unless iOS is up and
+    /// showing a picture (the readiness watch then says USB isn't there yet).
+    /// Per boot (also after Power On and Restart).
     private func startBootWatch() {
         bootWatchTask?.cancel()
         let generation = bootGeneration
         bootWatchTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(self?.profile.bootBudget ?? 0))
             guard let self, !Task.isCancelled, generation == bootGeneration, !bootFinished else { return }
+            guard deadlineVerdict == .stop else {
+                logEvent("boot: iOS is up (\(bootStage.text)) but USB didn’t answer in \(Int(profile.bootBudget)) s; keeping it running")
+                return
+            }
             abortBoot(Self.deadlineReason(profile))
         }
     }
@@ -537,24 +559,34 @@ final class EmulatorController {
         readinessTask?.cancel()
         preparingDevice = true
         preparationStatus = "Starting iOS…"
+        bootStage = .poweringOn
+        reportAtBootStart = status?.guestPackage
         readinessFailure = nil
         let generation = bootGeneration
         readinessTask = Task { [weak self] in
             guard let self else { return }
             defer { if generation == self.bootGeneration { self.preparingDevice = false } }
             do {
-                let deadline = ContinuousClock.now + .seconds(profile.bootBudget)
+                var deadline: ContinuousClock.Instant? = ContinuousClock.now + .seconds(profile.bootBudget)
                 while true {
                     try Task.checkCancellation()
                     guard generation == bootGeneration else { return }
-                    guard !isDead, !storageFailed, ContinuousClock.now < deadline else {
-                        throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.")
+                    guard !isDead, !storageFailed else { throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.") }
+                    if let due = deadline, ContinuousClock.now >= due {
+                        guard deadlineVerdict == .keepRunning else {
+                            throw DeviceToolsError.failed("The \(profile.shortName) didn’t become ready in time.")
+                        }
+                        // iOS is on screen without USB: the screen is the user's; keep waiting for USB, quietly.
+                        deadline = nil
+                        preparingDevice = false
+                        reportDeviceNotice(ReadinessDeadline.notice(shortName: profile.shortName), for: .preparation)
                     }
                     if state == .running, await deviceReady() { break }
                     try await Task.sleep(for: .milliseconds(250))
                 }
                 try Task.checkCancellation()
                 guard generation == bootGeneration else { return }
+                noteBoot(.usbAttached)
                 preparationStatus = "Waiting for the Home screen…"
                 // A framebuffer and lockdown can both respond while SpringBoard
                 // is still starting. Do not enable input until its service answers.
@@ -705,6 +737,9 @@ final class EmulatorController {
             lastFrameSerial = status.frameSerial
             noteFrameAdvanced()
         }
+        if bootStage < .system, status.agentStatus == 1 || (status.guestPackage != nil && status.guestPackage != reportAtBootStart) {
+            noteBoot(.guestTools)
+        }
         let now = Date()
         if now.timeIntervalSince(lastAgentStatusCheck) >= 1 {
             lastAgentStatusCheck = now
@@ -759,7 +794,8 @@ final class EmulatorController {
             if restartingSpringBoard { return "Restarting the Home screen…" }
             if let readinessFailure { return "Startup failed — \(readinessFailure)" }
             guard canManageApps else { return "Running — USB unavailable" }
-            return "Running — " + guestToolsLine
+            // Quiet when all is well; the guest tools only when they need attention.
+            return guestToolsState.needsAttention ? "Running — " + guestToolsLine : "Running"
         case .paused:     return "Paused"
         case .dead:       return "Stopped"
         }
@@ -1052,7 +1088,8 @@ final class EmulatorController {
                 try? await Task.sleep(for: .seconds(3))
                 guard let self else { return }
                 if self.state == .booting { last = nil }   // a restart: adopt again
-                guard self.state == .running, self.canManageApps, !self.isSleeping, !self.isInstalling,
+                // Only once lockdown has answered: before that every try is "not reachable over USB yet", every 3 s in the log.
+                guard self.canReachDevice, !self.isSleeping, !self.isInstalling,
                       let reading = try? await self.services.interfaceOrientation(),
                       let target = Self.iPadDegrees(forInterface: reading) else { continue }
                 if last == nil || (last != reading && self.autoRotateEnabled), target != self.rotationDegrees {

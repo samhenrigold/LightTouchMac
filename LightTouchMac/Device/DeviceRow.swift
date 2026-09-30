@@ -119,8 +119,10 @@ nonisolated struct DeviceRow: Equatable, Sendable {
 
     var title: String { "iOS \(entry.version)" }
     var isExperimental: Bool { entry.status == .experimental }
-    /// The tag beside the title: a developer build's "Beta 3"/"GM", else "Experimental" for that status.
-    var badge: String? { entry.prereleaseBadge ?? (isExperimental ? "Experimental" : nil) }
+    /// The tag beside the title, in secondary text: a developer build's "Beta 3"/"GM 1". How well a build is
+    /// tested isn't the row's to shout: that is `supportNote`, in the tooltip, VoiceOver and the placeholder's popover.
+    var badge: String? { entry.prereleaseBadge }
+    var supportNote: String? { entry.status == .untested ? "Untested" : isExperimental ? "Experimental" : nil }
     var isStartable: Bool { instanceID != nil }
     var isDimmed: Bool { if case .unavailable = state { true } else { false } }
     var isError: Bool { if case .error = state { true } else { false } }
@@ -133,29 +135,65 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
     }
 
-    /// The sidebar's words beside the ring: "43%", "Step 6 of 7 · 48%".
-    var progressSummary: String? {
-        let percent = progress.map { "\(Int(($0 * 100).rounded(.down)))%" }
+    /// The sidebar's words beside the ring: "43%"; nil while there is no fraction yet (the ring spins).
+    var progressSummary: String? { progress.map { "\(Int(($0 * 100).rounded(.down)))%" } }
+
+    /// What the sidebar shows after the title. Only what differs from the usual: a downloaded, built-in or
+    /// ready build shows nothing; one that isn't here yet shows a download glyph (its size is in VoiceOver).
+    enum Accessory: Equatable, Sendable {
+        case none, notDownloaded, running, stopping, error
+        case progress(Double?, String?)
+        case text(String)
+    }
+    var accessory: Accessory {
         switch state {
-        case let .downloading(_, _, files): return files > 1 ? "\(files) IPSWs" + (percent.map { " · \($0)" } ?? "") : percent
-        case let .preparing(p): return p.steps > 0 ? "Step \(p.step) of \(p.steps)" + (percent.map { " · \($0)" } ?? "") : p.name
-        default: return nil
+        case .notDownloaded: .notDownloaded
+        case .downloaded, .bundled, .ready: .none
+        case .downloading, .preparing: .progress(progress, progressSummary)
+        case .running: .running
+        case .stopping: .stopping
+        case .error: .error
+        case .unavailable(.comingSoon): .text("Coming soon")
+        case .unavailable(.requiresIPSW): .text("Requires an IPSW")
         }
     }
 
-    /// The placeholder's lines under the bar: the step, what it is doing, and percent with time left.
-    var progressLines: [String] {
-        let percent = progress.map { "\(Int(($0 * 100).rounded(.down)))%" }
-        switch state {
-        case let .downloading(_, remaining, files):
-            return [files > 1 ? "\(files) IPSWs" : nil,
-                    [percent, remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")].compactMap { $0 }
-        case let .preparing(p) where p.steps > 0:
-            return ["Step \(p.step) of \(p.steps): \(p.name)", p.detail,
-                    [percent, p.remaining.map(Self.remainingText)].compactMap { $0 }.joined(separator: " · ")].compactMap { $0 }
-        case let .preparing(p): return [p.name]
-        default: return []
+    /// The placeholder's one line under the bar: percent and time left ("34% · About 1 min remaining").
+    var progressLine: String? {
+        let remaining: TimeInterval? = switch state {
+        case let .downloading(_, remaining, _): remaining
+        case let .preparing(p): p.remaining
+        default: nil
         }
+        let parts = [progress.map { "\(Int(($0 * 100).rounded(.down)))%" }, remaining.map(Self.remainingText)].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// What the job is doing inside, for the bar's tooltip only: the preparer's step and its words, or the IPSW count.
+    var progressDetail: [String] {
+        switch state {
+        case let .downloading(_, _, files): files > 1 ? ["\(files) IPSWs"] : []
+        case let .preparing(p) where p.steps > 0: ["Step \(p.step) of \(p.steps): \(p.name)", p.detail].compactMap { $0 }
+        case let .preparing(p): [p.name]
+        default: []
+        }
+    }
+
+    /// The placeholder's info popover: "Untested." or "Experimental." and the catalog's note (source, keys).
+    var catalogNote: String? {
+        let tag = entry.status == .untested ? "Untested." : isExperimental ? "Experimental." : nil
+        let note = tag != nil || entry.prerelease != nil ? entry.statusNote : nil
+        let text = [tag, note].compactMap { $0 }.joined(separator: " ")
+        return text.isEmpty ? nil : text
+    }
+
+    /// Before a download or preparation, when `available` bytes can't hold it: the copy's words; nil when there is room.
+    func spaceShortage(available: Int64) -> String? {
+        let download: Int64 = if case let .notDownloaded(bytes) = state { bytes ?? 0 } else { 0 }
+        let needed = download + entry.estimates.peakBytes
+        guard [.downloaded, .bundled].contains(state) || download > 0, needed > available else { return nil }
+        let format = { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
+        return "Not enough disk space: this needs \(format(needed)), and \(format(available)) is available."
     }
 
     static func remainingText(_ seconds: TimeInterval) -> String {
@@ -209,11 +247,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
     }
 
-    /// The row's note, when there is one: an untested build (downloadable and preparable like any
-    /// other, never run through the matrix) says so.
-    var note: String? {
-        preparedWithoutActivation && instanceID != nil ? "Prepared without activation" : entry.status == .untested ? "Untested" : nil
-    }
+    /// The row's note beside a quiet accessory: a device prepared without activation says so.
+    var note: String? { preparedWithoutActivation && instanceID != nil ? "Prepared without activation" : nil }
 
     /// The accessory's words: what VoiceOver reads after the version.
     var stateDescription: String {
@@ -222,8 +257,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
             bytes.map { "Not downloaded, " + ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Not downloaded"
         case .downloaded: "Downloaded"
         case .bundled: "Built in"
-        case .downloading: "Downloading, " + (progressSummary ?? "")
-        case .preparing: "Preparing, " + (progressSummary ?? "")
+        case .downloading: "Downloading" + (progressSummary.map { ", " + $0 } ?? "…")
+        case .preparing: "Preparing" + (progressSummary.map { ", " + $0 } ?? "…")
         case .ready: "Ready"
         case .running: "Running"
         case .stopping: "Stopping"
