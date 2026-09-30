@@ -861,6 +861,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func setBatteryCharging(_ sender: NSMenuItem) { emulator?.setBattery(charging: Int32(sender.tag)) }
     @objc func toggleHighPowerUSB(_ sender: Any?)       { emulator.map { $0.setHighPowerUSB(!$0.highPowerUSB) } }
     @objc func setCompassHeading(_ sender: NSMenuItem)  { emulator?.setCompassHeading(sender.tag) }
+    @objc func specialTrick(_ sender: Any?) {
+        deviceVC?.screen.specialTrick()
+        // The chime lands on the pop, a beat after the crouch starts.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NSSound(named: "special_trick")?.play() }
+    }
     @objc func toggleDevicePause(_ sender: Any?) {
         guard let emulator else { return }
         if emulator.isPaused { emulator.resume() } else if emulator.isRunning { emulator.pause() }

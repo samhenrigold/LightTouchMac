@@ -36,6 +36,7 @@ final class DeviceModelView: NSView {
   private var rotation = 0
   private var screenOff = false
   private var shakeStarted: CFTimeInterval?
+  private var trickStarted: CFTimeInterval?
 
   @available(macOS 15, *)
   init(url: URL, profile: DeviceProfile) async throws {
@@ -385,6 +386,11 @@ final class DeviceModelView: NSView {
     guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
     shakeStarted = CACurrentMediaTime()
   }
+  /// A 360 double kickflip, launched with the THPS special chime.
+  func specialTrick() {
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+    trickStarted = CACurrentMediaTime()
+  }
   func advanceAnimations() {
     let now = CACurrentMediaTime()
     if let animation = transition {
@@ -416,6 +422,41 @@ final class DeviceModelView: NSView {
         chassis.orientation = simd_quatf(angle: cross * 0.008, axis: [1, 0, 0])
           * simd_quatf(angle: wave * 0.012, axis: [0, 1, 0]) * basePose.rotation
       }
+    }
+    if let start = trickStarted {
+      // Crouch, pop, double kickflip over a 360 shove-it, catch, and stomp the landing.
+      let t = Float(now - start)
+      let height = basePose.scale.y * shellBounds.extents.y
+      var lift: Float = 0, grow: Float = 1, pitch: Float = 0, wobble: Float = 0
+      var flip: Float = 0, spin: Float = 0
+      switch t {
+      case ..<0.15:
+        let crouch = sin(t / 0.15 * .pi / 2)
+        lift = -0.06 * height * crouch
+        pitch = 0.3 * crouch
+      case ..<1:
+        let air = (t - 0.15) / 0.85
+        let back = air - 1
+        lift = 2.2 * height * air * (1 - air)
+        grow = 1 + 0.18 * sin(air * .pi)
+        pitch = 0.3 * (1 - air) * (1 - air)
+        wobble = 0.35 * sin(air * 2 * .pi)
+        flip = (1 + 2.70158 * back * back * back + 1.70158 * back * back) * 4 * .pi
+        spin = (air < 0.5 ? 4 * air * air * air : 1 + 4 * back * back * back) * 2 * .pi
+      case ..<1.25:
+        // Same bounce rhythm as a long settle, damped hard so it's over in 0.25 s.
+        let land = (t - 1) / 0.45
+        let settle = exp(-11 * land)
+        lift = -0.05 * height * settle * cos(3 * .pi * land)
+        pitch = -0.12 * settle * sin(4 * .pi * land)
+      default:
+        trickStarted = nil
+      }
+      chassis.position = [0, lift, 0]
+      chassis.scale = basePose.scale * grow
+      chassis.orientation = simd_quatf(angle: spin, axis: [0, 1, 0])
+        * simd_quatf(angle: -pitch, axis: [1, 0, 0]) * simd_quatf(angle: wobble, axis: [0, 0, 1])
+        * basePose.rotation * simd_quatf(angle: flip, axis: [0, 1, 0])
     }
     // Project the rounded chassis outline; never shadow the rectangular ARView.
     let path = CGMutablePath()

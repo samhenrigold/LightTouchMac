@@ -169,6 +169,7 @@ enum MainMenuBuilder {
         menu.addItem(submenu(orientation, title: "Orientation"))
         let input = NSMenu(title: "Input")
         input.addItem(item("Shake", #selector(MainWindowController.deviceShake(_:))))
+        input.addItem(item("Special Trick", #selector(MainWindowController.specialTrick(_:))))
         input.addItem(.separator())
         input.addItem(item("Volume Up", #selector(MainWindowController.deviceVolumeUp(_:)), String(UnicodeScalar(NSUpArrowFunctionKey)!), [.option, .command]))
         input.addItem(item("Volume Down", #selector(MainWindowController.deviceVolumeDown(_:)), String(UnicodeScalar(NSDownArrowFunctionKey)!), [.option, .command]))

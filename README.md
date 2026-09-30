@@ -71,6 +71,13 @@ hash, the names the app and firmwarekit need, the catalog's GL tables, the sourc
 archives are pinned in `build-support/dependencies.json`. Firmware and the iPhoneOS SDK are external inputs;
 nothing downloads or redistributes them.
 
+The product build supports macOS 14 or later, on Apple Silicon by default or as a universal app for Intel
+too: add `--universal`. The build still runs on an Apple Silicon Mac: it cross-compiles every native
+dependency and QEMU a second time for x86_64 (`LTM_ARCH=x86_64`), keeps one complete native root per
+architecture under `native/arm64` and `native/x86_64`, merges them into `native-universal/` with
+`scripts/merge-native.py`, and builds the app with both slices. The x86_64 FFmpeg build uses NASM for its
+decoder assembly. With `--native-build`, pass the directory that holds the `arm64` and `x86_64` roots.
+
 The pre-multi-device README, with the iPod feature notes (media import, battery, proxy, captures) and
 the older build walkthrough, is kept at `docs/archive/README-2026-09-26.md`.
 

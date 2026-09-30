@@ -1223,6 +1223,8 @@ final class DisplayView: NSView {
         }
     }
 
+    func specialTrick() { modelView?.specialTrick() }
+
     func resetMotion() {
         endTilt()
     }

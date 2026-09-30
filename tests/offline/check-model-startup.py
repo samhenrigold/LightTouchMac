@@ -44,6 +44,7 @@ stub_source = prefix + r'''
  func isChassis(_ p:CGPoint)->Bool{false}
  func advanceAnimations(){}
  func shake(){}
+ func specialTrick(){}
 }
 @main struct Check {
  @MainActor static func main() async throws {
