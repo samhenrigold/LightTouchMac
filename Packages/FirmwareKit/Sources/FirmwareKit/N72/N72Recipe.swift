@@ -3,18 +3,18 @@
 //
 // Boot files: nor.bin, iBoot.bin (3.x+: the machine's direct-iboot), gid-blobs.bin. Volume: the IPSW rootfs
 // grown to the recipe, fstab, the kernelcache at the path iBoot names, the shared bake (SystemEdits) plus the
-// iPod's own pieces (MBXGLEngine shim, sound defaults, guest-tools markers), owners patched in the catalog.
+// iPod's own pieces (sound defaults, guest-tools markers), owners patched in the catalog.
 // Store: N72NAND's page directory. There is no seal boot: the legacy FTL store needs no clean halt.
 // options.data_protection (4.x) adds the restore-ramdisk keybag one-shot (N72Keybag) through --helper.
 //
 // The recipe: storage "8g" (model MB528; 16g MB531, 32g MB533; region LL/A), system_mib = the volume
 // (7168 MiB = 1835008 blocks), options gles_shim / appsync / web_proxy / data_protection. --guest-tools
-// holds MBXGLEngine (one shim for every firmware with the armv6 shared cache) and gles-names.h, sblaunch,
+// holds OpenGLES (the GL front end, qemu-ios contrib/gles-public: every build, 2.x to 4.x) and gles-names.h, sblaunch,
 // sbdlicon (optional), it_agent, it_typein.dylib, com.qemu.it-agent.plist, libappsync.dylib, armv6.itpack (the
 // guest-package loader and seed package, as ipod2g_device.py bakes them), it_prefs-armv6 + com.qemu.it-prefs.plist
-// (3.1+: no first-run "Edit Home Screen" tip; 2.x/3.0 get its SBDidShowReorderText baked instead), it_keybag-armv6 (data protection) and opengles-2x.exports (2.x: the
-// stock OpenGLES must export exactly these names before the seed package's n72-ios2 hook, the GL front end, replaces
-// it and SpringBoard gets CA_ENABLE_OGL=1; an itpack without that hook is refused).
+// (3.1+: no first-run "Edit Home Screen" tip; 2.x/3.0 get its SBDidShowReorderText baked instead) and it_keybag-armv6
+// (data protection). With gles_shim the front end replaces OpenGLES once FitCheck.glesFrontEnd fits (else the prepare
+// fails) and SpringBoard gets CA_ENABLE_OGL=1.
 
 import CryptoKit
 import Foundation
@@ -23,9 +23,7 @@ final class N72Board: Board {
     static let models = ["8g": "MB528", "16g": "MB531", "32g": "MB533"]
     static let kcPrefix = "/System/Library/Caches/com.apple.kernelcaches/"
     static let mbx = "System/Library/Frameworks/OpenGLES.framework/MBXGLEngine.bundle/MBXGLEngine"
-    /// 1.x/2.x: the framework binary is the driver; the guest package's GL front end (OpenGLES-2x) replaces it.
     static let openGLES = "System/Library/Frameworks/OpenGLES.framework/OpenGLES"
-    static let openGLESExports = "opengles-2x.exports"
     static let prefs = "private/var/mobile/Library/Preferences"
     static let agentJob = "System/Library/LaunchDaemons/com.qemu.it-agent.plist"
     static let prefsJob = "System/Library/LaunchDaemons/com.qemu.it-prefs.plist"
@@ -247,7 +245,7 @@ final class N72Board: Board {
     /// install_web_proxy, activation) with the shared pieces of SystemEdits. Appends the owners to patch;
     /// returns the report (the lock's `derived`, plus activation and guest_package).
     func bake(_ m: URL, _ c: Recipe.Context, owners: inout [(UInt32, String)]) throws -> [String: Any] {
-        let fm = FileManager.default, opt = recipe.options, helpers = c.o.guestTools, mbx = Self.mbx
+        let fm = FileManager.default, opt = recipe.options, helpers = c.o.guestTools
         let cache = SystemEdits.dyldCache(arch)
         let at = { (rel: String) in m.appendingPathComponent(rel) }
         // The guest helpers (it_agent, it_typein DYLD_INSERTed into SpringBoard, sblaunch, it_prefs, the loader and
@@ -255,7 +253,6 @@ final class N72Board: Board {
         // LC_DYLD_INFO_ONLY ("dyld: unknown required load command 0x80000022") and SpringBoard never comes up with
         // it_typein inserted (qemu-ios ipod2g_device.py 4074277e42). Proven from the volume (guestToolsFit), not
         // assumed from the version or the cache: where they do not load they are left out with a warning.
-        let cached = fm.fileExists(atPath: at(cache).path)
         func helper(_ n: String) throws -> Data {
             let u = helpers.appendingPathComponent(n)
             guard fm.fileExists(atPath: u.path) else { throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)") }
@@ -267,34 +264,23 @@ final class N72Board: Board {
         if opt["appsync"] == true { try FitCheck.checkAppSync(c.fit, fw, helpers: helpers) } else { c.fit.notInstalled("AppSync", "appsync off") }
         // the reorder tip's key: set by it_prefs at boot (tools) or baked below; either way only if SpringBoard reads it
         try c.fit.check(FitCheck.prefs(fw, [FitCheck.itPrefs[0]])[0], required: false, outcome: tools ? "kept: it_prefs skips the key at boot" : "not baked")
+        // the GL front end (qemu-ios contrib/gles-public): one OpenGLES.framework/OpenGLES for every build, 2.x's EGL
+        // compositor and 3.x/4.x's EAGL one alike, once FitCheck.glesFrontEnd proves this firmware has what it looks up
         var report: [String: Any] = [:]
-        // ipod2g_device.gli_engine: the one MBXGLEngine (it reads the dispatch layout at load) wherever the armv6
-        // shared cache exists; the sanity line says what it will find
-        let gles = (opt["gles_shim"] ?? true) && cached
-        let why = !(opt["gles_shim"] ?? true) ? "options.gles_shim off" : "no dyld shared cache (2.x, 3.0)"
-        let info = try gles ? SystemEdits.glesSanity(Data(contentsOf: at(cache), options: .alwaysMapped), helpers: helpers) : ""
-        report["gles"] = gles ? "shim MBXGLEngine (\(info))" : "stock engine, software CA: " + why
-        // ipod2g_device.gles2x_front_end: 1.x/2.x have no engine to replace; the package's OpenGLES hook (the same
-        // core) goes in instead when the stock framework exports exactly the front end's names
-        var front = false
-        if !tools, opt["gles_shim"] ?? true {
-            let (ok, line) = try Self.frontEnd(at(Self.openGLES), exports: helpers.appendingPathComponent(Self.openGLESExports))
-            front = ok
-            report["gles"] = line + (ok ? "; CA composites through it (CA_ENABLE_OGL=1)" : "")
+        var gles = false
+        if opt["gles_shim"] ?? true {
+            let (engine, owned) = try SystemEdits.installCAOGL(m, helpers: helpers, arch: arch, fw: fw, fit: c.fit, log: c.log)
+            gles = true
+            owners += owned.map { (UInt32(0), $0) }
+            report["gles"] = "GL front end \(engine) as OpenGLES; CoreAnimation composites through it (CA_ENABLE_OGL=1)"
+        } else {
+            report["gles"] = "stock OpenGLES, software CA: options.gles_shim off"
         }
-        report["gles_shim"] = gles || front
-        report["gles_engine"] = gles ? "MBXGLEngine" : front ? "OpenGLES" : NSNull() as Any
+        report["gles_shim"] = gles
+        report["gles_engine"] = gles ? SystemEdits.Helpers.openGLES : NSNull() as Any
         report["guest_tools"] = tools ? "installed" : "omitted: " + toolsFit.proof
 
         // bake-guest-tools.sh
-        if gles {
-            try SystemEdits.mkdirs(at(mbx).deletingLastPathComponent())
-            let stock = at(mbx + ".stock")   // 4.x has no stock file to keep: its MBXGLEngine is in the shared cache
-            if !fm.fileExists(atPath: stock.path), fm.fileExists(atPath: at(mbx).path) {
-                try SystemEdits.put(Data(contentsOf: at(mbx)), stock, mode: try SystemEdits.permissions(at(mbx)) & ~0o022)
-            }
-            try SystemEdits.put(helper(SystemEdits.Helpers.mbxEngine), at(mbx), mode: 0o755)
-        }
         if tools {
             try SystemEdits.mkdirs(at("usr/local/bin"))
             try SystemEdits.put(helper("sblaunch"), at("usr/local/bin/sblaunch"), mode: 0o755)
@@ -304,10 +290,10 @@ final class N72Board: Board {
             try SystemEdits.put(helper("it_agent"), at("usr/local/bin/it_agent"), mode: 0o755)
             try SystemEdits.put(helper("it_typein.dylib"), at("usr/lib/it_typein.dylib"), mode: 0o755)
         }
-        try c.fit.check(FitCheck.environment(fw, Self.sbSwitches, also: gles ? [(SystemEdits.Helpers.mbxEngine, try helper(SystemEdits.Helpers.mbxEngine))] : []),
+        try c.fit.check(FitCheck.environment(fw, Self.sbSwitches),
                         required: false, outcome: "kept: a switch nothing reads is inert")
         try SystemEdits.editSpringBoardJob(m) { env, _ in
-            for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = gles || front ? "1" : "0" }
+            for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = gles ? "1" : "0" }
             for k in ["CA_AUTO_ENABLE_OGL", "LK_AUTO_ENABLE_OGL", "CA_ENABLE_MBX2D", "LK_ENABLE_MBX2D"] { env[k] = "0" }
             let old = (env["DYLD_INSERT_LIBRARIES"] as? String ?? "").split(separator: ":").map(String.init)
             let libs = old.filter { !["/usr/lib/it_kbd_agent.dylib", "/usr/lib/it_typein.dylib"].contains($0) } + (tools ? ["/usr/lib/it_typein.dylib"] : [])
@@ -332,11 +318,6 @@ final class N72Board: Board {
             for rel in [Self.agentJob] + (1...3).map({ "private/var/mobile/Media/.lt-guest-tools-v\($0)" }) { try? fm.removeItem(at: at(rel)) }
         }
 
-        if gles {   // ipad1_rootfs.gli_uncache: 4.x caches MBXGLEngine, so dyld must prefer the file
-            let status = try autoreleasepool { try SystemEdits.overrideCachedImage(m, image: mbx, cache: cache) }
-            report["gles_cache"] = status
-            if status.contains("overridden") { owners.append((0, SystemEdits.dyldOverride)) }
-        }
         if opt["appsync"] == true {   // patch-appsync-dylib.sh
             let (line, job) = try SystemEdits.installAppSync(m, helper: helpers.appendingPathComponent(SystemEdits.Helpers.appsync), cache: cache, log: c.log)
             report["appsync"] = [line, "installation service (\(job)) DYLD_INSERT_LIBRARIES += /\(SystemEdits.appsyncPath)"]
@@ -363,14 +344,10 @@ final class N72Board: Board {
         owners.append((0, SystemEdits.lockdownd))
         // mkpkg.seed: the loader and the seed package; it_boot loads the package's jobs (com.qemu.it-agent), so
         // the baked copies it provides are removed. Owners after it, for only what is left.
-        // On 2.x the package carries only the OpenGLES front-end hook.
-        if tools || front {
-            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles || front,
+        // On 2.x and 3.0 the package carries only the GL front end's hook.
+        if tools || gles {
+            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles,
                                                                      omitted: opt["appsync"] == true ? [] : ["/" + SystemEdits.appsyncPath], fit: c.fit, log: c.log)
-            if front, !record.hooks.contains("/" + Self.openGLES) {
-                // CA_ENABLE_OGL=1 over the stock driver drives the unemulated MBX: fail rather than wedge
-                throw FirmwareError(.internal, "\(SystemEdits.Helpers.itpack(arch)) has no OpenGLES hook for this build; rebuild the guest package")
-            }
             report["guest_package"] = record
             owners += seeded.map { (UInt32(0), $0) }
         }

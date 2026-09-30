@@ -52,13 +52,13 @@ import Testing
         }
     }
 
-    /// 2.x GL front end against the oracle on 5F138's stock OpenGLES: the export scan as gles2x_exports.scan, the
-    /// check against opengles-2x.exports (and its refusal of a list that differs), and, with an armv6.itpack at
-    /// hand, GuestPackage.seed as mkpkg.seed: n72-ios2's OpenGLES hook in, the stock binary kept as OpenGLES.baked.
+    /// The GL front end on 2.x against the oracle, 5F138's stock OpenGLES: the export scan as gles2x_exports.scan and,
+    /// with an armv6.itpack at hand, GuestPackage.seed as mkpkg.seed: n72-ios2's hook puts the one front end
+    /// (contrib/gles-public) over OpenGLES, the stock binary kept as OpenGLES.baked, every stock name still exported.
     @Test func frontEndMatchesPython() throws {
         let fw = Oracle.firmware("n72ap-5F138"), dmg = fw.cache?.appendingPathComponent("rootfs.dmg")
-        let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles"), list = it.appendingPathComponent(N72Board.openGLESExports)
-        guard let dmg, Oracle.exists(dmg), Oracle.exists(list) else { return }
+        let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles")
+        guard let dmg, Oracle.exists(dmg) else { return }
         try Oracle.withTemp { dir in
             let raw = dir.appendingPathComponent("rootfs.hfs"), stock = dir.appendingPathComponent("OpenGLES")
             try UDIF.extractRootfs(dmg: dmg, to: raw)
@@ -71,11 +71,6 @@ import Testing
             let names = try N72Board.exportedSymbols(Data(contentsOf: stock))
             let pyNames = try String(contentsOf: scan, encoding: .utf8).split(separator: "\n").map(String.init)
             #expect(names.count > 200 && names == pyNames)
-            let (ok, line) = try N72Board.frontEnd(stock, exports: list)
-            #expect(ok, "\(line)")
-            let short = dir.appendingPathComponent("short.exports")
-            try (String(contentsOf: list, encoding: .utf8).replacingOccurrences(of: "\nglFlush\n", with: "\n")).write(to: short, atomically: true, encoding: .utf8)
-            #expect(try N72Board.frontEnd(stock, exports: short).0 == false)
 
             let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
             guard Oracle.exists(itpack) else { return }
@@ -106,7 +101,7 @@ import Testing
             #expect(hooked == pyHooked && hooked != stockBytes && baked == stockBytes)
             let modes = try [a, b].map { try SystemEdits.permissions($0.appendingPathComponent(N72Board.openGLES + ".baked")) }
             #expect(modes[0] == modes[1])
-            #expect(try N72Board.exportedSymbols(hooked) == names)   // the front end exports the firmware's own names
+            #expect(Set(try N72Board.exportedSymbols(hooked)).isSuperset(of: names))   // every stock name, and 3.x-5.x's
         }
     }
 
