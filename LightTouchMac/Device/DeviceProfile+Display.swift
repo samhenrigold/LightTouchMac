@@ -29,12 +29,15 @@ nonisolated extension DeviceProfile {
 
     // MARK: - Device art (shell-native pixels, top-left origin)
 
-    /// The iPod has shell.png and the N72 3D model. The iPad borrows the iPad
-    /// chrome from the iPhone Simulator in Xcode 3.2.4 (iPad.deviceinfo:
-    /// portrait.png, 852x1108, with the 768x1024 screen centred in it), as a
-    /// stand-in until it has a 3D model of its own.
+    /// Each board has a 3D model (<name>.usdz, revision 7 for K48 and N45).
+    /// The flat art is the fallback while it loads or where RealityKit can't:
+    /// the iPod has shell.png, and the iPad borrows the iPad chrome from the
+    /// iPhone Simulator in Xcode 3.2.4 (iPad.deviceinfo: portrait.png,
+    /// 852x1108, with the 768x1024 screen centred in it).
     var shellImageName: String { self == .iPad1 ? "ipad-frame" : "shell" }
-    var hasDeviceModel: Bool { self == .iPodTouch2G }
+    var deviceModelName: String? {
+        switch self { case .iPodTouch2G: "N72"; case .iPad1: "K48"; case .iPodTouch1G: "N45" }
+    }
 
     var shellPixels: CGSize {
         switch self {
