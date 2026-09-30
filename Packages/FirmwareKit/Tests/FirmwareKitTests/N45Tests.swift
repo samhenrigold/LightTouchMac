@@ -28,6 +28,19 @@ import Testing
         #expect(got.count == want.count && diff.isEmpty, "\(diff.count) bytes differ, first at \(diff.prefix(8).map { String($0, radix: 16) })")
     }
 
+    /// iBoot-204 fills arm-io/sdio's local-mac-address only from nvram wifiaddr (its SysCfg fallback returns 0):
+    /// the NOR's nvram carries the identity's Wi-Fi MAC, and none when the identity has none (devos50's set).
+    @Test func nvramCarriesTheWiFiMAC() throws {
+        var body = Data(count: IMG2.headerSize + 16)
+        body[0x10] = 16
+        let images = Dictionary(uniqueKeysWithValues: N45NOR.order.map { ($0, body) })
+        let id = try UnitIdentity.synthesizeIPod(seed: "n45-nvram", modelNumber: "MA623", regionInfo: "LL/A", bluetooth: false)
+        let nvram = { (nor: Data) in String(decoding: nor[N45NOR.nvram + 0x30..<N45NOR.nvram + 0x830], as: UTF8.self) }
+        let text = nvram(try N45NOR.build(identity: id, images: images))
+        #expect(text.contains("\0wifiaddr=\(id["wifi-mac"]!.uppercased())\0") && !text.contains("btaddr"))
+        #expect(!nvram(try N45NOR.build(identity: Self.devos50, images: images)).contains("wifiaddr"))
+    }
+
     @Test func iBootIsTheDecryptedComponent() throws {
         guard Self.available else { return }
         let body = try Apple8900.body(IPSWArchive(Self.ipsw).read(Self.prefix + "iBoot.n45ap.RELEASE.img2"))
