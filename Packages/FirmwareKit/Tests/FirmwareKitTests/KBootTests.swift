@@ -137,10 +137,11 @@ struct KBootTests {
          "b983e3f72a757f3c7581c1d55cb7b5432550935d4fba5ebe4ea64560bcd6f98e", "fc3e36b72520d33cabad48d58385d1787d1a55510164e4a7d771eb8810117324"),
         ("k48ap-7B367", "018-7225-009-ramdisk.dmg",
          "9df137569c86ad51d814f1da56ac33bf178f8763b27f96fdd4784b95a652770e", "94703af6dbba02cc7ba691bfecaa6801662345d5e18a135e5384126bec31d495"),
-    ].filter { Oracle.firmware($0.0).available }
+    ]
 
     /// The whole Swift chain (IPSW -> FirmwareDecryptor -> KBoot) against the Python chain's kboot.bin.
-    @Test(arguments: python) func kbootMatchesPython(id: String, ramdisk: String, normal: String, rdMode: String) throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: python) func kbootMatchesPython(id: String, ramdisk: String, normal: String, rdMode: String) throws {
+        guard Oracle.firmware(id).available else { try FixtureRequirements.missing("cached IPSW for " + id) }
         try Oracle.withTemp { dir in
             let dec = dir.appendingPathComponent("dec")
             _ = try FirmwareDecryptor.decrypt(ipsw: Oracle.firmware(id).ipsw, entry: Oracle.entry(id), into: dec, rootfs: false)
