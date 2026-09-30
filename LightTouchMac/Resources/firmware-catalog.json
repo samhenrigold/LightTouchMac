@@ -321,7 +321,7 @@
   "version": "4.3",
   "build": "8F5148b",
   "released": "2011-01-12",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 1,
   "status_note": "iOS 4.3 Beta 1 (8F5148b), 2011-01-12: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
@@ -357,7 +357,7 @@
   "version": "4.3",
   "build": "8F5153d",
   "released": "2011-01-19",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 2,
   "status_note": "iOS 4.3 Beta 2 (8F5153d), 2011-01-19: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
@@ -393,7 +393,7 @@
   "version": "4.3",
   "build": "8F5166b",
   "released": "2011-02-01",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 3,
   "status_note": "iOS 4.3 Beta 3 (8F5166b), 2011-02-01: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
@@ -834,7 +834,7 @@
   "version": "1.1.1",
   "build": "3A110a",
   "released": "2007-09-27",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-3932.20070927.p23dD/iPod1,1_1.1.1_3A110a_Restore.ipsw", "sha1": "84bbc6ea8bf29745195bc9926c1874f7c2a36f32", "bytes": 157906686},
   "keys": {
    "rootfs": {"file": "022-3642-8.dmg", "key": "d45b837ddd85bdae0ec82a033ba00ea03ceb8c827040034f7554c65d6376472844b8dc6a"}
@@ -866,7 +866,7 @@
   "version": "1.1.3",
   "build": "4A93",
   "released": "2008-01-15",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/061-4060.20080115.9Iuh5/iPod1,1_1.1.3_4A93_Restore.ipsw", "sha1": "8dca23eec69d5ae58fbf3d4a23276e46cbb2e3c6", "bytes": 173511411},
   "keys": {
    "rootfs": {"file": "022-3742-100.dmg", "key": "11070c11d93b9be5069b643204451ed95aad37df7b332d10e48fd3d23c62fca517055816"}
@@ -882,7 +882,7 @@
   "version": "1.1.4",
   "build": "4A102",
   "released": "2008-02-26",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-4312.20080226.Btu45/iPod1,1_1.1.4_4A102_Restore.ipsw", "sha1": "c148d1eb1c979bb6434175411d4a372103a4fdd2", "bytes": 173519589},
   "keys": {
    "rootfs": {"file": "022-3893-4.dmg", "key": "d0a0c0977bd4b6350b256d6650ec9eca419b6f961f593e74b7e5b93e010b698ca6cca1fe"}
@@ -898,7 +898,7 @@
   "version": "1.1.5",
   "build": "4B1",
   "released": "2008-07-15",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-4841.20080714.bgy8O/iPod1,1_1.1.5_4B1_Restore.ipsw", "sha1": "1b818911316e4248ee01d3ec67f9d39afc3db240", "bytes": 173519637},
   "keys": {
    "rootfs": {"file": "018-3755-1.dmg", "key": "c7973558e8f6af22e38d4573737d1533f1d5eec202bf86a32d941975d76f8906c7f0afe4"}

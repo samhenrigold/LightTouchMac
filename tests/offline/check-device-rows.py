@@ -152,7 +152,7 @@ import Foundation
 
         // Untested builds (betas from archive.org, releases the matrix hasn't run) download and
         // prepare like any other, with an Untested note; coming soon stays shut (above).
-        for e in [entry("n72ap-8C5091e"), entry("k48ap-8F5148b"), entry("n72ap-7A341")] {   // still untested after the 09-30 sweep
+        for e in [entry("n72ap-8C5091e"), entry("n45ap-3B48b"), entry("n72ap-7A341")] {   // still untested after the 09-30 sweep
             precondition(e.status == .untested && e.source.url?.scheme == "https", e.id)
             r = row(e)
             guard case .notDownloaded = r.state else { fatalError("\(e.id): \(r.state)") }
