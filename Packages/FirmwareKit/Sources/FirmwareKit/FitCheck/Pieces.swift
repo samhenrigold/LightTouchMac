@@ -9,7 +9,7 @@ extension FitCheck {
 
     /// Undefined external symbols a Mach-O imports.
     static func imports(_ m: MachO32) -> Set<String> {
-        Set(m.symbols().filter { $0.type & 0xE0 == 0 && $0.type & 0x01 != 0 && $0.type & 0x0E == 0 }.map(\.name))
+        Set(m.symbols().filter { MachO32.isImport($0.type) }.map(\.name))
     }
 
     // MARK: it_msmquiet
@@ -159,5 +159,77 @@ extension FitCheck {
         for f in bootArgs(kernel, args) {
             try log.check(f, required: requiredArgs.contains(String(f.piece.dropFirst("boot-arg ".count))), outcome: "kept: inert here")
         }
+    }
+}
+
+extension FitCheck {
+    // MARK: AppSync
+
+    /// What libappsync hooks in its host (contrib/appsync appsync.c): it interposes libmis's signature checks (one of
+    /// the two is the host's), and the two Security calls installd's verify_signer_identity makes on the signer
+    /// certificate; it fills the info dict under the two libmis keys the host reads. Each group: alternatives.
+    static let appSyncCalls = [["_MISValidateSignatureAndCopyInfo", "_MISValidateSignature"], ["_SecCertificateCreateWithData"],
+                               ["_SecCertificateCopySubjectSummary"], ["_kMISValidationInfoSignerCertificate"], ["_kMISValidationInfoValidatedByProfile"]]
+
+    /// libappsync fits the installation service `host` when the host's process (it, and every image it links)
+    /// imports what the dylib hooks (appSyncCalls), the dylib's getprogname gate names the host's program (the
+    /// Security interposes act only there), and the dylib loads in it.
+    public static func appSync(_ fw: Firmware, host: String, dylib: Data) -> Fit {
+        let name = (host as NSString).lastPathComponent, piece = "\(SystemEdits.Helpers.appsync) (in \(name))"
+        guard fw.resolve(host) != nil else { return Fit(piece, fits: false, "no \(host) on this firmware") }
+        var why: [String] = []
+        if !contains(dylib, cString(name)) { why.append("its getprogname gate does not name \(name): the Security interposes would pass through there") }
+        let images = fw.loaded(host)
+        var hooked: [String] = [], unhooked: [String] = []
+        for group in appSyncCalls {
+            let hit = group.lazy.compactMap { s in images.first { fw.imports($0)?.contains(s) == true }.map { "\(s.dropFirst()) by \(($0 as NSString).lastPathComponent)" } }.first
+            if let hit { hooked.append(hit) } else { unhooked.append(group.map { String($0.dropFirst()) }.joined(separator: " or ")) }
+        }
+        if !unhooked.isEmpty { why.append("nothing in \(name)'s process imports \(unhooked.joined(separator: ", ")), which the dylib hooks") }
+        let l = loads(piece, dylib, on: fw, host: host)
+        if !l.fits { why.append(l.proof) }
+        guard why.isEmpty else { return Fit(piece, fits: false, why.joined(separator: "; ")) }
+        return Fit(piece, fits: true, "hooks " + hooked.joined(separator: ", ") + "; gate names \(name); " + l.proof)
+    }
+
+    /// appsync-launch (2.x: Lockbot passes ProgramArguments only, so it sets DYLD_INSERT_LIBRARIES and execs the
+    /// service) fits when it loads, names the dylib where the bake puts it, and the service `program` it execs is a
+    /// Mach-O this CPU runs.
+    public static func appSyncLauncher(_ fw: Firmware, program: String, launcher: Data) -> Fit {
+        let piece = SystemEdits.Helpers.appsyncLauncher + " (Lockbot's installation_proxy service)"
+        guard let bin = fw.data(program), MachO32.slice(bin, arch: fw.arch) != nil else {
+            return Fit(piece, fits: false, "the service it execs, \(program), is not a Mach-O this CPU runs on this firmware")
+        }
+        guard contains(launcher, cString("/" + SystemEdits.appsyncPath)) else {
+            return Fit(piece, fits: false, "it does not insert /\(SystemEdits.appsyncPath), where the bake puts the dylib")
+        }
+        let l = loads(piece, launcher, on: fw)
+        guard l.fits else { return l }
+        return Fit(piece, fits: true, "execs \((program as NSString).lastPathComponent) with /\(SystemEdits.appsyncPath) inserted; " + l.proof)
+    }
+
+    /// AppSync's pieces where installAppSync puts them, recorded in `log`, required: libappsync in installd's job's
+    /// program, else (2.x) in Lockbot's installation_proxy service with appsync-launch.
+    static func checkAppSync(_ log: Log, _ fw: Firmware, helpers: URL) throws {
+        func piece(_ n: String) throws -> Data {
+            let u = helpers.appendingPathComponent(n)
+            guard FileManager.default.fileExists(atPath: u.path) else { throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)") }
+            return try Data(contentsOf: u)
+        }
+        let dylib = try piece(SystemEdits.Helpers.appsync)
+        let program: (NSDictionary?) -> String? = { d in (d?["ProgramArguments"] as? [String])?.first ?? d?["Program"] as? String }
+        if let job = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map({ SystemEdits.daemons + "/" + $0 }).first(where: { fw.resolve($0) != nil }) {
+            guard let host = program(NSDictionary(contentsOf: fw.resolve(job)!)) else {
+                try log.check(Fit(SystemEdits.Helpers.appsync, fits: false, "\(job) names no program"), required: true); return
+            }
+            try log.check(appSync(fw, host: host, dylib: dylib), required: true)
+            return
+        }
+        let services = fw.resolve("System/Library/Lockdown/Services.plist").flatMap { NSDictionary(contentsOf: $0) }
+        guard let host = program(services?["com.apple.mobile.installation_proxy"] as? NSDictionary) else {
+            try log.check(Fit(SystemEdits.Helpers.appsync, fits: false, "no installd job and no Lockbot installation_proxy service"), required: true); return
+        }
+        try log.check(appSync(fw, host: host, dylib: dylib), required: true)
+        try log.check(appSyncLauncher(fw, program: host, launcher: piece(SystemEdits.Helpers.appsyncLauncher)), required: true)
     }
 }

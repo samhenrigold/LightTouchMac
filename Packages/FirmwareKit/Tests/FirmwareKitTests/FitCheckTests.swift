@@ -22,9 +22,9 @@ enum FitFixture {
         FitCheck.Firmware.precedentBinaries + ["usr/lib/libSystem.B.dylib", SystemEdits.dyldCache(arch(id)), GuestPackage.systemVersion]
     }
 
-    /// `files` (those the image has; re-exported libraries of the on-disk ones too) under `dir`/`name`; nil when the
-    /// fixture is absent.
-    static func volume(_ id: String, _ files: [String], in dir: URL, name: String = "stock") throws -> URL? {
+    /// `files` (those the image has; re-exported libraries of the on-disk ones too, and with `links` every linked one)
+    /// under `dir`/`name`; nil when the fixture is absent.
+    static func volume(_ id: String, _ files: [String], in dir: URL, name: String = "stock", links: Bool = false) throws -> URL? {
         guard let dmg = dmgs[id], Oracle.exists(dmg) else { return nil }
         let raw = dir.appendingPathComponent("\(name).hfs"), out = dir.appendingPathComponent(name)
         try UDIF.extractRootfs(dmg: dmg, to: raw)
@@ -36,7 +36,7 @@ enum FitFixture {
             let data = try v.contents(r), to = out.appendingPathComponent(rel)
             try SystemEdits.mkdirs(to.deletingLastPathComponent())
             try SystemEdits.put(data, to, mode: r.mode & 0o7777)
-            if let m = MachO32.slice(data, arch: arch(id))?.image { queue += m.reexported().map { String($0.drop { $0 == "/" }) } }
+            if let m = MachO32.slice(data, arch: arch(id))?.image { queue += (links ? m.dylibs().map(\.name) : m.reexported()).map { String($0.drop { $0 == "/" }) } }
         }
         return out
     }
@@ -207,6 +207,8 @@ enum FitFixture {
             #expect(r.guestPackage.map { !$0.hooks.contains("/" + SystemEdits.Helpers.tools[3].path) } == true)
             #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet") && !$0.fits })
             #expect(!log.fits.contains { $0.piece.hasSuffix("(hook)") }, "left out on purpose, so not a dropped hook")
+            #expect(log.fits.contains { $0.piece == "AppSync" && !$0.fits && $0.proof == "not installed (appsync off)" }, "\(log.fits.map(\.piece))")
+            #expect(!log.fits.contains { $0.piece.hasPrefix(SystemEdits.Helpers.appsync) })
         }
     }
 
@@ -263,6 +265,7 @@ enum FitFixture {
             #expect(c.fit.fits.contains { $0.piece == "it_prefs SBDidShowReorderText" && $0.fits })
             #expect(c.fit.fits.contains { $0.piece.hasPrefix("SpringBoard environment (CA_ENABLE_OGL/LK_ENABLE_OGL") && $0.fits })
             #expect(c.fit.fits.contains { $0.piece.hasPrefix("web proxy PAC") && $0.fits })
+            #expect(c.fit.fits.contains { $0.piece == "libappsync.dylib (in installd)" && $0.fits }, "\(c.fit.fits)")
         }
     }
 
@@ -443,6 +446,116 @@ enum FitFixture {
             _ = try board.identity(seed: "fit")
             try board.bootFiles(c)
             #expect(c.fit.fits.contains { $0.piece == "kernelcache at the path iBoot loads" && $0.fits }, "\(c.fit.fits)")
+        }
+    }
+
+    // MARK: AppSync
+
+    static let appSyncFiles = ["usr/libexec/installd", "usr/libexec/mobile_installation_proxy", SystemEdits.installdJob,
+                               SystemEdits.daemons + "/com.apple.installd.plist",
+                               "System/Library/Lockdown/Services.plist"]
+
+    /// The installation service's volume for `id`: its program, everything it links, the jobs, the precedent binaries.
+    static func appSyncVolume(_ id: String, in dir: URL) throws -> URL? {
+        try FitFixture.volume(id, FitFixture.stock(id) + appSyncFiles, in: dir, links: true)
+    }
+
+    /// AppSync fits every AppSync-on family at hand, in the service installAppSync puts it in: installd on 3.0
+    /// (prebound imports), 3.1.3, 3.2.2 and 4.2.1 (iPod and iPad), and on 2.1.1 mobile_installation_proxy, whose
+    /// MobileInstallation framework makes the libmis and Security calls, with appsync-launch in front of it.
+    @Test func appSyncFitsEveryAppSyncFamily() throws {
+        guard let helpers = K48Oracle.guestTools else { return }
+        for id in ["k48ap-7B500", "k48ap-8C148", "n72ap-5F138", "n72ap-7A341", "n72ap-7E18", "n72ap-8C148"] {
+            try Oracle.withTemp { dir in
+                guard let v = try Self.appSyncVolume(id, in: dir) else { return }
+                let log = FitCheck.Log()
+                try FitCheck.checkAppSync(log, FitCheck.Firmware(root: v, arch: FitFixture.arch(id)), helpers: helpers)
+                let lockbot = id == "n72ap-5F138"
+                #expect(log.fits.count == (lockbot ? 2 : 1) && log.fits.allSatisfy(\.fits), "\(id): \(log.fits)")
+                let dylib = try #require(log.fits.first)
+                #expect(dylib.piece == "libappsync.dylib (in \(lockbot ? "mobile_installation_proxy" : "installd"))", "\(id)")
+                #expect(dylib.proof.contains("SecCertificateCreateWithData by ") && dylib.proof.contains("imports resolved"), "\(id): \(dylib.proof)")
+                #expect(dylib.proof.contains(lockbot ? "by MobileInstallation" : "by installd"), "\(id): \(dylib.proof)")
+                if lockbot { #expect(log.fits[1].piece.hasPrefix("appsync-launch") && log.fits[1].proof.contains("execs mobile_installation_proxy")) }
+            }
+        }
+    }
+
+    /// `bin` with every C string `from` renamed to `to` (the same length): both slices of a fat binary.
+    static func renamingAll(_ bin: Data, _ from: String, _ to: String) -> Data {
+        var b = [UInt8](bin), start = 0
+        let f = Array("\0\(from)\0".utf8), t = Array("\0\(to)\0".utf8)
+        while let at = b[start...].firstRange(of: f) { b.replaceSubrange(at, with: t); start = at.upperBound }
+        return Data(b)
+    }
+
+    /// Real misfits: the dylib in a real service that makes none of the calls it hooks and that its gate does not name
+    /// (3.2.2's MobileStorageMounter); the libappsync of 2026-09-28 (qemu-ios build/appsync, before LEGACY_LINK and
+    /// the 2.x gate; its armv6 slice carries LC_DYLD_INFO_ONLY) in 2.1.1's and 3.0's installation services, while it
+    /// still fits 3.1.3's installd. Corrupted copies: 3.2.2's installd with its libmis check renamed (only the hook
+    /// misses), the dylib with its gate renamed (only the gate misses), the launcher inserting another path.
+    @Test func appSyncDoesNotFitWhereItCannotWork() throws {
+        guard let helpers = K48Oracle.guestTools else { return }
+        let dylib = try Data(contentsOf: helpers.appendingPathComponent(SystemEdits.Helpers.appsync))
+        let launcher = try Data(contentsOf: helpers.appendingPathComponent(SystemEdits.Helpers.appsyncLauncher))
+        try Oracle.withTemp { dir in
+            guard let v = try FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500") + Self.appSyncFiles + [FitFixture.mounter], in: dir, links: true) else { return }
+            let f = FitCheck.appSync(FitCheck.Firmware(root: v, arch: "armv7"), host: "/" + FitFixture.mounter, dylib: dylib)
+            #expect(!f.fits && f.proof.contains("gate does not name MobileStorageMounter")
+                    && f.proof.contains("imports MISValidateSignatureAndCopyInfo or MISValidateSignature, SecCertificateCreateWithData"), "\(f.proof)")
+            let gateless = Self.renamingAll(dylib, "installd", "installx")
+            #expect(gateless != dylib)
+            let g = FitCheck.appSync(FitCheck.Firmware(root: v, arch: "armv7"), host: "/usr/libexec/installd", dylib: gateless)
+            #expect(!g.fits && g.proof == "its getprogname gate does not name installd: the Security interposes would pass through there", "\(g.proof)")
+            let installd = v.appendingPathComponent("usr/libexec/installd")
+            let blind = Self.renamingAll(try Data(contentsOf: installd), "_MISValidateSignatureAndCopyInfo", "_MISValidateSignatureAndCopyInfX")
+            try FileManager.default.removeItem(at: installd)
+            try SystemEdits.put(blind, installd, mode: 0o755)
+            let h = FitCheck.appSync(FitCheck.Firmware(root: v, arch: "armv7"), host: "/usr/libexec/installd", dylib: dylib)
+            #expect(!h.fits && h.proof == "nothing in installd's process imports MISValidateSignatureAndCopyInfo or MISValidateSignature, which the dylib hooks", "\(h.proof)")
+        }
+        try Oracle.withTemp { dir in
+            guard let v = try Self.appSyncVolume("n72ap-5F138", in: dir) else { return }
+            let fw = FitCheck.Firmware(root: v, arch: "armv6"), proxy = "/usr/libexec/mobile_installation_proxy"
+            let elsewhere = Self.renamingAll(launcher, "/" + SystemEdits.appsyncPath, "/usr/lib/libappsynX.dylib")
+            let l = FitCheck.appSyncLauncher(fw, program: proxy, launcher: elsewhere)
+            #expect(!l.fits && l.proof.contains("does not insert /usr/lib/libappsync.dylib"), "\(l.proof)")
+            let m = FitCheck.appSyncLauncher(fw, program: "/usr/libexec/mobile_installation_proxX", launcher: launcher)
+            #expect(!m.fits && m.proof.contains("is not a Mach-O this CPU runs"), "\(m.proof)")
+        }
+        let old = Oracle.qemuIOS.appendingPathComponent("build/appsync/libappsync.dylib")
+        guard Oracle.exists(old), let modern = MachO32.slice(try Data(contentsOf: old), arch: "armv6"),
+              modern.image.commands.contains(where: { $0.cmd == 0x8000_0022 }) else { return }
+        for (id, fits) in [("n72ap-5F138", false), ("n72ap-7A341", false), ("n72ap-7E18", true)] {
+            try Oracle.withTemp { dir in
+                guard let v = try Self.appSyncVolume(id, in: dir) else { return }
+                let host = id == "n72ap-5F138" ? "/usr/libexec/mobile_installation_proxy" : "/usr/libexec/installd"
+                let f = FitCheck.appSync(FitCheck.Firmware(root: v, arch: "armv6"), host: host, dylib: try Data(contentsOf: old))
+                #expect(f.fits == fits, "\(id): \(f.proof)")
+                if !fits { #expect(f.proof.contains("load command 0x80000022"), "\(id): \(f.proof)") }
+                if id == "n72ap-5F138" { #expect(f.proof.contains("gate does not name mobile_installation_proxy"), "\(f.proof)") }
+            }
+        }
+    }
+
+    /// The K48 bake checks AppSync before it installs it: 7B500 (appsync on) with a libappsync whose gate names no
+    /// installd fails SystemEdits.buildK48 with that misfit recorded; the 9B206 bake (appsync off) records
+    /// "not installed (appsync off)" (k48BakeLeavesOutWhatDoesNotFit).
+    @Test func k48BakeChecksAppSync() throws {
+        let fw = Oracle.firmware("k48ap-7B500")
+        guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { return }
+        try Oracle.withTemp { dir in
+            guard let helpers = try FitFixture.helpers(in: dir, replacing: SystemEdits.Helpers.appsync, with: { Self.renamingAll($0, "installd", "installx") }) else { return }
+            let recipe = try #require(try Oracle.entry(fw.entryID).recipe), log = FitCheck.Log()
+            #expect(recipe.options["appsync"] == true)
+            let work = dir.appendingPathComponent("work")
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            let error = #expect(throws: FirmwareError.self) {
+                try SystemEdits.buildK48(rootfs: dmg, work: work, systemBytes: 1_500_000_000, dataBytes: 1 << 30, options: .init(recipe: recipe),
+                                         helpers: helpers, fit: log)
+            }
+            #expect(error?.message.contains("libappsync.dylib (in installd) does not fit this firmware: its getprogname gate does not name installd") == true, "\(String(describing: error))")
+            #expect(log.fits.last.map { $0.piece == "libappsync.dylib (in installd)" && !$0.fits } == true, "\(log.fits)")
         }
     }
 }

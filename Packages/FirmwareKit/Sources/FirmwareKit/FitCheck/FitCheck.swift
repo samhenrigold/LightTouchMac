@@ -35,6 +35,8 @@ public enum FitCheck {
             warn(f.warning(outcome))
             return false
         }
+        /// A piece the preparer did not install, recorded as such (nothing proven, so not a fit; no warning).
+        public func notInstalled(_ piece: String, _ why: String) { fits.append(Fit(piece, fits: false, "not installed (\(why))")) }
         public var object: [[String: Any]] { fits.map(\.object) }
     }
 
@@ -129,6 +131,28 @@ public enum FitCheck {
                 for l in links(next) where !seen.contains(l) { seen.append(l); queue.append(l) }
             }
             return seen
+        }
+
+        private var importMemo: [String: Set<String>?] = [:]
+
+        /// The undefined external symbols (prebound ones included: 2.x/3.0) the image installed as `install` imports;
+        /// nil when this firmware has no such image.
+        public func imports(_ install: String) -> Set<String>? {
+            if let hit = importMemo[install] { return hit }
+            let (followed, onDisk) = follow(install)
+            var found: Set<String>?
+            if let cache, let img = cache.image(install) ?? cache.image("/" + followed) {
+                var out = Set<String>()
+                cache.forEachSymbol(in: img) { s in
+                    if MachO32.isImport(s.type) { out.insert(s.name) }
+                    return true
+                }
+                found = out
+            } else if onDisk, let d = data(followed), let m = MachO32.slice(d, arch: arch)?.image {
+                found = FitCheck.imports(m)
+            }
+            importMemo[install] = .some(found)
+            return found
         }
 
         private func loadExports(_ install: String) -> Set<String>? {
@@ -273,6 +297,8 @@ struct MachO32 {
     }
 
     static func isExport(_ type: UInt8) -> Bool { type & 0xE0 == 0 && type & 0x01 != 0 && type & 0x0E != 0 }
+    /// N_UNDF, or N_PBUD (a prebound import: 2.x and 3.0 executables).
+    static func isImport(_ type: UInt8) -> Bool { type & 0xE0 == 0 && type & 0x01 != 0 && (type & 0x0E == 0 || type & 0x0E == 0x0C) }
 
     func name(_ off: Int) -> String {
         let start = off + Int(u32(b, off + 8))
