@@ -102,8 +102,17 @@ struct SingleConfig: Decodable {
             guard asks, (try? await guestAgent.isLocked()) == true else { break }
         }
         // A fresh 5.x iPad slides into the Setup Assistant instead of the home screen: walk it as a user would.
-        if ipad, offered, let front = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost(),
-           front.bundleID == Setup5.bundleID {
+        // Ask until the agent answers (under load it comes up after the slide; one unanswered probe skipped the
+        // walk on 9B176's first boot and left Setup up through the install and launch).
+        var setupFront: (bundleID: String, name: String)?
+        if ipad, offered {
+            let t0 = Date()
+            while setupFront == nil, Date().timeIntervalSince(t0) < d.profile.bootBudget / 2.5 {
+                setupFront = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost()
+                if setupFront == nil { try? await Task.sleep(for: .seconds(3)) }
+            }
+        }
+        if let setupFront, setupFront.bundleID == Setup5.bundleID {
             let (ok, detail) = await Setup5.walk(d)
             let after = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost().bundleID
             emit("setup", ["device": d.name, "generation": generation, "ok": ok && after != Setup5.bundleID, "detail": detail,
