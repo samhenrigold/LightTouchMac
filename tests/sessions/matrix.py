@@ -301,16 +301,23 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     # gl (audit gap #1/#2: this column was a hard-coded skip). The matrix boots with GL on, so its
     # home/installed screenshots ARE GL output -- a black/slept or wrong picture already fails `home`
     # above (and the framecheck diff there is the frame reference). Here we also record the render
-    # path and refusals: a software-composited fallback (4.3.5's "no gldshim device ... no GL") must
-    # SHOW in the column, not pass silently.
-    sw_fallback = "no gldshim device" in serial_text or "GLRendererFloatQEMU.bundle" in serial_text
+    # path and refusals. Where the pipeline installed the GL shim (the lock's built GLEngine on k48,
+    # derived.gles_shim on n72), the shim giving up on GL ("[glishim] ...: no GL", 4.3.x's "no gldshim
+    # device") is a FAIL: software CoreAnimation still draws a correct home screen, so the pictures
+    # cannot tell, and that fallback is the hollow pass the 09-29 test audit warned about.
+    serial_text = serial.read_text(errors="replace") if serial.exists() else ""
+    sw_fallback = bool(re.search(r"\[glishim\][^\n]*: no GL\r?$|no gldshim device", serial_text, re.M))
     gl_rejects = len(re.findall(r"unsupported graphics hardware|gl[ie]s?[-_ ]?reject", serial_text, re.I))
+    lock = json.loads((base / "device.lock.json").read_text())
+    shim = bool(((lock.get("tool") or {}).get("built") or {}).get("GLEngine") or (lock.get("derived") or {}).get("gles_shim"))
     home_ok = r["home"].get("ok")
-    r["gl"] = {"ok": (bool(home_ok) and gl_rejects == 0) if home_ok is not None else None,
+    r["gl"] = {"ok": False if shim and sw_fallback else (bool(home_ok) and gl_rejects == 0) if home_ok is not None else None,
                "path": "software CA (no gldshim device)" if sw_fallback else "hardware GL",
+               "shim": shim, "gld_registered": serial_text.count("[glishim] gld plugin registered"),
                "rejects": gl_rejects,
                "picture": {n: frame[n]["frac"] for n in frame} or None,
-               "note": ("software-composited fallback: no gldshim device, no GL" if sw_fallback else
+               "note": (("the GL shim is installed but fell back to software CoreAnimation (no gldshim device, no GL)"
+                         if shim else "software-composited: the pipeline installed no GL shim") if sw_fallback else
                         (None if home_ok is not None else "no home screenshot to judge"))}
     per = find("persist")
     r["persist"] = {"ok": bool(per) and per[0].get("kept") and per[0].get("same"), "error": per[0].get("error") if per else None}
