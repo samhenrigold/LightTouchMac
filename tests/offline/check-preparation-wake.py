@@ -39,6 +39,8 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
  func startForegroundWatch(){}
  func startGuestPackageWatch(){}
  func startBootWatch(){}
+ var timezoneStarts=0
+ func startTimeZoneSync(){timezoneStarts+=1}
  var preparationStatus=""
  var bootStage=BootStage.poweringOn,reportAtBootStart:Int?
  func noteBoot(_ e:BootStage.Event){bootStage=bootStage.after(e)}
@@ -71,7 +73,7 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
   pending.springBoardReady=true;await pending.readinessTask?.value
   precondition(!pending.preparingDevice)
   sleeping=true;let cold=Controller();cold.state = .poweredOff
-  cold.powerOn();precondition(cold.bootGeneration==1)
+  cold.powerOn();precondition(cold.bootGeneration==1 && cold.timezoneStarts==1, "cold power-on must establish a new timezone operation")
   cold.state = .running
   let deadline=ContinuousClock.now + .seconds(2)
   while cold.readinessTask==nil,ContinuousClock.now<deadline {await Task.yield()}

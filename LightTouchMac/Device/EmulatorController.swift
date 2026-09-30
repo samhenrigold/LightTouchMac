@@ -651,27 +651,52 @@ final class EmulatorController {
     /// first lock screen is drawn before lockdown answers and shows the
     /// restore's Pacific zone until this lands (smoke #58). The guest's clock
     /// itself is UTC from the RTC model; only the zone needs the host's help.
+    private var timeZoneObserver: NSObjectProtocol?
+    private var timeZoneScope = 0
+    private var timeZoneTask: Task<Void, Never>?
+
+    private func stopTimeZoneSync() {
+        timeZoneScope += 1
+        timeZoneTask?.cancel()
+        timeZoneTask = nil
+        if let observer = timeZoneObserver { NotificationCenter.default.removeObserver(observer) }
+        timeZoneObserver = nil
+    }
+
     private func startTimeZoneSync() {
-        NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange,
+        stopTimeZoneSync()
+        let generation = bootGeneration
+        let scope = timeZoneScope
+        timeZoneObserver = NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange,
                                                object: nil, queue: nil) { [weak self] _ in
-            Task { @MainActor in await self?.syncTimeZoneWhenReady() }
+            Task { @MainActor in
+                guard let self, generation == self.bootGeneration, scope == self.timeZoneScope else { return }
+                self.scheduleTimeZoneSync(generation: generation)
+            }
         }
-        Task { [weak self] in await self?.syncTimeZoneWhenReady() }
+        scheduleTimeZoneSync(generation: generation)
+    }
+
+    private func scheduleTimeZoneSync(generation: Int) {
+        timeZoneTask?.cancel()
+        timeZoneTask = Task { [weak self] in await self?.syncTimeZoneWhenReady(generation: generation) }
     }
 
     /// Wait out the boot (services come up well after lockdown answers), then
     /// set until one attempt sticks — a transient "Invalid service" right
     /// after boot just means the next 5 s tick tries again. A zone the device
     /// keeps whatever lockdown says stays until the Mac's zone changes again.
-    /// Idempotent, so an overlapping run is harmless.
-    private func syncTimeZoneWhenReady() async {
+    /// A new timezone notification replaces the pending operation for this boot.
+    private func syncTimeZoneWhenReady(generation: Int) async {
         while !Task.isCancelled {
-            guard !shuttingDown, !isDead, !isPoweredOff else { return }
+            guard generation == bootGeneration, !shuttingDown, !isDead, !isPoweredOff else { return }
             if state == .running, !preparingDevice, canManageApps, await deviceReady() {
+                guard generation == bootGeneration, !Task.isCancelled else { return }
                 do {
                     try await services.setTimeZone(TimeZone.current.identifier, guest: guest)
                     return
                 } catch DeviceToolsError.zoneKept(let zone) {
+                    guard generation == bootGeneration, !Task.isCancelled else { return }
                     logEvent("timezone: the device keeps \(zone)")
                     return
                 } catch {}
@@ -684,6 +709,7 @@ final class EmulatorController {
     /// SIGTERM: a guest that already powered off quits at once; one that
     /// didn't gets the helper's own bounded clean shutdown after we are gone.
     func stop() {
+        stopTimeZoneSync()
         connectionRecoveryTask?.cancel()
         statusTimer?.invalidate()
         statusTimer = nil
@@ -711,6 +737,7 @@ final class EmulatorController {
     /// `.dead`; the window shows a Restart overlay, and the other devices keep running.
     private func helperDied(_ reason: String) {
         guard !isDead else { return }
+        stopTimeZoneSync()
         if !halting, deathReason == nil { deathReason = reason }   // an aborted boot keeps its own reason
         bootWatchTask?.cancel()
         fileWatch = nil
@@ -1370,6 +1397,7 @@ final class EmulatorController {
     func powerOff(completion: @escaping (Bool) -> Void) {
         guard canStop else { completion(false); return }
         AppInstaller.discard(for: instance.id)
+        stopTimeZoneSync()
         halt(completion: completion)
     }
 
@@ -1389,6 +1417,7 @@ final class EmulatorController {
         rotationDegrees = 0
         setAccelerometer(for: 0)
         state = .booting
+        startTimeZoneSync()
         link?.send(.machine(.reset))
         Task { [weak self] in
             guard let self else { return }

@@ -48,8 +48,10 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
             var guest: Guest?
             /// The entry whose restore ramdisk boots the keybag one-shot (no public ramdisk keys for this build).
             var keybagRamdiskFrom: String?
+            /// Preserve explicit boot policy when forwarding the entry to FirmwareKit.
+            var boot: String?
             enum CodingKeys: String, CodingKey {
-                case name, version, storage, options, guest
+                case name, version, storage, options, guest, boot
                 case systemMiB = "system_mib", dataSize = "data_size", keybagRamdiskFrom = "keybag_ramdisk_from"
             }
         }

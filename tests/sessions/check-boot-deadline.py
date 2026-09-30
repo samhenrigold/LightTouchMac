@@ -33,6 +33,8 @@ def offline():
                                 "try? await Task.sleep(for: .milliseconds(Int((self?.profile.bootBudget ?? 0) * 1000)))")
     a = s.index("    private func helperDied(_ reason: String) {")
     died = s[a:s.index("    // MARK: - Liveness", a)]
+    a = s.index("    private func stopTimeZoneSync() {")
+    timezone_stop = s[a:s.index("    private func startTimeZoneSync()", a)]
     source = r'''import Foundation
 nonisolated func logEvent(_ message: String) {}
 enum DeviceProfile { case iPodTouch2G, iPad1
@@ -63,6 +65,9 @@ struct Serial { func finish() {} }
  var isPoweredOff: Bool { state == .poweredOff }
  var shuttingDown = false, halting = false
  var bootGeneration = 0
+ var timeZoneScope = 0
+ var timeZoneObserver: NSObjectProtocol?
+ var timeZoneTask: Task<Void, Never>?
  var status: Status? = Status()
  var deviceReachable: Bool?
  var bootStage = BootStage.poweringOn
@@ -77,9 +82,11 @@ struct Serial { func finish() {} }
  var serialCapture: Serial? = Serial()
  init(_ profile: DeviceProfile) {
   self.profile = profile
+  timeZoneObserver = NotificationCenter.default.addObserver(forName: .init("FixtureTimeZone"), object: nil, queue: nil) { _ in }
+  timeZoneTask = Task { try? await Task.sleep(for: .seconds(5)) }
   process!.onDeath = { [weak self] reason in self?.helperDied(reason) }
  }
-''' + deadline.replace("private func", "func").replace("private var", "var") + died.replace("audioSink?(.audioEnded(generation: 0, failed: true))", "audioSink?(0)") + r'''}
+''' + deadline.replace("private func", "func").replace("private var", "var") + timezone_stop.replace("private func", "func") + died.replace("audioSink?(.audioEnded(generation: 0, failed: true))", "audioSink?(0)") + r'''}
 @main struct Check {
  @MainActor static func main() async throws {
   // Waits on the watch's own task, or on the condition; the deadline is only a hang guard (host load).
@@ -97,6 +104,7 @@ struct Serial { func finish() {} }
   let late = Controller(.iPodTouch2G)
   late.startBootWatch(); await halted(late, "late")
   precondition(late.process!.terms == 1 && late.isDead && late.deathReason == Controller.deadlineReason(.iPodTouch2G))
+  precondition(late.timeZoneObserver == nil && late.timeZoneTask == nil && late.timeZoneScope == 1, "helper death must retire timezone work")
   precondition(late.deathReason!.hasPrefix("The iPod didn’t start within"))
   // lockdown answered in time (QEMU's uiReady alone is iBoot's display, not iOS): nothing happens.
   let lit = Controller(.iPad1); lit.deviceReachable = true

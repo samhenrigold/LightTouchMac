@@ -17,6 +17,10 @@ source = r'''import Foundation
 @main struct Check {
  static func main() throws {
   let args = CommandLine.arguments
+  let recipe = try JSONDecoder().decode(FirmwareCatalog.Entry.Recipe.self, from: Data(
+   #"{"name":"k48","version":1,"storage":"nand","system_mib":1024,"data_size":"4G","options":{},"boot":"kernel"}"#.utf8))
+  let forwarded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(recipe)) as! [String: Any]
+  precondition(forwarded["boot"] as? String == "kernel", "GUI forwarding must preserve explicit boot policy")
   let c = try FirmwareCatalog.load(from: URL(fileURLWithPath: args[1]))
   let order = c.entries.map { "\($0.board) \($0.version) \($0.build)" }
   precondition(order == ["n72ap 2.1.1 5F138", "n72ap 3.1.3 7E18", "n72ap 3.1.3 7E18b",
