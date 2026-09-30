@@ -93,26 +93,26 @@ The short answer: 2.x on the 2G already composites correctly in software today. 
 | Formats | BGRA, ARGB, 565, 555, 4444, A8, 2vuy, 420v, y420 |
 
 **Two ways to hoist it:**
-- **At the API level: small.** Replace `MBX2D.framework` (about 40 exports) with a shim that forwards these five draw ops to host 2D blits over CoreSurface memory. Estimate: 5–8 days.
-- **At the hardware level: not small.** The 2D-core packets are small (`pack2DCtxBlitCopy` does about 33 stores per command), but every quad goes through the MBX 3D TA stream (`mbx3DCtx*`, 2.8–3.5 KB packers). That is the 120–250-day undocumented MBX row.
+- **At the API level: small.** Replace `MBX2D.framework` (about 40 exports) with a shim that forwards these five draw ops to host 2D blits over CoreSurface memory. Pieces: the ~40 exports, the five draw ops as host blits/quads (perspective quads included), CoreSurface locking; gate: Cover Flow and video on the MBX 2D path match the software compositor.
+- **At the hardware level: not small.** The 2D-core packets are small (`pack2DCtxBlitCopy` does about 33 stores per command), but every quad goes through the MBX 3D TA stream (`mbx3DCtx*`, 2.8–3.5 KB packers). That is the undocumented MBX hardware row: a TA/ISP model with no public register or packet documentation.
 
 ### 4. Recommendations, in matrix order
 
 **2.x on the 2G (in the catalog now)**
 
-1. **Keep software compositing (0 days).** It is Apple's renderer with an env switch: class P, full visual fidelity, 24–50 fps measured. Log it in the ledger with its measured numbers and the planar-YUV/video-plane caveat, and measure video on the LCD plane path next.
-2. **Build a 2.x GL front end for apps: about 4–6 days to a first game on screen, plus 2–3 days of compatibility work. Class P, same as the 3.x/4.x bridges.** It stays one shim per arch: the same `mbxshim` core and `gles-names.h` wire, with the `gles2x.c` export front end.
+1. **Keep software compositing (no new work).** It is Apple's renderer with an env switch: class P, full visual fidelity, 24–50 fps measured. Log it in the ledger with its measured numbers and the planar-YUV/video-plane caveat, and measure video on the LCD plane path next.
+2. **Build a 2.x GL front end for apps, in two gates: a first game on screen, then a compatibility pass over the games that follow (the unknown is how many GL entry points they use beyond the first). Class P, same as the 3.x/4.x bridges.** It stays one shim per arch: the same `mbxshim` core and `gles-names.h` wire, with the `gles2x.c` export front end.
    - Replace `/System/Library/Frameworks/OpenGLES.framework/OpenGLES` through an `n72-ios2` hook.
    - Front ends to add: the 12 EAGL methods (`renderbufferStorage:fromDrawable:`, `presentRenderbuffer:`, `attachImage:toCoreSurface:invertedRender:`, `swapNotification:forTransaction:onLayer:`…) and the 11 egl calls QuartzCore makes, presenting CoreSurface BGRA buffers that the software compositor can already sample.
    - Export only the firmware's own names (read from the stock binary's symbol table at build or seed time) rather than OES aliases for every row.
-   - **Prerequisite (about half a day):** extend `mkold.py --legacy` to turn rebase opcodes into classic local relocations for dylibs and bundles, and refuse any dylib whose rebases it would otherwise drop. Today it passes them silently.
+   - **Prerequisite:** extend `mkold.py --legacy` to turn rebase opcodes into classic local relocations for dylibs and bundles, and refuse any dylib whose rebases it would otherwise drop. Today it passes them silently.
    - Leave `CA_AUTO_ENABLE_OGL=0` unless an app is found that needs GL compositing.
 3. **Optional, after that: the MBX 2D API shim** (the item-3 work), which also restores 2.x's stock MBX 2D compositor path. It is only worth doing if the matrix wants stock-path fidelity or Cover Flow-style perspective.
 
 **1.x on the 1G (the 1G milestone)**
 
-4. **Ship with software compositing via `LK_ENABLE_MBX2D=0`, as devos50 does (0 days, class P).** On the first 4B1 boot, test Cover Flow and a video. There is nothing to hoist for GL.
-5. **If Cover Flow or video is visibly wrong:** do the MBX 2D API shim (5–8 days, class P; shared with item 3, so one piece of work covers both majors). Do not start a hardware MBX model; that is the 120–250-day row.
+4. **Ship with software compositing via `LK_ENABLE_MBX2D=0`, as devos50 does (no new work, class P).** On the first 4B1 boot, test Cover Flow and a video. There is nothing to hoist for GL.
+5. **If Cover Flow or video is visibly wrong:** do the MBX 2D API shim (class P; shared with item 3, so one piece of work covers both majors). Do not start a hardware MBX model; that is the undocumented hardware row above.
 
 1.x/2.x on the 1G later reuse the 2G's 2.x decisions unchanged, since both run the same OpenGLES binary family and export set.
 

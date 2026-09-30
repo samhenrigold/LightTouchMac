@@ -128,17 +128,17 @@ The shim is bound to the firmware's dispatch table and must be present before Sp
 - A boot that changes the engine costs one respring. Rejected alternative: wrapping SpringBoard with the
   loader, which would make the loader boot-critical.
 
-## 7. Migration (about 10–14 days)
+## 7. Migration
 
-| Phase | Work | Effort |
-|---|---|---|
-| P0 | Tag every baked item with its class | 0.5 d |
-| P1 | Guest-tools build emits per-family manifests + `.itpack`; loader built legacy-linked for 2.x | 1–1.5 d |
-| P2 | QEMU `guest-package.c`, the `guest-package=` property, `QC_GLES_HELLO` + proto 0, status slots | 1.5–2 d |
-| P3 | `it_boot` in C (libSystem only), with a host test using a fake `qc()` | 2–3 d |
-| P4 | Preparer (Python and Swift together): loader + seed package + `.baked` copies | 1.5–2 d |
-| P5 | App: offer composition, `device.json guest`, verdicts, UI states; delete `updateMediaComponents` and the marker | 2–3 d |
-| P6 | Existing devices: adopted iPod images get the loader through the old path once, and `nand.itnand` is re-bundled; already-prepared iPads stay on frozen tools (said plainly in the UI) | 1 d |
+| Phase | Work |
+|---|---|
+| P0 | Tag every baked item with its class |
+| P1 | Guest-tools build emits per-family manifests + `.itpack`; loader built legacy-linked for 2.x |
+| P2 | QEMU `guest-package.c`, the `guest-package=` property, `QC_GLES_HELLO` + proto 0, status slots |
+| P3 | `it_boot` in C (libSystem only), with a host test using a fake `qc()` |
+| P4 | Preparer (Python and Swift together): loader + seed package + `.baked` copies |
+| P5 | App: offer composition, `device.json guest`, verdicts, UI states; delete `updateMediaComponents` and the marker |
+| P6 | Existing devices: adopted iPod images get the loader through the old path once, and `nand.itnand` is re-bundled; already-prepared iPads stay on frozen tools (said plainly in the UI) |
 
 **Risks:**
 - one respring on upgrade boots;

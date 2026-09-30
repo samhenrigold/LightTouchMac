@@ -20,9 +20,12 @@ The method and the scratch tools are in the appendix.
    - The layer below did change: libGFXShared gained 16 exports and renamed the shared-state calls,
      the gld plugin table had 6 changes, and GLEngine's imports changed by about 50 symbols.
      That lower layer is where our shim sits, and it is why 4.3 lost GL.
-   - Estimate: **10-20 working days, medium confidence.** It retires glishim, gldshim and the
+   - Scope: six pieces (§1.5 table: export lists per build, the native window v6/v7, private EAGL, the 5.x macro
+     context, Apple's extension entry points, the framecheck gates on four builds). The unknown is the private
+     EAGL surface CoreAnimation uses beyond the selectors already listed. It retires glishim, gldshim and the
      libGFXShared generation logic. It is still class **P**, but it is P at the most stable seam there is.
-2. **Full SGX535 model (class R): 150-330 working days, low confidence.**
+2. **Full SGX535 model (class R): six phases (§3: registers + MMU, driver init, USSE1 interpreter, TA/ISP,
+   fragment/texture, host shader translation); go/no-go is decoding the undocumented USSE1 encoding.**
    - The hardware interface is stable. The set of registers the kext touches is essentially
      identical from 3.2.2 to 5.1.1, and the names and offsets match the public Dual MIT/GPLv2 `sgx535defs.h`.
    - The microkernel is not a hardware constant. It is 2 to 5 USSE blobs embedded in each kext,
@@ -137,15 +140,15 @@ What gles2x.c already has:
 
 What the iPad needs on top, per build:
 
-| work | builds | est. |
+| work | builds | unknown |
 |---|---|---|
-| Export lists for 7B500/8C148/8L1/9B206 (run `gles2x_exports.py` on each cached OpenGLES; new EXT names get generated forwarders or counted refusals) | all | 1-2 d |
-| The native window v6/v7 (`version`, `collect`, `properties`) instead of 2.x's four-entry closure | all | 2-3 d |
-| Private EAGL: `initWithAPI:properties:` (kEAGLContextPropertyAccelerated, Sharegroup, ClientRetainRelease), `getParameter:to:`/`setParameter:to:`, `sendNotification:…`, `texImageIOSurface:…` | 3.2+ / 4.x+ | 3-5 d |
-| 5.x macro context: `GetMacroContextPrivate`/`EAGLGetCurrentMacroContextPrivate`, `GLIContextFromEAGLContext`, the `GLC*Dispatch` exports, a dispatch table at the firmware's @encode layout (reuse `gles_dispatch.c`) | 5.x (the GLC/GLI exports exist on all four) | 3-5 d |
-| Apple extension entry points CA uses (`glFramebufferParameteriAPPLE`, `glFinishObjectAPPLE`), MSAA resolve and discard (4.x+) on the host | all | 1-3 d |
-| Gates: regress gles legs plus `framecheck.py` against the software-CA reference on all four builds; smoke entries | all | 2-3 d |
-| **Total** | | **10-20 d, medium confidence** |
+| Export lists for 7B500/8C148/8L1/9B206 (run `gles2x_exports.py` on each cached OpenGLES; new EXT names get generated forwarders or counted refusals) | all | – (generated) |
+| The native window v6/v7 (`version`, `collect`, `properties`) instead of 2.x's four-entry closure | all | which fields each version adds |
+| Private EAGL: `initWithAPI:properties:` (kEAGLContextPropertyAccelerated, Sharegroup, ClientRetainRelease), `getParameter:to:`/`setParameter:to:`, `sendNotification:…`, `texImageIOSurface:…` | 3.2+ / 4.x+ | private selectors CA calls that the static read missed |
+| 5.x macro context: `GetMacroContextPrivate`/`EAGLGetCurrentMacroContextPrivate`, `GLIContextFromEAGLContext`, the `GLC*Dispatch` exports, a dispatch table at the firmware's @encode layout (reuse `gles_dispatch.c`) | 5.x (the GLC/GLI exports exist on all four) | who calls the GLC/GLI exports on 5.x |
+| Apple extension entry points CA uses (`glFramebufferParameteriAPPLE`, `glFinishObjectAPPLE`), MSAA resolve and discard (4.x+) on the host | all | – |
+| Gates: regress gles legs plus `framecheck.py` against the software-CA reference on all four builds; smoke entries | all | – (this row is the gate) |
+| **Done when** | | the gate row passes on 7B500, 8C148, 8L1 and 9B206 with no GLEngine or gld plugin installed |
 
 What it retires and what it keeps:
 - **Retires:**
@@ -167,14 +170,14 @@ The same seam serves the iPod: 3.x/4.x there also sit on a GLI engine (`MBXGLEng
 ### 1.6 Ranking
 
 Stability is how much of the seam's private surface changed across 3.2 → 4.2.1 → 4.3.5 → 5.1.1.
-Cost is to parity on the four builds, then per new point release.
+Scope is what parity on the four builds needs, then what each new point release needs.
 
-| rank | option | class | seam stability (measured) | cost now | cost per point release |
+| rank | option | class | seam stability (measured) | scope now | per point release |
 |---|---|---|---|---|---|
-| 1 | **Public-API OpenGLES + EAGL front end** (gles2x generalised) | P | public ABI fixed by apps; private part: 3.2→4.2 one struct field and one method; **4.2→4.3 zero**; 4.3→5.1 macro context and EXT exports | 10-20 d | ~0-2 d (new EXT exports are generated) |
-| 2 | Self-discovering GLI shim (today's seam, hardened: gld/gfx tables read at load) | P | 4.2→4.3: 16 libGFXShared exports, 6 gld entries, 29 dispatch rows; 4.3→5.1: gld 3.1→4.0 (83→113) | 5-10 d for 4.3 | 2-10 d, unbounded (a contract with Apple's internal plugin ABI) |
-| 3 | Full SGX535 model running Apple's stack unchanged | **R** | the hardware: register set identical 4.3.5 = 5.1.1, near-identical from 3.2.2 (§2.3) | 150-330 d | ~0 |
-| 4 | Microkernel HLE (register model, host implements the microkernel's command protocol) | H | the microkernel and its host interface are per-kext and change every release (§2.4), the same trap as the IOP HLE | 90-200 d (still needs shaders) | per build |
+| 1 | **Public-API OpenGLES + EAGL front end** (gles2x generalised) | P | public ABI fixed by apps; private part: 3.2→4.2 one struct field and one method; **4.2→4.3 zero**; 4.3→5.1 macro context and EXT exports | the six pieces of §1.5 | new EXT exports, generated |
+| 2 | Self-discovering GLI shim (today's seam, hardened: gld/gfx tables read at load) | P | 4.2→4.3: 16 libGFXShared exports, 6 gld entries, 29 dispatch rows; 4.3→5.1: gld 3.1→4.0 (83→113) | 4.3's libGFXShared/gld/dispatch deltas | unbounded: a new contract with Apple's internal plugin ABI each release |
+| 3 | Full SGX535 model running Apple's stack unchanged | **R** | the hardware: register set identical 4.3.5 = 5.1.1, near-identical from 3.2.2 (§2.3) | the six phases of §3; go/no-go on the USSE1 encoding | none expected |
+| 4 | Microkernel HLE (register model, host implements the microkernel's command protocol) | H | the microkernel and its host interface are per-kext and change every release (§2.4), the same trap as the IOP HLE | option 3 without the microkernel, still with the shader ISA | per build |
 | 5 | Kext user-client / command-buffer intercept | H | worst: the payload is SGX hardware commands built in user space by the gld plugin's USC compiler (USSE and PDS code); the ABI changed 3.2→4.2 (`IOGLStreamHardwareCommand`, `validateRenderCommand`) and 5.x moved the user clients to IOAcceleratorFamily (`IOAccelGLContext`, `IOAccelSharedUserClient`) | ≈ option 3 minus the microkernel | per build |
 
 Options 4 and 5 are dominated: they cost most of option 3 and keep the fragility of option 2.
@@ -304,17 +307,18 @@ Consequences:
 
 ## 3. Phased plan for the SGX535 model (research track)
 
-Estimates are working days for one engineer or agent-equivalent, with the existing test harness.
+Each phase is sized by what it builds, the unknown it hinges on and the gate that proves it, with the existing test
+harness.
 
-| phase | deliverable | gate | estimate | confidence | retires |
-|---|---|---|---|---|---|
-| **S1** Register file + MMU walker | `hw/arm/s5l8930_sgx.c`: 64 KiB register file with reset values, CORE_ID/REVISION, SOFT_RESET/CLKGATECTL semantics, EVENT_STATUS/HOST_ENABLE/CLEAR plus IRQ 0x2f, BIF with DIR_LIST_BASE*, BIF_CTRL, fault reporting, and a host page-table walker (public `sgxmmu.h` format) used by a QMP/debug dump; the `sgx` DT node kept stock and matched | the kext matches and starts on 3.2.2, 4.2.1, 4.3.5 and 5.1.1 without panic; microkernel blobs uploaded (the host logs the scan-approved blob addresses via the walker); page-table dump of the EDM directory is self-consistent | 10-20 d | medium | the SGX part of the unimplemented window (K48 #60); **not** smoke #24, see below |
-| **S2** Init to a waiting kernel | the kext's init path complete up to the first microkernel handshake: reset sequence, clock gating, EVENT_TIMER, kick registers latched; the `chip-revision`/core-revision checks read | the kext times out *only* on "Microkernel unresponsive" and not earlier, on all four builds | 5-15 d | medium | – |
-| **S3** USSE1 + PDS interpreter, microkernel runs | a USSE1 interpreter (clean-room: Apple's blobs, the kext's scan masks, the public register map, Vita3K/sgx540-reversing as structural guides only) and a PDS interpreter; EDM task scheduling on events | the microkernel acknowledges init and the host kicks; no HWR in 10 min idle; stock GLEngine + IMGSGX535GLDriver create a context and `glClear` + present completes a (trivial) 3D kick | **40-90 d** | **low** (ISA RE) | – |
-| **S4** TA + ISP (geometry, tiling, HSR, ZLS) | TA consuming the vertex-shader output into a parameter buffer, ISP depth/stencil per tile, ZLS load/store to the addresses the kext programs | SpringBoard composites with the stock stack (CA's GL path) on 4.2.1; `framecheck.py` within THR against the software-CA reference | 30-70 d | low-medium | – |
-| **S5** Fragment USSE + TSP + textures | fragment shading, texture sampling incl. PVRTC and the IMG twiddled layouts, blending, the pixel back end | Apple's apps (Settings, Safari, Maps, Photos) and a GL ES 1.1/2.0 test app on 3.2.2/4.2.1/4.3.5/5.1.1 pass framecheck; `gles-rejects` gone | 30-70 d | low-medium | **glishim, gldshim, the dyld override, the SpringBoard env, `gles-host.c` and the GL use of the cp15 hypercall** (K48 #55 and guest-side rows; #56 once nothing else uses it; `amfi_allow_any_signature` once nothing is injected) |
-| **S6** Performance | USSE → host translation (Metal or GL compute/fragment), tile work on the host GPU, caching of translated programs by blob hash | SpringBoard at 60 Hz, games at playable rates on the dev Mac | 30-60 d | low | – |
-| **Total** | | | **145-325 d, round to 150-330 d (7-15 months)** | **low** | |
+| phase | deliverable | gate | unknown | retires |
+|---|---|---|---|---|
+| **S1** Register file + MMU walker | `hw/arm/s5l8930_sgx.c`: 64 KiB register file with reset values, CORE_ID/REVISION, SOFT_RESET/CLKGATECTL semantics, EVENT_STATUS/HOST_ENABLE/CLEAR plus IRQ 0x2f, BIF with DIR_LIST_BASE*, BIF_CTRL, fault reporting, and a host page-table walker (public `sgxmmu.h` format) used by a QMP/debug dump; the `sgx` DT node kept stock and matched | the kext matches and starts on 3.2.2, 4.2.1, 4.3.5 and 5.1.1 without panic; microkernel blobs uploaded (the host logs the scan-approved blob addresses via the walker); page-table dump of the EDM directory is self-consistent | whether IOSurface creation alone populates the GART (see below) | the SGX part of the unimplemented window (K48 #60); **not** smoke #24, see below |
+| **S2** Init to a waiting kernel | the kext's init path complete up to the first microkernel handshake: reset sequence, clock gating, EVENT_TIMER, kick registers latched; the `chip-revision`/core-revision checks read | the kext times out *only* on "Microkernel unresponsive" and not earlier, on all four builds | the reset/clock-gating order the kext checks | – |
+| **S3** USSE1 + PDS interpreter, microkernel runs | a USSE1 interpreter (clean-room: Apple's blobs, the kext's scan masks, the public register map, Vita3K/sgx540-reversing as structural guides only) and a PDS interpreter; EDM task scheduling on events | the microkernel acknowledges init and the host kicks; no HWR in 10 min idle; stock GLEngine + IMGSGX535GLDriver create a context and `glClear` + present completes a (trivial) 3D kick | **the USSE1 and PDS encodings (undocumented; clean-room RE): the go/no-go** | – |
+| **S4** TA + ISP (geometry, tiling, HSR, ZLS) | TA consuming the vertex-shader output into a parameter buffer, ISP depth/stencil per tile, ZLS load/store to the addresses the kext programs | SpringBoard composites with the stock stack (CA's GL path) on 4.2.1; `framecheck.py` within THR against the software-CA reference | the parameter-buffer and ZLS formats the kext programs | – |
+| **S5** Fragment USSE + TSP + textures | fragment shading, texture sampling incl. PVRTC and the IMG twiddled layouts, blending, the pixel back end | Apple's apps (Settings, Safari, Maps, Photos) and a GL ES 1.1/2.0 test app on 3.2.2/4.2.1/4.3.5/5.1.1 pass framecheck; `gles-rejects` gone | PVRTC and the twiddled layouts; the TSP state words | **glishim, gldshim, the dyld override, the SpringBoard env, `gles-host.c` and the GL use of the cp15 hypercall** (K48 #55 and guest-side rows; #56 once nothing else uses it; `amfi_allow_any_signature` once nothing is injected) |
+| **S6** Performance | USSE → host translation (Metal or GL compute/fragment), tile work on the host GPU, caching of translated programs by blob hash | SpringBoard at 60 Hz, games at playable rates on the dev Mac | how much of USSE1 maps onto host shaders; the reason S6 stays open-ended | – |
+| **Order** | S1 and S2 need no ISA; S3 is the go/no-go; S4-S6 each need the phase before | | | |
 
 Interpreter or translation:
 - Start with an interpreter (S3-S5). It is the correctness oracle.
@@ -343,7 +347,8 @@ not support that yet.
 - **What carries over from an SGX model:** the TBDR pipeline skeleton (tiling, ISP HSR, ZLS, texture and
   blend back end, the host rasteriser, framecheck gates) and PVRTC decoding.
 - **What doesn't carry over:** USSE, PDS, the microkernel and the BIF MMU (MBX's memory model is different).
-- Roughly 30-40% of S4-S6 carries over. The ledger's 120-250 d for MBX stands, perhaps 90-200 d after an SGX model.
+- Roughly 30-40% of S4-S6 carries over. The MBX model still needs its own go/no-go: decoding the TA/3D state the
+  MBXGLEngine writes to the slave ports (ledger N72 #49).
 - The public-API seam (§1) covers the iPod's 3.x/4.x GLI layer for a fraction of that.
 
 ---
@@ -378,15 +383,15 @@ not support that yet.
 
 ## 5. Recommendation
 
-1. **Now: the public-API seam (§1.5), 10-20 d.**
+1. **Now: the public-API seam (§1.5), its six pieces.**
    - Branch off `contrib/it-gles/gles2x.c`, and keep the mbxshim core and `gles-host.c`.
    - Gate on 7B500/8C148/8L1/9B206 with framecheck. Then retire glishim, gldshim and `gfx_gen.h`.
    - The ledger row stays P, but the row's "per point release" cost goes to about zero.
      That is what "4.3 silently lost GL" asked for.
-2. **Research track: S1 (10-20 d)** when the IOP/NAND core work frees a slot.
+2. **Research track: S1 (register file + MMU walker)** when the IOP/NAND core work frees a slot.
    - It is low-risk and moves the SGX window from S to a partial R.
    - It also answers the open S1 question (does IOSurface alone populate the GART?).
-3. **Decide on S3 after a 10-day USSE1 spike.**
+3. **Decide on S3 after a USSE1 spike.**
    - The spike: from the 4.2.1 and 5.1.1 blobs plus stock-compiled shaders, decode enough of the ISA
      to disassemble the microkernel's init path.
    - If the spike can't read the init path, park the full model. The seam from item 1 keeps GL working.

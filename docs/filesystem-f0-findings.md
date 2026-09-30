@@ -68,15 +68,15 @@ FirmwareKit already has most of the host side:
 - It would also need unique UDIDs per instance, and Finder may not handle iOS 3/4 at all.
 - **A zero-code check:** plug a real iPod touch 2G or iPad 1 into the Mac and see whether Finder shows it.
 
-## Estimates
+## Stages
 
-| Stage | Work | Estimate |
+| Stage | Work | Gate |
 |---|---|---|
-| F0 remainder | lease + `.clean` + a lifecycle test | 1 d |
-| F1 | iPod rebuild (0.5 d); iPad YaFTL rebuild with oracle (2–3 d); clone→rebuild→fsck→attach pipeline (1 d); Mount/Export UI (1.5–2 d) | 6–8 d |
-| F2 | read-write staging + fsck + owners (1 d); iPod write-back of changed blocks as page files (1–1.5 d); iPad full rebuild into a new base generation (4 d), or append pages and force YaFTL's read-only restore (1–1.5 d, if a spike holds); candidate boot, publish, fault injection (2 d) | 7–10 d |
-| F3 | AFC-backed file protocol (1 d); a full-root guest daemon waits on guest packages; a Finder volume via NFS loopback (5–8 d) | 1 d, then 3+ weeks |
-| F4 | `storageSnapshot(dest)` link command: pause, msync (iPad), clone, resume | 2 d |
+| F0 remainder | lease + `.clean` | a lifecycle test |
+| F1 | iPod rebuild; iPad YaFTL rebuild with oracle; clone→rebuild→fsck→attach pipeline; Mount/Export UI | the rebuilt volume matches the oracle and passes fsck on both boards; the UI mounts and exports under the lease |
+| F2 | read-write staging + fsck + owners; iPod write-back of changed blocks as page files; iPad full rebuild into a new base generation, or append pages and force YaFTL's read-only restore (unknown: whether YaFTL accepts it; a spike decides which) | the candidate boots with the edit, publishes, and survives fault injection |
+| F3 | AFC-backed file protocol first; then a full-root guest daemon (waits on guest packages) and a Finder volume via NFS loopback (unknown: Finder's behaviour on an NFS loopback volume) | the AFC protocol lists and round-trips files; the daemon and volume are deferred |
+| F4 | `storageSnapshot(dest)` link command: pause, msync (iPad), clone, resume | the clone of a running device boots |
 
 ## Riskiest unknowns
 

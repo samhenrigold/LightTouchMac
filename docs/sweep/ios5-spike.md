@@ -37,14 +37,14 @@ How far: kboot 5.1.1 and 4.3.5 both reach ~2400 serial lines — AMFI args, plat
 
 ## Ranked "make it faithful" (from the ledger, confirmed by the spike)
 
-1. Run the IOP ARM7 firmware on a second core (H→R), 20-30 d (+3-5 d H2FMI program/erase/ECC): the one component that gates every 4.3+ build (HLE v3 table would be 0.5-1 d but stays H).
-2. NAND/NOR from a stock USB restore instead of the offline FTL/NOR writers (P→R), 1-2 d (path exists): removes FTL/LwVM/keybag knowledge.
-3. GLI shim parses the dispatch @encode at load (P, per-build → generic), 2-3 d.
-4. Security epoch: boot from the ROM so LLB sets POWER_ID (R), or a `security-epoch` property from the image's SEPO (generic, 0.5 d, stays P).
-5. USB_CTL + cable-type host/device switching, 2-4 d.
-6. PMGR clock tree (S→R), 5-8 d; D1815 PMU sequencing incl. power-off/reset (H→R), 5-10 d; I2C +0x14 and blocks 0xbfc00000/0xbfe00000, 0.5-3 d each.
-7. Display pipe all layers/modes, 5-10 d. 8. Delete inert code (it-hle, HOST_GMT, banner table), 0-1 d.
-9. SGX535 / MBX GPU models: 120+ d, undocumented — the only route to "unmodified guest".
+1. Run the IOP ARM7 firmware on a second core (H→R): an ARM7 core with its own interrupt controllers and DRAM window, plus register-level H2FMI program/erase/ECC; unknown: which AP peripherals the firmware touches besides FMI/CDMA. The one component that gates every 4.3+ build (the HLE v3 table is a smaller piece but stays H).
+2. NAND/NOR from a stock USB restore instead of the offline FTL/NOR writers (P→R), on the existing restore path (restore-smoke): removes FTL/LwVM/keybag knowledge.
+3. GLI shim parses the dispatch @encode at load (P, per-build → generic); gate: the generated layout equals today's tables on every build.
+4. Security epoch: boot from the ROM so LLB sets POWER_ID (R), or a `security-epoch` property from the image's SEPO (generic, one property, stays P).
+5. USB_CTL + cable-type host/device switching; unknown: which signal 4.3's power source reads for the cable type.
+6. PMGR clock tree (S→R; unknown: the undocumented gate/divider layout); D1815 PMU sequencing incl. power-off/reset (H→R; unknown: which registers each iOS major reads across a restart); I2C +0x14 and blocks 0xbfc00000/0xbfe00000, each first identified, then modelled.
+7. Display pipe all layers/modes (unknown: which layer formats and blend modes the firmwares actually program). 8. Delete inert code (it-hle, HOST_GMT, banner table).
+9. SGX535 / MBX GPU models: six phases (registers+MMU, driver init, USSE1 interpreter, TA/ISP, fragment/texture, host shader translation; docs/research/sgx535-feasibility.md), go/no-go is decoding the undocumented USSE1 encoding — the only route to "unmodified guest".
 
 ## What 4.3.x already needs (for the matrix agent)
 
