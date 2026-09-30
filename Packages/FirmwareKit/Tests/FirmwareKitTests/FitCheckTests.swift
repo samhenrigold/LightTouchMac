@@ -17,6 +17,7 @@ enum FitFixture {
     static func arch(_ id: String) -> String { id.hasPrefix("k48") ? "armv7" : "armv6" }
     static let springBoard = "System/Library/CoreServices/SpringBoard.app/SpringBoard"
     static let mounter = "System/Library/CoreServices/MobileStorageMounter.app/MobileStorageMounter"
+    static let usbArbitrator = "System/Library/CoreServices/USBDeviceArbitrator.app/USBDeviceArbitrator"
     /// What a guest binary's load check reads: the precedent executables, libSystem, the shared cache, SystemVersion.
     static func stock(_ id: String) -> [String] {
         FitCheck.Firmware.precedentBinaries + ["usr/lib/libSystem.B.dylib", SystemEdits.dyldCache(arch(id)), GuestPackage.systemVersion]
@@ -171,24 +172,28 @@ enum FitFixture {
         }
     }
 
-    /// it_msmquiet fits where the mounter raises the notice it hides: 3.2.2 (UNSUPPORTED_FAILURE through
-    /// CFUserNotificationDisplayNotice), 4.2.1 (UNSUPPORTED_FAILURE_BODY through CFUserNotificationCreate); not 5.1.1,
-    /// whose MobileStorageMounter names neither key (its strings file still has them).
-    @Test func msmQuietFitsWhereTheMounterRaisesTheNotice() throws {
+    /// it_msmquiet fits where the notice it hides is raised: 3.2.2's mounter (UNSUPPORTED_FAILURE through
+    /// CFUserNotificationDisplayNotice), 4.2.1's (UNSUPPORTED_FAILURE_BODY through CFUserNotificationCreate); on 5.1.1
+    /// not the mounter, which names neither key (its strings file still has them), but USBDeviceArbitrator, the 5.x
+    /// catch-all for an unclaimed IOUSBDevice (the emulated keyboard; LightTouchMac smoke #49).
+    @Test func msmQuietFitsWhereTheNoticeIsRaised() throws {
         guard let quiet = try FitFixture.payload("armv7", "k48-ios4/hooks/it_msmquiet.dylib") else { return }
-        for (id, fits, key) in [("k48ap-7B500", true, "UNSUPPORTED_FAILURE through CFUserNotificationDisplayNotice"),
-                                ("k48ap-8C148", true, "UNSUPPORTED_FAILURE_BODY"), ("k48ap-9B206", false, "names neither")] {
+        for (id, program, fits, key) in [("k48ap-7B500", FitFixture.mounter, true, "UNSUPPORTED_FAILURE through CFUserNotificationDisplayNotice"),
+                                         ("k48ap-8C148", FitFixture.mounter, true, "UNSUPPORTED_FAILURE_BODY"),
+                                         ("k48ap-9B206", FitFixture.mounter, false, "names neither"),
+                                         ("k48ap-9B206", FitFixture.usbArbitrator, true, "UNSUPPORTED_FAILURE_BODY through CFUserNotificationCreate")] {
             try Oracle.withTemp { dir in
-                guard let v = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter], in: dir) else { return }
-                let f = FitCheck.msmQuiet(FitCheck.Firmware(root: v, arch: "armv7"), program: "/" + FitFixture.mounter, dylib: quiet)
-                #expect(f.fits == fits && f.proof.contains(key), "\(id): \(f.proof)")
+                guard let v = try FitFixture.volume(id, FitFixture.stock(id) + [program], in: dir) else { return }
+                let f = FitCheck.msmQuiet(FitCheck.Firmware(root: v, arch: "armv7"), program: "/" + program, dylib: quiet)
+                #expect(f.fits == fits && f.proof.contains(key), "\(id) \(program): \(f.proof)")
             }
         }
     }
 
-    /// The whole K48 bake on 5.1.1 (9B206), where it_msmquiet does not fit: SystemEdits.buildK48 leaves the dylib out,
-    /// leaves storage_mounter's job as shipped, seeds no hook for it, and records the misfit in `fit`.
-    @Test func k48BakeLeavesOutWhatDoesNotFit() throws {
+    /// The whole K48 bake on 5.1.1 (9B206): it_msmquiet does not fit the mounter, so storage_mounter's job stays as
+    /// shipped with the misfit recorded, and it fits USBDeviceArbitrator, whose job loads it; the dylib is installed
+    /// and the guest package keeps its hook.
+    @Test func k48BakeQuietsTheNoticeWhereItFits() throws {
         guard let dmg = FitFixture.dmgs["k48ap-9B206"], Oracle.exists(dmg), let helpers = K48Oracle.guestTools else { return }
         try Oracle.withTemp { dir in
             let recipe = try #require(try Oracle.entry("k48ap-9B206").recipe), log = FitCheck.Log()
@@ -201,12 +206,17 @@ enum FitFixture {
             #expect(log.fits.contains { $0.piece.hasPrefix("SpringBoard environment") && $0.fits })
             #expect(log.fits.contains { $0.piece.hasPrefix("web proxy PAC") && $0.fits })
             let sv = try HFSPlusVolume(r.system)
-            #expect((try? sv.record(at: SystemEdits.Helpers.tools[3].path)) == nil)
-            let job = try #require(PropertyListSerialization.propertyList(from: sv.contents(sv.record(at: SystemEdits.msmJob)), format: nil) as? [String: Any])
-            #expect((job["EnvironmentVariables"] as? [String: Any])?["DYLD_INSERT_LIBRARIES"] == nil)
-            #expect(r.guestPackage.map { !$0.hooks.contains("/" + SystemEdits.Helpers.tools[3].path) } == true)
-            #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet") && !$0.fits })
-            #expect(!log.fits.contains { $0.piece.hasSuffix("(hook)") }, "left out on purpose, so not a dropped hook")
+            let env = { (job: String) in
+                ((try PropertyListSerialization.propertyList(from: sv.contents(sv.record(at: job)), format: nil) as? [String: Any])?["EnvironmentVariables"]
+                    as? [String: Any])?["DYLD_INSERT_LIBRARIES"] as? String
+            }
+            #expect((try? sv.record(at: SystemEdits.Helpers.tools[3].path)) != nil)
+            #expect(try env(SystemEdits.msmJob) == nil)
+            #expect(try env(SystemEdits.daemons + "/com.apple.mobile.usb_device_arbitrator.plist") == "/" + SystemEdits.Helpers.tools[3].path)
+            #expect(r.guestPackage.map { $0.hooks.contains("/" + SystemEdits.Helpers.tools[3].path) } == true)
+            #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet (MobileStorageMounter") && !$0.fits })
+            #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet (USBDeviceArbitrator") && $0.fits })
+            #expect(!log.fits.contains { $0.piece.hasSuffix("(hook)") && !$0.fits }, "\(log.fits.filter { $0.piece.hasSuffix("(hook)") })")
         }
     }
 
