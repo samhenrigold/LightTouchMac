@@ -5,7 +5,7 @@
 // Volume: the IPSW rootfs grown to the recipe, then the 1.x bake of devos50's qemu-ios-generate-nand
 // docs/changes.md through SystemEdits: fstab rw with no /private/var line (one partition), the kernelcache (the
 // IPSW's 8900 container, which the machine's 8900 engine decrypts) where iBoot loads it, SpringBoard's
-// LK_ENABLE_MBX2D=0 (no MBX 2D on this machine), the six LaunchDaemons that changes.md keeps, and the
+// LK_ENABLE_MBX2D=0 (no MBX 2D on this machine), the LaunchDaemons that changes.md keeps (and 1.1.3+'s lockbot), and the
 // /var/root/Library skeleton; then ipod1g_device.bake: when the stock OpenGLES exports exactly
 // opengles-1x.exports (a guest helper), the seed package's n45-ios1 hook (OpenGLES-1x, the GL front end) replaces it
 // (the stock binary kept as OpenGLES.baked) and SpringBoard gets LK_ENABLE_OGL=1 LK_AUTO_ENABLE_OGL=0 (else
@@ -30,6 +30,14 @@ final class N45Board: Board {
     static let keptDaemons: Set = ["com.apple.AddressBook.plist", "com.apple.CommCenter.plist", "com.apple.configd.plist",
                                    "com.apple.mobile.lockdown.plist", "com.apple.notifyd.plist", "com.apple.SpringBoard.plist",
                                    "com.apple.usbptpd.plist", "coreaudiod.plist"]
+    /// Kept where the firmware ships them, not required of every 1.x: 1.1.3+ lockdownd starts each service (AFC among
+    /// them) through lockbot ("spawn_service_agent: Could not spawn service agent via lockbot" without it); 1.1-1.1.2
+    /// have no lockbot and spawn their own.
+    static let keptWhenShipped: Set = ["com.apple.mobile.lockbot.plist"]
+    /// The jobs the bake removes from this firmware's LaunchDaemons.
+    static func removedDaemons(_ jobs: [String]) -> [String] {
+        jobs.filter { !keptDaemons.contains($0) && !keptWhenShipped.contains($0) }.sorted()
+    }
     static let rootLibrary = "private/var/root/Library"
     static let openGLESExports = "opengles-1x.exports"
     /// configd's Aeropuerto plug-in (AirPort-63) keeps the Wi-Fi power preference (AllowEnable) and the networks
@@ -124,7 +132,7 @@ final class N45Board: Board {
             let jobs = try fm.contentsOfDirectory(atPath: at(SystemEdits.daemons).path).filter { $0.hasSuffix(".plist") }
             try c.fit.check(Self.keptDaemonsFit(jobs), required: false, outcome: "the rest removed as planned")
             c.fit.notInstalled("AppSync", recipe.options["appsync"] == true ? "the 1.x recipe has no AppSync" : "appsync off")
-            let removed = jobs.filter { !Self.keptDaemons.contains($0) }.sorted()
+            let removed = Self.removedDaemons(jobs)
             for n in removed { try fm.removeItem(at: at(SystemEdits.daemons + "/" + n)) }
             for d in ["", "/AddressBook", "/Lockdown", "/Preferences"] {
                 try SystemEdits.mkdirs(at(Self.rootLibrary + d))
