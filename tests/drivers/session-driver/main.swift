@@ -236,6 +236,37 @@ extension String {
         return url.path
     }
 
+    /// Wake the panel, then capture. The display sleeps ~12 s after `lit`, so an unqualified
+    /// screenshot lands on a black panel (audit finding 3). Press Home, re-check brightness, and
+    /// capture only once it is lit -- or capture the black frame after the last try, so the matrix
+    /// fails the row honestly rather than passing a slept panel.
+    @discardableResult
+    func wakeForShot(_ label: String, floor: Double = 0.05, tries: Int = 5) async -> String? {
+        for _ in 0..<tries {
+            if (brightness() ?? 0) >= floor { break }
+            process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))
+            process.link.send(.button(0, down: false))
+            try? await Task.sleep(for: .seconds(2))
+        }
+        return screenshot(label)
+    }
+
+    /// Slide to unlock, again while the guest agent (where the boot has one) says it is still locked: a slide can
+    /// miss (4.2.1's iPod, rejudge 09-29; 4.2.1's iPad first boot under host load, smoke #66), and the lock screen
+    /// sleeps a few seconds after a miss, so each retry wakes the panel first (`unlockN-M.png`). Emits `unlock`.
+    func slideToUnlock(_ generation: Int, agent: GuestAgent?) async {
+        var attempts = 0, locked: Bool?
+        for attempt in 0..<3 {
+            if attempt > 0 { await wakeForShot("unlock\(generation)-\(attempt)") }
+            if profile == .iPad1 { await drag(0.9365, 0.621, 0.9365, 0.0612) } else { await drag(0.18, 0.9, 0.92, 0.9) }
+            attempts += 1
+            try? await Task.sleep(for: .seconds(5))
+            locked = try? await agent?.isLocked()
+            guard locked == true else { break }
+        }
+        emit("unlock", ["device": name, "generation": generation, "attempts": attempts, "locked": locked.map { $0 ? 1 : 0 } ?? -1])
+    }
+
     func drag(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) async {
         let link = process.link
         link.send(.touch(slot: 0, phase: 0, x: x0, y: y0)); try? await Task.sleep(for: .milliseconds(150))

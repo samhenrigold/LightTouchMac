@@ -64,8 +64,7 @@ struct ProxyConfig: Decodable {
         }
         try? await Task.sleep(for: .seconds(3))
         d.screenshot("lock\(generation)")
-        if ipad { await d.drag(0.9365, 0.621, 0.9365, 0.0612) } else { await d.drag(0.18, 0.9, 0.92, 0.9) }
-        try? await Task.sleep(for: .seconds(5))
+        await d.slideToUnlock(generation, agent: agent)
         d.screenshot("home\(generation)")
     }
 
