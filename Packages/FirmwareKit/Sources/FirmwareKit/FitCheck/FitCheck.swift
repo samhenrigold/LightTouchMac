@@ -296,7 +296,9 @@ struct MachO32 {
         return nil
     }
 
-    static func isExport(_ type: UInt8) -> Bool { type & 0xE0 == 0 && type & 0x01 != 0 && type & 0x0E != 0 }
+    /// A defined external symbol: N_EXT and a defined type (N_ABS, N_SECT, N_INDR), not N_UNDF nor N_PBUD (a prebound
+    /// 1.x/2.x image's imports are N_PBUD, 0xC: counting them made every name a prebound framework imports its export).
+    static func isExport(_ type: UInt8) -> Bool { type & 0xE0 == 0 && type & 0x01 != 0 && type & 0x0E != 0 && type & 0x0E != 0x0C }
     /// N_UNDF, or N_PBUD (a prebound import: 2.x and 3.0 executables).
     static func isImport(_ type: UInt8) -> Bool { type & 0xE0 == 0 && type & 0x01 != 0 && (type & 0x0E == 0 || type & 0x0E == 0x0C) }
 

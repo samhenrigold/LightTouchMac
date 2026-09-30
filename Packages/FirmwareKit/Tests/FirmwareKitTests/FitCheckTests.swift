@@ -23,8 +23,8 @@ enum FitFixture {
         FitCheck.Firmware.precedentBinaries + ["usr/lib/libSystem.B.dylib", SystemEdits.dyldCache(arch(id)), GuestPackage.systemVersion]
     }
 
-    /// `files` (those the image has; re-exported libraries of the on-disk ones too, and with `links` every linked one)
-    /// under `dir`/`name`; nil when the fixture is absent.
+    /// `files` (those the image has, and listed directories as empty ones; re-exported libraries of the on-disk ones too,
+    /// and with `links` every linked one) under `dir`/`name`; nil when the fixture is absent.
     static func volume(_ id: String, _ files: [String], in dir: URL, name: String = "stock", links: Bool = false) throws -> URL? {
         guard let dmg = dmgs[id], Oracle.exists(dmg) else { return nil }
         let raw = dir.appendingPathComponent("\(name).hfs"), out = dir.appendingPathComponent(name)
@@ -33,7 +33,8 @@ enum FitFixture {
         let v = try HFSPlusVolume(raw)
         var queue = files, seen = Set<String>()
         while let rel = queue.popLast() {
-            guard seen.insert(rel).inserted, let r = try? v.record(at: rel), r.kind == .file, !r.isSymlink else { continue }
+            guard seen.insert(rel).inserted, let r = try? v.record(at: rel), !r.isSymlink else { continue }
+            if r.kind == .folder { try SystemEdits.mkdirs(out.appendingPathComponent(rel)); continue }   // a listed directory, as it is
             let data = try v.contents(r), to = out.appendingPathComponent(rel)
             try SystemEdits.mkdirs(to.deletingLastPathComponent())
             try SystemEdits.put(data, to, mode: r.mode & 0o7777)
@@ -124,6 +125,38 @@ enum FitFixture {
                 #expect(!alone.fits && alone.proof.contains("_CFUserNotificationCreate"), "\(id): \(alone.proof)")
                 let hosted = FitCheck.loads("it_msmquiet", quiet, on: fw, host: "/" + FitFixture.mounter)
                 #expect(hosted.fits, "\(id): \(hosted.proof)")
+            }
+        }
+    }
+
+    /// The GL front end (qemu-ios contrib/gles-public: one fat OpenGLES for every build) fits the iPad's 3.2.2, 4.2.1 and
+    /// 5.1.1 and the iPod's 2.1.1, 3.1.3 and 4.2.1, and each lookup decides: an export renamed away fails every build,
+    /// and a dispatch field the name table lacks fails 5.1.1 alone (the one compositor that asks for a macro context).
+    @Test func glesFrontEndFits() throws {
+        let bin = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.openGLES)
+        let table = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.glesNames)
+        guard Oracle.exists(bin), Oracle.exists(table) else { return }
+        let front = try Data(contentsOf: bin), names = try String(contentsOf: table, encoding: .utf8)
+        func renamingAll(_ d: Data, _ from: String, _ to: String) -> Data {
+            var b = [UInt8](d)
+            while let at = b.firstRange(of: Array("\0\(from)\0".utf8)) { b.replaceSubrange(at, with: Array("\0\(to)\0".utf8)) }
+            return Data(b)
+        }
+        let files = [FitCheck.openGLES, FitCheck.quartzCore, FitCheck.coreImage, FitCheck.ioSurface, FitCheck.ioMobileFramebuffer,
+                     FitCheck.sgxEngine, "System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+                     "System/Library/Frameworks/Foundation.framework/Foundation", "usr/lib/libobjc.A.dylib"] + FitCheck.coreSurfaces
+        for id in ["k48ap-7B500", "k48ap-8C148", "k48ap-9B206", "n72ap-5F138", "n72ap-7E18", "n72ap-8C148"] {
+            try Oracle.withTemp { dir in
+                guard let v = try FitFixture.volume(id, FitFixture.stock(id) + files, in: dir) else { return }
+                let fw = { FitCheck.Firmware(root: v, arch: FitFixture.arch(id)) }
+                let f = FitCheck.glesFrontEnd(fw(), binary: front, names: names)
+                #expect(f.fits, "\(id): \(f.proof)")
+                #expect(f.proof.contains(id.hasPrefix("k48") ? "ES 1.1 + 2.0" : "ES 1.1 only"), "\(id): \(f.proof)")
+                let lost = FitCheck.glesFrontEnd(fw(), binary: renamingAll(front, "_glClear", "_glClxar"), names: names)
+                #expect(!lost.fits && lost.proof.contains("_glClear"), "\(id): \(lost.proof)")
+                let unnamed = FitCheck.glesFrontEnd(fw(), binary: front, names: names.replacingOccurrences(of: "bind_framebuffer_EXT,", with: "bind_framebuffer_XXX,"))
+                #expect(unnamed.fits == (id != "k48ap-9B206"), "\(id): \(unnamed.proof)")
+                if id == "k48ap-9B206" { #expect(unnamed.proof.contains("bind_framebuffer_EXT") && f.proof.contains("macro context: 905")) }
             }
         }
     }
@@ -313,16 +346,14 @@ enum FitFixture {
         }
     }
 
-    /// Every switch SpringBoard's job gets has a reader: the iPad's GL set (MBX2D_PAGE_FLIP in the firmware,
-    /// GLI_ACCELERATED only in the GL shim: without the shim it has none) on 3.2.2 and 5.1.1; the iPod's
+    /// Every switch SpringBoard's job gets has a reader: the iPad's GL set (MBX2D_PAGE_FLIP, read by the firmware
+    /// itself: the GL front end needs no switch of its own) on 3.2.2 and 5.1.1; the iPod's
     /// CoreAnimation/LayerKit pairs on 2.1.1 (frameworks on disk), 3.1.3 and 4.2.1; not a LayerKit-only switch on
     /// the iPad's 4.2.1, which reads no LK_ name.
     @Test func springBoardSwitchesHaveReaders() throws {
-        guard let helpers = K48Oracle.guestTools else { return }
-        let gl = [(SystemEdits.Helpers.glEngine, try Data(contentsOf: helpers.appendingPathComponent(SystemEdits.Helpers.glEngine)))]
         let ipad = SystemEdits.sbEnvCAOGL.keys.sorted().map { [$0] }
         let cases: [(String, [[String]], [(String, Data)], Bool)] = [
-            ("k48ap-7B500", ipad, gl, true), ("k48ap-7B500", ipad, [], false), ("k48ap-9B206", ipad, gl, true),
+            ("k48ap-7B500", ipad, [], true), ("k48ap-9B206", ipad, [], true),
             ("k48ap-8C148", [["LK_ENABLE_OGL"]], [], false),
             ("n72ap-5F138", N72Board.sbSwitches, [], true), ("n72ap-7E18", N72Board.sbSwitches, [], true), ("n72ap-8C148", N72Board.sbSwitches, [], true)]
         for (id, switches, also, fits) in cases {
@@ -332,7 +363,7 @@ enum FitFixture {
                 let fw = FitCheck.Firmware(root: v, arch: FitFixture.arch(id))
                 let f = FitCheck.environment(fw, switches, also: also)
                 #expect(f.fits == fits, "\(id) \(switches): \(f.proof)")
-                if !fits { #expect(f.proof.contains(switches == ipad ? "GLI_ACCELERATED" : "LK_ENABLE_OGL")) }
+                if !fits { #expect(f.proof.contains("LK_ENABLE_OGL")) }
                 // the web proxy's keys are named by every firmware at hand (SystemConfiguration / CFNetwork)
                 let pac = FitCheck.webProxy(fw)
                 #expect(pac.fits, "\(id): \(pac.proof)")
