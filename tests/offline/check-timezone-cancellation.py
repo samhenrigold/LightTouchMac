@@ -6,17 +6,10 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-# Reuse already-built package products when supplied. Otherwise build only the
-# existing Subprocess dependency, not the app or the preparation library.
-def subprocess_products():
-    if value := os.environ.get('LTM_SUBPROCESS_PRODUCTS'):
-        return Path(value), Path(os.environ['LTM_SOURCE_PACKAGES'])
-    scratch = ROOT / '.build/offline-subprocess'
-    subprocess.run(['swift', 'build', '--package-path', str(ROOT / 'Packages/FirmwareKit'),
-                    '--scratch-path', str(scratch), '--target', 'Subprocess'], check=True)
-    return scratch / 'debug', scratch / 'checkouts'
-
-products, checkouts = subprocess_products()
+import sys
+sys.path.insert(0, str(ROOT / 'scripts'))
+import swift_subprocess
+package_flags = swift_subprocess.swift_flags(ROOT)
 source = (ROOT / 'LightTouchMac/Services/LockdownTools.swift').read_text()
 methods = source[source.index('    static func setTimeZone(_ identifier:'):source.index('    /// Offer a CA')]
 methods += source[source.index('    private static func lockdownChild('):source.index('    /// A development build')]
@@ -112,11 +105,7 @@ struct GuestServices {
 }
 '''.replace('METHODS', methods).replace('WAIT', wait)
     swift = tmp / 'Probe.swift'; swift.write_text(harness)
-    maps = [checkouts / 'swift-system/Sources/CSystem/include/module.modulemap',
-            checkouts / 'swift-subprocess/Sources/_SubprocessCShims/include/module.modulemap']
     subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5',
-        '-module-cache-path', str(tmp / 'modules'), '-I', str(products),
-        *[arg for path in maps for arg in ['-Xcc', '-fmodule-map-file=' + str(path)]],
-        str(swift), *[str(products / (name + '.o')) for name in ['Subprocess', 'SystemPackage', 'CSystem', '_SubprocessCShims']],
+        '-module-cache-path', str(tmp / 'modules'), *package_flags, str(swift),
         '-o', str(tmp / 'probe')], check=True)
     subprocess.run([str(tmp / 'probe'), str(tmp)], check=True, timeout=20)

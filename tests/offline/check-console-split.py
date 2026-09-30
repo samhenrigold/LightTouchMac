@@ -7,12 +7,21 @@ from pathlib import Path
 import os, subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
 check = r"""import Cocoa
+import ObjectiveC
 typealias L = ConsoleSplitLayout
 func expect(_ ok: Bool, _ what: String, line: Int = #line) { if !ok { print("FAIL line \(line): \(what)"); exit(1) } }
 
 @main struct Check {
  @MainActor static func main() async throws {
   _ = NSApplication.shared
+  // This offscreen fixture checks final geometry/state, not animation timing.
+  // Use the real Reduce Motion path: a sleeping display pauses AppKit’s
+  // constraint animator even though the control action and model both change.
+  let motionGetter = class_getInstanceMethod(NSWorkspace.self, #selector(getter: NSWorkspace.accessibilityDisplayShouldReduceMotion))!
+  let motionless: @convention(block) (AnyObject) -> Bool = { _ in true }
+  let replacement = imp_implementationWithBlock(motionless)
+  let previous = method_setImplementation(motionGetter, replacement)
+  defer { method_setImplementation(motionGetter, previous); imp_removeBlock(replacement) }
   // Detents: available 600 -> range 100...440, middle 270, default 200; tolerance 10 (strict).
   let cases: [(CGFloat, CGFloat?)] = [(265, 270), (279.5, 270), (261, 270), (280, 280), (260, 260),
       (195, 200), (209, 200), (210, 210), (191, 200), (190, 190),
