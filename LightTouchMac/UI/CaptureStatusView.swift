@@ -79,7 +79,7 @@ final class CaptureStatusView: NSView {
     }
 
     func showCapture(title: String, image: NSImage, fileURL: URL?) {
-        update(title: title, detail: fileURL == nil ? "Copied to Clipboard" : "Open in Finder", dismissible: true, appearance: .success)
+        update(title: title, dismissible: true, appearance: .success)
         state.image = image
         state.fileURL = fileURL
         let id = presentationID
@@ -234,7 +234,7 @@ private struct CaptureBannerThumbnail: View {
                 Image(nsImage: image).resizable().scaledToFit().frame(width: 160, height: 160)
             }
             .accessibilityLabel("Capture thumbnail")
-            .help("Drag to copy the capture")
+            .help("Drag into another app or the Finder")
     }
 }
 

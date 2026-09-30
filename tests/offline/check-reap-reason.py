@@ -53,7 +53,7 @@ enum DeviceLinkError: Error { case helperFailure(String) }
    while !p.isDead, Date().timeIntervalSince(start) < 1 { try? await Task.sleep(for: .milliseconds(5)) }
    return p.deathReason ?? "(never died)"
   }
-  let stopped = "The iPod stopped.", crashed = "The iPod stopped unexpectedly. Open Device Logs for details."
+  let stopped = "The iPod stopped.", crashed = "The iPod stopped unexpectedly."
   let cases: [(String, (DeviceProcess) -> Void)] = [
    // A stop whose helper reported QEMU's exit before dying.
    (stopped, { $0.terminate() }),

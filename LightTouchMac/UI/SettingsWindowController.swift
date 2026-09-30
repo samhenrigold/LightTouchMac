@@ -1,5 +1,12 @@
 import Cocoa
 
+/// A Settings pane: sized by its `fittingSize`, and says when that changes.
+protocol SettingsPane: NSView {
+    var onResize: (() -> Void)? { get set }
+}
+
+extension GeneralSettingsView: SettingsPane {}
+
 /// Settings…: one window, a toolbar button per pane, the window sized to the
 /// pane and titled after it (HIG, "Preferences Windows").
 final class SettingsWindowController: NSWindowController {
@@ -7,11 +14,10 @@ final class SettingsWindowController: NSWindowController {
 
     private let tabs = SettingsTabViewController()
 
-    /// Each pane reports its `fittingSize` and calls its `onResize` hook.
-    init(general: GeneralSettingsView, capture: CaptureOptionsView, storage: StorageSettingsView) {
+    init(general: SettingsPane, capture: SettingsPane, storage: SettingsPane) {
         tabs.tabStyle = .toolbar
         tabs.canPropagateSelectedChildViewControllerTitle = true
-        for (view, title, symbol) in [(general as NSView, "General", "gearshape"),
+        for (view, title, symbol) in [(general, "General", "gearshape"),
                                       (capture, "Capture", "camera"),
                                       (storage, "Storage", "internaldrive")] {
             let pane = NSViewController()
@@ -28,9 +34,7 @@ final class SettingsWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
         WindowRestorationPolicy.configure(window)
         super.init(window: window)
-        general.onResize = { [weak self] in self?.fit() }
-        capture.onResize = { [weak self] in self?.fit() }
-        storage.onResize = { [weak self] in self?.fit() }
+        for pane in [general, capture, storage] { pane.onResize = { [weak self] in self?.fit() } }
         tabs.onSelect = { [weak self] in self?.fit() }
         fit()
         window.center()

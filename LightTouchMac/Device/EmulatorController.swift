@@ -53,7 +53,7 @@ final class EmulatorController {
     private lazy var noticeOperation = UserDefaults.standard.dictionary(forKey: instance.defaultsKey("deviceNotice"))?["operation"] as? String
     func reportDeviceNotice(_ message: String, for operation: NoticeOperation) {
         let value = storageFailed
-            ? "Couldn’t save to disk. The device stopped and recent changes weren’t saved. Free disk space, then reopen Light Touch. Open Device Logs for details."
+            ? "Couldn’t save to disk, so the \(profile.shortName) stopped and recent changes were lost. Free up space, then reopen Light Touch."
             : message
         logEvent(value)
         deviceNotice = value
@@ -465,10 +465,10 @@ final class EmulatorController {
     /// it_ethlink (the iPad's guest package) bringing the USB Ethernet link up.
     static let ethlinkMarker = "it_ethlink: LinkStatus 0 -> 1"
     static func recoveryReason(_ profile: DeviceProfile) -> String {
-        "The \(profile.shortName) entered recovery mode instead of starting iOS. Delete it and prepare it again. Open Device Logs for details."
+        "The \(profile.shortName) started in recovery mode. Delete it and prepare it again."
     }
     static func deadlineReason(_ profile: DeviceProfile) -> String {
-        "The \(profile.shortName) didn’t start within \(Int(profile.bootBudget)) seconds. Open Device Logs for details."
+        "The \(profile.shortName) didn’t start within \(Int(profile.bootBudget)) seconds."
     }
     /// A boot file the base lacks (BootRecipe.preparedFiles), else the storage error as it is.
     static func bootFilesReason(_ error: Error, profile: DeviceProfile) -> String {
@@ -635,7 +635,7 @@ final class EmulatorController {
             } catch {
                 if !Task.isCancelled, generation == bootGeneration {
                     readinessFailure = error.localizedDescription
-                    reportDeviceNotice("The device didn’t finish starting. Restart it to try again; open Device Logs for details.", for: .preparation)
+                    reportDeviceNotice("The \(profile.shortName) didn’t finish starting. Restart it to try again.", for: .preparation)
                     logEvent("boot: readiness failed: \(error.localizedDescription)")
                 }
             }
@@ -1577,7 +1577,7 @@ final class EmulatorController {
                 }
                 guard process?.isDead != false else {
                     isErasing = false
-                    reportDeviceNotice("Couldn’t stop the device to erase it. Your data has not been erased. Try again.", for: .erase)
+                    reportDeviceNotice("Couldn’t stop the \(profile.shortName) to erase it. Try again.", for: .erase)
                     return
                 }
             }
@@ -1605,7 +1605,7 @@ final class EmulatorController {
                 }
             } catch {
                 isErasing = false
-                reportDeviceNotice("The device could not be completely erased: \(error.localizedDescription) Choose Erase All Content and Settings to try again.", for: .erase)
+                reportDeviceNotice("Couldn’t finish erasing the \(profile.shortName): \(error.localizedDescription)", for: .erase)
             }
         }
     }
@@ -1765,7 +1765,7 @@ final class EmulatorController {
         }
         _ = try services
         guard guestAgent.isAlive else {
-            throw DeviceToolsError.failed("Open the app on the device’s Home screen; launching from the sidebar isn’t available for this device yet.")
+            throw DeviceToolsError.failed("Open it from the \(profile.shortName)’s Home screen.")
         }
         try await guest.launch(bundleID)
     }

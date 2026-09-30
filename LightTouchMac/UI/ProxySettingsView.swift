@@ -70,6 +70,9 @@ final class ProxySettingsView: NSView {
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor),
+            // Sized by its content where the sheet's stack lays it out.
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
             stack.widthAnchor.constraint(equalToConstant: 300),
             archiveNote.widthAnchor.constraint(equalToConstant: 282),
             statusLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 276),
@@ -127,7 +130,8 @@ extension ProxySettingsView {
         }
         cancel.keyEquivalent = "\u{1b}"
         ok.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [cancel, ok])
+        let buttons = NSStackView()
+        buttons.setViews([cancel, ok], in: .trailing)
         buttons.spacing = 12
         let stack = NSStackView(views: [title, editor, buttons])
         stack.orientation = .vertical
@@ -135,7 +139,7 @@ extension ProxySettingsView {
         stack.spacing = 16
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         stack.setCustomSpacing(20, after: editor)
-        buttons.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -20).isActive = true
+        buttons.widthAnchor.constraint(equalTo: editor.widthAnchor).isActive = true
         let sheet = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
         sheet.contentView = stack
         let fit = { [weak sheet, weak stack] in

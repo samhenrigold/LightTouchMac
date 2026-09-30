@@ -73,7 +73,7 @@ import Cocoa
             ("preparing", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .preparing(prep), failure: nil)),
             ("error", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .failed(unsupported), failure: nil)),
             ("ready", DeviceRow(entry: ipad, instanceID: id, session: nil, job: nil, failure: nil)),
-            ("stopped", DeviceRow(entry: ipad, instanceID: id, session: .dead("The iPad stopped unexpectedly. Open Device Logs for details."), job: nil, failure: nil)),
+            ("stopped", DeviceRow(entry: ipad, instanceID: id, session: .dead("The iPad stopped unexpectedly."), job: nil, failure: nil)),
             ("requires-ipsw", DeviceRow(entry: ipod, instanceID: nil, session: nil, job: nil, failure: nil)),
         ]
         var failures: [String] = []

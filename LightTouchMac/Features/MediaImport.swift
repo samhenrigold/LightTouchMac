@@ -27,7 +27,7 @@ struct MediaImport: Sendable {
     private func commitPhoto(_ photo: MediaPhoto) async throws {
         guard try await guest.commitMedia(id: photo.id, helper: "itphoto", localHelper: { try Self.guestTool("itphoto") },
                                           metadata: nil) else {
-            throw DeviceToolsError.failed("Photos did not confirm the import. Check Saved Photos before importing it again.")
+            throw DeviceToolsError.failed("Photos didn’t confirm the import. Check Saved Photos before importing it again.")
         }
     }
 
@@ -40,7 +40,7 @@ struct MediaImport: Sendable {
     private func commitLibraryMedia(id: String, metadata: URL, destination: String) async throws {
         guard try await guest.commitMedia(id: id, helper: "itmedia", localHelper: { try Self.guestTool("itmedia") },
                                           metadata: metadata) else {
-            throw DeviceToolsError.failed("\(destination) did not confirm the import. The copied media has been retained.")
+            throw DeviceToolsError.failed("\(destination) didn’t confirm the import. The copied media has been retained.")
         }
     }
 

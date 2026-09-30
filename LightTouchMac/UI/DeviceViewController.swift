@@ -60,9 +60,8 @@ final class DeviceViewController: NSViewController {
         // point of accepting multiple files.
         guard emulator.canQueueInstall else {
             let alert = NSAlert()
-            alert.messageText = "The device isn’t ready yet"
-            alert.informativeText =
-                "Apps can be installed once the device has finished starting up and USB is connected."
+            alert.messageText = "The \(emulator.profile.shortName) isn’t ready yet"
+            alert.informativeText = "Try again when it has finished starting up."
             if let window = view.window { alert.beginSheetModal(for: window) { _ in } }
             else { alert.runModal() }
             return

@@ -81,7 +81,7 @@ final class CanvasCapture {
             if let error = frames.failure { throw error }
             try await Task.sleep(for: .milliseconds(16))
         }
-        guard frames.image != nil else { await stop(); throw CaptureError.failed("No canvas frames arrived.") }
+        guard frames.image != nil else { await stop(); throw CaptureError.failed("Couldn’t capture the screen.") }
         refresh = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .milliseconds(50)) } catch { return }

@@ -80,7 +80,7 @@ final class Seen: @unchecked Sendable {
         precondition(stage == .usb && ReadinessDeadline.verdict(painted: true, stage: recorded.prefix(4).map(BootStage.Event.serial)
             .reduce(.poweringOn) { $0.after($1) }) == .keepRunning, "the recorded boot, had USB never come: kept")
         let notice = ReadinessDeadline.notice(shortName: "iPad")
-        precondition(notice.hasPrefix("The iPad is running, but it isn’t connected over USB yet.") && notice.contains("Installing apps and transferring files"))
+        precondition(notice == "Apps and files will be available when the iPad connects.", notice)
         print("PASS: the recorded boot's serial lines, guest tools and USB give the toast's stages in order, only forward; iOS on screen without USB keeps running, no picture stops")
     }
 }

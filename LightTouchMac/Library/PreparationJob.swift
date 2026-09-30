@@ -176,7 +176,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
             finish(.failed(Self.message(code: code, detail: detail, piece: piece, beta: request.entry.prerelease != nil)))
         default:
             logEvent("firmware: firmwarekit exited \(status) without a result")
-            finish(.failed("Preparation stopped unexpectedly. Open Device Logs for details."))
+            finish(.failed("Preparation stopped unexpectedly."))
         }
     }
 

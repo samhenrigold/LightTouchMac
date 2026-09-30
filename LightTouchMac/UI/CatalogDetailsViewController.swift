@@ -79,7 +79,7 @@ final class CatalogDetailsViewController: NSHostingController<CatalogDetailsView
             }
             rows = found
             guard !found.isEmpty else {
-                problem = "No \(arch) copies are available."
+                problem = "No version of this app runs on this device."
                 return
             }
             selection = found.first { $0.copy.ipa_id == String(app.ipaID) }?.copy.ipa_id ?? found[0].copy.ipa_id
@@ -144,8 +144,6 @@ struct CatalogDetailsView: View {
                             if model.rows == nil { ProgressView().controlSize(.small) } else { Text("None") }
                         }
                     }
-                    LabeledContent("File", value: model.details?.filename.map { ($0 as NSString).lastPathComponent } ?? "—")
-                    LabeledContent("Architecture", value: model.details?.binary?.architectures?.joined(separator: ", ") ?? "—")
                     LabeledContent("Minimum iOS", value: minimumOS ?? "—")
                 } header: {
                     Text(model.app.name).font(.headline)
@@ -178,10 +176,11 @@ struct CatalogDetailsView: View {
         .task(id: model.selection) { await model.check() }
     }
 
-    /// The listing's minimum, and the binary's own when they disagree.
+    /// What the copy needs: the listing's minimum, or the binary's own when it asks for more.
     private var minimumOS: String? {
         let listed = model.selectedRow?.version.minimum_os_version
-        guard let binary = model.details?.binary?.macho_min_os, binary != listed else { return listed }
-        return listed.map { "\($0) (binary \(binary))" } ?? binary
+        guard let binary = model.details?.binary?.macho_min_os else { return listed }
+        guard let listed else { return binary }
+        return binary.compare(listed, options: .numeric) == .orderedDescending ? binary : listed
     }
 }
