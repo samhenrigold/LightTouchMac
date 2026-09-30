@@ -16,7 +16,7 @@ final class AppsInspectorViewController: NSViewController {
     private let tableView = NSTableView()
     private let addRemove = NSSegmentedControl()
     private let searchField = NSSearchField()
-    private let placeholder = NSTextField(labelWithString: "")
+    private let placeholder = NSTextField.paneMessage()
     private let emptyActions = NSStackView()
     private let browseButton = NSButton(title: "Browse Store", target: nil, action: nil)
     private let installButton = NSButton(title: "Install App…", target: nil, action: nil)
@@ -28,7 +28,7 @@ final class AppsInspectorViewController: NSViewController {
     /// Shown over a populated list when the device stops answering: the list is
     /// kept (it was correct a moment ago) but no longer silently pretends to be
     /// current.
-    private let banner = NSTextField(labelWithString: "")
+    private let banner = NSTextField.paneCaption()
     private var bannerHeight: NSLayoutConstraint?
     private var lastLoaded: Date?
     private var apps: [InstalledApp] = []
@@ -113,22 +113,12 @@ final class AppsInspectorViewController: NSViewController {
 
         configureAddRemove()
 
-        placeholder.textColor = .secondaryLabelColor
-        placeholder.alignment = .center
-        placeholder.font = .systemFont(ofSize: NSFont.systemFontSize)
-        placeholder.maximumNumberOfLines = 0
-        placeholder.translatesAutoresizingMaskIntoConstraints = false
         placeholder.isHidden = true
 
         // A quiet caption, the way Mail dates its last check — no fill at all.
         // Both a yellow band and a gray quaternary strip were tried; any
         // edge-to-edge fill under the segmented control reads as a broken
         // control, not a status line.
-        banner.font = .systemFont(ofSize: 11)
-        banner.textColor = .secondaryLabelColor
-        banner.alignment = .center
-        banner.lineBreakMode = .byTruncatingMiddle
-        banner.translatesAutoresizingMaskIntoConstraints = false
         banner.isHidden = true
         let bannerHeight = banner.heightAnchor.constraint(equalToConstant: 0)
         self.bannerHeight = bannerHeight
@@ -954,7 +944,9 @@ final class AppsInspectorViewController: NSViewController {
                 self.catalogResults = []
                 self.catalogFailed = true
                 self.reloadTablePreservingSelection()
-                self.showPlaceholder("Couldn’t reach Legacy Store — \(error.localizedDescription)")
+                // Legacy Store's own errors say it plainly; a network error needs the name.
+                self.showPlaceholder(error is CatalogError ? error.localizedDescription
+                                                           : "Couldn’t reach Legacy Store — \(error.localizedDescription)")
             }
             self.updateButtons()
         }

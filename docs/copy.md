@@ -143,7 +143,7 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 
 ### Install failures
 
-Every failed install, download or removal writes its whole error to app.log (`install: <name> failed: …`, with a DecodingError's coding path; `Legacy Store: HTTP <code> for <path>`). A Legacy Store response that doesn’t decode reads “Legacy Store sent a response Light Touch couldn’t read.”, never Foundation’s “isn’t in the correct format”.
+Every failed install, download or removal writes its whole error to app.log (`install: <name> failed: …`, with a DecodingError's coding path; `Legacy Store: HTTP <code> for <path>`). A Legacy Store response that doesn’t decode reads “Legacy Store sent a response Light Touch couldn’t read.”, never Foundation’s “isn’t in the correct format”. A server error (HTTP 5xx) reads “Legacy Store isn’t responding. Try again in a moment.”, any other status “Legacy Store couldn’t answer that request. Try again later.”; the code stays in the log. Only a network error (no answer at all) says “Couldn’t reach Legacy Store — …”. The Apps pane’s messages wrap to its width; they never widen or clip it.
 
 ### Store on iPhone OS 1.x
 
