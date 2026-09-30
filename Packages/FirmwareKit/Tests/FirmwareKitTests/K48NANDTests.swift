@@ -29,11 +29,15 @@ struct K48NANDTests {
     }
 
     /// make_mbr reproduces the 16 GB unit's sector 0 (ipad1_nand.py selfcheck's bytes).
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func mbrMatchesUnit() throws {
+    @Test func mbrMatchesUnit() {
         let head = [UInt8](K48NAND.makeMBR())
         let unit = Data(hex: "00010100affeffff3f00000000000500" + "00feffffaefeffff6d0005002fe53600" + "00feffffaffeffff4000050008000000")!
         #expect(Data(head[0x1be..<0x1ee]) == unit && head[510] == 0x55 && head[511] == 0xAA)
         #expect((head[..<0x1be] + head[0x1ee..<510] + head[512...]).allSatisfy { $0 == 0 })
+    }
+
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func mbrMatchesPython() throws {
+        let head = K48NAND.makeMBR()
         guard Fixtures.hasPython else { try FixtureRequirements.missing(#"K48NANDTests.swift: Fixtures.hasPython"#) }
         let dir = try Fixtures.tempDir("mbr")
         defer { try? FileManager.default.removeItem(at: dir) }
