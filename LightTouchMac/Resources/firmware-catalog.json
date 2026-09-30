@@ -288,7 +288,7 @@
   "version": "4.2.1",
   "build": "8C148",
   "released": "2010-11-22",
-  "status": "experimental",
+  "status": "available",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPad/061-9857.20101122.VGthy/iPad1,1_4.2.1_8C148_Restore.ipsw", "sha1": "8717b3bedc925b587566442ad375aa65d857e79a", "bytes": 578084840},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "d108bbfc6e3e4d6d3c9fec1d19fe1769", "key": "3359842bed66e5f2b942f60ac30667a36a86f049b8cb33bd101c1caf5cb422e8"},
@@ -943,7 +943,7 @@
   "version": "2.2",
   "build": "5G77a",
   "released": "2008-11-21",
-  "status": "experimental",
+  "status": "available",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/061-5358.20081120.Gtghy/iPod2,1_2.2_5G77a_Restore.ipsw", "sha1": "34a0a489605f34d6cc6c9954edcaaf9a050deedc", "bytes": 291123491},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "84fdb401700547796d1db8a4e4dc1765", "key": "992dec77ad422af79ebecc34bf110053"},
@@ -972,7 +972,7 @@
   "version": "2.2.1",
   "build": "5H11a",
   "released": "2009-01-27",
-  "status": "experimental",
+  "status": "available",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone/061-5863.20090127.rt56K/iPod2,1_2.2.1_5H11a_Restore.ipsw", "sha1": "9af5625ea34acdd8abeb6fce71a72651d0c815d5", "bytes": 291140244},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "62940272d1a3a34106e5bbf6d7c166ea", "key": "e8fdd305f48de7c4f086ad17eec180e8"},

@@ -132,8 +132,9 @@ import Foundation
         precondition(row(beta, failure: "x").primaryAction == .importIPSW, "a failed import offers the import again")
 
         // Experimental carries the tag; a status note is the catalog's to add when it says more than the tag.
-        r = row(iPad4)
+        r = row(entry("k48ap-8L1"))   // 4.2.1 is available since 09-29; 4.3.5 is still experimental
         precondition(r.isExperimental)
+        precondition(!row(iPad4).isExperimental)
         // iPod 4.2.1 downloads and prepares like the iPads.
         r = row(iPod4)
         precondition(r.isExperimental && r.primaryAction == .downloadAndPrepare)
