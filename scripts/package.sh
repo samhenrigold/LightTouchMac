@@ -312,7 +312,7 @@ done
 # then strip -S -x (debug and local symbols) before signing.
 for f in "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
     [ -L "$f" ] && continue
-    if [ -n "${LTM_DSYM_DIR:-}" ] && nm -ap "$f" 2>/dev/null | grep -q ' OSO '; then
+    if [ -n "${LTM_DSYM_DIR:-}" ] && nm -ap "$f" 2>/dev/null | grep ' OSO ' >/dev/null; then
         mkdir -p "$LTM_DSYM_DIR"
         dsymutil "$f" -o "$LTM_DSYM_DIR/$(basename "$f").dSYM"
     fi
