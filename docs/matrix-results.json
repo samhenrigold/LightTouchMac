@@ -1021,11 +1021,23 @@
   "version": "3.0",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T17:40:32+00:00",
+  "when": "2026-09-30T14:05:13+00:00",
+  "load": {
+   "start": [
+    4.14,
+    3.75,
+    3.88
+   ],
+   "end": [
+    3.07,
+    3.55,
+    3.79
+   ]
+  },
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-legacy-gate/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-files/legacy-gate/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/legacy-gate/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 19,
@@ -1034,7 +1046,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 61.9,
+   "seconds": 31.7,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1044,10 +1056,13 @@
     "Writing the NAND",
     "Writing the lock"
    ],
-   "warnings": [],
+   "warnings": [
+    "boot-arg cs_enforcement_disable does not fit this firmware (kept: inert here): the kernel does not read it as a boot-arg",
+    "guest tools (it_agent, it_typein.dylib, sblaunch, sbdlicon, it_prefs-armv6) does not fit this firmware (left out): it_agent: load command 0x80000022 is in none of this firmware's own executables (its dyld refuses what it does not know); it_typein.dylib: load command 0x80000022 is in none of this firmware's own executables (its dyld refuses what it does not know); sblaunch: load command 0x80000022 is in none of this firmware's own executables (its dyld refuses what it does not know); sbdlicon: load command 0x80000022 is in none of this firmware's own executables (its dyld refuses what it does not know); it_prefs-armv6: load command 0x80000022 is in none of this firmware's own executables (its dyld refuses what it does not know)"
+   ],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-7A341/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-7A341/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": "stock OpenGLES exports differ from opengles-2x.exports (missing [\"eglBindTexImage\", \"eglChooseConfig\", \"eglCopyBuffers\", \"eglCreateContext\"], extra [\"glAttachShader\", \"glBeginQuery\", \"glBindAttribLocation\", \"glBindFramebuffer\"]): stock kept",
@@ -1057,14 +1072,36 @@
     "kernel": "Darwin Kernel Version 10.0.0d3: Wed May 13 22:14:24 PDT 2009; root:xnu-1357.2.89~4/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/files/matrix-ipa/145757.ipa",
+   "bundle_id": "com.namconetworks.pacmanlite",
+   "min_os": "2.0",
+   "name": "PAC-MAN Lite",
+   "source": "Legacy Store 145757 (Harness needs iOS 3.1)"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 10.4
+    "seconds": 8.5
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.417,
+     "home2": 0.417,
+     "installed": 0.185
+    },
+    "frontmost": "unknown (no guest agent on this build)",
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 10.0,
+    "seconds": 4.3,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1083,78 +1120,88 @@
    },
    "install": {
     "ok": true,
-    "seconds": 12,
+    "seconds": 1,
     "attempt": 1,
     "apps": [
-     "se.illusionlabs.labyrinth2lite"
-    ],
-    "launch": {
-     "at": [
-      0.147,
-      0.129,
-      1
-     ],
-     "bundleID": "se.illusionlabs.labyrinth2lite",
-     "shot1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-7A341/boot/ipod/launched1.png",
-     "shot2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-7A341/boot/ipod/launched2.png",
-     "shot3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/matrix-scratch/n72ap-7A341/boot/ipod/launched3.png"
-    }
+     "com.namconetworks.pacmanlite"
+    ]
    },
    "package": {
     "ok": null,
     "note": "no loader baked (the lock has no guest_package)"
    },
-   "gl": {
+   "helpers": {
     "ok": null,
-    "note": "no GL path on 3.0: its OpenGLES exports differ from the 2.x front end's list (ES2 names, no EGL), so the stock engine stays, and without a shared cache no MBXGLEngine is installed (smoke #47)"
+    "note": "no guest helpers baked"
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "shim": false,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
-    "ok": false,
+    "ok": true,
     "error": null,
     "second_boot": {
-     "lit": null,
-     "lockdown": null
-    }
+     "lit": 8.8,
+     "lockdown": 5.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 35.4,
+    "seconds": 12.0,
     "reason": "The iPod stopped.",
-    "second": null
+    "second": 35.4,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
-   "base_unchanged": false,
-   "driver_exit": 1,
-   "driver_fail": "ipod never lit"
+   "base_unchanged": true,
+   "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/installed.png",
-   "tip": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/tip.png",
-   "prelaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/prelaunch.png",
-   "launched1": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/launched1.png",
-   "launched2": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/launched2.png",
-   "launched3": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/launched3.png",
-   "afterlaunch": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/afterlaunch.png",
-   "never-lit": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/never-lit.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-7A341/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-7A341/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-7A341/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-7A341/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-7A341/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/legacy-gate/results/n72ap-7A341/driver.jsonl",
-  "first_failure": {
-   "check": "persist",
-   "why": "ipod never lit",
-   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\nBoot Failure Count: 0\tPanic Fail Count: 0"
+  "events": "/Users/shg/ltm-runner/results/n72ap-7A341/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
   },
-  "triage": "legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): 3.0 lights now (it never did before the per-iBoot epoch fix, it_iboot.c). AppSync (installd injection) installs Labyrinth 2 Lite (Legacy Store ipa 257098, min OS 3.0, armv6) in 12 s and it launches, but its window stays grey: no GL on 3.0 (smoke #47). Enigmo (ipa 195588, labelled armv6/min OS 3.0) installs too and dies at launch with SIGILL on a MOVW (armv7) in its own initializer: that copy is not an ARM1176 binary (Legacy Store data, not the emulator). No springboardservices on 3.0 (it arrives in 3.1): the reorder fails with Invalid service, so the icon is tapped on page 2 (--launch-at 0.147,0.129,1); the app no longer waits for that service at boot. Package: no loader baked on 3.0 (the lock has no guest_package; smoke #10). Persist: boot 2 never lit in 240 s after a confirmed clean shutdown (2 of 6 runs today; the other 4 lit in 10-36 s; smoke #46). Shutdown 12-35 s."
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): legacy-gate 09-29 (multidevice 53e392f + this branch, qemu-ios aec1594bf7 guest tools/dylib): 3.0 lights now (it never did before the per-iBoot epoch fix, it_iboot.c). AppSync (installd injection) installs Labyrinth 2 Lite (Legacy Store ipa 257098, min OS 3.0, armv6) in 12 s and it launches, but its window stays grey: no GL on 3.0 (smoke #47). Enigmo (ipa 195588, labelled armv6/min OS 3.0) installs too and dies at launch with SIGILL on a MOVW (armv7) in its own initializer: that copy is not an ARM1176 binary (Legacy Store data, not the emulator). No springboardservices on 3.0 (it arrives in 3.1): the reorder fails with Invalid service, so the icon is tapped on page 2 (--launch-at 0.147,0.129,1); the app no longer waits for that service at boot. Package: no loader baked on 3.0 (the lock has no guest_package; smoke #10). Persist: boot 2 never lit in 240 s after a confirmed clean shutdown (2 of 6 runs today; the other 4 lit in 10-36 s; smoke #46). Shutdown 12-35 s."
  },
  "n72ap-7C145": {
   "version": "3.1.1",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T00:05:18+00:00",
+  "when": "2026-09-30T14:09:48+00:00",
+  "load": {
+   "start": [
+    3.42,
+    3.61,
+    3.81
+   ],
+   "end": [
+    3.72,
+    3.67,
+    3.81
+   ]
+  },
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 19,
@@ -1163,7 +1210,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 33.0,
+   "seconds": 33.3,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1176,24 +1223,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-7C145/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-7C145/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-7E18",
-    "gli": "7E18",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 822 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios3",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.0.0d3: Fri Aug 14 13:21:06 PDT 2009; root:xnu-1357.5.30~2/RELEASE_ARM_S5L8720X"
    }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
   },
   "checks": {
    "lit": {
     "ok": true,
     "seconds": 9.1
    },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.417,
+     "home2": 0.417,
+     "installed": 0.417
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
+   },
    "lockdown": {
     "ok": true,
-    "seconds": 11.5,
+    "seconds": 5.3,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1212,55 +1283,91 @@
    },
    "install": {
     "ok": true,
-    "seconds": 4,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
+   },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 18.4,
-     "lockdown": 8.4
-    }
+     "lit": 9.1,
+     "lockdown": 5.2
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.8,
-    "reason": "The emulator stopped.",
-    "second": 1.2
+    "seconds": 1.5,
+    "reason": "The iPod stopped.",
+    "second": 1.4,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7C145/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7C145/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7C145/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7C145/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7C145/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-7C145/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-7C145/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-7C145/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-7C145/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-7C145/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7C145/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only (7E18 GL layout, shim reused)."
+  "events": "/Users/shg/ltm-runner/results/n72ap-7C145/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only (7E18 GL layout, shim reused)."
  },
  "n72ap-7D11": {
   "version": "3.1.2",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T00:07:35+00:00",
+  "when": "2026-09-30T14:11:40+00:00",
+  "load": {
+   "start": [
+    3.96,
+    3.73,
+    3.83
+   ],
+   "end": [
+    3.88,
+    3.78,
+    3.83
+   ]
+  },
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 19,
@@ -1269,7 +1376,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 47.9,
+   "seconds": 31.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1282,24 +1389,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-7D11/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-7D11/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-7E18",
-    "gli": "7E18",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 822 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios3",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.0.0d3: Fri Sep 25 23:33:11 PDT 2009; root:xnu-1357.5.30~3/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 9.6
+    "seconds": 9.3
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.417,
+     "home2": 0.417,
+     "installed": 0.417
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 17.0,
+    "seconds": 5.1,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1318,55 +1449,91 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
+   },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 9.8,
-     "lockdown": 4.7
-    }
+     "lit": 8.9,
+     "lockdown": 5.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.3,
-    "reason": "The emulator stopped.",
-    "second": 2.4
+    "seconds": 1.5,
+    "reason": "The iPod stopped.",
+    "second": 1.4,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7D11/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7D11/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7D11/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7D11/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7D11/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-7D11/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-7D11/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-7D11/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-7D11/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-7D11/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-7D11/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only (7E18 GL layout, shim reused)."
+  "events": "/Users/shg/ltm-runner/results/n72ap-7D11/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only (7E18 GL layout, shim reused)."
  },
  "k48ap-7B405": {
   "version": "3.2.1",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T00:09:56+00:00",
+  "when": "2026-09-30T13:17:25+00:00",
+  "load": {
+   "start": [
+    4.45,
+    4.57,
+    4.05
+   ],
+   "end": [
+    3.84,
+    4.32,
+    4.04
+   ]
+  },
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 19,
@@ -1375,7 +1542,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 81.3,
+   "seconds": 67.7,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1389,7 +1556,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/k48ap-7B405/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-7B405/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -1399,14 +1566,38 @@
     "kernel": null
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 25.1
+    "seconds": 17.6
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.611,
+     "home2": 0.611,
+     "installed": 0.603
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 5.4,
+    "seconds": 2.8,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -1425,55 +1616,97 @@
    },
    "install": {
     "ok": true,
-    "seconds": 5,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "ethlink": true,
+    "prefs": true,
+    "silent": null
+   },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 21.2,
-     "lockdown": 5.3
-    }
+     "lit": 16.9,
+     "lockdown": 2.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.1,
-    "reason": "The emulator stopped.",
-    "second": 16.0
+    "seconds": 14.9,
+    "reason": "The iPad stopped.",
+    "second": 15.0,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B405/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B405/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B405/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B405/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B405/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/k48ap-7B405/lock.png",
+   "home": "/Users/shg/ltm-runner/results/k48ap-7B405/home.png",
+   "installed": "/Users/shg/ltm-runner/results/k48ap-7B405/installed.png",
+   "powerdown1-7s": "/Users/shg/ltm-runner/results/k48ap-7B405/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/ltm-runner/results/k48ap-7B405/powerdown1-12s.png",
+   "lock2": "/Users/shg/ltm-runner/results/k48ap-7B405/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/k48ap-7B405/home2.png",
+   "powerdown2-7s": "/Users/shg/ltm-runner/results/k48ap-7B405/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/ltm-runner/results/k48ap-7B405/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-7B405/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only."
+  "events": "/Users/shg/ltm-runner/results/k48ap-7B405/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only."
  },
  "n72ap-8A293": {
   "version": "4.0",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T00:40:03+00:00",
+  "when": "2026-09-30T14:23:03+00:00",
+  "load": {
+   "start": [
+    3.62,
+    4.06,
+    4.07
+   ],
+   "end": [
+    4.29,
+    4.3,
+    4.17
+   ]
+  },
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 17,
@@ -1482,7 +1715,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 46.4,
+   "seconds": 44.8,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1496,24 +1729,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-8A293/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8A293/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.3.1: Wed May 26 22:16:56 PDT 2010; root:xnu-1504.50.73~2/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 20.8
+    "seconds": 14.7
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.327,
+     "home2": 0.327,
+     "installed": 0.131
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 18.8,
+    "seconds": 11.8,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1532,52 +1789,88 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 20.4,
-     "lockdown": 4.6
-    }
+     "lit": 16.5,
+     "lockdown": 2.2
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 0.8,
-    "reason": "The emulator stopped.",
-    "second": 0.9
+    "seconds": 1.0,
+    "reason": "The iPod stopped.",
+    "second": 0.7,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8A293/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8A293/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8A293/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8A293/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8A293/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A293/driver.jsonl"
+  "events": "/Users/shg/ltm-runner/results/n72ap-8A293/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  }
  },
  "n72ap-8A400": {
   "version": "4.0.2",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T00:42:47+00:00",
+  "when": "2026-09-30T14:25:27+00:00",
+  "load": {
+   "start": [
+    4.9,
+    4.44,
+    4.22
+   ],
+   "end": [
+    4.03,
+    4.46,
+    4.27
+   ]
+  },
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -1586,7 +1879,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 48.0,
+   "seconds": 45.4,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1600,24 +1893,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-8A400/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8A400/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.3.1: Wed Aug  4 18:38:55 PDT 2010; root:xnu-1504.50.80~1/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 22.5
+    "seconds": 15.6
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.326,
+     "home2": 0.327,
+     "installed": 0.13
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 16.3,
+    "seconds": 10.8,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1636,52 +1953,88 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 19.6,
-     "lockdown": 5.7
-    }
+     "lit": 15.4,
+     "lockdown": 4.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
     "seconds": 0.9,
-    "reason": "The emulator stopped.",
-    "second": 0.9
+    "reason": "The iPod stopped.",
+    "second": 0.7,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8A400/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8A400/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8A400/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8A400/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8A400/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A400/driver.jsonl"
+  "events": "/Users/shg/ltm-runner/results/n72ap-8A400/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  }
  },
  "n72ap-8B117": {
   "version": "4.1",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T00:26:20+00:00",
+  "when": "2026-09-30T14:34:44+00:00",
+  "load": {
+   "start": [
+    4.12,
+    3.86,
+    3.96
+   ],
+   "end": [
+    3.42,
+    3.86,
+    3.96
+   ]
+  },
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-matrix-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-guest2/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -1690,7 +2043,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 49.7,
+   "seconds": 44.8,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -1704,24 +2057,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch/n72ap-8B117/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8B117/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.3.1: Wed Aug  4 22:27:59 PDT 2010; root:xnu-1504.55.33~10/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 21.5
+    "seconds": 15.7
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.345,
+     "home2": 0.345,
+     "installed": 0.134
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 10.4,
+    "seconds": 4.7,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -1740,42 +2117,66 @@
    },
    "install": {
     "ok": true,
-    "seconds": 4,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 35.4,
-     "lockdown": 1.1
-    }
+     "lit": 15.8,
+     "lockdown": 2.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.5,
-    "reason": "The emulator stopped.",
-    "second": null
+    "seconds": 0.8,
+    "reason": "The iPod stopped.",
+    "second": 0.8,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8B117/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8B117/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8B117/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8B117/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8B117/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B117/driver.jsonl"
+  "events": "/Users/shg/ltm-runner/results/n72ap-8B117/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  }
  },
  "n72ap-5G77a": {
   "version": "2.2",
@@ -3160,13 +3561,24 @@
   "version": "4.0",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T02:02:02+00:00",
+  "when": "2026-09-30T14:13:31+00:00",
+  "load": {
+   "start": [
+    4.26,
+    3.87,
+    3.87
+   ],
+   "end": [
+    4.4,
+    4.16,
+    3.98
+   ]
+  },
   "prerelease": "beta",
-  "clock": "2010-04-15",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -3175,7 +3587,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 42.6,
+   "seconds": 45.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -3189,24 +3601,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8A230m/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8A230m/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.3.1: Sat Apr  3 03:01:48 PDT 2010; root:xnu-1504.51.1~2/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 16.9
+    "seconds": 14.1
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.364,
+     "home2": 0.364,
+     "installed": 0.145
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 4.6,
+    "seconds": 6.4,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -3225,59 +3661,90 @@
    },
    "install": {
     "ok": true,
-    "seconds": 14,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 30.5,
-     "lockdown": 0.2
-    }
+     "lit": 15.3,
+     "lockdown": 4.4
+    },
+    "restartedApps": true
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": "The emulator stopped.",
-    "second": null
+    "ok": true,
+    "seconds": 1.2,
+    "reason": "The iPod stopped.",
+    "second": 0.9,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8A230m/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8A230m/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8A230m/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8A230m/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8A230m/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A230m/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The emulator stopped.",
-   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\npinot_init(): pinot_default_color: 0x00ffffff\nBoot Failure Count: 0\tPanic Fail Count: 0"
+  "events": "/Users/shg/ltm-runner/results/n72ap-8A230m/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
   },
-  "triage": "(a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): (a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
  },
  "n72ap-8A248c": {
   "version": "4.0",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T03:08:46+00:00",
+  "when": "2026-09-30T14:15:50+00:00",
+  "load": {
+   "start": [
+    5.08,
+    4.31,
+    4.04
+   ],
+   "end": [
+    4.48,
+    4.52,
+    4.17
+   ]
+  },
   "prerelease": "beta",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 17,
@@ -3286,7 +3753,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 76.6,
+   "seconds": 45.0,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -3300,243 +3767,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8A248c/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8A248c/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.3.1: Wed Apr 14 23:40:46 PDT 2010; root:xnu-1504.50.51~3/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 46.3
+    "seconds": 15.4
    },
-   "lockdown": {
+   "home": {
     "ok": true,
-    "seconds": 19.1,
-    "productType": "iPod2,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
+    "brightness": {
+     "home": 0.365,
+     "home2": 0.365,
+     "installed": 0.146
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
     ],
-    "error": null
-   },
-   "install": {
-    "ok": true,
-    "seconds": 18,
-    "attempt": 1
-   },
-   "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 27.9,
-     "lockdown": 1.1
-    }
-   },
-   "shutdown": {
-    "ok": true,
-    "seconds": 29.5,
-    "reason": "The emulator stopped.",
-    "second": 29.3
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A248c/driver.jsonl",
-  "triage": "pass on the rerun (persist ok, shutdown confirmed 29 s on both boots): the first run's boot-2 'afc(unknown AFC error (code 1))' came 8+ s after lockdown answered (0.3 s is boot 2's lockdown-after-lit) and followed boot 1's shutdown missing the 50 s budget, so a Stop mid-shutdown; not an AFC readiness race (smoke.md #5). (a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
- },
- "n72ap-8A260b": {
-  "version": "4.0",
-  "board": "n72ap",
-  "status": "untested",
-  "when": "2026-09-29T02:11:57+00:00",
-  "prerelease": "beta",
-  "clock": "2010-05-11",
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 17,
-   "ok": 17,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 43.3,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity, NOR and boot files",
-    "Building the system volume",
-    "Writing the NAND",
-    "Booting the restore ramdisk",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8A260b/firmwarekit.log",
-   "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
-    "guest_package": "n72-ios4",
-    "activation": true,
-    "kernel": "Darwin Kernel Version 10.3.1: Wed Apr 28 20:45:34 PDT 2010; root:xnu-1504.50.61~1/RELEASE_ARM_S5L8720X"
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 26.9
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 4.8,
-    "productType": "iPod2,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
-    ],
-    "error": null
-   },
-   "install": {
-    "ok": true,
-    "seconds": 20,
-    "attempt": 1
-   },
-   "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 27.3,
-     "lockdown": 5.4
-    }
-   },
-   "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": "The emulator stopped.",
-    "second": 31.1
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A260b/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The emulator stopped.",
-   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\npinot_init(): pinot_default_color: 0x00ffffff\nBoot Failure Count: 0\tPanic Fail Count: 0"
-  },
-  "triage": "(a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
- },
- "n72ap-8A274b": {
-  "version": "4.0",
-  "board": "n72ap",
-  "status": "untested",
-  "when": "2026-09-29T02:16:54+00:00",
-  "prerelease": "beta",
-  "clock": "2010-05-25",
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 17,
-   "ok": 17,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 57.8,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity, NOR and boot files",
-    "Building the system volume",
-    "Writing the NAND",
-    "Booting the restore ramdisk",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8A274b/firmwarekit.log",
-   "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
-    "guest_package": "n72-ios4",
-    "activation": true,
-    "kernel": "Darwin Kernel Version 10.3.1: Tue May 11 22:10:33 PDT 2010; root:xnu-1504.50.69~2/RELEASE_ARM_S5L8720X"
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 31.7
-   },
-   "lockdown": {
-    "ok": true,
-    "seconds": 1.1,
+    "seconds": 11.1,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -3556,63 +3828,98 @@
    "install": {
     "ok": true,
     "seconds": 2,
-    "attempt": 1
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 28.8,
-     "lockdown": 0.7
-    }
+     "lit": 17.9,
+     "lockdown": 2.5
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.5,
-    "reason": "The emulator stopped.",
-    "second": 1.0
+    "seconds": 1.0,
+    "reason": "The iPod stopped.",
+    "second": 1.0,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8A248c/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8A248c/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8A248c/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8A248c/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8A248c/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8A274b/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only (8C148 shim, no per-build data)."
+  "events": "/Users/shg/ltm-runner/results/n72ap-8A248c/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the rerun (persist ok, shutdown confirmed 29 s on both boots): the first run's boot-2 'afc(unknown AFC error (code 1))' came 8+ s after lockdown answered (0.3 s is boot 2's lockdown-after-lit) and followed boot 1's shutdown missing the 50 s budget, so a Stop mid-shutdown; not an AFC readiness race (smoke.md #5). (a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
  },
- "n72ap-8B5080c": {
-  "version": "4.1",
+ "n72ap-8A260b": {
+  "version": "4.0",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T02:19:53+00:00",
+  "when": "2026-09-30T14:18:17+00:00",
+  "load": {
+   "start": [
+    4.84,
+    4.6,
+    4.21
+   ],
+   "end": [
+    3.61,
+    4.23,
+    4.11
+   ]
+  },
   "prerelease": "beta",
-  "clock": "2010-07-21",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
-   "total": 18,
-   "ok": 18,
+   "total": 17,
+   "ok": 17,
    "bad": "",
    "error": null
   },
   "prepare": {
-   "seconds": 61.3,
+   "seconds": 44.2,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -3626,20 +3933,874 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8B5080c/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8A260b/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Wed Apr 28 20:45:34 PDT 2010; root:xnu-1504.50.61~1/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 20.0
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.365,
+     "home2": 0.365,
+     "installed": 0.146
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 6.4,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
+   },
+   "package": {
+    "ok": null,
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 15.9,
+     "lockdown": 2.2
+    },
+    "restartedApps": true
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 1.0,
+    "reason": "The iPod stopped.",
+    "second": 0.7,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8A260b/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8A260b/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8A260b/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8A260b/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8A260b/home2.png"
+  },
+  "events": "/Users/shg/ltm-runner/results/n72ap-8A260b/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): (a) clean shutdown via the agent halt (reboot2) takes ~30 s on the 4.0 betas (0.8 s on 8A293) and slipped past the driver's 50 s once, right after the IPA install; the app's Stop is a hard halt so nothing user-facing. Boots, activates, installs, persists. No expiry alert on the Mac's date."
+ },
+ "n72ap-8A274b": {
+  "version": "4.0",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-30T14:20:38+00:00",
+  "load": {
+   "start": [
+    3.99,
+    4.29,
+    4.13
+   ],
+   "end": [
+    3.25,
+    4.01,
+    4.05
+   ]
+  },
+  "prerelease": "beta",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 17,
+   "ok": 17,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 45.1,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8A274b/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Tue May 11 22:10:33 PDT 2010; root:xnu-1504.50.69~2/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 20.1
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.328,
+     "home2": 0.328,
+     "installed": 0.146
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 6.3,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
+   },
+   "package": {
+    "ok": null,
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 15.3,
+     "lockdown": 4.7
+    },
+    "restartedApps": true
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 1.0,
+    "reason": "The iPod stopped.",
+    "second": 0.8,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8A274b/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8A274b/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8A274b/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8A274b/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8A274b/home2.png"
+  },
+  "events": "/Users/shg/ltm-runner/results/n72ap-8A274b/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only (8C148 shim, no per-build data)."
+ },
+ "n72ap-8B5080c": {
+  "version": "4.1",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-30T14:27:52+00:00",
+  "load": {
+   "start": [
+    4.05,
+    4.43,
+    4.26
+   ],
+   "end": [
+    2.22,
+    3.68,
+    3.99
+   ]
+  },
+  "prerelease": "beta",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 45.1,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8B5080c/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.3.1: Mon Jul  5 20:00:30 PDT 2010; root:xnu-1504.55.27~4/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 29.4
+    "seconds": 16.3
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.345,
+     "home2": 0.345,
+     "installed": 0.134
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 4.2,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
+   },
+   "package": {
+    "ok": null,
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 15.7,
+     "lockdown": 2.3
+    },
+    "restartedApps": true
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 1.1,
+    "reason": "The iPod stopped.",
+    "second": 0.8,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8B5080c/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8B5080c/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8B5080c/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8B5080c/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8B5080c/home2.png"
+  },
+  "events": "/Users/shg/ltm-runner/results/n72ap-8B5080c/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only."
+ },
+ "n72ap-8B5091b": {
+  "version": "4.1",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-30T14:30:09+00:00",
+  "load": {
+   "start": [
+    2.32,
+    3.63,
+    3.96
+   ],
+   "end": [
+    3.41,
+    3.62,
+    3.91
+   ]
+  },
+  "prerelease": "beta",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 44.1,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8B5091b/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Tue Jul 20 21:24:02 PDT 2010; root:xnu-1504.55.32~9/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 16.1
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.344,
+     "home2": 0.345,
+     "installed": 0.134
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 4.2,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
+   },
+   "package": {
+    "ok": null,
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 15.6,
+     "lockdown": 2.2
+    },
+    "restartedApps": true
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 0.9,
+    "reason": "The iPod stopped.",
+    "second": 0.9,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8B5091b/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8B5091b/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8B5091b/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8B5091b/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8B5091b/home2.png"
+  },
+  "events": "/Users/shg/ltm-runner/results/n72ap-8B5091b/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only."
+ },
+ "n72ap-8B5097d": {
+  "version": "4.1",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-30T14:32:24+00:00",
+  "load": {
+   "start": [
+    4.3,
+    3.81,
+    3.98
+   ],
+   "end": [
+    3.98,
+    3.81,
+    3.95
+   ]
+  },
+  "prerelease": "beta",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 45.2,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8B5097d/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.3.1: Wed Jul 28 01:14:40 PDT 2010; root:xnu-1504.55.33~3/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 15.4
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.323,
+     "home2": 0.324,
+     "installed": 0.134
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 5.1,
+    "productType": "iPod2,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
+   },
+   "package": {
+    "ok": null,
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 16.9,
+     "lockdown": 3.3
+    },
+    "restartedApps": true
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 1.0,
+    "reason": "The iPod stopped.",
+    "second": 1.1,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8B5097d/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8B5097d/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8B5097d/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8B5097d/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8B5097d/home2.png"
+  },
+  "events": "/Users/shg/ltm-runner/results/n72ap-8B5097d/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only."
+ },
+ "n72ap-8C134": {
+  "version": "4.2",
+  "board": "n72ap",
+  "status": "untested",
+  "when": "2026-09-30T14:48:12+00:00",
+  "load": {
+   "start": [
+    4.5,
+    4.47,
+    4.2
+   ],
+   "end": [
+    4.17,
+    4.4,
+    4.22
+   ]
+  },
+  "prerelease": "gm",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 45.9,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Booting the restore ramdisk",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8C134/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
+    "guest_package": "n72-ios4",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 10.4.0: Wed Oct 20 20:06:26 PDT 2010; root:xnu-1504.58.28~3/RELEASE_ARM_S5L8720X"
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 14.9
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.345,
+     "home2": 0.345,
+     "installed": 0.134
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
@@ -3662,376 +4823,90 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 60.1,
-     "lockdown": 1.4
-    }
+     "lit": 15.1,
+     "lockdown": 5.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.5,
-    "reason": "The emulator stopped.",
-    "second": 1.8
+    "seconds": 0.8,
+    "reason": "The iPod stopped.",
+    "second": 0.7,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8C134/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8C134/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8C134/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8C134/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8C134/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5080c/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only."
- },
- "n72ap-8B5091b": {
-  "version": "4.1",
-  "board": "n72ap",
-  "status": "untested",
-  "when": "2026-09-29T02:23:50+00:00",
-  "prerelease": "beta",
-  "clock": "2010-08-03",
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+  "events": "/Users/shg/ltm-runner/results/n72ap-8C134/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
   },
-  "keys": {
-   "total": 18,
-   "ok": 18,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 69.4,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity, NOR and boot files",
-    "Building the system volume",
-    "Writing the NAND",
-    "Booting the restore ramdisk",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8B5091b/firmwarekit.log",
-   "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
-    "guest_package": "n72-ios4",
-    "activation": true,
-    "kernel": "Darwin Kernel Version 10.3.1: Tue Jul 20 21:24:02 PDT 2010; root:xnu-1504.55.32~9/RELEASE_ARM_S5L8720X"
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 25.1
-   },
-   "lockdown": {
-    "ok": true,
-    "seconds": 13.7,
-    "productType": "iPod2,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
-    ],
-    "error": null
-   },
-   "install": {
-    "ok": true,
-    "seconds": 3,
-    "attempt": 1
-   },
-   "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 50.6,
-     "lockdown": 0.7
-    }
-   },
-   "shutdown": {
-    "ok": true,
-    "seconds": 1.5,
-    "reason": "The emulator stopped.",
-    "second": 1.5
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5091b/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only."
- },
- "n72ap-8B5097d": {
-  "version": "4.1",
-  "board": "n72ap",
-  "status": "untested",
-  "when": "2026-09-29T02:27:42+00:00",
-  "prerelease": "beta",
-  "clock": "2010-08-10",
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 18,
-   "ok": 18,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 62.2,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity, NOR and boot files",
-    "Building the system volume",
-    "Writing the NAND",
-    "Booting the restore ramdisk",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8B5097d/firmwarekit.log",
-   "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
-    "guest_package": "n72-ios4",
-    "activation": true,
-    "kernel": "Darwin Kernel Version 10.3.1: Wed Jul 28 01:14:40 PDT 2010; root:xnu-1504.55.33~3/RELEASE_ARM_S5L8720X"
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 21.8
-   },
-   "lockdown": {
-    "ok": true,
-    "seconds": 5.3,
-    "productType": "iPod2,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
-    ],
-    "error": null
-   },
-   "install": {
-    "ok": true,
-    "seconds": 2,
-    "attempt": 1
-   },
-   "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 24.1,
-     "lockdown": 0.7
-    }
-   },
-   "shutdown": {
-    "ok": true,
-    "seconds": 0.9,
-    "reason": "The emulator stopped.",
-    "second": 1.0
-   },
-   "base_unchanged": false,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8B5097d/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only."
- },
- "n72ap-8C134": {
-  "version": "4.2",
-  "board": "n72ap",
-  "status": "untested",
-  "when": "2026-09-29T02:30:43+00:00",
-  "prerelease": "gm",
-  "clock": null,
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 18,
-   "ok": 18,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 61.6,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity, NOR and boot files",
-    "Building the system volume",
-    "Writing the NAND",
-    "Booting the restore ramdisk",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8C134/firmwarekit.log",
-   "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
-    "guest_package": "n72-ios4",
-    "activation": true,
-    "kernel": "Darwin Kernel Version 10.4.0: Wed Oct 20 20:06:26 PDT 2010; root:xnu-1504.58.28~3/RELEASE_ARM_S5L8720X"
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 23.4
-   },
-   "lockdown": {
-    "ok": true,
-    "seconds": 9.5,
-    "productType": "iPod2,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
-    ],
-    "error": null
-   },
-   "install": {
-    "ok": true,
-    "seconds": 3,
-    "attempt": 1
-   },
-   "package": {
-    "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 24.3,
-     "lockdown": 0.6
-    }
-   },
-   "shutdown": {
-    "ok": true,
-    "seconds": 1.0,
-    "reason": "The emulator stopped.",
-    "second": 1.0
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C134/driver.jsonl",
-  "triage": "pass on the first run (the pulled 4.2 GM): catalog entry only."
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run (the pulled 4.2 GM): catalog entry only."
  },
  "n72ap-8C5091e": {
   "version": "4.2",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T02:33:44+00:00",
+  "when": "2026-09-30T14:53:52+00:00",
+  "load": {
+   "start": [
+    3.08,
+    3.8,
+    4.0
+   ],
+   "end": [
+    3.32,
+    3.43,
+    3.7
+   ]
+  },
   "prerelease": "beta",
-  "clock": "2010-09-22",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4040,7 +4915,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 61.8,
+   "seconds": 46.2,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4054,24 +4929,46 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8C5091e/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8C5091e/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.3.1: Tue Sep  7 23:26:42 PDT 2010; root:xnu-1504.58.18~2/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 23.6
+    "seconds": 14.9
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.356,
+     "installed": 0.134
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 15.0,
+    "seconds": 200.6,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -4090,55 +4987,102 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
-    "ok": true,
+    "ok": false,
     "error": null,
     "second_boot": {
-     "lit": 29.6,
-     "lockdown": 1.0
+     "lit": null,
+     "lockdown": null
     }
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.2,
-    "reason": "The emulator stopped.",
-    "second": 1.3
+    "seconds": 1.0,
+    "reason": "The iPod stopped.",
+    "second": null,
+    "second_ok": null,
+    "boot2_reason": null
    },
    "base_unchanged": true,
-   "driver_exit": 0
+   "driver_exit": 1,
+   "driver_fail": "ipod never lit",
+   "stall": {
+    "kind": "slow",
+    "silent_s": 10.2,
+    "load": 3.3,
+    "why": "ipod never lit",
+    "label": "slow: serial still advancing at load 3.3 (last write 10 s before the deadline)"
+   }
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8C5091e/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8C5091e/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8C5091e/installed.png",
+   "never-lit": "/Users/shg/ltm-runner/results/n72ap-8C5091e/never-lit.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5091e/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only."
+  "events": "/Users/shg/ltm-runner/results/n72ap-8C5091e/driver.jsonl",
+  "first_failure": {
+   "check": "persist",
+   "why": "ipod never lit",
+   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\npinot_init(): pinot_default_color: 0x00ffffff\nBoot Failure Count: 0\tPanic Fail Count: 0",
+   "stall": "slow: serial still advancing at load 3.3 (last write 10 s before the deadline)"
+  },
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(c) 4.2 beta 1 reboot loop: iBoot starts 19-29 times per run (serial.log), kernel output none. Run 1 (evidence n72ap-8C5091e-run1): lockdown never answered; run 2 (this record): lockdown at 200.6 s, then boot 2 never lit. Siblings 8C5101c/8C5115c/8C134 pass. Earlier record (2026-09-29): pass on the first run: catalog entry only."
  },
  "n72ap-8C5101c": {
   "version": "4.2",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T02:37:24+00:00",
+  "when": "2026-09-30T14:43:27+00:00",
+  "load": {
+   "start": [
+    4.78,
+    4.16,
+    4.02
+   ],
+   "end": [
+    4.15,
+    4.13,
+    4.03
+   ]
+  },
   "prerelease": "beta",
-  "clock": "2010-10-05",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4147,7 +5091,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 70.2,
+   "seconds": 45.8,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4161,24 +5105,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8C5101c/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8C5101c/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.4.0: Thu Sep 23 20:48:24 PDT 2010; root:xnu-1504.58.21~5/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 27.6
+    "seconds": 15.4
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.345,
+     "home2": 0.345,
+     "installed": 0.134
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 18.2,
+    "seconds": 5.0,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -4197,55 +5165,90 @@
    },
    "install": {
     "ok": true,
-    "seconds": 3,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 31.5,
-     "lockdown": 3.4
-    }
+     "lit": 15.3,
+     "lockdown": 5.1
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 1.2,
-    "reason": "The emulator stopped.",
-    "second": 1.3
+    "seconds": 1.0,
+    "reason": "The iPod stopped.",
+    "second": 0.8,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8C5101c/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8C5101c/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8C5101c/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8C5101c/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8C5101c/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5101c/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only."
+  "events": "/Users/shg/ltm-runner/results/n72ap-8C5101c/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only."
  },
  "n72ap-8C5115c": {
   "version": "4.2",
   "board": "n72ap",
   "status": "untested",
-  "when": "2026-09-29T02:41:16+00:00",
+  "when": "2026-09-30T14:45:49+00:00",
+  "load": {
+   "start": [
+    5.7,
+    4.48,
+    4.16
+   ],
+   "end": [
+    4.07,
+    4.39,
+    4.17
+   ]
+  },
   "prerelease": "beta",
-  "clock": "2010-10-19",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4254,7 +5257,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 69.7,
+   "seconds": 47.1,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4268,24 +5271,48 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/n72ap-8C5115c/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n72ap-8C5115c/firmwarekit.log",
    "lock": {
-    "boot_strategy": null,
-    "gles": "shim MBXGLEngine-8C148",
-    "gli": "8C148",
+    "boot_strategy": "iboot",
+    "gles": "shim MBXGLEngine (GLI dispatch: 841 slots, 0 unknown to the name table)",
+    "gli": null,
     "guest_package": "n72-ios4",
     "activation": true,
     "kernel": "Darwin Kernel Version 10.4.0: Tue Oct  5 21:33:33 PDT 2010; root:xnu-1504.58.25~18/RELEASE_ARM_S5L8720X"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 34.3
+    "seconds": 14.8
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.345,
+     "home2": 0.345,
+     "installed": 0.134
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 14.4,
+    "seconds": 4.5,
     "productType": "iPod2,1"
    },
    "activation": {
@@ -4304,59 +5331,90 @@
    },
    "install": {
     "ok": true,
-    "seconds": 5,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": null,
-    "note": "itpack has no package for this build (GuestPackage.compose: nil)"
+    "note": "stub seed n72-ios4 (no jobs, no hooks): nothing for the loader to run or report"
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "silent": null
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 88.5,
-     "lockdown": 2.0
-    }
+     "lit": 15.1,
+     "lockdown": 2.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": "The emulator stopped.",
-    "second": 1.3
+    "ok": true,
+    "seconds": 0.8,
+    "reason": "The iPod stopped.",
+    "second": 1.1,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5115c/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5115c/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5115c/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5115c/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5115c/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/n72ap-8C5115c/lock.png",
+   "home": "/Users/shg/ltm-runner/results/n72ap-8C5115c/home.png",
+   "installed": "/Users/shg/ltm-runner/results/n72ap-8C5115c/installed.png",
+   "lock2": "/Users/shg/ltm-runner/results/n72ap-8C5115c/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/n72ap-8C5115c/home2.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/n72ap-8C5115c/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The emulator stopped.",
-   "excerpt": "Boot Failure Count: 0\tPanic Fail Count: 0\npinot_init(): pinot_default_color: 0x00ffffff\nBoot Failure Count: 0\tPanic Fail Count: 0"
+  "events": "/Users/shg/ltm-runner/results/n72ap-8C5115c/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
   },
-  "triage": "(a) as the 4.0 betas: boot 1's clean shutdown unconfirmed inside 50 s right after the install, boot 2 confirms in 1.3 s; everything else passes."
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): (a) as the 4.0 betas: boot 1's clean shutdown unconfirmed inside 50 s right after the install, boot 2 confirms in 1.3 s; everything else passes."
  },
  "k48ap-8C134": {
   "version": "4.2",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T02:47:35+00:00",
+  "when": "2026-09-30T13:29:54+00:00",
+  "load": {
+   "start": [
+    5.16,
+    4.69,
+    4.31
+   ],
+   "end": [
+    4.92,
+    4.76,
+    4.4
+   ]
+  },
   "prerelease": "gm",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4365,7 +5423,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 83.9,
+   "seconds": 74.8,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4380,7 +5438,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/k48ap-8C134/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-8C134/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -4390,123 +5448,38 @@
     "kernel": null
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 37.0
+    "seconds": 20.6
    },
-   "lockdown": {
+   "home": {
     "ok": true,
-    "seconds": 1.4,
-    "productType": "iPad1,1"
-   },
-   "activation": {
-    "ok": true,
-    "state": "Activated"
-   },
-   "afc": {
-    "ok": true,
-    "sizes": [
-     16384,
-     16385,
-     65536,
-     1048583
+    "brightness": {
+     "home": 0.966,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
     ],
-    "error": null
-   },
-   "install": {
-    "ok": true,
-    "seconds": 2,
-    "attempt": 1
-   },
-   "package": {
-    "ok": true,
-    "offered": 3,
-    "reported": 3,
-    "result": 0
-   },
-   "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
-   },
-   "persist": {
-    "ok": true,
-    "error": null,
-    "second_boot": {
-     "lit": 43.5,
-     "lockdown": 0.7
-    }
-   },
-   "shutdown": {
-    "ok": true,
-    "seconds": 17.6,
-    "reason": "The emulator stopped.",
-    "second": 16.9
-   },
-   "base_unchanged": true,
-   "driver_exit": 0
-  },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134/driver.jsonl",
-  "triage": "pass on the first run (4.2 GM): catalog entry only; shutdown 17 s as 8C148."
- },
- "k48ap-8C134b": {
-  "version": "4.2",
-  "board": "k48ap",
-  "status": "untested",
-  "when": "2026-09-29T02:51:35+00:00",
-  "prerelease": "gm",
-  "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
-  },
-  "keys": {
-   "total": 18,
-   "ok": 18,
-   "bad": "",
-   "error": null
-  },
-  "prepare": {
-   "seconds": 83.0,
-   "ok": true,
-   "steps": [
-    "Verifying the IPSW",
-    "Decrypting the firmware",
-    "Writing the identity and boot chain",
-    "Building the system and data volumes",
-    "Writing the NAND",
-    "Creating the data-protection keybag",
-    "Sealing the NAND",
-    "Writing the lock"
-   ],
-   "warnings": [],
-   "error": null,
-   "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/k48ap-8C134b/firmwarekit.log",
-   "lock": {
-    "boot_strategy": "iboot",
-    "gles": null,
-    "gli": null,
-    "guest_package": "k48-ios4",
-    "activation": true,
-    "kernel": null
-   }
-  },
-  "checks": {
-   "lit": {
-    "ok": true,
-    "seconds": 25.3
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 0.7,
+    "seconds": 0.3,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -4526,55 +5499,272 @@
    "install": {
     "ok": true,
     "seconds": 1,
-    "attempt": 1
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "ethlink": true,
+    "prefs": true,
+    "silent": null
+   },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 2,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 87.3,
-     "lockdown": 0.9
-    }
+     "lit": 20.1,
+     "lockdown": 0.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 16.9,
-    "reason": "The emulator stopped.",
-    "second": 15.5
+    "seconds": 15.2,
+    "reason": "The iPad stopped.",
+    "second": 15.8,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
-   "base_unchanged": false,
+   "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/k48ap-8C134/lock.png",
+   "home": "/Users/shg/ltm-runner/results/k48ap-8C134/home.png",
+   "installed": "/Users/shg/ltm-runner/results/k48ap-8C134/installed.png",
+   "powerdown1-7s": "/Users/shg/ltm-runner/results/k48ap-8C134/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/ltm-runner/results/k48ap-8C134/powerdown1-12s.png",
+   "lock2": "/Users/shg/ltm-runner/results/k48ap-8C134/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/k48ap-8C134/home2.png",
+   "powerdown2-7s": "/Users/shg/ltm-runner/results/k48ap-8C134/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/ltm-runner/results/k48ap-8C134/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C134b/driver.jsonl",
-  "triage": "pass on the first run (4.2 GM 2): catalog entry only."
+  "events": "/Users/shg/ltm-runner/results/k48ap-8C134/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run (4.2 GM): catalog entry only; shutdown 17 s as 8C148."
+ },
+ "k48ap-8C134b": {
+  "version": "4.2",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-30T13:33:01+00:00",
+  "load": {
+   "start": [
+    4.77,
+    4.73,
+    4.39
+   ],
+   "end": [
+    4.9,
+    4.85,
+    4.51
+   ]
+  },
+  "prerelease": "gm",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 75.7,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity and boot chain",
+    "Building the system and data volumes",
+    "Writing the NAND",
+    "Creating the data-protection keybag",
+    "Sealing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-8C134b/firmwarekit.log",
+   "lock": {
+    "boot_strategy": "iboot",
+    "gles": null,
+    "gli": null,
+    "guest_package": "k48-ios4",
+    "activation": true,
+    "kernel": null
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 20.5
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.966,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
+   },
+   "lockdown": {
+    "ok": true,
+    "seconds": 0.2,
+    "productType": "iPad1,1"
+   },
+   "activation": {
+    "ok": true,
+    "state": "Activated"
+   },
+   "afc": {
+    "ok": true,
+    "sizes": [
+     16384,
+     16385,
+     65536,
+     1048583
+    ],
+    "error": null
+   },
+   "install": {
+    "ok": true,
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
+   },
+   "package": {
+    "ok": true,
+    "offered": 8,
+    "reported": 8,
+    "result": 0
+   },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "ethlink": true,
+    "prefs": true,
+    "silent": null
+   },
+   "gl": {
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 2,
+    "rejects": 0,
+    "picture": null,
+    "note": null
+   },
+   "persist": {
+    "ok": true,
+    "error": null,
+    "second_boot": {
+     "lit": 20.7,
+     "lockdown": 4.3
+    },
+    "restartedApps": true
+   },
+   "shutdown": {
+    "ok": true,
+    "seconds": 15.1,
+    "reason": "The iPad stopped.",
+    "second": 15.1,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
+   },
+   "base_unchanged": true,
+   "driver_exit": 0
+  },
+  "screenshots": {
+   "lock": "/Users/shg/ltm-runner/results/k48ap-8C134b/lock.png",
+   "home": "/Users/shg/ltm-runner/results/k48ap-8C134b/home.png",
+   "installed": "/Users/shg/ltm-runner/results/k48ap-8C134b/installed.png",
+   "powerdown1-7s": "/Users/shg/ltm-runner/results/k48ap-8C134b/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/ltm-runner/results/k48ap-8C134b/powerdown1-12s.png",
+   "lock2": "/Users/shg/ltm-runner/results/k48ap-8C134b/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/k48ap-8C134b/home2.png",
+   "powerdown2-7s": "/Users/shg/ltm-runner/results/k48ap-8C134b/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/ltm-runner/results/k48ap-8C134b/powerdown2-12s.png"
+  },
+  "events": "/Users/shg/ltm-runner/results/k48ap-8C134b/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run (4.2 GM 2): catalog entry only."
  },
  "k48ap-8C5091e": {
   "version": "4.2",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T02:56:01+00:00",
+  "when": "2026-09-30T13:20:21+00:00",
+  "load": {
+   "start": [
+    3.71,
+    4.27,
+    4.02
+   ],
+   "end": [
+    4.44,
+    4.25,
+    4.04
+   ]
+  },
   "prerelease": "beta",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4583,7 +5773,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 73.5,
+   "seconds": 74.6,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4598,7 +5788,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/k48ap-8C5091e/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-8C5091e/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -4608,14 +5798,38 @@
     "kernel": null
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 28.4
+    "seconds": 20.8
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.953,
+     "home2": 0.953,
+     "installed": 0.961
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 1.6,
+    "seconds": 0.2,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -4634,61 +5848,98 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "ethlink": true,
+    "prefs": true,
+    "silent": null
+   },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 2,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 33.6,
-     "lockdown": 0.5
-    }
+     "lit": 22.4,
+     "lockdown": 0.2
+    },
+    "restartedApps": true
    },
    "shutdown": {
-    "ok": false,
-    "seconds": null,
-    "reason": "The emulator stopped.",
-    "second": 15.4
+    "ok": true,
+    "seconds": 15.4,
+    "reason": "The iPad stopped.",
+    "second": 14.7,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5091e/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5091e/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5091e/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5091e/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5091e/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/k48ap-8C5091e/lock.png",
+   "home": "/Users/shg/ltm-runner/results/k48ap-8C5091e/home.png",
+   "installed": "/Users/shg/ltm-runner/results/k48ap-8C5091e/installed.png",
+   "powerdown1-7s": "/Users/shg/ltm-runner/results/k48ap-8C5091e/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/ltm-runner/results/k48ap-8C5091e/powerdown1-12s.png",
+   "lock2": "/Users/shg/ltm-runner/results/k48ap-8C5091e/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/k48ap-8C5091e/home2.png",
+   "powerdown2-7s": "/Users/shg/ltm-runner/results/k48ap-8C5091e/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/ltm-runner/results/k48ap-8C5091e/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5091e/driver.jsonl",
-  "first_failure": {
-   "check": "shutdown",
-   "why": "The emulator stopped.",
-   "excerpt": "AppleH3CamIn: Error conencting to PWM driver\nAppleBCMWLAN Joined BSS:     @ 0x89bc1800, BSSID = 02:00:5e:10:00:01, rssi = -45, rate = 11 (100%), channel =  6, encryption = 0x1, ap = 1, failures =   0, age = 0, ssid[ 8] = \"qemu-ios\"\nUSB mux: 263 reads / 0 errors, 184 writes / 0 errors"
+  "events": "/Users/shg/ltm-runner/results/k48ap-8C5091e/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
   },
-  "triage": "(a) boot 1's clean shutdown unconfirmed inside 50 s right after the install (boot 2: 15 s, as 8C148); everything else passes. No expiry alert on the Mac's date."
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): (a) boot 1's clean shutdown unconfirmed inside 50 s right after the install (boot 2: 15 s, as 8C148); everything else passes. No expiry alert on the Mac's date."
  },
  "k48ap-8C5101c": {
   "version": "4.2",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T03:00:20+00:00",
+  "when": "2026-09-30T13:23:28+00:00",
+  "load": {
+   "start": [
+    4.25,
+    4.21,
+    4.03
+   ],
+   "end": [
+    5.15,
+    4.49,
+    4.17
+   ]
+  },
   "prerelease": "beta",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4697,7 +5948,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 81.5,
+   "seconds": 75.7,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4712,7 +5963,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/k48ap-8C5101c/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-8C5101c/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -4722,14 +5973,38 @@
     "kernel": null
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 46.8
+    "seconds": 20.3
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.955,
+     "home2": 0.955,
+     "installed": 0.963
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 2.6,
+    "seconds": 0.2,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -4748,56 +6023,98 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "ethlink": true,
+    "prefs": true,
+    "silent": null
+   },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 2,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 31.2,
-     "lockdown": 0.9
-    }
+     "lit": 19.5,
+     "lockdown": 0.3
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.9,
-    "reason": "The emulator stopped.",
-    "second": 16.6
+    "seconds": 15.8,
+    "reason": "The iPad stopped.",
+    "second": 15.7,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/k48ap-8C5101c/lock.png",
+   "home": "/Users/shg/ltm-runner/results/k48ap-8C5101c/home.png",
+   "installed": "/Users/shg/ltm-runner/results/k48ap-8C5101c/installed.png",
+   "powerdown1-7s": "/Users/shg/ltm-runner/results/k48ap-8C5101c/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/ltm-runner/results/k48ap-8C5101c/powerdown1-12s.png",
+   "lock2": "/Users/shg/ltm-runner/results/k48ap-8C5101c/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/k48ap-8C5101c/home2.png",
+   "powerdown2-7s": "/Users/shg/ltm-runner/results/k48ap-8C5101c/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/ltm-runner/results/k48ap-8C5101c/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5101c/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only."
+  "events": "/Users/shg/ltm-runner/results/k48ap-8C5101c/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only."
  },
  "k48ap-8C5115c": {
   "version": "4.2",
   "board": "k48ap",
   "status": "untested",
-  "when": "2026-09-29T03:04:12+00:00",
+  "when": "2026-09-30T13:26:47+00:00",
+  "load": {
+   "start": [
+    4.68,
+    4.42,
+    4.15
+   ],
+   "end": [
+    5.34,
+    4.72,
+    4.32
+   ]
+  },
   "prerelease": "beta",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-matrix-betas/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/matrix-betas-guest/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 18,
@@ -4806,7 +6123,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 80.0,
+   "seconds": 74.5,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4821,7 +6138,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/matrix-scratch-betas/k48ap-8C5115c/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-8C5115c/firmwarekit.log",
    "lock": {
     "boot_strategy": "iboot",
     "gles": null,
@@ -4831,14 +6148,38 @@
     "kernel": null
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 31.4
+    "seconds": 20.6
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.966,
+     "home2": 0.966,
+     "installed": 0.974
+    },
+    "frontmost": [
+     "com.apple.springboard / Home Screen",
+     "com.apple.springboard / Home Screen"
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "locked": null,
+    "unanswered": null,
+    "frame": null,
+    "exposure": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 1.4,
+    "seconds": 0.2,
     "productType": "iPad1,1"
    },
    "activation": {
@@ -4857,45 +6198,75 @@
    },
    "install": {
     "ok": true,
-    "seconds": 2,
-    "attempt": 1
+    "seconds": 1,
+    "attempt": 1,
+    "apps": [
+     "com.qemuios.harness"
+    ]
    },
    "package": {
     "ok": true,
-    "offered": 3,
-    "reported": 3,
+    "offered": 8,
+    "reported": 8,
     "result": 0
    },
+   "helpers": {
+    "ok": true,
+    "agent": true,
+    "ethlink": true,
+    "prefs": true,
+    "silent": null
+   },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "shim": true,
+    "gld_registered": 2,
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 25.9,
-     "lockdown": 0.9
-    }
+     "lit": 20.5,
+     "lockdown": 0.2
+    },
+    "restartedApps": true
    },
    "shutdown": {
     "ok": true,
-    "seconds": 16.9,
-    "reason": "The emulator stopped.",
-    "second": 18.0
+    "seconds": 15.2,
+    "reason": "The iPad stopped.",
+    "second": 15.7,
+    "second_ok": true,
+    "boot2_reason": "The iPad stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/home2.png"
+   "lock": "/Users/shg/ltm-runner/results/k48ap-8C5115c/lock.png",
+   "home": "/Users/shg/ltm-runner/results/k48ap-8C5115c/home.png",
+   "installed": "/Users/shg/ltm-runner/results/k48ap-8C5115c/installed.png",
+   "powerdown1-7s": "/Users/shg/ltm-runner/results/k48ap-8C5115c/powerdown1-7s.png",
+   "powerdown1-12s": "/Users/shg/ltm-runner/results/k48ap-8C5115c/powerdown1-12s.png",
+   "lock2": "/Users/shg/ltm-runner/results/k48ap-8C5115c/lock2.png",
+   "home2": "/Users/shg/ltm-runner/results/k48ap-8C5115c/home2.png",
+   "powerdown2-7s": "/Users/shg/ltm-runner/results/k48ap-8C5115c/powerdown2-7s.png",
+   "powerdown2-12s": "/Users/shg/ltm-runner/results/k48ap-8C5115c/powerdown2-12s.png"
   },
-  "events": "/Users/shg/Developer/qemu-ios-files/matrix-results/k48ap-8C5115c/driver.jsonl",
-  "triage": "pass on the first run: catalog entry only."
+  "events": "/Users/shg/ltm-runner/results/k48ap-8C5115c/driver.jsonl",
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "shg-mini sweep 09-30 (3614f1c/b5b5038280): see the checks. Earlier record (2026-09-29): pass on the first run: catalog entry only."
  },
  "n45ap-3A101a": {
   "version": "1.1",
@@ -5037,11 +6408,23 @@
   "version": "1.1.5",
   "board": "n45ap",
   "status": "untested",
-  "when": "2026-09-29T21:28:41+00:00",
+  "when": "2026-09-30T13:58:07+00:00",
+  "load": {
+   "start": [
+    6.71,
+    4.44,
+    4.17
+   ],
+   "end": [
+    3.22,
+    3.56,
+    3.83
+   ]
+  },
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac/.claude/worktrees/agent-a93abbf030aab6695/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-ipad1/build-w1-native/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
   },
   "keys": {
    "total": 1,
@@ -5050,7 +6433,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 221.4,
+   "seconds": 68.0,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -5063,7 +6446,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/Users/shg/Developer/qemu-ios-files/n45-c003/matrix-scratch/n45ap-4B1/firmwarekit.log",
+   "log": "/Users/shg/ltm-runner/scratch/n45ap-4B1/firmwarekit.log",
    "lock": {
     "boot_strategy": null,
     "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
@@ -5073,16 +6456,25 @@
     "kernel": "Darwin Kernel Version 9.0.0d1: Wed Dec 12 00:16:00 PST 2007; root:xnu-933.0.0.211.obj~2/RELEASE_ARM_S5L8900XRB"
    }
   },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness (iPhone OS 1.x has no App Store; the install check cannot run)"
+  },
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 51.5
+    "seconds": 8.1
+   },
+   "home": {
+    "ok": null,
+    "note": "no home screenshot taken"
    },
    "lockdown": {
     "ok": false,
     "seconds": null,
-    "productType": null,
-    "error": "iPod-Touch-1G has no USB link (smoke.md #43)"
+    "productType": null
    },
    "activation": {
     "ok": false,
@@ -5098,46 +6490,68 @@
     "note": "appsync off"
    },
    "package": {
-    "ok": true,
+    "ok": false,
     "offered": 8,
-    "reported": 8,
-    "result": 0
+    "reported": null,
+    "result": null
+   },
+   "helpers": {
+    "ok": null,
+    "note": "no guest helpers baked"
    },
    "gl": {
     "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "path": "hardware GL",
+    "shim": false,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": "no home screenshot to judge"
    },
    "persist": {
-    "ok": true,
+    "ok": false,
     "error": null,
     "second_boot": {
-     "lit": 12.5,
+     "lit": null,
      "lockdown": null
     }
    },
    "shutdown": {
-    "ok": true,
-    "seconds": 15.1,
-    "reason": "The iPod stopped.",
-    "second": 15.3
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null,
+    "second_ok": null,
+    "boot2_reason": null
    },
    "base_unchanged": true,
-   "driver_exit": 0
+   "driver_exit": 1,
+   "driver_fail": "ipod1g: lockdown never answered over its usbmuxd",
+   "stall": {
+    "kind": "stuck",
+    "silent_s": 115.3,
+    "load": 3.1,
+    "why": "ipod1g: lockdown never answered over its usbmuxd",
+    "label": "stuck: serial silent for 115 s (load 3.1)"
+   }
   },
-  "screenshots": {
-   "lock": "/Users/shg/Developer/qemu-ios-files/n45-c003/results/n45ap-4B1/lock.png",
-   "home": "/Users/shg/Developer/qemu-ios-files/n45-c003/results/n45ap-4B1/home.png",
-   "installed": "/Users/shg/Developer/qemu-ios-files/n45-c003/results/n45ap-4B1/installed.png",
-   "lock2": "/Users/shg/Developer/qemu-ios-files/n45-c003/results/n45ap-4B1/lock2.png",
-   "home2": "/Users/shg/Developer/qemu-ios-files/n45-c003/results/n45ap-4B1/home2.png"
-  },
-  "events": "/Users/shg/Developer/qemu-ios-files/n45-c003/results/n45ap-4B1/driver.jsonl",
+  "screenshots": {},
+  "events": "/Users/shg/ltm-runner/results/n45ap-4B1/driver.jsonl",
   "first_failure": {
    "check": "lockdown",
-   "why": "iPod-Touch-1G has no USB link (smoke.md #43)",
-   "excerpt": "May  3 16:46:36 launchd[1]: 16/com.apple.configd: Standard Out/Error: server shutdown complete (799544796.920460)\nMay  3 16:46:36 launchd[1]: 16/com.apple.CommCenter: Standard Out/Error: QUIT received.  Setting flag to shut down.\nMay  3 16:46:36 launchd[1]: 16/com.apple.CommCenter: Standard Out/Error: Communications Center shutdown."
+   "why": "ipod1g: lockdown never answered over its usbmuxd",
+   "excerpt": "Sep 30 06:59:29 lockdown[12]: set_response_error: handle_get_value GetProhibited\nSep 30 06:59:31 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: error compiling query \"SELECT value FROM _SqliteDatabaseProperties WHERE key = ?;\": no such table: _SqliteDatabaseProperties\nSep 30 06:59:31 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: _SCHelperOpen connect() failed: No such file or directory",
+   "stall": "stuck: serial silent for 115 s (load 3.1)"
   },
-  "triage": "n45-c003 09-29: smoke #52 closed. N45NAND writes the NAND signature the staged iBoot's driver wants (C003 here, read off the image), so iBoot-204.3.16 passes FTL_Open, the kernel mounts disk0s1 and 1.1.5 boots to the home screen: lit 51.5 s (boot 1), persist ok (boot 2 lit 12.5 s), shutdown ok both boots, package 8 r0. lockdown/activation/AFC not attempted: hasUSBLink is false until the host speaks SSLv3 (smoke #51); lockdownd says Activated on the serial log (built-in 1.x activation). 4A93 and 4A102 (not matrix rows) also boot to the home screen from a fresh create. SpringBoard shows the 1.1.3+ 'Edit Home Screen' tip (2.x's #45 bake does not reach 1.x)."
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(a) runner artifact, not a firmware result: the mini runner's libimobiledevice predates libimobiledevice-sslv3-ios1.patch (b5f2613/80ffcdb), so 1.x lockdownd (SSLv3 only) never answers. Rerun with the patched library. Earlier record (2026-09-29): n45-c003 09-29: smoke #52 closed. N45NAND writes the NAND signature the staged iBoot's driver wants (C003 here, read off the image), so iBoot-204.3.16 passes FTL_Open, the kernel mounts disk0s1 and 1.1.5 boots to the home screen: lit 51.5 s (boot 1), persist ok (boot 2 lit 12.5 s), shutdown ok both boots, package 8 r0. lockdown/activation/AFC not attempted: hasUSBLink is false until the host speaks SSLv3 (smoke #51); lockdownd says Activated on the serial log (built-in 1.x activation). 4A93 and 4A102 (not matrix rows) also boot to the home screen from a fresh create. SpringBoard shows the 1.1.3+ 'Edit Home Screen' tip (2.x's #45 bake does not reach 1.x)."
  },
  "k48ap-9B206": {
   "version": "5.1.1",
@@ -6062,5 +7476,674 @@
    "powerdown2-12s": "/tmp/glpub/final/k48ap-9B176/powerdown2-12s.png"
   },
   "events": "/tmp/glpub/final/k48ap-9B176/driver.jsonl"
+ },
+ "k48ap-8F5148b": {
+  "version": "4.3",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-30T13:36:13+00:00",
+  "load": {
+   "start": [
+    4.61,
+    4.79,
+    4.49
+   ],
+   "end": [
+    4.61,
+    4.79,
+    4.49
+   ]
+  },
+  "prerelease": "beta",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 0.3,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware"
+   ],
+   "warnings": [],
+   "error": "unsupported: 7fb2f13a47282ee22938ccea1b8f6cf762c20da3.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu",
+   "last_step": "Decrypting the firmware",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-8F5148b/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: 7fb2f13a47282ee22938ccea1b8f6cf762c20da3.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu",
+   "excerpt": "[1/8] Verifying the IPSW\n[2/8] Decrypting the firmware\nfirmwarekit: unsupported: 7fb2f13a47282ee22938ccea1b8f6cf762c20da3.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu"
+  },
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(a) prepare: BuildIdentity.fromBuildManifest takes BuildIdentities.first, which on the 4.3 betas is the k48dev identity (Firmware/dfu/iBSS.k48dev.RELEASE.dfu, all_flash.k48dev); the IPSW ships only k48ap files. Pick the identity matching the entry's board."
+ },
+ "k48ap-8F5153d": {
+  "version": "4.3",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-30T13:36:26+00:00",
+  "load": {
+   "start": [
+    4.29,
+    4.71,
+    4.47
+   ],
+   "end": [
+    4.1,
+    4.67,
+    4.45
+   ]
+  },
+  "prerelease": "beta",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 0.3,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware"
+   ],
+   "warnings": [],
+   "error": "unsupported: 5624814e59d7a56279df1e19823d228c0b26ad88.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu",
+   "last_step": "Decrypting the firmware",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-8F5153d/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: 5624814e59d7a56279df1e19823d228c0b26ad88.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu",
+   "excerpt": "[1/8] Verifying the IPSW\n[2/8] Decrypting the firmware\nfirmwarekit: unsupported: 5624814e59d7a56279df1e19823d228c0b26ad88.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu"
+  },
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(a) prepare: BuildIdentity.fromBuildManifest takes BuildIdentities.first, which on the 4.3 betas is the k48dev identity (Firmware/dfu/iBSS.k48dev.RELEASE.dfu, all_flash.k48dev); the IPSW ships only k48ap files. Pick the identity matching the entry's board."
+ },
+ "k48ap-8F5166b": {
+  "version": "4.3",
+  "board": "k48ap",
+  "status": "untested",
+  "when": "2026-09-30T13:36:33+00:00",
+  "load": {
+   "start": [
+    4.1,
+    4.66,
+    4.45
+   ],
+   "end": [
+    4.1,
+    4.66,
+    4.45
+   ]
+  },
+  "prerelease": "beta",
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 18,
+   "ok": 18,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 0.3,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware"
+   ],
+   "warnings": [],
+   "error": "unsupported: 246e5a2f33f3cd14e97b37003a7c2a1f47aa8bf2.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu",
+   "last_step": "Decrypting the firmware",
+   "log": "/Users/shg/ltm-runner/scratch/k48ap-8F5166b/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: 246e5a2f33f3cd14e97b37003a7c2a1f47aa8bf2.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu",
+   "excerpt": "[1/8] Verifying the IPSW\n[2/8] Decrypting the firmware\nfirmwarekit: unsupported: 246e5a2f33f3cd14e97b37003a7c2a1f47aa8bf2.ipsw: no member Firmware/dfu/iBSS.k48dev.RELEASE.dfu"
+  },
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(a) prepare: BuildIdentity.fromBuildManifest takes BuildIdentities.first, which on the 4.3 betas is the k48dev identity (Firmware/dfu/iBSS.k48dev.RELEASE.dfu, all_flash.k48dev); the IPSW ships only k48ap files. Pick the identity matching the entry's board."
+ },
+ "n45ap-3A110a": {
+  "version": "1.1.1",
+  "board": "n45ap",
+  "status": "untested",
+  "when": "2026-09-30T13:36:37+00:00",
+  "load": {
+   "start": [
+    4.57,
+    4.75,
+    4.48
+   ],
+   "end": [
+    3.53,
+    3.9,
+    4.16
+   ]
+  },
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 1,
+   "ok": 1,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 72.5,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/n45ap-3A110a/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
+    "gli": null,
+    "guest_package": "n45-ios1",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 9.0.0d1: Thu Sep 20 00:27:53 PDT 2007; root:xnu-933.0.0.203.obj~24/RELEASE_ARM_S5L8900XRB"
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness (iPhone OS 1.x has no App Store; the install check cannot run)"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 6.9
+   },
+   "home": {
+    "ok": null,
+    "note": "no home screenshot taken"
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": null,
+    "note": "appsync off"
+   },
+   "package": {
+    "ok": false,
+    "offered": 8,
+    "reported": null,
+    "result": null
+   },
+   "helpers": {
+    "ok": null,
+    "note": "no guest helpers baked"
+   },
+   "gl": {
+    "ok": null,
+    "path": "hardware GL",
+    "shim": false,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": "no home screenshot to judge"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null,
+    "second_ok": null,
+    "boot2_reason": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipod1g: lockdown never answered over its usbmuxd",
+   "stall": {
+    "kind": "stuck",
+    "silent_s": 114.0,
+    "load": 3.6,
+    "why": "ipod1g: lockdown never answered over its usbmuxd",
+    "label": "stuck: serial silent for 114 s (load 3.6)"
+   }
+  },
+  "screenshots": {},
+  "events": "/Users/shg/ltm-runner/results/n45ap-3A110a/driver.jsonl",
+  "first_failure": {
+   "check": "lockdown",
+   "why": "ipod1g: lockdown never answered over its usbmuxd",
+   "excerpt": "IOUSBDeviceInterface: match category IODefaultMatchCategory exists\nIOUSBDeviceInterface: match category IODefaultMatchCategory exists\nSep 30 06:38:05 launchd[1]: 16/com.apple.mobile.lockdown: Standard Out/Error: Could not enable SSL",
+   "stall": "stuck: serial silent for 114 s (load 3.6)"
+  },
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(a) runner artifact, not a firmware result: the mini runner's libimobiledevice predates libimobiledevice-sslv3-ios1.patch (b5f2613/80ffcdb), so 1.x lockdownd (SSLv3 only) never answers. Rerun with the patched library."
+ },
+ "n45ap-3B48b": {
+  "version": "1.1.2",
+  "board": "n45ap",
+  "status": "untested",
+  "when": "2026-09-30T13:43:50+00:00",
+  "load": {
+   "start": [
+    4.56,
+    4.13,
+    4.23
+   ],
+   "end": [
+    4.56,
+    4.13,
+    4.23
+   ]
+  },
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 1,
+   "ok": 1,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 0.1,
+   "ok": false,
+   "steps": [
+    "Verifying the IPSW"
+   ],
+   "warnings": [],
+   "error": "unsupported: IPSW is N45AP 3B48b n45ap, n45ap-3B48b wants iPod1,1 3B48b n45ap",
+   "last_step": "Verifying the IPSW",
+   "log": "/Users/shg/ltm-runner/scratch/n45ap-3B48b/firmwarekit.log"
+  },
+  "first_failure": {
+   "check": "prepare",
+   "why": "unsupported: IPSW is N45AP 3B48b n45ap, n45ap-3B48b wants iPod1,1 3B48b n45ap",
+   "excerpt": "[1/6] Verifying the IPSW\nfirmwarekit: unsupported: IPSW is N45AP 3B48b n45ap, n45ap-3B48b wants iPod1,1 3B48b n45ap"
+  },
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(b) prepare: the 1.1.2 beta's Restore.plist says ProductType N45AP (board name), the entry wants iPod1,1; the identity check needs to accept it (or the entry the IPSW's value)."
+ },
+ "n45ap-4A93": {
+  "version": "1.1.3",
+  "board": "n45ap",
+  "status": "untested",
+  "when": "2026-09-30T13:43:52+00:00",
+  "load": {
+   "start": [
+    4.56,
+    4.13,
+    4.23
+   ],
+   "end": [
+    3.25,
+    3.61,
+    3.98
+   ]
+  },
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 1,
+   "ok": 1,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 68.4,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/n45ap-4A93/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
+    "gli": null,
+    "guest_package": "n45-ios1",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 9.0.0d1: Wed Dec 12 00:16:00 PST 2007; root:xnu-933.0.0.211.obj~2/RELEASE_ARM_S5L8900XRB"
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness (iPhone OS 1.x has no App Store; the install check cannot run)"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 8.0
+   },
+   "home": {
+    "ok": null,
+    "note": "no home screenshot taken"
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": null,
+    "note": "appsync off"
+   },
+   "package": {
+    "ok": false,
+    "offered": 8,
+    "reported": null,
+    "result": null
+   },
+   "helpers": {
+    "ok": null,
+    "note": "no guest helpers baked"
+   },
+   "gl": {
+    "ok": null,
+    "path": "hardware GL",
+    "shim": false,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": "no home screenshot to judge"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null,
+    "second_ok": null,
+    "boot2_reason": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipod1g: lockdown never answered over its usbmuxd",
+   "stall": {
+    "kind": "stuck",
+    "silent_s": 114.3,
+    "load": 3.3,
+    "why": "ipod1g: lockdown never answered over its usbmuxd",
+    "label": "stuck: serial silent for 114 s (load 3.3)"
+   }
+  },
+  "screenshots": {},
+  "events": "/Users/shg/ltm-runner/results/n45ap-4A93/driver.jsonl",
+  "first_failure": {
+   "check": "lockdown",
+   "why": "ipod1g: lockdown never answered over its usbmuxd",
+   "excerpt": "Sep 30 06:45:16 lockdown[12]: set_response_error: handle_get_value GetProhibited\nSep 30 06:45:18 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: error compiling query \"SELECT value FROM _SqliteDatabaseProperties WHERE key = ?;\": no such table: _SqliteDatabaseProperties\nSep 30 06:45:18 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: _SCHelperOpen connect() failed: No such file or directory",
+   "stall": "stuck: serial silent for 114 s (load 3.3)"
+  },
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(a) runner artifact, not a firmware result: the mini runner's libimobiledevice predates libimobiledevice-sslv3-ios1.patch (b5f2613/80ffcdb), so 1.x lockdownd (SSLv3 only) never answers. Rerun with the patched library."
+ },
+ "n45ap-4A102": {
+  "version": "1.1.4",
+  "board": "n45ap",
+  "status": "untested",
+  "when": "2026-09-30T13:51:00+00:00",
+  "load": {
+   "start": [
+    4.11,
+    3.82,
+    4.04
+   ],
+   "end": [
+    3.13,
+    3.57,
+    3.86
+   ]
+  },
+  "tools": {
+   "firmwarekit": "/Users/shg/ltm-runner/tools/firmwarekit",
+   "dylib": "/Users/shg/ltm-runner/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/ltm-runner/guest-tools"
+  },
+  "keys": {
+   "total": 1,
+   "ok": 1,
+   "bad": "",
+   "error": null
+  },
+  "prepare": {
+   "seconds": 68.1,
+   "ok": true,
+   "steps": [
+    "Verifying the IPSW",
+    "Decrypting the firmware",
+    "Writing the identity, NOR and boot files",
+    "Building the system volume",
+    "Writing the NAND",
+    "Writing the lock"
+   ],
+   "warnings": [],
+   "error": null,
+   "last_step": "Writing the lock",
+   "log": "/Users/shg/ltm-runner/scratch/n45ap-4A102/firmwarekit.log",
+   "lock": {
+    "boot_strategy": null,
+    "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
+    "gli": null,
+    "guest_package": "n45-ios1",
+    "activation": true,
+    "kernel": "Darwin Kernel Version 9.0.0d1: Wed Dec 12 00:16:00 PST 2007; root:xnu-933.0.0.211.obj~2/RELEASE_ARM_S5L8900XRB"
+   }
+  },
+  "test_app": {
+   "ipa": "/Users/shg/ltm-runner/qemu-ios/contrib/it-harness/build/Harness.ipa",
+   "bundle_id": "com.qemuios.harness",
+   "min_os": "3.1",
+   "source": "Harness (iPhone OS 1.x has no App Store; the install check cannot run)"
+  },
+  "checks": {
+   "lit": {
+    "ok": true,
+    "seconds": 7.6
+   },
+   "home": {
+    "ok": null,
+    "note": "no home screenshot taken"
+   },
+   "lockdown": {
+    "ok": false,
+    "seconds": null,
+    "productType": null
+   },
+   "activation": {
+    "ok": false,
+    "state": null
+   },
+   "afc": {
+    "ok": false,
+    "sizes": [],
+    "error": null
+   },
+   "install": {
+    "ok": null,
+    "note": "appsync off"
+   },
+   "package": {
+    "ok": false,
+    "offered": 8,
+    "reported": null,
+    "result": null
+   },
+   "helpers": {
+    "ok": null,
+    "note": "no guest helpers baked"
+   },
+   "gl": {
+    "ok": null,
+    "path": "hardware GL",
+    "shim": false,
+    "gld_registered": 0,
+    "rejects": 0,
+    "picture": null,
+    "note": "no home screenshot to judge"
+   },
+   "persist": {
+    "ok": false,
+    "error": null,
+    "second_boot": {
+     "lit": null,
+     "lockdown": null
+    }
+   },
+   "shutdown": {
+    "ok": false,
+    "seconds": null,
+    "reason": null,
+    "second": null,
+    "second_ok": null,
+    "boot2_reason": null
+   },
+   "base_unchanged": true,
+   "driver_exit": 1,
+   "driver_fail": "ipod1g: lockdown never answered over its usbmuxd",
+   "stall": {
+    "kind": "stuck",
+    "silent_s": 114.9,
+    "load": 3.1,
+    "why": "ipod1g: lockdown never answered over its usbmuxd",
+    "label": "stuck: serial silent for 115 s (load 3.1)"
+   }
+  },
+  "screenshots": {},
+  "events": "/Users/shg/ltm-runner/results/n45ap-4A102/driver.jsonl",
+  "first_failure": {
+   "check": "lockdown",
+   "why": "ipod1g: lockdown never answered over its usbmuxd",
+   "excerpt": "Sep 30 06:52:22 lockdown[12]: set_response_error: handle_get_value GetProhibited\nSep 30 06:52:23 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: error compiling query \"SELECT value FROM _SqliteDatabaseProperties WHERE key = ?;\": no such table: _SqliteDatabaseProperties\nSep 30 06:52:23 launchd[1]: 16/com.apple.SpringBoard: Standard Out/Error: _SCHelperOpen connect() failed: No such file or directory",
+   "stall": "stuck: serial silent for 115 s (load 3.1)"
+  },
+  "runner": {
+   "host": "shg-mini (M4, macOS 15.7.9)",
+   "app": "3614f1c",
+   "qemu-ios": "b5b5038280",
+   "usbmuxd": "33728aee",
+   "libimobiledevice": "0929a native prefix (predates libimobiledevice-sslv3-ios1.patch)",
+   "evidence": "shg-mini:~/ltm-runner/results/<entry>"
+  },
+  "triage": "(a) runner artifact, not a firmware result: the mini runner's libimobiledevice predates libimobiledevice-sslv3-ios1.patch (b5f2613/80ffcdb), so 1.x lockdownd (SSLv3 only) never answers. Rerun with the patched library."
  }
 }
