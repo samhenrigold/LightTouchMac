@@ -3,7 +3,7 @@
 Built with use from agentic coding products.
 
 Light Touch is a native macOS (AppKit) app that runs a library of emulated legacy iOS devices.
-Today that library is the **iPod touch 2G** (n72ap) and the **iPad 1** (k48ap). Each device is prepared
+The device catalog includes the **iPod touch 1G** (n45ap), **iPod touch 2G** (n72ap) and **iPad 1** (k48ap). Each device is prepared
 from a stock Apple IPSW by the bundled Swift preparer, `firmwarekit` (`Packages/FirmwareKit`), using
 the keys pinned in `LightTouchMac/Resources/firmware-catalog.json`; there are no hand-prepared images
 per firmware. Each running device is its own helper process (`LightTouchDevice`), which is the only
@@ -14,23 +14,24 @@ first.
 
 ## Firmwares in the catalog
 
-| Board | Build | iOS | Catalog status |
-|---|---|---|---|
-| iPod touch 2G (n72ap) | 7E18 | 3.1.3 | `user_ipsw` (no public URL; also the bundled image) |
-| iPod touch 2G (n72ap) | 8C148 | 4.2.1 | `experimental` |
-| iPod touch 2G (n72ap) | 5F138 | 2.1.1 | `coming_soon` |
-| iPad 1 (k48ap) | 7B500 | 3.2.2 | `available` |
-| iPad 1 (k48ap) | 7B367 | 3.2 | `available` |
-| iPad 1 (k48ap) | 8C148 | 4.2.1 | `experimental` |
+The shared [firmware catalog](LightTouchMac/Resources/firmware-catalog.json) is the source of truth for
+builds, availability, keys and preparation recipes. The CLI reads that same catalog:
 
-Source: `LightTouchMac/Resources/firmware-catalog.json`; the per-entry notes are in STATUS.md.
+```sh
+firmwarekit create --catalog LightTouchMac/Resources/firmware-catalog.json \
+  --id k48ap-7B500 --ipsw /path/to/stock.ipsw --out /path/to/new-device \
+  --helper /path/to/LightTouchDevice --guest-tools /path/to/ipad-guest-tools
+```
+
+Catalog availability is distinct from measured acceptance. The six-device boot and persistence
+matrix and current fidelity limits are recorded in [docs/fidelity-consolidation.md](docs/fidelity-consolidation.md).
 
 ## The three repositories
 
 | Repo | What it is | How this app uses it |
 |---|---|---|
 | [LightTouchMac](https://github.com/samhenrigold/LightTouchMac) | This app, the per-device helper, the Swift preparer, the app tests, the product build | — |
-| [qemu-ios](https://github.com/samhenrigold/qemu-ios) (fork; branch `ipad1` carries both boards) | The emulator (`hw/arm/ipod_touch_*.c`, `hw/arm/ipad1.c`, `hw/arm/s5l8930_*.c`), the guest tools under `contrib/` (agent, GL shims, AppSync, guest packages), the Python `imgtools/` pipeline that is FirmwareKit's test oracle, and the emulator gates under `tests/` | Pinned by commit in `build-support/sources.json`. Linked by the helper as `libqemu-arm.dylib` (`contrib/macos-app/make-dylib-macos.sh`); its `contrib/export-guest-artifacts.sh` builds and stages the guest tools, GL tables, entitlements and headers with a manifest, and `scripts/build-guest-tools.sh` is a thin caller of it |
+| [qemu-ios](https://github.com/samhenrigold/qemu-ios) (fork; branch `ipad1` carries both boards) | The emulator (`hw/arm/ipod_touch_*.c`, `hw/arm/ipad1.c`, `hw/arm/s5l8930_*.c`), the guest tools under `contrib/` (agent, GL shims, AppSync, guest packages), Python format inspection tools and frozen bake references, and the emulator gates under `tests/` | Pinned by commit in `build-support/sources.json`. Linked by the helper as `libqemu-arm.dylib` (`contrib/macos-app/make-dylib-macos.sh`); its `contrib/export-guest-artifacts.sh` builds and stages the guest tools, GL tables, entitlements and headers with a manifest, and `scripts/build-guest-tools.sh` is a thin caller of it |
 | [usbmuxd](https://github.com/samhenrigold/usbmuxd) (fork, branch `idle-poll` on `qemu-zlp`) | The usbmuxd that bridges the emulated USB device to libimobiledevice | Built into the bundle from the commit pinned in `build-support/sources.json`; the emulator and this fork ship together, so bump both pins in one commit |
 
 The emulator side's own entry point is qemu-ios `README.md`; its iPod capabilities doc is
@@ -93,7 +94,7 @@ scripts/gate.sh --full          # quick + sessions
 `tests/run.py` lists as known failing on today's code, XPASS once it passes again); non-zero exit only on
 FAIL; every log under the printed directory. The sessions tier's inputs (`QEMU_IOS_DIR`, the helper's dylib,
 the iPad and iPod device directories, the armv6 package) are documented in `tests/run.py`; a check whose
-input is missing is SKIP with the path it wanted. Every script resolves the qemu-ios and usbmuxd checkouts
+input is missing is SKIP with the path it wanted; `--require-inputs` makes a selected skip fail acceptance. Every script resolves the qemu-ios and usbmuxd checkouts
 through `scripts/sources.py` (the pin in `build-support/sources.json`).
 
 | Directory | What is there |
@@ -102,7 +103,7 @@ through `scripts/sources.py` (the pin in `build-support/sources.json`).
 | `tests/sessions/` | `check-sessions.py` boots two devices at once through the app's own session code (`tests/drivers/session-driver`); `--single DIR --board ipod|ipad` boots one prepared base the way the app does and is what the release verify stage runs; `--guest` runs the guest-services scenario. `check-helper-boot.py` drives the helper directly (`tests/drivers/helper-driver`). `matrix.py`, `install-durability.py` and `volume-rebuild-oracle.py` are tools run by hand (`tests/matrix.py` still works) |
 | `tests/release/` | Build and packaging checks: dependency sources, guest build, release, package, signing, package layout. `scripts/check-macho.py` and `scripts/test-glib-compat.py` stay in `scripts/` because the native recipe hash includes them |
 | `tests/drivers/`, `tests/fixtures/` | The Swift drivers the session checks compile; the fake preparer, the catalog server and the Swift fixtures the checks share |
-| `swift test --package-path Packages/FirmwareKit` | FirmwareKit's unit tests; oracle comparisons against the Python pipeline. Fixtures under `~/Developer/qemu-ios-files` and a qemu-ios checkout (`FIRMWAREKIT_QEMU_IOS`; `gate.sh` sets it from the pin); tests skip when they are absent |
+| `swift test --package-path Packages/FirmwareKit` | FirmwareKit's synthetic unit tests and fixed legacy reference hashes. Optional corpus tests report real skips unless `FK_TEST_CORPUS=1` or `FK_REQUIRE_FIXTURES=1` selects them; selected missing inputs fail. Format/bake oracle checks resolve qemu-ios through `FIRMWAREKIT_QEMU_IOS` |
 | `scripts/build-release.py --stage verify` | The bundled `firmwarekit` prepares each entry in `VERIFY_ENTRIES`, then `tests/sessions/check-sessions.py --single` boots it through the bundle: lit, lockdown, AFC round trips past 16 KiB, an IPA install, a clean shutdown |
 
 Every headless boot passes `-audio driver=none`. Nobody but Sam launches the app itself; verification is
