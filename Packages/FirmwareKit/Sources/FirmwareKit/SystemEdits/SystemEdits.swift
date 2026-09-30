@@ -167,24 +167,13 @@ public enum SystemEdits {
             }
             try put(Data(fstabRW.utf8), at(fstab))
             if o.webProxy { rootOwned += try installPAC(m) }
-            // GL first: a firmware whose gld plugin does not fit boots the stock engine with software CoreAnimation,
-            // as the iPod recipe does, rather than refusing the build (docs/matrix.md).
-            var caOGL = o.caOGL
-            if caOGL {
-                do {
-                    let (engine, gld, overridden) = try installGL(m, helpers: helpers, log: log)
-                    result.engine = engine
-                    rootOwned.append(glEngine)
-                    if overridden { rootOwned.append(dyldOverride) }
-                    if gld { rootOwned += [(gldPath as NSString).deletingLastPathComponent, gldPath] }
-                } catch let e as FirmwareError where e.code == .unsupported {
-                    caOGL = false
-                    result.notes.append("Stock GL engine, software CoreAnimation: \(e.message)")
-                    log("warning: " + result.notes.last!)
-                }
+            if o.caOGL {   // GL first
+                let (engine, owned) = try installCAOGL(m, helpers: helpers, log: log)
+                result.engine = engine
+                rootOwned += owned
             }
             try editSpringBoardJob(m) { env, d in
-                env.addEntries(from: caOGL ? sbEnvCAOGL : sbEnv)
+                env.addEntries(from: o.caOGL ? sbEnvCAOGL : sbEnv)
                 d["StandardOutPath"] = "/dev/console"; d["StandardErrorPath"] = "/dev/console"
             }
             if o.appsync {
@@ -322,6 +311,20 @@ public enum SystemEdits {
         let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gles: gles)
         log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
         return (seeded, record)
+    }
+
+    /// [ca_ogl] installGL for a recipe that asks SpringBoard to composite through the GL bridge; returns the engine
+    /// and the files to own by root. A firmware the shim cannot serve (a gld plugin that does not fit) fails the
+    /// prepare, as ipad1_rootfs.py build does, rather than quietly producing a software-CoreAnimation device.
+    static func installCAOGL(_ m: URL, helpers: URL, log: (String) -> Void) throws -> (engine: String, owned: [String]) {
+        do {
+            let (engine, gld, overridden) = try installGL(m, helpers: helpers, log: log)
+            return (engine, [glEngine] + (overridden ? [dyldOverride] : [])
+                            + (gld ? [(gldPath as NSString).deletingLastPathComponent, gldPath] : []))
+        } catch let e as FirmwareError where e.code == .unsupported {
+            throw FirmwareError(.unsupported, "the recipe asks for GL CoreAnimation (ca_ogl) and this firmware cannot "
+                                + "composite through the GL bridge: \(e.message)")
+        }
     }
 
     /// The GL shim as GLEngine (+ the gld plugin when this firmware's EAGL needs one, + dyld's override switch

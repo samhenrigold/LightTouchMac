@@ -38,4 +38,25 @@ struct GLIDispatchCheckTests {
         let plugin = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.gld)
         if needed, Fixtures.exists(plugin) { #expect(GLIDispatch.gldProblem(cache, plugin: plugin).why == nil) }
     }
+
+    /// A ca_ogl recipe on a firmware whose gld plugin does not fit fails the prepare (as ipad1_rootfs.py build
+    /// does) instead of quietly producing a software-CoreAnimation device, and installs nothing.
+    @Test func caOGLRefusesAMisfitGldPlugin() throws {
+        guard Fixtures.hasRootfs("8C148") else { return }
+        let dir = try Fixtures.tempDir("caogl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let m = dir.appendingPathComponent("mnt"), helpers = dir.appendingPathComponent("helpers")
+        let at = m.appendingPathComponent(SystemEdits.dyldCache("armv7"))
+        try FileManager.default.createDirectory(at: at.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: helpers, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: try Fixtures.cache("8C148", to: dir), to: at)
+        try Data("engine".utf8).write(to: helpers.appendingPathComponent(SystemEdits.Helpers.glEngine))
+        try Data("\0_gldGetVersion\0".utf8).write(to: helpers.appendingPathComponent(SystemEdits.Helpers.gld))
+        #expect {
+            try SystemEdits.installCAOGL(m, helpers: helpers) { _ in }
+        } throws: { e in
+            (e as? FirmwareError)?.code == .unsupported && "\(e)".contains("ca_ogl") && "\(e)".contains("gldshim lacks")
+        }
+        #expect(!FileManager.default.fileExists(atPath: m.appendingPathComponent(SystemEdits.glEngine).path))
+    }
 }
