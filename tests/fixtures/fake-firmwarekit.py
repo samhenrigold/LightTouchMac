@@ -34,8 +34,10 @@ emit(event="begin", steps=3, seconds=[5, 10, 70])
 emit(event="step", index=1, name="Decrypting")
 emit(event="progress", fraction=0, detail="Decrypting the firmware — 0 s")
 if a.cache:
-    os.makedirs(os.path.join(a.cache, entry["source"]["sha1"]), exist_ok=True)
-    open(os.path.join(a.cache, entry["source"]["sha1"], "rootfs.dmg"), "w").write("x")
+    # FirmwareKit's layout: decrypted-v<format>/<sha1>/<identity digest>/ (DecryptionCache.swift).
+    entry_dir = os.path.join(a.cache, "decrypted-v2", entry["source"]["sha1"], "0" * 64)
+    os.makedirs(entry_dir, exist_ok=True)
+    open(os.path.join(entry_dir, "rootfs.dmg"), "w").write("x")
 emit(event="progress", fraction=0.5, detail="Decrypting the firmware — 1 s")
 emit(event="progress", fraction=1, detail="Decrypting the firmware — 2 s")
 if mode == "crash":

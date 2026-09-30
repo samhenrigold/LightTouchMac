@@ -197,7 +197,11 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         if case .published = event {} else { try? DeviceStateStorage.removeTree(staging) }
         try? FileManager.default.removeItem(at: entryFile)
         let sha1 = request.entry.source.sha1 ?? "-"
-        for name in [sha1, "\(sha1).tmp"] { try? DeviceStateStorage.removeTree(request.cache.appendingPathComponent(name)) }
+        // FirmwareKit's versioned layout is decrypted-v<format>/<sha1>/…; <sha1> and <sha1>.tmp are the format-1 layout.
+        let formats = ((try? FileManager.default.contentsOfDirectory(atPath: request.cache.path)) ?? []).filter { $0.hasPrefix("decrypted-v") }
+        for name in [sha1, "\(sha1).tmp"] + formats.map({ "\($0)/\(sha1)" }) {
+            try? DeviceStateStorage.removeTree(request.cache.appendingPathComponent(name))
+        }
         onEvent(event)
     }
 

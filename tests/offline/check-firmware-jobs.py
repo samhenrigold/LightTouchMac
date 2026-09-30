@@ -235,7 +235,8 @@ case "unit":
     let store1 = base.appendingPathComponent("nand/store")
     expect(try allocatedKiB(store1) < 1024 && (fm.attributesOfItem(atPath: store1.path)[.size] as! Int) == 1 << 30, "the NAND stays sparse")
     expect(leftovers().isEmpty, "Preparing/ is empty after a publish: \(leftovers())")
-    expect(!fm.fileExists(atPath: cache.appendingPathComponent(iPad32.source.sha1!).path), "the decrypt cache is gone after a publish")
+    expect(!fm.fileExists(atPath: cache.appendingPathComponent(iPad32.source.sha1!).path)
+           && !fm.fileExists(atPath: cache.appendingPathComponent("decrypted-v2/\(iPad32.source.sha1!)").path), "the decrypt cache is gone after a publish")
     let publishedListing = try fm.subpathsOfDirectory(atPath: DeviceInstance.directory(device.id, state: state).path).sorted()
     let publishedRecord = try Data(contentsOf: DeviceInstance.directory(device.id, state: state).appendingPathComponent("device.json"))
 
@@ -257,7 +258,8 @@ case "unit":
     try StorageLocations.privateDirectory(cache.appendingPathComponent("\(sha1).tmp"))
     run = prepare(iPad32, state: state, cache: cache, mode: "error")
     expect(run.events.last == .failed("Light Touch doesn’t have the keys for this firmware."), "\(run.events)")
-    expect(!fm.fileExists(atPath: cache.appendingPathComponent(sha1).path) && !fm.fileExists(atPath: cache.appendingPathComponent("\(sha1).tmp").path),
+    expect(!fm.fileExists(atPath: cache.appendingPathComponent(sha1).path) && !fm.fileExists(atPath: cache.appendingPathComponent("\(sha1).tmp").path)
+           && !fm.fileExists(atPath: cache.appendingPathComponent("decrypted-v2/\(sha1)").path),
            "the decrypt cache and its .tmp go after a failure too")
     // An IPSW failing its SHA in the preparer is deleted.
     let ipsw = tmp.appendingPathComponent("fake.ipsw")
