@@ -181,6 +181,8 @@ def test_app(entry, a):
     bundle, min_os = ipa_app(HARNESS)
     if os_tuple(min_os) <= os_tuple(entry["version"]):
         return {"ipa": str(HARNESS), "bundle_id": bundle, "min_os": min_os, "source": "Harness"}
+    if os_tuple(entry["version"]) < (2, 0):   # no App Store (and no third-party apps) before 2.0: nothing to fetch
+        return {"ipa": str(HARNESS), "bundle_id": bundle, "min_os": min_os, "source": "Harness (iPhone OS 1.x has no App Store; the install check cannot run)"}
     import urllib.request
     ua = {"User-Agent": "LightTouchMac/matrix (+https://legacystore.app)"}
     q = f"{LEGACY_STORE}/api/emulator/apps?ipa_id={OLD_OS_APP}&device={entry['product_type']}&os={entry['version']}"
