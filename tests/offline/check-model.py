@@ -233,13 +233,29 @@ func pattern(_ profile: DeviceProfile, rotation: Int) -> CGImage {
   let large = lcdBox().width
   precondition(abs(large/small-2)<0.001)
   let centre = model.projectedPoint(CGPoint(x:0.5,y:0.5))
-  let beforeShakeWidth = lcdBox().width
+  /// Opposite LCD edges' length differences: a translation (even in depth)
+  /// keeps the face-on panel a rectangle, only a tilt makes it a trapezoid.
+  /// (The box width is no measure: a tilt widens it, backing away narrows it,
+  /// and mid-shake the two cancel.)
+  func skew() -> CGPoint {
+    let p = [CGPoint(x:0,y:0), CGPoint(x:1,y:0), CGPoint(x:0,y:1), CGPoint(x:1,y:1)].map(model.projectedPoint)
+    func length(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x-b.x, a.y-b.y) }
+    return CGPoint(x: length(p[0],p[1])-length(p[2],p[3]), y: length(p[0],p[2])-length(p[1],p[3]))
+  }
+  let restSkew = skew()
+  // The wobble crosses its rest pose many times: sample it rather than one instant.
+  var moved: CGFloat = 0, tilted: CGFloat = 0
+  let shaken = CACurrentMediaTime()
   model.shake()
-  try await Task.sleep(for: .seconds(0.07))
-  model.advanceAnimations()
+  while CACurrentMediaTime() - shaken < 0.25 {
+    try await Task.sleep(for: .seconds(0.01))
+    model.advanceAnimations()
+    moved = max(moved, abs(model.projectedPoint(CGPoint(x:0.5,y:0.5)).x-centre.x))
+    tilted = max(tilted, abs(skew().x-restSkew.x) + abs(skew().y-restSkew.y))
+  }
   if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-    precondition(abs(model.projectedPoint(CGPoint(x:0.5,y:0.5)).x-centre.x)>0.1)
-    precondition(abs(lcdBox().width-beforeShakeWidth)>0.01, "Shake must change 3D perspective, not only position")
+    precondition(moved>1, "Shake must move the model: \(moved)")
+    precondition(tilted>0.2, "Shake must change 3D perspective, not only position: \(tilted)")
   }
   try await Task.sleep(for: .seconds(0.5))
   model.advanceAnimations()
