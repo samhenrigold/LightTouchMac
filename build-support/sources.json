@@ -4,7 +4,7 @@
   "qemu-ios": {
     "repository": "https://github.com/samhenrigold/qemu-ios",
     "branch": "ipad1",
-    "commit": "0f610faa9440a6941f662adc6ac8ca8fec86b24f",
+    "commit": "38828d4e77b831a0724039de9eb75f9e474b1ca5",
     "path": "~/Developer/qemu-ios-ipad1",
     "build_dir": "build-w1-native",
     "provides": "contrib/export-guest-artifacts.sh (guest tools, tables, entitlements, headers, dylib); build_dir is the development build (the helper's dylib for Xcode and the checks), never the release's --qemu-build"
@@ -12,9 +12,9 @@
   "usbmuxd": {
     "repository": "https://github.com/samhenrigold/usbmuxd",
     "branch": "idle-poll",
-    "commit": "33728aee156750d75a424ecc5a7bdcfcce1ce0c9",
+    "commit": "e19fac2d4bf344f67fc05e693f8239d2b7101190",
     "path": "~/Developer/usbmuxd-qemu/usbmuxd",
-    "provides": "the usbmuxd the bundle ships (qemu-zlp 41631a7: real ZLPs after max-packet-multiple writes, wMaxPacketSize 512; idle-poll: 50 ms polling once idle for 1 s)"
+    "provides": "the usbmuxd the bundle ships: real ZLPs after max-packet-multiple writes, 50 ms polling once idle for 1 s, and complete EP0 control transfers across NAK pauses"
   },
   "iBoot32Patcher": {
     "pinned_in": "build-support/dependencies.json",

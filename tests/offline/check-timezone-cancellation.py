@@ -76,7 +76,7 @@ struct GuestServices {
   // A process that does not answer must be reaped at its deadline too.
   Timeouts.query = 0.1
   do { _ = try await DeviceServices.lockdownChild(slow.path, [], socket: "127.0.0.1:31411"); fatalError("deadline succeeded") }
-  catch DeviceToolsError.failed {} 
+  catch DeviceToolsError.failed {}
   try await Task.sleep(for: .milliseconds(500))
   precondition(!FileManager.default.fileExists(atPath: marker.path), "deadline left a delayed writer")
   Timeouts.query = 2
