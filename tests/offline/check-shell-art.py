@@ -19,7 +19,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-shell-art-') as tmp:
     (tmp / 'main.swift').write_text('''import Foundation
 for board in CommandLine.arguments.dropFirst() {
     guard let p = [DeviceProfile.iPodTouch2G, .iPad1, .iPodTouch1G].first(where: { $0.boardID == board }) else { print(board, "-"); continue }
-    print(board, p.shellImageName, Int(p.shellPixels.width), Int(p.shellPixels.height))
+    let c = p.screenCutout
+    print(board, p.shellImageName, Int(p.shellPixels.width), Int(p.shellPixels.height), Int(c.midX), Int(c.midY), Int(c.minY / 2))
 }
 ''')
     subprocess.run(['xcrun', 'swiftc', '-module-cache-path', str(tmp / 'modules'), str(root / 'LightTouchMac/Device/DeviceProfile.swift'),
@@ -27,7 +28,9 @@ for board in CommandLine.arguments.dropFirst() {
     rows = [line.split() for line in subprocess.check_output([tmp / 'art', *boards], text=True).splitlines()]
 
 seen = {}
+tones = {}
 for board, name, *size in rows:
+    size, (cx, cy, above) = size[:2], map(int, size[2:])
     assert name != '-', f'{board}: no DeviceProfile'
     imageset = assets / f'{name}.imageset'
     files = json.loads((imageset / 'Contents.json').read_text())['images']
@@ -39,5 +42,10 @@ for board, name, *size in rows:
     seen[board] = (name, digest)
     w, h = Image.open(png).size
     assert (w, h) == (int(size[0]), int(size[1])), f'{board}: {png.name} is {w}x{h}, profile shellPixels {size}'
-    print(f'{board}: {name} ({png.name}, {w}x{h})')
-print(f'PASS: {len(seen)} catalog boards, each with its own picture')
+    rgb = Image.open(png).convert('RGB')
+    tones[board] = (rgb.getpixel((cx, cy)), rgb.getpixel((cx, above)))   # the screen-off LCD, the glass above it
+    print(f'{board}: {name} ({png.name}, {w}x{h}), LCD {tones[board][0]}, glass {tones[board][1]}')
+# The two iPods are drawn as siblings: the 1G art uses the 2G photo's LCD and glass tones (not a render's pure black).
+for a, b in zip(tones['n45ap'], tones['n72ap']):
+    assert max(abs(x - y) for x, y in zip(a, b)) <= 6, f'n45ap art tones {tones["n45ap"]} differ from n72ap {tones["n72ap"]}'
+print(f'PASS: {len(seen)} catalog boards, each with its own picture; the iPods share one palette')

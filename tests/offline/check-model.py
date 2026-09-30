@@ -292,15 +292,22 @@ func pattern(_ profile: DeviceProfile, rotation: Int) -> CGImage {
   model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
   let face = try await render(model)
   try save(face, out+"/\(lower)-pattern.png")
-  // N45's graphite front frame reads as medium grey face-on (Apple's product shots), not the
-  // asset's near-black metal (luminance ~0.03 before DeviceModelView's frameDark tune).
+  // N45 against Apple's product shot (touch_topsongs.jpg, colour-managed from its CMYK): a brushed graphite
+  // frame lit from the upper left, sRGB ~150-175 there falling to ~85-100 at the lower right (the asset's
+  // near-black frameDark alone gives ~0.03 everywhere; flat grey paint gives no gradient), and blue-black
+  // glass, ~25, with a faint sheen (~43) to the upper right of a diagonal (N45Rim).
   if profile == .iPodTouch1G {
-    for x in [-0.095, 1.095] {
-      let c = color(face, model.projectedPoint(CGPoint(x: x, y: 0.5)), in: model.bounds.size)
-      let level = 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent
-      print("N45: graphite frame at \(x): \(level)")
-      precondition(level > 0.25 && level < 0.6, "N45 graphite frame is not medium grey: \(level)")
+    func level(_ p: CGPoint) -> CGFloat {
+      let c = color(face, model.projectedPoint(p), in: model.bounds.size)
+      return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent
     }
+    let lit = [CGPoint(x: -0.095, y: 0.2), CGPoint(x: 0.5, y: -0.217)].map(level)
+    let shade = [CGPoint(x: 1.095, y: 0.8), CGPoint(x: 0.5, y: 1.217)].map(level)
+    let sheen = level(CGPoint(x: 0.85, y: -0.1)), glass = [CGPoint(x: 0.05, y: -0.2), CGPoint(x: 0.15, y: 1.1)].map(level)
+    print("N45: graphite frame lit \(lit) shaded \(shade); glass \(glass) sheen \(sheen)")
+    precondition(lit.allSatisfy { $0 > 0.5 && $0 < 0.75 }, "N45 frame's upper left is not a light graphite: \(lit)")
+    precondition(shade.allSatisfy { $0 > 0.28 && $0 < 0.45 }, "N45 frame's lower right is not a darker graphite: \(shade)")
+    precondition(glass.allSatisfy { $0 > 0.06 && $0 < 0.15 } && sheen - glass.max()! > 0.05, "N45 glass is not blue-black with a sheen: \(glass) \(sheen)")
   }
   // Nearest-neighbour upscaling: a 4x6 black/white checker blown up to ~600 px must keep hard edges.
   // A linear mag filter ramps across each ~150 px cell, leaving a third or more of a scan mid-grey.
@@ -492,6 +499,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
     for model in MODELS:
         (app/f"Resources/{model}.usdz").symlink_to(root/f"LightTouchMac/{model}.usdz")
     (app/"Resources/N72Studio.realityenv").symlink_to(root/"LightTouchMac/N72Studio.realityenv")
+    (app/"Resources/N45Rim.realityenv").symlink_to(root/"LightTouchMac/N45Rim.realityenv")
     sources=root/"LightTouchMac"
     qemu=Path(os.environ["QEMU_SRC"]) if os.environ.get("QEMU_SRC") else pins.path("qemu-ios")
     attitude_header=qemu/"include/hw/arm/ipod-attitude.h"

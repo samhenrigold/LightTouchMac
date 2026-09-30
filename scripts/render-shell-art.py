@@ -25,7 +25,24 @@ import Metal
   model.frame = NSRect(origin: .zero, size: size)
   // Scale 0.5 at 2x: one output pixel per shell pixel.
   model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
-  model.setScreenOff(true)
+  // The 2G shell's palette (a product photo): near-black glass (8, 7, 8) and a dark blue-grey LCD
+  // (14, 18, 22), so the two iPods read as siblings; the rim and Home keep the model's own lighting.
+  let screen = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+  screen.setFillColor(CGColor(srgbRed: 14 / 255, green: 18 / 255, blue: 22 / 255, alpha: 1))
+  screen.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+  model.updateFrame(screen.makeImage()!)
+  var glass = UnlitMaterial(applyPostProcessToneMap: false)
+  glass.color = .init(tint: NSColor(srgbRed: 8 / 255, green: 7 / 255, blue: 8 / 255, alpha: 1))
+  func paint(_ e: Entity) {
+    if var m = e.components[ModelComponent.self] {
+      if m.materials.contains(where: { ["glass", "Display5___inactive_LCD_perimeter"].contains(($0 as? PhysicallyBasedMaterial)?.name ?? "") }) {
+        m.materials = m.materials.map { _ in glass }; e.components.set(m)
+      }
+    }
+    e.children.forEach(paint)
+  }
+  paint((model.subviews[0] as! ARView).scene.anchors.first!)
   // Project before the anchors move to the offscreen renderer: ARView projects with its own scene's camera.
   let corners = [model.projectedPoint(CGPoint(x: 0, y: 0)), model.projectedPoint(CGPoint(x: 1, y: 1))]
   let home = model.homeButtonRect!
@@ -75,6 +92,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-shell-art-") as tmp:
     (app / "MacOS").mkdir(parents=True)
     (app / "Resources").mkdir()
     (app / "Resources/N72Studio.realityenv").symlink_to(root / "LightTouchMac/N72Studio.realityenv")
+    (app / "Resources/N45Rim.realityenv").symlink_to(root / "LightTouchMac/N45Rim.realityenv")
     (work / "render.swift").write_text(source)
     exe = app / "MacOS/render"
     src = root / "LightTouchMac"
