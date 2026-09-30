@@ -12,9 +12,11 @@ gaps the 2026-09-29 audit found are now caught:
   - a clean lit-SpringBoard boot with both shutdowns confirmed passes all three;
   - (matrix-holes) a lock-screen home shot and an agent that never answers FAIL `home`; with no
     agent (2.x/3.0) the frontmost is reported unknown; a dim-backlight capture of the reference
-    picture passes (framecheck exposure) while a flipped one still fails.
+    picture passes (framecheck exposure) while a flipped one still fails;
+  - (matrix-load) a boot that hits a deadline is labelled "slow" when its serial log was written just before the
+    deadline and "stuck" when it had been silent, stays a FAIL either way, and the md shows the label and the load.
 """
-import importlib.util, json, os, sys, tempfile
+import importlib.util, json, os, sys, tempfile, time
 from pathlib import Path
 from PIL import Image
 
@@ -42,13 +44,15 @@ def base_dir(lock=None):
 ENTRY = {"id": "k48ap-8L1", "product_type": "iPad1,1", "board": "k48ap", "version": "4.3.5",
          "recipe": {"options": {"appsync": False}}}
 
-def run(events, serial_text="", lock=K48_SHIM, entry=ENTRY):
+def run(events, serial_text="", lock=K48_SHIM, entry=ENTRY, timing=None, serial_mtime=None):
     b = base_dir(lock)
     serial = TMP / ("serial-%d.log" % len(list(TMP.glob("serial-*"))))
     serial.write_text(serial_text)
+    if serial_mtime is not None:
+        os.utime(serial, (serial_mtime, serial_mtime))
     shots_to = TMP / ("shots-%d" % len(list(TMP.glob("shots-*"))))
     before = mx.check_sessions.tree(b)
-    return mx.judge(entry, events, 0, serial, TMP, shots_to, before, b)
+    return mx.judge(entry, events, 0, serial, TMP, shots_to, before, b, timing)
 
 def screenshot(stem, lum):
     return {"event": "screenshot", "path": png(stem + ".png", lum), "serial": 1,
@@ -187,7 +191,36 @@ r = two_x(grad.transpose(Image.FLIP_TOP_BOTTOM))
 check("exposure: a flipped dim capture still fails the picture", r["home"]["ok"] is False and r["home"]["frame"]["home"] > 0.3)
 mx.MATRIX_REFS = TMP / "no-refs"
 
+# 10. deadline triage (matrix-load, 09-30): the 9B206 "regression" was a loaded host. A never-lit boot whose serial log
+#     was written 5 s before the 240 s deadline is "slow"; one silent for 200 s is "stuck". Both stay FAILs.
+T0 = time.time() - 400
+never_lit = [screenshot("never-lit", 2), {"event": "fail", "t": 241.0, "why": "ipad never lit"}]
+TIMING = {"started": T0, "ended": T0 + 242, "load": (55.58, 41.56, 49.58), "killed": False}
+KERNEL = "AppleBCMWLANCore::initDongle(): Core Driver Initialization Time 83.890805000\nit_ethlink: LinkStatus 0 -> 1\n"
+r, _, first = run(never_lit, serial_text=KERNEL, timing=TIMING, serial_mtime=T0 + 236)
+check("stall: serial written 5 s before the deadline is slow", (r.get("stall") or {}).get("kind") == "slow"
+      and r["stall"]["load"] == 55.6 and r["stall"]["silent_s"] == 5.0 and "slow: serial still advancing at load 55.6" in r["stall"]["label"])
+check("stall: slow is still a FAIL", r["lit"]["ok"] is False and first == "lit")
+r, _, first = run(never_lit, serial_text=KERNEL, timing=TIMING, serial_mtime=T0 + 41)
+check("stall: serial silent 200 s before the deadline is stuck", (r.get("stall") or {}).get("kind") == "stuck"
+      and r["stall"]["silent_s"] == 200.0 and r["stall"]["label"].startswith("stuck: serial silent for 200 s"))
+check("stall: stuck is a FAIL", r["lit"]["ok"] is False and first == "lit")
+r, _, _ = run([{"event": "fail", "t": 30.0, "why": "ipad boot: no such file"}], timing=TIMING, serial_mtime=T0 + 29)
+check("stall: a boot error is not a deadline, no label", "stall" not in r)
+r, _, _ = run(good, timing=TIMING, serial_mtime=T0 + 100)
+check("stall: a passing boot has no label", "stall" not in r)
+r, _, _ = run([], timing=dict(TIMING, killed=True, ended=T0 + 1200), serial_mtime=T0 + 1195)
+check("stall: a driver killed at --boot-timeout is judged at the kill", (r.get("stall") or {}).get("kind") == "slow")
+# the md: the Load column and the label next to the first failure
+mx.RESULTS_MD = TMP / "matrix-results.md"
+r, _, first = run(never_lit, serial_text=KERNEL, timing=TIMING, serial_mtime=T0 + 41)
+mx.write_md({"k48ap-9B206": {"version": "5.1.1", "load": {"start": [55.58, 41.56, 49.58], "end": [12.3, 30.1, 40.2]}, "checks": r,
+                             "first_failure": {"check": first, "why": r["driver_fail"], "stall": r["stall"]["label"]}}}, {"entries": []})
+md = mx.RESULTS_MD.read_text()
+check("md: the row shows the load at start and end", "| 55.6 → 12.3 |" in md)
+check("md: the first failure carries the label", "stuck: serial silent for 200 s" in md)
+
 import shutil; shutil.rmtree(TMP, ignore_errors=True)
 if fails:
     sys.exit("%d matrix-judge assertion(s) failed" % fails)
-print("matrix judge: home (incl. lock screen, silent agent, unknown frontmost, backlight exposure), GL (incl. shim software fallback), boot-2 shutdown, helpers and package verdicts all bite")
+print("matrix judge: home (incl. lock screen, silent agent, unknown frontmost, backlight exposure), GL (incl. shim software fallback), boot-2 shutdown, helpers, package and deadline-triage (slow/stuck) verdicts all bite")

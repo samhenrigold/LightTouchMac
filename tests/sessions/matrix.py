@@ -49,6 +49,29 @@ fspec.loader.exec_module(framecheck)
 MATRIX_REFS = ROOT / "tests/sessions/matrix-refs"   # per-entry known-good home pictures, if committed
 HOME_FLOOR = 0.05   # a home screenshot below this luma is a slept/black panel (audit finding 3)
 SPRINGBOARD = "com.apple.springboard"
+# A deadline failure is labelled for triage (still a FAIL): "slow" if the serial log was written within this many
+# seconds of the deadline, else "stuck". A loaded host slows 5.x several-fold (09-30: 9B206 lit at 196 s under
+# load 55-160 against 45 s idle, on the tip and on the known-good pin alike) and still logs as it goes.
+SERIAL_QUIET_S = 60
+DEADLINE_FAIL = re.compile(r"never (lit|answered|came up)|timed out")   # session-driver's waits giving up
+
+
+def stall(fails, serial, timing):
+    """The label for a boot that hit a deadline: did the serial log advance in the SERIAL_QUIET_S before it?
+    None when the driver gave up for another reason (a boot error, a death) or did not give up."""
+    why = fails[0]["why"] if fails else ("driver killed at the matrix's --boot-timeout" if timing.get("killed") else None)
+    if not why or (fails and not DEADLINE_FAIL.search(why)):
+        return None
+    deadline = timing["started"] + fails[0]["t"] if fails and "t" in fails[0] else timing["ended"]
+    load = round(timing["load"][0], 1)
+    try:
+        silent = round(max(0.0, deadline - serial.stat().st_mtime), 1)
+    except OSError:
+        return {"kind": "stuck", "silent_s": None, "load": load, "why": why, "label": f"stuck: no serial log (load {load})"}
+    if silent < SERIAL_QUIET_S:
+        return {"kind": "slow", "silent_s": silent, "load": load, "why": why,
+                "label": f"slow: serial still advancing at load {load} (last write {silent:.0f} s before the deadline)"}
+    return {"kind": "stuck", "silent_s": silent, "load": load, "why": why, "label": f"stuck: serial silent for {silent:.0f} s (load {load})"}
 
 
 def sha1(path):
@@ -238,6 +261,7 @@ def boot(entry, base, a, helper, work, env, app):
         else:
             cfg["single"]["itpack"] = str(itpack)
     (work / "config.json").write_text(json.dumps(cfg, indent=1))
+    started, killed = time.time(), False
     driver = subprocess.Popen([work / "session-driver", work / "config.json"], stdout=open(work / "driver.jsonl", "w"),
                               stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env)
     try:
@@ -245,6 +269,8 @@ def boot(entry, base, a, helper, work, env, app):
     except subprocess.TimeoutExpired:
         driver.kill()
         driver.wait()
+        killed = True
+    timing = {"started": started, "ended": time.time(), "load": os.getloadavg(), "killed": killed}
     events = []
     for line in (work / "driver.jsonl").read_text(errors="replace").splitlines():
         try:
@@ -259,10 +285,10 @@ def boot(entry, base, a, helper, work, env, app):
             os.kill(pid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             pass
-    return events, driver.returncode, work / board / "serial.log", work / board
+    return events, driver.returncode, work / board / "serial.log", work / board, timing
 
 
-def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
+def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base, timing=None):
     """The check verdicts from the driver's events (each ok/fail with a note), plus the first failure's excerpt."""
     def find(name, **m):
         return [e for e in events if e.get("event") == name and all(e.get(k) == v for k, v in m.items())]
@@ -410,6 +436,8 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base):
     fails = find("fail")
     if fails:
         r["driver_fail"] = fails[0]["why"]
+    if timing and (st := stall(fails, serial, timing)):
+        r["stall"] = st
     shots = {}
     shots_to.mkdir(parents=True, exist_ok=True)
     for e in find("screenshot"):
@@ -476,10 +504,14 @@ def write_md(results, catalog):
         ff = r.get("first_failure") or {}
         fftxt = ""
         if ff:
-            fftxt = f"**{ff['check']}**: {ff.get('why', '')}".replace("|", "\\|").replace("\n", " ")  # a multi-line error (a tool's output) stays in its cell
+            fftxt = f"**{ff['check']}**: {ff.get('why', '')}".replace("|", "\\|").replace("\n", " ")
+            if ff.get("stall"):
+                fftxt += f" (*{ff['stall']}*)"  # a multi-line error (a tool's output) stays in its cell
             if ff.get("excerpt"):
                 fftxt += "<br>" + "<br>".join("`" + l.replace("`", "'").replace("|", "\\|") + "`" for l in ff["excerpt"].splitlines())
-        rows.append(f"| {eid} | {r.get('version', '')} | {ktxt} | {ptxt} | {cell('lit')} | {cell('home')} | {cell('lockdown')} | {cell('activation')} | "
+        ld = r.get("load") or {}
+        ltxt = " → ".join(f"{v[0]:.1f}" for v in (ld.get("start"), ld.get("end")) if v) or "-"
+        rows.append(f"| {eid} | {r.get('version', '')} | {ltxt} | {ktxt} | {ptxt} | {cell('lit')} | {cell('home')} | {cell('lockdown')} | {cell('activation')} | "
                     f"{cell('afc')} | {cell('install')} | {cell('package')} | {cell('helpers')} | {cell('gl')} | {cell('persist')} | {cell('shutdown')} | "
                     f"{r.get('restore', {}).get('ok', '-') if r.get('restore') else '-'} | {fftxt} |")
     RESULTS_MD.write_text(f"""# Matrix results
@@ -495,10 +527,12 @@ Legacy Store (`test_app` in the JSON). GL records the render
 path (hardware GL vs a software-composited fallback), any refusals, and the frame-reference verdict -- it no longer
 skips. Shutdown judges boot 2's clean power-off as well as boot 1. Helpers: what the prepare baked answers at boot (the
 agent names the frontmost app; on the iPad it_ethlink and it_prefs report on the console), per the lock's seed and fit
-checks; a loader baked with a package that never reports fails Package. Last write {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.
+checks; a loader baked with a package that never reports fails Package. Load is the host's 1-minute load average
+(uptime) at the row's start and end (all three averages in the JSON). A boot that hits a deadline stays a FAIL, labelled
+for triage: "slow" if the serial log was still being written in the last {SERIAL_QUIET_S} s before the deadline, else "stuck". Last write {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.
 
-| Entry | iOS | Keys | Prepare | Lit | Home | Lockdown | Activation | AFC | Install | Package | Helpers | GL | Persist | Shutdown | Restore | First failure |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Entry | iOS | Load | Keys | Prepare | Lit | Home | Lockdown | Activation | AFC | Install | Package | Helpers | GL | Persist | Shutdown | Restore | First failure |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 {chr(10).join(rows)}
 
 ## Triage
@@ -595,6 +629,7 @@ def main():
             continue
         log(f"== {eid} (iOS {entry['version']}, {entry['status']})")
         rec = {"version": entry["version"], "board": entry["board"], "status": entry["status"], "when": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+               "load": {"start": [round(x, 2) for x in os.getloadavg()]},   # uptime's 1/5/15-minute averages
                **({"prerelease": entry["prerelease"]} if entry.get("prerelease") else {}),
                "tools": {"firmwarekit": str(a.firmwarekit), "dylib": str(a.dylib), "guest_tools": str(a.guest_tools)}}
         work = a.scratch / eid
@@ -629,14 +664,17 @@ def main():
                 os.symlink(tools / n, drive / n)
             rec["test_app"] = test_app(entry, a)
             log(f"  test app: {rec['test_app']['bundle_id']} (min OS {rec['test_app']['min_os']}, {rec['test_app']['source']})")
-            events, rc, serial, shots_from = boot(entry, base, a, helper, drive, env, rec["test_app"])
-            rec["checks"], rec["screenshots"], first = judge(entry, events, rc, serial, shots_from, shots, base_before, base)
+            events, rc, serial, shots_from, timing = boot(entry, base, a, helper, drive, env, rec["test_app"])
+            rec["checks"], rec["screenshots"], first = judge(entry, events, rc, serial, shots_from, shots, base_before, base, timing)
             rec["events"] = str(shots / "driver.jsonl")
             shutil.copyfile(drive / "driver.jsonl", shots / "driver.jsonl")
             if first:
                 c = rec["checks"][first]
                 rec["first_failure"] = {"check": first, "why": rec["checks"].get("driver_fail") or c.get("error") or c.get("reason") or json.dumps(c),
                                         "excerpt": excerpt(serial)}
+                if st := rec["checks"].get("stall"):
+                    rec["first_failure"]["stall"] = st["label"]
+                    log(f"  {st['label']}")
             for c in CHECKS:
                 if c in rec["checks"]:
                     v = rec["checks"][c]
@@ -649,6 +687,7 @@ def main():
             rec.setdefault("first_failure", {"check": "runner", "why": repr(e)})
             log(f"  runner error: {e!r}")
         finally:
+            rec["load"]["end"] = [round(x, 2) for x in os.getloadavg()]
             results[eid] = rec
             RESULTS_JSON.write_text(json.dumps(results, indent=1) + "\n")
             write_md(results, catalog)
