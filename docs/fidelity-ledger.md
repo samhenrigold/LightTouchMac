@@ -258,6 +258,52 @@ From the consolidation survey (`docs/sweep/emulator.md` (b)), with the iOS 5 spi
 11. `ipod2g_device.py` major≥3 derivations (manifest logic, acceptable).
 12. 115 `IT_*` env names in hw/ (one on the iPad).
 
+## Fit checks
+
+Every guest-side piece the pipeline injects or edits has to prove it fits the firmware it goes into, read off that
+firmware at prepare time (symbols, strings, structure; no per-build tables), or, where only a boot can tell, through the
+matrix at boot. "Could not tell" never counts as fits. FirmwareKit `FitCheck` (`Packages/FirmwareKit/Sources/FirmwareKit/
+FitCheck/`) does it; every verdict goes into the lock's `fit` list; a required piece that does not fit fails the prepare,
+an optional one is a warning event and is left out where it can be. `firmwarekit create --stop-after volumes` runs the
+real prepare to the end of the bake and writes `fit.json` (the offline survey of a build, no device);
+`firmwarekit fit --root MOUNTED_VOLUME MACHO...` checks one binary. Before = the class the detection had before
+2026-09-29: A affirmative proof, B absence treated as fine, C assumed by build number or family. The tests are
+FirmwareKit's `FitCheckTests` unless named; each fails with its check removed (the commits record the runs).
+
+| Piece | Before | How fit is proven | Prepare or boot | Misfit | Test that fails when the check is removed |
+|---|---|---|---|---|---|
+| `it_boot` loader (every board) | C | `FitCheck.loads`: a slice the board's CPU runs; every dyld-required load command one of the firmware's own executables (launchd, SpringBoard, lockdownd) carries, so its dyld takes it (3.0 and 2.x ship none with LC_DYLD_INFO_ONLY); every non-weak linked image on disk or in the shared cache; every non-weak import exported by its image | prepare (seed) + boot: matrix `package` (the loader's report; a seed with jobs or hooks that is never offered anything fails, a stub seed is a skip) | fails | `seedChecksTheLoader`; `test-matrix-judge.py` "package: a baked package never offered fails" |
+| Seed family payloads (`mkpkg.py` FAMILIES; the family is still chosen by build glob) | C | `loads` for every package binary and hook, a hook in the program whose job inserts it | prepare | fails | `seedChecksTheLoader`, `importsAndHosts` |
+| Seeded hooks whose target is missing | B | dropped only as a recorded misfit, unless the bake left the target out on purpose (AppSync off, `it_msmquiet` not fitting) | prepare | warning | `seedRecordsDroppedHooks`, `k48BakeLeavesOutWhatDoesNotFit` |
+| `it_agent` (iPad: seed package; iPod: bake) | C | `loads` | prepare + boot: matrix `helpers.agent` (some home event names the frontmost app through it) | iPad fails; iPod see next row | `importsAndHosts`, `iPodToolsOnlyWhereTheyLoad`; judge "a silent agent fails" |
+| iPod baked tools (`it_agent`, `it_typein` in SpringBoard, `sblaunch`, `sbdlicon`, `it_prefs`) | C (installed wherever the shared cache was) | `loads`, all or none (`N72Board.guestToolsFit`) | prepare | left out, warning | `iPodToolsOnlyWhereTheyLoad` |
+| iPad baked helpers (`it_pbd`, `it_ethlink`, `it_prefs`, `it_seal`) | C | `loads` | prepare (`it_seal` also: the seal boot's halting line) | fails | `k48BakeChecksItsHelpers` |
+| `it_msmquiet` | B | the stock storage_mounter job's program names `UNSUPPORTED_FAILURE` or `UNSUPPORTED_FAILURE_BODY` and imports `CFUserNotificationDisplayNotice` or `CFUserNotificationCreate`; the dylib loads in it | prepare | left out (dylib, job edit, hook), warning | `msmQuietFitsWhereTheMounterRaisesTheNotice`, `k48BakeLeavesOutWhatDoesNotFit` |
+| `it_ethlink` and the en1 IOPathMatch pin (`usb_net`) | C | the decrypted kernelcache has every class of the pinned path (AppleUSBEthernetDevice among them) and names LinkStatus | prepare + boot: `helpers.ethlink` ("watching AppleUSBEthernetDevice" on the iPad console) | warning | `usbEthernetNeedsThePinnedClasses`, `k48BakeLeavesOutWhatDoesNotFit`; judge "it_ethlink never watching fails" |
+| `it_prefs` keys | B (skipped silently on the guest) | each key's reader names it, by it_prefs' own rule | prepare + boot: `helpers.prefs` (iPad console) | warning | `prefsKeysNamedByTheirReaders`, `k48BakeLeavesOutWhatDoesNotFit`, `iPodToolsOnlyWhereTheyLoad` |
+| `SBDidShowReorderText` bake (2.x/3.0) | B ("left alone") | SpringBoard names the key | prepare | warning, not baked | `prefsKeysNamedByTheirReaders`, `iPodToolsOnlyWhereTheyLoad` |
+| SpringBoard environment switches (iPad `CA_ENABLE_OGL`/`MBX2D_PAGE_FLIP`/`GLI_ACCELERATED`; iPod `CA_`/`LK_` pairs; 1.x `LK_`) | C | each switch, or its CoreAnimation/LayerKit pair, named by the shared cache, a framework binary, SpringBoard, or the binary injected with it (only the GL shim reads `GLI_ACCELERATED`) | prepare | warning | `springBoardSwitchesHaveReaders`, the 9B206 / 7E18 bake tests, `N45Tests.frontEndAndBakeMatchPython` |
+| Web proxy PAC (Wi-Fi Proxies keys) | C | `ProxyAutoConfigEnable`, `ProxyAutoConfigURLString`, `ExceptionsList`, `FTPPassive` named by the firmware | prepare | warning | `springBoardSwitchesHaveReaders`, the 9B206 / 7E18 bake tests |
+| AMFI boot-args | C | the kernel names `amfi_allow_any_signature` (required) and `cs_enforcement_disable` | prepare (boot-file step) | fails / warning | `bootArgsReadByTheKernel`, `bootFilesRecordTheBootArgs` |
+| Other iPad boot-args (`serial`, `debug`, `enable-hsic`) and DeviceTree `hsic-enabled` | C | read or inert per the kernel, recorded | prepare | recorded | `bootArgsReadByTheKernel`, `bootFilesRecordTheBootArgs` |
+| iPad kernelcache for fsboot | C (constant path) | the one kernelcache path the decrypted iBoot names is the one installed | prepare | fails | `iPadKernelcacheWhereIBootLoadsIt` |
+| 1.x LaunchDaemons keep-list | C | each kept job is among the firmware's | prepare | warning | `n45SurveyRecordsTheKeptJobs` |
+| iPod kernelcache path | A | read out of the decrypted iBoot (exactly one) | prepare | fails | (unchanged) |
+| dyld `enable-dylibs-to-override-cache` | A | dyld names the switch; fails closed | prepare | fails | (GL work, unchanged) |
+| `MISValidateSignature` cache patch | A | located by symbol, Thumb prologue byte-checked before any write | prepare | fails | `SharedCacheTests` (unchanged) |
+| Stock job edits (SpringBoard, storage_mounter, installd, BTServer) | A | the job exists under its label | prepare | fails | (unchanged) |
+| `it_seal`, `it_keybag` | A | the prepare's own boots require their lines (`it_seal: halting`, the keybag done line) | boot inside the prepare | fails | (unchanged) |
+
+Survey of the catalog (2026-09-29, `create --stop-after volumes` on every cached IPSW, against the same run of the
+pre-fit-check pipeline): no build that got through the volumes step before fails now. What the checks found:
+5.x (9A334, 9A405, 9A5288d, 9B176, 9B206): MobileStorageMounter names neither notice key, so `it_msmquiet` had nothing
+to hide and is now left out; 2.x and 3.0 iPod kernels (5F138, 5G77a, 5H11a, 7A341) have no `cs_enforcement_disable`
+boot-arg (only the `_cs_enforcement_disable` global), so the arg is inert there (their guest code runs on
+`amfi_allow_any_signature` alone); the iPod helpers do not load on 2.x/3.0 (as before, now proven). Not covered yet:
+AppSync's dylib and launcher (a `loads` check in installd / the installation proxy needs Sam's approval), the GL engines
+and gld plugin (the GL work), activation (Sam's), the iPod's Sounds defaults (keys not proven), and the Python imgtools
+mirror (unchanged).
+
 ## Ranked: what to make faithful, and what it buys
 
 | # | Item | Class today | Cost | What it removes |
