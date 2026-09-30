@@ -72,8 +72,10 @@ public enum Recipe {
         func file(_ n: String) -> URL { o.out.appendingPathComponent(n) }
         func decFile(_ n: String) -> URL { dec.appendingPathComponent(n) }
         /// stderr; a "warning: " line is also a warning event.
+        /// Every warning event this prepare emitted.
+        var warnings: [String] = []
         func log(_ s: String) {
-            if s.hasPrefix("warning: ") { emit(.warning(String(s.dropFirst(9)))) }
+            if s.hasPrefix("warning: ") { warnings.append(String(s.dropFirst(9))); emit(.warning(String(s.dropFirst(9)))) }
             FileHandle.standardError.write(Data((s + "\n").utf8))
         }
         func warn(_ s: String) { log("warning: " + s) }
@@ -135,6 +137,15 @@ public enum Recipe {
 
         step()   // volumes (+ the shared bake, activation, guest package)
         try board.volumes(c)
+        if o.stopAfterVolumes {
+            let survey: [String: Any] = ["entry": e.id, "build": e.build, "board": e.board, "fit": c.fit.object,
+                                         "guest_package": c.guestPackage?.object ?? NSNull(), "warnings": c.warnings]
+            try? fm.removeItem(at: c.work)
+            try Preparer.lockData(survey).write(to: c.file("fit.json"))
+            progress.finish()
+            emit(.done(lock: "fit.json"))
+            return
+        }
 
         step()   // the store, and its listing before any boot writes into it (the lock's built_listing_sha256)
         try board.store(c)
