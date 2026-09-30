@@ -35,22 +35,29 @@ described here.
 | **P** | Needs a guest patch, shim, injected component, boot-arg or pipeline edit of the firmware. No real device has it. |
 | **S** | Stub. Fixed values, writes ignored, or a RAM window where a device should be. |
 
-A row with two classes (R/S) is a register-level model whose data is synthetic; it is counted under
-the lower class in the summary.
+A row with more than one class (R/S, R (+P gate), S + P, R (SDIO) / H (firmware)) is counted under its lowest class
+in the summary, in the order R > H > P > S; qualifiers such as "(unverified)", "(partial)", "(inert)" or
+"(absent)" do not change the class.
 
 ## Summary
 
 | Board | R | H | P | S | rows |
 |---|---|---|---|---|---|
-| K48 iPad 1 | 26 | 8 | 6 | 20 | 60 |
-| N72 iPod touch 2G (and the N45 1G parts it shares or adds) | 21 | 7 | 8 | 23 | 59 |
+| K48 iPad 1 | 25 | 8 | 7 | 20 | 60 |
+| N72 iPod touch 2G (and the N45 1G parts it shares or adds) | 20 | 7 | 8 | 24 | 59 |
 | Guest side (both boards: boot-args, injected components, image edits, synthesised state) | 0 | 0 | 43 | 0 | 43 |
+
+Counted from the rows on 2026-09-30. The two board lines were one off before: K48 #47 (`R (+P gate)`) and N72 #47
+(`R (custom) / S (GID, UID) / P (preserve)`) had been counted as R. Guest side: the 34 rows of its three tables (the
+historical `nand-enable-reformat` row not counted) plus the 9 per-build assumptions still live (items 1, 4 and 5
+retired).
 
 The distance to "boots any iOS unchanged" is the H and P rows. The two that decided it were the IOP
 (every NAND and SDIO byte went through a C reimplementation of one specific firmware's mailbox ABI;
 since 2026-09-29 Apple's firmware runs on a modelled second core, the default) and the GPU (there is
-none; GL exists only because the guest's GLEngine is replaced by a shim), which is now the first stop
-of iOS 5 (5.1.1 reaches SpringBoard on the IOP core and never draws). The
+none; GL exists only because the guest's GLEngine is replaced by a shim), which was the next stop
+of iOS 5 (5.1.1 reached SpringBoard on the IOP core and never drew until `ios5-gl` taught the shim 5.x's GL
+stack; GL is still a guest shim, P). The
 iOS 5 spike hit exactly those, in that order (`docs/ipad1/ios5.md`).
 
 ## K48 (iPad 1, S5L8930 "A4")
