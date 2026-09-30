@@ -333,15 +333,17 @@ struct SingleConfig: Decodable {
     }
 
     /// The Apple ID page is up: its two white buttons ("Sign In with an Apple ID", "Create a Free Apple ID") fill
-    /// APPLE_ID's two columns. Terms, Diagnostics and Thank You leave at least one of them dark.
-    static let appleID: [Box] = [(795, 170, 830, 600), (860, 170, 895, 600)]
+    /// the two button columns and the gap between them is dark. Set Up iPad's white list fills the gap too (0.98 white
+    /// against the Apple ID page's 0); Terms, Diagnostics and Thank You leave a button column dark.
+    static let appleID: [Box] = [(795, 170, 830, 600), (860, 170, 895, 600)], appleIDGap: Box = (840, 170, 852, 600)
+    static func whiteFraction(_ d: Device, _ b: Box) -> Double {
+        guard let px = region(d, b) else { return 0 }
+        var white = 0, n = 0
+        for i in stride(from: 0, to: px.count, by: 16) { n += 1; if px[i] > 225 && px[i + 1] > 225 && px[i + 2] > 225 { white += 1 } }
+        return n == 0 ? 0 : Double(white) / Double(n)
+    }
     static func appleIDUp(_ d: Device) -> Bool {
-        appleID.allSatisfy { b in
-            guard let px = region(d, b) else { return false }
-            var white = 0, n = 0
-            for i in stride(from: 0, to: px.count, by: 16) { n += 1; if px[i] > 225 && px[i + 1] > 225 && px[i + 2] > 225 { white += 1 } }
-            return white * 100 > 85 * n
-        }
+        appleID.allSatisfy { whiteFraction(d, $0) > 0.85 } && whiteFraction(d, appleIDGap) < 0.2
     }
 
     /// The box once it holds still for a second (a page still sliding in under load).
@@ -365,20 +367,23 @@ struct SingleConfig: Decodable {
     }
 
     /// From the first Setup page (the driver has already slid "slide to set up"): (walked, detail).
-    /// Taps until `answered` (polled every second) or `budget` runs out, tapping again every `every` seconds while
-    /// nothing answered. A lost tap (a page still sliding in, a frame the host was too loaded to deliver) is retried
-    /// instead of failing the walk; a tap that did land is not repeated, because the page it answered has changed.
-    static func tapUntil(budget: Double, every: Double, tap: () async -> Void, answered: () -> Bool) async -> Bool {
+    /// Taps until `answered` holds on `hold` consecutive one-second polls, or `budget` runs out, tapping again every
+    /// `every` seconds while nothing answered. A lost tap (a page still sliding in, a frame the host was too loaded to
+    /// deliver) is retried instead of failing the walk; a pressed button's flash (the title bar changes for a moment,
+    /// the page stays: 9B176's Set Up Next) is not an answer; a tap that did land is not repeated.
+    static func tapUntil(budget: Double, every: Double, hold: Int = 3, tap: () async -> Void, answered: () -> Bool) async -> Bool {
         let t0 = Date()
+        var streak = 0
         while Date().timeIntervalSince(t0) < budget {
             await tap()
             let t1 = Date()
-            while Date().timeIntervalSince(t1) < every, Date().timeIntervalSince(t0) < budget {
-                if answered() { return true }
+            while Date().timeIntervalSince(t1) < every || streak > 0, Date().timeIntervalSince(t0) < budget {
+                streak = answered() ? streak + 1 : 0
+                if streak >= hold { return true }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
-        return answered()
+        return false
     }
 
     /// tapUntil's contract, with a fake page: a lost tap is retried, a landed tap is not repeated, a page that never
@@ -395,6 +400,10 @@ struct SingleConfig: Decodable {
         taps = 0
         r = await tapUntil(budget: 5, every: 2, tap: { taps += 1 }, answered: { false })
         expect("a page that never answers fails after the budget, one tap per interval", !r && taps == 3)
+        taps = 0
+        var polls = 0
+        r = await tapUntil(budget: 12, every: 3, tap: { taps += 1; polls = 0 }, answered: { polls += 1; return taps >= 2 || polls == 1 })
+        expect("a one-poll flash is not an answer: tapped again", r && taps == 2)
         return ok
     }
 
