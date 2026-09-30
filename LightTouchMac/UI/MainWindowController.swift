@@ -116,9 +116,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.setContentSize(Self.contentSize(for: profile))
         window.contentMinSize = NSSize(width: 360, height: 380)
-        WindowRestorationPolicy.configure(window)
-        window.center()
+        // The frame is remembered (HIG: reopen where the user left it); a saved size is the user's, not the device's.
+        let restored = WindowRestorationPolicy.configure(window, frameAutosaveName: "Main")
+        if !restored { window.center() }
         super.init(window: window)
+        sizedToDevice = !restored
         library.delegate = self
         library.onAdd = { [weak self] in self?.addDevice(nil) }
         placeholder.onAction = { [weak self] action in
@@ -189,7 +191,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     override func windowDidLoad() {
         super.windowDidLoad()
-        window?.center()
         apply(Self.savedZoom())   // restore the zoom the user left it at
     }
 

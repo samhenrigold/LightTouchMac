@@ -12,11 +12,16 @@ enum WindowRestorationPolicy {
         defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
     }
 
-    static func configure(_ window: NSWindow) {
+    /// No restoration. `frameAutosaveName` keeps just the window's frame in the
+    /// defaults (not its contents); returns true when a saved frame was applied.
+    @discardableResult
+    static func configure(_ window: NSWindow, frameAutosaveName: String = "") -> Bool {
         window.isRestorable = false
         window.restorationClass = nil
         window.disableSnapshotRestoration()
-        window.setFrameAutosaveName("")
+        let restored = !frameAutosaveName.isEmpty && window.setFrameUsingName(frameAutosaveName)
+        window.setFrameAutosaveName(frameAutosaveName)
+        return restored
     }
 }
 

@@ -35,6 +35,17 @@ nonisolated final class UntouchedCoder: NSCoder {
   window.isRestorable = true
   WindowRestorationPolicy.configure(window)
   precondition(!window.isRestorable && window.restorationClass == nil && window.frameAutosaveName.isEmpty)
+  // A named window keeps only its frame: the first configure has nothing to apply, a
+  // later window with the same name opens where the first was left (HIG p.23, W6).
+  let name = "ltm-frame-test-" + UUID().uuidString
+  defer { UserDefaults.standard.removeObject(forKey: "NSWindow Frame " + name) }
+  let first = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 240), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+  precondition(!WindowRestorationPolicy.configure(first, frameAutosaveName: name) && first.frameAutosaveName == name && !first.isRestorable)
+  let moved = NSRect(x: 123, y: 77, width: 500, height: 410)
+  first.setFrame(moved, display: false)
+  first.saveFrame(usingName: name)
+  let second = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 240), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+  precondition(WindowRestorationPolicy.configure(second, frameAutosaveName: name) && second.frame.size == moved.size, "saved frame not applied: \(second.frame)")
   let coder = UntouchedCoder()
   var completions = 0
   let accepted = app.restoreWindow(withIdentifier: .init("old-crashed-window"), state: coder) { restored, error in
@@ -46,7 +57,7 @@ nonisolated final class UntouchedCoder: NSCoder {
   app.encodeRestorableState(with: coder)
   app.encodeRestorableState(with: coder, backgroundQueue: OperationQueue())
   precondition(coder.accesses == 0, "old window archives must never be inspected")
-  print("PASS: no window restoration/encoding, completed restoration callbacks, per-window opt-out, process-only defaults and preserved preferences")
+  print("PASS: no window restoration/encoding, completed restoration callbacks, per-window opt-out, remembered frames only by name, process-only defaults and preserved preferences")
  }
 }
 '''
