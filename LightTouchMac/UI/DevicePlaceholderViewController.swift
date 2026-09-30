@@ -15,7 +15,7 @@ final class DevicePlaceholderViewController: NSViewController {
     private let progress = NSProgressIndicator()
     private let step = NSTextField(wrappingLabelWithString: "")
     private let reason = NSTextField(wrappingLabelWithString: "")
-    private let showLog = NSButton(title: "Show Log", target: nil, action: nil)
+    private let showLog = NSButton(title: "Device Logs", target: nil, action: nil)
     private let primary = NSButton(title: "", target: nil, action: nil)
     private let space = NSTextField(wrappingLabelWithString: "")
     /// The build's catalog note (untested, experimental, where a beta came from), in a popover.
@@ -33,17 +33,20 @@ final class DevicePlaceholderViewController: NSViewController {
         art.setAccessibilityElement(false)
         art.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         art.setContentHuggingPriority(.defaultLow, for: .vertical)
-        model.font = .systemFont(ofSize: NSFont.systemFontSize * 1.7, weight: .semibold)
+        // One column, three tiers: what it is (name, then version), where it stands (state, then its detail),
+        // what to do (one button row, the default button last). The same slots in every state.
+        model.font = .systemFont(ofSize: NSFont.preferredFont(forTextStyle: .title1).pointSize, weight: .semibold)
+        version.font = .preferredFont(forTextStyle: .title3)
         version.textColor = .secondaryLabelColor
         version.isSelectable = true
         for label in [status, step, reason, space] {
             label.alignment = .center
-            label.preferredMaxLayoutWidth = 320
+            label.preferredMaxLayoutWidth = 340
         }
-        status.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+        status.font = .preferredFont(forTextStyle: .headline)
         reason.textColor = .secondaryLabelColor
         space.textColor = .secondaryLabelColor
-        space.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        space.font = .preferredFont(forTextStyle: .footnote)
         info.isBordered = false
         info.contentTintColor = .secondaryLabelColor
         info.target = self
@@ -54,25 +57,28 @@ final class DevicePlaceholderViewController: NSViewController {
         progress.maxValue = 1
         progress.setAccessibilityLabel("Progress")
         step.textColor = .secondaryLabelColor
-        step.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        showLog.bezelStyle = .rounded
-        showLog.target = self
+        step.font = .monospacedDigitSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .subheadline).pointSize, weight: .regular)
+        for button in [showLog, primary] {
+            button.bezelStyle = .push
+            button.controlSize = .large
+            button.target = self
+        }
         showLog.action = #selector(showLogClicked(_:))
-        primary.bezelStyle = .rounded
-        primary.controlSize = .large
-        primary.keyEquivalent = "\r"
-        primary.target = self
         primary.action = #selector(primaryClicked(_:))
 
         let versionLine = NSStackView(views: [version, info])
         versionLine.spacing = 4
-        let stack = NSStackView(views: [art, model, versionLine, status, progress, step, reason, showLog, primary, space])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 8
-        stack.setCustomSpacing(20, after: art)
-        stack.setCustomSpacing(16, after: showLog)
-        stack.setCustomSpacing(16, after: primary)
+        let identity = column([model, versionLine], spacing: 2)
+        let state = column([status, progress, step, reason], spacing: 6)
+        let actions = NSStackView(views: [showLog, primary])
+        actions.spacing = 12
+        // The row keeps its height with no button (running), so the lockup doesn't move between states.
+        actions.heightAnchor.constraint(greaterThanOrEqualTo: primary.heightAnchor).isActive = true
+        actions.detachesHiddenViews = true
+        let stack = column([art, identity, state, actions, space], spacing: 20)
+        stack.setCustomSpacing(28, after: art)
+        stack.setCustomSpacing(12, after: actions)
+        stack.detachesHiddenViews = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
         let guide = view.safeAreaLayoutGuide
@@ -83,8 +89,18 @@ final class DevicePlaceholderViewController: NSViewController {
             stack.leadingAnchor.constraint(greaterThanOrEqualTo: guide.leadingAnchor, constant: 20),
             art.heightAnchor.constraint(lessThanOrEqualToConstant: 320),
             art.heightAnchor.constraint(lessThanOrEqualTo: guide.heightAnchor, multiplier: 0.45),
-            progress.widthAnchor.constraint(equalToConstant: 240),
+            progress.widthAnchor.constraint(equalToConstant: 260),
+            // The state tier holds a line, a bar and its line: the buttons stay put (a two-line reason adds one line).
+            state.heightAnchor.constraint(greaterThanOrEqualToConstant: 52),
         ])
+    }
+
+    private func column(_ views: [NSView], spacing: CGFloat) -> NSStackView {
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = spacing
+        return stack
     }
 
     func update(_ row: DeviceRow, canDownload: Bool) {
@@ -105,9 +121,8 @@ final class DevicePlaceholderViewController: NSViewController {
         showLog.isHidden = true
         status.isHidden = false
         switch row.state {
-        // The button says it: Prepare, or Download & Prepare.
         case .notDownloaded, .downloaded:
-            status.isHidden = true
+            status.stringValue = row.stateDescription
             if !canDownload, let why = FirmwareJobs.shared.unavailableReason { reason.stringValue = why; reason.isHidden = false }
         case .downloading:
             status.stringValue = "Downloading…"
@@ -129,6 +144,8 @@ final class DevicePlaceholderViewController: NSViewController {
 
         if let action = row.primaryAction, let title = row.primaryTitle {
             primary.title = title
+            // Return does the next thing; it never cancels a download (Escape does).
+            primary.keyEquivalent = action == .cancel ? "\u{1b}" : "\r"
             primary.isEnabled = row.allows(action, canDownload: canDownload)
             primary.isHidden = false
             primary.setAccessibilityLabel("\(title) \(model.stringValue) iOS \(entry.version)")

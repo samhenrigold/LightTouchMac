@@ -41,10 +41,12 @@ The same state has the same words on every surface (sidebar accessory, placehold
 
 ### Device (sidebar row: `DeviceRow.stateDescription`; placeholder: `DevicePlaceholderViewController`)
 
+The placeholder is one centred column in three tiers, the same slots in every state: the device's name (Title 1, semibold) over the version (Title 3, secondary, ⓘ beside it); the state (Headline) over its detail (the reason, or the bar and its line); one row of large buttons, the default button last, Device Logs to its left on an error. Return presses the default button; on Cancel it's Escape.
+
 | State | Words | Notes |
 |---|---|---|
-| notDownloaded | Not downloaded (, 580 MB) | row: a tertiary download glyph (`arrow.down.circle`), the words and size in its tooltip and VoiceOver |
-| downloaded | Downloaded | VoiceOver only; the row shows nothing (the usual state) |
+| notDownloaded | Not downloaded (, 580 MB) | row: a tertiary download glyph (`arrow.down.circle`), the words and size in its tooltip and VoiceOver; placeholder: the words and size as its state line |
+| downloaded | Downloaded | VoiceOver and the placeholder's state line; the row shows nothing (the usual state) |
 | downloading | Downloading, 43% / Downloading… (row: ring and “43%”) | placeholder: one line under the bar, “43% · About 1 min remaining”; a build that also fetches its keybag sibling says “2 IPSWs” in the bar’s tooltip |
 | preparing | Preparing, 48% / Preparing… (row: ring and “48%”) | placeholder: the same one line; the step and the preparer’s words are the bar’s tooltip |
 | ready | Ready | |
