@@ -39,10 +39,10 @@ with tempfile.TemporaryDirectory(prefix='ltm-logs-') as tmp:
   precondition(text.string=="replacement\n","atomic log rotation must reopen the file")
   let controls=content.subviews.compactMap{$0 as? NSStackView}.first!
   let pause=controls.arrangedSubviews.compactMap{$0 as? NSButton}.first{$0.title=="Pause updates"}!
-  pause.state = .on
+  pause.performClick(nil)
   try Data("paused\n".utf8).write(to:file)
   try await Task.sleep(for:.milliseconds(1200));precondition(text.string=="replacement\n")
-  pause.state = .off
+  pause.performClick(nil)
   controller.close()
   try await Task.sleep(for:.milliseconds(1200));precondition(text.string=="replacement\n")
   controller.showWindow(nil)
