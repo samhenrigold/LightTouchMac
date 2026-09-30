@@ -81,7 +81,7 @@ nonisolated func logEvent(_ format: String, _ arguments: CVarArg...) {}
         let deadline = Date().addingTimeInterval(10)
         while ready == nil, Date() < deadline {
             ready = try children(scratch).map { $0.appendingPathComponent("LightTouchMac-diagnostics/ready") }
-                .first { exists($0) }
+                .first { exists($0) && !((try? text($0))?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }   // the file and its pid: the archiver writes after creating it
             if ready == nil { try await Task.sleep(for: .milliseconds(10)) }
         }
         guard let ready else { cancelled.cancel(); fatalError("archiver did not start") }
