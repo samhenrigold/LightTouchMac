@@ -36,6 +36,7 @@ final class DeviceModelView: NSView {
   private var rotation = 0
   private var screenOff = false
   private var shakeStarted: CFTimeInterval?
+  private var trickStarted: CFTimeInterval?
 
   @available(macOS 15, *)
   init(url: URL, profile: DeviceProfile) async throws {
@@ -115,6 +116,18 @@ final class DeviceModelView: NSView {
             finish.metallic = .init(floatLiteral: 0)
             finish.roughness = .init(floatLiteral: 0.5)
           }
+          // N45's graphite front frame ships as near-black (0.03 linear) metal, which reflects almost
+          // nothing; Apple's shots show a lighter brushed anodised rim. It and N45's cover glass take
+          // their gradient and highlight from N45Rim (below); the glass is a blue-black with a sheen.
+          if name == "frameDark" {
+            finish.baseColor = .init(tint: NSColor(srgbRed: 0.72, green: 0.75, blue: 0.78, alpha: 1))
+            finish.metallic = .init(floatLiteral: 0.7)
+            finish.roughness = .init(floatLiteral: 0.36)
+          }
+          if profile == .iPodTouch1G && (name == "glass" || name.contains("inactive_LCD_perimeter")) {
+            finish.baseColor = .init(tint: NSColor(srgbRed: 0.07, green: 0.08, blue: 0.1, alpha: 1))
+            finish.specular = .init(floatLiteral: 0.5)
+          }
           if name.contains("Concave") {
             finish.specular = .init(floatLiteral: 0.5)
             finish.roughness = .init(floatLiteral: 0.18)
@@ -133,6 +146,17 @@ final class DeviceModelView: NSView {
     homeLight.inheritsRotation = true
     homeLighting.components.set(homeLight)
     home.components.set(ImageBasedLightReceiverComponent(imageBasedLight: homeLighting))
+    if profile == .iPodTouch1G {
+      // World-fixed like a studio light: the rim's gradient stays upper-left as the device turns.
+      let rimLighting = Entity()
+      anchor.addChild(rimLighting)
+      rimLighting.components.set(ImageBasedLightComponent(
+        source: .single(try await EnvironmentResource(named: "N45Rim", in: .main)), intensityExponent: 2))
+      for name in ["Front_frame___broad_graphite_bevel", "Cover_glass___opaque_masked_surround",
+                   "Display___inactive_optical_border", "Ambient_proximity_sensor___1"] {
+        loaded.findEntity(named: name)?.components.set(ImageBasedLightReceiverComponent(imageBasedLight: rimLighting))
+      }
+    }
     wantsLayer = true
     layer?.insertSublayer(chassisShadow, at: 0)
     chassisShadow.shadowColor = NSColor.black.cgColor
@@ -281,6 +305,9 @@ final class DeviceModelView: NSView {
       sampler.modify { descriptor in
         descriptor.sAddressMode = .clampToEdge
         descriptor.tAddressMode = .clampToEdge
+        // Upscaled LCD pixels stay square, like DisplayView's flat layer; shrunk ones still filter.
+        descriptor.magFilter = .nearest
+        descriptor.minFilter = .linear
       }
       screenMaterial.color = .init(tint: .white, texture: .init(screenTexture, sampler: sampler))
     } else {
@@ -385,6 +412,11 @@ final class DeviceModelView: NSView {
     guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
     shakeStarted = CACurrentMediaTime()
   }
+  /// A 360 double kickflip, launched with the THPS special chime.
+  func specialTrick() {
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+    trickStarted = CACurrentMediaTime()
+  }
   func advanceAnimations() {
     let now = CACurrentMediaTime()
     if let animation = transition {
@@ -416,6 +448,41 @@ final class DeviceModelView: NSView {
         chassis.orientation = simd_quatf(angle: cross * 0.008, axis: [1, 0, 0])
           * simd_quatf(angle: wave * 0.012, axis: [0, 1, 0]) * basePose.rotation
       }
+    }
+    if let start = trickStarted {
+      // Crouch, pop, double kickflip over a 360 shove-it, catch, and stomp the landing.
+      let t = Float(now - start)
+      let height = basePose.scale.y * shellBounds.extents.y
+      var lift: Float = 0, grow: Float = 1, pitch: Float = 0, wobble: Float = 0
+      var flip: Float = 0, spin: Float = 0
+      switch t {
+      case ..<0.15:
+        let crouch = sin(t / 0.15 * .pi / 2)
+        lift = -0.06 * height * crouch
+        pitch = 0.3 * crouch
+      case ..<1:
+        let air = (t - 0.15) / 0.85
+        let back = air - 1
+        lift = 2.2 * height * air * (1 - air)
+        grow = 1 + 0.18 * sin(air * .pi)
+        pitch = 0.3 * (1 - air) * (1 - air)
+        wobble = 0.35 * sin(air * 2 * .pi)
+        flip = (1 + 2.70158 * back * back * back + 1.70158 * back * back) * 4 * .pi
+        spin = (air < 0.5 ? 4 * air * air * air : 1 + 4 * back * back * back) * 2 * .pi
+      case ..<1.25:
+        // Same bounce rhythm as a long settle, damped hard so it's over in 0.25 s.
+        let land = (t - 1) / 0.45
+        let settle = exp(-11 * land)
+        lift = -0.05 * height * settle * cos(3 * .pi * land)
+        pitch = -0.12 * settle * sin(4 * .pi * land)
+      default:
+        trickStarted = nil
+      }
+      chassis.position = [0, lift, 0]
+      chassis.scale = basePose.scale * grow
+      chassis.orientation = simd_quatf(angle: spin, axis: [0, 1, 0])
+        * simd_quatf(angle: -pitch, axis: [1, 0, 0]) * simd_quatf(angle: wobble, axis: [0, 0, 1])
+        * basePose.rotation * simd_quatf(angle: flip, axis: [0, 1, 0])
     }
     // Project the rounded chassis outline; never shadow the rectangular ARView.
     let path = CGMutablePath()

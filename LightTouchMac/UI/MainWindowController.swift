@@ -6,6 +6,7 @@
 // responder chain (the window controller is the window's next responder).
 
 import Cocoa
+import SwiftUI
 import UniformTypeIdentifiers
 
 private extension NSToolbarItem.Identifier {
@@ -25,6 +26,7 @@ private extension NSToolbarItem.Identifier {
     static let zoom         = NSToolbarItem.Identifier("zoom")
     static let installApp   = NSToolbarItem.Identifier("installApp")
     static let searchCatalog = NSToolbarItem.Identifier("searchCatalog")
+    static let addDevice    = NSToolbarItem.Identifier("addDevice")
 }
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate, DeviceLibraryDelegate {
@@ -41,6 +43,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var currentProfile: DeviceProfile
     private let library: DeviceLibraryViewController
     private let placeholder = DevicePlaceholderViewController()
+    /// The detail area with no row selected.
+    private let nothingSelected = ContainerViewController()
     private let detail = ContainerViewController()
     /// The device pane over its console (ConsoleSplit.swift).
     private let console: ConsoleSplitViewController
@@ -117,6 +121,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.center()
         super.init(window: window)
         library.delegate = self
+        library.onAdd = { [weak self] in self?.addDevice(nil) }
         placeholder.onAction = { [weak self] action in
             guard let self, let entry = selectedEntry else { return }
             perform(action, for: entry)
@@ -135,6 +140,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.toolbar = toolbar
         migrateCaptureToolbar(toolbar)
         migrateSidebarToolbar(toolbar)
+        migrateAddDeviceToolbar(toolbar)
         // Out and in. Momentary, because both are commands rather than states
         // to sit in — which state you are in is the menu's job, where the
         // checkmarks live.
@@ -192,7 +198,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     /// Selects the launch device and starts it, as the single-device app did.
     func selectLaunchDevice() {
-        guard let entry = host.launchSelection else { return }
+        guard let entry = host.launchSelection.flatMap({ library.contains($0) ? $0 : nil }) ?? library.entries.first else { return }
         library.select(entry)
         if canPerform(.start, for: entry) { start(entry) }
     }
@@ -239,13 +245,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             session = next
             attachWorkspace()
         }
+        if session == nil { detail.show(entry == nil ? nothingSelected : placeholder) }
         if let entry, session == nil { placeholder.update(host.row(for: entry), canDownload: FirmwareJobs.shared.canDownload) }
         // The console's picker: the same logs as Device Logs, without the rotated
         // copies, the device's serial log first.
         let logs = diagnosticLogs.filter { $0.pathExtension == "log" }
         console.split.sources = logs.filter { $0.lastPathComponent == "serial.log" } + logs.filter { $0.lastPathComponent != "serial.log" }
         if let profile = session?.profile ?? entry?.profile, profile != currentProfile { profileDidChange(to: profile) }
-        window?.title = session?.instance.name
+        window?.title = entry.flatMap(library.customName(for:)) ?? session?.instance.name
             ?? entry.map { host.instance(for: $0)?.name ?? $0.profile?.displayName ?? $0.productType } ?? "Light Touch"
         refreshForState()
     }
@@ -340,7 +347,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func name(_ entry: FirmwareCatalog.Entry) -> String {
-        "\(entry.profile?.displayName ?? entry.productType) iOS \(entry.version)"
+        library.customName(for: entry).map { "“\($0)”" } ?? "\(entry.profile?.displayName ?? entry.productType) iOS \(entry.version)"
     }
 
     private func start(_ entry: FirmwareCatalog.Entry) {
@@ -360,7 +367,25 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func importIPSW(_ sender: Any?) { selectedEntry.map { perform(.importIPSW, for: $0) } }
     @objc func cancelFirmwareJob(_ sender: Any?) { selectedEntry.map { perform(.cancel, for: $0) } }
     @objc func showDeviceInFinder(_ sender: Any?) { selectedEntry.map { perform(.showInFinder, for: $0) } }
-    @objc func deleteDevice(_ sender: Any?) { selectedEntry.map { perform(.delete, for: $0) } }
+    /// Delete Device… for a prepared device (asks, then leaves the sidebar), Remove Device for the rest.
+    @objc func deleteDevice(_ sender: Any?) { selectedEntry.map(library.remove) }
+
+    /// The toolbar's +, the Device menu and the empty sidebar: the catalog in a sheet.
+    @objc func addDevice(_ sender: Any?) {
+        guard let window, window.attachedSheet == nil, let split = contentSplitViewController else { return }
+        let catalog = host.catalog
+        let downloaded = Set(catalog.entries.filter { $0.source.sha1.map { IPSWStore.shared.existing($0) != nil } ?? false }.map(\.id))
+        var sheet: NSViewController?
+        let view = AddDeviceView(catalog: catalog, added: Set(library.entries.map(\.id)), downloaded: downloaded,
+                                 onAdd: { [weak self] ids in
+                                     sheet.map { split.dismiss($0) }
+                                     self?.library.add(ids)
+                                 },
+                                 onCancel: { sheet.map { split.dismiss($0) } })
+        let hosting = NSHostingController(rootView: view)
+        sheet = hosting
+        split.presentAsSheet(hosting)
+    }
 
     private func chooseIPSW(for entry: FirmwareCatalog.Entry) {
         guard let window else { return }
@@ -388,7 +413,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.buttons.first?.hasDestructiveAction = true
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            do { try host.delete(instance) }
+            do { try host.delete(instance); library.removeFromList(entry) }
             catch { NSAlert(error: error).beginSheetModal(for: window) }
         }
     }
@@ -555,6 +580,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                  itemForItemIdentifier id: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         switch id {
+        case .addDevice:
+            return button(id, "Add Device", "plus", #selector(addDevice(_:)), "Add Device")
         case .screenshot:
             return button(id, "Save Screenshot", "square.and.arrow.down", #selector(saveScreenshot(_:)), "Save Screenshot (⌘S)")
         case .recording:
@@ -667,7 +694,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     
     /// Frequent capture actions live beside the device controls, as in WireView.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.toggleSidebar, .sidebarTrackingSeparator, .home, .lock, .rotate, .zoom, .flexibleSpace,
+        [.toggleSidebar, .flexibleSpace, .addDevice, .sidebarTrackingSeparator, .home, .lock, .rotate, .zoom, .flexibleSpace,
          .openScreenshot, .screenshot, .copyScreen, .recording,
          .inspectorTrackingSeparator, .flexibleSpace, .searchCatalog, .toggleInspector]
     }
@@ -685,8 +712,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.files, .home, .lock, .rotate, .motion, .zoom, .screenshot, .recording, .saveScreenshotAs, .openScreenshot, .captureOptions, .liveText, .copyScreen, .fingerDots, .installApp, .searchCatalog,
+        [.addDevice, .files, .home, .lock, .rotate, .motion, .zoom, .screenshot, .recording, .saveScreenshotAs, .openScreenshot, .captureOptions, .liveText, .copyScreen, .fingerDots, .installApp, .searchCatalog,
          .space, .flexibleSpace, .toggleSidebar, .sidebarTrackingSeparator, .inspectorTrackingSeparator, .toggleInspector]
+    }
+
+    /// Add Device arrived after toolbars were saved: once, at the sidebar's trailing edge.
+    private func migrateAddDeviceToolbar(_ toolbar: NSToolbar) {
+        guard !UserDefaults.standard.bool(forKey: "addDeviceToolbarMigrated") else { return }
+        if !toolbar.items.contains(where: { $0.itemIdentifier == .addDevice }),
+           let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == .sidebarTrackingSeparator }) {
+            toolbar.insertItem(withItemIdentifier: .flexibleSpace, at: index)
+            toolbar.insertItem(withItemIdentifier: .addDevice, at: index + 1)
+        }
+        UserDefaults.standard.set(true, forKey: "addDeviceToolbarMigrated")
     }
 
     /// The sidebar arrived after toolbars were saved; give them its toggle and
@@ -861,6 +899,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func setBatteryCharging(_ sender: NSMenuItem) { emulator?.setBattery(charging: Int32(sender.tag)) }
     @objc func toggleHighPowerUSB(_ sender: Any?)       { emulator.map { $0.setHighPowerUSB(!$0.highPowerUSB) } }
     @objc func setCompassHeading(_ sender: NSMenuItem)  { emulator?.setCompassHeading(sender.tag) }
+    @objc func specialTrick(_ sender: Any?) {
+        deviceVC?.screen.specialTrick()
+        // The chime lands on the pop, a beat after the crouch starts.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NSSound(named: "special_trick")?.play() }
+    }
     @objc func toggleDevicePause(_ sender: Any?) {
         guard let emulator else { return }
         if emulator.isPaused { emulator.resume() } else if emulator.isRunning { emulator.pause() }
@@ -1151,6 +1194,7 @@ extension MainWindowController: NSToolbarItemValidation {
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
         case .captureOptions, .files, .motion, .searchCatalog, .toggleSidebar: return true
+        case .addDevice: return window?.attachedSheet == nil
         default: break
         }
         guard let emulator, let deviceVC else {
@@ -1231,6 +1275,7 @@ extension MainWindowController: NSMenuItemValidation {
         }
         // The selected row's commands, and the window's own, work without a device.
         switch menuItem.action {
+        case #selector(addDevice(_:)): return window?.attachedSheet == nil
         case #selector(toggleDeviceRunning(_:)):
             let running = selectedEntry.map { host.row(for: $0).state == .running } ?? false
             menuItem.title = running ? "Stop" : "Start"
@@ -1242,7 +1287,10 @@ extension MainWindowController: NSMenuItemValidation {
             else { menuItem.title = "Cancel Download" }
             return selectedEntry.map { canPerform(.cancel, for: $0) } ?? false
         case #selector(showDeviceInFinder(_:)): return selectedEntry.map { canPerform(.showInFinder, for: $0) } ?? false
-        case #selector(deleteDevice(_:)): return selectedEntry.map { canPerform(.delete, for: $0) } ?? false
+        case #selector(deleteDevice(_:)):
+            let row = selectedEntry.map(library.row(for:))
+            menuItem.title = row?.removeTitle ?? "Delete Device…"
+            return row.map { $0.instanceID != nil ? canPerform(.delete, for: $0.entry) : $0.canRemoveFromSidebar } ?? false
         case #selector(eraseDevice(_:)): return selectedEntry.map { canPerform(.erase, for: $0) } ?? false
         case #selector(toggleCaptureScreenOnly(_:)):
             menuItem.state = captureMode == 1 ? .on : .off

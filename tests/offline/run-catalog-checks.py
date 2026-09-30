@@ -72,6 +72,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
              ipaID:id,iconURL:nil,downloadURL:URL(string:"https://example.invalid/app.ipa")!,appURL:nil)
  }
  var pending: [Job] = [], visibleApps: [App] = [], catalogResults: [CatalogApp] = []
+ var catalogFetched: [CatalogApp] { get { catalogResults } set { catalogResults = newValue } }
+ let filterButton = NSButton()
  func numberOfRows(in tableView: NSTableView) -> Int { rowIdentities.count }
 ''' + rows + modes + '''
  static func run() {
@@ -124,6 +126,6 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
  }
 }
 ''')
-            swift('ui',common+['LightTouchMac/UI/CatalogDetailsViewController.swift',str(fixture),'tests/fixtures/catalog-ui.swift'],[port])
+            swift('ui',common+[str(fixture),'tests/fixtures/catalog-ui.swift'])
     finally:
         server.terminate(); server.wait(timeout=5)
