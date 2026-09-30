@@ -6,7 +6,7 @@ import Foundation
 /// cross-process lock; a failed producer never replaces a completed result.
 enum DecryptionCache {
     // Bump when decrypt output conventions change, independently of app versions.
-    static let format = 1
+    static let format = 2
     struct Identity: Codable, Equatable, Sendable {
         let format: Int
         let tool, ipsw, board, productType: String
@@ -19,9 +19,13 @@ enum DecryptionCache {
             get throws { SHA256.hash(data: try DecryptionCache.encode(self)).map { String(format: "%02x", $0) }.joined() }
         }
     }
+    struct FileRecord: Codable {
+        let bytes: Int64
+        let sha256: String
+    }
     struct Manifest: Codable {
         let identity: Identity
-        let files: [String: Int64]
+        let files: [String: FileRecord]
     }
     static func encode<T: Encodable>(_ value: T) throws -> Data {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
@@ -48,21 +52,22 @@ enum DecryptionCache {
         if let data = try? Data(contentsOf: marker),
            let manifest = try? JSONDecoder().decode(Manifest.self, from: data),
            manifest.identity == identity, !manifest.files.isEmpty,
-           manifest.files.allSatisfy({ name, size in
+           manifest.files.allSatisfy({ name, record in
                guard validName(name), let actual = try? fm.attributesOfItem(atPath: result.appendingPathComponent(name).path)[.size] as? NSNumber else { return false }
-               return actual.int64Value == size
+               return actual.int64Value == record.bytes &&
+                    (try? Preparer.digest(result.appendingPathComponent(name), SHA256())) == record.sha256
            }) {
             reused(); return result
         }
         let staged = parent.appendingPathComponent(".\(key)-\(UUID().uuidString).tmp", isDirectory: true)
         try fm.createDirectory(at: staged, withIntermediateDirectories: false)
         defer { try? fm.removeItem(at: staged) }
-        var files: [String: Int64] = [:]
+        var files: [String: FileRecord] = [:]
         for name in try produce(staged) {
             guard validName(name), let size = try fm.attributesOfItem(atPath: staged.appendingPathComponent(name).path)[.size] as? NSNumber else {
                 throw FirmwareError(.internal, "decrypt cache: invalid output \(name)")
             }
-            files[name] = size.int64Value
+            files[name] = FileRecord(bytes: size.int64Value, sha256: try Preparer.digest(staged.appendingPathComponent(name), SHA256()))
         }
         guard !files.isEmpty else { throw FirmwareError(.internal, "decrypt cache: no outputs") }
         try encode(Manifest(identity: identity, files: files)).write(to: staged.appendingPathComponent("manifest.json"), options: .atomic)

@@ -26,6 +26,9 @@ struct DecryptionCacheTests {
             #expect(FileManager.default.fileExists(atPath: first.appendingPathComponent("manifest.json").path))
             _ = try DecryptionCache.resolve(root: root, identity: identity, produce: produce)
             #expect(runs == 3)
+            try Data("corrupt!".utf8).write(to: first.appendingPathComponent("iBoot.bin"))
+            _ = try DecryptionCache.resolve(root: root, identity: identity, produce: produce)
+            #expect(runs == 4)
             #expect(try Data(contentsOf: first.appendingPathComponent("iBoot.bin")) == Data("firmware".utf8))
         }
     }
