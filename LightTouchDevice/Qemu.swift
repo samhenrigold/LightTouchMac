@@ -90,6 +90,9 @@ final class Qemu: @unchecked Sendable {
     lazy var reset = sym("qemu_ios_ui_reset", VoidFn.self)
     lazy var powerdown = sym("qemu_ios_ui_powerdown", VoidFn.self)
     lazy var quit = sym("qemu_ios_ui_quit", VoidFn.self)
+    // optionalSym: an older dylib without this symbol just leaves networking
+    // restricted (safe) rather than trapping.
+    lazy var netRestrict = optionalSym("qemu_ios_ui_net_restrict", (@convention(c) (UnsafePointer<CChar>, Bool) -> Void).self)
     lazy var snapshotSave2 = sym("qemu_ios_snapshot_save2", (@convention(c) (UnsafePointer<CChar>) -> Void).self)
     lazy var snapshotStatus = sym("qemu_ios_snapshot_status", (@convention(c) (UnsafeMutablePointer<CChar>, UInt) -> Int32).self)
     lazy var snapshotResume = sym("qemu_ios_snapshot_resume", VoidFn.self)

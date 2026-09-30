@@ -34,6 +34,15 @@ final class WebProxy: @unchecked Sendable {
     /// One archive fetch at a time, a second apart, none while the archive asked us to wait.
     private let archiveGate = NSLock()
     private var archiveNext = Date.distantPast, cooldownUntil = Date.distantPast
+    /// Follows wifi0's slirp restrict (5.x Setup runs offline, smoke #54): the image's PAC routes every
+    /// public host here, and slirp's restrict lets guestfwd traffic through, so while this is set each
+    /// connection is closed without a byte. Any reply, even a 503, answers iOS's captive-network probe
+    /// and Setup shows a "Log In" sheet; a dead proxy reads as no internet, as a real unit offline.
+    var offline: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _offline }
+        set { lock.lock(); _offline = newValue; lock.unlock() }
+    }
+    private var _offline = false
 
     static let headMax = 65536, bodyMax = 8 << 20, archiveBodyMax = 32 << 20
 
@@ -115,6 +124,7 @@ final class WebProxy: @unchecked Sendable {
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         let guest = Guest(fd: fd)
         defer { guest.finish() }
+        if offline { return }
         do {
             try handle(guest, mode: Self.mode(config))
         } catch let reply as Reply {

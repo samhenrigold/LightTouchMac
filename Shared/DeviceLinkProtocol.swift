@@ -58,6 +58,9 @@ nonisolated enum LinkCommand: Codable, Sendable, Equatable {
     case snapshotResume
     case agentCancel(id: String)
     case audioStop(generation: UInt64)
+    /// qemu_ios_ui_net_restrict on the wifi0 user netdev: flip slirp's restrict
+    /// flag in place (false opens outbound networking after Setup, no link event).
+    case netRestrict(Bool)
 }
 
 nonisolated enum LinkRequest: Codable, Sendable, Equatable {
@@ -123,6 +126,12 @@ nonisolated struct BootConfig: Codable, Sendable, Equatable {
         environment = try c.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
         machine = try c.decode(String.self, forKey: .machine)
         webProxy = try c.decodeIfPresent(WebProxyEndpoint.self, forKey: .webProxy)
+    }
+
+    /// argv's wifi0 user netdev boots restricted (BootRecipe.wifiNetdev): 5.x Setup runs offline. The
+    /// helper's web proxy starts offline to match and opens with `.netRestrict(false)`.
+    var wifiRestricted: Bool {
+        zip(argv, argv.dropFirst()).contains { $0 == "-netdev" && $1.hasPrefix("user,id=wifi0,") && $1.split(separator: ",").contains("restrict=on") }
     }
 }
 
