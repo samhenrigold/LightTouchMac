@@ -112,7 +112,6 @@ final class DevicePlaceholderViewController: NSViewController {
         model.stringValue = profile?.marketingName ?? entry.productType
         version.stringValue = "iOS \(entry.version)" + (row.badge.map { " \($0)" } ?? "") + " (\(entry.build))"
         info.isHidden = row.catalogNote == nil
-        info.toolTip = row.catalogNote
 
         progress.isHidden = true
         progress.stopAnimation(nil)
@@ -172,24 +171,40 @@ final class DevicePlaceholderViewController: NSViewController {
     }
 
     @objc private func infoClicked(_ sender: NSButton) {
-        guard let text = row?.catalogNote else { return }
-        let label = NSTextField(wrappingLabelWithString: text)
-        label.preferredMaxLayoutWidth = 280
-        label.translatesAutoresizingMaskIntoConstraints = false
-        let content = NSViewController()
-        content.view = NSView()
-        content.view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: content.view.topAnchor, constant: 12),
-            label.bottomAnchor.constraint(equalTo: content.view.bottomAnchor, constant: -12),
-            label.leadingAnchor.constraint(equalTo: content.view.leadingAnchor, constant: 14),
-            label.trailingAnchor.constraint(equalTo: content.view.trailingAnchor, constant: -14),
-            label.widthAnchor.constraint(lessThanOrEqualToConstant: 280),
-        ])
+        guard let row, let content = Self.infoContent(for: row) else { return }
         let popover = NSPopover()
         popover.behavior = .transient
         popover.contentViewController = content
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+    }
+
+    /// The ⓘ popover: the support tag and what it means, the catalog's source note, the release date.
+    /// Sized to fit before it is shown: a view controller's bare NSView() is 0×0, and a popover that
+    /// takes that size shows nothing (RC1).
+    static func infoContent(for row: DeviceRow) -> NSViewController? {
+        guard row.catalogNote != nil else { return nil }
+        func label(_ text: String?, _ style: NSFont.TextStyle, _ color: NSColor = .labelColor) -> NSTextField? {
+            guard let text else { return nil }
+            let label = NSTextField(wrappingLabelWithString: text)
+            label.font = .preferredFont(forTextStyle: style)
+            label.textColor = color
+            label.isSelectable = true
+            label.preferredMaxLayoutWidth = 280
+            return label
+        }
+        let stack = NSStackView(views: [label(row.supportNote, .headline), label(row.supportExplanation, .body, .secondaryLabelColor),
+                                        label(row.entry.statusNote, .body), label(row.releaseLine, .subheadline, .secondaryLabelColor)]
+            .compactMap { $0 })
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
+        stack.widthAnchor.constraint(equalToConstant: 308).isActive = true
+        let content = NSViewController()
+        content.view = stack
+        stack.frame.size = stack.fittingSize
+        content.preferredContentSize = stack.frame.size
+        return content
     }
 
     @objc private func primaryClicked(_ sender: Any?) {

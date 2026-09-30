@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""The prepare screen (DevicePlaceholderViewController) in every state.
+"""The prepare screen (DevicePlaceholderViewController) in every state, and its build-info popover.
 
 Compiles the real view controller with the real catalog and DeviceRow, stubs for the app singletons it asks
 (FirmwareJobs, IPSWStore, Bundled, DroppedFiles), and lays it out in a window that is never ordered front:
 nothing appears on screen. Each state renders to <out>/placeholder-<state>.png (--out DIR, default a temp dir).
 
 Checks: the name, version and state lines stack in that order in one column; the buttons share one row with the
-default button last (Device Logs to its left); no label is clipped; every state shows a state line.
+default button last (Device Logs to its left); no label is clipped; every state shows a state line. The info
+popover (ⓘ) has a real size (RC1's was 0×0 and showed nothing) and shows the support status and its
+explanation, the source note and the release date for experimental, untested, beta and paid-update builds.
 """
 from pathlib import Path
 import argparse, subprocess, tempfile
@@ -93,8 +95,27 @@ import Cocoa
             if row.isError && !buttons.contains(where: { $0.title == "Device Logs" }) { fail("an error without Device Logs") }
         }
 
+        // The ⓘ popover: a real size and the build's words, for experimental, untested and beta builds.
+        for e in [entry("k48ap-7B405"), entry("n45ap-3B48b"), beta, entry("n72ap-8C5091e"), entry("n72ap-7E18")] {
+            let row = DeviceRow(entry: e, instanceID: nil, session: nil, job: nil, failure: nil)
+            guard let content = DevicePlaceholderViewController.infoContent(for: row) else { failures.append("\(e.id): no popover"); continue }
+            let size = content.preferredContentSize
+            content.view.layoutSubtreeIfNeeded()
+            let words = content.view.subviews.compactMap { $0 as? NSTextField }.filter { !$0.stringValue.isEmpty && $0.frame.width > 20 && $0.frame.height > 8 }
+            let text = words.map(\.stringValue).joined(separator: "\n")
+            if size.width < 100 || size.height < 40 || content.view.frame.size != size { failures.append("\(e.id): popover size \(size), view \(content.view.frame.size)") }
+            if let tag = row.supportNote, !words.contains(where: { $0.stringValue == tag }) || !text.contains(row.supportExplanation ?? "?") {
+                failures.append("\(e.id): no \(tag) and its explanation: \(text)")
+            }
+            if !text.contains("Released ") { failures.append("\(e.id): no release date: \(text)") }
+            if let note = e.statusNote, !text.contains(note) { failures.append("\(e.id): no source note: \(text)") }
+            for w in words where !content.view.bounds.contains(w.frame) { failures.append("\(e.id): \(w.stringValue) outside the popover") }
+            let rep = content.view.bitmapImageRepForCachingDisplay(in: content.view.bounds)!
+            content.view.cacheDisplay(in: content.view.bounds, to: rep)
+            try rep.representation(using: .png, properties: [:])!.write(to: out.appendingPathComponent("popover-\(e.id).png"))
+        }
         precondition(failures.isEmpty, failures.joined(separator: "\n"))
-        print("PASS: the prepare screen in every state (name, version, state; one button row)")
+        print("PASS: the prepare screen in every state (name, version, state; one button row) and the build popover's words")
     }
 }
 '''

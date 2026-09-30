@@ -54,9 +54,9 @@ The placeholder is one centred column in three tiers, the same slots in every st
 | stopping | Stopping / Stopping… | |
 | error | Error, with the reason below | reason is the failure or stop text |
 | comingSoon | Coming soon | |
-| untested (note) | Untested (row tooltip and VoiceOver, never drawn in the row) / “Untested.” before the catalog note in the placeholder’s info popover (ⓘ beside the version) | not a state: an untested build downloads and prepares like any other |
+| untested (note) | Untested (row tooltip and VoiceOver, never drawn in the row) / the placeholder’s info popover (ⓘ beside the version): “Untested”, “Light Touch hasn’t run this build yet. It may not prepare or start.”, the catalog note, “Released June 7, 2011” | not a state: an untested build downloads and prepares like any other |
 | requiresIPSW | Requires an IPSW | |
-| experimental (tag) | Experimental | row tooltip and VoiceOver, no capsule; placeholder: “Experimental.” and the catalog `status_note` in the info popover |
+| experimental (tag) | Experimental | row tooltip and VoiceOver, no capsule; placeholder’s info popover: “Experimental”, “This build prepares and starts, but it hasn’t been through every check. Some features may not work.”, the catalog `status_note` (where the IPSW comes from), the release date |
 | prepared without activation (note) | Prepared without activation | |
 | beta / GM (tag) | Beta 1, Beta 3, GM 1, GM 2 | always numbered; secondary text after the version, no capsule |
 

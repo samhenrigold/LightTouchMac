@@ -176,12 +176,26 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         }
     }
 
-    /// The placeholder's info popover: "Untested." or "Experimental." and the catalog's note (source, keys).
+    /// "Untested." or "Experimental." and the catalog's note (source); the placeholder shows its ⓘ when there is one.
     var catalogNote: String? {
         let tag = entry.status == .untested ? "Untested." : isExperimental ? "Experimental." : nil
-        let note = tag != nil || entry.prerelease != nil ? entry.statusNote : nil
-        let text = [tag, note].compactMap { $0 }.joined(separator: " ")
+        let text = [tag, entry.statusNote].compactMap { $0 }.joined(separator: " ")
         return text.isEmpty ? nil : text
+    }
+
+    /// What `supportNote` means, the line under it in the ⓘ popover.
+    var supportExplanation: String? {
+        switch entry.status {
+        case .untested: "Light Touch hasn’t run this build yet. It may not prepare or start."
+        case .experimental: "This build prepares and starts, but it hasn’t been through every check. Some features may not work."
+        default: nil
+        }
+    }
+
+    /// "Released June 7, 2011", from the catalog's `released` date.
+    var releaseLine: String? {
+        guard let released = entry.released, let date = try? Date(released + "T12:00:00Z", strategy: .iso8601) else { return nil }
+        return "Released " + date.formatted(Date.FormatStyle(date: .long, time: .omitted, timeZone: TimeZone(identifier: "UTC")!))
     }
 
     /// Before a download or preparation, when `available` bytes can't hold it: the copy's words; nil when there is room.
