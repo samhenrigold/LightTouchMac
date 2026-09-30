@@ -99,8 +99,8 @@ struct SingleConfig: Decodable {
         // finding 3), so a later shot lands black. wakeForShot woke it; report the frontmost app
         // (SpringBoard where an agent can say) and the brightness so the matrix fails a slept/black
         // or wrong-app home instead of passing it on the single `lit` threshold (audit gap #2).
-        var front = ""
-        if agent, let f = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost() { front = f.bundleID }
+        var front = ""   // the iPad's agent comes from the seed package (offered): ask it too, the matrix's helpers check
+        if agent || (ipad && offered), let f = try? await GuestAgent(link: d.process.link, cache: GuestAgentCache()).frontmost() { front = f.bundleID }
         emit("home", ["device": d.name, "generation": generation, "brightness": d.brightness() ?? -1,
                       "frontmost": front, "path": hp ?? ""])
     }

@@ -102,6 +102,9 @@ final class N72Board: Board {
         kcPath = try Self.kernelcachePath(iboot)
         guard let kc = try BuildComponents.load(ipsw)["KernelCache"] else { throw FirmwareError(.unsupported, "\(e.id): the IPSW names no KernelCache") }
         kcMember = kc
+        // the machine boots every n72 device with the AMFI pair (qemu-ios ipod_touch_2g.c; N72Keybag.bootArgs)
+        let kernel = try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped)
+        try FitCheck.checkBootArgs(c.fit, kernel: kernel, args: FitCheck.amfiArgs.sorted().map { $0 + "=1" }.joined(separator: " "))
         derived = ["nand_epoch": epoch, "wrap_shsh": major >= 3, "kernelcache_path": kcPath, "kernelcache_member": kcMember,
                    "kernel": Self.firstMatch(try Data(contentsOf: c.decFile("kernelcache.mach")), /Darwin Kernel Version [^\x00]+/) ?? NSNull(),
                    "iboot": Self.firstMatch(iboot, /iBoot-[0-9.]+/) ?? "?", "direct_iboot": major >= 3]
@@ -250,18 +253,23 @@ final class N72Board: Board {
         // The guest helpers (it_agent, it_typein DYLD_INSERTed into SpringBoard, sblaunch, it_prefs, the loader and
         // its seed package) are linked for the dyld that ships the shared cache (3.1+); 2.x's and 3.0's refuse
         // LC_DYLD_INFO_ONLY ("dyld: unknown required load command 0x80000022") and SpringBoard never comes up with
-        // it_typein inserted (qemu-ios ipod2g_device.py 4074277e42). Detected from the volume, not the version: a
-        // firmware without the cache gets a stock SpringBoard, no AppSync cache patch and no GL shim.
-        let tools = fm.fileExists(atPath: at(cache).path)
+        // it_typein inserted (qemu-ios ipod2g_device.py 4074277e42). Proven from the volume (guestToolsFit), not
+        // assumed from the version or the cache: where they do not load they are left out with a warning.
+        let cached = fm.fileExists(atPath: at(cache).path)
         func helper(_ n: String) throws -> Data {
             let u = helpers.appendingPathComponent(n)
             guard fm.fileExists(atPath: u.path) else { throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)") }
             return try Data(contentsOf: u)
         }
+        let fw = FitCheck.Firmware(root: m, arch: arch)
+        let toolsFit = try Self.guestToolsFit(fw, helpers: helpers)
+        let tools = try c.fit.check(toolsFit, required: false)
+        // the reorder tip's key: set by it_prefs at boot (tools) or baked below; either way only if SpringBoard reads it
+        try c.fit.check(FitCheck.prefs(fw, [FitCheck.itPrefs[0]])[0], required: false, outcome: tools ? "kept: it_prefs skips the key at boot" : "not baked")
         var report: [String: Any] = [:]
         // ipod2g_device.gli_engine: the one MBXGLEngine (it reads the dispatch layout at load) wherever the armv6
         // shared cache exists; the sanity line says what it will find
-        let gles = (opt["gles_shim"] ?? true) && tools
+        let gles = (opt["gles_shim"] ?? true) && cached
         let why = !(opt["gles_shim"] ?? true) ? "options.gles_shim off" : "no dyld shared cache (2.x, 3.0)"
         let info = try gles ? SystemEdits.glesSanity(Data(contentsOf: at(cache), options: .alwaysMapped), helpers: helpers) : ""
         report["gles"] = gles ? "shim MBXGLEngine (\(info))" : "stock engine, software CA: " + why
@@ -275,7 +283,7 @@ final class N72Board: Board {
         }
         report["gles_shim"] = gles || front
         report["gles_engine"] = gles ? "MBXGLEngine" : front ? "OpenGLES" : NSNull() as Any
-        report["guest_tools"] = tools ? "installed" : "omitted: current helpers require the iOS 3.1+ dyld (no shared cache)"
+        report["guest_tools"] = tools ? "installed" : "omitted: " + toolsFit.proof
 
         // bake-guest-tools.sh
         if gles {
@@ -295,6 +303,8 @@ final class N72Board: Board {
             try SystemEdits.put(helper("it_agent"), at("usr/local/bin/it_agent"), mode: 0o755)
             try SystemEdits.put(helper("it_typein.dylib"), at("usr/lib/it_typein.dylib"), mode: 0o755)
         }
+        try c.fit.check(FitCheck.environment(fw, Self.sbSwitches, also: gles ? [(SystemEdits.Helpers.mbxEngine, try helper(SystemEdits.Helpers.mbxEngine))] : []),
+                        required: false, outcome: "kept: a switch nothing reads is inert")
         try SystemEdits.editSpringBoardJob(m) { env, _ in
             for k in ["CA_ENABLE_OGL", "LK_ENABLE_OGL"] { env[k] = gles || front ? "1" : "0" }
             for k in ["CA_AUTO_ENABLE_OGL", "LK_AUTO_ENABLE_OGL", "CA_ENABLE_MBX2D", "LK_ENABLE_MBX2D"] { env[k] = "0" }
@@ -341,6 +351,7 @@ final class N72Board: Board {
             report["prefs"] = try Self.bakeReorderTip(m)
         }
         if opt["web_proxy"] ?? true {   // install_web_proxy: the PAC, and the Wi-Fi service on the system volume's /private/var
+            try c.fit.check(FitCheck.webProxy(fw), required: false, outcome: "kept: the PAC is unused")
             let sc = "private/var/preferences/SystemConfiguration"
             owners += try SystemEdits.installPAC(m, dirs: [sc]).map { (UInt32(0), $0) }
             try SystemEdits.seedPlist(at(sc + "/preferences.plist"), SystemEdits.wifiProxyPrefs)
@@ -353,7 +364,8 @@ final class N72Board: Board {
         // the baked copies it provides are removed. Owners after it, for only what is left.
         // On 2.x the package carries only the OpenGLES front-end hook.
         if tools || front {
-            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles || front, log: c.log)
+            let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: arch, gles: gles || front,
+                                                                     omitted: opt["appsync"] == true ? [] : ["/" + SystemEdits.appsyncPath], fit: c.fit, log: c.log)
             if front, !record.hooks.contains("/" + Self.openGLES) {
                 // CA_ENABLE_OGL=1 over the stock driver drives the unemulated MBX: fail rather than wedge
                 throw FirmwareError(.internal, "\(SystemEdits.Helpers.itpack(arch)) has no OpenGLES hook for this build; rebuild the guest package")
@@ -368,6 +380,28 @@ final class N72Board: Board {
 }
 
 extension N72Board {
+    /// The switches the bake sets in SpringBoard's job, each under its 3.x+ (CoreAnimation) and 1.x/2.x (LayerKit) name.
+    static let sbSwitches = [["CA_ENABLE_OGL", "LK_ENABLE_OGL"], ["CA_AUTO_ENABLE_OGL", "LK_AUTO_ENABLE_OGL"], ["CA_ENABLE_MBX2D", "LK_ENABLE_MBX2D"]]
+
+    /// The baked guest tools (and it_typein in SpringBoard) that must all load for any to be installed.
+    static let guestTools = ["it_agent", "it_typein.dylib", "sblaunch", "sbdlicon", SystemEdits.Helpers.name("it_prefs", "armv6")]
+
+    /// One Fit for the iPod's baked guest tools: each proven with FitCheck.loads (sbdlicon only if the helpers have it).
+    static func guestToolsFit(_ fw: FitCheck.Firmware, helpers: URL) throws -> FitCheck.Fit {
+        var fits: [FitCheck.Fit] = []
+        for n in guestTools {
+            let u = helpers.appendingPathComponent(n)
+            guard FileManager.default.fileExists(atPath: u.path) else {
+                if n == "sbdlicon" { continue }
+                throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)")
+            }
+            fits.append(FitCheck.loads(n, try Data(contentsOf: u), on: fw, host: n == "it_typein.dylib" ? "/" + springBoard : nil))
+        }
+        let piece = "guest tools (\(fits.map(\.piece).joined(separator: ", ")))", lost = fits.filter { !$0.fits }
+        guard lost.isEmpty else { return FitCheck.Fit(piece, fits: false, lost.map { "\($0.piece): \($0.proof)" }.joined(separator: "; ")) }
+        return FitCheck.Fit(piece, fits: true, "each loads (\(fits[0].piece): \(fits[0].proof))")
+    }
+
     /// SpringBoard's first-run "Edit Home Screen" tip stays down once com.apple.springboard SBDidShowReorderText is true.
     static let reorderTip = "SBDidShowReorderText"
     static let springBoard = "System/Library/CoreServices/SpringBoard.app/SpringBoard"

@@ -24,22 +24,22 @@ def png(name, lum):
     Image.new("RGB", (32, 48), (lum, lum, lum)).save(p)
     return str(p)
 
-def base_dir():
+def base_dir(lock=None):
     b = TMP / ("base-%d" % len(list(TMP.glob("base-*"))))
     b.mkdir()
-    (b / "device.lock.json").write_text(json.dumps({"guest_package": None}))
+    (b / "device.lock.json").write_text(json.dumps(lock or {"guest_package": None}))
     return b
 
 ENTRY = {"id": "k48ap-8L1", "product_type": "iPad1,1", "board": "k48ap", "version": "4.3.5",
          "recipe": {"options": {"appsync": False}}}
 
-def run(events, serial_text=""):
-    b = base_dir()
+def run(events, serial_text="", lock=None, entry=ENTRY):
+    b = base_dir(lock)
     serial = TMP / ("serial-%d.log" % len(list(TMP.glob("serial-*"))))
     serial.write_text(serial_text)
     shots_to = TMP / ("shots-%d" % len(list(TMP.glob("shots-*"))))
     before = mx.check_sessions.tree(b)
-    return mx.judge(ENTRY, events, 0, serial, TMP, shots_to, before, b)
+    return mx.judge(entry, events, 0, serial, TMP, shots_to, before, b)
 
 def screenshot(stem, lum):
     return {"event": "screenshot", "path": png(stem + ".png", lum), "serial": 1,
@@ -96,7 +96,36 @@ check("good boot: gl ok on hardware path", r["gl"]["ok"] is True and r["gl"]["pa
 # (afc/persist aren't fabricated here, so the row's first failure is afc -- our three checks must not be it)
 check("good boot: home/gl/shutdown are not the failure", first not in ("home", "gl", "shutdown"))
 
+# 6. helpers (fit checks, boot side): an iPad seed with the agent, it_ethlink and it_prefs jobs, USB Ethernet proven to
+#    fit, must be heard from; silence fails, and a lock without them has nothing to judge.
+IPAD_LOCK = {"guest_package": {"family": "k48-ios4", "seed": 8, "jobs": ["com.qemu.it-agent.plist", "com.qemu.it-ethlink.plist",
+                                                                      "com.qemu.it-prefs.plist"], "hooks": ["/usr/local/lib/it_msmquiet.dylib"]},
+             "fit": [{"piece": mx.USB_ETHERNET, "fits": True, "proof": "..."}]}
+KONSOLE = "it_ethlink: watching AppleUSBEthernetDevice\nit_prefs: preferences already set\n"
+offer = {"event": "offer", "serial": 8}
+report = {"event": "guestPackage", "generation": 1, "serial": 8, "result": 0}
+good = boot_events(home_lum=200, frontmost=mx.SPRINGBOARD, boot2_confirmed=True)
+r, _, _ = run(good + [offer, report], serial_text=KONSOLE, lock=IPAD_LOCK)
+check("helpers: agent answered, ethlink and prefs reported", r["helpers"]["ok"] is True and r["helpers"]["agent"] and r["helpers"]["ethlink"])
+r, _, first = run(boot_events(home_lum=200, frontmost="", boot2_confirmed=True) + [offer, report], serial_text=KONSOLE, lock=IPAD_LOCK)
+check("helpers: a silent agent fails", r["helpers"]["ok"] is False and r["helpers"]["silent"] == ["agent"])
+r, _, _ = run(good + [offer, report], serial_text="it_prefs: preferences already set\n", lock=IPAD_LOCK)
+check("helpers: it_ethlink never watching fails", r["helpers"]["ok"] is False and r["helpers"]["silent"] == ["ethlink"])
+unfit = dict(IPAD_LOCK, fit=[{"piece": mx.USB_ETHERNET, "fits": False, "proof": "..."}])
+r, _, _ = run(good + [offer, report], serial_text="it_prefs: x\n", lock=unfit)
+check("helpers: USB Ethernet proven not to fit is not expected", r["helpers"]["ok"] is True and "ethlink" not in r["helpers"])
+r, _, _ = run(good)
+check("helpers: nothing baked, nothing to judge", r["helpers"]["ok"] is None)
+# 7. package: a loader baked with jobs that is never offered anything fails; a stub seed is a skip, not a pass.
+r, _, _ = run(good, serial_text=KONSOLE, lock=IPAD_LOCK)
+check("package: a baked package never offered fails", r["package"]["ok"] is False)
+stub = {"guest_package": {"family": "n72-ios4", "seed": 8, "jobs": [], "hooks": []}}
+r, _, _ = run(good + [{"event": "offer", "serial": -1}], lock=stub, entry=dict(ENTRY, board="n72ap", id="n72ap-8C148"))
+check("package: a stub seed is a skip", r["package"]["ok"] is None and "stub" in r["package"]["note"])
+r, _, _ = run(good + [offer, report], serial_text=KONSOLE, lock=IPAD_LOCK)
+check("package: offered and reported passes", r["package"]["ok"] is True)
+
 import shutil; shutil.rmtree(TMP, ignore_errors=True)
 if fails:
     sys.exit("%d matrix-judge assertion(s) failed" % fails)
-print("matrix judge: home, GL and boot-2 shutdown verdicts all bite")
+print("matrix judge: home, GL, boot-2 shutdown, helpers and package verdicts all bite")

@@ -85,7 +85,12 @@ public enum GuestPackage {
         return builds.contains { $0 == build || ($0.hasSuffix("*") && $0.dropLast() == major) }
     }
 
-    public static func seed(volume m: URL, itpack: URL, gles: Bool) throws -> (written: [String], record: Record) {
+    /// Every Mach-O it bakes (the loader, the package's binaries and hooks) is first proven to load on this firmware
+    /// (FitCheck.loads, recorded in `fit`; one that does not fails the seed), except the GL engines' and AppSync's
+    /// hooks, which their own installers check.
+    /// A hook whose target is not on the volume is dropped; unless the preparer left that target out on purpose
+    /// (`omitted`) or it is a GL engine's, the drop is a recorded misfit (a warning), never silent.
+    public static func seed(volume m: URL, itpack: URL, gles: Bool, omitted: Set<String> = [], fit: FitCheck.Log = FitCheck.Log()) throws -> (written: [String], record: Record) {
         let fm = FileManager.default
         let entries = try read(itpack)
         let at = { (rel: String) in m.appendingPathComponent(rel) }
@@ -106,10 +111,28 @@ public enum GuestPackage {
             return (gles || !glTargets.contains(target)) && fm.fileExists(atPath: at(String(target.dropFirst())).path)
         }
         let dropped = Set(allHooks.compactMap { $0["file"] as? String }).subtracting(hooks.compactMap { $0["file"] as? String })
+        for h in allHooks where dropped.contains(h["file"] as? String ?? "") {
+            let target = h["target"] as? String ?? ""
+            guard !glTargets.contains(target), !omitted.contains(target) else { continue }
+            try fit.check(FitCheck.Fit("\(families[0].dropLast("/manifest.json".count))/\(h["file"] as? String ?? "") (hook)", fits: false,
+                                       "its target \(target) is not on this firmware: the hook is dropped"), required: false)
+        }
         man["hooks"] = hooks
         man["files"] = (man["files"] as? [[String: Any]] ?? []).filter { !dropped.contains($0["name"] as? String ?? "") }
         let files = man["files"] as! [[String: Any]]
         var written: [String] = []
+
+        // the loader and the package's own binaries must load on this firmware's dyld, with this firmware's images
+        let fw = FitCheck.Firmware(root: m, arch: itpack.deletingPathExtension().lastPathComponent)
+        guard let loaderBytes = entries["loader/it_boot"] else { throw FirmwareError(.internal, "\(itpack.lastPathComponent): no loader/it_boot") }
+        try fit.check(FitCheck.loads("it_boot (guest-package loader)", loaderBytes, on: fw), required: true)
+        let hookTargets = Dictionary(hooks.map { ($0["file"] as? String ?? "", $0["target"] as? String ?? "") }, uniquingKeysWith: { a, _ in a })
+        for f in files {
+            let name = f["name"] as? String ?? "", target = hookTargets[name]
+            guard let bytes = entries[family + "/" + name], FitCheck.isMachO(bytes),
+                  !(target.map { glTargets.contains($0) || $0 == "/" + SystemEdits.appsyncPath } ?? false) else { continue }
+            try fit.check(FitCheck.loads("\(family)/\(name)", bytes, on: fw, host: target.flatMap { FitCheck.host(of: $0, on: fw) }), required: true)
+        }
 
         func payload(_ n: String) throws -> Data {
             guard let d = entries[n] else { throw FirmwareError(.internal, "\(itpack.lastPathComponent): no \(n)") }

@@ -110,13 +110,13 @@ public enum SystemEdits {
 
     /// The k48 system + data volumes into `work` (system.img, data.img; scratch next to them).
     /// `rootfs` is the decrypted rootfs DMG (or a bare HFS volume); `systemBytes`/`dataBytes` are partition
-    /// 1 and 2 of the MBR in bytes.
+    /// 1 and 2 of the MBR in bytes. `kernel`: the decrypted kernelcache the fit checks read.
     /// The path the K48 iBoot loads the kernel from (fsboot); the raw IPSW img3 kernelcache is installed there
     /// for the real-iBoot chain (ipad1_rootfs.build --kernelcache). kboot omits it (the kernel is in the bundle).
     public static let kernelcachePath = "System/Library/Caches/com.apple.kernelcaches/kernelcache"
 
     public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
-                                kernelcache: Data? = nil, dataVolumeUUID: [UInt8]? = nil,
+                                kernelcache: Data? = nil, kernel: Data? = nil, dataVolumeUUID: [UInt8]? = nil, fit: FitCheck.Log = FitCheck.Log(),
                                 log: (String) -> Void = { _ in }) throws -> Result {
         let fm = FileManager.default
         let system = work.appendingPathComponent("system.img"), data = work.appendingPathComponent("data.img")
@@ -161,12 +161,28 @@ public enum SystemEdits {
         var rootOwned: [String] = []
         try VolumeMount.withMounted(system, at: work.appendingPathComponent("mnt-system")) { m in
             let at = { (rel: String) in m.appendingPathComponent(rel) }
+            // every baked helper proven to load on this firmware (FitCheck.loads), read before any edit
+            let fw = FitCheck.Firmware(root: m, arch: "armv7", kernelcache: kernel)
+            _ = fw.precedent
+            // it_msmquiet only where the mounter raises the notice it recognises; else left out, job untouched
+            let msm = Helpers.tools[3]
+            let quiet = try fit.check(FitCheck.msmQuiet(fw, program: try stockProgram(m, msmJob, label: "com.apple.mobile.storage_mounter"),
+                                                        dylib: Data(contentsOf: try helper(msm.name))), required: false)
+            if !quiet { tools.removeAll { $0.name == msm.name } }
+            for f in FitCheck.prefs(fw, FitCheck.itPrefs) { try fit.check(f, required: false, outcome: "kept: it_prefs skips the key at boot") }
+            if o.usbNet { try fit.check(FitCheck.usbEthernet(fw, path: usbEthPath), required: false, outcome: "kept: the link stays down and en1 unpinned") }
+            for t in tools where t.name != msm.name {
+                try fit.check(FitCheck.loads(t.name, Data(contentsOf: try helper(t.name)), on: fw), required: true)
+            }
             if let kernelcache {   // real-iBoot fsboot: the raw IPSW img3 kernelcache in the system volume
                 try mkdirs(at(kernelcachePath).deletingLastPathComponent())
                 try put(kernelcache, at(kernelcachePath), mode: 0o644)
             }
             try put(Data(fstabRW.utf8), at(fstab))
-            if o.webProxy { rootOwned += try installPAC(m) }
+            if o.webProxy {
+                try fit.check(FitCheck.webProxy(FitCheck.Firmware(root: m, arch: "armv7")), required: false, outcome: "kept: the PAC is unused")
+                rootOwned += try installPAC(m)
+            }
             // GL first: a firmware whose gld plugin does not fit boots the stock engine with software CoreAnimation,
             // as the iPod recipe does, rather than refusing the build (docs/matrix.md).
             var caOGL = o.caOGL
@@ -183,6 +199,10 @@ public enum SystemEdits {
                     log("warning: " + result.notes.last!)
                 }
             }
+            let env = caOGL ? sbEnvCAOGL : sbEnv
+            try fit.check(FitCheck.environment(fw, env.keys.sorted().map { [$0] },
+                                               also: result.engine != nil ? [(Helpers.glEngine, try Data(contentsOf: helper(Helpers.glEngine)))] : []),
+                          required: false, outcome: "kept: a switch nothing reads is inert")
             try editSpringBoardJob(m) { env, d in
                 env.addEntries(from: caOGL ? sbEnvCAOGL : sbEnv)
                 d["StandardOutPath"] = "/dev/console"; d["StandardErrorPath"] = "/dev/console"
@@ -200,17 +220,21 @@ public enum SystemEdits {
                 try put(Data(contentsOf: try helper(t.name)), at(t.path), mode: t.mode)
             }
             for j in jobs { try put(Data(contentsOf: try helper(j)), at(daemons + "/" + j), mode: 0o644) }
-            try rewritePlist(at(msmJob)) { d in
-                guard d["Label"] as? String == "com.apple.mobile.storage_mounter" else { throw FirmwareError(.unsupported, "\(msmJob): not storage_mounter's job") }
-                dict(d, "EnvironmentVariables")["DYLD_INSERT_LIBRARIES"] = "/" + Helpers.tools[3].path
+            if quiet {
+                try rewritePlist(at(msmJob)) { d in
+                    guard d["Label"] as? String == "com.apple.mobile.storage_mounter" else { throw FirmwareError(.unsupported, "\(msmJob): not storage_mounter's job") }
+                    dict(d, "EnvironmentVariables")["DYLD_INSERT_LIBRARIES"] = "/" + msm.path
+                }
             }
             try rewritePlist(at(btJob)) { $0["Disabled"] = true }
             result.activation = try activate(m, log: log)
             rootOwned.append(lockdownd)
-            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gles: result.engine != nil, log: log)
+            // what this bake left out on purpose: AppSync when off, it_msmquiet where it does not fit
+            let omitted = Set((o.appsync ? [] : ["/" + appsyncPath]) + (quiet ? [] : ["/" + msm.path]))
+            let (seeded, record) = try seedGuestPackage(m, helpers: helpers, arch: "armv7", gles: result.engine != nil, omitted: omitted, fit: fit, log: log)
             result.guestPackage = record
             rootOwned += seeded
-            rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"] + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
+            rootOwned += ["usr/local", "usr/local/bin", "usr/local/lib"].filter { fm.fileExists(atPath: at($0).path) } + jobs.map { daemons + "/" + $0 } + tools.map(\.path)
 
             // /private/var skeleton for the data volume
             try copyTree(at("private/var"), skeleton)
@@ -303,6 +327,15 @@ public enum SystemEdits {
         return (line, "Services.plist:com.apple.mobile.installation_proxy")
     }
 
+    /// The program of the stock job `job` (volume-relative), checked by label.
+    static func stockProgram(_ m: URL, _ job: String, label: String) throws -> String {
+        guard let d = NSDictionary(contentsOf: m.appendingPathComponent(job)), d["Label"] as? String == label,
+              let program = (d["ProgramArguments"] as? [String])?.first ?? d["Program"] as? String else {
+            throw FirmwareError(.unsupported, "\(job): not \(label)'s job")
+        }
+        return program
+    }
+
     /// SpringBoard's launchd job, checked by label: `edit` gets its EnvironmentVariables and the job.
     static func editSpringBoardJob(_ m: URL, _ edit: (NSMutableDictionary, NSMutableDictionary) throws -> Void) throws {
         try rewritePlist(m.appendingPathComponent(springBoardJob)) { d in
@@ -318,8 +351,9 @@ public enum SystemEdits {
     }
 
     /// The guest-package loader and the arch's seed package (GuestPackage.seed of <arch>.itpack).
-    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gles: Bool, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
-        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gles: gles)
+    static func seedGuestPackage(_ m: URL, helpers: URL, arch: String, gles: Bool, omitted: Set<String> = [], fit: FitCheck.Log, log: (String) -> Void) throws -> ([String], GuestPackage.Record) {
+        let (seeded, record) = try GuestPackage.seed(volume: m, itpack: helpers.appendingPathComponent(Helpers.itpack(arch)), gles: gles,
+                                                     omitted: omitted, fit: fit)
         log("seed package \(record.family) serial \(record.seed), hooks \(record.hooks)")
         return (seeded, record)
     }

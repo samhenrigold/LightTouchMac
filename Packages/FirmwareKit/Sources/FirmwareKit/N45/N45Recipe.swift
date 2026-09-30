@@ -48,6 +48,13 @@ final class N45Board: Board {
 
     func check(_ c: Recipe.Context) throws {}
 
+    /// The jobs this machine keeps must all be among the firmware's (usbptpd: no usbmux without it).
+    static func keptDaemonsFit(_ jobs: [String]) -> FitCheck.Fit {
+        let absent = keptDaemons.subtracting(jobs).sorted()
+        return FitCheck.Fit("LaunchDaemons kept on 1.x (\(keptDaemons.count))", fits: absent.isEmpty,
+                            absent.isEmpty ? "all shipped by this firmware" : "this firmware ships no \(absent.joined(separator: ", "))")
+    }
+
     func identity(seed: String) throws -> UnitIdentity {
         ident = try UnitIdentity.synthesizeIPod(seed: seed, modelNumber: model, regionInfo: UnitIdentity.iPadRegion)
         return ident
@@ -98,8 +105,9 @@ final class N45Board: Board {
             try SystemEdits.put(Data(N72Board.fstabRW.utf8), at(SystemEdits.fstab))
             try SystemEdits.mkdirs(at(kcPath).deletingLastPathComponent())
             try c.ipsw.extract(kcMember, to: at(kcPath))
-            let removed = try fm.contentsOfDirectory(atPath: at(SystemEdits.daemons).path)
-                .filter { $0.hasSuffix(".plist") && !Self.keptDaemons.contains($0) }.sorted()
+            let jobs = try fm.contentsOfDirectory(atPath: at(SystemEdits.daemons).path).filter { $0.hasSuffix(".plist") }
+            try c.fit.check(Self.keptDaemonsFit(jobs), required: false, outcome: "the rest removed as planned")
+            let removed = jobs.filter { !Self.keptDaemons.contains($0) }.sorted()
             for n in removed { try fm.removeItem(at: at(SystemEdits.daemons + "/" + n)) }
             for d in ["", "/AddressBook", "/Lockdown", "/Preferences"] {
                 try SystemEdits.mkdirs(at(Self.rootLibrary + d))
@@ -111,7 +119,7 @@ final class N45Board: Board {
             let ark = Self.rootLibrary + "/Lockdown/data_ark.plist"
             try SystemEdits.put(try PropertyListSerialization.data(fromPropertyList: ["-BrickState": false], format: .xml, options: 0), at(ark), mode: 0o600)
             owners.append((0, ark))
-            let (report, record, owned) = try Self.bake(m, helpers: c.o.guestTools, gles: recipe.options["gles_shim"] ?? true, log: c.log)
+            let (report, record, owned) = try Self.bake(m, helpers: c.o.guestTools, gles: recipe.options["gles_shim"] ?? true, fit: c.fit, log: c.log)
             for (k, v) in report { derived[k] = v }
             c.guestPackage = record
             owners += owned.map { (0, $0) }
@@ -133,7 +141,7 @@ final class N45Board: Board {
     /// opengles-1x.exports (and `gles`), the seed package (GuestPackage.seed of armv6.itpack: the loader and n45-ios1),
     /// SpringBoard's LK_* environment. Returns (the lock's derived gles/gles_engine, the guest_package record, the
     /// volume-relative paths to make root-owned).
-    static func bake(_ m: URL, helpers: URL, gles: Bool, log: (String) -> Void) throws -> ([String: Any], GuestPackage.Record, [String]) {
+    static func bake(_ m: URL, helpers: URL, gles: Bool, fit: FitCheck.Log = FitCheck.Log(), log: (String) -> Void) throws -> ([String: Any], GuestPackage.Record, [String]) {
         var front = false, report: [String: Any] = [:]
         if gles {
             let (ok, line) = try N72Board.frontEnd(m.appendingPathComponent(N72Board.openGLES), exports: helpers.appendingPathComponent(openGLESExports))
@@ -142,11 +150,13 @@ final class N45Board: Board {
         } else {
             report["gles"] = "gles off; software LayerKit"
         }
-        let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: "armv6", gles: front, log: log)
+        let (seeded, record) = try SystemEdits.seedGuestPackage(m, helpers: helpers, arch: "armv6", gles: front, fit: fit, log: log)
         if front, !record.hooks.contains("/" + N72Board.openGLES) {
             // LK_ENABLE_OGL=1 over the stock IMG driver drives the unemulated MBX: fail rather than wedge
             throw FirmwareError(.internal, "\(SystemEdits.Helpers.itpack("armv6")) has no OpenGLES hook for this build; rebuild the guest package")
         }
+        try fit.check(FitCheck.environment(FitCheck.Firmware(root: m, arch: "armv6"), (front ? [["LK_ENABLE_OGL"], ["LK_AUTO_ENABLE_OGL"]] : []) + [["LK_ENABLE_MBX2D"]]),
+                      required: false, outcome: "kept: a switch nothing reads is inert")
         try SystemEdits.editSpringBoardJob(m) { env, _ in
             if front { env["LK_ENABLE_OGL"] = "1"; env["LK_AUTO_ENABLE_OGL"] = "0" } else { env.removeObjects(forKeys: ["LK_ENABLE_OGL", "LK_AUTO_ENABLE_OGL"]) }
             env["LK_ENABLE_MBX2D"] = "0"   // never the unemulated MBX 2D path

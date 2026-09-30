@@ -34,21 +34,24 @@ if command == "mount" || command == "export" || command == "unmount" {
     volumeCommand(command!, Array(args))
 }
 if command == "verify-keys" { verifyKeysCommand(Array(args)) }
+if command == "fit" { fitCommand(Array(args)) }
 guard command == "create" else {
     FileHandle.standardError.write(Data("""
         firmwarekit \(FirmwareKit.version)
         usage: firmwarekit create --entry ENTRY.json --ipsw IPSW --out DIR [--seed S]
                                   [--helper PATH] [--cache DIR] [--guest-tools DIR]
                                   [--sibling-entry ENTRY.json --sibling-ipsw IPSW]   (recipe.keybag_ramdisk_from)
+                                  [--stop-after volumes]   (fit.json: the fit checks' survey, no device)
                firmwarekit mount|export --device DIR [--volume system|data|all] [--out DIR]
                firmwarekit unmount --out DIR
                firmwarekit verify-keys --entry ENTRY.json --ipsw IPSW
+               firmwarekit fit --root MOUNTED_SYSTEM_VOLUME [--arch armv6|armv7] MACHO...
 
         """.utf8))
     exit(64)
 }
 var flags: [String: String] = [:]
-let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools", "--sibling-entry", "--sibling-ipsw"]
+let known: Set = ["--entry", "--ipsw", "--out", "--seed", "--helper", "--cache", "--guest-tools", "--sibling-entry", "--sibling-ipsw", "--stop-after"]
 while let a = args.popFirst() {
     guard known.contains(a), let v = args.popFirst() else { emit(.error(code: "internal", message: "bad argument \(a)")); exit(1) }
     flags[a] = v
@@ -84,7 +87,7 @@ if parent == 1 || getppid() != parent { cancelAndExit("no parent") }
     emit(Preparer.errorEvent(error))
     exit(1)
 }
-let options: Preparer.Options
+var options: Preparer.Options
 do {
     let bundled = Bundle.main.executableURL!.resolvingSymlinksInPath().deletingLastPathComponent()
         .appendingPathComponent("../Resources/guest-tools").standardizedFileURL
@@ -93,6 +96,10 @@ do {
                     guestTools: flags["--guest-tools"].map(url) ?? bundled, cache: flags["--cache"].map(url),
                     sibling: try flags["--sibling-entry"].map { (try FirmwareEntry.load(from: url($0)), url(flags["--sibling-ipsw"] ?? "")) })
 } catch { fail(error) }
+if let stop = flags["--stop-after"] {
+    guard stop == "volumes" else { emit(.error(code: "internal", message: "--stop-after takes only volumes")); exit(1) }
+    options.stopAfterVolumes = true
+}
 
 Thread.detachNewThread { [options] in
     do { try Preparer.create(options, emit: emit); exit(0) } catch { fail(error) }

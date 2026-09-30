@@ -41,6 +41,9 @@ public enum Preparer {
         public var guestTools: URL
         /// The entry named by recipe.keybag_ramdisk_from and its IPSW: its restore ramdisk boots the keybag one-shot.
         public var sibling: (entry: FirmwareEntry, ipsw: URL)?
+        /// Stop after the volumes step and write fit.json (the fit checks, the seed record, the warnings) instead of a
+        /// device: the offline survey of what each firmware gets (`create --stop-after volumes`); no boot, no store.
+        public var stopAfterVolumes = false
         public init(entry: FirmwareEntry, ipsw: URL, out: URL, seed: String? = nil, helper: URL?,
                     guestTools: URL, cache: URL? = nil, sibling: (entry: FirmwareEntry, ipsw: URL)? = nil) {
             self.entry = entry; self.ipsw = ipsw; self.out = out; self.seed = seed

@@ -62,6 +62,8 @@ public enum Recipe {
         /// Filled by the store and lock steps.
         var built = "", nandHashes: [String: String] = [:], listing = ""
         var progress: StepProgress!
+        /// Every fit check the steps ran (the lock's "fit"); an optional piece that does not fit is a warning event.
+        lazy var fit = FitCheck.Log { [unowned self] in self.warn($0) }
 
         init(_ o: Preparer.Options, recipe: FirmwareEntry.Recipe, emit: @escaping (PrepareEvent) -> Void) {
             self.o = o; e = o.entry; self.recipe = recipe; self.emit = emit
@@ -70,8 +72,10 @@ public enum Recipe {
         func file(_ n: String) -> URL { o.out.appendingPathComponent(n) }
         func decFile(_ n: String) -> URL { dec.appendingPathComponent(n) }
         /// stderr; a "warning: " line is also a warning event.
+        /// Every warning event this prepare emitted.
+        var warnings: [String] = []
         func log(_ s: String) {
-            if s.hasPrefix("warning: ") { emit(.warning(String(s.dropFirst(9)))) }
+            if s.hasPrefix("warning: ") { warnings.append(String(s.dropFirst(9))); emit(.warning(String(s.dropFirst(9)))) }
             FileHandle.standardError.write(Data((s + "\n").utf8))
         }
         func warn(_ s: String) { log("warning: " + s) }
@@ -133,6 +137,15 @@ public enum Recipe {
 
         step()   // volumes (+ the shared bake, activation, guest package)
         try board.volumes(c)
+        if o.stopAfterVolumes {
+            let survey: [String: Any] = ["entry": e.id, "build": e.build, "board": e.board, "fit": c.fit.object,
+                                         "guest_package": c.guestPackage?.object ?? NSNull(), "warnings": c.warnings]
+            try? fm.removeItem(at: c.work)
+            try Preparer.lockData(survey).write(to: c.file("fit.json"))
+            progress.finish()
+            emit(.done(lock: "fit.json"))
+            return
+        }
 
         step()   // the store, and its listing before any boot writes into it (the lock's built_listing_sha256)
         try board.store(c)
@@ -169,6 +182,7 @@ public enum Recipe {
             "identity": ["seed": c.seed, "udid": c.ident.udid ?? "", "sha256": try Preparer.digest(c.file("identity.json"), SHA256())],
             "outputs": ["nand": ["path": "nand", "listing_sha256": c.listing, "built_listing_sha256": c.built]],
             "guest_package": opt(c.guestPackage?.object),
+            "fit": c.fit.object,
         ]
         let lock = merged(shared, try board.lock(c))
         try fm.removeItem(at: c.work)
