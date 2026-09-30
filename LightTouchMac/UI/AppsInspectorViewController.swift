@@ -1052,8 +1052,8 @@ final class AppsInspectorViewController: NSViewController {
                 let alert = NSAlert()
                 if case AppLaunchError.locked = error {
                     alert.alertStyle = .informational
-                    alert.messageText = "Unlock the \(emulator.profile.shortName)"
-                    alert.informativeText = "Unlock the \(emulator.profile.shortName), then try opening “\(displayName(app))” again."
+                    alert.messageText = "“\(displayName(app))” couldn’t open because the \(emulator.profile.shortName) is locked."
+                    alert.informativeText = "Unlock it, then try again."
                 } else {
                     alert.alertStyle = .warning
                     alert.messageText = "Couldn’t open “\(displayName(app))”"
