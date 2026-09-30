@@ -217,8 +217,9 @@ enum FitFixture {
             #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet (MobileStorageMounter") && !$0.fits })
             #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet (USBDeviceArbitrator") && $0.fits })
             #expect(!log.fits.contains { $0.piece.hasSuffix("(hook)") && !$0.fits }, "\(log.fits.filter { $0.piece.hasSuffix("(hook)") })")
-            #expect(log.fits.contains { $0.piece == "AppSync" && !$0.fits && $0.proof == "not installed (appsync off)" }, "\(log.fits.map(\.piece))")
-            #expect(!log.fits.contains { $0.piece.hasPrefix(SystemEdits.Helpers.appsync) })
+            // 9B206 has AppSync on since appsync-5x: its shared-cache target and libappsync in installd both fit.
+            #expect(log.fits.contains { $0.piece.hasPrefix("AppSync shared-cache patch") && $0.fits }, "\(log.fits.map(\.piece))")
+            #expect(log.fits.contains { $0.piece.hasPrefix(SystemEdits.Helpers.appsync) && $0.fits })
         }
     }
 
@@ -481,12 +482,15 @@ enum FitFixture {
                 let log = FitCheck.Log()
                 try FitCheck.checkAppSync(log, FitCheck.Firmware(root: v, arch: FitFixture.arch(id)), helpers: helpers)
                 let lockbot = id == "n72ap-5F138"
-                #expect(log.fits.count == (lockbot ? 2 : 1) && log.fits.allSatisfy(\.fits), "\(id): \(log.fits)")
-                let dylib = try #require(log.fits.first)
+                // The shared-cache patch target (appsync-5x) is its own piece where the build has a cache.
+                #expect(log.fits.allSatisfy { $0.fits }, "\(id): \(log.fits)")
+                let fits = log.fits.filter { !$0.piece.hasPrefix("AppSync shared-cache patch") }
+                #expect(fits.count == (lockbot ? 2 : 1), "\(id): \(log.fits)")
+                let dylib = try #require(fits.first)
                 #expect(dylib.piece == "libappsync.dylib (in \(lockbot ? "mobile_installation_proxy" : "installd"))", "\(id)")
                 #expect(dylib.proof.contains("SecCertificateCreateWithData by ") && dylib.proof.contains("imports resolved"), "\(id): \(dylib.proof)")
                 #expect(dylib.proof.contains(lockbot ? "by MobileInstallation" : "by installd"), "\(id): \(dylib.proof)")
-                if lockbot { #expect(log.fits[1].piece.hasPrefix("appsync-launch") && log.fits[1].proof.contains("execs mobile_installation_proxy")) }
+                if lockbot { #expect(fits[1].piece.hasPrefix("appsync-launch") && fits[1].proof.contains("execs mobile_installation_proxy")) }
             }
         }
     }
