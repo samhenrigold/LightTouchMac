@@ -2,9 +2,11 @@
 
 Worktrees: `/private/tmp/LightTouchMac-fidelity-consolidation` and
 `/private/tmp/qemu-ios-fidelity-consolidation`, both on `codex/fidelity-consolidation`.
-Bases: app `f924819`; emulator `0be1499f24`. The primary app checkout's unrelated
-FitCheckTests edit and emulator checkout's untracked ipad1-gles directory are excluded.
-Nothing is merged to the primary branches.
+Bases: app `f924819`; emulator `0be1499f24`. The worktrees subsequently integrated
+app `8d2e98dfc41a26c9b18b4efb1eedf07a58505dbc` and emulator `7b92325bde`,
+including the incoming board-specific identity selection and GL export fixes.
+The emulator checkout's untracked ipad1-gles directory remains excluded.
+Nothing from these worktrees is merged to the primary branches.
 
 ## Changes
 
@@ -17,7 +19,10 @@ Nothing is merged to the primary branches.
 - The decrypt cache uses format 2, tool/version/board/product/IPSW/key identity,
   immutable paths, advisory locks, unique staging, and SHA-256/size manifests.
   Corruption including a same-size edit causes a rebuild. Failed production
-  leaves the previous entry available. Eight simultaneous producers publish once.
+  leaves the previous entry available. Eight simultaneous producers publish once. Two independent CLI processes also
+  passed: one producer, one verified cache hit, intact hashes and independent
+  device identities. FirmwareKit 0.2.0 invalidates cache entries made before the
+  integrated board-specific BuildIdentity selection fix.
 - Corpus tests require explicit `FK_TEST_CORPUS=1` or `FK_REQUIRE_FIXTURES=1`.
   Missing selected prerequisites fail, rather than returning success or filtering
   out the case. Synthetic NAND and preference contracts run without corpus inputs.
@@ -54,44 +59,54 @@ Fresh devices were prepared by the Swift CLI from stock cached IPSWs, catalog
 keys, synthesized identities, the built native helper and exported guest tools.
 Each boot and persistence check was required; missing inputs could not pass.
 
-| Board/build | Version | Boot | Clean halt and 70,001-byte persistence |
+| Board/build | Version | Boot | Clean halt and persistence |
 |---|---|---|---|
 | n72ap-7E18 | 3.1.3 | PASS | PASS |
 | n72ap-8C148 | 4.2.1 | PASS | PASS |
 | k48ap-7B367 | 3.2 | PASS | PASS |
 | k48ap-7B500 | 3.2.2 | PASS | PASS |
 | k48ap-8C148 | 4.2.1 | PASS | PASS |
-| k48ap-9B206 | 5.1.1 | PASS | PASS after asynchronous-halt harness fix |
+| k48ap-9B206 | 5.1.1 | PASS | PASS |
 
-Artifacts: `/private/tmp/fidelity-fresh-six`. iOS 5 boot evidence is in
-`k48ap-9B206-rerun2`; persistence evidence is in `k48ap-9B206-rerun4`.
-The first iOS 5 failures exposed harness defects; they are preserved alongside
-successful reruns. On 5.1.1 the activated guest initially shows Setup Assistant,
+Artifacts: `/private/tmp/fidelity-merged-six`; orchestration and results are in
+`/private/tmp/fidelity-merged-six.log`. All six final merged runs passed boot and
+persistence in a single run: iPod markers are 4,259,839 bytes, iPad markers are
+70,001 bytes. Earlier failed runs are preserved in `/private/tmp/fidelity-fresh-six`.
+On 5.1.1 the activated guest initially shows Setup Assistant,
 which the boot check explicitly recognizes; this is not mislabeled as the home screen.
 
-The Swift suite passed (114 reported tests, including real optional corpus skips);
-the newly separated synthetic reorder-tip test passed afterward. The independent
+The Swift suite passed (118 reported tests across 26 suites, including real optional corpus skips);
+the final strict three-case direct-kernel reference check also passed. The independent
 NOR/metadata/iBoot reference checks passed in strict corpus mode. Cache corruption,
 failed replacement and concurrency tests passed. FMSS probe/free-pool and PMGR
 hardware-contract checks passed under ASan/UBSan. The app/helper/CLI Xcode build
 and QEMU executable/native dylib build passed. The complete offline tier reports
-82 passed and two display-only skips; strict mode rejects those selected skips.
+84 passed and two display-only skips; strict mode rejects those selected skips.
 The two specifically selected strict boot-strategy/prerequisite checks pass.
-A fresh guest export contains 39 staged, hashed files from clean emulator
-`a2327230ff70d2299f02d7d50869e083ffa02bf6`.
+A fresh export contains 39 guest/support files plus the native dylib, all hashed from clean emulator
+`ecd789e2beefa5b8a1a27484f1f78dee2e79fad9` in
+`/private/tmp/fidelity-final-guest-export-ecd789`. The final change is test-harness-only;
+the six-device and native acceptance used the same guest payloads from
+`054bdcc8a2b487b78a2b3ec157a41e62979ca3d3`.
 
 Native production-session acceptance also passed 11/11 checks on the fresh
 3.2.2 iPad and 3.1.3 iPod: live lockdown, 16,384/16,385/65,536/1,048,583-byte
 AFC round trips, IPA installation, unchanged base images and guest-confirmed
-shutdown. Artifacts: `/private/tmp/fidelity-native-ipad2` and
-`/private/tmp/fidelity-native-ipod`. The supplied temporary helper was authenticated
+shutdown. Artifacts: `/private/tmp/fidelity-merged-native-ipad` and
+`/private/tmp/fidelity-merged-native-ipod`. The supplied temporary helper was authenticated
 by its exact ad-hoc code hash; default project-team authentication was not relaxed.
 
-A fresh N45 1.1.5 (`n45ap-4B1`) prepared and booted through the new shared fresh-device
-script. Artifacts: `/private/tmp/fidelity-fresh-n45`. Its SecureROM is resolved as
-an external boot input. The N72 fsck mapper explicitly reports N45 unsupported;
-requesting that check in strict mode fails rather than misinterpreting another
-board's NAND layout. N45 persistence/USB is not covered by this acceptance case.
+A fresh merged N45 1.1.5 (`n45ap-4B1`) prepared through the shared script.
+Its first test run panicked in AppleMultitouchSPI while the harness sent touches
+during the boot-logo/firmware handshake. The harness now waits for a visible
+home screen before keep-awake touches and fails promptly on a kernel panic.
+The same fresh device then passed boot in 36 seconds; evidence is in
+`/private/tmp/fidelity-merged-n45-no-early-touch`, with the failed run retained in
+`/private/tmp/fidelity-merged-n45/regress/boot1`. This fixes the harness stimulus;
+it does not establish hardware-correct handling of touches during firmware loading.
+Its SecureROM is an external boot input. The N72 fsck mapper explicitly reports
+N45 unsupported; strict selection fails rather than applying another board's NAND
+layout. N45 persistence/USB is not covered by this acceptance case.
 
 Stock `idevicerestore` completed an erase restore of 7B500 over emulated USB,
 including ASR transfer, NOR flashing and filesystem unmount. The run used a
@@ -99,6 +114,11 @@ private NAND/NOR and the dumped SecureROM; it did not target physical USB.
 Artifacts: `/private/tmp/fidelity-stock-restore`, whose log ends in
 `Status: Restore Finished`. This proves the restore transaction, not a restored
 stock SpringBoard UI.
+
+Detailed logs: `/private/tmp/fidelity-merged-swift.log`,
+`/private/tmp/fidelity-merged-corpus.log`, `/private/tmp/fidelity-kboot-strict.log`,
+`/private/tmp/fidelity-merged-offline.log`, `/private/tmp/fidelity-merged-xcode.log`,
+and `/private/tmp/fidelity-cache-process-probe.log`.
 
 ## ANGLE decision
 
@@ -122,7 +142,10 @@ silently substituted in the app.
   `gBootArgs.commandLine` and kernel command line. It does not justify deleting
   that workaround or claiming native NVRAM delivery. The experiment is isolated
   in `/private/tmp/qemu-ios-fidelity-nvram` and its artifacts in
-  `/private/tmp/fidelity-nvram-stock-probe`.
+  `/private/tmp/fidelity-nvram-stock-probe`. Clearing the production fuse also
+  yielded blank arguments (`/private/tmp/fidelity-nvram-dev-probe`); clearing the
+  secure fuse did not reach a discoverable kernel boot-args structure
+  (`/private/tmp/fidelity-nvram-insecure-probe`). Neither experiment is merged.
 - 2.1.1 reaches Connect to iTunes in the existing fixture; that is the known
   activation baseline, not a passing home-screen acceptance case in this matrix.
 - The watchdog's 24 MHz rate follows the existing PMGR timebase model; independent
