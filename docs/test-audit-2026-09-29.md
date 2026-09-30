@@ -348,9 +348,17 @@ every time. Those are H by the ledger's own definitions.
    isn't in the matrix). The epoch, ADC start bit, panel ID and CDMA status fixes have no standing check.
 6. **1G storage.** No two-boot leg and no catalog entry, so the ADM 0x400/0x600 model is unguarded (its revert
    passes everything).
-7. **Performance.** Nothing gates on fps, first-frame latency or host CPU. The STATUS numbers came from scripts
-   outside the repos. A committed harness (the audit's `perf.py`/`perf_ipad.py` are a start) and a coarse gate
-   would do: "close zoom first frame < 1.5 s", "fps within 30% of the software path".
+7. **Performance.** ~~Nothing gates on fps, first-frame latency or host CPU. The STATUS numbers came from scripts
+   outside the repos.~~ **Done (09-29, animation smoothness): the jank harness, docs/perf-jank.md.**
+   - *What it is.* The display models record every vsync's latched frame in guest-virtual time (`frame-timeline`).
+     `tests/ipad1/jank.py` runs under `-icount` and injects input on exact vsync steps, then scores p99, hitches,
+     dropped, longest and runs.
+   - *The gate.* `jank.py --gate` in `tests/gate.sh --full` checks three iPad animations against
+     `jank-baselines.json`. Two runs at load 206→89 and 151→165 gave frame-identical timelines, and a deliberate
+     one-vsync swap stall FAILs the gate. No quiet-host (<8) run: the host never came quiet.
+   - *Still open.* Host CPU per frame, the cost this metric cannot see by construction; it belongs in a
+     quiet-host measurement. No 2.x/1.x (iPod LCD) baselines yet. The IOP second core doesn't boot under icount,
+     so the gate runs the HLE.
 8. **Guest services.** The sessions tier's guest checks don't run by default (`LTM_IPOD_DEVICE`), so the agent,
    respring, photo import and rollback can regress unseen.
 9. **Compatibility.** The shipped 2.x recipe (AppSync on) was never run through the matrix, and it fails install
