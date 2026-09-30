@@ -23,9 +23,13 @@ final class N45Board: Board {
     /// changes.md: every other job is removed (the rest wait on hardware this machine does not have). Plus ptpd
     /// (usbptpd): USBDeviceConfiguration's iPod1,1 configurations all carry PTP, and IOIpodUSBDevice starts no USB
     /// stack ("can't start! Need functions") until every function has registered, so without it there is no usbmux.
+    /// Plus coreaudiod.plist (the job is mediaserverd): it serves com.apple.audio.systemsoundserver2, so every system
+    /// sound, keyboard clicks and lock included, and on N45 each is played as Beep + Buzz (Celestial's
+    /// N45/SystemSoundBehaviour.plist), the Buzz on the piezo behind timer 1. It needs the WM8758 codec to answer
+    /// on I2C (qemu-ios ipod1g-buzzer); without one it crash-loops on an empty audio device list.
     static let keptDaemons: Set = ["com.apple.AddressBook.plist", "com.apple.CommCenter.plist", "com.apple.configd.plist",
                                    "com.apple.mobile.lockdown.plist", "com.apple.notifyd.plist", "com.apple.SpringBoard.plist",
-                                   "com.apple.usbptpd.plist"]
+                                   "com.apple.usbptpd.plist", "coreaudiod.plist"]
     static let rootLibrary = "private/var/root/Library"
     static let openGLESExports = "opengles-1x.exports"
 

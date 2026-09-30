@@ -4089,12 +4089,12 @@
  "n45ap-3A101a": {
   "version": "1.1",
   "board": "n45ap",
-  "status": "untested",
-  "when": "2026-09-29T21:25:15+00:00",
+  "status": "experimental",
+  "when": "2026-09-30T01:21:22+00:00",
   "tools": {
-   "firmwarekit": "/Users/shg/Developer/LightTouchMac-ssl3-1g/Packages/FirmwareKit/.build/release/firmwarekit",
-   "dylib": "/Users/shg/Developer/qemu-ios-1g-sigill/build/libqemu-arm.dylib",
-   "guest_tools": "/Users/shg/Developer/qemu-ios-files/ipod-1g-app/export/ipad-guest-tools"
+   "firmwarekit": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/ltm/Packages/FirmwareKit/.build/release/firmwarekit",
+   "dylib": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/qemu-ios/build/libqemu-arm.dylib",
+   "guest_tools": "/Users/shg/Developer/qemu-ios-files/rejudge-0929/export/ipad-guest-tools"
   },
   "keys": {
    "total": 1,
@@ -4103,7 +4103,7 @@
    "error": null
   },
   "prepare": {
-   "seconds": 109.2,
+   "seconds": 110.5,
    "ok": true,
    "steps": [
     "Verifying the IPSW",
@@ -4116,7 +4116,7 @@
    "warnings": [],
    "error": null,
    "last_step": "Writing the lock",
-   "log": "/tmp/ssl3-1g/mscratch/n45ap-3A101a/firmwarekit.log",
+   "log": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-scratch/n45ap-3A101a/firmwarekit.log",
    "lock": {
     "boot_strategy": null,
     "gles": "GL front end replaces OpenGLES (186 exports, the firmware's own); LayerKit composites through it (LK_ENABLE_OGL=1)",
@@ -4129,11 +4129,26 @@
   "checks": {
    "lit": {
     "ok": true,
-    "seconds": 8.6
+    "seconds": 11.9
+   },
+   "home": {
+    "ok": true,
+    "brightness": {
+     "home": 0.225,
+     "home2": 0.225,
+     "installed": 0.225
+    },
+    "frontmost": [
+     "",
+     ""
+    ],
+    "dark": null,
+    "wrongApp": null,
+    "frame": null
    },
    "lockdown": {
     "ok": true,
-    "seconds": 4.2,
+    "seconds": 8.6,
     "productType": "iPod1,1"
    },
    "activation": {
@@ -4161,35 +4176,41 @@
     "result": 0
    },
    "gl": {
-    "ok": null,
-    "note": "skipped: qemu-ios gl-coverage not merged (no counters)"
+    "ok": true,
+    "path": "hardware GL",
+    "rejects": 0,
+    "picture": null,
+    "note": null
    },
    "persist": {
     "ok": true,
     "error": null,
     "second_boot": {
-     "lit": 10.4,
+     "lit": 12.3,
      "lockdown": 2.2
-    }
+    },
+    "restartedApps": false
    },
    "shutdown": {
     "ok": true,
-    "seconds": 15.1,
+    "seconds": 16.6,
     "reason": "The iPod stopped.",
-    "second": 15.1
+    "second": 15.3,
+    "second_ok": true,
+    "boot2_reason": "The iPod stopped."
    },
    "base_unchanged": true,
    "driver_exit": 0
   },
   "screenshots": {
-   "lock": "/tmp/ssl3-1g/results/n45ap-3A101a/lock.png",
-   "home": "/tmp/ssl3-1g/results/n45ap-3A101a/home.png",
-   "installed": "/tmp/ssl3-1g/results/n45ap-3A101a/installed.png",
-   "lock2": "/tmp/ssl3-1g/results/n45ap-3A101a/lock2.png",
-   "home2": "/tmp/ssl3-1g/results/n45ap-3A101a/home2.png"
+   "lock": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/lock.png",
+   "home": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/home.png",
+   "installed": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/installed.png",
+   "lock2": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/lock2.png",
+   "home2": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/home2.png"
   },
-  "events": "/tmp/ssl3-1g/results/n45ap-3A101a/driver.jsonl",
-  "triage": "ssl3-1g 09-29 (qemu-ios ipod-1g-sigill: OTG OUT transfers end on a short packet/PktCnt; libimobiledevice 1.4.0 + libimobiledevice-sslv3-ios1.patch on OpenSSL 3.6.3 enable-ssl3 enable-ssl3-method, --frameworks the native build's prefix; usbmuxd 33728ae): the 1G's USB columns through the app's own libimobiledevice: lockdown 4.2 s (iPod1,1), Activated, AFC 4/4 (16384..1048583 bytes), persist through the AFC marker (boot 2 lockdown 2.2 s), shutdown 15.1 s both boots. Reverting either half fails lockdown/Activation: without the patch the handshake is TLS1.0 (SSL error -5, 'Could not perform SSL handshake'); without the OTG fix a 512-byte mux packet merges with the next ('expected 512 bytes, received 540'), the TCP stream loses 484 bytes and ActivationState never answers."
+  "events": "/Users/shg/Developer/qemu-ios-files/ipod1g-buzzer/matrix-results/n45ap-3A101a/driver.jsonl",
+  "triage": "ipod1g-buzzer 09-29 (qemu-ios ipod1g-buzzer: WM8758 on i2c1, I2S1 on dmac1 with host-output off, timers 0-3, the piezo on timer 1; N45Recipe keeps coreaudiod.plist, i.e. mediaserverd; --frameworks a fresh build-package-native prefix, the SSLv3 libimobiledevice): every check passes; mediaserverd runs on both boots with no crash and the WM8758's output attaches. The buzzer itself is judged outside the matrix: headless WAV, key taps and the lock sound give timer-1 tones at the guest's own START times (smoke #56, fidelity ledger N72 rows 57/58)."
  },
  "n45ap-4B1": {
   "version": "1.1.5",

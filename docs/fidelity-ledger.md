@@ -43,7 +43,7 @@ the lower class in the summary.
 | Board | R | H | P | S | rows |
 |---|---|---|---|---|---|
 | K48 iPad 1 | 26 | 8 | 6 | 20 | 60 |
-| N72 iPod touch 2G | 20 | 6 | 8 | 22 | 56 |
+| N72 iPod touch 2G (and the N45 1G parts it shares or adds) | 21 | 6 | 8 | 23 | 58 |
 | Guest side (both boards: boot-args, injected components, image edits, synthesised state) | 0 | 0 | 42 | 0 | 42 |
 
 The distance to "boots any iOS unchanged" is the H and P rows. The two that decided it were the IOP
@@ -138,7 +138,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 5 | RAM windows (vrom, insecure 48 M, secure, fb, iboot, llb, sram1) | `ipod_touch_2g.c:1366-1392` | R | Plain RAM; llb/sram1 overlap at equal priority. | MIU model, 2-3 d |
 | 6 | EdgeIC @0x38E02000 | `ipod_touch_2g.c:1381` | S | 4 KB of RAM. | 1-2 d |
 | 7 | VIC0/1 (PL192) | `ipod_touch_2g.c:2934-2952` | R | Register-level. | – |
-| 8 | Timer | `hw/arm/ipod_touch_timer.c:4-25, 125-150` | R/S | Timer 4 + 64-bit tick counter real; timers A-D write-only; 6 vs 10 MHz mismatch kept; time-dilation knob. | All timers at rate, 2-3 d |
+| 8 | Timer | `hw/arm/ipod_touch_timer.c` | R/S | Timer 4 + 64-bit tick counter real; timers 0-3 hold their registers, latch on STATE bit 1, run, one-shot and report the output pin's waveform at `input-hz` (N45: 24 MHz; the N45 buzzer's PWM, row 58), no 0-3 interrupts (none enabled by any kernel seen); 6 vs 10 MHz mismatch kept; time-dilation knob. | 0-3 interrupts when a consumer appears; timer 4 at its configured rate, 2-3 d |
 | 9 | Clock0/1 | `hw/arm/ipod_touch_clock.c` | S | Register file, PLLs always locked, no frequency derivation. | 2-4 d |
 | 10 | SYSIC (power + GPIO IC) | `hw/arm/ipod_touch_sysic.c:52-70, 110-200` | R/S/P | GPIO IC real; ONCTRL drops some bits; epoch 4 synthesised for direct boot. | Power-domain machine, 2-3 d |
 | 11 | GPIO | `hw/arm/ipod_touch_gpio.c:20-60, 97-130` | R/S | Only FSEL out-lo/hi modelled. | 2 d |
@@ -164,7 +164,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 31 | Tethered demo card (`IT_TETHERED`) | `hw/arm/ipod_touch_tethered.c` | S | Returns 0x82. | None (not retail) |
 | 32 | CS42L58 codec | `hw/arm/ipod_touch_cs42l58.c:5-43, 61-111` | R/S | MAP register file; LRCLK from reg 05; no ADC/mic. | Capture path, 3-5 d |
 | 33 | LM48821 amp | `hw/arm/ipod_touch_lm48821.c` | R | Datasheet control word. | – |
-| 34 | I2S0 | `hw/arm/ipod_touch_i2s.c`, `ipod_touch_2g.c:3285-3322` | R | DMA-paced FIFO to host audio at the codec's LRCLK. | – |
+| 34 | I2S0 | `hw/arm/ipod_touch_i2s.c`, `ipod_touch_2g.c:3285-3322` | R | DMA-paced FIFO to host audio at the codec's LRCLK. The same model is N45's I2S1 (dmac1 request 2, ready interrupt GPIO 5/10) with `host-output=off` (smoke #56). | – |
 | 35 | ISL29003 ALS | `hw/arm/ipod_touch_isl29003dl.c:25-82` | S | Fixed value. | 1 d |
 | 36 | CD3272 Mikey | `hw/arm/ipod_touch_cd3272_mikey.c:14-41` | S | Reads 0. | 2-3 d |
 | 37 | AMC | `hw/arm/ipod_touch_amc.c:1-119, 361-525` | S (registers) / H (`decode`) | Default reports enabled IRQs pending; decode mode is AAC/MP3/ALAC HLE via libavcodec. | AMC DSP running the guest's DE programs, 60-120 d |
@@ -187,6 +187,8 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 54 | Host input automation (keys→buttons, on-screen keyboard taps, power-off slide) | `ipod_touch_2g.c:2020-2145, 2435-2650` | H | Host synthesises GPIO/touch events. | None |
 | 55 | Guest services (agent, keyboard, pasteboard, package) | `hw/arm/guest-services.c:98-183`, `hw/arm/ipod-agent.c` | P | Injected daemons/dylibs over the hypercall. | USB lockdown/AFC tooling for what it covers, 10-20 d |
 | 56 | TCG `it-hle` | `target/arm/tcg/it-hle.c` | P (inert) | Opt-in memcpy hoist at fixed 7E18 addresses. | Delete, 0 d |
+| 57 | WM8758 codec (N45, i2c1 0x1a) | `hw/arm/ipod_touch_wm8758.c` | R/S | The write-only 2-wire control port (7-bit register, 9-bit value, register 0 resets): what AppleWM8758Audio's start needs. No analogue path (headphone jack, hp_detect), so no Beep reaches the host. | Output path + jack detect after smoke #56, 1-2 d |
+| 58 | Piezo buzzer (N45, timer 1) | `hw/arm/ipod_touch_piezo.c` | R | The stock chain drives it unmodified: mediaserverd (Celestial's Buzz, SystemSoundBuzzToneSequences.plist) → AppleS5L8900XTimerDevice → timer 1 registers (row 8). The pin's square wave is rendered into a 44.1 kHz host voice 40 ms behind the guest clock. The transducer is ideal (no resonance or filtering); `amplitude` is a loudness knob. | A piezo response curve, if anyone can measure one, 0.5 d |
 
 ## Guest side: patches, shims, boot-args, synthesised state (both boards)
 
