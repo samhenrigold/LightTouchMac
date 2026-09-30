@@ -617,7 +617,7 @@
   "version": "5.0",
   "build": "9A5220p",
   "released": "2011-06-07",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 1,
   "status_note": "iOS 5.0 Beta 1 (9A5220p), 2011-06-07: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it). No public keys for UpdateRamDisk.",
