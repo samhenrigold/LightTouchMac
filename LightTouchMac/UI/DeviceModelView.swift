@@ -103,7 +103,8 @@ final class DeviceModelView: NSView {
         model.materials = model.materials.map { material in
           guard var finish = material as? PhysicallyBasedMaterial else { return material }
           let name = finish.name ?? entity.name
-          if name.contains("Black_glass") {
+          // N72's front glass, then revision 7's (K48, N45) and its LCD border under it.
+          if name.contains("Black_glass") || name == "glass" || name.contains("inactive_LCD_perimeter") {
             finish.specular = .init(floatLiteral: 0)
             finish.baseColor = .init(tint: NSColor(white: 0.018, alpha: 1))
           }
