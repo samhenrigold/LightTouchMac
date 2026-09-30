@@ -417,6 +417,19 @@ class ReleaseTests(unittest.TestCase):
 
 
 class RemoveTreeTests(unittest.TestCase):
+    def test_locked_base_takes_no_new_files_and_still_removes(self):
+        """verify boots a base locked as the app locks one: a Finder .DS_Store can't land in it, and clean() removes it."""
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary) / 'prepare-check/out'
+            (base / 'nand/cs0').mkdir(parents=True)
+            (base / 'nand/cs0/1.page').write_bytes(b'x')
+            release.lock_base(base)
+            for directory in (base, base / 'nand', base / 'nand/cs0'):
+                with self.assertRaises(PermissionError):
+                    (directory / '.DS_Store').write_bytes(b'')
+            release.remove_tree(base.parent)
+            self.assertFalse(base.parent.exists())
+
     def test_retries_when_finder_refills_a_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             work = Path(temporary) / 'prepare-check'

@@ -593,6 +593,7 @@ def remove_tree(path, attempts=5):
     for attempt in range(attempts):
         if not path.exists():
             return
+        subprocess.run(['chflags', '-R', 'nouchg', path], check=True)   # a base lock_base locked
         subprocess.run(['chmod', '-R', 'u+w', path], check=True)
         try:
             return shutil.rmtree(path)
@@ -600,6 +601,13 @@ def remove_tree(path, attempts=5):
             if attempt == attempts - 1:
                 raise
             time.sleep(1)
+
+
+def lock_base(base):
+    """What the app does to a published base (DeviceStateStorage.lockBase): chflags uchg on it and every directory in
+    it, so nothing adds to it. The boot then runs on a base locked as the app's are, and a Finder window open on the
+    output can't drop .DS_Store into it (09-30: RC2's post-staple verify failed 'the prepared base is unchanged' so)."""
+    subprocess.run(['find', base, '-type', 'd', '-exec', 'chflags', 'uchg', '{}', '+'], check=True)
 
 
 def check_prepare(args, log, state, app):
@@ -651,6 +659,7 @@ def check_prepare(args, log, state, app):
         if bundled not in json.dumps(lock):
             raise RuntimeError(f'Prepare did not use the bundled guest tools {bundled}')
         prepared = int(subprocess.check_output(['du', '-sk', work / 'out'], text=True).split()[0]) * 1024
+        lock_base(work / 'out')
         boot = [sys.executable, ROOT / 'tests/sessions/check-sessions.py', '--single', work / 'out', '--board', board,
                 '--helper', app / 'Contents/MacOS/LightTouchDevice', '--dylib', app / 'Contents/Frameworks/libqemu-arm.dylib',
                 '--usbmuxd', app / 'Contents/MacOS/usbmuxd', '--frameworks', app / 'Contents/Frameworks',
