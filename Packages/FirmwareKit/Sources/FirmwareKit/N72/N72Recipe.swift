@@ -98,7 +98,7 @@ final class N72Board: Board {
         let e = c.e, ipsw = c.ipsw
         let iboot = try Data(contentsOf: c.decFile("iBoot.bin"))
         kcPath = try Self.kernelcachePath(iboot)
-        guard let kc = try BuildComponents.load(ipsw)["KernelCache"] else { throw FirmwareError(.unsupported, "\(e.id): the IPSW names no KernelCache") }
+        guard let kc = try BuildComponents.load(ipsw, board: c.e.board)["KernelCache"] else { throw FirmwareError(.unsupported, "\(e.id): the IPSW names no KernelCache") }
         kcMember = kc
         // the machine boots every n72 device with the AMFI pair (qemu-ios ipod_touch_2g.c; N72Keybag.bootArgs)
         let kernel = try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped)

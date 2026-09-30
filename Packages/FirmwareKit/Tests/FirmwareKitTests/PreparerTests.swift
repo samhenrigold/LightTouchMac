@@ -95,7 +95,7 @@ import Testing
     }
 
     @Test func errorCodes() {
-        func code(_ e: Error) -> String? { if case .error(let c, _) = Preparer.errorEvent(e) { return c }; return nil }
+        func code(_ e: Error) -> String? { if case .error(let c, _, _) = Preparer.errorEvent(e) { return c }; return nil }
         #expect(code(FirmwareError(.activationFailed, "x")) == "activation_failed")
         #expect(code(ActivationFailure("x")) == "activation_failed")
         #expect(code(FirmwareError(.oneshotFailed, "x")) == "oneshot_failed")
@@ -103,6 +103,14 @@ import Testing
         #expect(code(NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))) == "disk_full")
         #expect(code(CocoaError(.fileWriteOutOfSpace)) == "disk_full")
         #expect(code(CocoaError(.fileNoSuchFile)) == "internal")
+        // A required piece that doesn't fit names itself in the event, for the app's plain words.
+        let log = FitCheck.Log()
+        #expect(throws: FirmwareError.self) { try log.check(FitCheck.Fit("OpenGLES front end (contrib/gles-public)", fits: false, "x"), required: true) }
+        do { try log.check(FitCheck.Fit("OpenGLES front end (contrib/gles-public)", fits: false, "x"), required: true) } catch {
+            let line = Self.object(Preparer.errorEvent(error).json)
+            #expect(line?["code"] as? String == "unsupported" && line?["piece"] as? String == "OpenGLES front end (contrib/gles-public)")
+        }
+        #expect(Self.object(Preparer.errorEvent(FirmwareError(.unsupported, "x")).json)?["piece"] == nil)
     }
 
     /// Cancel's process sweep: a grandchild is found and stopped.

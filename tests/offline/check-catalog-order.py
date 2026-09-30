@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Every listing of the firmware catalog is per board, chronological.
+"""Every listing of the firmware catalog is per board, in version order.
 
-FirmwareCatalog.load sorts on load: boards keep the order the file introduces them; within a board
-entries sort by numeric version, a version's betas (by number, a missing number is 1) before its
-GMs before its release, build as the last tiebreak; then entries with a `released` date take the
-dated positions in date order (a 5.0 beta that came out before 4.3.4 lists before it), whatever
-order the JSON has. The shipped catalog must load in that order too: every entry dated, dates
-ascending per board, 4.1 betas before 4.1.
+FirmwareCatalog.load sorts on load: boards keep the order the file introduces them; within a board entries
+sort by marketing version, and within a version its betas and GMs come before the release, by release date
+(by beta/GM number where undated), build as the last tiebreak, whatever order the JSON has. So 4.3.x stays
+together and a 5.0 beta that came out before 4.3.4 lists after 4.3.5, just before 5.0 (user, 09-30; the
+earlier date-first order interleaved them). The shipped catalog must load in that order too: every entry
+dated, versions ascending per board, dates ascending within a version, 4.1 betas before 4.1.
 """
 from pathlib import Path
 import json, subprocess, tempfile
@@ -23,18 +23,27 @@ source = r'''import Foundation
                          "n72ap 4.1 8B5080c", "n72ap 4.1 8B5091b", "n72ap 4.1 8B117",
                          "n72ap 4.2 8C5115c", "n72ap 4.2 8C134", "n72ap 4.2 8C134b", "n72ap 4.2.1 8C148",
                          "k48ap 3.2 7B367", "k48ap 3.2.2 7B500", "k48ap 4.2.1 8C148",
-                         "k48ap 4.3.3 8J3", "k48ap 5.0 9A5220p", "k48ap 4.3.4 8K2", "k48ap 4.3.5 8L1", "k48ap 5.0 9A334"], "\(order)")
+                         "k48ap 4.3.3 8J3", "k48ap 4.3.4 8K2", "k48ap 4.3.5 8L1", "k48ap 5.0 9A5220p", "k48ap 5.0 9A334"], "\(order)")
   let badges = c.entries.compactMap(\.prereleaseBadge)
   precondition(badges == ["Beta 1", "Beta 2", "Beta 3", "GM 1", "GM 2", "Beta 1"], "\(badges)")
   let s = try FirmwareCatalog.load(from: URL(fileURLWithPath: args[2]))
+  func version(_ v: String) -> [Int] { v.split(separator: ".").map { Int($0)! } }
   for board in Set(s.entries.map(\.board)) {
-   let dates = s.entries.filter { $0.board == board }.map { $0.released ?? "" }
-   precondition(!dates.contains("") && dates == dates.sorted(), "\(board): \(dates)")
+   let listed = s.entries.filter { $0.board == board }
+   precondition(listed.allSatisfy { $0.released != nil }, "\(board): an undated entry")
+   for (a, b) in zip(listed, listed.dropFirst()) {
+    precondition(!version(b.version).lexicographicallyPrecedes(version(a.version)), "\(board): \(a.build) (\(a.version)) before \(b.build) (\(b.version))")
+    precondition(a.version != b.version || a.released! <= b.released!, "\(board) \(a.version): \(a.build) before \(b.build)")
+    precondition(a.version != b.version || a.prerelease != nil || b.prerelease == nil, "\(board) \(a.version): the release before \(b.build)")
+   }
   }
+  let ipad = s.entries.filter { $0.board == "k48ap" }.map { "\($0.version) \($0.prereleaseBadge ?? "")" }
+  let from433 = ipad.drop { $0 != "4.3.3 " }.prefix(5)
+  precondition(Array(from433) == ["4.3.3 ", "4.3.4 ", "4.3.5 ", "5.0 Beta 1", "5.0 Beta 5"], "\(ipad)")
   let ipod41 = s.entries.filter { $0.board == "n72ap" && $0.version == "4.1" }.map(\.build)
   precondition(ipod41 == ["8B5080c", "8B5091b", "8B5097d", "8B117"], "\(ipod41)")
   precondition(s.entries.allSatisfy { $0.prerelease == nil || $0.prereleaseBadge?.last?.isNumber == true })
-  print("PASS: catalog entries list per board chronologically (betas, GMs, release; dates first); the shipped catalog too")
+  print("PASS: catalog entries list per board in version order (a version's betas and GMs by date, then its release); the shipped catalog too")
  }
 }
 '''

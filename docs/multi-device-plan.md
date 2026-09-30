@@ -151,6 +151,8 @@ EC stays in the app: every `qemu_ios_*` call becomes a `link.…` call. `NativeL
 ```
 
 - `status` is one of `available`, `experimental`, `coming_soon` or `user_ipsw`.
+> 2026-09-30 (`bundle-cleanup`): the built-in iPod is gone. No prepared device ships (no `bundled` key, `BundledBase`, `pack-base.py`, `--bundled-ipsw`); the catalog's `first_run` (k48ap-7B500) is what a first launch selects, and n72ap-7E18 stays a `user_ipsw` entry. A device an earlier build unpacked stays an ordinary device. The legacy erase keeps the IPAs only. Test: `tests/offline/check-legacy-erase.py`.
+
 - `source.kind` is always `ipsw`. The entry the app ships a prepared base for carries `"bundled": "device/n72ap-7E18.itbase"` (C6, 2026-09-28): a `firmwarekit create` of that entry packed as one blob (`scripts/pack-base.py`, the .itpack format), unpacked into `Preparing/<id>/` and published like any preparation on first launch (`FirmwareJobs.prepareBundled`). The entry stays `user_ipsw`, so a user can re-prepare it from their own IPSW after deleting the built-in device.
 
 Status column:
@@ -178,6 +180,8 @@ State/Preparing/<job-uuid>/                                      staging -> atom
 
 **The old layout is erased once, not migrated** (C6, 2026-09-28, `LegacyState.swift`; the adoption of it in place, `LegacyAdoption`, is gone with `LaunchOptions` and every non-prepared boot path).
 - Found at launch: `State/device`, `nandrw-*`, `snapshot-*`, `.reset-*`, `State/IPAs`, `AppCache`, the old logs, records whose `base.kind` is not `prepared`, and the pre-library root `Application Support/LightTouchMac`.
+> 2026-09-30 (`bundle-cleanup`): the built-in iPod is gone. No prepared device ships (no `bundled` key, `BundledBase`, `pack-base.py`, `--bundled-ipsw`); the catalog's `first_run` (k48ap-7B500) is what a first launch selects, and n72ap-7E18 stays a `user_ipsw` entry. A device an earlier build unpacked stays an ordinary device. The legacy erase keeps the IPAs only. Test: `tests/offline/check-legacy-erase.py`.
+
 - One prompt: "Light Touch's built-in iPod has changed format. Erase it and continue (apps you've saved are kept), or quit." Erase & Continue keeps every `.ipa` (into the library) and the host pairing (`work/usbmuxd-conf`, seeded into the built-in device when it is published), removes the rest. Quit changes nothing.
 - Test: `tests/offline/check-bundled-prepared.py` (fresh state → the built-in iPod published as `.prepared`; old layout → erased, IPAs kept, pairing copied).
 
@@ -339,6 +343,8 @@ Logs/<bundle>/Devices/<uuid>/, Logs/Preparing/
 - The app target stops linking the dylib: the bridging header drops the qemu headers.
 - `Resources/firmware-catalog.json`.
 - **New per-build armv7 guest payloads go into one opaque blob per arch** (`Resources/guest/armv7.itpack`, in nandpack format). Unsigned nested `.bundle`s and raw payloads trip codesign and the notary.
+> 2026-09-30 (`bundle-cleanup`): the built-in iPod is gone. No prepared device ships (no `bundled` key, `BundledBase`, `pack-base.py`, `--bundled-ipsw`); the catalog's `first_run` (k48ap-7B500) is what a first launch selects, and n72ap-7E18 stays a `user_ipsw` entry. A device an earlier build unpacked stays an ordinary device. The legacy erase keeps the IPAs only. Test: `tests/offline/check-legacy-erase.py`.
+
 - The built-in iPod ships as `Resources/device/n72ap-7E18.itbase` (about 250 MB: a `firmwarekit create` of 7E18 packed by `scripts/pack-base.py` in the .itpack format), beside `bootrom_240_4`. The old `nand.itnand`, `ios3/iBoot.bin` and `nor_7E18.bin` are gone: a prepared base carries its own iBoot and NOR.
 - **Signing order:** frameworks, then `MacOS/*` (each with its own entitlements), then the app.
 - **`test-package.py` must check:** no raw NAND, no tarballs, and no `*.ipsw` or img3 magic outside `.itnand`/`.itpack`.
@@ -375,6 +381,8 @@ What each stage does:
 - **dylib:** `make-dylib-macos.sh`.
 - **guest:** qemu-ios `contrib/export-guest-artifacts.sh` (through `scripts/build-guest-tools.sh`): every guest component built by its own `build.sh` from a source copy (`contrib/guest-package/build.sh`), staged as `guest/guest-tools` (the iPod set the app uploads) and `guest/ipad-guest-tools` (the flat directory firmwarekit reads: the iPad helpers, AppSync, the two GL engines `GLEngine` and `MBXGLEngine` with `gles-names.h`, the n72 recipe's inputs, `armv6.itpack` and `armv7.itpack` at `contrib/guest-package/VERSION`'s serial; ldid-signed; `IPAD_SDK` picks the 3.2 SDK), plus the helper entitlements and headers, with `guest/manifest.json` (source commit, dirty flag, sha256 per input and per file). `validate_guest` checks the directories against the manifest, the required names (`GUEST_PAYLOADS`, `IPAD_GUEST_PAYLOADS`) and that the checkout's HEAD and the recorded inputs are unchanged. package.sh ships the iPad set flat as `Contents/Resources/guest-tools`, and refuses to ship firmwarekit without it. `GLRendererFloatQEMU` ships as the flat Mach-O, so no nested bundle is signed. The app composes each boot's offer from the packages (guest-package-bootstrap.md, P5).
 - **app:** xcodebuild Release (it embeds `LightTouchDevice` and `firmware-catalog.json`), and `swift build -c release` for `Packages/FirmwareKit`; package.sh ships it as `Contents/MacOS/firmwarekit` (hardened runtime, no entitlements). It must build: the built-in iPod needs it.
+> 2026-09-30 (`bundle-cleanup`): the built-in iPod is gone. No prepared device ships (no `bundled` key, `BundledBase`, `pack-base.py`, `--bundled-ipsw`); the catalog's `first_run` (k48ap-7B500) is what a first launch selects, and n72ap-7E18 stays a `user_ipsw` entry. A device an earlier build unpacked stays an ordinary device. The legacy erase keeps the IPAs only. Test: `tests/offline/check-legacy-erase.py`.
+
 - **package:** first the built-in iPod (`bundled_base`): the built firmwarekit's `create` of `n72ap-7E18` from `--bundled-ipsw` with the built `ipad-guest-tools` (and the built helper), packed by `scripts/pack-base.py` into `bundled/n72ap-7E18.itbase` with `bundled.json` (inputs, the lock's hashes) beside it, skipped when its inputs are unchanged; then a fresh copy of the product, `build-inputs.json` and package.sh (`LTM_BASE_BLOB`). Notarization is not done here.
 - **notarize:** submits once, records the id in `stages.json` and waits up to 9 minutes. Rerun it to keep waiting; `notary-log.json` is written if it's rejected.
 - **staple.**
@@ -512,7 +520,7 @@ firmwarekit create --entry ENTRY.json --ipsw IPSW --out STAGING_DIR
 {"event":"progress","fraction":0.42,"detail":"Booting to seal the flash — 42 s"}   // fraction within the current step; detail optional
 {"event":"warning","message":"…"}
 {"event":"done","lock":"device.lock.json"}      // relative to STAGING_DIR
-{"event":"error","code":"key_missing|sha_mismatch|unsupported|activation_failed|oneshot_failed|disk_full|internal","message":"…"}
+{"event":"error","code":"key_missing|sha_mismatch|unsupported|activation_failed|oneshot_failed|disk_full|internal","message":"…","piece":"…"}   // piece: only when a required fit check failed (FitCheck.Fit.piece)
 ```
 
 **Progress (2026-09-28, prep-ux):** during every step firmwarekit emits a `progress` event about once a second, and a final `fraction` 1.0 just before the next `step` (or `done`).
@@ -574,6 +582,8 @@ boot chain (iBoot/kboot vs direct-iboot), data volume (k48) and seal (k48). The 
   `Packages/FirmwareKit/Package.swift` and recorded with licenses in `build-support/dependencies.json` (`swiftpm`).
 
 The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for the built-in iPod's unpacked blob and, kept in place, an `LTM_DEV_BASE` development base).
+
+> 2026-09-30 (`bundle-cleanup`): the built-in iPod is gone. No prepared device ships (no `bundled` key, `BundledBase`, `pack-base.py`, `--bundled-ipsw`); the catalog's `first_run` (k48ap-7B500) is what a first launch selects, and n72ap-7E18 stays a `user_ipsw` entry. A device an earlier build unpacked stays an ordinary device. The legacy erase keeps the IPAs only. Test: `tests/offline/check-legacy-erase.py`.
 
 **The built-in iPod (C6, 2026-09-28).** The release build runs the same `firmwarekit create` for `n72ap-7E18` (built firmwarekit, built guest tools, the 7E18 IPSW) and packs STAGING_DIR with `scripts/pack-base.py` into `Resources/device/n72ap-7E18.itbase`: the .itpack format ("ITPACK01", a JSON index of the files in stream order, one zlib stream), which the notary does not open. The app (`BundledBase.unpack`) streams it into `Preparing/<id>/` and publishes it as above; nothing in the app boots anything but a prepared base. Development runs: `LTM_DEV_BASE=<firmwarekit create output>` writes a `.prepared` record naming that directory once (absolute path, never locked), for the entry its lock names.
 

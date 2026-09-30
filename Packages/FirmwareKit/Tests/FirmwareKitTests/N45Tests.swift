@@ -257,8 +257,27 @@ import Testing
 
     @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func components() throws {
         guard Self.available else { try FixtureRequirements.missing(#"N45Tests.swift: Self.available"#) }
-        let c = try BuildComponents.load(IPSWArchive(Self.ipsw))
+        let c = try BuildComponents.load(IPSWArchive(Self.ipsw), board: "n45ap")
         #expect(c["iBoot"] == Self.prefix + "iBoot.n45ap.RELEASE.img2" && c["AppleLogo"] == Self.prefix + "applelogo.img2")
         #expect(c["KernelCache"] == "kernelcache.release.s5l8900xrb" && c["OS"] == "022-3601-4.dmg")
+    }
+    /// 1.1.3+ (4A93, 4B1) ship com.apple.mobile.lockbot, through which their lockdownd starts every service (AFC):
+    /// the bake keeps it; 1.1.1 (3A110a) has none. Read off the real system volumes.
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: [("n45ap-4A93", true), ("n45ap-4B1", true), ("n45ap-3A110a", false)])
+    func lockbotKeptWhereShipped(_ id: String, _ ships: Bool) throws {
+        guard let url = try K48IBootTests.cachedIPSW(id) else { try FixtureRequirements.missing("cached IPSW for " + id) }
+        try Oracle.withTemp { dir in
+            let ipsw = IPSWArchive(url), e = try Oracle.entry(id), os = try BuildComponents.load(ipsw, board: e.board)["OS"]!
+            let key = try #require(Data(hex: e.key(forPath: os).key))
+            let dmg = dir.appendingPathComponent("rootfs.dmg"), raw = dir.appendingPathComponent("rootfs.hfs")
+            try ipsw.stream(os) { try VFDecrypt.decrypt(from: $0.fileDescriptor, output: dmg, key: key) }
+            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            let jobs = try HFSPlusVolume(raw).listing(under: SystemEdits.daemons, hashes: false)
+                .map { ($0.path as NSString).lastPathComponent }.filter { $0.hasSuffix(".plist") }
+            let lockbot = "com.apple.mobile.lockbot.plist", removed = N45Board.removedDaemons(jobs)
+            #expect(jobs.contains(lockbot) == ships, "\(id): \(jobs)")
+            #expect(!removed.contains(lockbot) && removed.contains("com.apple.syslogd.plist"), "\(id): \(removed)")
+            #expect(N45Board.keptDaemonsFit(jobs).fits)
+        }
     }
 }

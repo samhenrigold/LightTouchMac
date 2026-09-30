@@ -30,13 +30,16 @@ import Foundation
             Set(DeviceAction.allCases.filter { r.allows($0, canDownload: canDownload) }.map { "\($0)" })
         }
 
-        // iPod 3.1.3 is the built-in device (a packed prepared base in the bundle, unpacked at first
-        // launch); with no record its Prepare needs no preparer. It is also a user_ipsw entry.
-        var r = row(iPod)
-        precondition(iPod.bundled == "device/n72ap-7E18.itbase" && r.state == .bundled && r.primaryTitle == "Prepare")
-        precondition(r.stateDescription == "Built in" && !r.isStartable)
-        precondition(allowed(r) == ["importIPSW", "downloadAndPrepare"], "\(allowed(r))")
-        precondition(iPod4.bundled == nil && row(iPod4).state != .bundled)
+        // A first launch selects a build Apple still serves, ready to Download & Prepare: no device ships in the app.
+        let first = catalog.firstRunEntry!
+        precondition(first.status == .available && first.source.url?.host == "secure-appldnld.apple.com", "first run: \(first.id)")
+        var r = row(first)
+        guard case .notDownloaded = r.state else { fatalError("first run: \(r.state)") }
+        precondition(r.primaryTitle == "Download & Prepare" && allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"])
+        // iPod 3.1.3 (user_ipsw) with no record asks for its IPSW; nothing prepares it without one.
+        r = row(iPod)
+        precondition(r.state == .unavailable(.requiresIPSW) && r.primaryTitle == "Import IPSW…" && !r.isStartable, "\(r.state)")
+        precondition(allowed(r, canDownload: true) == ["importIPSW"], "\(allowed(r, canDownload: true))")
         r = row(iPod, instance: id)
         precondition(r.state == .ready && r.isStartable && r.primaryTitle == "Start")
         precondition(allowed(r) == ["start", "erase", "showInFinder", "delete"], "\(allowed(r))")
@@ -149,7 +152,7 @@ import Foundation
 
         // Untested builds (betas from archive.org, releases the matrix hasn't run) download and
         // prepare like any other, with an Untested note; coming soon stays shut (above).
-        for e in [entry("n72ap-8C5091e"), entry("k48ap-8F5148b"), entry("n72ap-7A341")] {   // still untested after the 09-30 sweep
+        for e in [entry("n72ap-8C5091e"), entry("n45ap-3B48b"), entry("n72ap-7A341")] {   // still untested after the 09-30 sweep
             precondition(e.status == .untested && e.source.url?.scheme == "https", e.id)
             r = row(e)
             guard case .notDownloaded = r.state else { fatalError("\(e.id): \(r.state)") }
@@ -164,7 +167,7 @@ import Foundation
         // The sidebar shows only what differs from the usual (DeviceRow.accessory, what the cell draws).
         let downloaded = DeviceRow(entry: iPad, instanceID: nil, session: nil, job: nil, failure: nil, downloaded: true)
         precondition(downloaded.accessory == .none, "Downloaded is the normal state: nothing after the title")
-        precondition(row(iPod).accessory == .none && row(iPad, instance: id).accessory == .none, "built in and ready: nothing")
+        precondition(row(iPad, instance: id).accessory == .none, "ready: nothing")
         precondition(row(iPad).accessory == .notDownloaded && row(beta1).accessory == .notDownloaded, "not here yet: the download glyph")
         precondition(row(iPad32, job: .downloading(fraction: 0.425)).accessory == .progress(0.425, "42%"))
         precondition(row(iPad32, job: .preparing(p)).accessory == .progress(1, "100%"))
@@ -184,6 +187,10 @@ import Foundation
         precondition(row(iPad).spaceShortage(available: needed - 1)?.hasPrefix("Not enough disk space: this needs ") == true)
         precondition(row(iPad, instance: id).spaceShortage(available: 0) == nil, "a prepared device needs no space")
         precondition(row(iPad32, job: .downloading(fraction: 0.5)).spaceShortage(available: 0) == nil, "nor does one already downloading")
+        // The sidebar lists in catalog order: version order, a version's betas right before its release.
+        let ids = catalog.entries.map(\.id)
+        precondition(ids.firstIndex(of: "k48ap-8L1")! < ids.firstIndex(of: "k48ap-9A5220p")! && ids.firstIndex(of: "k48ap-9A5288d")! < ids.firstIndex(of: "k48ap-9A334")!
+                     && ids.firstIndex(of: "n72ap-8A400")! < ids.firstIndex(of: "n72ap-8B5080c")!, "sidebar order: \(ids)")
         print("PASS: row states, accessories, primary buttons and commands for every catalog status")
     }
 }

@@ -1,4 +1,4 @@
-{"format": 1, "entries": [
+{"format": 1, "first_run": "k48ap-7B500", "entries": [
  {
   "id": "k48ap-7B367",
   "board": "k48ap",
@@ -111,7 +111,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 1,
-  "status_note": "iOS 4.2 Beta 1 (8C5091e), 2010-09-15: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_4.2_8C5091e_Restore.ipsw", "sha1": "bb685f022c6267dd77d4ce4c6bff8b60ad84c5d5", "bytes": 538847283},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "2c4f2ff9732af8f9ac4189fb5d1b095a", "key": "284288e5bd1afca58364c3358669a3b69f310f62b6d1ac2fcb356eeab3bfeb9e"},
@@ -147,7 +147,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 2,
-  "status_note": "iOS 4.2 Beta 2 (8C5101c), 2010-09-28: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_4.2_8C5101c_Restore.ipsw", "sha1": "b9c9c84b312d61a77413e8d71d1231a3d3899b96", "bytes": 545646316},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "5499a8558b6391cc82e828e86ca5e2f3", "key": "3457998397a3a383162dd6aa836ab1e73f07f13b3a4c13b2ab16b48a5d9f730c"},
@@ -183,7 +183,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 3,
-  "status_note": "iOS 4.2 Beta 3 (8C5115c), 2010-10-12: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_4.2_8C5115c_Restore.ipsw", "sha1": "ff01b907cc170648405224dd72311c9eabc29105", "bytes": 576124370},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "41ed134f17599a2f4e68334f3cd56218", "key": "2b45d41ccc6dc2335bf502d936d9370aa657650b9079f8da371cde74d5a7448a"},
@@ -219,7 +219,7 @@
   "status": "experimental",
   "prerelease": "gm",
   "prerelease_number": 1,
-  "status_note": "iOS 4.2 GM 1 (8C134), 2010-11-01: the golden master Apple replaced with 4.2.1; from the iOS Firmware Exhibit Collection on archive.org (third party).",
+  "status_note": "The golden master Apple replaced with 4.2.1; from the iOS Firmware Exhibit Collection on archive.org (third party).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_4.2_8C134_Restore.ipsw", "sha1": "edc2374ea39a029a943b345c43a8c2f2ab4bb504", "bytes": 575667008},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "d108bbfc6e3e4d6d3c9fec1d19fe1769", "key": "3359842bed66e5f2b942f60ac30667a36a86f049b8cb33bd101c1caf5cb422e8"},
@@ -255,7 +255,7 @@
   "status": "experimental",
   "prerelease": "gm",
   "prerelease_number": 2,
-  "status_note": "iOS 4.2 GM 2 (8C134b), 2010-11-12: the golden master Apple replaced with 4.2.1; from the iOS Firmware Exhibit Collection on archive.org (third party).",
+  "status_note": "The golden master Apple replaced with 4.2.1; from the iOS Firmware Exhibit Collection on archive.org (third party).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_4.2_8C134b_Restore.ipsw", "sha1": "57b9bef53d56bfb81c107847b62da97d5fb207ae", "bytes": 578020841},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "d108bbfc6e3e4d6d3c9fec1d19fe1769", "key": "3359842bed66e5f2b942f60ac30667a36a86f049b8cb33bd101c1caf5cb422e8"},
@@ -321,10 +321,10 @@
   "version": "4.3",
   "build": "8F5148b",
   "released": "2011-01-12",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 1,
-  "status_note": "iOS 4.3 Beta 1 (8F5148b), 2011-01-12: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_4.3_8F5148b_Restore.ipsw", "sha1": "7fb2f13a47282ee22938ccea1b8f6cf762c20da3", "bytes": 639846333},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "4f8022112673d4875c32b050198cb945", "key": "0159008eeeeca0cee87cb80def3df9d1a87c0e67536e86c49c7a8e5307b0c3e5"},
@@ -357,10 +357,10 @@
   "version": "4.3",
   "build": "8F5153d",
   "released": "2011-01-19",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 2,
-  "status_note": "iOS 4.3 Beta 2 (8F5153d), 2011-01-19: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_4.3_8F5153d_Restore.ipsw", "sha1": "5624814e59d7a56279df1e19823d228c0b26ad88", "bytes": 636269961},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "f74ef7745549c6445ac87e7bd333be30", "key": "8cea19b64418b2a9204631bc567b72955174509a292545ced6f763b94211b794"},
@@ -393,10 +393,10 @@
   "version": "4.3",
   "build": "8F5166b",
   "released": "2011-02-01",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 3,
-  "status_note": "iOS 4.3 Beta 3 (8F5166b), 2011-02-01: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_4.3_8F5166b_Restore.ipsw", "sha1": "246e5a2f33f3cd14e97b37003a7c2a1f47aa8bf2", "bytes": 624729345},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "13ef35d473b11285cd14ee4bd2036e02", "key": "6fe70b4a9537f6a3f955c1dfafe69020e7bae153d2958181df3eaf1f9462a9cf"},
@@ -620,7 +620,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 1,
-  "status_note": "iOS 5.0 Beta 1 (9A5220p), 2011-06-07: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it). No public keys for UpdateRamDisk.",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_5.0_9A5220p_Restore.ipsw", "sha1": "006bd8859e534e6cf68d6a72e7c7086dbb675dae", "bytes": 702191668},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "7581d851243eb9122a002c3e4722e5da", "key": "69e3b92d89a77df0c35b0d1c992ce03b6875d50a91a1a82c68fa1aabedf2aae6"},
@@ -655,7 +655,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 5,
-  "status_note": "iOS 5.0 Beta 5 (9A5288d), 2011-08-06: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it). No public keys for UpdateRamDisk.",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPad1,1_5.0_9A5288d_Restore.ipsw", "sha1": "383ec353c779168aa60a1e3110037a81929785e9", "bytes": 759078534},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8930x.img3", "iv": "27b254b74f41f2be4d73583bc470ffcd", "key": "8b4c2214b0f188e97fb6139fd03a0cfa23a8383476c81a35e95528bdafad04cc"},
@@ -834,7 +834,7 @@
   "version": "1.1.1",
   "build": "3A110a",
   "released": "2007-09-27",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-3932.20070927.p23dD/iPod1,1_1.1.1_3A110a_Restore.ipsw", "sha1": "84bbc6ea8bf29745195bc9926c1874f7c2a36f32", "bytes": 157906686},
   "keys": {
    "rootfs": {"file": "022-3642-8.dmg", "key": "d45b837ddd85bdae0ec82a033ba00ea03ceb8c827040034f7554c65d6376472844b8dc6a"}
@@ -866,7 +866,7 @@
   "version": "1.1.3",
   "build": "4A93",
   "released": "2008-01-15",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/061-4060.20080115.9Iuh5/iPod1,1_1.1.3_4A93_Restore.ipsw", "sha1": "8dca23eec69d5ae58fbf3d4a23276e46cbb2e3c6", "bytes": 173511411},
   "keys": {
    "rootfs": {"file": "022-3742-100.dmg", "key": "11070c11d93b9be5069b643204451ed95aad37df7b332d10e48fd3d23c62fca517055816"}
@@ -882,7 +882,7 @@
   "version": "1.1.4",
   "build": "4A102",
   "released": "2008-02-26",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-4312.20080226.Btu45/iPod1,1_1.1.4_4A102_Restore.ipsw", "sha1": "c148d1eb1c979bb6434175411d4a372103a4fdd2", "bytes": 173519589},
   "keys": {
    "rootfs": {"file": "022-3893-4.dmg", "key": "d0a0c0977bd4b6350b256d6650ec9eca419b6f961f593e74b7e5b93e010b698ca6cca1fe"}
@@ -898,7 +898,7 @@
   "version": "1.1.5",
   "build": "4B1",
   "released": "2008-07-15",
-  "status": "untested",
+  "status": "experimental",
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-4841.20080714.bgy8O/iPod1,1_1.1.5_4B1_Restore.ipsw", "sha1": "1b818911316e4248ee01d3ec67f9d39afc3db240", "bytes": 173519637},
   "keys": {
    "rootfs": {"file": "018-3755-1.dmg", "key": "c7973558e8f6af22e38d4573737d1533f1d5eec202bf86a32d941975d76f8906c7f0afe4"}
@@ -1108,7 +1108,6 @@
   "released": "2010-02-02",
   "status": "user_ipsw",
   "source": {"kind": "ipsw", "url": "https://invoxiplaygames.uk/ipsw/iPod2,1_3.1.3_7E18_Restore.ipsw", "sha1": "5f4f5c01eda2f811f73167e7d1f82dbeed82367b", "bytes": 263275211},
-  "bundled": "device/n72ap-7E18.itbase",
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "f246cfefd363c2ec38927473be6f6d45", "key": "afa37377de73fdf1e2ad6b0117cd2847"},
    "BatteryCharging0": {"file": "batterycharging0.s5l8720x.img3", "iv": "f617033546f742170011669656b57494", "key": "a8ab6a757b1f2cfdb69f8a2455e0aa95"},
@@ -1145,7 +1144,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 1,
-  "status_note": "iOS 4.0 Beta 1 (8A230m), 2010-04-08: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it). No public keys for UpdateRamDisk.",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.0_8A230m_Restore.ipsw", "sha1": "30ab55a8ad3788af70c8bc3b036adb94fa274836", "bytes": 320899292},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "dcff6d2d56887b2e82c2cbc243d2ec59", "key": "4f919fcebe03ac0d0aceeab7b1e82e25"},
@@ -1181,7 +1180,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 2,
-  "status_note": "iOS 4.0 Beta 2 (8A248c), 2010-04-20: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it). No public keys for UpdateRamDisk.",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.0_8A248c_Restore.ipsw", "sha1": "02631ccd3a847a66b870f8f9078c97f801c51f61", "bytes": 324553033},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "332aae4016ed878bd00eaadca4eadfa2", "key": "47fcfd0d93cc176c35e6ebb1461f75d2"},
@@ -1216,7 +1215,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 3,
-  "status_note": "iOS 4.0 Beta 3 (8A260b), 2010-05-04: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it). No public keys for UpdateRamDisk.",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.0_8A260b_Restore.ipsw", "sha1": "fd65a731d0764ca6e1fac145d792aa21b787102d", "bytes": 330073091},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "6210ffd6ee0e15054414caacd4189496", "key": "31c6246e04de1638386ecf026fb6c15a"},
@@ -1251,7 +1250,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 4,
-  "status_note": "iOS 4.0 Beta 4 (8A274b), 2010-05-18: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it). No public keys for UpdateRamDisk.",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.0_8A274b_Restore.ipsw", "sha1": "e95696a965f16b8cba70a647da73338422653e1b", "bytes": 324314892},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "aeebfe728125f88b7e134a5202305d79", "key": "a3406bd9fa8764bf33d831c6d462720c"},
@@ -1351,7 +1350,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 1,
-  "status_note": "iOS 4.1 Beta 1 (8B5080c), 2010-07-14: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.1_8B5080c_Restore.ipsw", "sha1": "4a44df7abad161cc5ac3d1a9a54e692b65c5d375", "bytes": 343163477},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "6baa1939604545c77415bdcf7da800ba", "key": "5e257256c66d850cf0110d844a5e64a0"},
@@ -1387,7 +1386,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 2,
-  "status_note": "iOS 4.1 Beta 2 (8B5091b), 2010-07-27: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.1_8B5091b_Restore.ipsw", "sha1": "01e2bfbbd54558c3a2546234e848da958ec651d5", "bytes": 349571734},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "136afe6299cf5460be811c89bb6653ae", "key": "fa7ed83f9bc7c6588a508a571e3ad8af"},
@@ -1423,7 +1422,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 3,
-  "status_note": "iOS 4.1 Beta 3 (8B5097d), 2010-08-03: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.1_8B5097d_Restore.ipsw", "sha1": "12ebb29c9ff04007b218232a6690ec6830f73c52", "bytes": 345660363},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "dcc1644711c09ce4f3a8465af9522c46", "key": "519acd7b65cf8c8d79d4ebe190806e91"},
@@ -1492,7 +1491,7 @@
   "status": "untested",
   "prerelease": "beta",
   "prerelease_number": 1,
-  "status_note": "iOS 4.2 Beta 1 (8C5091e), 2010-09-15: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.2_8C5091e_Restore.ipsw", "sha1": "711597af361f003d5f3d2ec865ada3fb5e2bbb1d", "bytes": 363496695},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "97499e44f7263a6c5afe50b0a4032c1a", "key": "8585653e95dbcb03d7c8e9c60c15d0df"},
@@ -1528,7 +1527,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 2,
-  "status_note": "iOS 4.2 Beta 2 (8C5101c), 2010-09-28: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.2_8C5101c_Restore.ipsw", "sha1": "ccd8249250491f6b7783c67e71b492e201138aba", "bytes": 366143810},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "eeb900b84e96396cc1233abf8c47ba87", "key": "eeb49f90383273be371a87cf780e5a21"},
@@ -1564,7 +1563,7 @@
   "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 3,
-  "status_note": "iOS 4.2 Beta 3 (8C5115c), 2010-10-12: a developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
+  "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.2_8C5115c_Restore.ipsw", "sha1": "c1113a43303b99ba2bed9333477df162c6d043e1", "bytes": 364755569},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "63ba655901735a4a0c2305a89b1542f5", "key": "1735d64b4581745014c95ac8a654b634"},
@@ -1600,7 +1599,7 @@
   "status": "experimental",
   "prerelease": "gm",
   "prerelease_number": 1,
-  "status_note": "iOS 4.2 GM 1 (8C134), 2010-11-01: the golden master Apple replaced with 4.2.1; from the iOS Firmware Exhibit Collection on archive.org (third party).",
+  "status_note": "The golden master Apple replaced with 4.2.1; from the iOS Firmware Exhibit Collection on archive.org (third party).",
   "source": {"kind": "ipsw", "url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod2,1_4.2_8C134_Restore.ipsw", "sha1": "cd4bb233a54f35f765ce12625f00b20ef31a777f", "bytes": 363581294},
   "keys": {
    "AppleLogo": {"file": "applelogo.s5l8720x.img3", "iv": "75155f29cafe8dfdfdcf6fbf107664c1", "key": "6788b9096c321f1f3563f546e1809676"},

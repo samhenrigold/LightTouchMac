@@ -21,7 +21,7 @@ How Light Touch talks to the user. Check new strings against this; change this f
 | Light Touch | the app | LightTouchMac, "this build" (say "this copy of Light Touch") |
 | prepare, preparing, prepared | turning an IPSW into a device (`firmwarekit create`) | preparer, bake, build, create |
 | download | fetching an IPSW | prepare |
-| Download & Prepare / Prepare | the row's button: Prepare when the IPSW is already here or built in | |
+| Download & Prepare / Prepare | the row's button: Prepare when the IPSW is already here | |
 | Import IPSW… | using an IPSW from disk | |
 | IPSW | the firmware file, in user text | firmware image, restore image |
 | guest tools | the in-device helpers (agent, loader, packages) | agent, it_agent, package, serial, itpack |
@@ -33,6 +33,7 @@ How Light Touch talks to the user. Check new strings against this; change this f
 | Erase All Content and Settings | wiping a device's data | reset, factory reset |
 | Delete Device | removing the device from the Mac | |
 | a component is missing … Reinstall Light Touch | a bundled binary or library is absent | brew install, tool names |
+| Licenses | Help's last section: each shipped component and its license; the texts and SOURCE.txt files in Contents/Resources/licenses | Acknowledgements, third-party notices |
 
 ## State names
 
@@ -40,11 +41,12 @@ The same state has the same words on every surface (sidebar accessory, placehold
 
 ### Device (sidebar row: `DeviceRow.stateDescription`; placeholder: `DevicePlaceholderViewController`)
 
+The placeholder is one centred column in three tiers, the same slots in every state: the device's name (Title 1, semibold) over the version (Title 3, secondary, ⓘ beside it); the state (Headline) over its detail (the reason, or the bar and its line); one row of large buttons, the default button last, Device Logs to its left on an error. Return presses the default button; on Cancel it's Escape.
+
 | State | Words | Notes |
 |---|---|---|
-| notDownloaded | Not downloaded (, 580 MB) | row: a tertiary download glyph (`arrow.down.circle`), the words and size in its tooltip and VoiceOver |
-| downloaded | Downloaded | VoiceOver only; the row shows nothing (the usual state) |
-| bundled | Built in | VoiceOver only; the row shows nothing |
+| notDownloaded | Not downloaded (, 580 MB) | row: a tertiary download glyph (`arrow.down.circle`), the words and size in its tooltip and VoiceOver; placeholder: the words and size as its state line |
+| downloaded | Downloaded | VoiceOver and the placeholder's state line; the row shows nothing (the usual state) |
 | downloading | Downloading, 43% / Downloading… (row: ring and “43%”) | placeholder: one line under the bar, “43% · About 1 min remaining”; a build that also fetches its keybag sibling says “2 IPSWs” in the bar’s tooltip |
 | preparing | Preparing, 48% / Preparing… (row: ring and “48%”) | placeholder: the same one line; the step and the preparer’s words are the bar’s tooltip |
 | ready | Ready | |
@@ -52,9 +54,9 @@ The same state has the same words on every surface (sidebar accessory, placehold
 | stopping | Stopping / Stopping… | |
 | error | Error, with the reason below | reason is the failure or stop text |
 | comingSoon | Coming soon | |
-| untested (note) | Untested (row tooltip and VoiceOver, never drawn in the row) / “Untested.” before the catalog note in the placeholder’s info popover (ⓘ beside the version) | not a state: an untested build downloads and prepares like any other |
+| untested (note) | Untested (row tooltip and VoiceOver, never drawn in the row) / the placeholder’s info popover (ⓘ beside the version): “Untested”, “Light Touch hasn’t run this build yet. It may not prepare or start.”, the catalog note, “Released June 7, 2011” | not a state: an untested build downloads and prepares like any other |
 | requiresIPSW | Requires an IPSW | |
-| experimental (tag) | Experimental | row tooltip and VoiceOver, no capsule; placeholder: “Experimental.” and the catalog `status_note` in the info popover |
+| experimental (tag) | Experimental | row tooltip and VoiceOver, no capsule; placeholder’s info popover: “Experimental”, “This build prepares and starts, but it hasn’t been through every check. Some features may not work.”, the catalog `status_note` (where the IPSW comes from), the release date |
 | prepared without activation (note) | Prepared without activation | |
 | beta / GM (tag) | Beta 1, Beta 3, GM 1, GM 2 | always numbered; secondary text after the version, no capsule |
 
@@ -126,7 +128,7 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | iOS on screen, USB not answering by the boot budget (the device keeps running) | The iPod is running, but it isn’t connected over USB yet. Installing apps and transferring files aren’t available until it connects. |
 | files changed under a running device | Files of this iPod were changed while it was running. Stop and start it again; unsaved changes may be lost. |
 | older data | This iPod’s data was made with an older system image. |
-| legacy erase and the unpack after it (window, then sheet) | Updating the built-in iPod… |
+| legacy erase (a window while it runs) | Erasing the earlier iPod… (alert before it: “The iPod from an earlier version of Light Touch can’t be used.” / “Erase it and continue (apps you’ve saved are kept), or quit.”) |
 
 ### Web proxy (`WebProxyStatus.message`)
 
@@ -139,9 +141,13 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | needsTap (no guest agent: the profile was offered) | Tap Install on the iPod to trust the proxy certificate. |
 | Settings ▸ Storage | Devices (Base · Data · Snapshot), IPSWs (Downloaded / Imported IPSW), Caches and logs, Library (N IPAs · size · size on no device) |
 
+### Preparation failures (`PreparationJob.message`)
+
+A required piece that doesn’t fit the firmware (the error event’s `piece`) says what, plainly: “Light Touch can’t prepare this beta yet: its graphics library isn’t supported.” (“this version” for a release). Pieces: the OpenGLES front end → its graphics library isn’t supported; kernelcache, boot-args, DeviceTree → the way it starts up isn’t supported; AppSync → installing apps on it isn’t supported; anything else → the guest tools don’t run on it. The fit check’s proof stays in the preparation log. An unsupported IPSW without a piece: “This IPSW isn’t supported.”
+
 ### Install failures
 
-Every failed install, download or removal writes its whole error to app.log (`install: <name> failed: …`, with a DecodingError's coding path; `Legacy Store: HTTP <code> for <path>`). A Legacy Store response that doesn’t decode reads “Legacy Store sent a response Light Touch couldn’t read.”, never Foundation’s “isn’t in the correct format”.
+Every failed install, download or removal writes its whole error to app.log (`install: <name> failed: …`, with a DecodingError's coding path; `Legacy Store: HTTP <code> for <path>`). A Legacy Store response that doesn’t decode reads “Legacy Store sent a response Light Touch couldn’t read.”, never Foundation’s “isn’t in the correct format”. A server error (HTTP 5xx) reads “Legacy Store isn’t responding. Try again in a moment.”, any other status “Legacy Store couldn’t answer that request. Try again later.”; the code stays in the log. Only a network error (no answer at all) says “Couldn’t reach Legacy Store — …”. The Apps pane’s messages wrap to its width; they never widen or clip it.
 
 ### Store on iPhone OS 1.x
 

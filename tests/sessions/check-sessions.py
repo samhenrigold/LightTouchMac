@@ -81,6 +81,29 @@ def tree(root):
     return out
 
 
+def tree_diff(before, after, limit=20):
+    """What changed under a base, one line per path: added, removed, or which of size/mode/mtime moved."""
+    lines = []
+    for path in sorted(set(before) | set(after)):
+        a, b = before.get(path), after.get(path)
+        if a == b:
+            continue
+        if a is None:
+            lines.append(f"added {path} (size {b[0]}, mode {oct(b[1])})")
+        elif b is None:
+            lines.append(f"removed {path}")
+        else:
+            moved = [f"{k} {x}->{y}" if k != "mode" else f"mode {oct(x)}->{oct(y)}"
+                     for k, x, y in zip(("size", "mode", "mtime_ns"), a, b) if x != y]
+            lines.append(f"changed {path}: " + ", ".join(moved))
+    return "; ".join(lines[:limit]) + (f"; … {len(lines) - limit} more" if len(lines) > limit else "")
+
+
+def unchanged(root, before):
+    after = tree(root)
+    return after == before, ("" if after == before else ": " + tree_diff(before, after))
+
+
 def guest_checks(find, check, events):
     one = lambda name, device, **m: (find(name, device=device, **m) or [{}])[0]
     for d in ("shipping", "fresh"):
@@ -288,7 +311,8 @@ def main():
         q = (find("quit", device=d) or [{}])[0]
         check(q.get("confirmed", -1) >= 0 and q.get("exited") and str(q.get("reason")).endswith(" stopped."),
               f"{d}: clean shutdown, power-off confirmed in {q.get('confirmed', -1):.1f} s, helper exited")
-        check(tree(base_dir) == base_before, f"{d}: the prepared base is unchanged")
+        same, why = unchanged(base_dir, base_before)
+        check(same, f"{d}: the prepared base is unchanged{why}")
         check(find("done") and driver.returncode == 0, f"driver finished (exit {driver.returncode})")
         fails = find("fail")
         if fails:
@@ -299,7 +323,8 @@ def main():
         sys.exit(0 if all(results) else 1)
     if args.guest:
         guest_checks(find, check, events)
-        check(tree(base_dir) == base_before, "the fresh device's base is unchanged (paths, sizes, modes, mtimes)")
+        same, why = unchanged(base_dir, base_before)
+        check(same, f"the fresh device's base is unchanged (paths, sizes, modes, mtimes){why}")
         check(find("done") and driver.returncode == 0, f"driver finished (exit {driver.returncode})")
         fails = find("fail")
         if fails:
@@ -359,7 +384,8 @@ def main():
     check(quit_.get("ipodExited") and quit_.get("ipadExited") and quit_.get("seconds", 99) < 5
           and quit_.get("ipodReason") == "The iPod stopped." and quit_.get("ipadReason") == "The iPad stopped.",
           f"Stop halts both at once (SIGTERM: pause, flush, quit; no guest shutdown) in {quit_.get('seconds', -1):.1f} s: {quit_}")
-    check(tree(args.ipad_device) == base_before, "the prepared base is unchanged (paths, sizes, modes, mtimes)")
+    same, why = unchanged(args.ipad_device, base_before)
+    check(same, f"the prepared base is unchanged (paths, sizes, modes, mtimes){why}")
     check(find("done") and driver.returncode == 0, f"driver finished (exit {driver.returncode})")
     fails = find("fail")
     if fails:

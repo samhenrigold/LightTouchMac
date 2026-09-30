@@ -68,9 +68,17 @@ echo 'Building OpenSSL 3.6.3'
     # still refuses it above security level 0, which only libimobiledevice's contexts set).
     ./Configure "darwin64-$ARCH-cc" no-shared no-tests no-docs enable-ssl3 enable-ssl3-method \
         --prefix="$PREFIX" --openssldir=/private/etc/ssl "$MIN" > "$LOG/openssl.configure.log" 2>&1
-    make -j"$JOBS" > "$LOG/openssl.build.log" 2>&1
+    # The engine and provider dirs it compiles in: somewhere that holds none (the bundle ships neither), not
+    # this build's prefix. Only the compiled-in value; install_sw still installs under the prefix.
+    make -j"$JOBS" ENGINESDIR=/var/empty/lib/engines-3 MODULESDIR=/var/empty/lib/ossl-modules > "$LOG/openssl.build.log" 2>&1
     make install_sw > "$LOG/openssl.install.log" 2>&1
 )
+license() {   # LICENSE-NAME DIRECTORY FILES...: license texts into prefix/share/licenses/NAME
+    local name="$1" dir="$2"; shift 2
+    mkdir -p "$PREFIX/share/licenses/$name"
+    (cd "$ROOT/build/$dir" && cp "$@" "$PREFIX/share/licenses/$name/")
+}
+license openssl openssl-3.6.3 LICENSE.txt
 
 autobuild() {
     local archive="$1" directory="$2"
@@ -90,6 +98,11 @@ autobuild libimobiledevice-glue-1.3.2.tar.bz2 libimobiledevice-glue-1.3.2
 autobuild libusbmuxd-2.1.1.tar.bz2 libusbmuxd-2.1.1
 autobuild libtatsu-1.0.5.tar.bz2 libtatsu-1.0.5
 autobuild libimobiledevice-1.4.0.tar.bz2 libimobiledevice-1.4.0 --without-cython
+# Linked statically into the shipped libimobiledevice and usbmuxd (LGPL-2.1): their texts and sources.
+for package in libimobiledevice-glue:libimobiledevice-glue-1.3.2 libusbmuxd:libusbmuxd-2.1.1 libtatsu:libtatsu-1.0.5; do
+    license "${package%%:*}" "${package#*:}" COPYING
+    python3 "$SRC/scripts/dependency-sources.py" note "${package%%:*}" > "$PREFIX/share/licenses/${package%%:*}/SOURCE.txt"
+done
 python3 - "$SRC" "$ROOT" "$ARCH" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
 source, root = map(pathlib.Path, sys.argv[1:3])

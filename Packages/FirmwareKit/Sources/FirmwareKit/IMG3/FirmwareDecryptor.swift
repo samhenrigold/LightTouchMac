@@ -31,7 +31,7 @@ public enum FirmwareDecryptor {
 
     public static func decrypt(ipsw url: URL, entry: FirmwareEntry, into dir: URL, rootfs: Bool = true) throws -> Result {
         let ipsw = IPSWArchive(url)
-        let comp = try BuildComponents.load(ipsw)
+        let comp = try BuildComponents.load(ipsw, board: entry.board)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         func path(_ c: String) throws -> String {
             guard let p = comp[c] else { throw FirmwareError(.unsupported, "\(entry.id): the IPSW names no \(c)") }

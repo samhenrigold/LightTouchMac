@@ -94,7 +94,9 @@ public enum SystemEdits {
     static let dyldOverride = "System/Library/Caches/com.apple.dyld/enable-dylibs-to-override-cache"
     static let lockdownd = "usr/libexec/lockdownd"
     static let retired = ["usr/local/bin/it_notip", daemons + "/com.qemu.it-notip.plist"]
-    static let pacPath = "usr/local/share/ltm/proxy.pac"
+    /// Under /usr/share, not /usr/local: 4.x's MobileSafari sandbox (builtin profile "MobileSafari") can't read
+    /// /usr/local, so its CFNetwork found no PAC and went DIRECT, while every unsandboxed client used the proxy.
+    static let pacPath = "usr/share/ltm/proxy.pac"
     static let pac = """
         function FindProxyForURL(url, host) {
             if (isPlainHostName(host)) return "DIRECT";
@@ -277,11 +279,11 @@ public enum SystemEdits {
 
     // MARK: the shared bake (every board's system volume)
 
-    /// The web-proxy PAC at /usr/local/share/ltm/proxy.pac; `dirs` are created too (the iPod's SystemConfiguration
+    /// The web-proxy PAC at /usr/share/ltm/proxy.pac; `dirs` are created too (the iPod's SystemConfiguration
     /// on the system volume). Returns the paths to make root-owned.
     static func installPAC(_ m: URL, dirs: [String] = []) throws -> [String] {
         var owned: [String] = []
-        for rel in ["usr/local", "usr/local/share", "usr/local/share/ltm"] + dirs {
+        for rel in ["usr/share/ltm"] + dirs {
             try mkdirs(m.appendingPathComponent(rel))
             owned.append(rel)
         }

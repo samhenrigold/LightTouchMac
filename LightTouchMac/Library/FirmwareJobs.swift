@@ -4,8 +4,6 @@
 // Download & Prepare: an IPSW either store already has, else a CDN download;
 // then `firmwarekit create` (PreparationJob), then a device in the library.
 // Import: hash, match, clone into State/IPSW, then the same preparation.
-// The built-in device (the catalog entry with `bundled`): its packed base
-// unpacked into Preparing/<id>/ and published the same way.
 
 import Cocoa
 
@@ -24,8 +22,6 @@ import Cocoa
     private let store: IPSWStore
     private var downloads: FirmwareDownloads!
     private var preparations: [String: PreparationJob] = [:]
-    /// Entries whose built-in base is being unpacked (not cancellable: seconds, no child process).
-    private var unpacking: Set<String> = []
     /// When each job's current phase started and how far along it was, for time remaining.
     private var starts: [String: (date: Date, fraction: Double)] = [:]
     /// The IPSWs (sha1s) each downloading job waits for: the entry's own and, for a recipe with
@@ -103,7 +99,6 @@ import Cocoa
 
     func downloadAndPrepare(_ entry: FirmwareCatalog.Entry) {
         guard jobs[entry.id].map({ if case .failed = $0 { true } else { false } }) ?? true else { return }
-        if entry.bundled != nil { return prepareBundled(entry) }
         guard let sha1 = entry.source.sha1, !refuseExisting(entry) else { return }
         // The entry's IPSW and its keybag sibling's (4.3.1–4.3.5 boot 4.3's ramdisk), whichever aren't here yet.
         let sources = ([entry] + [entry.recipe?.keybagRamdiskFrom.flatMap(catalog.entry(id:))].compactMap { $0 })
@@ -194,7 +189,6 @@ import Cocoa
     }
 
     func cancel(_ entry: FirmwareCatalog.Entry) {
-        guard !unpacking.contains(entry.id) else { return }
         if let job = preparations[entry.id] { job.cancel() }
         else if let sha1s = waiting.removeValue(forKey: entry.id) {
             // A download another job still waits for goes on.
@@ -204,55 +198,6 @@ import Cocoa
             }
         }
         jobs[entry.id] = nil
-    }
-
-    /// The entry's packed base in this bundle (a development build has none).
-    static func bundledBlob(_ entry: FirmwareCatalog.Entry) -> URL? {
-        guard let resource = entry.bundled, let blob = Bundle.main.resourceURL?.appendingPathComponent(resource),
-              FileManager.default.fileExists(atPath: blob.path) else { return nil }
-        return blob
-    }
-
-    /// The built-in device: its packed base (Resources/<entry.bundled>,
-    /// scripts/pack-base.py) unpacked into Preparing/<id>/ off the main actor
-    /// and published as any preparation is. A host pairing the legacy erase
-    /// kept (State/work/usbmuxd-conf, LegacyState) seeds the device and goes.
-    func prepareBundled(_ entry: FirmwareCatalog.Entry) {
-        guard entry.bundled != nil, !unpacking.contains(entry.id), !refuseExisting(entry) else { return }
-        guard let blob = Self.bundledBlob(entry) else {
-            return fail(entry, FirmwareError.failed("This copy of Light Touch has no built-in \(entry.profile?.shortName ?? "device")."))
-        }
-        let state = Bundled.stateDirectory
-        do { try IPSWStore.checkSpace(entry.estimates.preparedBytes + inFlightPeakBytes, at: state) }
-        catch { return fail(entry, error) }
-        let id = UUID()
-        let staging = PreparationJob.preparing(state).appendingPathComponent(id.uuidString, isDirectory: true)
-        let pairing = state.appendingPathComponent("work/usbmuxd-conf", isDirectory: true)
-        unpacking.insert(entry.id)
-        starts[entry.id] = (Date(), 0)
-        jobs[entry.id] = .preparing(.init(step: 1, steps: 1, name: "Unpacking the built-in \(entry.profile?.shortName ?? "device")"))
-        logEvent("firmware: unpacking the built-in \(entry.id) as \(id.uuidString)")
-        Task.detached { [weak self] in
-            let result = Result {
-                try StorageLocations.privateDirectory(staging)
-                StorageLocations.excludeFromBackup(PreparationJob.preparing(state))
-                try BundledBase.unpack(blob, into: staging) { fraction in
-                    Task { @MainActor in self?.preparation(entry, .progress(fraction, detail: nil)) }
-                }
-                let instance = try PreparationJob.publish(staging: staging, entry: entry, id: id, state: state, pairing: pairing)
-                try? DeviceStateStorage.removeTree(pairing)
-                return instance
-            }
-            if case .failure = result { try? DeviceStateStorage.removeTree(staging) }
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                unpacking.remove(entry.id)
-                switch result {
-                case let .success(instance): preparation(entry, .published(instance))
-                case let .failure(error): preparation(entry, .failed("Couldn’t unpack the built-in device: \(error.localizedDescription)"))
-                }
-            }
-        }
     }
 
     // MARK: - Steps
@@ -331,7 +276,7 @@ import Cocoa
 
     private func preparation(_ entry: FirmwareCatalog.Entry, _ event: PreparationJob.Event) {
         func update(_ change: (inout Preparation) -> Void) {
-            guard preparations[entry.id] != nil || unpacking.contains(entry.id), case var .preparing(p)? = jobs[entry.id] else { return }
+            guard preparations[entry.id] != nil, case var .preparing(p)? = jobs[entry.id] else { return }
             change(&p)
             p.remaining = p.overall.flatMap { remaining(entry, $0) }
             jobs[entry.id] = .preparing(p)

@@ -44,6 +44,8 @@ final class WebProxy: @unchecked Sendable {
     }
     private var _offline = false
 
+    /// LTM_WEB_PROXY_TRACE set: one stderr line per request (tests/sessions/check-proxy-trust.py: did Safari's page come here).
+    static let trace = ProcessInfo.processInfo.environment["LTM_WEB_PROXY_TRACE"] != nil
     static let headMax = 65536, bodyMax = 8 << 20, archiveBodyMax = 32 << 20
 
     init(config: URL, archiveOrigin: String = "https://web.archive.org", anchors: [SecCertificate] = []) {
@@ -138,6 +140,7 @@ final class WebProxy: @unchecked Sendable {
         var tunnel: String?
         while true {
             let (method, target, headers) = try readHead(guest)
+            if Self.trace { FileHandle.standardError.write(Data("web-proxy: \(method) \(tunnel.map { "https://" + $0 } ?? "")\(target)\n".utf8)) }
             if method == "CONNECT" {
                 guard tunnel == nil else { throw Reply(400, "Nested TLS tunnels are unsupported") }
                 guard target.utf8.count < 300 else { throw Reply(400, "Tunnel destination too long") }

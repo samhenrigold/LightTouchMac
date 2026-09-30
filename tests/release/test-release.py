@@ -35,13 +35,12 @@ class ReleaseTests(unittest.TestCase):
         self.put(self.qemu / 'contrib/it-agent/it_agent.c', 'agent')
         self.put(self.qemu / 'contrib/export-guest-artifacts.sh', 'export')
         self.put(self.product / 'LightTouchMac/Resources/firmware-catalog.json', json.dumps({'format': 1, 'entries': [
-            {'id': 'n72ap-7E18', 'bundled': 'device/n72ap-7E18.itbase', 'source': {'kind': 'ipsw', 'sha1': 'a' * 40},
+            {'id': 'n72ap-7E18', 'source': {'kind': 'ipsw', 'sha1': 'a' * 40},
              'recipe': {'name': 'n72'}}]}))
         self.put(self.usb / 'configure.ac')
         self.init_git(self.usb)
         for name in release.BOOTROMS:
             self.put(self.assets / name)
-        self.put(self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw')
         for name in ('usr/lib/libSystem.dylib', 'usr/include/stdio.h'):
             self.put(self.sdk / name)
         self.addCleanup(mock.patch.stopall)
@@ -49,8 +48,7 @@ class ReleaseTests(unittest.TestCase):
         mock.patch.object(release, 'SCRIPTS', self.product / 'scripts').start()
         mock.patch.object(release, 'CATALOG', self.product / 'LightTouchMac/Resources/firmware-catalog.json').start()
         self.argv = ['--output', str(self.root / 'output'), '--qemu-source', str(self.qemu),
-                     '--usbmuxd-source', str(self.usb), '--assets', str(self.assets), '--sdk', str(self.sdk),
-                     '--bundled-ipsw', str(self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw')]
+                     '--usbmuxd-source', str(self.usb), '--assets', str(self.assets), '--sdk', str(self.sdk)]
         self.args = release.parse(self.argv)
 
     def put(self, path, content='fixture'):
@@ -201,10 +199,6 @@ class ReleaseTests(unittest.TestCase):
         (self.assets / 'bootrom_240_4').unlink()
         with self.assertRaisesRegex(ValueError, 'bundled firmware input'):
             release.validate(self.args)
-        self.put(self.assets / 'bootrom_240_4')
-        (self.assets / 'iPod2,1_3.1.3_7E18_Restore.ipsw').unlink()
-        with self.assertRaisesRegex(ValueError, 'built-in iPod'):
-            release.validate(self.args)
 
     def test_every_board_bootrom_is_required_and_packaged(self):
         """Each DeviceProfile.bootromName is a release input, and package.sh copies the same list flat into Resources/device."""
@@ -220,31 +214,25 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'bundled firmware input'):
             release.validate(self.args)
 
-    def test_bundled_base_is_prepared_packed_and_reused(self):
-        """bundled_base runs the built firmwarekit (a fake here), packs its output, records it, and skips when current."""
+    def test_build_record_names_no_local_path(self):
+        """build-inputs.json ships in the bundle: the checkouts' and binaries' absolute paths stay out of it, and a
+        local path anything else brings in stops the build."""
+        self.native_fixture()
         self.guest_fixture()
         self.args.output.mkdir()
-        firmwarekit = self.root / 'fk/firmwarekit'
-        firmwarekit.parent.mkdir()
-        firmwarekit.write_text('#!/bin/sh\n'
-                               'while [ $# -gt 0 ]; do case "$1" in --out) out=$2;; --guest-tools) tools=$2;; esac; shift; done\n'
-                               'mkdir -p "$out/nand/cs0"; printf page > "$out/nand/cs0/1.page"; printf boot > "$out/iBoot.bin"\n'
-                               'printf "{\\"tool\\": {\\"guest_tools\\": \\"$tools\\"}, \\"outputs\\": {}}" > "$out/device.lock.json"\n')
-        firmwarekit.chmod(0o755)
-        self.put(self.product / 'scripts/pack-base.py', (Path(__file__).resolve().parents[2] / 'scripts/pack-base.py').read_text())
-        log = self.args.output / 'build.log'
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            blob = release.bundled_base(self.args, {'PATH': '/usr/bin:/bin'}, log, firmwarekit, self.guest)
-        self.assertEqual(blob.read_bytes()[:8], b'ITPACK01')
-        record = json.loads((blob.parent / 'bundled.json').read_text())
-        self.assertEqual(record['entry'], 'n72ap-7E18')
-        self.assertEqual(record['blob_sha256'], release.digest(blob))
-        self.assertFalse((blob.parent / 'staging').exists())
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            release.bundled_base(self.args, {'PATH': '/usr/bin:/bin'}, log, firmwarekit, self.guest)
-        self.assertIn('bundled: current', out.getvalue())
-        with self.assertRaisesRegex(ValueError, 'needs firmwarekit'):
-            release.bundled_base(self.args, {}, log, self.root / 'missing-firmwarekit', self.guest)
+        self.put(self.native / 'build/iBoot32Patcher/build.json', json.dumps(
+            {'commit': 'c' * 40, 'sha256': 'd' * 64, 'binary': str(self.native / 'build/iBoot32Patcher/iBoot32Patcher')}))
+        self.put(self.product / 'LightTouchMac.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', '{"pins": []}')
+        sources = {name: {'revision': None, 'dirty': True, 'source_sha256': '0' * 64, 'files': 1, 'submodules': {}}
+                   for name in ('app', 'qemu', 'usbmuxd')}
+        record = release.write_build_record(self.args, sources, self.native, self.native / 'qemu-build', self.guest)
+        text = record.read_text()
+        self.assertNotIn(str(self.root), text)
+        self.assertEqual(json.loads(text)['native_artifacts']['iboot32patcher'], {'commit': 'c' * 40, 'sha256': 'd' * 64})
+        self.assertEqual(set(json.loads(text)['pin']['qemu-ios']), {'pinned', 'actual', 'dirty', 'matches'})
+        self.put(self.native / 'build/iBoot32Patcher/build.json', json.dumps({'commit': 'c' * 40, 'source': str(Path.home() / 'src')}))
+        with self.assertRaisesRegex(ValueError, 'local path'):
+            release.write_build_record(self.args, sources, self.native, self.native / 'qemu-build', self.guest)
 
     def test_existing_and_symlink_outputs_are_rejected(self):
         self.args.output.mkdir()
@@ -429,6 +417,19 @@ class ReleaseTests(unittest.TestCase):
 
 
 class RemoveTreeTests(unittest.TestCase):
+    def test_locked_base_takes_no_new_files_and_still_removes(self):
+        """verify boots a base locked as the app locks one: a Finder .DS_Store can't land in it, and clean() removes it."""
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary) / 'prepare-check/out'
+            (base / 'nand/cs0').mkdir(parents=True)
+            (base / 'nand/cs0/1.page').write_bytes(b'x')
+            release.lock_base(base)
+            for directory in (base, base / 'nand', base / 'nand/cs0'):
+                with self.assertRaises(PermissionError):
+                    (directory / '.DS_Store').write_bytes(b'')
+            release.remove_tree(base.parent)
+            self.assertFalse(base.parent.exists())
+
     def test_retries_when_finder_refills_a_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             work = Path(temporary) / 'prepare-check'

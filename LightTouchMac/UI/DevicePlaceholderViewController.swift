@@ -15,7 +15,7 @@ final class DevicePlaceholderViewController: NSViewController {
     private let progress = NSProgressIndicator()
     private let step = NSTextField(wrappingLabelWithString: "")
     private let reason = NSTextField(wrappingLabelWithString: "")
-    private let showLog = NSButton(title: "Show Log", target: nil, action: nil)
+    private let showLog = NSButton(title: "Device Logs", target: nil, action: nil)
     private let primary = NSButton(title: "", target: nil, action: nil)
     private let space = NSTextField(wrappingLabelWithString: "")
     /// The build's catalog note (untested, experimental, where a beta came from), in a popover.
@@ -33,17 +33,20 @@ final class DevicePlaceholderViewController: NSViewController {
         art.setAccessibilityElement(false)
         art.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         art.setContentHuggingPriority(.defaultLow, for: .vertical)
-        model.font = .systemFont(ofSize: NSFont.systemFontSize * 1.7, weight: .semibold)
+        // One column, three tiers: what it is (name, then version), where it stands (state, then its detail),
+        // what to do (one button row, the default button last). The same slots in every state.
+        model.font = .systemFont(ofSize: NSFont.preferredFont(forTextStyle: .title1).pointSize, weight: .semibold)
+        version.font = .preferredFont(forTextStyle: .title3)
         version.textColor = .secondaryLabelColor
         version.isSelectable = true
         for label in [status, step, reason, space] {
             label.alignment = .center
-            label.preferredMaxLayoutWidth = 320
+            label.preferredMaxLayoutWidth = 340
         }
-        status.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+        status.font = .preferredFont(forTextStyle: .headline)
         reason.textColor = .secondaryLabelColor
         space.textColor = .secondaryLabelColor
-        space.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        space.font = .preferredFont(forTextStyle: .footnote)
         info.isBordered = false
         info.contentTintColor = .secondaryLabelColor
         info.target = self
@@ -54,25 +57,28 @@ final class DevicePlaceholderViewController: NSViewController {
         progress.maxValue = 1
         progress.setAccessibilityLabel("Progress")
         step.textColor = .secondaryLabelColor
-        step.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        showLog.bezelStyle = .rounded
-        showLog.target = self
+        step.font = .monospacedDigitSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .subheadline).pointSize, weight: .regular)
+        for button in [showLog, primary] {
+            button.bezelStyle = .push
+            button.controlSize = .large
+            button.target = self
+        }
         showLog.action = #selector(showLogClicked(_:))
-        primary.bezelStyle = .rounded
-        primary.controlSize = .large
-        primary.keyEquivalent = "\r"
-        primary.target = self
         primary.action = #selector(primaryClicked(_:))
 
         let versionLine = NSStackView(views: [version, info])
         versionLine.spacing = 4
-        let stack = NSStackView(views: [art, model, versionLine, status, progress, step, reason, showLog, primary, space])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 8
-        stack.setCustomSpacing(20, after: art)
-        stack.setCustomSpacing(16, after: showLog)
-        stack.setCustomSpacing(16, after: primary)
+        let identity = column([model, versionLine], spacing: 2)
+        let state = column([status, progress, step, reason], spacing: 6)
+        let actions = NSStackView(views: [showLog, primary])
+        actions.spacing = 12
+        // The row keeps its height with no button (running), so the lockup doesn't move between states.
+        actions.heightAnchor.constraint(greaterThanOrEqualTo: primary.heightAnchor).isActive = true
+        actions.detachesHiddenViews = true
+        let stack = column([art, identity, state, actions, space], spacing: 20)
+        stack.setCustomSpacing(28, after: art)
+        stack.setCustomSpacing(12, after: actions)
+        stack.detachesHiddenViews = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
         let guide = view.safeAreaLayoutGuide
@@ -83,8 +89,18 @@ final class DevicePlaceholderViewController: NSViewController {
             stack.leadingAnchor.constraint(greaterThanOrEqualTo: guide.leadingAnchor, constant: 20),
             art.heightAnchor.constraint(lessThanOrEqualToConstant: 320),
             art.heightAnchor.constraint(lessThanOrEqualTo: guide.heightAnchor, multiplier: 0.45),
-            progress.widthAnchor.constraint(equalToConstant: 240),
+            progress.widthAnchor.constraint(equalToConstant: 260),
+            // The state tier holds a line, a bar and its line: the buttons stay put (a two-line reason adds one line).
+            state.heightAnchor.constraint(greaterThanOrEqualToConstant: 52),
         ])
+    }
+
+    private func column(_ views: [NSView], spacing: CGFloat) -> NSStackView {
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = spacing
+        return stack
     }
 
     func update(_ row: DeviceRow, canDownload: Bool) {
@@ -96,7 +112,6 @@ final class DevicePlaceholderViewController: NSViewController {
         model.stringValue = profile?.marketingName ?? entry.productType
         version.stringValue = "iOS \(entry.version)" + (row.badge.map { " \($0)" } ?? "") + " (\(entry.build))"
         info.isHidden = row.catalogNote == nil
-        info.toolTip = row.catalogNote
 
         progress.isHidden = true
         progress.stopAnimation(nil)
@@ -105,9 +120,8 @@ final class DevicePlaceholderViewController: NSViewController {
         showLog.isHidden = true
         status.isHidden = false
         switch row.state {
-        // The button says it: Prepare, or Download & Prepare.
-        case .bundled, .notDownloaded, .downloaded:
-            status.isHidden = true
+        case .notDownloaded, .downloaded:
+            status.stringValue = row.stateDescription
             if !canDownload, let why = FirmwareJobs.shared.unavailableReason { reason.stringValue = why; reason.isHidden = false }
         case .downloading:
             status.stringValue = "Downloading…"
@@ -129,6 +143,8 @@ final class DevicePlaceholderViewController: NSViewController {
 
         if let action = row.primaryAction, let title = row.primaryTitle {
             primary.title = title
+            // Return does the next thing; it never cancels a download (Escape does).
+            primary.keyEquivalent = action == .cancel ? "\u{1b}" : "\r"
             primary.isEnabled = row.allows(action, canDownload: canDownload)
             primary.isHidden = false
             primary.setAccessibilityLabel("\(title) \(model.stringValue) iOS \(entry.version)")
@@ -155,24 +171,40 @@ final class DevicePlaceholderViewController: NSViewController {
     }
 
     @objc private func infoClicked(_ sender: NSButton) {
-        guard let text = row?.catalogNote else { return }
-        let label = NSTextField(wrappingLabelWithString: text)
-        label.preferredMaxLayoutWidth = 280
-        label.translatesAutoresizingMaskIntoConstraints = false
-        let content = NSViewController()
-        content.view = NSView()
-        content.view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: content.view.topAnchor, constant: 12),
-            label.bottomAnchor.constraint(equalTo: content.view.bottomAnchor, constant: -12),
-            label.leadingAnchor.constraint(equalTo: content.view.leadingAnchor, constant: 14),
-            label.trailingAnchor.constraint(equalTo: content.view.trailingAnchor, constant: -14),
-            label.widthAnchor.constraint(lessThanOrEqualToConstant: 280),
-        ])
+        guard let row, let content = Self.infoContent(for: row) else { return }
         let popover = NSPopover()
         popover.behavior = .transient
         popover.contentViewController = content
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+    }
+
+    /// The ⓘ popover: the support tag and what it means, the catalog's source note, the release date.
+    /// Sized to fit before it is shown: a view controller's bare NSView() is 0×0, and a popover that
+    /// takes that size shows nothing (RC1).
+    static func infoContent(for row: DeviceRow) -> NSViewController? {
+        guard row.catalogNote != nil else { return nil }
+        func label(_ text: String?, _ style: NSFont.TextStyle, _ color: NSColor = .labelColor) -> NSTextField? {
+            guard let text else { return nil }
+            let label = NSTextField(wrappingLabelWithString: text)
+            label.font = .preferredFont(forTextStyle: style)
+            label.textColor = color
+            label.isSelectable = true
+            label.preferredMaxLayoutWidth = 280
+            return label
+        }
+        let stack = NSStackView(views: [label(row.supportNote, .headline), label(row.supportExplanation, .body, .secondaryLabelColor),
+                                        label(row.entry.statusNote, .body), label(row.releaseLine, .subheadline, .secondaryLabelColor)]
+            .compactMap { $0 })
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
+        stack.widthAnchor.constraint(equalToConstant: 308).isActive = true
+        let content = NSViewController()
+        content.view = stack
+        stack.frame.size = stack.fittingSize
+        content.preferredContentSize = stack.frame.size
+        return content
     }
 
     @objc private func primaryClicked(_ sender: Any?) {

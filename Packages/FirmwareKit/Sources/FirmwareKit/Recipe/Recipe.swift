@@ -213,7 +213,7 @@ public enum Recipe {
     static func keybagRamdisk(_ c: Context) throws -> (URL, String) {
         // A restore-only build ships just the Restore ramdisk; a build whose Update ramdisk has no public key (the 5.0
         // betas, 9A334) boots its keyed Restore ramdisk: it runs the same restored_external.
-        let comp = try BuildComponents.load(c.ipsw)
+        let comp = try BuildComponents.load(c.ipsw, board: c.e.board)
         guard let update = [comp["UpdateRamDisk"], comp["RestoreRamDisk"]].compactMap({ $0 }).first(where: { (try? c.e.key(forPath: $0)) != nil })
                 ?? comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"] else { throw FirmwareError(.unsupported, "\(c.e.id): no ramdisk") }
         let name = String(update.dropLast(4)) + "-ramdisk.dmg"

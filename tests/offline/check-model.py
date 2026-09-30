@@ -175,6 +175,22 @@ func pattern(_ profile: DeviceProfile, rotation: Int) -> CGImage {
       let level = color(snapshot, p, in: model.bounds.size)
       homeLevels.append(level.redComponent)
       precondition(level.redComponent < 0.35, "Home button washed out: \(rotation) \(level)")
+      // The glyph's rounded square reads as a light ring on the black cap (K48's and N45's steel glyph vanished).
+      if rotation == 0 {
+        let rep = NSBitmapImageRep(cgImage: snapshot)
+        var levels: [CGFloat] = []
+        for i in 0..<40 { for j in 0..<40 {
+          let q = CGPoint(x: rect.minX + rect.width * (CGFloat(i) + 0.5) / 40, y: rect.minY + rect.height * (CGFloat(j) + 0.5) / 40)
+          guard hypot(q.x - rect.midX, q.y - rect.midY) < rect.width * 0.4 else { continue }
+          var px = [Int](repeating: 0, count: 4)
+          rep.getPixel(&px, atX: Int(q.x / model.bounds.width * CGFloat(rep.pixelsWide)), y: Int((1 - q.y / model.bounds.height) * CGFloat(rep.pixelsHigh)))
+          levels.append((0.2126 * CGFloat(px[0]) + 0.7152 * CGFloat(px[1]) + 0.0722 * CGFloat(px[2])) / 255)
+        } }
+        levels.sort()
+        let cap = levels[levels.count / 2], glyph = levels.last!
+        print("\(name): Home glyph \(glyph) on cap \(cap)")
+        precondition(glyph - cap > 0.25, "Home glyph barely visible: \(glyph) on \(cap)")
+      }
     }
    }
   }
@@ -213,17 +229,30 @@ func pattern(_ profile: DeviceProfile, rotation: Int) -> CGImage {
     // A second layout with the same target must not cancel the spring.
     model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
     precondition(abs(model.projectedPoint(top).x-tilted.x)<1)
-    try await Task.sleep(for: .seconds(0.3)); model.advanceAnimations()
-    let overshoot = model.projectedPoint(top)
-    precondition((overshoot.x-rest.x)*(tilted.x-rest.x)<0, "Spring must cross the resting pose")
-    try await Task.sleep(for: .seconds(0.9)); model.advanceAnimations()
+    // The overshoot lasts only ~0.17-0.43 s: sample the spring rather than one instant.
+    // Past the rest pose, as a fraction of the release distance (the spring peaks near 0.17).
+    var overshoot: CGFloat = 0
+    let released = CACurrentMediaTime()
+    while CACurrentMediaTime() - released < 0.6 {
+      try await Task.sleep(for: .seconds(0.01)); model.advanceAnimations()
+      overshoot = max(overshoot, (rest.x-model.projectedPoint(top).x)/(tilted.x-rest.x))
+    }
+    precondition(overshoot>0.05, "Spring must cross the resting pose: \(overshoot)")
+    try await Task.sleep(for: .seconds(0.6)); model.advanceAnimations()
     precondition(abs(model.projectedPoint(top).x-rest.x)<0.01)
+    // Some sample must sit well away from both the start and the end of the 0.4 s transition.
+    let corner = CGPoint(x: 0.2, y: 0.3)
+    let start = model.projectedPoint(corner)
     model.pose(scale: 0.8, rotation: 90, roll: 0, pitch: 0, animated: true)
-    try await Task.sleep(for: .seconds(0.16)); model.advanceAnimations()
-    let midway = model.projectedPoint(CGPoint(x: 0.2, y: 0.3))
-    try await Task.sleep(for: .seconds(0.3)); model.advanceAnimations()
-    let end = model.projectedPoint(CGPoint(x: 0.2, y: 0.3))
-    precondition(hypot(midway.x-end.x,midway.y-end.y)>10, "Rotation/scale must interpolate")
+    var path: [CGPoint] = []
+    let turned = CACurrentMediaTime()
+    while CACurrentMediaTime() - turned < 0.5 {
+      try await Task.sleep(for: .seconds(0.01)); model.advanceAnimations()
+      path.append(model.projectedPoint(corner))
+    }
+    let end = path.last!
+    let between = path.map { min(hypot($0.x-start.x,$0.y-start.y), hypot($0.x-end.x,$0.y-end.y)) }.max()!
+    precondition(between>10, "Rotation/scale must interpolate: \(between)")
   }
   model.pose(scale: 0.4, rotation: 0, roll: 0, pitch: 0, animated: false)
   try await Task.sleep(for: .seconds(0.1))

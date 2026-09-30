@@ -150,11 +150,11 @@ current tree.
 
 | Path | What |
 |---|---|
-| `LightTouchMac/` | The app, one directory per layer (below), plus `Resources/firmware-catalog.json` (the built-in iPod is its `bundled` entry, shipped as `Resources/device/n72ap-7E18.itbase`), `Assets.xcassets`, `Shim/` |
+| `LightTouchMac/` | The app, one directory per layer (below), plus `Resources/firmware-catalog.json` (its `first_run` names the device a first launch selects: an `available` build Apple still serves), `Assets.xcassets`, `Shim/` |
 | `LightTouchMac/Transport/` | The wire to a device and the app's logs: `IMobileDevice` (the dlopen'd libimobiledevice), `USBMux` (each device's usbmuxd), `DeviceExecution` (the serial gate, deadlines, late-handle cleanup, errors, timeouts), `NativeLogging`, `AppEventLog` |
 | `LightTouchMac/Services/` | Stock lockdown services on one device, all on `DeviceServices`' `run` kernel: `InstallationProxy`, `AFC` (staging and the Files browser), `SpringBoardServices`, `LockdownTools` (ActivationState, the lockdown-tz and lockdown-mcinstall children), `NotificationProxy` |
 | `LightTouchMac/Guest/` | The guest agent: `GuestAgent` (the wire and typed ops), `GuestServices` (media commit, trust, proxy route, respring, launch), `GuestPackage` |
-| `LightTouchMac/Library/` | What the app keeps: `DeviceInstance`, `DeviceLibrary`, `DeviceStateStorage`, `StorageLocations`, `Bundled`, `BundledBase`, `LegacyState`, `IPSWStore`, `FirmwareCatalog`, `FirmwareJobs`, `FirmwareDownloads`, `PreparationJob`, `IPALibrary`, `IPAMembers`, `AppMetadataCache` |
+| `LightTouchMac/Library/` | What the app keeps: `DeviceInstance`, `DeviceLibrary`, `DeviceStateStorage`, `StorageLocations`, `Bundled`, `LegacyState`, `IPSWStore`, `FirmwareCatalog`, `FirmwareJobs`, `FirmwareDownloads`, `PreparationJob`, `IPALibrary`, `IPAMembers`, `AppMetadataCache` |
 | `LightTouchMac/Device/` | One running device: `DeviceProfile`, `DeviceSession`, `DeviceProcess` (its helper), `BootRecipe`, `EmulatorController` (lifecycle and input; vends `services`, `guest`, `installPipeline`), `DeviceRow`, `DeviceConnectionIssue`, `DeviceFileWatch`, `WebProxyConfiguration` |
 | `LightTouchMac/Features/` | What the app does with a device: `AppInstaller` (the per-device install and removal queue), `AppInstallPipeline`, `MediaImport` (+ `Media*`, `PreparedMedia`), `WebProxySetup`, `CaptureController` (+ recording, movie writer, canvas capture, capture preferences), `CatalogClient`/`CatalogCopy`, `DiagnosticsExport` |
 | `LightTouchMac/UI/` | Windows, views and view controllers: `MainWindowController`, the sidebar, placeholder, device and inspector view controllers, `DisplayView`, `DeviceModelView`, `DroppedFiles`, the Files, log, storage, proxy and capture panels, small controls |
@@ -162,7 +162,7 @@ current tree.
 | `LightTouchDevice/` | The per-device helper: one QEMU instance, frames over IOSurface, control over the `Shared/` link, and the device's web proxy (`WebProxy` on URLSession, `WebProxyAdapters`) behind the 10.0.2.100:3128 guestfwd |
 | `Shared/` | The app–helper link (`DeviceLink`, `DeviceLinkProtocol`, `DeviceRendezvous`, the `CLink` module); `WebProxyCA`, the per-device proxy CA both sides use |
 | `Packages/FirmwareKit/` | `FirmwareKit` (IPSW → device), the `firmwarekit` CLI (`Sources/FirmwareKitCLI`), `CActivation` |
-| `scripts/` | `build-release.py` and its stages, `build-guest-tools.sh`, `pack-base.py` (the built-in iPod's blob), `package.sh`, `gate.sh`, `sources.py`, `check-macho.py`, `test-glib-compat.py`, lockdown C helpers |
+| `scripts/` | `build-release.py` and its stages, `build-guest-tools.sh`, `package.sh`, `gate.sh`, `sources.py`, `check-macho.py`, `test-glib-compat.py`, lockdown C helpers |
 | `tests/` | `run.py` and the tiers `offline/`, `sessions/`, `release/`; `drivers/` (helper-driver, session-driver), `fixtures/` (fake-firmwarekit.py, catalog-server.py, the Swift fixtures); `SLICED.md` |
 | `build-support/` | `dependencies.json` (pinned archives) and build patches |
 | `Configuration/` | `Shared.xcconfig` |

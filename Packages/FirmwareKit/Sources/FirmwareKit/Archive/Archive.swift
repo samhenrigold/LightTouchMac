@@ -18,7 +18,9 @@ public struct FirmwareError: Error, CustomStringConvertible, Sendable {
                                            oneshotFailed = "oneshot_failed", diskFull = "disk_full", `internal` }
     public var code: Code
     public var message: String
-    public init(_ code: Code, _ message: String) { self.code = code; self.message = message }
+    /// The fit check's piece when a required one doesn't fit (the error event's "piece"): the app names it plainly.
+    public var piece: String?
+    public init(_ code: Code, _ message: String, piece: String? = nil) { self.code = code; self.message = message; self.piece = piece }
     public var description: String { "\(code.rawValue): \(message)" }
 }
 

@@ -28,7 +28,7 @@ import Testing
     func rootfsMatchesPython(_ fw: Oracle.Firmware) throws {
         guard fw.available else { try FixtureRequirements.missing(fw.ipsw.path) }
         let entry = try Oracle.entry(fw.entryID), ipsw = IPSWArchive(fw.ipsw)
-        let os = try BuildComponents.load(ipsw)["OS"]!
+        let os = try BuildComponents.load(ipsw, board: entry.board)["OS"]!
         let key = try #require(Data(hex: entry.key(forPath: os).key))
         try Oracle.withTemp { dir in
             let out = dir.appendingPathComponent("rootfs.dmg")

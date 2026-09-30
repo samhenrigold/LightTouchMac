@@ -59,6 +59,26 @@ fetch_group() {   # GROUP: its pinned archives into src/, from the caches when t
     if [ "${LTM_OFFLINE:-0}" = 1 ]; then args+=(--offline); fi
     python3 "$SRC/scripts/dependency-sources.py" "${args[@]}"
 }
+# What a library compiles in about its own prefix (glib's GIO module and locale dirs, FFmpeg's configure
+# line) must not name this build's path: glib and FFmpeg are configured for NEUTRAL, which cannot hold
+# anything (/var/empty is root-owned and empty), installed under stage/, then moved into $P.
+NEUTRAL=/var/empty
+restage() {   # stage/$NEUTRAL into $P, its pkg-config files pointed at $P
+    local pc
+    for pc in "$ROOT/stage$NEUTRAL"/lib/pkgconfig/*.pc; do sed -i '' "s|$NEUTRAL|$P|g" "$pc"; done
+    cp -R "$ROOT/stage$NEUTRAL/." "$P/"
+    rm -rf "$ROOT/stage"
+}
+# LICENSE-NAME DIR FILES...: license texts into $P/share/licenses/NAME, with a SOURCE.txt naming the pinned archive
+license() {
+    local name="$1" dir="$2"; shift 2
+    mkdir -p "$P/share/licenses/$name"
+    (cd "$dir" && cp "$@" "$P/share/licenses/$name/")
+}
+source_note() {   # MANIFEST-NAME LICENSE-NAME [PATCH...]
+    local package="$1" name="$2"; shift 2
+    python3 "$SRC/scripts/dependency-sources.py" note "$package" "$@" > "$P/share/licenses/$name/SOURCE.txt"
+}
 fetch_group native
 cd "$ROOT/build"
 for archive in glib-2.88.3.tar.xz pcre2-10.48.tar.bz2 pixman-0.46.4.tar.gz libslirp-v4.9.4.tar.gz libusb-1.0.30.tar.bz2 libplist-2.7.0.tar.bz2 libimobiledevice-1.4.0.tar.bz2 ffmpeg-9.0.1.tar.xz; do
@@ -95,16 +115,27 @@ cpu = 'x86_64'
 endian = 'little'
 EOF
 fi
-"$MESON" setup glib-out glib-2.88.3 ${MESON_CROSS[@]+"${MESON_CROSS[@]}"} --prefix="$P" --buildtype=release -Ddefault_library=static -Dnls=disabled -Dtests=false -Dintrospection=disabled -Dman-pages=disabled -Dlibmount=disabled -Dselinux=disabled -Dsysprof=disabled --wrap-mode=nodownload
-ninja -C glib-out -j"$JOBS" && ninja -C glib-out install
-mkdir -p "$P/share/licenses/glib"
-cp glib-2.88.3/COPYING "$SRC/build-support/patches/glib-pipe2-availability.patch" "$P/share/licenses/glib/"
+"$MESON" setup glib-out glib-2.88.3 ${MESON_CROSS[@]+"${MESON_CROSS[@]}"} --prefix="$NEUTRAL" --buildtype=release -Ddefault_library=static -Dnls=disabled -Dtests=false -Dintrospection=disabled -Dman-pages=disabled -Dlibmount=disabled -Dselinux=disabled -Dsysprof=disabled --wrap-mode=nodownload
+ninja -C glib-out -j"$JOBS" && DESTDIR="$ROOT/stage" ninja -C glib-out install && restage
+license glib glib-2.88.3 COPYING "$SRC/build-support/patches/glib-pipe2-availability.patch"
+source_note glib glib glib-pipe2-availability.patch
+license proxy-libintl glib-2.88.3/subprojects/proxy-libintl-0.5 COPYING
+source_note proxy-libintl proxy-libintl
+license pcre2 pcre2-10.48 LICENCE.md
+license pixman pixman-0.46.4 COPYING
+license libslirp libslirp-v4.9.4 COPYRIGHT LICENSE
 "$MESON" setup pixman-out pixman-0.46.4 ${MESON_CROSS[@]+"${MESON_CROSS[@]}"} --prefix="$P" --buildtype=release -Ddefault_library=static -Dtests=disabled -Ddemos=disabled --wrap-mode=nofallback
 ninja -C pixman-out -j"$JOBS" && ninja -C pixman-out install
 # qemu-ios's slirp_set_restricted(): the in-place restrict flip behind netdev_set_restrict /
 # qemu_ios_ui_net_restrict (5.x networking on after Setup). Older qemu-ios pins lack the patch file.
 SLIRP_PATCH="$QEMU/subprojects/packagefiles/libslirp-set-restricted.patch"
-if [ -f "$SLIRP_PATCH" ]; then (cd libslirp-v4.9.4 && patch -p1 < "$SLIRP_PATCH"); fi
+if [ -f "$SLIRP_PATCH" ]; then
+    (cd libslirp-v4.9.4 && patch -p1 < "$SLIRP_PATCH")
+    cp "$SLIRP_PATCH" "$P/share/licenses/libslirp/"
+    source_note slirp libslirp "$(basename "$SLIRP_PATCH")"
+else
+    source_note slirp libslirp
+fi
 "$MESON" setup slirp-out libslirp-v4.9.4 ${MESON_CROSS[@]+"${MESON_CROSS[@]}"} --prefix="$P" --buildtype=release -Ddefault_library=static --wrap-mode=nofallback
 ninja -C slirp-out -j"$JOBS" && ninja -C slirp-out install
 # libusb: only the usbmuxd fork's configure.ac asks for it (PKG_CHECK_MODULES, no flag); its QEMU backend
@@ -114,12 +145,14 @@ ninja -C slirp-out -j"$JOBS" && ninja -C slirp-out install
 # corresponding static archives intentionally hide these public symbols.
 export PKG_CONFIG_LIBDIR="$P/lib/pkgconfig:$STATIC/lib/pkgconfig"
 (cd libplist-2.7.0 && ./configure --prefix="$P" ${HOST[@]+"${HOST[@]}"} --enable-shared --disable-static --without-cython && make -j"$JOBS" && make install)
+license libplist libplist-2.7.0 COPYING COPYING.LESSER
+source_note libplist libplist
 # iPhone OS 1.x lockdownd speaks SSLv3 only: offer exactly SSLv3 below ProductVersion 2.0 (smoke.md #51); no ECDHE
 # suites below 10.0 (5.0 beta 1 lockdownd aborts a ClientHello that offers one; smoke.md "9A5220p USB lockdown").
 (cd libimobiledevice-1.4.0 && patch -p1 < "$SRC/build-support/patches/libimobiledevice-sslv3-ios1.patch")
 (cd libimobiledevice-1.4.0 && LDFLAGS="$LDFLAGS -framework SystemConfiguration -framework CoreFoundation" ./configure --prefix="$P" ${HOST[@]+"${HOST[@]}"} --enable-shared --disable-static --without-cython && make -j"$JOBS" && make install)
-mkdir -p "$P/share/licenses/libimobiledevice"
-cp libimobiledevice-1.4.0/COPYING "$SRC/build-support/patches/libimobiledevice-sslv3-ios1.patch" "$P/share/licenses/libimobiledevice/"
+license libimobiledevice libimobiledevice-1.4.0 COPYING COPYING.LESSER "$SRC/build-support/patches/libimobiledevice-sslv3-ios1.patch"
+source_note libimobiledevice libimobiledevice libimobiledevice-sslv3-ios1.patch
 (cd usbmuxd && glibtoolize --copy --force && autoreconf -fi)
 (cd usbmuxd && LDFLAGS="$LDFLAGS -framework IOKit -framework CoreFoundation -framework Security" ./configure --prefix="$P" ${HOST[@]+"${HOST[@]}"} --without-systemd && make -j"$JOBS")
 # iBoot32Patcher (GPL-3.0, the "tools" group of the manifest): firmwarekit runs it for the k48 real-iBoot
@@ -129,13 +162,13 @@ LTM_ARCH="$ARCH" bash "$SRC/scripts/build-iboot32patcher.sh" "$ROOT/src" "$ROOT/
 # AMC audio and incremental H.264 slices use libavcodec/libavutil. Keep the closure native
 # to macOS 14, with no automatically discovered Homebrew codec dependencies.
 (cd ffmpeg-9.0.1 && patch -p1 < "$QEMU/contrib/ffmpeg/h264-chunk-er.patch" && patch -p1 < "$QEMU/contrib/ffmpeg/h264-cavlc-pcm-offset.patch")
-(cd ffmpeg-9.0.1 && ./configure --prefix="$P" ${FFMPEG_CROSS[@]+"${FFMPEG_CROSS[@]}"} \
+(cd ffmpeg-9.0.1 && ./configure --prefix="$NEUTRAL" ${FFMPEG_CROSS[@]+"${FFMPEG_CROSS[@]}"} \
     --disable-everything --disable-autodetect --disable-programs --disable-doc \
     --disable-avdevice --disable-avformat --disable-avfilter --disable-swscale --disable-swresample \
     --enable-decoder=aac,mp3,alac,h264 --enable-shared --disable-static --install-name-dir=@rpath \
     --extra-cflags="$ARCH_FLAG-mmacosx-version-min=14.0" \
     --extra-ldflags="$ARCH_FLAG-mmacosx-version-min=14.0 -Wl,-rpath,@loader_path" \
-    && make -j"$JOBS" && make install)
+    && make -j"$JOBS" && make install DESTDIR="$ROOT/stage") && restage
 mkdir -p "$P/share/licenses/ffmpeg"
 cp ffmpeg-9.0.1/COPYING.LGPLv2.1 "$P/share/licenses/ffmpeg/"
 printf '%s\n' 'FFmpeg 9.0.1: https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz' \
@@ -150,10 +183,12 @@ mkdir "$ROOT/qemu-build"
 cd "$ROOT/qemu-build"
 "$QEMU/configure" ${QEMU_CROSS[@]+"${QEMU_CROSS[@]}"} --target-list=arm-softmmu --without-default-features --enable-cocoa --enable-coreaudio --enable-pixman --enable-slirp --disable-pie \
     --python="${QEMU_PYTHON:-python3.12}" \
-    --extra-cflags="-I$STATIC/include -mmacosx-version-min=14.0" \
+    --extra-cflags="-I$STATIC/include -mmacosx-version-min=14.0 -fmacro-prefix-map=$QEMU/= -fmacro-prefix-map=$ROOT/qemu-build/=" \
     --extra-ldflags="-L$STATIC/lib -lcrypto -mmacosx-version-min=14.0"
 ninja -j"$JOBS" qemu-system-arm
-bash "$QEMU/contrib/macos-app/make-dylib-macos.sh" "$ROOT/qemu-build"
+# make-dylib-macos.sh compiles the entry files itself: CCC_OVERRIDE_OPTIONS gives its clang the same prefix maps.
+CCC_OVERRIDE_OPTIONS="+-fmacro-prefix-map=$QEMU/= +-fmacro-prefix-map=$ROOT/qemu-build/=" \
+    bash "$QEMU/contrib/macos-app/make-dylib-macos.sh" "$ROOT/qemu-build"
 python3 "$SRC/scripts/check-macho.py" --no-weak-imports --arch "$ARCH" "$ROOT/qemu-build/libqemu-arm.dylib" "$P/lib/libimobiledevice-1.0.dylib" "$P/lib/libplist-2.0.dylib" "$ROOT/build/usbmuxd/src/usbmuxd" "$ROOT/build/iBoot32Patcher/iBoot32Patcher"
 python3 "$SRC/scripts/test-glib-compat.py" --arch "$ARCH" --native-build "$ROOT"
 python3 - "$SRC" "$ROOT" "$STATIC" "$QEMU" "$USB" "$ARCH" <<'PY'
