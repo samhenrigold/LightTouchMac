@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Bounded placeholder, eventual live 3D, renderer readiness, and closed-window lifetime."""
+"""Bounded placeholder, eventual live 3D, renderer readiness, and closed-window lifetime.
+
+The stubbed-renderer half never shows its windows (attached, never ordered in). The actual-renderer half needs
+ARView to present in a visible window, which RealityKit only draws in: it runs with LTM_DISPLAY_CHECKS=1."""
 import ast
 from pathlib import Path
-import subprocess, tempfile
+import os, subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
 node = ast.parse((root/'tests/offline/check-model.py').read_text())
 fixture = next(ast.literal_eval(n.value) for n in node.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'display_source' for t in n.targets))
@@ -14,7 +17,10 @@ stub_source = prefix + r'''
  static var loadingDelay:Duration = .zero
  static var preparationDelay:Duration = .milliseconds(50)
  let delay:Duration
- init(url:URL) async throws {
+ var shellPixels: CGSize { CGSize(width:737,height:1318) }
+ enum Control { case sleepWake, volumeUp, volumeDown }
+ func control(at p:CGPoint)->Control?{nil}
+ init(url:URL,profile:DeviceProfile) async throws {
   delay=Self.preparationDelay
   try await Task.sleep(for:Self.loadingDelay)
   super.init(frame:.zero)
@@ -46,7 +52,7 @@ stub_source = prefix + r'''
    let display=DisplayView(frame:NSRect(x:0,y:0,width:500,height:800),profile:.iPodTouch2G)
    let e=EmulatorController();display.emulator=e
    let window=NSWindow(contentRect:display.frame,styleMask:[.titled],backing:.buffered,defer:false)
-   window.contentView=display;window.orderFront(nil)
+   window.contentView=display
    display.needsLayout=true;display.layoutSubtreeIfNeeded()
    let shell=display.layer!.sublayers!.first { $0.bounds.size==CGSize(width:737,height:1318) }!
    precondition(shell.isHidden,"Do not flash the photo before the model gets its first chance to render")
@@ -67,7 +73,7 @@ stub_source = prefix + r'''
   var closingDisplay:DisplayView? = DisplayView(frame:NSRect(x:0,y:0,width:500,height:800),profile:.iPodTouch2G)
   weak let releasedDisplay = closingDisplay
   let closingWindow=NSWindow(contentRect:closingDisplay!.frame,styleMask:[.titled],backing:.buffered,defer:false)
-  closingWindow.contentView=closingDisplay;closingWindow.orderFront(nil)
+  closingWindow.contentView=closingDisplay
   try await Task.sleep(for:.milliseconds(100))
   closingWindow.orderOut(nil);closingWindow.contentView=nil;closingDisplay=nil
   try await Task.sleep(for:.milliseconds(100))
@@ -113,7 +119,7 @@ real_source = prefix + r'''
     "Visible model did not render the green guest LCD: \(pixel)")
   window.orderOut(nil);window.contentView=nil
   // A first-frame waiter with no drawable must still cancel promptly.
-  let unattached=try await DeviceModelView(url:Bundle.main.url(forResource:"N72",withExtension:"usdz")!)
+  let unattached=try await DeviceModelView(url:Bundle.main.url(forResource:"N72",withExtension:"usdz")!,profile:.iPodTouch2G)
   let waiter=Task { await unattached.prepareFirstFrame() }
   waiter.cancel()
   let cancelledResult=await waiter.value
@@ -126,7 +132,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-model-startup-') as tmp:
     work=Path(tmp);app=work/'Check.app/Contents';(app/'MacOS').mkdir(parents=True);(app/'Resources').mkdir()
     for name in ['N72.usdz', 'N72Studio.realityenv']:
         (app/'Resources'/name).symlink_to(root/'LightTouchMac'/name)
-    for name, source, actual_model in [('stub', stub_source, False), ('renderer', real_source, True)]:
+    windowed = os.environ.get('LTM_DISPLAY_CHECKS') == '1'
+    for name, source, actual_model in [('stub', stub_source, False), *([('renderer', real_source, True)] if windowed else [])]:
         swift=work/f'{name}.swift';swift.write_text(source);exe=app/'MacOS'/name
         sources=['UI/DisplayView','Device/DeviceProfile','Device/DeviceProfile+Display','UI/DisplayMeasurements','UI/AttitudeIndicatorButton','UI/InlineLiveTextView','UI/DroppedFiles']
         if actual_model: sources.append('UI/DeviceModelView')
@@ -134,3 +141,5 @@ with tempfile.TemporaryDirectory(prefix='ltm-model-startup-') as tmp:
                         *[str(root/'LightTouchMac'/f'{item}.swift') for item in sources],
                         str(root/'Shared/DeviceLinkProtocol.swift'),str(swift),'-o',str(exe)],check=True)
         subprocess.run([str(exe)],check=True,timeout=30)
+    if not windowed:
+        print('SKIP: the actual renderer in a visible window; LTM_DISPLAY_CHECKS=1 runs it')

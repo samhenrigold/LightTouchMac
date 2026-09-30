@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native N72 rendering and production DisplayView input. Uses a disposable app, no QEMU."""
+"""Every board's 3D model, rendered headless, and production DisplayView input. Uses a disposable app, no QEMU."""
 from pathlib import Path
 import os, subprocess, sys, tempfile
 root=Path(__file__).resolve().parents[2]
@@ -7,27 +7,116 @@ sys.path.insert(0, str(root/"scripts"))
 import sources as pins  # the pinned checkouts (build-support/sources.json)
 model_source = r'''import AppKit
 import RealityKit
+import Metal
 func - (a:CGPoint,b:CGPoint)->CGPoint { CGPoint(x:a.x-b.x,y:a.y-b.y) }
+let profiles: [String: DeviceProfile] = ["N72": .iPodTouch2G, "K48": .iPad1, "N45": .iPodTouch1G]
+/// Renders the model's own scene headless: RealityRenderer draws the same
+/// entities and camera into a texture, so no window is ever shown and the
+/// check runs with the display asleep. Pixel (x, y) is the view's y-up point.
+@MainActor func render(_ model: DeviceModelView) async throws -> CGImage {
+  let view = model.subviews[0] as! ARView
+  let anchors = Array(view.scene.anchors)
+  for anchor in anchors { view.scene.removeAnchor(anchor) }
+  defer { for anchor in anchors { view.scene.addAnchor(anchor) } }
+  let renderer = try RealityRenderer()
+  for anchor in anchors { renderer.entities.append(anchor) }
+  func camera(_ e: Entity) -> Entity? { e is PerspectiveCamera ? e : e.children.lazy.compactMap(camera).first }
+  renderer.activeCamera = anchors.lazy.compactMap(camera).first!
+  renderer.lighting.resource = view.environment.lighting.resource
+  renderer.lighting.intensityExponent = view.environment.lighting.intensityExponent
+  renderer.cameraSettings.colorBackground = .color(CGColor(gray: 0.5, alpha: 1))
+  let w = Int(model.bounds.width) * 2, h = Int(model.bounds.height) * 2
+  let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm_srgb, width: w, height: h, mipmapped: false)
+  descriptor.usage = [.renderTarget, .shaderRead]; descriptor.storageMode = .shared
+  let texture = MTLCreateSystemDefaultDevice()!.makeTexture(descriptor: descriptor)!
+  let output = try RealityRenderer.CameraOutput(.singleProjection(colorTexture: texture))
+  // Twice: the first pass can precede material and texture uploads.
+  for _ in 0..<2 {
+    try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, Error>) in
+      do { try renderer.updateAndRender(deltaTime: 1.0 / 60, cameraOutput: output, onComplete: { _ in done.resume() }) }
+      catch { done.resume(throwing: error) }
+    }
+  }
+  var bytes = [UInt8](repeating: 0, count: w * h * 4)
+  texture.getBytes(&bytes, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+  let context = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+    space: CGColorSpace(name: CGColorSpace.displayP3)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+  return context.makeImage()!
+}
+/// RealityKit writes Display P3: compare raw P3 components with P3 references.
+func color(_ image: CGImage, _ p: CGPoint, in size: CGSize) -> NSColor {
+  let rep = NSBitmapImageRep(cgImage: image)
+  var pixel = [Int](repeating: 0, count: 4)
+  rep.getPixel(&pixel, atX: Int(p.x / size.width * CGFloat(rep.pixelsWide)), y: Int((1 - p.y / size.height) * CGFloat(rep.pixelsHigh)))
+  return NSColor(displayP3Red: CGFloat(pixel[0]) / 255, green: CGFloat(pixel[1]) / 255, blue: CGFloat(pixel[2]) / 255, alpha: 1)
+}
+func save(_ image: CGImage, _ path: String) throws {
+  try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+}
+/// Upright quadrants (red, green / blue, yellow), a centre circle and TOP, then
+/// turned into the panel's own scan-out orientation (the iPad's is landscape).
+func pattern(_ profile: DeviceProfile, rotation: Int) -> CGImage {
+  let turnsBack = profile.panelRotation != 0 ? 1 : rotation / 90
+  let upright = profile.uprightScreenPixels
+  let size = turnsBack % 2 == 0 ? upright : CGSize(width: upright.height, height: upright.width)
+  let w = Int(size.width), h = Int(size.height)
+  let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w*4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+  // Draw in the upright frame: turn the context so its y-up upright picture lands turned back.
+  context.translateBy(x: size.width / 2, y: size.height / 2)
+  context.rotate(by: CGFloat(turnsBack) * .pi / 2)
+  context.translateBy(x: -upright.width / 2, y: -upright.height / 2)
+  let colors: [NSColor] = [.red, .green, .blue, .yellow]
+  for i in 0..<4 {
+    context.setFillColor(colors[i].cgColor)
+    context.fill(CGRect(x: CGFloat(i % 2) * upright.width / 2, y: CGFloat(1 - i / 2) * upright.height / 2, width: upright.width / 2, height: upright.height / 2))
+  }
+  let d = upright.width * 0.6
+  context.setStrokeColor(.white); context.setLineWidth(upright.width * 0.02)
+  context.strokeEllipse(in: CGRect(x: (upright.width - d) / 2, y: (upright.height - d) / 2, width: d, height: d))
+  let text = NSAttributedString(string: "TOP", attributes: [.font: NSFont.boldSystemFont(ofSize: upright.width * 0.12), .foregroundColor: NSColor.white])
+  let line = CTLineCreateWithAttributedString(text)
+  let bounds = CTLineGetBoundsWithOptions(line, [])
+  context.textPosition = CGPoint(x: (upright.width - bounds.width) / 2, y: upright.height * 0.9)
+  CTLineDraw(line, context)
+  return context.makeImage()!
+}
 @main struct Check {
  @MainActor static func main() async throws {
   _ = NSApplication.shared
-  let model = try await DeviceModelView(url: URL(fileURLWithPath: CommandLine.arguments[1]))
+  NSApp.setActivationPolicy(.prohibited)
+  let name = CommandLine.arguments[3], profile = profiles[name]!
+  let lower = name.lowercased(), out = CommandLine.arguments[2]
+  let model = try await DeviceModelView(url: URL(fileURLWithPath: CommandLine.arguments[1]), profile: profile)
   model.frame = NSRect(x: 0, y: 0, width: 800, height: 800)
-  let window = NSWindow(contentRect: model.frame, styleMask: [.titled], backing: .buffered, defer: false)
-  window.contentView = model; window.orderFront(nil)
-  // Resize the actual ARView synchronously: the projection must preserve the
-  // LCD's physical 2:3 ratio before an asynchronous layout/render catches up.
+  let cutout = profile.screenCutout.size
+  /// The upright LCD's on-screen box: the four panel corners' projections.
+  func lcdBox() -> CGRect {
+    let points = [CGPoint(x:0,y:0), CGPoint(x:1,y:0), CGPoint(x:0,y:1), CGPoint(x:1,y:1)].map(model.projectedPoint)
+    let xs = points.map(\.x), ys = points.map(\.y)
+    return CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
+  }
+  // Resize the actual ARView synchronously: the projection must keep the
+  // LCD's physical aspect and size before an asynchronous layout catches up.
   for size in [CGSize(width:400,height:1000), CGSize(width:1200,height:450), CGSize(width:800,height:800)] {
     model.setFrameSize(size)
     model.pose(scale: 0.3, rotation: 0, roll: 0, pitch: 0, animated: false)
     let renderer = model.subviews[0] as! ARView
     precondition(renderer.bounds.size == size)
-    let horizontal = model.projectedPoint(CGPoint(x:1,y:0.5))-model.projectedPoint(CGPoint(x:0,y:0.5))
-    let vertical = model.projectedPoint(CGPoint(x:0.5,y:1))-model.projectedPoint(CGPoint(x:0.5,y:0))
-    precondition(abs(hypot(horizontal.x,horizontal.y)/hypot(vertical.x,vertical.y)-2.0/3)<0.003,
-      "LCD stretched during resize to \(size)")
-    precondition(abs(hypot(horizontal.x,horizontal.y)-0.3*594)<0.1, "Display scale changed with viewport aspect")
+    let box = lcdBox()
+    precondition(abs(box.width / box.height - cutout.width / cutout.height) < 0.003,
+      "LCD stretched during resize to \(size): \(box.size)")
+    precondition(abs(box.width - 0.3 * cutout.width) < 0.1, "Display scale changed with viewport aspect: \(box.width)")
   }
+  // The panel's own axes on the upright model: the iPad's landscape panel is
+  // mounted a quarter-turn clockwise, so its left edge (portrait SpringBoard's
+  // status bar) is the device's top; the iPod's panel top is the top.
+  let top = profile.panelRotation != 0 ? CGPoint(x: 0, y: 0.5) : CGPoint(x: 0.5, y: 0)
+  let bottom = CGPoint(x: 1 - top.x, y: 1 - top.y)
+  let (t, b) = (model.projectedPoint(top), model.projectedPoint(bottom))
+  precondition(t.y - b.y > 0.99 * lcdBox().height && abs(t.x - b.x) < 0.01, "Panel mounted the wrong way: top \(t) bottom \(b)")
+  let shell = model.shellPixels
+  print("\(name): display \(lcdBox().size) at scale 0.3; model outline \(shell) shell pixels (flat art \(profile.shellPixels))")
+  precondition(shell.width > cutout.width && shell.height > cutout.height)
   // Transform world gravity into the actual model's axes and compare with
   // the production QEMU LIS302DL conversion, including compound landscape tilt.
   for flat in [false,true] {
@@ -53,57 +142,82 @@ func - (a:CGPoint,b:CGPoint)->CGPoint { CGPoint(x:a.x-b.x,y:a.y-b.y) }
     }
    }
   }
-  let colors: [NSColor] = [.red, .green, .blue, .yellow]
   let points = [CGPoint(x: 0.25,y: 0.25), CGPoint(x: 0.75,y: 0.25), CGPoint(x: 0.25,y: 0.75), CGPoint(x: 0.75,y: 0.75)]
   var homeLevels: [CGFloat] = []
+  // The iPod's surface arrives pre-rotated; the iPad's panel never turns.
   for rotation in [0,90,180,270] {
-   let w = rotation % 180 == 0 ? 320 : 480, h = rotation % 180 == 0 ? 480 : 320
-   let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w*4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-   for i in 0..<4 { context.setFillColor(colors[i].cgColor); context.fill(CGRect(x: i%2*w/2, y: i/2*h/2, width: w/2, height: h/2)) }
-   model.updateFrame(context.makeImage()!)
+   let frame = pattern(profile, rotation: rotation)
+   let reference = NSBitmapImageRep(cgImage: frame)
+   model.updateFrame(frame)
    for tilt in [0.0,0.35] {
     model.pose(scale: 0.5, rotation: rotation, roll: tilt, pitch: tilt, animated: false)
-    try await Task.sleep(for: .seconds(0.15))
-    // HDR avoids the SDR snapshot tone mapper altering saturated test colors.
-    let rendered: NSImage? = await withCheckedContinuation { continuation in
-      (model.subviews[0] as! ARView).snapshot(saveToHDR: true) { continuation.resume(returning: $0) }
-    }
-    let snapshot = NSBitmapImageRep(data: rendered!.tiffRepresentation!)!
+    let snapshot = try await render(model)
+    if tilt == 0 { try save(snapshot, out+"/\(lower)-orientation-\(rotation).png") }
+    if rotation == 0 && tilt != 0 { try save(snapshot, out+"/\(lower)-tilted.png") }
     for p in points {
      let screen = model.projectedPoint(p)
      let hit = model.panelPoint(screen)!
      precondition(hypot(hit.x-p.x, hit.y-p.y) < 0.0001)
-     let pixel = snapshot.colorAt(x: Int(screen.x/800*CGFloat(snapshot.pixelsWide)), y: Int((1-screen.y/800)*CGFloat(snapshot.pixelsHigh)))!.usingColorSpace(.sRGB)!
-     let reference = NSBitmapImageRep(cgImage: context.makeImage()!).colorAt(x: Int(p.x*CGFloat(w)), y: Int(p.y*CGFloat(h)))!.usingColorSpace(.sRGB)!
-     precondition(abs(pixel.redComponent-reference.redComponent)<0.22 && abs(pixel.greenComponent-reference.greenComponent)<0.22 && abs(pixel.blueComponent-reference.blueComponent)<0.22, "Frame orientation mismatch rotation=\(rotation) tilt=\(tilt) point=\(p) pixel=\(pixel) reference=\(reference)")
+     let pixel = color(snapshot, screen, in: model.bounds.size)
+     let expected = reference.colorAt(x: Int(p.x*CGFloat(frame.width)), y: Int(p.y*CGFloat(frame.height)))!.usingColorSpace(.displayP3)!
+     precondition(abs(pixel.redComponent-expected.redComponent)<0.22 && abs(pixel.greenComponent-expected.greenComponent)<0.22 && abs(pixel.blueComponent-expected.blueComponent)<0.22, "Frame orientation mismatch rotation=\(rotation) tilt=\(tilt) point=\(p) pixel=\(pixel) reference=\(expected)")
     }
-    if tilt == 0, let rect = model.homeButtonRect {
-      let p = CGPoint(x: rect.midX + rect.width * 0.3, y: rect.midY)
-      let color = snapshot.colorAt(x: Int(p.x/800*CGFloat(snapshot.pixelsWide)), y: Int((1-p.y/800)*CGFloat(snapshot.pixelsHigh)))!.usingColorSpace(.sRGB)!
-      homeLevels.append(color.redComponent)
-      precondition(color.redComponent < 0.35, "Home button washed out: \(rotation) \(color)")
-      try snapshot.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[2]+"/n72-orientation-\(rotation).png"))
-    }
-    if rotation == 0 && tilt != 0 {
-      try snapshot.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[2]+"/n72-tilted.png"))
+    if tilt == 0 {
+      let rect = model.homeButtonRect!
+      // Home sits below the LCD on the upright device, whichever way it is turned.
+      let rest = CGFloat(rotation == 270 ? -90 : rotation) * .pi / 180
+      let down = CGVector(dx: -sin(rest), dy: -cos(rest))   // y-up view; turns are clockwise
+      let lcd = lcdBox()
+      let offset = CGVector(dx: rect.midX - lcd.midX, dy: rect.midY - lcd.midY)
+      precondition(offset.dx * down.dx + offset.dy * down.dy > 0.5 * max(lcd.width, lcd.height), "Home is not below the LCD at \(rotation): \(rect) vs \(lcd)")
+      // The same spot on the cap in every orientation (the device's right of centre).
+      let p = CGPoint(x: rect.midX + rect.width * 0.3 * cos(rest), y: rect.midY - rect.width * 0.3 * sin(rest))
+      let level = color(snapshot, p, in: model.bounds.size)
+      homeLevels.append(level.redComponent)
+      precondition(level.redComponent < 0.35, "Home button washed out: \(rotation) \(level)")
     }
    }
   }
   precondition(homeLevels.max()! - homeLevels.min()! < 0.12, "Home lighting changes with orientation: \(homeLevels)")
+  // Hardware controls: each named side control answers where it is drawn, and
+  // the LCD and bezel are not controls.
+  model.updateFrame(pattern(profile, rotation: 0))
+  model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
+  let view = model.subviews[0] as! ARView
+  func projected(_ entity: Entity, _ fraction: SIMD3<Float>) -> CGPoint {
+    let b = entity.visualBounds(relativeTo: nil)
+    return model.convert(view.project(b.min + (b.max - b.min) * fraction)!, from: view)
+  }
+  var found: [String] = []
+  for (names, expected) in [(["SleepWakeButton", "Sleep_wake___black_fitted_button"], [DeviceModelView.Control.sleepWake]),
+                            (["VolumeButton", "Volume___continuous_recessed_centre_rocker"], [.volumeUp, .volumeDown])] {
+    guard let entity = names.lazy.compactMap({ view.scene.findEntity(named: $0) }).first else { continue }
+    found.append(entity.name)
+    if expected.count == 1 {
+      precondition(model.control(at: projected(entity, [0.5, 0.5, 0.5])) == expected[0], "\(entity.name) does not press")
+    } else {
+      precondition(model.control(at: projected(entity, [0.5, 0.8, 0.5])) == .volumeUp, "\(entity.name) upper half is not volume up")
+      precondition(model.control(at: projected(entity, [0.5, 0.2, 0.5])) == .volumeDown, "\(entity.name) lower half is not volume down")
+    }
+  }
+  precondition(model.control(at: model.projectedPoint(CGPoint(x: 0.5, y: 0.5))) == nil)
+  let bezel = model.projectedPoint(CGPoint(x: bottom.x + (bottom.x - 0.5) * 0.12, y: bottom.y + (bottom.y - 0.5) * 0.12))
+  precondition(model.isChassis(bezel) && model.control(at: bezel) == nil, "The bezel below the LCD must grab the chassis")
+  print("\(name): controls \(found)")
   if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
     model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
-    let rest = model.projectedPoint(CGPoint(x: 0.5, y: 0))
+    let rest = model.projectedPoint(top)
     model.pose(scale: 0.5, rotation: 0, roll: 0.4, pitch: 0, animated: false)
-    let tilted = model.projectedPoint(CGPoint(x: 0.5, y: 0))
+    let tilted = model.projectedPoint(top)
     model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: true, spring: true)
     // A second layout with the same target must not cancel the spring.
     model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
-    precondition(abs(model.projectedPoint(CGPoint(x: 0.5, y: 0)).x-tilted.x)<1)
+    precondition(abs(model.projectedPoint(top).x-tilted.x)<1)
     try await Task.sleep(for: .seconds(0.3)); model.advanceAnimations()
-    let overshoot = model.projectedPoint(CGPoint(x: 0.5, y: 0))
+    let overshoot = model.projectedPoint(top)
     precondition((overshoot.x-rest.x)*(tilted.x-rest.x)<0, "Spring must cross the resting pose")
     try await Task.sleep(for: .seconds(0.9)); model.advanceAnimations()
-    precondition(abs(model.projectedPoint(CGPoint(x: 0.5, y: 0)).x-rest.x)<0.01)
+    precondition(abs(model.projectedPoint(top).x-rest.x)<0.01)
     model.pose(scale: 0.8, rotation: 90, roll: 0, pitch: 0, animated: true)
     try await Task.sleep(for: .seconds(0.16)); model.advanceAnimations()
     let midway = model.projectedPoint(CGPoint(x: 0.2, y: 0.3))
@@ -113,34 +227,29 @@ func - (a:CGPoint,b:CGPoint)->CGPoint { CGPoint(x:a.x-b.x,y:a.y-b.y) }
   }
   model.pose(scale: 0.4, rotation: 0, roll: 0, pitch: 0, animated: false)
   try await Task.sleep(for: .seconds(0.1))
-  let small = model.projectedPoint(CGPoint(x:1,y:0.5)).x-model.projectedPoint(CGPoint(x:0,y:0.5)).x
+  let small = lcdBox().width
   model.pose(scale: 0.8, rotation: 0, roll: 0, pitch: 0, animated: false)
   try await Task.sleep(for: .seconds(0.1))
-  let large = model.projectedPoint(CGPoint(x:1,y:0.5)).x-model.projectedPoint(CGPoint(x:0,y:0.5)).x
+  let large = lcdBox().width
   precondition(abs(large/small-2)<0.001)
   let centre = model.projectedPoint(CGPoint(x:0.5,y:0.5))
-  let beforeShakeWidth = model.projectedPoint(CGPoint(x: 1, y: 0.5)).x-model.projectedPoint(CGPoint(x: 0, y: 0.5)).x
+  let beforeShakeWidth = lcdBox().width
   model.shake()
   try await Task.sleep(for: .seconds(0.07))
   model.advanceAnimations()
   if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
     precondition(abs(model.projectedPoint(CGPoint(x:0.5,y:0.5)).x-centre.x)>0.1)
-    let shakenWidth = model.projectedPoint(CGPoint(x: 1, y: 0.5)).x-model.projectedPoint(CGPoint(x: 0, y: 0.5)).x
-    precondition(abs(shakenWidth-beforeShakeWidth)>0.01, "Shake must change 3D perspective, not only position")
+    precondition(abs(lcdBox().width-beforeShakeWidth)>0.01, "Shake must change 3D perspective, not only position")
   }
   try await Task.sleep(for: .seconds(0.5))
   model.advanceAnimations()
   precondition(abs(model.projectedPoint(CGPoint(x:0.5,y:0.5)).x-centre.x)<0.01)
+  model.pose(scale: 0.5, rotation: 0, roll: 0, pitch: 0, animated: false)
+  try save(try await render(model), out+"/\(lower)-pattern.png")
   model.setScreenOff(true)
-  try await Task.sleep(for: .seconds(0.1))
-  let rendered: NSImage? = await withCheckedContinuation { continuation in
-    (model.subviews[0] as! ARView).snapshot(saveToHDR: true) { continuation.resume(returning: $0) }
-  }
-  let bitmap = NSBitmapImageRep(data: rendered!.tiffRepresentation!)!
-  let dark = bitmap.colorAt(x:bitmap.pixelsWide/2,y:bitmap.pixelsHigh/2)!.usingColorSpace(.sRGB)!
+  let dark = color(try await render(model), model.projectedPoint(CGPoint(x: 0.5, y: 0.5)), in: model.bounds.size)
   precondition(dark.redComponent<0.05 && dark.greenComponent<0.05 && dark.blueComponent<0.05)
-  print("PASS: rendered frame colors, projected touches, four orientations, two tilt axes, pixel sizing, shake and screen off")
-  window.orderOut(nil)
+  print("PASS \(name): headless render of frame colors, projected touches, four orientations, two tilt axes, pixel sizing, controls, shake and screen off")
  }
 }
 '''
@@ -178,9 +287,10 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
  var motionPose=Pose.upright, rotationDegrees=0, acceptsInput=true, canQueueInstall=true
  var keyboardInputEnabled=true, keyboardTiltRate=90.0, isSleeping=false, isPoweredOff=false, shuttingDown=false
  var preparingDevice=false
- var shakeGeneration: UInt64=0, homeCount=0, lockCount=0
+ var shakeGeneration: UInt64=0, homeCount=0, lockCount=0, volume=0
  let link: FakeLink? = FakeLink()
  func pressLock() { lockCount += 1 };func powerOn() {}
+ func pressVolumeUp() { volume += 1 };func pressVolumeDown() { volume -= 1 }
  var attitude = (angle: CGFloat.zero, pitch: CGFloat.zero)
  func shake() { shakeGeneration &+= 1 };func setTilt(angle:CGFloat,pitch:CGFloat) { attitude = (angle, pitch) }
  func pressHome() {homeCount += 1};func sendKey(macKeyCode:UInt16,down:Bool) {}
@@ -188,7 +298,10 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
 @main struct Check {
  @MainActor static func main() async throws {
   _=NSApplication.shared
-  let e=EmulatorController(), display=DisplayView(frame:NSRect(x:0,y:0,width:800,height:800),profile:.iPodTouch2G)
+  let profile: DeviceProfile = ["N72": .iPodTouch2G, "K48": .iPad1, "N45": .iPodTouch1G][CommandLine.arguments[3]]!
+  let panel = profile.screenPixels, mounted = profile.panelRotation != 0
+  frameWidth = Int32(panel.width); frameHeight = Int32(panel.height)
+  let e=EmulatorController(), display=DisplayView(frame:NSRect(x:0,y:0,width:800,height:800),profile:profile)
   display.emulator=e
   let window=NSWindow(contentRect:display.frame,styleMask:[.titled,.resizable],backing:.buffered,defer:false)
   window.contentView=display;window.makeKeyAndOrderFront(nil)
@@ -198,7 +311,10 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
   let model=display.subviews.compactMap{$0 as? DeviceModelView}.first!
   precondition(!model.isHidden && model.alphaValue > 0.99, "The live model must actually be visible")
   for rotation in [0,90,180,270] {
-   e.rotationDegrees=rotation; frameWidth=rotation%180==0 ? 320:480;frameHeight=rotation%180==0 ? 480:320;try await settle()
+   // The iPod's surface turns with the device; the iPad's mounted panel does not.
+   e.rotationDegrees=rotation
+   if !mounted { frameWidth=Int32(rotation%180==0 ? panel.width:panel.height);frameHeight=Int32(rotation%180==0 ? panel.height:panel.width) }
+   try await settle()
    for p in [CGPoint(x:0.2,y:0.3),CGPoint(x:0.8,y:0.7)] {
     let local=model.projectedPoint(p)
     let windowPoint=model.convert(local,to:nil)
@@ -207,8 +323,10 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
     precondition(!touches.isEmpty && abs(touches[0].0-p.x)<0.001 && abs(touches[0].1-p.y)<0.001)
    }
   }
-  e.rotationDegrees=0;frameWidth=320;frameHeight=480;try await settle()
-  let grab = model.projectedPoint(CGPoint(x: 0.5, y: -0.15))
+  e.rotationDegrees=0;frameWidth=Int32(panel.width);frameHeight=Int32(panel.height);try await settle()
+  // Upright top and bottom in panel space (the iPad panel's left edge is the top).
+  let (up, down) = mounted ? (CGPoint(x: 0.1, y: 0.5), CGPoint(x: 0.9, y: 0.5)) : (CGPoint(x: 0.5, y: 0.1), CGPoint(x: 0.5, y: 0.9))
+  let grab = model.projectedPoint(mounted ? CGPoint(x: -0.1, y: 0.5) : CGPoint(x: 0.5, y: -0.15))
   precondition(model.isChassis(grab))
   let rest = model.projectedPoint(CGPoint(x: 0.5, y: 0))
   func dragEvent(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent {
@@ -218,8 +336,8 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
   display.mouseDown(with: dragEvent(.leftMouseDown, grab))
   display.mouseDragged(with: dragEvent(.leftMouseDragged, CGPoint(x: grab.x+100, y: grab.y)))
   let tilted = model.projectedPoint(CGPoint(x: 0.5, y: 0))
-  let top = model.projectedPoint(CGPoint(x: 0.5, y: 0.1))
-  let bottom = model.projectedPoint(CGPoint(x: 0.5, y: 0.9))
+  let top = model.projectedPoint(up)
+  let bottom = model.projectedPoint(down)
   precondition(top.x-bottom.x > 10, "Upright horizontal drag must visibly roll for accelerometer steering")
   precondition(abs(e.attitude.angle - 0.4) < 0.0001 && abs(e.attitude.pitch) < 0.0001, "Visible steering must reach the accelerometer")
   precondition(abs(tilted.x-rest.x)>1)
@@ -227,6 +345,16 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
   try await Task.sleep(for: .seconds(1.2))
   precondition(abs(model.projectedPoint(CGPoint(x: 0.5, y: 0)).x-rest.x)<0.1)
   precondition(model.layer!.sublayers!.contains { $0.shadowPath != nil && $0.shadowOpacity > 0 })
+  // A click on a side control presses that button, not a touch or a tilt.
+  let view = model.subviews[0] as! ARView
+  if let sleep = ["SleepWakeButton", "Sleep_wake___black_fitted_button"].lazy.compactMap({ view.scene.findEntity(named: $0) }).first {
+    let b = sleep.visualBounds(relativeTo: nil)
+    let at = model.convert(view.project((b.min + b.max) / 2)!, from: view)
+    touches.removeAll()
+    display.mouseDown(with: dragEvent(.leftMouseDown, at)); display.mouseUp(with: dragEvent(.leftMouseUp, at))
+    precondition(e.lockCount == 1 && touches.isEmpty, "The model's sleep/wake button must press power")
+    e.lockCount = 0
+  }
   e.isSleeping=true;display.updatePowerPresentation();touches.removeAll()
   let sleepBadge = display.subviews.compactMap { $0 as? NSStackView }.first!
   precondition(sleepBadge.arrangedSubviews.count == 2)
@@ -255,25 +383,36 @@ enum PreparedMedia { nonisolated static let extensions: Set<String> = [] }
  }
 }
 '''
+# The model half renders headless (RealityRenderer, no window) for every board.
+# The DisplayView half needs a presented ARView, which renders only in a visible
+# window: it runs with LTM_DISPLAY_CHECKS=1. `check-model.py DIR` keeps the renders.
+MODELS = ["N72", "K48", "N45"]
+windowed = os.environ.get("LTM_DISPLAY_CHECKS") == "1"
 with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
     work=Path(tmp)
+    renders=Path(sys.argv[1]) if len(sys.argv) > 1 else work
+    renders.mkdir(parents=True, exist_ok=True)
     app=work/"Check.app/Contents"
     (app/"MacOS").mkdir(parents=True)
     (app/"Resources").mkdir()
-    asset=root/"LightTouchMac/N72.usdz"
-    (app/"Resources/N72.usdz").symlink_to(asset)
+    for model in MODELS:
+        (app/f"Resources/{model}.usdz").symlink_to(root/f"LightTouchMac/{model}.usdz")
     (app/"Resources/N72Studio.realityenv").symlink_to(root/"LightTouchMac/N72Studio.realityenv")
     sources=root/"LightTouchMac"
     qemu=Path(os.environ["QEMU_SRC"]) if os.environ.get("QEMU_SRC") else pins.path("qemu-ios")
     attitude_header=qemu/"include/hw/arm/ipod-attitude.h"
     if not attitude_header.is_file():
         raise SystemExit("Set QEMU_SRC to the QEMU source tree for the production accelerometer comparison")
+    profile=["Device/DeviceProfile", "Device/DeviceProfile+Display"]
     for name,source,extra in [
-        ("model",model_source,[]),
-        ("display",display_source,["UI/DisplayView", "Device/DeviceProfile", "Device/DeviceProfile+Display", "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles"])
+        ("model",model_source,profile),
+        *([("display",display_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "../Shared/DeviceLinkProtocol"])] if windowed else [])
     ]:
         swift=work/(name+".swift");swift.write_text(source)
         exe=app/"MacOS"/name
         bridge=["-import-objc-header",str(attitude_header)] if name == "model" else []
-        subprocess.run(["swiftc","-module-cache-path",str(work/"modules"),"-default-isolation","MainActor",*bridge,str(sources/"UI/DeviceModelView.swift"),*[str(sources/(x+".swift")) for x in extra],*([str(root/"Shared/DeviceLinkProtocol.swift")] if extra else []),str(swift),"-o",str(exe)],check=True)
-        subprocess.run([str(exe),str(asset),str(work)],check=True,timeout=45)
+        subprocess.run(["swiftc","-module-cache-path",str(work/"modules"),"-default-isolation","MainActor",*bridge,str(sources/"UI/DeviceModelView.swift"),*[str(sources/(x+".swift")) for x in extra],str(swift),"-o",str(exe)],check=True)
+        for model in MODELS:
+            subprocess.run([str(exe),str(root/f"LightTouchMac/{model}.usdz"),str(renders),model],check=True,timeout=90)
+    if not windowed:
+        print("SKIP: DisplayView input with the presented model (a visible window); LTM_DISPLAY_CHECKS=1 runs it")

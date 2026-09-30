@@ -230,8 +230,8 @@ final class DisplayView: NSView {
         homeButton.action = #selector(homeTapped)
         addSubview(homeButton)
         // macOS 14 keeps the photo shell; RealityKit texture rotation requires 15.
-        if #available(macOS 15, *), profile.hasDeviceModel,
-           let url = Bundle.main.url(forResource: "N72", withExtension: "usdz") {
+        if #available(macOS 15, *), let name = profile.deviceModelName,
+           let url = Bundle.main.url(forResource: name, withExtension: "usdz") {
             // Give RealityKit one second to present the device itself. Slower
             // startup shows a temporary photo while the live model keeps
             // loading; a busy GPU must never permanently disable 3D.
@@ -243,7 +243,7 @@ final class DisplayView: NSView {
             }
             modelLoadTask = Task { [weak self] in
                 do {
-                    let model = try await DeviceModelView(url: url)
+                    let model = try await DeviceModelView(url: url, profile: profile)
                     try Task.checkCancellation()
                     guard self?.stageModelForPresentation(model) == true else { return }
                     let frameReady = await model.prepareFirstFrame()
@@ -253,7 +253,7 @@ final class DisplayView: NSView {
                     guard frameReady else { return }
                     self?.presentModel(model)
                 } catch is CancellationError {} catch {
-                    NSLog("N72 model could not load: %@", error.localizedDescription)
+                    NSLog("%@ model could not load: %@", name, error.localizedDescription)
                     self?.showStaticDevice()
                 }
             }
@@ -403,10 +403,12 @@ final class DisplayView: NSView {
             ? CGSize(width: screenCutout.height, height: screenCutout.width)
             : screenCutout.size
         // The shell's own on-screen bounding box once rotated — this, not just
-        // the content, is what needs to fit inside the pane with margin.
+        // the content, is what needs to fit inside the pane with margin. The
+        // 3D model's outline, once it has one: the iPad's flat art is smaller.
+        let shell = (modelView ?? pendingModelView)?.shellPixels ?? shellPixels
         let shellOnScreenPixels = isLandscape
-            ? CGSize(width: shellPixels.height, height: shellPixels.width)
-            : shellPixels
+            ? CGSize(width: shell.height, height: shell.width)
+            : shell
 
         let scale: CGFloat
         switch zoom {
@@ -1091,6 +1093,7 @@ final class DisplayView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        if pressModelControl(event) { return }
         guard touchInteractionEnabled else { return }
         if isChassisEvent(event) {
             endTilt()
@@ -1154,6 +1157,17 @@ final class DisplayView: NSView {
     /// The shell's resting rotation for the guest's current orientation —
     /// the same angle layout() starts from.
     private var restAngle: CGFloat { motionRestAngle ?? Self.layerAngle(emulator?.rotationDegrees ?? 0) }
+
+    /// The model's side buttons are hardware, like Home: they work asleep too.
+    private func pressModelControl(_ event: NSEvent) -> Bool {
+        guard let modelView, let control = modelView.control(at: modelView.convert(event.locationInWindow, from: nil)) else { return false }
+        switch control {
+        case .sleepWake: emulator?.pressLock()
+        case .volumeUp: emulator?.pressVolumeUp()
+        case .volumeDown: emulator?.pressVolumeDown()
+        }
+        return true
+    }
 
     /// Keep direct manipulation on the chassis and guest touches on the LCD.
     private func isChassisEvent(_ event: NSEvent) -> Bool {

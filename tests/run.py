@@ -66,7 +66,9 @@ def display_asleep():
     return bool(cg.CGDisplayIsAsleep(cg.CGMainDisplayID()))
 
 
-NEEDS_DISPLAY = ('check-canvas-capture.py', 'check-model.py', 'check-model-startup.py')
+# Put windows on screen. check-model and check-model-startup render headless and run their windowed
+# halves only with LTM_DISPLAY_CHECKS=1 themselves.
+NEEDS_DISPLAY = ('check-canvas-capture.py',)
 
 
 def module_cache_shims(out):
@@ -119,7 +121,7 @@ def offline_checks():
     checks.append([TESTS / 'sessions/check-boot-deadline.py', '--offline'])
     checks.append([TESTS / 'sessions/test-matrix-judge.py'])   # the matrix's verdicts on fabricated event streams
     skips = []
-    # Opt-in (Sam, 09-29): these put the 3D device model on screen. LTM_DISPLAY_CHECKS=1 runs them.
+    # Opt-in (Sam, 09-29): nothing on screen by default. LTM_DISPLAY_CHECKS=1 runs them.
     if os.environ.get('LTM_DISPLAY_CHECKS') != '1':
         skips = [(f'offline/{c}', 'opens windows on screen; LTM_DISPLAY_CHECKS=1 runs it') for c in NEEDS_DISPLAY]
         checks = [c for c in checks if c[0].name not in NEEDS_DISPLAY]
@@ -216,6 +218,8 @@ def main():
     env = dict(os.environ)
     env['QEMU_IOS_DIR'] = str(sources.path('qemu-ios'))
     env['PATH'] = f"{module_cache_shims(args.out)}:{env['PATH']}"
+    if display_asleep():
+        env.pop('LTM_DISPLAY_CHECKS', None)   # windowed halves would wait forever for a frame
     jobs = 1 if args.tier == 'sessions' else args.j   # one emulator at a time
     results = []
     with ThreadPoolExecutor(jobs) as pool:

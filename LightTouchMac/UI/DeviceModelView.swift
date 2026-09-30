@@ -17,6 +17,16 @@ final class DeviceModelView: NSView {
   private let display: Entity
   private let home: Entity
   private let displayBounds: BoundingBox
+  /// The upright screen's width in shell pixels: pose and physical scale
+  /// size the model's display to what the flat shell's cutout would be.
+  private let screenWidth: Float
+  /// A panel mounted a quarter-turn in the shell (the iPad's) keeps its
+  /// surface mapping when the device turns; the iPod's pre-rotated surface
+  /// follows the device. Either way the mapping is one of the four below.
+  private let fixedSurfaceRotation: Int?
+  enum Control: Equatable { case sleepWake, volumeUp, volumeDown }
+  /// Side controls by node name (revision 7 names, then N72's own).
+  private var controls: [(entity: Entity, isRocker: Bool)] = []
   private var screenMaterial: UnlitMaterial = {
     if #available(macOS 15, *) { return UnlitMaterial(applyPostProcessToneMap: false) }
     return UnlitMaterial()
@@ -28,7 +38,7 @@ final class DeviceModelView: NSView {
   private var shakeStarted: CFTimeInterval?
 
   @available(macOS 15, *)
-  init(url: URL) async throws {
+  init(url: URL, profile: DeviceProfile) async throws {
     let loaded = try await Entity(contentsOf: url)
     func firstModel(_ entity: Entity) -> Entity? {
       if entity.components[ModelComponent.self] != nil { return entity }
@@ -39,11 +49,21 @@ final class DeviceModelView: NSView {
     else {
       throw NSError(
         domain: "DeviceModel", code: 1,
-        userInfo: [NSLocalizedDescriptionKey: "N72 is missing its display or Home button."])
+        userInfo: [NSLocalizedDescriptionKey: "\(url.lastPathComponent) is missing its display or Home button."])
     }
     self.display = display
     self.home = home
     displayBounds = display.visualBounds(relativeTo: display)
+    screenWidth = Float(profile.screenCutout.width)
+    // The clockwise panel quarter-turn is the iPod surface's 270° mapping.
+    fixedSurfaceRotation = profile.panelRotation == 0 ? nil
+      : (360 - Int((profile.panelRotation * 180 / .pi).rounded())) % 360
+    for (names, isRocker) in [(["SleepWakeButton", "Sleep_wake___black_fitted_button"], false),
+                              (["VolumeButton", "Volume___continuous_recessed_centre_rocker"], true)] {
+      if let entity = names.lazy.compactMap({ loaded.findEntity(named: $0) }).first {
+        controls.append((entity, isRocker))
+      }
+    }
     super.init(frame: .zero)
     addSubview(renderer)
     renderer.environment.background = .color(.clear)
@@ -57,25 +77,27 @@ final class DeviceModelView: NSView {
     camera.camera.near = 0.001
     camera.camera.far = 10
     camera.camera.fieldOfViewOrientation = .vertical
-    // A black seat closes the asset's gap, which otherwise exposes steel around Home.
-    var rim = MeshDescriptor(name: "Home black gasket")
-    var vertices: [SIMD3<Float>] = []
-    var indices: [UInt32] = []
-    for i in 0..<128 {
-      let angle = Float(i) * 2 * .pi / 128
-      for radius: Float in [0.00487, 0.00515] {
-        vertices.append([cos(angle) * radius, sin(angle) * radius, 0])
+    // A black seat closes N72's gap, which otherwise exposes steel around Home.
+    if profile == .iPodTouch2G {
+      var rim = MeshDescriptor(name: "Home black gasket")
+      var vertices: [SIMD3<Float>] = []
+      var indices: [UInt32] = []
+      for i in 0..<128 {
+        let angle = Float(i) * 2 * .pi / 128
+        for radius: Float in [0.00487, 0.00515] {
+          vertices.append([cos(angle) * radius, sin(angle) * radius, 0])
+        }
+        let a = UInt32(i * 2)
+        let b = UInt32(((i + 1) % 128) * 2)
+        indices += [a, a + 1, b, b, a + 1, b + 1]
       }
-      let a = UInt32(i * 2)
-      let b = UInt32(((i + 1) % 128) * 2)
-      indices += [a, a + 1, b, b, a + 1, b + 1]
+      rim.positions = .init(vertices)
+      rim.primitives = .triangles(indices)
+      let seat = ModelEntity(
+        mesh: try .generate(from: [rim]), materials: [UnlitMaterial(color: .black)])
+      seat.position = [0, -0.0457, 0.004145]
+      chassis.addChild(seat)
     }
-    rim.positions = .init(vertices)
-    rim.primitives = .triangles(indices)
-    let seat = ModelEntity(
-      mesh: try .generate(from: [rim]), materials: [UnlitMaterial(color: .black)])
-    seat.position = [0, -0.0457, 0.004145]
-    chassis.addChild(seat)
     func tune(_ entity: Entity) {
       if var model = entity.components[ModelComponent.self] {
         model.materials = model.materials.map { material in
@@ -142,13 +164,19 @@ final class DeviceModelView: NSView {
     let projectedHeight = Float(height)
     let depth = displayBounds.max.z - shellBounds.max.z
     let units = projectedHeight * 0.3 / (3000 * shellBounds.extents.y - projectedHeight * depth)
-    return CGFloat(units * displayBounds.extents.x * 10000 / 594)
+    return CGFloat(units * displayBounds.extents.x * 10000 / screenWidth)
+  }
+
+  /// The model's upright outline in shell pixels (the flat shell's units), for fitting it.
+  var shellPixels: CGSize {
+    let pixels = screenWidth / displayBounds.extents.x
+    return CGSize(width: CGFloat(shellBounds.extents.x * pixels), height: CGFloat(shellBounds.extents.y * pixels))
   }
 
   func pose(scale: CGFloat, rotation: Int, roll: CGFloat, pitch: CGFloat, yaw: CGFloat = 0, flat: Bool = false, animated: Bool, spring: Bool = false) {
     self.rotation = rotation
     let rest = Float(rotation == 270 ? -90 : rotation) * .pi / 180
-    let units = Float(scale * 594 / 10000) / displayBounds.extents.x
+    let units = Float(scale) * screenWidth / 10000 / displayBounds.extents.x
     let pose = Transform(
       scale: SIMD3(repeating: units),
       rotation: Self.orientation(rest: rest, roll: Float(roll), pitch: Float(pitch), yaw: Float(yaw), flat: flat), translation: .zero)
@@ -165,15 +193,17 @@ final class DeviceModelView: NSView {
     homeLighting.orientation = simd_quatf(angle: -rest, axis: [0, 0, 1])
     camera.position = [0, 0, 0.3 + units * displayBounds.max.z]
     updateViewport()
+    let surface = surfaceRotation
     let offset: SIMD2<Float>
-    switch rotation {
+    switch surface {
     case 90: offset = [1, 0]
     case 180: offset = [1, 1]
     case 270: offset = [0, 1]
     default: offset = .zero
     }
     if #available(macOS 15, *) {
-      screenMaterial.textureCoordinateTransform = .init(offset: offset, rotation: rest)
+      screenMaterial.textureCoordinateTransform = .init(
+        offset: offset, rotation: Float(surface == 270 ? -90 : surface) * .pi / 180)
     }
     updateScreenMaterial()
     advanceAnimations()
@@ -235,7 +265,7 @@ final class DeviceModelView: NSView {
         screenTexture = try TextureResource.generate(from: image, options: .init(semantic: .color))
       }
       updateScreenMaterial()
-    } catch { NSLog("N72 framebuffer upload failed: %@", error.localizedDescription) }
+    } catch { NSLog("Model framebuffer upload failed: %@", error.localizedDescription) }
   }
   private func updateScreenMaterial() {
     if let screenTexture, !screenOff {
@@ -256,8 +286,9 @@ final class DeviceModelView: NSView {
     screenOff = off
     updateScreenMaterial()
   }
+  private var surfaceRotation: Int { fixedSurfaceRotation ?? rotation }
   private func surfacePoint(_ p: CGPoint) -> CGPoint {
-    switch rotation {
+    switch surfaceRotation {
     case 90: return CGPoint(x: 1 - p.y, y: p.x)
     case 180: return CGPoint(x: 1 - p.x, y: 1 - p.y)
     case 270: return CGPoint(x: p.y, y: 1 - p.x)
@@ -265,7 +296,7 @@ final class DeviceModelView: NSView {
     }
   }
   private func portraitPoint(_ p: CGPoint) -> CGPoint {
-    switch rotation {
+    switch surfaceRotation {
     case 90: return CGPoint(x: p.y, y: 1 - p.x)
     case 180: return CGPoint(x: 1 - p.x, y: 1 - p.y)
     case 270: return CGPoint(x: 1 - p.y, y: p.x)
@@ -315,13 +346,32 @@ final class DeviceModelView: NSView {
     return CGRect(
       x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
   }
+  /// The front outline as a rounded rectangle (N72's: 46 x 94 mm inside an 8 mm radius).
+  private var cornerRadius: Float { min(shellBounds.extents.x, shellBounds.extents.y) * 0.13 }
   func isChassis(_ point: CGPoint) -> Bool {
-    guard panelPoint(point) == nil, let p = intersection(point, entity: chassis, z: 0.004) else {
+    guard panelPoint(point) == nil, let p = intersection(point, entity: chassis, z: shellBounds.max.z) else {
       return false
     }
-    let x = max(abs(p.x) - 0.023, 0)
-    let y = max(abs(p.y) - 0.047, 0)
-    return x * x + y * y <= 0.008 * 0.008
+    let r = cornerRadius
+    let x = max(abs(p.x - shellBounds.center.x) - (shellBounds.extents.x / 2 - r), 0)
+    let y = max(abs(p.y - shellBounds.center.y) - (shellBounds.extents.y / 2 - r), 0)
+    return x * x + y * y <= r * r
+  }
+  /// The side control under a point: a ray through each control's bounds, in
+  /// the model's own axes, so it holds at any pose. A rocker's upper half is up.
+  func control(at point: CGPoint) -> Control? {
+    guard let ray = renderer.ray(through: renderer.convert(point, from: self)) else { return nil }
+    let origin = chassis.convert(position: ray.origin, from: nil)
+    let direction = chassis.convert(direction: ray.direction, from: nil)
+    for (entity, isRocker) in controls {
+      let b = entity.visualBounds(relativeTo: chassis)
+      let t0 = (b.min - origin) / direction, t1 = (b.max - origin) / direction
+      let near = simd_reduce_max(simd_min(t0, t1)), far = simd_reduce_min(simd_max(t0, t1))
+      guard near <= far, far >= 0 else { continue }
+      guard isRocker else { return .sleepWake }
+      return (origin + direction * max(near, 0)).y > b.center.y ? .volumeUp : .volumeDown
+    }
+    return nil
   }
   func shake() {
     guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
@@ -361,7 +411,7 @@ final class DeviceModelView: NSView {
     }
     // Project the rounded chassis outline; never shadow the rectangular ARView.
     let path = CGMutablePath()
-    let radius = min(shellBounds.extents.x, shellBounds.extents.y) * 0.12
+    let radius = cornerRadius
     for corner in 0..<4 {
       let right = corner == 0 || corner == 3
       let top = corner < 2
@@ -369,7 +419,7 @@ final class DeviceModelView: NSView {
                                 top ? shellBounds.max.y-radius : shellBounds.min.y+radius)
       for step in 0...8 {
         let angle = Float(corner) * .pi / 2 + Float(step) * .pi / 16
-        let local = SIMD3<Float>(center.x + cos(angle)*radius, center.y + sin(angle)*radius, 0.004)
+        let local = SIMD3<Float>(center.x + cos(angle)*radius, center.y + sin(angle)*radius, shellBounds.max.z)
         guard let point = renderer.project(chassis.convert(position: local, to: nil)) else { continue }
         if path.isEmpty { path.move(to: point) } else { path.addLine(to: point) }
       }
