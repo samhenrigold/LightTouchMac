@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import FirmwareKit
 
-/// The n72 NOR and NAND bookkeeping against the Python oracle (qemu-ios imgtools build_nor.py, ipod2g_nand.py).
+/// N72 format contracts, independent legacy digests, and optional stock-firmware bake checks.
 @Suite struct N72Tests {
     /// ipod2g_nand.selfcheck.
     @Test func metadataSelfcheck() throws {
@@ -15,40 +15,26 @@ import Testing
     }
 
     /// Every metadata page, byte for byte, for the 7E18 volume and epoch.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func metadataMatchesPython() throws {
-        guard HFSOracle.available else { try FixtureRequirements.missing(#"N72Tests.swift: HFSOracle.available"#) }
-        let out = try HFSOracle.python("""
-            import hashlib, ipod2g_nand
-            for (cs, pg), d in sorted(ipod2g_nand.metadata_pages(1835008, 4).items()):
-                print(cs, pg, hashlib.sha256(d).hexdigest())
-            """, [])
-        let want = String(decoding: out, as: UTF8.self).split(separator: "\n").map(String.init)
+    @Test func metadataMatchesLegacyReference() throws {
+        let want = LegacyPreparationGoldens.n72Metadata
         let got = N72NAND.metadataPages(blocks: 1835008, epoch: 4).sorted { ($0.key.cs, $0.key.page) < ($1.key.cs, $1.key.page) }
             .map { "\($0.key.cs) \($0.key.page) \(Oracle.sha256(Data($0.value)))" }
         #expect(got == want)
     }
 
     /// build_nor.py --identity over the 7E18 IPSW's all_flash: the same 1 MiB.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func norMatchesPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func norMatchesLegacyReference() throws {
         let fw = Oracle.firmware("n72ap-7E18")
-        guard fw.available, HFSOracle.available else { try FixtureRequirements.missing(#"N72Tests.swift: fw.available, HFSOracle.available"#) }
+        guard fw.available else { try FixtureRequirements.missing(#"N72Tests.swift: fw.available"#) }
         try Oracle.withTemp { dir in
             let ipsw = IPSWArchive(fw.ipsw), prefix = "Firmware/all_flash/all_flash.n72ap.production/"
-            let af = dir.appendingPathComponent("all_flash")
-            try FileManager.default.createDirectory(at: af, withIntermediateDirectories: true)
             var images: [String: Data] = [:]
-            for n in try ipsw.names() where n.hasPrefix(prefix) && !n.hasSuffix("/") {
-                let d = try ipsw.read(n)
-                try d.write(to: af.appendingPathComponent((n as NSString).lastPathComponent))
-                if n.hasSuffix(".img3") { images[try N72NOR.type(of: d)] = d }
+            for n in try ipsw.names() where n.hasPrefix(prefix) && n.hasSuffix(".img3") {
+                images[try N72NOR.type(of: ipsw.read(n))] = try ipsw.read(n)
             }
             let id = try UnitIdentity.synthesizeIPod(seed: "n72-test", modelNumber: "MB528", regionInfo: "LL/A")
-            let idURL = dir.appendingPathComponent("identity.json"), py = dir.appendingPathComponent("nor-py.bin")
-            try id.write(to: idURL)
-            _ = try HFSOracle.python("import build_nor, runpy; sys.argv = ['build_nor.py'] + sys.argv[1:]; runpy.run_path(build_nor.__file__, run_name='__main__')",
-                                     ["--identity", idURL.path, "--all-flash", af.path, "--out", py.path])
             let got = try N72NOR.build(identity: id, images: images, types: N72NOR.order, wrapTypes: nil)
-            #expect(got == (try Data(contentsOf: py)))
+            #expect(Oracle.sha256(got) == LegacyPreparationGoldens.n72NOR)
         }
     }
 
@@ -108,7 +94,7 @@ import Testing
     /// Smoke #45: without helpers (2.x/3.0) the bake writes it_prefs' key itself, SBDidShowReorderText = <true/> in
     /// mobile's com.apple.springboard.plist, keeping the Sounds defaults already there; a SpringBoard that doesn't name
     /// the key is left alone. With the 5F138 cache at hand, its real SpringBoard names it.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func reorderTipBakedWithoutHelpers() throws {
+    @Test func reorderTipBakedWithoutHelpers() throws {
         try Oracle.withTemp { m in
             let sb = m.appendingPathComponent(N72Board.springBoard), plist = m.appendingPathComponent(N72Board.prefs + "/com.apple.springboard.plist")
             try SystemEdits.mkdirs(sb.deletingLastPathComponent())
@@ -123,6 +109,10 @@ import Testing
             try Data("SpringBoard".utf8).write(to: sb)
             #expect(try N72Board.bakeReorderTip(m).hasSuffix("left alone") && !Oracle.exists(plist))
         }
+    }
+
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"))
+    func stock2xSpringBoardReadsReorderTip() throws {
         let fw = Oracle.firmware("n72ap-5F138")
         guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { try FixtureRequirements.missing(#"N72Tests.swift: let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg)"#) }
         try Oracle.withTemp { dir in

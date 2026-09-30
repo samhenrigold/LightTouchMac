@@ -219,7 +219,7 @@ import Testing
                 #expect(log.fits.contains { $0.piece.hasPrefix("it_boot") && $0.fits })
                 #expect(log.fits.contains { $0.piece == "SpringBoard environment (\(gles ? "LK_ENABLE_OGL, LK_AUTO_ENABLE_OGL, " : "")LK_ENABLE_MBX2D)" })
                 try K48Oracle.sh(["python3", "-c", """
-                    import json, sys; sys.path.insert(0, sys.argv[1]); import ipod1g_device
+                    import json, sys; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[1] + "/../research/python-preparer"); import ipod1g_device
                     report, owned = ipod1g_device.bake(sys.argv[2], sys.argv[3], sys.argv[4] == "1")
                     json.dump({"report": report, "owned": owned}, open(sys.argv[5], "w"))
                     """, Oracle.qemuIOS.appendingPathComponent("imgtools").path, b.path, itpack.path, gles ? "1" : "0", out.path], cwd: dir)
