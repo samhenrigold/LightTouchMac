@@ -230,7 +230,7 @@ struct SingleConfig: Decodable {
     await wakeForShot(d, "installed")   // wake first: the panel may have slept during the install
     if s.launch == true {
         // through the guest agent wherever the bake installed it (the iPad; the iPod from 3.1); else a tap on the icon
-        if agent && s.launchAt == nil { await launchByAgent(d, tap: s.tapAfterLaunch) } else { await launch(d, at: s.launchAt, tap: s.tapAfterLaunch) }
+        if (ipad || agent) && s.launchAt == nil { await launchByAgent(d, tap: s.tapAfterLaunch) } else { await launch(d, at: s.launchAt, tap: s.tapAfterLaunch) }
     }
 
     // The persist marker: a file that must still be there after the clean shutdown and the second boot.
