@@ -47,7 +47,7 @@ assert(cc.has_function('pipe', prefix: '#include <unistd.h>'))
     print('PASS: real Meson/SDK probe rejects pipe2 and accepts pipe for macOS 14')
 
 
-def check_native(work, native, cc):
+def check_native(work, native, cc, arch):
     config = native / 'build/glib-out/config.h'
     if re.search(r'^\s*#\s*define\s+HAVE_PIPE2\b', config.read_text(), re.MULTILINE):
         raise RuntimeError(f'{config} still defines HAVE_PIPE2 for the macOS 14 build')
@@ -100,7 +100,7 @@ int main(void)
 }
 ''')
     executable = work / 'pipe-check'
-    run([cc, '-arch', 'arm64', '-mmacosx-version-min=14.0', '-Wl,-no_weak_imports',
+    run([cc, '-arch', arch, '-mmacosx-version-min=14.0', '-Wl,-no_weak_imports',
          source, '-o', executable, *flags])
     reject_pipe2_import(executable)
     run([executable], timeout=10)
@@ -113,12 +113,13 @@ def main():
     parser.add_argument('--native-build', type=Path, help='output of build-package-native.sh')
     parser.add_argument('--meson', default=os.environ.get('MESON') or shutil.which('meson') or 'meson')
     parser.add_argument('--cc', default='/usr/bin/clang')
+    parser.add_argument('--arch', default='arm64')
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='ltm-glib-compat-') as directory:
         work = Path(directory)
         check_probe(work, args.meson, args.cc)
         if args.native_build:
-            check_native(work, args.native_build.resolve(), args.cc)
+            check_native(work, args.native_build.resolve(), args.cc, args.arch)
 
 
 if __name__ == '__main__':

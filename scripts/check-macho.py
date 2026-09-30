@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the complete arm64 macOS load closure before packaging or signing."""
+"""Check the complete macOS load closure of every architecture slice before packaging or signing."""
 import argparse
 import pathlib
 import re
@@ -16,11 +16,15 @@ def version(value):
     return parts + (0,) * (3 - len(parts))
 
 
-def metadata(path):
-    if 'arm64' not in run('lipo', '-archs', str(path)).split():
-        raise ValueError(f'{path}: missing arm64 slice')
+def archs(path):
+    return run('lipo', '-archs', str(path)).split()
+
+
+def metadata(path, arch):
+    if arch not in archs(path):
+        raise ValueError(f'{path}: missing {arch} slice')
     deps, rpaths, minimum = [], [], None
-    for block in re.split(r'Load command \d+\n', run('otool', '-arch', 'arm64', '-l', str(path)))[1:]:
+    for block in re.split(r'Load command \d+\n', run('otool', '-arch', arch, '-l', str(path)))[1:]:
         command = re.search(r'\bcmd (\S+)', block).group(1)
         if command in ('LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB'):
             deps.append(re.search(r'\bname (.+) \(offset', block).group(1))
@@ -46,8 +50,8 @@ def expand(path, loader, executable):
     return pathlib.Path(path.replace('@loader_path', str(loader)).replace('@executable_path', str(executable)))
 
 
-def dependencies(path, inherited=(), executable=None):
-    deps, rpaths, minimum = metadata(path)
+def dependencies(path, arch, inherited=(), executable=None):
+    deps, rpaths, minimum = metadata(path, arch)
     executable = executable or path.parent
     search = [expand(p, path.parent, executable) for p in rpaths] + list(inherited)
     resolved = []
@@ -65,31 +69,33 @@ def dependencies(path, inherited=(), executable=None):
     return resolved, search, minimum
 
 
-def check(path, target, bundle=None, inherited=(), executable=None, seen=None, no_weak_imports=False):
+def check(path, target, arch, bundle=None, inherited=(), executable=None, seen=None, no_weak_imports=False):
     seen = set() if seen is None else seen
     path = path.resolve()
     if path in seen:
         return
     seen.add(path)
     if no_weak_imports:
-        imports = run('nm', '-arch', 'arm64', '-m', str(path))
+        imports = run('nm', '-arch', arch, '-m', str(path))
         weak = re.findall(r'\(undefined\)\s+weak external (\S+)', imports)
         if weak:
             raise ValueError(f'{path}: unexpected weak imports in native code: {", ".join(sorted(weak))}')
-    deps, search, minimum = dependencies(path, inherited, executable)
+    deps, search, minimum = dependencies(path, arch, inherited, executable)
     if version(minimum) > version(target):
         raise ValueError(f'{path}: requires macOS {minimum}, app supports {target}')
-    print(f'macOS {minimum}: {path}')
+    print(f'macOS {minimum} {arch}: {path}')
     for name, dep in deps:
         if bundle and (name.startswith('/') or not dep.is_relative_to(bundle.resolve())):
             raise ValueError(f'{path}: dependency escapes relocatable bundle: {name}')
-        check(dep, target, bundle, search, executable, seen, no_weak_imports)
+        check(dep, target, arch, bundle, search, executable, seen, no_weak_imports)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--minos', default='14.0')
     parser.add_argument('--bundle', type=pathlib.Path)
+    parser.add_argument('--arch', action='append',
+                        help='Require this slice (repeatable); default: every slice of each path')
     parser.add_argument('--deps', action='store_true')
     parser.add_argument('--rpaths', action='store_true')
     parser.add_argument('--no-weak-imports', action='store_true',
@@ -98,17 +104,26 @@ def main():
     args = parser.parse_args()
     try:
         for path in args.paths:
+            selected = args.arch or archs(path)
             if args.rpaths:
-                print('\n'.join(metadata(path)[1]))
+                # Packaging edits every slice together, so their rpaths must agree.
+                found = {tuple(metadata(path, arch)[1]) for arch in selected}
+                if len(found) != 1:
+                    raise ValueError(f'{path}: rpaths differ between slices')
+                print('\n'.join(found.pop()))
             elif args.deps:
-                for name, dep in dependencies(path.resolve())[0]:
+                found = {tuple(dependencies(path.resolve(), arch)[0]) for arch in selected}
+                if len(found) != 1:
+                    raise ValueError(f'{path}: dependencies differ between slices')
+                for name, dep in found.pop():
                     print(f'{name}\t{dep}')
             else:
                 executable = path.resolve().parent
                 if args.bundle and path.suffix == '.dylib':
                     executable = args.bundle / 'Contents/MacOS'
-                check(path, args.minos, args.bundle, executable=executable,
-                      no_weak_imports=args.no_weak_imports)
+                for arch in selected:
+                    check(path, args.minos, arch, args.bundle, executable=executable,
+                          no_weak_imports=args.no_weak_imports)
     except (ValueError, subprocess.CalledProcessError) as error:
         sys.exit(str(error))
 

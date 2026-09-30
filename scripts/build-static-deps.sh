@@ -4,6 +4,7 @@
 # No command-line tools ship: the app calls libimobiledevice directly (IMobileDevice.swift).
 # Usage: build-static-deps.sh NEW-WORK-DIRECTORY (output: WORK-DIRECTORY/prefix)
 # LTM_SOURCE_CACHE optionally names a directory of source archives; each is verified.
+# LTM_ARCH=x86_64 cross-compiles the Intel slice on an Apple Silicon Mac (default arm64, built exactly as before).
 set -euo pipefail
 ROOT="${1:?usage: build-static-deps.sh new-work-directory}"
 [ ! -e "$ROOT" ] || { echo "use a new build directory: $ROOT" >&2; exit 1; }
@@ -14,6 +15,12 @@ for tool in python3 curl make pkg-config xcrun; do
     command -v "$tool" >/dev/null || { echo "missing build tool: $tool" >&2; exit 1; }
 done
 [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || { echo 'requires an Apple Silicon Mac' >&2; exit 1; }
+ARCH="${LTM_ARCH:-arm64}"
+case "$ARCH" in
+    arm64) HOST=() ARCH_FLAG='' ;;
+    x86_64) HOST=(--host=x86_64-apple-darwin) ARCH_FLAG='-arch x86_64 ' ;;
+    *) echo "unsupported LTM_ARCH: $ARCH" >&2; exit 1 ;;
+esac
 mkdir -p "$ROOT/src" "$ROOT/build" "$ROOT/logs" "$ROOT/prefix/lib/pkgconfig"
 ROOT="$(cd "$ROOT" && pwd)"
 trap 'echo "Static dependency build failed; see $ROOT/logs" >&2' ERR
@@ -28,7 +35,7 @@ python3 "$SRC/scripts/dependency-sources.py" "${SOURCE_ARGS[@]}"
 # application's supported macOS 14 baseline. Never discover Homebrew libraries.
 export MACOSX_DEPLOYMENT_TARGET=14.0
 MIN="-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
-export CFLAGS="$MIN -O2" CXXFLAGS="$MIN -O2" LDFLAGS="$MIN"
+export CFLAGS="$ARCH_FLAG$MIN -O2" CXXFLAGS="$ARCH_FLAG$MIN -O2" LDFLAGS="$ARCH_FLAG$MIN"
 export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" PKG_CONFIG_PATH=
 export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 export CC="$(xcrun -f clang)" CXX="$(xcrun -f clang++)"
@@ -59,7 +66,7 @@ echo 'Building OpenSSL 3.6.3'
     cd "$ROOT/build/openssl-3.6.3"
     # SSLv3 for iPhone OS 1.x lockdownd (libimobiledevice-sslv3-ios1.patch picks it below 2.0 only; OpenSSL
     # still refuses it above security level 0, which only libimobiledevice's contexts set).
-    ./Configure darwin64-arm64-cc no-shared no-tests no-docs enable-ssl3 enable-ssl3-method \
+    ./Configure "darwin64-$ARCH-cc" no-shared no-tests no-docs enable-ssl3 enable-ssl3-method \
         --prefix="$PREFIX" --openssldir=/private/etc/ssl "$MIN" > "$LOG/openssl.configure.log" 2>&1
     make -j"$JOBS" > "$LOG/openssl.build.log" 2>&1
     make install_sw > "$LOG/openssl.install.log" 2>&1
@@ -72,7 +79,7 @@ autobuild() {
     untar "$archive"
     (
         cd "$ROOT/build/$directory"
-        ./configure --prefix="$PREFIX" --disable-shared --enable-static "$@" \
+        ./configure --prefix="$PREFIX" --disable-shared --enable-static ${HOST[@]+"${HOST[@]}"} "$@" \
             > "$LOG/$directory.configure.log" 2>&1
         make -j"$JOBS" > "$LOG/$directory.build.log" 2>&1
         make install > "$LOG/$directory.install.log" 2>&1
@@ -83,12 +90,12 @@ autobuild libimobiledevice-glue-1.3.2.tar.bz2 libimobiledevice-glue-1.3.2
 autobuild libusbmuxd-2.1.1.tar.bz2 libusbmuxd-2.1.1
 autobuild libtatsu-1.0.5.tar.bz2 libtatsu-1.0.5
 autobuild libimobiledevice-1.4.0.tar.bz2 libimobiledevice-1.4.0 --without-cython
-python3 - "$SRC" "$ROOT" <<'PY'
+python3 - "$SRC" "$ROOT" "$ARCH" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
-source, root = map(pathlib.Path, sys.argv[1:])
+source, root = map(pathlib.Path, sys.argv[1:3])
 record = {
     'schema_version': 1, 'static_deps': str(root / 'prefix'),
-    'deployment_target': '14.0', 'architecture': 'arm64',
+    'deployment_target': '14.0', 'architecture': sys.argv[3],
     'sources': json.loads((root / 'src/static-sources.json').read_text()),
     'recipe_sha256': hashlib.sha256((source / 'scripts/build-static-deps.sh').read_bytes()).hexdigest(),
     'xcode': subprocess.check_output(['xcodebuild', '-version'], text=True).strip(),

@@ -62,6 +62,14 @@ USBMUXD_COMMIT = pins.commit('usbmuxd')
 # in build-support/dependencies.json ("tools" group; LukeZGD's fork, GPL-3.0). Both native paths build it with
 # scripts/build-iboot32patcher.sh into build/iBoot32Patcher, and package.sh ships it in Contents/MacOS.
 PATCHER = 'build/iBoot32Patcher/iBoot32Patcher'
+# --universal: the slices of an Intel + Apple Silicon app. Each gets a complete native root (native/<arch>; staged,
+# its own --qemu-build/<arch>), cross-compiled on the Apple Silicon build Mac with LTM_ARCH; scripts/merge-native.py
+# lipos them into native-universal/, the one-step layout package.sh consumes, and iBoot32Patcher is built fat there.
+UNIVERSAL_ARCHS = ('arm64', 'x86_64')
+UNIVERSAL_ROOT = 'native-universal'
+# QEMU's configure for a cross-compiled slice (the one-step recipe, build-package-native.sh, passes the same).
+QEMU_CROSS = {'arm64': [], 'x86_64': ['--cross-prefix=', '--cpu=x86_64', '--cc=clang -arch x86_64',
+                                      '--cxx=clang++ -arch x86_64', '--objcc=clang -arch x86_64']}
 
 
 def digest(path):
@@ -214,9 +222,11 @@ def tracked_usbmuxd(source):
     }
 
 
-def validate_native(args, root, deps_only=False):
+def validate_native(args, root, deps_only=False, arch='arm64'):
     """deps_only: reuse the prefix, static deps and usbmuxd; QEMU is built elsewhere."""
     native = read_record(root / 'native-build.json')
+    if native.get('architecture') != arch:
+        raise ValueError(f'Native build {root} is not an {arch} build')
     if not deps_only and Path(native.get('qemu_source', '')).resolve() != args.qemu_source:
         raise ValueError('Native build was configured for a different QEMU checkout')
     if Path(native.get('usbmuxd_source', '')).resolve() != args.usbmuxd_source:
@@ -256,6 +266,32 @@ def validate_native(args, root, deps_only=False):
                         (root / PATCHER, 'native iBoot32Patcher')):
         require(path, label)
     return native
+
+
+def slice_roots(args, base):
+    """Native roots per architecture: base itself, or with --universal one complete root per slice under it."""
+    if not args.universal:
+        return {'arm64': base}
+    return {arch: base / arch for arch in UNIVERSAL_ARCHS}
+
+
+def slice_env(args, env, arch, root):
+    """The environment for building one slice against root's prefix (the shared env itself when not universal)."""
+    if not args.universal:
+        return env
+    return dict(env, LTM_ARCH=arch, PKG_CONFIG_LIBDIR=str(root / 'prefix/lib/pkgconfig'), PKG_CONFIG_PATH='')
+
+
+def merge_universal(args, env, log, slices, output):
+    """lipo the per-slice native roots into output (scripts/merge-native.py) and build iBoot32Patcher fat into it
+    from the pinned archive the arm64 root fetched."""
+    if output.exists():
+        subprocess.run(['chmod', '-R', 'u+w', output], check=True)
+        shutil.rmtree(output)
+    run([sys.executable, SCRIPTS / 'merge-native.py', output, *slices.values()], env, log)
+    run(['bash', SCRIPTS / 'build-iboot32patcher.sh', slices['arm64'] / 'src', (output / PATCHER).parent],
+        dict(env, LTM_ARCH=' '.join(slices)), log)
+    return output
 
 
 def validate_output(args):
@@ -317,7 +353,10 @@ def parse(argv=None):
                         help=f'The {BUNDLED_ENTRY} IPSW the built firmwarekit prepares as the built-in iPod')
     parser.add_argument('--sdk', type=Path, default=Path(os.environ['ARMV6_SDK']) if 'ARMV6_SDK' in os.environ else None,
                         help='Locally installed iPhoneOS3.1.3.sdk used to build guest helpers')
-    parser.add_argument('--native-build', type=Path, help='Reuse a native build root; rebuild its QEMU before packaging')
+    parser.add_argument('--native-build', type=Path, help='Reuse a native build root (with --universal, the directory holding '
+                        'its arm64/ and x86_64/ roots); rebuild its QEMU before packaging')
+    parser.add_argument('--universal', action='store_true',
+                        help='Build an arm64 + x86_64 (Intel) app: every native dependency and QEMU a second time for x86_64')
     parser.add_argument('--static-deps', type=Path, help='Explicit compatible static prefix; otherwise build it from the pinned recipe')
     parser.add_argument('--guest-tools', type=Path, help='Reuse a guest-tools directory produced by build-guest-tools.sh')
     parser.add_argument('--source-packages', type=Path, help='Optional Xcode SourcePackages cache')
@@ -327,8 +366,9 @@ def parse(argv=None):
                         help='Run the resumable staged build (repeatable, run in pipeline order; see "Multi-device release build" in docs/multi-device-plan.md). '
                              'Without it, the one-step build runs; --output may then not exist.')
     parser.add_argument('--native-deps', type=Path, help='Staged: native root whose prefix, static deps and usbmuxd are reused '
-                        '(e.g. a previous release output\'s native/)')
-    parser.add_argument('--qemu-build', type=Path, help='Staged: private QEMU build directory (default <qemu-source>/build-release-native)')
+                        '(e.g. a previous release output\'s native/; with --universal, the directory holding arm64/ and x86_64/ roots)')
+    parser.add_argument('--qemu-build', type=Path, help='Staged: private QEMU build directory (default <qemu-source>/build-release-native; '
+                        'with --universal, <qemu-source>/build-release-universal, one subdirectory per slice)')
     parser.add_argument('--verify-ipsw', type=Path,
                         default=Path.home() / 'Downloads/ipad1-ios32-feasibility/iPad1,1_3.2.2_7B500_Restore.ipsw',
                         help=f'Staged verify: the {PREPARE_ENTRY} IPSW the bundled firmwarekit prepares (VERIFY_ENTRIES has the others)')
@@ -346,9 +386,11 @@ def parse(argv=None):
             parser.error('--stage requires --native-deps (a native root to reuse)')
         if args.native_build or args.guest_tools or args.static_deps:
             parser.error('--stage builds its own QEMU and guest tools; use --native-deps and --qemu-build')
-        args.qemu_build = args.qemu_build or args.qemu_source / 'build-release-native'
+        args.qemu_build = args.qemu_build or args.qemu_source / ('build-release-universal' if args.universal else 'build-release-native')
     elif args.output.exists():
         parser.error(f'Output already exists: {args.output}; choose a new directory')
+    if args.universal and args.static_deps:
+        parser.error('--static-deps names one architecture; omit it with --universal')
     if args.notary_profile and args.sign_id == '-':
         parser.error('--notary-profile requires a Developer ID --sign-id')
     return args
@@ -387,7 +429,8 @@ def validate(args):
     if args.static_deps:
         require(args.static_deps / 'lib/libcrypto.a', 'static OpenSSL')
     if args.native_build:
-        validate_native(args, args.native_build)
+        for arch, root in slice_roots(args, args.native_build).items():
+            validate_native(args, root, arch=arch)
 
 
 def inventory(app):
@@ -407,6 +450,9 @@ def build_app(args, env, log, qemu_build):
                '-configuration', 'Release', '-derivedDataPath', derived, '-disableAutomaticPackageResolution',
                '-onlyUsePackageVersionsFromResolvedFile', 'CODE_SIGNING_ALLOWED=NO', 'ARCHS=arm64',
                f'QEMU_IOS_DIR={args.qemu_source}', f'QEMU_BUILD_DIR={qemu_build}', 'build']
+    if args.universal:
+        command[command.index('ARCHS=arm64')] = f'ARCHS={" ".join(UNIVERSAL_ARCHS)}'
+        command.insert(-1, 'ONLY_ACTIVE_ARCH=NO')
     if args.source_packages:
         command[1:1] = ['-clonedSourcePackagesDirPath', args.source_packages]
     run(command, env, log)
@@ -421,7 +467,9 @@ def build_firmwarekit(args, log):
     """`swift build` of Packages/FirmwareKit into <output>/firmwarekit/release/firmwarekit (the built-in
     iPod and every in-app prepare need it)."""
     firmwarekit = args.output / 'firmwarekit/release/firmwarekit'
-    swift = ['swift', 'build', '-c', 'release', '--arch', 'arm64', '--package-path', ROOT / 'Packages/FirmwareKit',
+    archs = UNIVERSAL_ARCHS if args.universal else ('arm64',)
+    swift = ['swift', 'build', '-c', 'release', *(flag for arch in archs for flag in ('--arch', arch)),
+             '--package-path', ROOT / 'Packages/FirmwareKit',
              '--scratch-path', args.output / 'firmwarekit-build']
     run(swift, os.environ.copy(), log)
     built = Path(subprocess.check_output([*swift, '--show-bin-path'], text=True).strip()) / 'firmwarekit'
@@ -433,7 +481,8 @@ def build_firmwarekit(args, log):
 def write_build_record(args, sources, native_root, qemu_build, guest):
     provenance = copy_provenance(args.output, native_root / 'native-build.json', guest.parent / 'manifest.json')
     record = {
-        'schema_version': 1, 'sources': sources, 'host_architecture': 'arm64',
+        'schema_version': 1, 'sources': sources,
+        **({'host_architectures': list(UNIVERSAL_ARCHS)} if args.universal else {'host_architecture': 'arm64'}),
         'pin': pin_status(args),
         'firmware': {'bootroms_sha256': {Path(name).name: digest(args.assets / name) for name in BOOTROMS},
                      'bundled': json.loads((args.output / 'bundled/bundled.json').read_text())},
@@ -461,7 +510,7 @@ def write_build_record(args, sources, native_root, qemu_build, guest):
 def sources_now(args):
     usbmuxd = source_identity(args.usbmuxd_source)
     if args.stage:   # the pinned commit the native stage built, not the checkout's working tree
-        staged = json.loads((args.output / 'native/usbmuxd-source.json').read_text())
+        staged = json.loads((slice_roots(args, args.output / 'native')['arm64'] / 'usbmuxd-source.json').read_text())
         usbmuxd = {'revision': staged['commit'], 'dirty': staged['modified'], 'files': len(staged['files']),
                    'source_sha256': hashlib.sha256(json.dumps(staged['files'], sort_keys=True).encode()).hexdigest(),
                    'submodules': {}}
@@ -659,13 +708,13 @@ def save_state(args, state):
     (args.output / 'stages.json').write_text(json.dumps(state, indent=2) + '\n')
 
 
-def native_stage(args, env, log, deps, root, static):
+def native_stage(args, env, log, deps, root, static, arch='arm64', qemu_build=None):
     """Reuse deps' prefix and static deps (they need over 10 minutes to build); rebuild usbmuxd
-    from USBMUXD_COMMIT of the fork (a temporary worktree), as build-package-native.sh does."""
+    from USBMUXD_COMMIT of the fork (a temporary worktree), as build-package-native.sh does, for arch."""
     record = read_record(deps / 'native-build.json')
     if (root / 'native-build.json').is_file():
         try:
-            validate_native(args, root, deps_only=True)
+            validate_native(args, root, deps_only=True, arch=arch)
             return print('native: current')
         except ValueError as error:
             print(f'native: rebuilding ({error})')
@@ -683,31 +732,33 @@ def native_stage(args, env, log, deps, root, static):
             ['git', '-C', tree, 'describe', '--tags', '--always', '--dirty'], text=True))
     finally:
         run([*git, 'worktree', 'remove', '--force', tree], env, log)
-    flags = '-O2 -mmacosx-version-min=14.0'
+    cross = '' if arch == 'arm64' else f'-arch {arch} '
+    flags = cross + '-O2 -mmacosx-version-min=14.0'
     build_env = {key: value for key, value in env.items()
                  if key not in ('CPATH', 'C_INCLUDE_PATH', 'CPLUS_INCLUDE_PATH', 'LIBRARY_PATH')}
     build_env.update(MACOSX_DEPLOYMENT_TARGET='14.0', CFLAGS=flags, CXXFLAGS=flags, CC='/usr/bin/clang',
                      CXX='/usr/bin/clang++', lt_cv_sys_max_cmd_len='131072', PKG_CONFIG_PATH='',
                      PKG_CONFIG_LIBDIR=f'{deps / "prefix/lib/pkgconfig"}:{static / "lib/pkgconfig"}',
-                     LDFLAGS='-mmacosx-version-min=14.0 -framework IOKit -framework CoreFoundation -framework Security')
+                     LDFLAGS=cross + '-mmacosx-version-min=14.0 -framework IOKit -framework CoreFoundation -framework Security')
     run(['sh', '-c', 'glibtoolize --copy --force && autoreconf -fi'], build_env, log, cwd=usb)
-    run(['./configure', f'--prefix={deps / "prefix"}', '--without-systemd'], build_env, log, cwd=usb)
+    host = [] if arch == 'arm64' else [f'--host={arch}-apple-darwin']
+    run(['./configure', f'--prefix={deps / "prefix"}', *host, '--without-systemd'], build_env, log, cwd=usb)
     run(['make', f'-j{os.cpu_count()}'], build_env, log, cwd=usb)
     if 'HAVE_LIBSLIRP 1' not in (usb / 'config.h').read_text():
         raise RuntimeError('usbmuxd configured without libslirp; the iPad USB Ethernet bridge would be missing')
-    run([sys.executable, SCRIPTS / 'check-macho.py', '--no-weak-imports', usb / 'src/usbmuxd'], env, log)
+    run([sys.executable, SCRIPTS / 'check-macho.py', '--no-weak-imports', '--arch', arch, usb / 'src/usbmuxd'], env, log)
     # iBoot32Patcher from the manifest's pinned archive (deps' src/ is a cache when it is a one-step root).
     caches = [c for cache in (deps / 'src',) if cache.is_dir() for c in ('--cache', cache)]
     run([sys.executable, SCRIPTS / 'dependency-sources.py', 'fetch', '--group', 'tools', '--destination', root / 'src', *caches], env, log)
-    run(['bash', SCRIPTS / 'build-iboot32patcher.sh', root / 'src', (root / PATCHER).parent], env, log)
+    run(['bash', SCRIPTS / 'build-iboot32patcher.sh', root / 'src', (root / PATCHER).parent], dict(env, LTM_ARCH=arch), log)
     record.update(usbmuxd=json.loads((root / 'usbmuxd-source.json').read_text()), usbmuxd_source=str(args.usbmuxd_source),
                   usbmuxd_commit=USBMUXD_COMMIT,
                   iboot32patcher=json.loads((root / PATCHER).with_name('build.json').read_text()),
                   usbmuxd_binary=str(usb / 'src/usbmuxd'), deps_prefix=str(root / 'prefix'),
-                  qemu_source=str(args.qemu_source), qemu_build=str(args.qemu_build),
+                  qemu_source=str(args.qemu_source), qemu_build=str(qemu_build or args.qemu_build),
                   reused_native_deps=str(deps), usbmuxd_rebuilt_by='build-release.py --stage native')
     (root / 'native-build.json').write_text(json.dumps(record, indent=2) + '\n')
-    validate_native(args, root, deps_only=True)
+    validate_native(args, root, deps_only=True, arch=arch)
 
 
 def staged(args, env, log):
@@ -715,8 +766,15 @@ def staged(args, env, log):
     state = json.loads(state_path.read_text()) if state_path.is_file() else {}
     selected = set(STAGES if 'all' in args.stage else args.stage)
     env.pop('NOTARY_PROFILE', None)  # notarize and staple are their own stages
-    deps, build, native_root = args.native_deps, args.qemu_build, args.output / 'native'
-    static = Path(read_record(deps / 'native-build.json')['static_deps']).resolve()
+    deps = args.native_deps
+    deps_roots, roots = slice_roots(args, deps), slice_roots(args, args.output / 'native')
+    builds = {arch: args.qemu_build / arch for arch in roots} if args.universal else {'arm64': args.qemu_build}
+    statics = {arch: Path(read_record(root / 'native-build.json')['static_deps']).resolve() for arch, root in deps_roots.items()}
+    if args.universal:   # what app and package read: the merged root (merge_universal)
+        native_root = args.output / UNIVERSAL_ROOT
+        build, static = native_root / 'qemu-build', native_root / 'static/prefix'
+    else:
+        native_root, build, static = roots['arm64'], builds['arm64'], statics['arm64']
     prefix = native_root / 'prefix'
     guest = args.output / 'guest/guest-tools'
     firmwarekit = args.output / 'firmwarekit/release/firmwarekit'
@@ -734,33 +792,52 @@ def staged(args, env, log):
         return False
 
     if need('native'):
-        native_stage(args, env, log, deps, native_root, static)
+        for arch, root in roots.items():
+            native_stage(args, env, log, deps_roots[arch], root, statics[arch], arch, builds[arch])
         state['native'] = {'deps': str(deps)}
         save_state(args, state)
     elif state.get('native', {}).get('deps') != str(deps):
         raise ValueError('Run --stage native for this --native-deps first')
     if need('qemu'):
-        configured = (build / 'config.log').read_text(errors='replace') if (build / 'config.log').is_file() else ''
-        line = next((l for l in configured.splitlines() if l.startswith('# Configured with:')), '')
-        if line and (str(args.qemu_source / 'configure') not in line or str(static) not in line):
-            raise ValueError(f'{build} was configured for another source or static prefix; choose a new --qemu-build')
-        if not (build / 'build.ninja').is_file():
-            build.mkdir(parents=True, exist_ok=True)
-            run([args.qemu_source / 'configure', '--target-list=arm-softmmu', '--without-default-features',
-                 '--enable-cocoa', '--enable-coreaudio', '--enable-pixman', '--enable-slirp', '--disable-pie',
-                 f'--python={os.environ.get("QEMU_PYTHON", "python3.12")}',
-                 f'--extra-cflags=-I{static}/include -mmacosx-version-min=14.0',
-                 f'--extra-ldflags=-L{static}/lib -lcrypto -mmacosx-version-min=14.0'], env, log, cwd=build)
-        run(['ninja', '-C', build, 'qemu-system-arm'], env, log)  # ninja is its own up-to-date check
+        for arch, arch_build in builds.items():
+            arch_env, arch_static = slice_env(args, env, arch, roots[arch]), statics[arch]
+            configured = (arch_build / 'config.log').read_text(errors='replace') if (arch_build / 'config.log').is_file() else ''
+            line = next((l for l in configured.splitlines() if l.startswith('# Configured with:')), '')
+            if line and (str(args.qemu_source / 'configure') not in line or str(arch_static) not in line):
+                raise ValueError(f'{arch_build} was configured for another source or static prefix; choose a new --qemu-build')
+            if not (arch_build / 'build.ninja').is_file():
+                arch_build.mkdir(parents=True, exist_ok=True)
+                run([args.qemu_source / 'configure', *QEMU_CROSS[arch], '--target-list=arm-softmmu', '--without-default-features',
+                     '--enable-cocoa', '--enable-coreaudio', '--enable-pixman', '--enable-slirp', '--disable-pie',
+                     f'--python={os.environ.get("QEMU_PYTHON", "python3.12")}',
+                     f'--extra-cflags=-I{arch_static}/include -mmacosx-version-min=14.0',
+                     f'--extra-ldflags=-L{arch_static}/lib -lcrypto -mmacosx-version-min=14.0'], arch_env, log, cwd=arch_build)
+            run(['ninja', '-C', arch_build, 'qemu-system-arm'], arch_env, log)  # ninja is its own up-to-date check
     if need('dylib'):
-        dylib, script = build / 'libqemu-arm.dylib', args.qemu_source / 'contrib/macos-app/make-dylib-macos.sh'
-        inputs = [build / 'qemu-system-arm-unsigned', script, *(args.qemu_source / 'contrib' / name for name in (
-            'ios-app/qemu-ios-entry.c', 'ios-app/qemu-ios-ui.c', 'macos-app/qemu-macos-extras.c'))]
-        if dylib.is_file() and dylib.stat().st_mtime >= max(path.stat().st_mtime for path in inputs):
-            print('dylib: current')
+        for arch, arch_build in builds.items():
+            arch_env = slice_env(args, env, arch, roots[arch])
+            dylib, script = arch_build / 'libqemu-arm.dylib', args.qemu_source / 'contrib/macos-app/make-dylib-macos.sh'
+            inputs = [arch_build / 'qemu-system-arm-unsigned', script, *(args.qemu_source / 'contrib' / name for name in (
+                'ios-app/qemu-ios-entry.c', 'ios-app/qemu-ios-ui.c', 'macos-app/qemu-macos-extras.c'))]
+            if dylib.is_file() and dylib.stat().st_mtime >= max(path.stat().st_mtime for path in inputs):
+                print(f'dylib: current{f" ({arch})" if args.universal else ""}')
+            else:
+                run(['bash', script, arch_build], arch_env, log)
+            run([sys.executable, SCRIPTS / 'check-macho.py', '--no-weak-imports',
+                 *(('--arch', arch) if args.universal else ()), dylib], env, log)
+    if args.universal and selected & {'dylib', 'app', 'package'}:
+        # Remerge whenever a slice's native root, usbmuxd or dylib (or the merge recipe) changed.
+        inputs = tree_stamp(*(path for arch, root in roots.items() for path in (
+            root / 'native-build.json', root / 'build/usbmuxd/src/usbmuxd', root / PATCHER, builds[arch] / 'libqemu-arm.dylib')),
+            SCRIPTS / 'merge-native.py', SCRIPTS / 'build-iboot32patcher.sh')
+        if native_root.is_dir() and state.get('universal') == inputs:
+            print(f'universal: current ({native_root})')
         else:
-            run(['bash', script, build], env, log)
-        run([sys.executable, SCRIPTS / 'check-macho.py', '--no-weak-imports', dylib], env, log)
+            for arch in roots:
+                require(builds[arch] / 'libqemu-arm.dylib', f'{arch} QEMU library built by --stage dylib')
+            merge_universal(args, env, log, roots, native_root)
+            state['universal'] = inputs
+            save_state(args, state)
     if need('guest'):
         try:
             validate_guest(args, guest)
@@ -870,15 +947,22 @@ def main(argv=None):
         return staged(args, env, log)
     sources = {'app': source_identity(ROOT), 'qemu': source_identity(args.qemu_source),
                'usbmuxd': source_identity(args.usbmuxd_source)}
-    native_root = args.native_build or args.output / 'native'
-    if args.native_build:
-        run(['ninja', '-C', native_root / 'qemu-build', 'qemu-system-arm'], env, log)
-        env['PKG_CONFIG_LIBDIR'] = str(native_root / 'prefix/lib/pkgconfig')
-        env['PKG_CONFIG_PATH'] = ''
-        run(['bash', args.qemu_source / 'contrib/macos-app/make-dylib-macos.sh', native_root / 'qemu-build'], env, log)
+    slices = slice_roots(args, args.native_build or args.output / 'native')
+    for arch, root in slices.items():
+        arch_env = dict(env, LTM_ARCH=arch) if args.universal else env
+        if args.native_build:
+            run(['ninja', '-C', root / 'qemu-build', 'qemu-system-arm'], arch_env, log)
+            arch_env['PKG_CONFIG_LIBDIR'] = str(root / 'prefix/lib/pkgconfig')
+            arch_env['PKG_CONFIG_PATH'] = ''
+            run(['bash', args.qemu_source / 'contrib/macos-app/make-dylib-macos.sh', root / 'qemu-build'], arch_env, log)
+        else:
+            run(['bash', SCRIPTS / 'build-package-native.sh', root], arch_env, log)
+        native = validate_native(args, root, arch=arch)
+    if args.universal:
+        native_root = merge_universal(args, env, log, slices, args.output / UNIVERSAL_ROOT)
+        native = read_record(native_root / 'native-build.json')
     else:
-        run(['bash', SCRIPTS / 'build-package-native.sh', native_root], env, log)
-    native = validate_native(args, native_root)
+        native_root = slices['arm64']
     static = Path(native['static_deps']).resolve()
     env.update(QEMU_BUILD_DIR=str(native_root / 'qemu-build'), LTM_DEPS_PREFIX=str(native_root / 'prefix'),
                LTM_STATIC_DEPS=str(static), USBMUXD_BIN=str(native_root / 'build/usbmuxd/src/usbmuxd'),

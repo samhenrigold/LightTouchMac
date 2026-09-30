@@ -88,24 +88,96 @@ class ReleaseTests(unittest.TestCase):
         self.args.guest_tools = self.guest
         return manifest
 
-    def native_fixture(self):
-        self.put(self.static / 'lib/libcrypto.a')
+    def native_fixture(self, native=None, arch='arm64'):
+        native = native or self.native
+        static = self.static if native == self.native else native / 'static/prefix'
+        self.put(static / 'lib/libcrypto.a')
         for name in ('qemu-build/build.ninja', 'qemu-build/libqemu-arm.dylib',
                      'prefix/lib/libimobiledevice-1.0.dylib', 'prefix/lib/libplist-2.0.dylib',
                      'build/usbmuxd/src/usbmuxd', 'build/iBoot32Patcher/iBoot32Patcher'):
-            self.put(self.native / name)
+            self.put(native / name)
         for name in release.FFMPEG_PATCHES:
             self.put(self.qemu / 'contrib/ffmpeg' / name, 'patch ' + name)
-            self.put(self.native / 'prefix/share/licenses/ffmpeg' / name, 'patch ' + name)
+            self.put(native / 'prefix/share/licenses/ffmpeg' / name, 'patch ' + name)
         record = {
-            'schema_version': 1, 'qemu_source': str(self.qemu), 'usbmuxd_source': str(self.usb),
-            'static_deps': str(self.static), 'usbmuxd': release.tracked_usbmuxd(self.usb),
+            'schema_version': 1, 'architecture': arch, 'qemu_source': str(self.qemu), 'usbmuxd_source': str(self.usb),
+            'static_deps': str(static), 'usbmuxd': release.tracked_usbmuxd(self.usb),
             'recipes': {name: release.digest(self.product / name) for name in release.NATIVE_RECIPES},
-            'static_inputs': [{'path': 'lib/libcrypto.a', 'sha256': release.digest(self.static / 'lib/libcrypto.a')}],
+            'static_inputs': [{'path': 'lib/libcrypto.a', 'sha256': release.digest(static / 'lib/libcrypto.a')}],
         }
-        self.put(self.native / 'native-build.json', json.dumps(record))
+        self.put(native / 'native-build.json', json.dumps(record))
         self.args.native_build = self.native
         return record
+
+    def test_native_slice_architecture_must_match(self):
+        self.guest_fixture()
+        record = self.native_fixture()
+        record['architecture'] = 'x86_64'
+        self.put(self.native / 'native-build.json', json.dumps(record))
+        with self.assertRaisesRegex(ValueError, 'not an arm64 build'):
+            release.validate(self.args)
+
+    def test_universal_reuses_one_native_root_per_slice(self):
+        """--universal --native-build names a directory of arm64/ and x86_64/ roots, each filed under its own arch."""
+        self.guest_fixture()
+        for arch in release.UNIVERSAL_ARCHS:
+            self.native_fixture(self.native / arch, arch)
+        args = release.parse(self.argv + ['--universal', '--native-build', str(self.native)])
+        args.guest_tools = self.guest
+        self.assertEqual(release.slice_roots(args, self.native),
+                         {'arm64': self.native / 'arm64', 'x86_64': self.native / 'x86_64'})
+        release.validate(args)
+        self.assertEqual(release.slice_roots(self.args, self.native), {'arm64': self.native})
+        swapped = json.loads((self.native / 'x86_64/native-build.json').read_text())
+        swapped['architecture'] = 'arm64'
+        self.put(self.native / 'x86_64/native-build.json', json.dumps(swapped))
+        with self.assertRaisesRegex(ValueError, 'not an x86_64 build'):
+            release.validate(args)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            release.parse(self.argv + ['--universal', '--static-deps', str(self.static)])
+
+    def test_universal_staged_build_keeps_a_root_and_qemu_build_per_slice(self):
+        self.args.output.mkdir()
+        for arch in release.UNIVERSAL_ARCHS:
+            self.native_fixture(self.native / arch, arch)
+        args = release.parse(self.argv + ['--universal', '--stage', 'qemu', '--native-deps', str(self.native)])
+        self.assertEqual(args.qemu_build, self.qemu / 'build-release-universal')
+        plain = release.parse(self.argv + ['--stage', 'qemu', '--native-deps', str(self.native / 'arm64')])
+        self.assertEqual(plain.qemu_build, self.qemu / 'build-release-native')
+        for arch, root in release.slice_roots(args, self.native).items():
+            release.validate_native(args, root, deps_only=True, arch=arch)
+        env = {'PATH': '/usr/bin:/bin'}
+        self.assertIs(release.slice_env(plain, env, 'arm64', self.native), env)
+        x86 = release.slice_env(args, env, 'x86_64', self.native / 'x86_64')
+        self.assertEqual((x86['LTM_ARCH'], x86['PKG_CONFIG_LIBDIR']), ('x86_64', str(self.native / 'x86_64/prefix/lib/pkgconfig')))
+        self.assertEqual(release.QEMU_CROSS['arm64'], [])
+        self.assertIn('--cpu=x86_64', release.QEMU_CROSS['x86_64'])
+
+    def test_universal_builds_every_host_binary_for_both_slices(self):
+        """xcodebuild (the app and LightTouchDevice) and swift build (firmwarekit) get both arches only with --universal."""
+        commands = []
+        def fake_run(command, env, log, cwd=None):
+            commands.append(list(map(str, command)))
+            products = self.args.output / 'DerivedData/Build/Products/Release/Light Touch.app/Contents'
+            products.mkdir(parents=True, exist_ok=True)
+            (products / 'Info.plist').write_text('plist')
+        universal = release.parse(self.argv + ['--universal'])
+        self.args.output.mkdir()
+        bin_path = self.root / 'fk-bin'
+        self.put(bin_path / 'firmwarekit', 'binary')
+        with mock.patch.object(release, 'run', fake_run), \
+                mock.patch.object(release.subprocess, 'check_output', return_value=str(bin_path) + '\n'):
+            for args in (self.args, universal):
+                release.build_app(args, {}, None, self.root / 'qemu-build')
+                release.build_firmwarekit(args, None)
+        plain_app, plain_fk, universal_app, universal_fk = commands
+        self.assertIn('ARCHS=arm64', plain_app)
+        self.assertNotIn('ONLY_ACTIVE_ARCH=NO', plain_app)
+        self.assertEqual(universal_app[-1], 'build')
+        self.assertIn('ARCHS=arm64 x86_64', universal_app)
+        self.assertIn('ONLY_ACTIVE_ARCH=NO', universal_app)
+        self.assertEqual([plain_fk[i + 1] for i, a in enumerate(plain_fk) if a == '--arch'], ['arm64'])
+        self.assertEqual([universal_fk[i + 1] for i, a in enumerate(universal_fk) if a == '--arch'], ['arm64', 'x86_64'])
 
     def test_plan_validates_without_creating_output(self):
         with contextlib.redirect_stdout(io.StringIO()):
