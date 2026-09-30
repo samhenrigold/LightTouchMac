@@ -42,6 +42,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let library: DeviceLibraryViewController
     private let placeholder = DevicePlaceholderViewController()
     private let detail = ContainerViewController()
+    /// The device pane over its console (ConsoleSplit.swift).
+    private let console: ConsoleSplitViewController
     private let inspectorContainer = ContainerViewController()
     private let noInspector = NotRunningViewController()
     private let sidebarItem: NSSplitViewItem
@@ -67,11 +69,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     func cancelFileTransfer() { filesVC?.cancelTransfer() }
 
     /// Today's device area, before the sidebar: 720×640 for the iPod and
-    /// 1100×760 for the iPad (device plus inspector).
+    /// 1100×760 for the iPad (device plus inspector), plus the console bar.
     private static let sidebarWidth: CGFloat = 220
     private static func contentSize(for profile: DeviceProfile) -> NSSize {
         let device = profile == .iPad1 ? NSSize(width: 1100, height: 760) : NSSize(width: 720, height: 640)
-        return NSSize(width: device.width + sidebarWidth, height: device.height)
+        return NSSize(width: device.width + sidebarWidth, height: device.height + ConsoleBar.height)
     }
     /// Cleared once the user resizes; until then switching devices resizes to fit.
     private var sizedToDevice = true
@@ -87,7 +89,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         sidebarItem.maximumThickness = 320
         split.addSplitViewItem(sidebarItem)
 
-        let deviceItem = NSSplitViewItem(viewController: detail)
+        console = ConsoleSplitViewController(top: detail, autosaveName: "main")
+        let deviceItem = NSSplitViewItem(viewController: console)
         deviceItem.minimumThickness = 320
         split.addSplitViewItem(deviceItem)
         
@@ -237,6 +240,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             attachWorkspace()
         }
         if let entry, session == nil { placeholder.update(host.row(for: entry), canDownload: FirmwareJobs.shared.canDownload) }
+        // The console's picker: the same logs as Device Logs, without the rotated
+        // copies, the device's serial log first.
+        let logs = diagnosticLogs.filter { $0.pathExtension == "log" }
+        console.split.sources = logs.filter { $0.lastPathComponent == "serial.log" } + logs.filter { $0.lastPathComponent != "serial.log" }
         if let profile = session?.profile ?? entry?.profile, profile != currentProfile { profileDidChange(to: profile) }
         window?.title = session?.instance.name
             ?? entry.map { host.instance(for: $0)?.name ?? $0.profile?.displayName ?? $0.productType } ?? "Light Touch"
@@ -965,6 +972,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         inspectorItem.animator().isCollapsed.toggle()
     }
 
+    @objc func toggleConsole(_ sender: Any?) { console.split.toggle() }
+
     
     // MARK: - Edit menu (guest clipboard / screen)
     
@@ -1251,6 +1260,9 @@ extension MainWindowController: NSMenuItemValidation {
             return canToggleRecording
         case #selector(toggleAppInspector(_:)):
             menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
+            return true
+        case #selector(toggleConsole(_:)):
+            menuItem.title = console.split.layout.isCollapsed ? "Show Console" : "Hide Console"
             return true
         case #selector(showDeviceLogs(_:)), #selector(exportDiagnostics(_:)), #selector(showRecordingRecovery(_:)),
              #selector(showCaptureOptions(_:)), #selector(focusDeviceScreen(_:)):

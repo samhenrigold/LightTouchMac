@@ -131,6 +131,8 @@ enum MainMenuBuilder {
         menu.addItem(item("Zoom Out", #selector(MainWindowController.zoomOut(_:)), "-"))
         menu.addItem(.separator())
         menu.addItem(item("Show Inspector", #selector(MainWindowController.toggleAppInspector(_:)), "i", [.option, .command]))
+        // Xcode's Show Debug Area key.
+        menu.addItem(item("Show Console", #selector(MainWindowController.toggleConsole(_:)), "y", [.shift, .command]))
         menu.addItem(item("Show Finger Dots", #selector(MainWindowController.toggleTouchOverlay(_:))))
         menu.addItem(item("Show Hidden Files", #selector(DeviceFilesViewController.toggleHidden(_:))))
         menu.addItem(.separator())

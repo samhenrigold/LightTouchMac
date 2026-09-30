@@ -1,12 +1,89 @@
 import Cocoa
 
+/// A live, selectable tail of one log file: the Device Logs window's view and
+/// the main window's console. Selecting text (or `isPaused`) holds updates.
+@MainActor
+final class LogTextView: NSScrollView {
+    let text = NSTextView()
+    var url: URL? { didSet { if url != oldValue { origin = 0; raw = ""; text.string = "" } } }
+    /// Shows only the lines containing it (case-insensitive), like Xcode's console filter.
+    var filter = "" { didSet { if filter != oldValue { show(raw) } } }
+    var isPaused = false
+    private var raw = ""
+    /// Clear hides what the file held so far; the file itself is untouched.
+    private var origin: UInt64 = 0
+    private var polling: Task<Void, Never>?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        text.isEditable = false
+        text.isSelectable = true
+        text.usesFindBar = true
+        text.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        text.textContainerInset = NSSize(width: 8, height: 8)
+        text.isVerticallyResizable = true
+        text.isHorizontallyResizable = false
+        text.autoresizingMask = [.width]
+        text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        text.textContainer?.widthTracksTextView = true
+        text.setAccessibilityLabel("Log output")
+        hasVerticalScroller = true
+        documentView = text
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// Polls once a second while visible; stop when the view goes away.
+    func startPolling() {
+        polling?.cancel()
+        polling = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refresh()
+                do { try await Task.sleep(for: .seconds(1)) } catch { break }
+            }
+        }
+    }
+
+    func stopPolling() { polling?.cancel(); polling = nil }
+
+    func clear() {
+        origin = url.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path)[.size] as? UInt64 } ?? 0
+        raw = ""
+        text.string = ""
+    }
+
+    func refresh() async {
+        guard window?.isVisible == true, !isPaused, text.selectedRange().length == 0, let url else { return }
+        let from = origin
+        let value = await Task.detached(priority: .utility) { LogWindowController.tail(url, from: from) }.value
+        guard !Task.isCancelled, self.url == url, origin == from, !isPaused, text.selectedRange().length == 0 else { return }
+        if value.rotated { origin = 0 }
+        guard value.text != raw else { return }
+        raw = value.text
+        show(raw)
+    }
+
+    nonisolated static func filtered(_ value: String, by filter: String) -> String {
+        filter.isEmpty ? value : value.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { $0.localizedCaseInsensitiveContains(filter) }.joined(separator: "\n")
+    }
+
+    private func show(_ value: String) {
+        let shown = Self.filtered(value, by: filter)
+        guard text.string != shown else { return }
+        let atBottom = text.visibleRect.maxY >= text.bounds.maxY - 8
+        text.string = shown
+        text.sizeToFit()
+        if atBottom { text.scrollToEndOfDocument(nil) }
+    }
+}
+
 @MainActor
 final class LogWindowController: NSWindowController, NSWindowDelegate {
     private let logs: [URL]
     private let picker = NSPopUpButton()
-    private let text = NSTextView()
+    private let log = LogTextView()
     private let pause = NSButton(checkboxWithTitle: "Pause updates", target: nil, action: nil)
-    private var polling: Task<Void, Never>?
 
     init(logs: [URL]) {
         self.logs = logs
@@ -22,28 +99,16 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
         picker.addItems(withTitles: logs.map(\.lastPathComponent))
         picker.setAccessibilityLabel("Log file")
         picker.target = self; picker.action = #selector(sourceChanged(_:))
-        text.isEditable = false
-        text.isSelectable = true
-        text.usesFindBar = true
-        text.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        text.textContainerInset = NSSize(width: 8, height: 8)
-        text.isVerticallyResizable = true
-        text.isHorizontallyResizable = false
-        text.autoresizingMask = [.width]
-        text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        text.textContainer?.widthTracksTextView = true
-        text.setAccessibilityLabel("Log output")
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.borderType = .bezelBorder
-        scroll.documentView = text
+        pause.target = self; pause.action = #selector(pauseChanged(_:))
+        log.url = logs.first
+        log.borderType = .bezelBorder
         let controls = NSStackView(views: [picker, pause])
         controls.spacing = 12
         let hint = NSTextField(labelWithString: "Latest 64 KB. Selecting text pauses updates.")
         hint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         hint.textColor = .secondaryLabelColor
         let content = window.contentView!
-        for view in [controls, scroll, hint] {
+        for view in [controls, log, hint] {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
         }
@@ -51,11 +116,11 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
             controls.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
             controls.topAnchor.constraint(equalTo: content.topAnchor, constant: 16),
             controls.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -16),
-            scroll.topAnchor.constraint(equalTo: controls.bottomAnchor, constant: 12),
-            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-            hint.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 8),
-            hint.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            log.topAnchor.constraint(equalTo: controls.bottomAnchor, constant: 12),
+            log.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            log.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            hint.topAnchor.constraint(equalTo: log.bottomAnchor, constant: 8),
+            hint.leadingAnchor.constraint(equalTo: log.leadingAnchor),
             hint.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -16),
             hint.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
         ])
@@ -65,47 +130,34 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
 
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
-        polling?.cancel()
-        polling = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.refresh()
-                do { try await Task.sleep(for: .seconds(1)) } catch { break }
-            }
-        }
+        log.startPolling()
     }
 
-    func windowWillClose(_ notification: Notification) {
-        polling?.cancel(); polling = nil
-    }
+    func windowWillClose(_ notification: Notification) { log.stopPolling() }
 
     @objc private func sourceChanged(_ sender: Any?) {
-        text.string = ""
+        log.url = logs.indices.contains(picker.indexOfSelectedItem) ? logs[picker.indexOfSelectedItem] : nil
     }
 
-    private func refresh() async {
-        guard window?.isVisible == true, pause.state != .on, text.selectedRange().length == 0,
-              logs.indices.contains(picker.indexOfSelectedItem) else { return }
-        let index = picker.indexOfSelectedItem, url = logs[index]
-        let value = await Task.detached(priority: .utility) { Self.tail(url) }.value
-        guard !Task.isCancelled, picker.indexOfSelectedItem == index, pause.state != .on,
-              text.selectedRange().length == 0, text.string != value else { return }
-        let atBottom = text.visibleRect.maxY >= text.bounds.maxY - 8
-        text.string = value
-        text.sizeToFit()
-        if atBottom { text.scrollToEndOfDocument(nil) }
-    }
+    @objc private func pauseChanged(_ sender: Any?) { log.isPaused = pause.state == .on }
 
-    nonisolated static func tail(_ url: URL) -> String {
+    nonisolated static func tail(_ url: URL) -> String { tail(url, from: 0).text }
+
+    /// The file's last 64 KB after `from` (a Clear point), whole lines only.
+    /// `rotated` when the file is now shorter than `from`: it was replaced, so read it all.
+    nonisolated static func tail(_ url: URL, from: UInt64) -> (text: String, rotated: Bool) {
         do {
             let file = try FileHandle(forReadingFrom: url)
             defer { try? file.close() }
             let size = try file.seekToEnd(), limit: UInt64 = 65536
-            try file.seek(toOffset: size > limit ? size - limit : 0)
+            let rotated = size < from, start = max(rotated ? 0 : from, size > limit ? size - limit : 0)
+            try file.seek(toOffset: start)
             var data = try file.read(upToCount: Int(limit)) ?? Data()
-            if size > limit, let newline = data.firstIndex(of: 10) { data = Data(data.suffix(from: data.index(after: newline))) }
-            return data.isEmpty ? "No log output yet." : String(decoding: data, as: UTF8.self)
+            if start > (rotated ? 0 : from), let newline = data.firstIndex(of: 10) { data = Data(data.suffix(from: data.index(after: newline))) }
+            if data.isEmpty { return (from > 0 && !rotated ? "" : "No log output yet.", rotated) }
+            return (String(decoding: data, as: UTF8.self), rotated)
         } catch {
-            return "Cannot read \(url.lastPathComponent): \(error.localizedDescription)"
+            return ("Cannot read \(url.lastPathComponent): \(error.localizedDescription)", false)
         }
     }
 }
