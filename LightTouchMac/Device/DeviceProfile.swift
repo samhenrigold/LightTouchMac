@@ -26,14 +26,18 @@ nonisolated enum DeviceProfile: Equatable {
         switch self { case .iPad1: "k48ap"; case .iPodTouch2G: "n72ap"; case .iPodTouch1G: "n45ap" }
     }
     /// A prepared base's boot file and the other files its boots need besides nand/, by the lock's boot_strategy.
-    /// The iPad's k48 iboot recipe (default) boots SecureROM->LLB->iBoot->kernel from iBoot.bin + nor.bin +
+    /// The iPad's k48 iboot recipe (default) boots iBoot->kernel from iBoot.bin + nor.bin +
     /// gid-blobs.bin; the kboot recipe (and the two older prepared iPads) boots direct-kernel from kboot.bin.
     /// The iPod's n72 recipe boots the machine's direct-iBoot from iBoot.bin + nor.bin + gid-blobs.bin (3.x+, no
     /// boot_strategy or "iboot"), or with "bootrom" (2.x) the real SecureROM -> NOR LLB -> iBoot chain from nor.bin.
     /// The 1G's n45 recipe: iBoot.bin (the machine's `iboot=`) + nor.bin; no GID blobs (1.x's 8900 key is fixed).
     func preparedBoot(strategy: String?) -> (boot: String, files: [String]) {
         if self == .iPad1 {
-            return strategy == "iboot" ? ("iBoot.bin", ["nor.bin", "gid-blobs.bin"]) : ("kboot.bin", [])
+            switch strategy {
+            case "iboot": return ("iBoot.bin", ["nor.bin", "gid-blobs.bin"])
+            case "bootrom": return ("SecureROM.bin", ["nor.bin", "gid-blobs.bin"])
+            default: return ("kboot.bin", [])
+            }
         }
         if self == .iPodTouch1G { return ("iBoot.bin", ["nor.bin"]) }
         return strategy == "bootrom" ? ("nor.bin", ["gid-blobs.bin"]) : ("iBoot.bin", ["nor.bin", "gid-blobs.bin"])

@@ -377,11 +377,15 @@ final class EmulatorController {
         let overlay = overlayURL
         let lock = instance.paths.base.appendingPathComponent("device.lock.json")
         let strategy = BootRecipe.bootStrategy(lock)
+        let bootPath: BootRecipe.IPadBoot
         let files: (boot: URL, nand: URL, writableNOR: URL?)
         do {
             let boot = profile.preparedBoot(strategy: strategy)
             files = try BootRecipe.preparedFiles(base: instance.paths.base, overlay: overlay,
                                                  writableNOR: instance.paths.writableNOR, boot: boot.boot, also: boot.files)
+            bootPath = try BootRecipe.preparedIPadBoot(strategy: strategy, image: files.boot.path,
+                                                       writableNOR: files.writableNOR?.path,
+                                                       gidBlobs: instance.paths.base.appendingPathComponent("gid-blobs.bin").path)
             guard try pinOverlay(overlay) else { return nil }
         } catch {
             failBoot(error)
@@ -400,9 +404,8 @@ final class EmulatorController {
         let restrict = network && BootRecipe.setupPhonesHome(iosVersion: iosVersion) && !setupDone
         let netdev = network ? proxyForward().map { BootRecipe.wifiNetdev(guestForward: $0, restricted: restrict) } : nil
         setupGate = netdev != nil && restrict ? BootRecipe.SetupNetworkGate() : nil
-        return BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: instance.identity?.dieID,
-                                     writableNOR: files.writableNOR?.path,
-                                     gidBlobs: strategy == "iboot" ? instance.paths.base.appendingPathComponent("gid-blobs.bin").path : nil,
+
+        return BootRecipe.iPad(.init(boot: bootPath, nand: files.nand.path, overlay: overlay.path, dieID: instance.identity?.dieID,
                                      usbAddress: usbSession?.guestAddress, wifi: network,
                                      guestPackage: composeGuestOffer(), machineOptions: BootRecipe.lockMachine(lock)),
                                serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev, restore: [])

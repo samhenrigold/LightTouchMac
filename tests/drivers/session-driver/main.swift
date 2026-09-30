@@ -154,9 +154,11 @@ extension String {
             let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: nor, boot: boot.boot, also: boot.files)
             let identity = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: Self.ipadBase + "/identity.json"))) as! [String: Any]
             let dieID = (identity["die-id"] as? [String])?.joined(separator: ":")
-            let gidBlobs = strategy == "iboot" ? base.appendingPathComponent("gid-blobs.bin").path : nil
-            config = BootRecipe.iPad(.init(kboot: files.boot.path, nand: files.nand.path, overlay: overlay.path, dieID: dieID,
-                                           writableNOR: files.writableNOR?.path, gidBlobs: gidBlobs, usbAddress: mux.guestAddress, wifi: true,
+            let bootPath = try BootRecipe.preparedIPadBoot(strategy: strategy, image: files.boot.path,
+                                                         writableNOR: files.writableNOR?.path,
+                                                         gidBlobs: base.appendingPathComponent("gid-blobs.bin").path)
+            config = BootRecipe.iPad(.init(boot: bootPath, nand: files.nand.path, overlay: overlay.path, dieID: dieID,
+                                           usbAddress: mux.guestAddress, wifi: true,
                                            guestPackage: try iPadOffer(base: base),
                                            machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
                                      serial: serial!.argument, audio: ["-audio", "driver=none"],

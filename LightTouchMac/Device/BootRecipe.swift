@@ -28,17 +28,34 @@ nonisolated enum BootRecipe {
         var machineOptions: [String: String] = [:]
     }
 
+    enum IPadBoot: Equatable {
+        case kernel(image: String, writableNOR: String?)
+        case iBoot(image: String, writableNOR: String, gidBlobs: String)
+        case secureROM(image: String, writableNOR: String, gidBlobs: String, developmentFuses: Bool)
+    }
+
+    /// Legacy locks with no strategy retain the explicit direct-kernel fallback.
+    /// New boot paths cannot be inferred from whether a key file happens to exist.
+    static func preparedIPadBoot(strategy: String?, image: String, writableNOR: String?, gidBlobs: String?) throws -> IPadBoot {
+        switch strategy {
+        case nil, "kboot": return .kernel(image: image, writableNOR: writableNOR)
+        case "iboot", "bootrom":
+            guard let writableNOR, !writableNOR.isEmpty, let gidBlobs, !gidBlobs.isEmpty else {
+                throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey: "The \(strategy!) boot needs writable NOR and GID key data."])
+            }
+            if strategy == "iboot" { return .iBoot(image: image, writableNOR: writableNOR, gidBlobs: gidBlobs) }
+            return .secureROM(image: image, writableNOR: writableNOR, gidBlobs: gidBlobs, developmentFuses: false)
+        default:
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSLocalizedDescriptionKey: "Unknown iPad boot strategy: \(strategy!)"])
+        }
+    }
+
     struct IPad {
-        /// The boot image: kboot.bin (direct-kernel) or, when `gidBlobs` is set, iBoot.bin (real iBoot chain).
-        var kboot: String
+        var boot: IPadBoot
         var nand: String
         var overlay: String
         /// "0xWORD2:0xWORD3" (identity.json); the machine uses zeros without it.
         var dieID: String?
-        var writableNOR: String?
-        /// Set for the iboot strategy: the base's gid-blobs.bin (the emulated AES has no GID key). Its presence
-        /// picks `iboot=` over `kboot=`.
-        var gidBlobs: String? = nil
         var usbAddress: String?
         var wifi: Bool
         var guestPackage: String? = nil
@@ -166,17 +183,17 @@ nonisolated enum BootRecipe {
     /// Wi-Fi is the machine's default (a BCM4329 on its own slirp wifi0); an
     /// explicit `netdev` replaces it. No -m: the machine's default is the K48's 256 MiB.
     static func iPad(_ d: IPad, serial: String, audio: [String], netdev: String?, restore: [String]) -> BootConfig {
-        // iboot strategy: enter the pattern-patched iBoot with the catalog keys and boot the kernel from NAND, off a
-        // private writable NOR (no base nor=, as ipad1_boot's writable path). kboot: the direct-kernel bundle.
         var machine: String
-        if let gid = d.gidBlobs {
-            machine = "ipad1,iboot=\(escape(d.kboot)),gid-blobs=\(escape(gid))"
-            if let nor = d.writableNOR { machine += ",nor-rw=\(escape(nor))" }
-            machine += ",nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
-        } else {
-            machine = "ipad1,kboot=\(escape(d.kboot)),nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
-            if let nor = d.writableNOR { machine += ",nor-rw=\(escape(nor))" }
+        switch d.boot {
+        case let .kernel(image, nor):
+            machine = "ipad1,kboot=\(escape(image))"
+            if let nor { machine += ",nor-rw=\(escape(nor))" }
+        case let .iBoot(image, nor, gid):
+            machine = "ipad1,iboot=\(escape(image)),nor-rw=\(escape(nor)),gid-blobs=\(escape(gid))"
+        case let .secureROM(image, nor, gid, developmentFuses):
+            machine = "ipad1,bootrom=\(escape(image)),nor-rw=\(escape(nor)),gid-blobs=\(escape(gid)),development-fuses=\(developmentFuses ? "on" : "off")"
         }
+        machine += ",nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
         if let dieID = d.dieID { machine += ",die-id=\(escape(dieID))" }
         // Without a bridge the machine's built-in USB host keeps it charging.
         if let usb = d.usbAddress { machine += ",usb-tcp-addr=\(usb)" }
