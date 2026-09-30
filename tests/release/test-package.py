@@ -129,16 +129,14 @@ def check_helper(app):
     imd = app / 'Contents/Frameworks/libimobiledevice-1.0.dylib'
     assert '_SSLv3_client_method' in run('nm', '-gU', imd).stdout, f'{imd.name} links an OpenSSL without SSLv3'
     device = app / 'Contents/Resources/device'
-    blob = device / 'n72ap-7E18.itbase'
-    assets = ('bootrom_240_4', 'bootrom_s5l8900', 'n72ap-7E18.itbase')  # the 2G's and 1G's SecureROMs, the built-in iPod
+    assets = ('bootrom_240_4', 'bootrom_s5l8900')  # the 2G's and 1G's SecureROMs; no prepared device ships
     assert all((device / name).is_file() for name in assets), f'missing device assets under {device}'
-    assert blob.read_bytes()[:8] == b'ITPACK01', f'{blob} is not a packed device'
     stray = [p for p in device.rglob('*') if p.is_file() and p.name not in assets]
-    assert not stray, f'unexpected device assets (raw pages, the old NAND or iBoot?): {stray[:5]}'
+    assert not stray, f'unexpected device assets (a packed device, raw pages, iBoot?): {stray[:5]}'
     catalog = json.loads((app / 'Contents/Resources/firmware-catalog.json').read_text())
-    assert [e['id'] for e in catalog['entries'] if e.get('bundled')] == ['n72ap-7E18']
-    print(f'PASS: {helper.name} signed (runtime, QEMU entitlements, minos {info}), closure in-bundle, loads {dylib.name} from Frameworks; SSLv3 in {imd.name}; built-in iPod packed')
-
+    first = next(e for e in catalog['entries'] if e['id'] == catalog['first_run'])
+    assert first['status'] == 'available' and first['source']['url'].startswith('https://secure-appldnld.apple.com/'), first['id']
+    print(f'PASS: {helper.name} signed (runtime, QEMU entitlements, minos {info}), closure in-bundle, loads {dylib.name} from Frameworks; SSLv3 in {imd.name}; SecureROMs only, first run {first["id"]} from Apple')
 
 if len(sys.argv) > 1:
     check_helper(sys.argv[1])

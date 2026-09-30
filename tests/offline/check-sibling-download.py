@@ -24,7 +24,7 @@ APP = ROOT / 'LightTouchMac'
 FAKE = ROOT / 'tests/fixtures/fake-firmwarekit.py'
 SOURCES = ['FirmwareJobs.swift', 'IPSWStore.swift', 'FirmwareDownloads.swift', 'PreparationJob.swift', 'DeviceInstance.swift',
            'FirmwareCatalog.swift', 'DeviceProfile.swift', 'StorageLocations.swift', 'DeviceStateStorage.swift',
-           'DeviceRow.swift', 'BundledBase.swift', 'BootRecipe.swift']
+           'DeviceRow.swift', 'BootRecipe.swift']
 
 
 def source(name):

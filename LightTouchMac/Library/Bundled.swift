@@ -32,7 +32,7 @@ nonisolated enum Bundled {
     /// Dylibs shipped with the app, where package.sh repoints @rpath.
     static let frameworksDirectory = Bundle.main.privateFrameworksPath
 
-    /// The device assets (the iPod bootrom, the packed built-in device): LTM_FILES,
+    /// The device assets (the iPod SecureROMs): LTM_FILES,
     /// then the bundle's Resources/device, then the dev checkout's qemu-ios-files.
     static let filesRoot: String = {
         if let env = ProcessInfo.processInfo.environment["LTM_FILES"] { return env }

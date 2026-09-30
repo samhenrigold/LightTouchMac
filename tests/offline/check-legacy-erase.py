@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""The built-in iPod is an ordinary prepared device, and the old layout is erased once.
+"""The old layout is erased once, and a prepared base publishes as an ordinary device.
 
 Compiles the production FirmwareCatalog, DeviceInstance, DeviceStateStorage, StorageLocations,
-PreparationJob (its static publish), BundledBase, LegacyState and IPALibrary with stubs, against
-the shipped catalog and a small packed base made with scripts/pack-base.py, in a temp state dir:
+PreparationJob (its static publish), LegacyState and IPALibrary with stubs, against the shipped
+catalog and a small base in the shape `firmwarekit create` makes, in a temp state dir:
 
-  fresh     no Devices/: the blob unpacks into Preparing/<id>/ and publishes as Devices/<id>
+  fresh     no Devices/: the base, copied into Preparing/<id>/, publishes as Devices/<id>
             with a .prepared record whose base has the boot files BootRecipe.preparedFiles wants,
-            the base locked (uchg) and identity.json 0600; a second publish for the entry is
-            refused by the one-device-per-entry rule the app applies
+            the base locked (uchg) and identity.json 0600 and nor.bin 0444 kept
   legacy    the old layout (State/device/<nand>-<digest>, active-<nand>.json, nandrw-<key>, a
-            legacyBundled record with a retained IPA, work/usbmuxd-conf, State/IPAs) is found;
-            erase() keeps the IPAs in the library and the pairing, removes the rest; then the
-            bundled publish seeds the new device with that pairing and removes it from work/.
+            legacyBundled record with a retained IPA, State/IPAs) is found; erase() keeps the
+            IPAs in the library and removes the rest (the old root with its pairing); a device
+            published afterwards is the only one.
             With a 160 MB retained IPA and 24,000 old pages (about 260 MB), run twice: legacy-quit
             exits midway (200 ms in, State/IPAs adopted); the next run
             resumes without asking (the .legacy-erase marker) and finishes. Both assert a main-
@@ -20,7 +19,7 @@ the shipped catalog and a small packed base made with scripts/pack-base.py, in a
             left by a quit after the last removal resumes and clears
   none      a state dir with only prepared records has no legacy state
 
-Also the catalog's shape: exactly one entry is bundled, and it is the iPod 3.1.3 user_ipsw entry.
+Also the catalog's shape: no entry ships prepared, and the first-run entry is an available build from Apple.
 """
 from pathlib import Path
 import json, os, re, subprocess, sys, tempfile
@@ -28,14 +27,13 @@ import json, os, re, subprocess, sys, tempfile
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / 'LightTouchMac'
 SOURCES = ['Library/FirmwareCatalog.swift', 'Library/DeviceInstance.swift', 'Library/DeviceStateStorage.swift', 'Library/StorageLocations.swift',
-           'Library/PreparationJob.swift', 'Device/DeviceProfile.swift', 'Library/BundledBase.swift', 'Library/LegacyState.swift', 'Library/IPALibrary.swift',
+           'Library/PreparationJob.swift', 'Device/DeviceProfile.swift', 'Library/LegacyState.swift', 'Library/IPALibrary.swift',
            'Library/IPSWStore.swift', 'Library/FirmwareDownloads.swift']
 
 catalog = json.loads((APP / 'Resources/firmware-catalog.json').read_text())
-bundled = [e for e in catalog['entries'] if e.get('bundled')]
-assert [e['id'] for e in bundled] == ['n72ap-7E18'], bundled
-assert bundled[0]['status'] == 'user_ipsw' and bundled[0]['bundled'] == 'device/n72ap-7E18.itbase'
-assert bundled[0]['source']['sha1'] == '5f4f5c01eda2f811f73167e7d1f82dbeed82367b'
+assert not [e['id'] for e in catalog['entries'] if 'bundled' in e]
+first = next(e for e in catalog['entries'] if e['id'] == catalog['first_run'])
+assert first['status'] == 'available' and first['source']['url'].startswith('https://secure-appldnld.apple.com/'), first['id']
 hexre = re.compile(r'^[0-9a-f]+$')
 for e in catalog['entries']:
     assert e['id'] == f"{e['board']}-{e['build']}" and e['source']['kind'] == 'ipsw', e['id']
@@ -95,20 +93,17 @@ func expect(_ ok: Bool, _ what: @autoclosure () -> String, line: Int = #line) {
 let fm = FileManager.default
 let args = CommandLine.arguments
 let catalog = try FirmwareCatalog.load(from: URL(fileURLWithPath: args[1]))
-let blob = URL(fileURLWithPath: args[2])
+let base = URL(fileURLWithPath: args[2])
 let state = Bundled.stateDirectory
-let entry = catalog.bundledEntry!
-expect(entry.id == "n72ap-7E18" && entry.profile == .iPodTouch2G, "the bundled entry")
+let entry = catalog.entry(id: "n72ap-7E18")!
 
-/// What FirmwareJobs.prepareBundled does, without the job bookkeeping.
-func publishBundled(pairing: URL?) throws -> DeviceInstance {
+/// A preparation's last step: its output in Preparing/<id>/, published.
+func publishPrepared() throws -> DeviceInstance {
     let id = UUID()
     let staging = PreparationJob.preparing(state).appendingPathComponent(id.uuidString, isDirectory: true)
-    try StorageLocations.privateDirectory(staging)
-    try BundledBase.unpack(blob, into: staging)
-    let instance = try PreparationJob.publish(staging: staging, entry: entry, id: id, state: state, pairing: pairing)
-    if let pairing { try? DeviceStateStorage.removeTree(pairing) }
-    return instance
+    try StorageLocations.privateDirectory(staging.deletingLastPathComponent())
+    try fm.copyItem(at: base, to: staging)
+    return try PreparationJob.publish(staging: staging, entry: entry, id: id, state: state)
 }
 func mode(_ url: URL) -> Int { (try! fm.attributesOfItem(atPath: url.path)[.posixPermissions] as! NSNumber).intValue }
 
@@ -116,7 +111,7 @@ switch args[3] {
 case "fresh":
     expect(LegacyState.find(state: state, applicationSupport: nil) == nil, "a fresh state has nothing legacy")
     expect(DeviceInstance.all(state: state).isEmpty, "no devices yet")
-    let instance = try publishBundled(pairing: nil)
+    let instance = try publishPrepared()
     let records = DeviceInstance.all(state: state)
     expect(records == [instance] && instance.firmware == entry.id && instance.board == "n72ap", "published as the entry's device: \(records)")
     expect(instance.base.kind == .prepared && instance.base.path == "Devices/\(instance.id.uuidString)/base", "a prepared record: \(instance.base)")
@@ -127,13 +122,13 @@ case "fresh":
     let files = try BootRecipe.preparedFiles(base: paths.base, overlay: paths.overlay, writableNOR: paths.writableNOR, boot: boot.boot, also: boot.files)
     expect(files.boot.lastPathComponent == "iBoot.bin" && fm.fileExists(atPath: files.nand.appendingPathComponent("cs0/1.page").path), "the boot files BootRecipe wants")
     expect(files.writableNOR.map { fm.fileExists(atPath: $0.path) && mode($0) & 0o200 != 0 } == true, "a writable NOR clone on first boot")
-    expect(mode(paths.base.appendingPathComponent("identity.json")) == 0o600 && mode(paths.base.appendingPathComponent("nor.bin")) == 0o444, "packed modes kept")
+    expect(mode(paths.base.appendingPathComponent("identity.json")) == 0o600 && mode(paths.base.appendingPathComponent("nor.bin")) == 0o444, "modes kept")
     expect(try DeviceStateStorage.pinOverlay(paths.overlay, toBase: instance.storage.key), "the overlay is pinned to the base")
     expect((try? fm.removeItem(at: paths.base.appendingPathComponent("gid-blobs.bin"))) == nil, "the base is locked")
     expect((try? fm.contentsOfDirectory(atPath: PreparationJob.preparing(state).path))?.isEmpty == true, "Preparing/ is empty afterwards")
     expect(DeviceInstance.lockLacksActivation(paths.base.appendingPathComponent("device.lock.json")) == false, "the lock records the activation")
     expect(!DeviceInstance.all(state: state).filter { $0.firmware == entry.id }.isEmpty, "the row is Ready: a device exists for the entry")
-    print("PASS fresh: the built-in iPod is published as a prepared device from its packed base")
+    print("PASS fresh: a prepared base is published as a device")
 
 case "legacy-quit":
     // Erase & Continue, then the app quits midway: 200 ms in, once State/IPAs is adopted
@@ -159,7 +154,7 @@ case "legacy":
     expect(legacy.records.count == 1 && legacy.oldRoot != nil, "the legacy record and the old root are found: \(legacy.records) \(String(describing: legacy.oldRoot))")
     let names = Set(legacy.items.map(\.lastPathComponent))
     expect(names.isSuperset(of: ["device", "nandrw-nand-ultimate", "snapshot-nand-ultimate", "IPAs", "app.log", "usbmuxd.pid", "session.env", "AppCache"]), "\(names)")
-    expect(!names.contains("Library") && !names.contains("Devices") && !names.contains("work") && !names.contains(".app-lock"), "the library, the devices and the pairing stay: \(names)")
+    expect(!names.contains("Library") && !names.contains("Devices") && !names.contains("work") && !names.contains(".app-lock"), "the library and the devices stay: \(names)")
     expect(DeviceInstance.all(state: state).isEmpty, "the legacy record does not decode as a device")
     // A few hundred MB of old pages go without blocking the main actor.
     let heart = Heartbeat()
@@ -177,8 +172,6 @@ case "legacy":
     }
     expect(!fm.fileExists(atPath: args[4] + "/LightTouchMac"), "the old root erased")
     expect((try? fm.contentsOfDirectory(atPath: state.appendingPathComponent("Devices").path))?.isEmpty == true, "the legacy record's directory erased")
-    let pairing = state.appendingPathComponent("work/usbmuxd-conf")
-    expect(fm.fileExists(atPath: pairing.appendingPathComponent("device.plist").path), "the pairing survives the erase")
     let kept = Set(IPALibrary.index.values.map(\.bundleID))
     expect(kept == ["com.example.retained", "com.example.shared", "com.example.old"], "every retained IPA is in the library: \(kept)")
     expect(fm.fileExists(atPath: state.appendingPathComponent("Library/IPAs/index.json").path), "the library index")
@@ -189,11 +182,9 @@ case "legacy":
     expect(leftover?.resuming == true && leftover?.items.isEmpty == true, "a lone marker resumes")
     try await leftover?.erase()
     expect(LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4])) == nil, "and then nothing is left")
-    let instance = try publishBundled(pairing: fm.fileExists(atPath: pairing.path) ? pairing : nil)
-    expect(fm.fileExists(atPath: instance.paths.usbmuxConf.appendingPathComponent("device.plist").path), "the new device is seeded with the pairing")
-    expect(!fm.fileExists(atPath: pairing.path), "the pairing left work/")
-    expect(DeviceInstance.all(state: state).map(\.id) == [instance.id], "one device: the built-in iPod")
-    print("PASS legacy: the old layout goes, IPAs and pairing stay, the built-in iPod takes the pairing")
+    let instance = try publishPrepared()
+    expect(DeviceInstance.all(state: state).map(\.id) == [instance.id], "one device: the one prepared after the erase")
+    print("PASS legacy: the old layout goes, IPAs stay")
 
 case "none":
     expect(LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4])) == nil, "prepared records are not legacy")
@@ -206,9 +197,9 @@ default: fatalError(args[3])
 
 
 def main():
-    tmp = Path(tempfile.mkdtemp(prefix='ltm-bundled-prepared-'))
+    tmp = Path(tempfile.mkdtemp(prefix='ltm-legacy-erase-'))
     try:
-        # A small base with the shape firmwarekit's n72 recipe makes, packed as the release does.
+        # A small base with the shape firmwarekit's n72 recipe makes.
         base = tmp / 'base'
         (base / 'nand/cs0').mkdir(parents=True)
         (base / 'nand/cs0/1.page').write_bytes(b'\xff' * 4160)
@@ -221,8 +212,6 @@ def main():
         (base / 'device.lock.json').write_text(json.dumps({
             'format': 1, 'entry': {'id': 'n72ap-7E18'}, 'machine': {'aes-uid': 'engine'},
             'identity': {'udid': 'a' * 40, 'seed': 'fixture'}, 'inputs': {'activation': {'input_sha256': '0', 'output_sha256': '0'}}}))
-        blob = tmp / 'n72ap-7E18.itbase'
-        subprocess.run([sys.executable, ROOT / 'scripts/pack-base.py', 'pack', base, blob], check=True, stdout=subprocess.DEVNULL)
 
         (tmp / 'stubs.swift').write_text(STUBS)
         (tmp / 'main.swift').write_text(CHECK)
@@ -233,7 +222,7 @@ def main():
 
         def run(case, state, support=''):
             state.mkdir(parents=True, exist_ok=True)
-            subprocess.run([tmp / 'check', catalog_path, blob, case, support], check=True, env=dict(os.environ, LTM_STATE_DIR=str(state)))
+            subprocess.run([tmp / 'check', catalog_path, base, case, support], check=True, env=dict(os.environ, LTM_STATE_DIR=str(state)))
 
         run('fresh', tmp / 'fresh')
 
@@ -289,7 +278,7 @@ def main():
         prepared = tmp / 'prepared'
         run('fresh', prepared)   # leaves one prepared record
         run('none', prepared, tmp / 'nowhere')
-        print('PASS: check-bundled-prepared')
+        print('PASS: check-legacy-erase')
     finally:
         subprocess.run(['chmod', '-R', 'u+w', tmp], check=False)
         subprocess.run(['chflags', '-R', 'nouchg', tmp], check=False)

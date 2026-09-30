@@ -131,9 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         do { try NativeLogging.start() }
         catch { logEvent("logging: native output capture unavailable: \(error.localizedDescription)") }
-        // State from before the built-in iPod was a prepared device: erased once, or the app quits.
-        // The erase runs off the main actor behind a progress window, which then follows the
-        // built-in device's unpack as a sheet; a launch after a quit midway resumes without asking.
+        // State from before devices were prepared from IPSWs: erased once, or the app quits. The erase
+        // runs off the main actor behind a progress window; a launch after a quit midway resumes without asking.
         if let legacy = LegacyState.find(state: Bundled.stateDirectory, applicationSupport: ProcessInfo.processInfo.environment["LTM_STATE_DIR"] == nil
                                             ? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0] : nil) {
             if !legacy.resuming {
@@ -154,25 +153,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     Self.requestTermination()
                     return
                 }
-                finishLaunching(progress: progress)
+                progress.window.orderOut(nil)
+                finishLaunching()
             }
             return
         }
-        finishLaunching(progress: nil)
+        finishLaunching()
     }
 
-    /// The rest of the launch, once no legacy state is left. `progress`, from the erase,
-    /// becomes a sheet on the device window that follows the built-in device's unpack.
-    private func finishLaunching(progress: MigrationProgress?) {
+    /// The rest of the launch, once no legacy state is left.
+    private func finishLaunching() {
         // The network question belongs to the device being started (DeviceSessionHost.start), not to the app.
         let host = DeviceSessionHost()
         Self.sweepStorage()
         Self.adoptDevelopmentBase(catalog: host.catalog)
-        // The built-in device, unpacked on first launch (and again after a Delete, on Prepare).
-        if let entry = host.catalog.bundledEntry, FirmwareJobs.bundledBlob(entry) != nil,
-           host.library.instances(firmware: entry.id).isEmpty {
-            FirmwareJobs.shared.prepareBundled(entry)
-        }
         let profile = host.launchSelection?.profile ?? .iPodTouch2G
         MainMenuBuilder.install(profile: profile)
         let controller = MainWindowController(host: host, profile: profile)
@@ -180,9 +174,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         self.host = host
         self.windowController = controller
         controller.selectLaunchDevice()
-        if let progress, let window = controller.window {
-            progress.follow(host.catalog.bundledEntry?.id, on: window)
-        }
     }
 
     /// Development runs: LTM_DEV_BASE names a `firmwarekit create` output directory to run as a
@@ -320,13 +311,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 }
 
-/// "Updating the built-in iPod…": a small window while the legacy erase runs off the main actor,
-/// then a sheet on the device window that follows the built-in device's unpack (FirmwareJobs)
-/// and ends when it is published or fails. The observer holds it until then.
+/// A small window while the legacy erase runs off the main actor.
 private final class MigrationProgress {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 80), styleMask: [.titled], backing: .buffered, defer: false)
     private let bar = NSProgressIndicator()
-    private var observer: (any NSObjectProtocol)?
 
     init() {
         window.title = "Light Touch"
@@ -354,29 +342,5 @@ private final class MigrationProgress {
         ])
         window.contentView = content
         window.center()
-    }
-
-    /// The erase is done: the bar now follows `entry`'s unpack as a sheet on `parent`, if one is under way.
-    func follow(_ entry: String?, on parent: NSWindow) {
-        window.orderOut(nil)
-        guard let entry, case .preparing? = FirmwareJobs.shared.jobs[entry] else { return }
-        parent.beginSheet(window)
-        observer = NotificationCenter.default.addObserver(forName: FirmwareJobs.didChangeNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { self.update(entry, parent) }
-        }
-        update(entry, parent)
-    }
-
-    private func update(_ entry: String, _ parent: NSWindow) {
-        guard case let .preparing(preparation)? = FirmwareJobs.shared.jobs[entry] else {
-            parent.endSheet(window)
-            if let observer { NotificationCenter.default.removeObserver(observer) }
-            observer = nil
-            return
-        }
-        if let overall = preparation.overall {
-            bar.isIndeterminate = false
-            bar.doubleValue = overall
-        }
     }
 }

@@ -3,7 +3,6 @@
 from pathlib import Path
 import os
 import subprocess
-import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
@@ -50,26 +49,6 @@ nonisolated func logEvent(_ format: String, _ arguments: CVarArg...) {}
         try StorageLocations.writeCacheData(Data("replacement icon".utf8), to: icon)
         precondition(try text(icon) == "replacement icon")
         precondition(try children(normalCache).map(\.lastPathComponent) == ["com.example.new.png"])
-        // The built-in device's blob (scripts/pack-base.py's format): unpacked as a stream, modes
-        // kept; a truncated stream, extra bytes and an escaping name are refused.
-        let blob = URL(fileURLWithPath: CommandLine.arguments[2])
-        let image = root.appendingPathComponent("device/image")
-        var fractions: [Double] = []
-        try BundledBase.unpack(blob, into: image) { fractions.append($0) }
-        precondition(try text(image.appendingPathComponent("nand/cs0/1.page")) == "page one" && fractions.last == 1 && fractions == fractions.sorted())
-        precondition(try text(image.appendingPathComponent("nor.bin")) == String(repeating: "n", count: 70000) && exists(image.appendingPathComponent("empty")))
-        precondition(try fm.attributesOfItem(atPath: image.appendingPathComponent("nor.bin").path)[.posixPermissions] as! NSNumber == 0o444)
-        precondition(try fm.attributesOfItem(atPath: image.appendingPathComponent("identity.json").path)[.posixPermissions] as! NSNumber == 0o600)
-        let bytes = try Data(contentsOf: blob)
-        let truncated = root.appendingPathComponent("truncated.itbase")
-        try bytes.prefix(bytes.count - 40).write(to: truncated)
-        do { try BundledBase.unpack(truncated, into: root.appendingPathComponent("device/truncated")); preconditionFailure("truncated blob accepted") } catch {}
-        let escaping = root.appendingPathComponent("escaping.itbase")
-        let index = Data(#"{"entries":[{"name":"../outside","size":0}]}"#.utf8)
-        try (Data("ITPACK01".utf8) + Data([UInt8(index.count), 0, 0, 0]) + index + Data([0x78, 0x9c, 3, 0, 0, 0, 0, 1])).write(to: escaping)
-        do { try BundledBase.unpack(escaping, into: root.appendingPathComponent("device/escaping")); preconditionFailure("escaping name accepted") } catch {}
-        precondition(!exists(root.appendingPathComponent("outside")) && !exists(root.appendingPathComponent("device/escaping")))
-
         let scratch = root.appendingPathComponent("diagnostic temp", isDirectory: true)
         let exports = root.appendingPathComponent("exports", isDirectory: true)
         try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
@@ -119,7 +98,7 @@ nonisolated func logEvent(_ format: String, _ arguments: CVarArg...) {}
         precondition(try children(scratch).isEmpty)
         precondition(try children(exports).allSatisfy { !$0.lastPathComponent.hasPrefix(".LightTouch-") })
         precondition(try text(log) == "sample events")
-        print("PASS: cache isolation/purge recovery, the built-in base unpacked and refused when torn, concurrent diagnostics, cancellation, and atomic export")
+        print("PASS: cache isolation/purge recovery, concurrent diagnostics, cancellation, and atomic export")
     }
 }
 '''
@@ -131,16 +110,6 @@ source = source.replace('func text(_ url:', 'func check(_ condition: Bool, _ mes
 
 with tempfile.TemporaryDirectory(prefix="ltm-storage-check-") as directory:
     work = Path(directory)
-    base = work / "base"
-    (base / "nand/cs0").mkdir(parents=True)
-    (base / "nand/cs0/1.page").write_text("page one")
-    (base / "nor.bin").write_text("n" * 70000)
-    (base / "nor.bin").chmod(0o444)
-    (base / "identity.json").write_text("{}")
-    (base / "identity.json").chmod(0o600)
-    (base / "empty").write_text("")
-    blob = work / "base.itbase"
-    subprocess.run([sys.executable, str(root / "scripts/pack-base.py"), "pack", str(base), str(blob)], check=True, stdout=subprocess.DEVNULL)
     archiver = work / "archive-helper"
     archiver.write_text('''#!/bin/sh
 case "$(cat "$5/info.txt")" in
@@ -156,9 +125,9 @@ exit 1
     executable = work / "check"
     subprocess.run(["xcrun", "swiftc", "-swift-version", "6", "-default-isolation", "MainActor",
                     "-parse-as-library", "-module-cache-path", str(work / "modules"),
-                    str(root / "LightTouchMac/Library/BundledBase.swift"), str(root / "LightTouchMac/Library/StorageLocations.swift"),
+                    str(root / "LightTouchMac/Library/StorageLocations.swift"),
                     str(root / "LightTouchMac/Features/DiagnosticsExport.swift"), str(check), "-o", str(executable)], check=True)
-    subprocess.run([str(executable), str(work), str(blob)], check=True, timeout=45,
+    subprocess.run([str(executable), str(work)], check=True, timeout=45,
                    env=dict(os.environ, LTM_TEST_ARCHIVER=str(archiver)))
     for name, info in [("success.zip", "real ditto archive"), ("concurrent.zip", "concurrent real archive")]:
         archive = work / "exports" / name

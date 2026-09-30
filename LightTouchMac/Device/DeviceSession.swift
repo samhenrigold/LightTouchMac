@@ -110,8 +110,8 @@ import Cocoa
         set { UserDefaults.standard.set(newValue?.id, forKey: Self.lastDeviceKey) }
     }
 
-    /// The last selection, else the built-in device.
-    var launchSelection: FirmwareCatalog.Entry? { lastSelection ?? catalog.bundledEntry }
+    /// The last selection, else the catalog's first-run device.
+    var launchSelection: FirmwareCatalog.Entry? { lastSelection ?? catalog.firstRunEntry }
 
     // MARK: Starting
 

@@ -21,7 +21,7 @@ How Light Touch talks to the user. Check new strings against this; change this f
 | Light Touch | the app | LightTouchMac, "this build" (say "this copy of Light Touch") |
 | prepare, preparing, prepared | turning an IPSW into a device (`firmwarekit create`) | preparer, bake, build, create |
 | download | fetching an IPSW | prepare |
-| Download & Prepare / Prepare | the row's button: Prepare when the IPSW is already here or built in | |
+| Download & Prepare / Prepare | the row's button: Prepare when the IPSW is already here | |
 | Import IPSW… | using an IPSW from disk | |
 | IPSW | the firmware file, in user text | firmware image, restore image |
 | guest tools | the in-device helpers (agent, loader, packages) | agent, it_agent, package, serial, itpack |
@@ -33,6 +33,7 @@ How Light Touch talks to the user. Check new strings against this; change this f
 | Erase All Content and Settings | wiping a device's data | reset, factory reset |
 | Delete Device | removing the device from the Mac | |
 | a component is missing … Reinstall Light Touch | a bundled binary or library is absent | brew install, tool names |
+| Licenses | Help's last section: each shipped component and its license; the texts and SOURCE.txt files in Contents/Resources/licenses | Acknowledgements, third-party notices |
 
 ## State names
 
@@ -44,7 +45,6 @@ The same state has the same words on every surface (sidebar accessory, placehold
 |---|---|---|
 | notDownloaded | Not downloaded (, 580 MB) | row: a tertiary download glyph (`arrow.down.circle`), the words and size in its tooltip and VoiceOver |
 | downloaded | Downloaded | VoiceOver only; the row shows nothing (the usual state) |
-| bundled | Built in | VoiceOver only; the row shows nothing |
 | downloading | Downloading, 43% / Downloading… (row: ring and “43%”) | placeholder: one line under the bar, “43% · About 1 min remaining”; a build that also fetches its keybag sibling says “2 IPSWs” in the bar’s tooltip |
 | preparing | Preparing, 48% / Preparing… (row: ring and “48%”) | placeholder: the same one line; the step and the preparer’s words are the bar’s tooltip |
 | ready | Ready | |
@@ -126,7 +126,7 @@ Apps inspector banner: Device powered off, Device powering off…, Reconnecting 
 | iOS on screen, USB not answering by the boot budget (the device keeps running) | The iPod is running, but it isn’t connected over USB yet. Installing apps and transferring files aren’t available until it connects. |
 | files changed under a running device | Files of this iPod were changed while it was running. Stop and start it again; unsaved changes may be lost. |
 | older data | This iPod’s data was made with an older system image. |
-| legacy erase and the unpack after it (window, then sheet) | Updating the built-in iPod… |
+| legacy erase (a window while it runs) | Erasing the earlier iPod… (alert before it: “The iPod from an earlier version of Light Touch can’t be used.” / “Erase it and continue (apps you’ve saved are kept), or quit.”) |
 
 ### Web proxy (`WebProxyStatus.message`)
 
