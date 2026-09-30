@@ -264,6 +264,7 @@ final class N72Board: Board {
         let fw = FitCheck.Firmware(root: m, arch: arch)
         let toolsFit = try Self.guestToolsFit(fw, helpers: helpers)
         let tools = try c.fit.check(toolsFit, required: false)
+        if opt["appsync"] == true { try FitCheck.checkAppSync(c.fit, fw, helpers: helpers) } else { c.fit.notInstalled("AppSync", "appsync off") }
         // the reorder tip's key: set by it_prefs at boot (tools) or baked below; either way only if SpringBoard reads it
         try c.fit.check(FitCheck.prefs(fw, [FitCheck.itPrefs[0]])[0], required: false, outcome: tools ? "kept: it_prefs skips the key at boot" : "not baked")
         var report: [String: Any] = [:]

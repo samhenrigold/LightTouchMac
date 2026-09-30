@@ -301,6 +301,7 @@ FirmwareKit's `FitCheckTests` unless named; each fails with its check removed (t
 | 1.x LaunchDaemons keep-list | C | each kept job is among the firmware's | prepare | warning | `n45SurveyRecordsTheKeptJobs` |
 | iPod kernelcache path | A | read out of the decrypted iBoot (exactly one) | prepare | fails | (unchanged) |
 | dyld `enable-dylibs-to-override-cache` | A | dyld names the switch; fails closed | prepare | fails | (GL work, unchanged) |
+| AppSync `libappsync.dylib` and `appsync-launch` (where `options.appsync` is on) | B (only the helper's own shape: slices, a signature, no modern load commands without a shared cache; nothing checked against the service it goes into) | `FitCheck.appSync`, in the program installAppSync inserts it into (installd's job; 2.x: Lockbot's `mobile_installation_proxy` service): that process (the program and every image it links, prebound 2.x/3.0 imports counted) imports what the dylib hooks: `MISValidateSignatureAndCopyInfo` or `MISValidateSignature`, `SecCertificateCreateWithData`, `SecCertificateCopySubjectSummary`, `kMISValidationInfoSignerCertificate`, `kMISValidationInfoValidatedByProfile`; the dylib's getprogname gate names the program; `loads` in it. `appSyncLauncher`: loads, inserts `/usr/lib/libappsync.dylib`, execs a Mach-O the CPU runs. Where appsync is off: recorded `not installed (appsync off)`, nothing checked | prepare | fails | `appSyncFitsEveryAppSyncFamily`, `appSyncDoesNotFitWhereItCannotWork`, `k48BakeChecksAppSync`, `k48BakeLeavesOutWhatDoesNotFit`, `iPodToolsOnlyWhereTheyLoad` |
 | `MISValidateSignature` cache patch | A | located by symbol, Thumb prologue byte-checked before any write | prepare | fails | `SharedCacheTests` (unchanged) |
 | Stock job edits (SpringBoard, storage_mounter, installd, BTServer) | A | the job exists under its label | prepare | fails | (unchanged) |
 | `it_seal`, `it_keybag` | A | the prepare's own boots require their lines (`it_seal: halting`, the keybag done line) | boot inside the prepare | fails | (unchanged) |
@@ -310,8 +311,13 @@ pre-fit-check pipeline): no build that got through the volumes step before fails
 5.x (9A334, 9A405, 9A5288d, 9B176, 9B206): MobileStorageMounter names neither notice key, so `it_msmquiet` had nothing
 to hide and is now left out; 2.x and 3.0 iPod kernels (5F138, 5G77a, 5H11a, 7A341) have no `cs_enforcement_disable`
 boot-arg (only the `_cs_enforcement_disable` global), so the arg is inert there (their guest code runs on
-`amfi_allow_any_signature` alone); the iPod helpers do not load on 2.x/3.0 (as before, now proven). Not covered yet:
-AppSync's dylib and launcher (a `loads` check in installd / the installation proxy needs Sam's approval), the GL engines
+`amfi_allow_any_signature` alone); the iPod helpers do not load on 2.x/3.0 (as before, now proven). AppSync
+(2026-09-30, the 40 appsync-on entries, against the same run without the check): the 37 that got through the volumes
+step still do, every one with libappsync fitting (installd on 3.0 to 4.3.5; on 2.x `mobile_installation_proxy`, whose
+MobileInstallation framework makes the libmis and Security calls, with `appsync-launch` fitting too); the three 4.3
+betas (8F5148b, 8F5153d, 8F5166b) stop before it as before (no k48dev iBSS in those IPSWs). 5.1.1's installd passes the
+same check (FitCheck, 9B206), so AppSync being off on 5.x is not something installd's shape shows. Not covered yet:
+the GL engines
 and gld plugin (the GL work), activation (Sam's), the iPod's Sounds defaults (keys not proven), and the Python imgtools
 mirror (unchanged).
 

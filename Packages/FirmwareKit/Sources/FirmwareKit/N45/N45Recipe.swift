@@ -123,6 +123,7 @@ final class N45Board: Board {
             try c.ipsw.extract(kcMember, to: at(kcPath))
             let jobs = try fm.contentsOfDirectory(atPath: at(SystemEdits.daemons).path).filter { $0.hasSuffix(".plist") }
             try c.fit.check(Self.keptDaemonsFit(jobs), required: false, outcome: "the rest removed as planned")
+            c.fit.notInstalled("AppSync", recipe.options["appsync"] == true ? "the 1.x recipe has no AppSync" : "appsync off")
             let removed = jobs.filter { !Self.keptDaemons.contains($0) }.sorted()
             for n in removed { try fm.removeItem(at: at(SystemEdits.daemons + "/" + n)) }
             for d in ["", "/AddressBook", "/Lockdown", "/Preferences"] {

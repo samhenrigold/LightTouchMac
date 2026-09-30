@@ -174,6 +174,7 @@ public enum SystemEdits {
             for t in tools where t.name != msm.name {
                 try fit.check(FitCheck.loads(t.name, Data(contentsOf: try helper(t.name)), on: fw), required: true)
             }
+            if o.appsync { try FitCheck.checkAppSync(fit, fw, helpers: helpers) } else { fit.notInstalled("AppSync", "appsync off") }
             if let kernelcache {   // real-iBoot fsboot: the raw IPSW img3 kernelcache in the system volume
                 try mkdirs(at(kernelcachePath).deletingLastPathComponent())
                 try put(kernelcache, at(kernelcachePath), mode: 0o644)
