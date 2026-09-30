@@ -132,10 +132,18 @@ public enum DiskImage {
     /// Every attached disk image: (image path, its whole-disk /dev entry). `hdiutil info` (deprecated, still
     /// functional on 27) is the only listing that names the image file; diskutil's info has no path.
     public static func attachedImages() -> [(image: String, device: String)] {
+        (try? checkedAttachedImages()) ?? []
+    }
+
+    /// Cleanup must distinguish an empty attachment list from a failed query.
+    public static func checkedAttachedImages() throws -> [(image: String, device: String)] {
         let (status, out) = exec(["/usr/bin/hdiutil", "info", "-plist"])
         guard status == 0, let start = out.range(of: "<?xml"),
-              let info = try? PropertyListSerialization.propertyList(from: Data(out[start.lowerBound...].utf8), format: nil) as? [String: Any] else { return [] }
-        return (info["images"] as? [[String: Any]] ?? []).compactMap { image in
+              let info = try? PropertyListSerialization.propertyList(from: Data(out[start.lowerBound...].utf8), format: nil) as? [String: Any],
+              let images = info["images"] as? [[String: Any]] else {
+            throw FirmwareError(.internal, "could not inspect mounted disk images: \(out.suffix(600))")
+        }
+        return images.compactMap { image in
             guard let path = image["image-path"] as? String,
                   let dev = (image["system-entities"] as? [[String: Any]])?.compactMap({ $0["dev-entry"] as? String }).min(by: { $0.count < $1.count })
             else { return nil }

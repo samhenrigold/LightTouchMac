@@ -73,6 +73,14 @@ func takeLease(_ path: String?) -> Bool {
     let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
     guard fd >= 0 else { helperLog("lease \(path): \(String(cString: strerror(errno)))"); return false }
     guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { helperLog("lease \(path) is held"); close(fd); return false }
+    // Check after taking the same lock as offline editing: an app relaunch must
+    // not boot while an edit's owner has exited but its durable intent remains.
+    let edit = ((path as NSString).deletingLastPathComponent as NSString).appendingPathComponent("edit.json")
+    guard !FileManager.default.fileExists(atPath: edit) else {
+        helperLog("unfinished storage edit \(edit); resolve it before booting")
+        close(fd)
+        return false
+    }
     leaseDescriptor = fd
     return true
 }

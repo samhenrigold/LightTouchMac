@@ -7,8 +7,8 @@
 //   5. mount: a read-only attach (DiskImage) with browsing on, so the stock HFS driver serves it in Finder.
 //
 // Base and overlay files are never opened for writing. <out>/export.json records what is attached;
-// unmount(out:) detaches it and deletes <out>. The caller (the app's lease, F0) guarantees the device is
-// stopped; nothing here can tell a running device's overlay from a stopped one.
+// unmount(out:) detaches it and deletes <out>. Device-directory sources acquire the helper's
+// exclusive storage lease. Direct base/overlay sources are for already isolated research fixtures.
 
 import Foundation
 
@@ -16,7 +16,8 @@ public enum VolumeExport {
     public struct Source: Sendable {
         public let base: URL
         public let overlay: URL?
-        public init(base: URL, overlay: URL?) { self.base = base; self.overlay = overlay }
+        let lease: URL?
+        public init(base: URL, overlay: URL?) { self.base = base; self.overlay = overlay; lease = nil }
 
         /// A device directory: an app instance (device.json; paths relative to the state root two levels up),
         /// or an imgtools device (nand/ or base/, with overlay/ beside it). A base holding nand/ uses that.
@@ -40,7 +41,9 @@ public enum VolumeExport {
                 overlay = dir.appendingPathComponent("overlay")
             }
             if fm.fileExists(atPath: base.appendingPathComponent("nand").path) { base = base.appendingPathComponent("nand") }
-            self.init(base: base, overlay: fm.fileExists(atPath: overlay.path) ? overlay : nil)
+            self.base = base
+            self.overlay = fm.fileExists(atPath: overlay.path) ? overlay : nil
+            lease = dir.appendingPathComponent("work/lease")
         }
     }
 
@@ -58,13 +61,31 @@ public enum VolumeExport {
 
     public static func manifest(_ out: URL) -> URL { out.appendingPathComponent("export.json") }
 
-    /// Steps 1-4: images in `out` (created; must not exist or be empty), ready to attach or keep.
+    /// Steps 1-4: images in a fresh `out` directory, ready to attach or keep.
     public static func export(_ src: Source, volumes: Set<String>? = nil, out: URL, log: (String) -> Void = { _ in }) throws -> [Exported] {
+        let lease = try src.lease.map(StoppedStorageLease.init)
+        defer { withExtendedLifetime(lease) {} }
         let fm = FileManager.default
-        if let names = try? fm.contentsOfDirectory(atPath: out.path), !names.isEmpty {
-            throw FirmwareError(.internal, "\(out.path) is not empty")
+        let dest = out.resolvingSymlinksInPath().standardizedFileURL.path
+        for source in [src.base, src.overlay].compactMap({ $0 }) {
+            let path = source.resolvingSymlinksInPath().standardizedFileURL.path
+            guard dest != path, !dest.hasPrefix(path + "/"), !path.hasPrefix(dest + "/") else {
+                throw FirmwareError(.internal, "export destination must be separate from source storage")
+            }
         }
-        try fm.createDirectory(at: out, withIntermediateDirectories: true)
+        // Own a fresh directory; never remove a caller's pre-existing files on failure.
+        guard !fm.fileExists(atPath: out.path) else {
+            throw FirmwareError(.internal, "\(out.path) already exists; choose a fresh export directory")
+        }
+        try fm.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.createDirectory(at: out, withIntermediateDirectories: false)
+        var completed = false
+        defer {
+            if !completed {
+                do { try removeDetachedOutput(out) }
+                catch { log("export staging retained at \(out.path): \(error)") }
+            }
+        }
         var t = Date()
         var overlay: URL?
         if let o = src.overlay {
@@ -91,6 +112,9 @@ public enum VolumeExport {
                 VolumeMount.detach(dev)
                 log("\(v.name): not cleanly unmounted; fsck_hfs -fy exit \(status): \(output.suffix(300))")
                 repaired = true
+                guard status == 0 else {
+                    throw FirmwareError(.internal, "\(v.name): filesystem repair failed: \(output.suffix(600))")
+                }
             }
             let mnt = out.appendingPathComponent(".mnt-\(v.name)")
             try VolumeMount.withMounted(v.image, at: mnt) { root in
@@ -101,6 +125,7 @@ public enum VolumeExport {
                                    seconds: rebuildTime / Double(vols.count) + Date().timeIntervalSince(t)))
         }
         try write(result, out)
+        completed = true
         return result
     }
 
@@ -117,6 +142,8 @@ public enum VolumeExport {
                 try write(vols, out)
             }
         } catch {
+            // `vols` includes an attachment even if publishing export.json failed.
+            for v in vols { if let device = v.device { VolumeMount.detach(device) } }
             try? unmount(out: out)
             throw error
         }
@@ -125,13 +152,35 @@ public enum VolumeExport {
 
     /// Detaches what `out`'s export.json says is attached, then deletes `out`.
     public static func unmount(out: URL) throws {
-        if let d = try? Data(contentsOf: manifest(out)), let vols = try? JSONDecoder().decode([Exported].self, from: d) {
-            let attached = DiskImage.attachedImages().map(\.image)     // skip what Finder already ejected
-            for v in vols where attached.contains(v.image) { v.device.map { VolumeMount.detach($0, force: true) } }
-            let still = DiskImage.attachedImages().map(\.image)
-            for v in vols where v.device != nil && still.contains(v.image) {
-                throw FirmwareError(.internal, "\(v.image) is still attached (\(v.device!)); close what uses \(v.mountPoint ?? "it")")
-            }
+        let vols = try readManifest(out)
+        let paths = Set(vols.map { URL(fileURLWithPath: $0.image).resolvingSymlinksInPath().path })
+        for attached in try DiskImage.checkedAttachedImages() where paths.contains(URL(fileURLWithPath: attached.image).resolvingSymlinksInPath().path) {
+            // Query the current device node: a manifest's old /dev/diskN may have been reused.
+            VolumeMount.detach(attached.device)
+        }
+        for attached in try DiskImage.checkedAttachedImages() where paths.contains(URL(fileURLWithPath: attached.image).resolvingSymlinksInPath().path) {
+            throw FirmwareError(.internal, "\(attached.image) is still attached; close its files before unmounting")
+        }
+        try removeDetachedOutput(out)
+    }
+
+    static func readManifest(_ out: URL) throws -> [Exported] {
+        let vols = try JSONDecoder().decode([Exported].self, from: Data(contentsOf: manifest(out)))
+        let root = out.resolvingSymlinksInPath().path + "/"
+        guard !vols.isEmpty, vols.allSatisfy({ URL(fileURLWithPath: $0.image).resolvingSymlinksInPath().path.hasPrefix(root) }) else {
+            throw FirmwareError(.internal, "invalid export manifest; image paths must belong to the export directory")
+        }
+        return vols
+    }
+
+    /// Used only for staging directories created by this operation. On failed
+    /// eject or image discovery, retain the artifact rather than unlink a live disk.
+    static func removeDetachedOutput(_ out: URL) throws {
+        let root = out.resolvingSymlinksInPath().path + "/"
+        guard try DiskImage.checkedAttachedImages().allSatisfy({
+            !URL(fileURLWithPath: $0.image).resolvingSymlinksInPath().path.hasPrefix(root)
+        }) else {
+            throw FirmwareError(.internal, "export still has attached disk images")
         }
         try FileManager.default.removeItem(at: out)
     }
