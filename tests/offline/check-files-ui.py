@@ -14,9 +14,12 @@ with tempfile.TemporaryDirectory(prefix='ltm-files-ui-') as tmp:
  override var mainWindow:NSWindow? { commandWindow }
 }
 struct DeviceFile: Sendable { let name,path:String;let isDirectory,isRegular:Bool;let size:UInt64 }
+// Listings the fake has handed back; the reply's consumer runs in the same main-actor job, so once the count moves the reply was taken or dropped.
+var replies=0
 struct DeviceServices: Sendable {
  func files(in path:String) async throws ->[DeviceFile] {
   try? await Task.sleep(for:.milliseconds(30)) // Deliberately deliver after cancellation.
+  defer { replies+=1 }
   return path.isEmpty ? [DeviceFile(name:"Folder",path:"Folder",isDirectory:true,isRegular:false,size:0)] : [DeviceFile(name:"file.bin",path:"Folder/file.bin",isDirectory:false,isRegular:true,size:10)]
  }
  func freeSpaceBytes() async throws ->Int64 { 2_500_000_000 }
@@ -44,19 +47,20 @@ final class Sink: NSResponder {
   (NSApp as! FilesApplication).commandWindow=window
   controller.showWindow(nil)
   window.setContentSize(NSSize(width:360,height:500))
+  // Wait on the listing itself; the deadline only guards a hang (host load must not decide the verdict).
+  func until(_ what:String,_ ok:()->Bool) async throws {
+   let guardline=Date().addingTimeInterval(15)
+   while !ok() { precondition(Date()<guardline,"hung waiting: \(what)"); try await Task.sleep(for:.milliseconds(10)) }
+  }
   vc.reload()
-  try await Task.sleep(for:.milliseconds(100))
   func children(_ view:NSView)->[NSView] { view.subviews.flatMap{[$0]+children($0)} }
   let all=children(vc.view)
   let browser=all.compactMap{$0 as? NSBrowser}.first!
-  precondition(browser.matrix(inColumn:0)!.numberOfRows==1)
+  func rows(_ column:Int)->Int { browser.matrix(inColumn:column)?.numberOfRows ?? -1 }
+  try await until("the root listing") { rows(0)==1 }
   browser.selectRow(0,inColumn:0)
   browser.addColumn()
-  for _ in 0..<40 {
-   if browser.matrix(inColumn:1)?.numberOfRows == 1 { break }
-   try await Task.sleep(for:.milliseconds(50))
-  }
-  precondition(browser.matrix(inColumn:1)!.numberOfRows==1)
+  try await until("the folder listing") { rows(1)==1 }
   browser.selectRow(0,inColumn:1)
   browser.sendAction(browser.action!,to:browser.target)
   let export=all.compactMap{$0 as? NSButton}.first{$0.title=="Save to Mac…"}!
@@ -71,9 +75,9 @@ final class Sink: NSResponder {
   precondition(NSApp.sendAction(hidden.action!,to:nil,from:hidden))
   precondition(vc.validateMenuItem(hidden) && hidden.title=="Hide Hidden Files" && hidden.state == .off)
   precondition(NSApp.sendAction(hidden.action!,to:nil,from:hidden))
-  try await Task.sleep(for:.milliseconds(100))
+  try await until("the root listing again") { rows(0)==1 }
   browser.selectRow(0,inColumn:0);browser.addColumn()
-  try await Task.sleep(for:.milliseconds(100))
+  try await until("the folder listing again") { rows(1)==1 }
   precondition(!vc.validateMenuItem(save),"Directories cannot be exported as files")
   browser.selectRow(0,inColumn:1);browser.sendAction(browser.action!,to:browser.target)
   for width in [360.0,660.0,900.0] {
@@ -91,8 +95,9 @@ final class Sink: NSResponder {
   controller.showWindow(nil)
   precondition(controller.browser === vc && browser.selectedColumn == 1)
   precondition(!window.isExcludedFromWindowsMenu && window.styleMask.contains(.resizable))
+  let asked=replies
   vc.reload();vc.services=nil;vc.reload()
-  try await Task.sleep(for:.milliseconds(100))
+  try await until("the stale listing's reply") { replies>asked }
   precondition(browser.matrix(inColumn:0)!.numberOfRows==0 && !export.isEnabled)
   precondition(!vc.validateMenuItem(save) && !vc.validateMenuItem(copy) && !vc.validateMenuItem(cancel))
   let idleStatus=vc.transferStatus;vc.cancelTransfer();precondition(vc.transferStatus==idleStatus)
@@ -107,4 +112,4 @@ final class Sink: NSResponder {
 }
 ''')
  subprocess.run(['xcrun','swiftc','-default-isolation','MainActor',str(root/'LightTouchMac/App/WindowRestorationPolicy.swift'),str(root/'LightTouchMac/UI/DeviceFilesViewController.swift'),str(root/'LightTouchMac/UI/DeviceFilesWindowController.swift'),str(root/'LightTouchMac/Device/DeviceProfile.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
- subprocess.run([str(tmp/'check')],check=True,timeout=20)
+ subprocess.run([str(tmp/'check')],check=True,timeout=120)  # hang guard only

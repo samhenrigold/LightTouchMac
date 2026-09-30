@@ -82,38 +82,48 @@ struct Serial { func finish() {} }
 ''' + deadline.replace("private func", "func").replace("private var", "var") + died.replace("audioSink?(.audioEnded(generation: 0, failed: true))", "audioSink?(0)") + r'''}
 @main struct Check {
  @MainActor static func main() async throws {
-  func settle(_ ms: Int) async { try? await Task.sleep(for: .milliseconds(ms)) }
+  // Waits on the watch's own task, or on the condition; the deadline is only a hang guard (host load).
+  func watched(_ c: Controller) async { await c.bootWatchTask?.value }
+  func until(_ what: String, _ ok: () -> Bool) async {
+   let guardline = Date().addingTimeInterval(30)
+   while !ok() { precondition(Date() < guardline, "hung waiting: \(what)"); try? await Task.sleep(for: .milliseconds(5)) }
+  }
+  // The deadline fired and chose to stop (the helper was told), then the helper's exit ends the session.
+  func halted(_ c: Controller, _ what: String) async {
+   await watched(c); precondition(c.process!.terms == 1, "\(what): not stopped at the deadline")
+   await until(what) { c.isDead }
+  }
   // No uiReady within the budget: halted, dead with the deadline reason.
   let late = Controller(.iPodTouch2G)
-  late.startBootWatch(); await settle(600)
+  late.startBootWatch(); await halted(late, "late")
   precondition(late.process!.terms == 1 && late.isDead && late.deathReason == Controller.deadlineReason(.iPodTouch2G))
   precondition(late.deathReason!.hasPrefix("The iPod didn’t start within"))
   // lockdown answered in time (QEMU's uiReady alone is iBoot's display, not iOS): nothing happens.
   let lit = Controller(.iPad1); lit.deviceReachable = true
-  lit.startBootWatch(); await settle(600)
+  lit.startBootWatch(); await watched(lit)
   precondition(lit.process!.terms == 0 && !lit.isDead && lit.deathReason == nil)
   let quiet = Controller(.iPad1); quiet.status!.uiReady = true
-  quiet.startBootWatch(); await settle(600)
+  quiet.startBootWatch(); await halted(quiet, "quiet")
   precondition(quiet.isDead, "a lit display without lockdown is not a finished boot")
   // iBoot's logo on screen (frames painted) but the boot never got past the kernel: still stopped.
   let logo = Controller(.iPad1); logo.state = .running; logo.bootStage = .kernel
-  logo.startBootWatch(); await settle(600)
+  logo.startBootWatch(); await halted(logo, "logo")
   precondition(logo.isDead && logo.deathReason == Controller.deadlineReason(.iPad1), "iBoot's picture alone is not iOS")
   // iOS on screen ("slide to set up") with its guest tools reporting, USB never answering: kept running.
   let setUp = Controller(.iPad1); setUp.state = .running; setUp.bootStage = .system
-  setUp.startBootWatch(); await settle(600)
+  setUp.startBootWatch(); await watched(setUp)
   precondition(!setUp.isDead && setUp.process!.terms == 0 && setUp.deathReason == nil, "a device on screen isn't killed for its USB")
   // The same boot without a picture: stopped.
   let dark = Controller(.iPad1); dark.bootStage = .system
-  dark.startBootWatch(); await settle(600)
+  dark.startBootWatch(); await halted(dark, "dark")
   precondition(dark.isDead, "no picture by the deadline: stopped")
   let noUSB = Controller(.iPodTouch2G); noUSB.usbmux.session = nil; noUSB.state = .running
-  noUSB.startBootWatch(); await settle(600)
+  noUSB.startBootWatch(); await watched(noUSB)
   precondition(!noUSB.isDead, "without a USB bridge, painting has to do")
   // Recovery mode on serial: at once, with the recovery reason; the helper's own exit keeps it.
   let recovery = Controller(.iPad1)
   recovery.startBootWatch()
-  recovery.abortBoot(Controller.recoveryReason(.iPad1)); await settle(100)
+  recovery.abortBoot(Controller.recoveryReason(.iPad1)); await until("recovery halted") { recovery.isDead }
   precondition(recovery.process!.terms == 1 && recovery.isDead && recovery.deathReason == Controller.recoveryReason(.iPad1))
   precondition(recovery.deathReason!.contains("recovery mode") && recovery.deathReason!.contains("iPad"))
   recovery.abortBoot("again"); precondition(recovery.process!.terms == 1, "a dead session isn't aborted twice")
@@ -121,7 +131,7 @@ struct Serial { func finish() {} }
   let stuck = Controller(.iPodTouch2G)
   stuck.process!.hung = true
   let stubborn = stuck.process!
-  stuck.abortBoot("stuck"); await settle(400)
+  stuck.abortBoot("stuck"); await until("stuck killed") { stubborn.kills == 1 }
   precondition(stubborn.terms == 1 && stubborn.kills == 1)
   // Stop/powered-off sessions are left to their own paths.
   let stopping = Controller(.iPodTouch2G); stopping.shuttingDown = true
@@ -150,7 +160,8 @@ struct Serial { func finish() {} }
   let matches = Matches()
   let reader = try LogPipeReader(descriptor: fds[0], log: RotatingLog(url: dir.appendingPathComponent("serial.log")),
                                  watch: .init(phrases: ["Entering recovery mode", "root filesystem mount failed"]) { matches.add($0) })
-  func write(_ text: String) { _ = text.withCString { Darwin.write(fds[1], $0, strlen($0)) }; usleep(50_000) }
+  // Each write is drained (flush waits on the reader's queue) before the next, so every write is its own chunk.
+  func write(_ text: String) { _ = text.withCString { Darwin.write(fds[1], $0, strlen($0)) }; reader.flush() }
   write("iBoot-636.66\nroot filesystem mou")
   write("nt failed\nEntering reco")
   precondition(matches.all == ["root filesystem mount failed"], "\(matches.all)")
@@ -178,13 +189,13 @@ final class Matches: @unchecked Sendable {
             Path(os.environ["LTM_DUMP"]).write_text(source)
         subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/BootStage.swift"),
                         str(p), "-o", d + "/check"], check=True)
-        subprocess.run([d + "/check"], check=True, timeout=20)
+        subprocess.run([d + "/check"], check=True, timeout=120)
         w = Path(d) / "watch.swift"
         w.write_text(watch)
         subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", *[str(ROOT / "LightTouchMac" / f)
                         for f in ("Transport/NativeLogging.swift", "Library/StorageLocations.swift", "Library/Bundled.swift", "Transport/AppEventLog.swift")],
                         str(w), "-o", d + "/watch"], check=True)
-        subprocess.run([d + "/watch"], check=True, timeout=20, env=dict(os.environ, LTM_STATE_DIR=d + "/state"))
+        subprocess.run([d + "/watch"], check=True, timeout=120, env=dict(os.environ, LTM_STATE_DIR=d + "/state"))
 
 
 def live(args):

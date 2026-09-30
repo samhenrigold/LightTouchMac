@@ -61,25 +61,34 @@ import Foundation
 func expect(_ ok: Bool, _ what: @autoclosure () -> String, line: Int = #line) {
     if !ok { print("FAIL line \(line): \(what())"); exit(1) }
 }
-/// Ticks on the main actor every 10 ms and keeps the longest gap between ticks.
+/// Ticks on the main actor every 10 ms and keeps the longest gap between ticks: `worst` in wall time (for the
+/// log) and `worstBusy` in the main thread's own CPU time. A main actor held by work burns CPU through its gap;
+/// one the host just didn't schedule (load averages of 100+) burns none, so `worstBusy` is the verdict.
 @MainActor final class Heartbeat {
-    var beats = 0, worst = 0.0
+    var beats = 0, worst = 0.0, worstBusy = 0.0
     var onBeat: () -> Void = {}
     private var task: Task<Void, Never>?
+    private var last = Date(), lastBusy = 0.0
+    private func busy() -> Double { var t = timespec(); clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t); return Double(t.tv_sec) + Double(t.tv_nsec) / 1e9 }
+    private func gap() {
+        let now = Date(), nowBusy = busy()
+        worst = max(worst, now.timeIntervalSince(last))
+        worstBusy = max(worstBusy, nowBusy - lastBusy)
+        last = now; lastBusy = nowBusy
+    }
     func start() {
-        var last = Date()
+        last = Date(); lastBusy = busy()
         task = Task { @MainActor in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(10))
-                let now = Date()
-                worst = max(worst, now.timeIntervalSince(last))
-                last = now
+                gap()
                 beats += 1
                 onBeat()
             }
         }
     }
-    func stop() { task?.cancel() }
+    /// The gap up to now counts too: work that held the main actor until the awaited call returned never lets a tick in.
+    func stop() { gap(); task?.cancel() }
 }
 @main struct Check {
 @MainActor static func main() async throws {
@@ -136,8 +145,8 @@ case "legacy-quit":
         guard heart.beats >= 20, IPALibrary.index.values.contains(where: { $0.bundleID == "com.example.shared" }) else { return }
         expect(fm.fileExists(atPath: LegacyState.marker(state).path) && fm.fileExists(atPath: state.appendingPathComponent("device").path),
                "marked, and not done yet")
-        expect(heart.worst < 0.25, "the main actor free: worst gap \(heart.worst) s")
-        print("PASS legacy-quit: quit midway (\(heart.beats) heartbeats, worst gap \(Int(heart.worst * 1000)) ms)")
+        expect(heart.worstBusy < 0.25, "the main actor free: worst gap \(heart.worstBusy) s of main-thread CPU (\(heart.worst) s wall)")
+        print("PASS legacy-quit: quit midway (\(heart.beats) heartbeats, worst gap \(Int(heart.worstBusy * 1000)) ms busy, \(Int(heart.worst * 1000)) ms wall)")
         exit(0)
     }
     heart.start()
@@ -159,9 +168,9 @@ case "legacy":
     try await legacy.erase()
     heart.stop()
     let took = Date().timeIntervalSince(started)
-    expect(took > 0.5 && heart.worst < 0.25 && Double(heart.beats) > took / 0.05,
-           "the main actor kept running: worst gap \(heart.worst) s over \(took) s, \(heart.beats) beats")
-    print("  erase: \(String(format: "%.1f", took)) s off the main actor, worst main-actor gap \(Int(heart.worst * 1000)) ms")
+    expect(took > 0.5 && heart.worstBusy < 0.25 && heart.beats > 20,
+           "the main actor kept running: worst gap \(heart.worstBusy) s of main-thread CPU (\(heart.worst) s wall) over \(took) s, \(heart.beats) beats")
+    print("  erase: \(String(format: "%.1f", took)) s off the main actor, worst main-actor gap \(Int(heart.worstBusy * 1000)) ms busy, \(Int(heart.worst * 1000)) ms wall")
     expect(!fm.fileExists(atPath: LegacyState.marker(state).path), "the marker goes with the erase")
     for name in ["device", "nandrw-nand-ultimate", "snapshot-nand-ultimate", "IPAs", "app.log", "AppCache", "work/usbmuxd.pid", "work/session.env"] {
         expect(!fm.fileExists(atPath: state.appendingPathComponent(name).path), "\(name) erased")

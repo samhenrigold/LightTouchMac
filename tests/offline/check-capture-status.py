@@ -37,7 +37,14 @@ final class DisplayView:NSView {}
     }
    }
   }
-  // Finder moves a file to Trash instead of unlinking it. Both must dismiss promptly.
+  // Pump the main run loop until the condition holds; the deadline only guards a hang (host load must not decide the verdict).
+  func until(_ what:String,_ ok:()->Bool) {
+   let guardline=Date().addingTimeInterval(30)
+   while !ok() { precondition(Date()<guardline,what); RunLoop.main.run(until:Date().addingTimeInterval(0.02)) }
+  }
+  // Finder moves a file to Trash instead of unlinking it. Both must dismiss the banner. The 5 s auto-dismissal
+  // is held off meanwhile, so only the file's own removal can hide it, however slow the host.
+  CaptureStatusView.autoDismissal = .seconds(3600)
   let temporary=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at:temporary,withIntermediateDirectories:true)
   defer {try? FileManager.default.removeItem(at:temporary)}
@@ -47,24 +54,33 @@ final class DisplayView:NSView {}
    status.showCapture(title:"Screenshot saved",image:NSImage(size:NSSize(width:320,height:480)),fileURL:saved)
    if move {try FileManager.default.moveItem(at:saved,to:temporary.appendingPathComponent("Trashed.\(extensionName)"))}
    else {try FileManager.default.removeItem(at:saved)}
-   RunLoop.main.run(until:Date().addingTimeInterval(0.5))
-   precondition(status.isHidden,"File removal did not dismiss the banner")
+   until("File removal did not dismiss the banner") { status.isHidden }
   }
   // A queued event for the old file must not dismiss a newer capture.
   let old=temporary.appendingPathComponent("Old.png"),new=temporary.appendingPathComponent("New.png")
   try Data([0]).write(to:old);try Data([0]).write(to:new)
   status.showCapture(title:"Old",image:NSImage(size:NSSize(width:1,height:1)),fileURL:old)
+  // Our own watch on the old file: once it has fired on the main queue, the old removal event has been delivered.
+  let sentinelFD=open(old.path,O_EVTONLY);precondition(sentinelFD>=0)
+  let sentinel=DispatchSource.makeFileSystemObjectSource(fileDescriptor:sentinelFD,eventMask:[.delete],queue:.main)
+  var oldEventSeen=false
+  sentinel.setEventHandler { oldEventSeen=true };sentinel.setCancelHandler { close(sentinelFD) };sentinel.resume()
   try FileManager.default.removeItem(at:old)
   status.showCapture(title:"New",image:NSImage(size:NSSize(width:1,height:1)),fileURL:new)
-  RunLoop.main.run(until:Date().addingTimeInterval(0.5))
+  until("the old file's removal event never arrived") { oldEventSeen }
+  sentinel.cancel()
+  // Then let whatever the old event queued (a main-actor task, and the 200 ms fade) run out.
+  var drained=false
+  Task { try? await Task.sleep(for:.milliseconds(300)); drained=true }
+  until("the main actor never drained") { drained }
   precondition(!status.isHidden,"Old capture event dismissed a new banner")
   precondition(status.fileURL==new,"Reveal must target the visible capture")
-  // Feedback disappears without a click; the idle canvas has no child panel.
+  // Feedback disappears without a click (the shipped 5 s); the idle canvas has no child panel.
+  CaptureStatusView.autoDismissal = .seconds(5)
   status.showCapture(title:"Screenshot saved",image:NSImage(size:NSSize(width:320,height:480)),fileURL:nil)
   precondition(status.fileURL==nil,"A copied capture must not reveal an earlier saved file")
   content.updateStatusVisibility()
-  let dismissalDeadline=Date().addingTimeInterval(7)
-  while !status.isHidden && Date()<dismissalDeadline { RunLoop.main.run(until:Date().addingTimeInterval(0.05)) }
+  until("Feedback did not dismiss") { status.isHidden }
   precondition(status.isHidden && !panel.isVisible && panel.parent==nil,"Feedback did not dismiss")
   precondition(screen.frame==content.bounds)
   status.update(title:"Starting iOS…",busy:true)
@@ -84,4 +100,4 @@ with tempfile.TemporaryDirectory(prefix='ltm-status-') as directory:
  work=Path(directory);(work/'check.swift').write_text(fixture)
  sources=[root/'LightTouchMac'/name for name in ['App/WindowRestorationPolicy.swift','Features/CaptureFileMonitor.swift','UI/CaptureStatusView.swift','UI/DeviceContentView.swift']]
  subprocess.run(['swiftc','-default-isolation','MainActor','-module-cache-path',str(work/'modules'),*map(str,sources),str(work/'check.swift'),'-o',str(work/'check')],check=True)
- subprocess.run([str(work/'check')],check=True,timeout=30)
+ subprocess.run([str(work/'check')],check=True,timeout=120)  # hang guard only
