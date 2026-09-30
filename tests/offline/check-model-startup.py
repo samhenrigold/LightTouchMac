@@ -16,6 +16,7 @@ stub_source = prefix + r'''
  var viewportCenter: CGPoint?
  static var loadingDelay:Duration = .zero
  static var preparationDelay:Duration = .milliseconds(50)
+ static var framesPrepared=0
  let delay:Duration
  var shellPixels: CGSize { CGSize(width:737,height:1318) }
  enum Control { case sleepWake, volumeUp, volumeDown }
@@ -31,6 +32,7 @@ stub_source = prefix + r'''
   await withCheckedContinuation { continuation in
    Task { try? await Task.sleep(for:delay);continuation.resume() }
   }
+  Self.framesPrepared+=1
   return true
  }
  func pose(scale:CGFloat,rotation:Int,roll:CGFloat,pitch:CGFloat,yaw:CGFloat=0,flat:Bool=false,animated:Bool,spring:Bool=false){}
@@ -49,23 +51,29 @@ stub_source = prefix + r'''
   for scenario in ["fast", "slow asset", "slow frame"] {
    DeviceModelView.loadingDelay = scenario == "slow asset" ? .milliseconds(1400):.zero
    DeviceModelView.preparationDelay = scenario == "slow frame" ? .milliseconds(1400):.milliseconds(50)
+   DeviceModelView.framesPrepared=0
+   let started=ContinuousClock.now
    let display=DisplayView(frame:NSRect(x:0,y:0,width:500,height:800),profile:.iPodTouch2G)
    let e=EmulatorController();display.emulator=e
    let window=NSWindow(contentRect:display.frame,styleMask:[.titled],backing:.buffered,defer:false)
    window.contentView=display
    display.needsLayout=true;display.layoutSubtreeIfNeeded()
    let shell=display.layer!.sublayers!.first { $0.bounds.size==CGSize(width:737,height:1318) }!
-   precondition(shell.isHidden,"Do not flash the photo before the model gets its first chance to render")
-   try await Task.sleep(for:.milliseconds(1100))
-   if scenario != "fast" {
-    precondition(!shell.isHidden,"Slow startup must show its placeholder within one second")
-    let pending=display.subviews.compactMap{$0 as? DeviceModelView}
-    precondition(pending.allSatisfy{$0.alphaValue == 0},"Unprepared models must stay invisible")
-    try await Task.sleep(for:.milliseconds(800))
+   // Sample every 10 ms rather than at fixed instants: a late wake-up must not
+   // skip the placeholder's 1.0-1.4 s window or read the model mid-fade.
+   var placeholderShown=false
+   func live()->Bool { let m=display.subviews.compactMap{$0 as? DeviceModelView}; return DeviceModelView.framesPrepared>0 && m.count==1 && m[0].alphaValue>0.99 && shell.isHidden }
+   while !live() && ContinuousClock.now-started < .seconds(5) {
+    if !shell.isHidden {
+     precondition(ContinuousClock.now-started >= .seconds(1),"Do not flash the photo before the model gets its first chance to render")
+     let pending=display.subviews.compactMap{$0 as? DeviceModelView}
+     if DeviceModelView.framesPrepared==0 { precondition(pending.allSatisfy{$0.alphaValue == 0},"Unprepared models must stay invisible") }
+     placeholderShown=true
+    }
+    try await Task.sleep(for:.milliseconds(10))
    }
-   let models=display.subviews.compactMap{$0 as? DeviceModelView}
-   precondition(models.count==1 && models[0].alphaValue>0.99 && shell.isHidden,
-     "\(scenario): a ready first frame must eventually present live 3D, including after the placeholder")
+   if scenario != "fast" { precondition(placeholderShown,"Slow startup must show its placeholder within one second") }
+   precondition(live(),"\(scenario): a ready first frame must eventually present live 3D, including after the placeholder")
    window.orderOut(nil);window.contentView=nil
   }
   DeviceModelView.loadingDelay = .zero
