@@ -697,5 +697,7 @@ the sanitizer overlap test; actual-handler sanitizers, real FMSS qtests7/7
 and independent default7E18 native two-boot8/8 pass. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-opcode0a-2026-10-01`.
 Other arithmetic, physical storage, erase and aborted-script completion remain
-separate contracts. The next stock restore trace is still being investigated;
-no full physical restore/coldboot qualification follows from this correction.
+separate contracts. The production-bridge stock5F138 erase trace now stops at opcode14
+`14000001 00000010` at +0x128, after eight Waiting for NAND responses.
+The research harness stops/reaps its own children; no full physical
+restore/coldboot qualification follows from this correction.
