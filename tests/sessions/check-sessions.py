@@ -212,6 +212,8 @@ def main():
     ap.add_argument("--work", type=Path)
     ap.add_argument("--single", type=Path, help="one prepared base (firmwarekit create output)")
     ap.add_argument("--board", choices=("ipod", "ipad"), help="--single: the base's board")
+    ap.add_argument("--launch", action="store_true", help="--single: launch the installed IPA through the app’s guest agent and verify its foreground identity")
+    ap.add_argument("--reboot", action="store_true", help="--single: cold boot the same overlay and verify file/app persistence, identity and shutdown again")
     ap.add_argument("--afc-race", type=int, metavar="N", help="--single: N boots, AFC at lockdown's first answer, then Stop (smoke.md #5)")
     ap.add_argument("--afc-race-dirty", action="store_true", help="--afc-race: install, upload and halt first, stopping mid-shutdown")
     ap.add_argument("--service-worker", help="explicit executable host-service worker (otherwise compile production sources)")
@@ -227,6 +229,8 @@ def main():
         ap.error("emulator dylib is missing: " + args.dylib)
     if not args.ipa.is_file():
         ap.error("test IPA is missing: " + str(args.ipa))
+    if (args.launch or args.reboot) and (not args.single or args.afc_race):
+        ap.error("--launch/--reboot need --single without --afc-race")
     if args.single and not args.board:
         ap.error("--single needs --board")
     if not args.guest and not args.ipad_device and not args.single:
@@ -249,7 +253,8 @@ def main():
     if args.single:
         bundled_tz = helper.parent / "lockdown-tz"
         tz = bundled_tz if os.access(bundled_tz, os.X_OK) else build_lockdown_tz(work, args.frameworks)
-        cfg["single"] = {"board": args.board, "base": str(args.single), "lockdownTZ": str(tz)}
+        cfg["single"] = {"board": args.board, "base": str(args.single), "lockdownTZ": str(tz),
+                         "launch": args.launch, "reboot": args.reboot}
         if args.afc_race:
             cfg["single"] |= {"raceBoots": args.afc_race, "raceDirty": args.afc_race_dirty}
             cfg["timeout"] = 200 * args.afc_race
@@ -342,9 +347,26 @@ def main():
         check(len(find("afc", device=d)) >= 4, f"{d}: AFC checks ran")
         inst = (find("installed", device=d) or [{}])[0]
         check(inst.get("has"), f"{d}: IPA installed ({inst.get('seconds', 0):.0f} s, attempt {inst.get('attempt')})")
-        q = (find("quit", device=d) or [{}])[0]
-        check(q.get("confirmed", -1) >= 0 and q.get("exited") and str(q.get("reason")).endswith(" stopped."),
-              f"{d}: clean shutdown, power-off confirmed in {q.get('confirmed', -1):.1f} s, helper exited")
+        if args.launch:
+            launches = find("launched", device=d)
+            check(launches and all(e.get("via") == "agent" and not e.get("launchError") and
+                                   e.get("frontmost3") == args.bundle_id for e in launches),
+                  f"{d}: installed app foreground identity confirmed: {launches}")
+        quits = find("quit", device=d)
+        boots = 2 if args.reboot else 1
+        check(len(quits) == boots and all(q.get("confirmed", -1) >= 0 and q.get("exited") and
+                                          str(q.get("reason")).endswith(" stopped.") for q in quits),
+              f"{d}: {len(quits)}/{boots} clean shutdowns with guest power-off and helper exit")
+        if args.reboot:
+            persisted = find("persist", device=d)
+            restarted = find("restartedApps", device=d)
+            check(persisted and all(e.get("kept") and e.get("same") for e in persisted),
+                  f"{d}: AFC marker survives cold reboot byte for byte: {persisted}")
+            check(restarted and all(e.get("has") for e in restarted),
+                  f"{d}: installed app survives cold reboot: {restarted}")
+            check(len(find("home", device=d)) == boots and len(activation) == boots and
+                  (d != "ipod" or len(ids) == boots),
+                  f"{d}: both boots completed Home, activation and identity gates")
         same, why = unchanged(base_dir, base_before)
         check(same, f"{d}: the prepared base is unchanged{why}")
         check(find("done") and driver.returncode == 0, f"driver finished (exit {driver.returncode})")

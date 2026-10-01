@@ -249,10 +249,9 @@ final class N72Board: Board {
         let cache = SystemEdits.dyldCache(arch)
         let at = { (rel: String) in m.appendingPathComponent(rel) }
         // The guest helpers (it_agent, it_typein DYLD_INSERTed into SpringBoard, sblaunch, it_prefs, the loader and
-        // its seed package) are linked for the dyld that ships the shared cache (3.1+); 2.x's and 3.0's refuse
-        // LC_DYLD_INFO_ONLY ("dyld: unknown required load command 0x80000022") and SpringBoard never comes up with
-        // it_typein inserted (qemu-ios ipod2g_device.py 4074277e42). Proven from the volume (guestToolsFit), not
-        // assumed from the version or the cache: where they do not load they are left out with a warning.
+        // its seed package) are checked against the volume's dyld and imports. The exported armv6 set is now
+        // legacy-linked for 2.x through 4.x; old helper directories with LC_DYLD_INFO_ONLY still fail the fit
+        // check on 2.x/3.0 and are left out with a warning. Never infer compatibility from the version or cache.
         func helper(_ n: String) throws -> Data {
             let u = helpers.appendingPathComponent(n)
             guard fm.fileExists(atPath: u.path) else { throw FirmwareError(.internal, "guest helper \(n) missing from \(helpers.path)") }
@@ -329,7 +328,7 @@ final class N72Board: Board {
             try SystemEdits.put(helper("com.qemu.it-prefs.plist"), at(Self.prefsJob), mode: 0o644)
             owners += [(0, "usr/local/bin/it_prefs"), (0, Self.prefsJob)]
             report["prefs"] = "it_prefs: SBDidShowReorderText at first boot"
-        } else {   // 2.x/3.0 get no helpers: the key it_prefs sets, baked into mobile's SpringBoard preferences
+        } else {   // Older incompatible helper inputs: bake the key into mobile’s SpringBoard preferences
             report["prefs"] = try Self.bakeReorderTip(m)
         }
         if opt["web_proxy"] ?? true {   // install_web_proxy: the PAC, and the Wi-Fi service on the system volume's /private/var

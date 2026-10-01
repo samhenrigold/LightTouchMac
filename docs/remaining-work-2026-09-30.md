@@ -333,3 +333,18 @@ promoting that build across 3.x/4.x and into release packages remains pending.
 Upstream fetch on October 1 found no new app commits beyond the already
 integrated main/multidevice refs. The rewritten remote emulator history remains
 separate from the coherent local ipad1 base; no unrelated history was merged.
+
+### Legacy helper qualification (2026-10-01)
+
+Guest package serial 13 / 1.1.11 now uses the existing legacy linker for one
+armv6 helper set across 2.x–4.x. Stock 2.x's older SpringBoard launch API is
+selected by export presence; injected it_typein is signed by its recipe and
+unsigned package hooks are refused. Fresh 2.1.1, 3.0, 3.1.3 and 4.2.1 native
+tests pass **18/18 each**, including actual installed-app foreground identity,
+file/app persistence across cold reboot, generated serial/UDID/radio addresses,
+automatic activation, Home and guest-confirmed power-off on both boots.
+The test runner exposes `--single ... --launch --reboot` and judges those gates.
+Evidence: `/private/tmp/ltm-n72-{211,30,421}-legacy13-signed-session` and
+`/private/tmp/ltm-n72-313-legacy13-session`. The iPad's armv7 helpers are unchanged.
+This closes the absent 2.x/3.0 core-helper seam; typing, clipboard, download
+placeholders, media and developer SSH still require older-firmware API proofs.

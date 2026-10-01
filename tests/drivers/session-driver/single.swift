@@ -31,10 +31,10 @@ struct SingleConfig: Decodable {
     var lockdownTZ: String?
     /// false: skip the IPA install (the entry has no AppSync, so the stock installd refuses it).
     var install: Bool?
-    /// After the install, open the installed app (config.bundleID) as a user would on an iPod without the guest agent:
-    /// the app's own Home-screen reorder puts its icon in the first slot, then a tap there; screenshots launched*.
+    /// After installation, launch through the app's guest agent where available. An unfitted helper set falls
+    /// back to Home-screen reorder and a tap; screenshots alone do not prove the requested foreground identity.
     var launch: Bool?
-    /// Where the icon is (normalized), for firmware whose SpringBoard has no springboardservices (2.x): the reorder
+    /// Where the icon is (normalized), for firmware without a usable host Home-screen reorder service: the reorder
     /// is skipped, and a tap on the first-install "Edit Home Screen" tip's Dismiss goes first.
     var launchAt: [Double]?
     /// A launch goes through the guest agent where the bake installed it (as the app's sidebar launches); then a tap at this
