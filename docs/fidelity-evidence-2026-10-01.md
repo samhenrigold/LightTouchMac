@@ -494,3 +494,27 @@ The diagnostic wrapper ignores main's return value, so results.json and
 actual checks are authoritative rather than its shell exit code. Stock
 restore on the committed rebuild is in progress. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-d7c-initializer-2026-10-01`.
+
+## Older HFS alternate-header and raw NAND representation leads
+
+Matched2.1.1 baseline and initializer-candidate volumes both have a stale
+alternate HFS header: primary catalog allocation3047 blocks versus
+alternate999. Debug read-only fsck reports this exact disagreement and
+invalid alternate VHB; both primary headers carry the unmounted bit and
+other checker status categories are zero. The untouched base independently
+passes read-only fsck. No alternate HFS header appears anywhere in either
+persisted overlay. Guest emission, actual FTL destination and dispatch order
+still need measurement; no header copy, repair or forced clean bit is a fix.
+The11-block GPT/HFS trailing-size difference remains an uncertain lead.
+
+Pinned adjacent-platform openiBoot code uses4096-byte main/128-byte raw
+OOB for B614D5AD and separately ECC-decodes12-byte metadata. Opaque target
+chip-table fields offer matching geometry evidence but their consumer still
+needs naming. Our64-byte backing and12-byte guest view are therefore not
+qualified raw-OOB representations. Generic QEMU NAND command/pin logic is
+a reuse starting point; current2K maximum, ID/geometry, timing and backing
+limits prevent treating it as a drop-in target controller. Exact8720 ECC,
+encryption and data-window contracts remain unmeasured.
+
+Textual diagnostics, pinned primary sources and limits:
+`/Users/shg/Developer/ltm-evidence/nand-boundaries-2026-10-01`.
