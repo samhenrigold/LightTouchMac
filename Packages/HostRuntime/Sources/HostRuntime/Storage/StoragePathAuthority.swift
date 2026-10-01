@@ -60,6 +60,15 @@ public nonisolated enum StoragePathAuthority {
         try checkRemovable(directory.appendingPathComponent("work"), state: state, owner: owner)
     }
 
+    /// A managed container owns children, including immutable published bases.
+    /// Check its confinement separately from disjointness of writable leaves.
+    public static func checkManagedContainer(_ container: URL, state: URL, owner: UUID) throws {
+        try checkLinks(container)
+        try checkRemovable(container, state: state, owner: owner)
+        let owned = canonicalPath(state.appendingPathComponent("Devices/\(owner.uuidString)"))
+        guard canonicalPath(container).hasPrefix(owned + "/") else { throw Failure.invalidPath(container) }
+    }
+
     /// Managed GUI records must keep writable state under their own record directory.
     /// Explicit external read-only bases and caller-authorized raw CLI fixtures are separate policy.
     /// This read-only preflight must run before helper spawn or storage preparation.

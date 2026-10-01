@@ -84,7 +84,7 @@ struct StoppedRecordOwnerTests {
         }
     }
 
-    @Test(arguments: ["work", "generations"])
+    @Test(arguments: ["work", "generations", "."])
     func managedMutableAuthorityCannotOverlapImmutableBase(_ directory: String) throws {
         try fixture { state, device, id in
             try bytes(id, base: device.appendingPathComponent(directory).path,
@@ -92,6 +92,63 @@ struct StoppedRecordOwnerTests {
             #expect(throws: StoragePathAuthority.Failure.self) { _ = try StoppedRecordOwner(device: device, policy: .managed(state: state, id: id)) }
             let held = try StorageLease(device.appendingPathComponent("work/lease"))
             withExtendedLifetime(held) {}
+        }
+    }
+
+    @Test func managedPublishedGenerationRetainsImmutableBaseWithMutableSiblings() throws {
+        try fixture { state, device, id in
+            let generation = device.appendingPathComponent("generations/published")
+            let base = generation.appendingPathComponent("base")
+            let overlay = generation.appendingPathComponent("overlay")
+            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: overlay, withIntermediateDirectories: true)
+            let record = try bytes(id, base: base.path, overlay: overlay.path)
+            try record.write(to: device.appendingPathComponent("device.json"))
+            let owner = try StoppedRecordOwner(device: device, policy: .managed(state: state, id: id))
+            #expect(owner.paths?.base.path == base.path)
+            #expect(owner.paths?.overlay.path == overlay.path)
+            #expect(owner.bytes == record)
+            withExtendedLifetime(owner) {}
+        }
+    }
+
+    @Test func publishedGenerationStillRejectsMutableBaseOverlapAndForeignContainer() throws {
+        try fixture { state, device, id in
+            let generation = device.appendingPathComponent("generations/published")
+            let base = generation.appendingPathComponent("base")
+            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+            let recordURL = device.appendingPathComponent("device.json")
+            try bytes(id, base: base.path, overlay: base.appendingPathComponent("overlay").path).write(to: recordURL)
+            #expect(throws: StoragePathAuthority.Failure.self) {
+                _ = try StoppedRecordOwner(device: device, policy: .managed(state: state, id: id))
+            }
+            let foreign = state.appendingPathComponent("foreign")
+            try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: true)
+            try FileManager.default.removeItem(at: device.appendingPathComponent("generations"))
+            try FileManager.default.createSymbolicLink(at: device.appendingPathComponent("generations"), withDestinationURL: foreign)
+            try bytes(id, base: state.appendingPathComponent("external").path, overlay: device.appendingPathComponent("overlay").path).write(to: recordURL)
+            #expect(throws: StoragePathAuthority.Failure.self) {
+                _ = try StoppedRecordOwner(device: device, policy: .managed(state: state, id: id))
+            }
+            #expect(try FileManager.default.contentsOfDirectory(atPath: foreign.path).isEmpty)
+        }
+    }
+
+    @Test func pendingPublishedRecordAdmitsOnlyExplicitRecovery() throws {
+        try fixture { state, device, id in
+            let generation = device.appendingPathComponent("generations/published")
+            let data = try bytes(id, base: generation.appendingPathComponent("base").path,
+                overlay: generation.appendingPathComponent("overlay").path)
+            try data.write(to: device.appendingPathComponent("device.json"))
+            try FileManager.default.createDirectory(at: device.appendingPathComponent("work"), withIntermediateDirectories: true)
+            try Data("pending".utf8).write(to: device.appendingPathComponent("work/edit.json"))
+            #expect(throws: StorageLease.Failure.pendingEdit) {
+                _ = try StoppedRecordOwner(device: device, policy: .managed(state: state, id: id))
+            }
+            let recovery = try StoppedRecordOwner(device: device, policy: .managed(state: state, id: id), allowPendingEdit: true)
+            #expect(recovery.bytes == data)
+            #expect(recovery.paths?.base == generation.appendingPathComponent("base"))
+            withExtendedLifetime(recovery) {}
         }
     }
 

@@ -61,8 +61,15 @@ public nonisolated struct StorageRecordPaths: Sendable {
             guard id == expected, StoragePathAuthority.canonicalPath(device) == StoragePathAuthority.canonicalPath(owned) else {
                 throw Failure.invalidRecord
             }
+            let generations = device.appendingPathComponent("generations")
+            try StoragePathAuthority.checkManagedContainer(generations, state: state, owner: expected)
+            let containerPath = StoragePathAuthority.canonicalPath(generations)
+            let basePath = StoragePathAuthority.canonicalPath(base)
+            guard containerPath != basePath, !containerPath.hasPrefix(basePath + "/") else {
+                throw StoragePathAuthority.Failure.invalidPath(generations)
+            }
             try StoragePathAuthority.checkBootPaths(base: base,
-                mutable: [device.appendingPathComponent("work"), device.appendingPathComponent("generations"), overlay, snapshot, writableNOR, usbmuxConf].compactMap { $0 }, state: state, owner: expected)
+                mutable: [device.appendingPathComponent("work"), overlay, snapshot, writableNOR, usbmuxConf].compactMap { $0 }, state: state, owner: expected)
         }
     }
 }
