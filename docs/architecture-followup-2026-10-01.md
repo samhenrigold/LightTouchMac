@@ -251,3 +251,9 @@ still missing. The managed published-generation admission regression is
 corrected in dd9d66a. The broader async host migration remains unqualified
 while cancellation and explicit descriptor release are tested. Current
 receipts and limits are maintained in the shared evidence journal.
+
+The genuine2.x private regression fixtures now pass installation, foreground
+launch and measured stereo audio. The2.1.1 native gate remains6/8, failing
+filesystem consistency and strict graphics bridge refusal checks. Latest
+stock erase still stops at D24; the literal initializer no longer stops it.
+Exact receipts and remaining limits are recorded in the shared journal.

@@ -491,8 +491,12 @@ AppSync-enabled manifests alone do not establish runtime injection.
 
 Source and candidate/baseline/rebuilt executable hashes are kept separately.
 The diagnostic wrapper ignores main's return value, so results.json and
-actual checks are authoritative rather than its shell exit code. Stock
-restore on the committed rebuild is in progress. Evidence:
+actual checks are authoritative rather than its shell exit code. The committed
+rebuild stock erase trace reaches only the known D24 stop at+0x308
+(105600 occurrences), with no remaining D7C initializer diagnostic. Stock
+restored still waits eight times for NAND; intentional research-stop exit1
+reaps owned processes. Restore completion/cold boot/durability remain
+unqualified. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-d7c-initializer-2026-10-01`.
 
 ## Older HFS alternate-header and raw NAND representation leads
@@ -518,3 +522,27 @@ encryption and data-window contracts remain unmeasured.
 
 Textual diagnostics, pinned primary sources and limits:
 `/Users/shg/Developer/ltm-evidence/nand-boundaries-2026-10-01`.
+
+## Genuine 2.x fixture acceptance separates ABI from hardware failures
+
+Private Harness and ES1 GLTest fixtures were rebuilt against actual SDK2.0
+APIs with ARMv6 legacy ABI conversion and independently audited imports and
+load commands. Merely lowering MinimumOSVersion on the3.x fixtures would
+leave unavailable APIs and incompatible relocation/startup conventions.
+The Harness uses guest AudioQueue stereo PCM; compressed audio and media
+query controls remain explicitly unsupported in this private variant.
+These prototypes are not yet maintained production fixture selection.
+
+On QEMU43858b7318 rebuilt executable b004277e835e, the actual2.1.1 native
+run passes6/8: boot, install/list, foreground launch, two-boot persistence,
+agent binary transport and measured stereo audio (6.46s,440/880Hz). Both
+shutdowns are guest-confirmed. Filesystem consistency still fails; strict
+graphics qualification still reports three bridge refusals since boot
+(first-buffer, nextbuffer and unknown drawable). Nothing is skipped or
+converted to an expected failure; harness exit1 matches results.json.
+
+This resolves the earlier fixture incompatibility classification without
+claiming the graphics or storage model is correct. The graphics callback's
+CoreSurface locking contract and the stale alternate HFS header's actual
+block-write path are being measured separately. Text-only evidence:
+`/Users/shg/Developer/ltm-evidence/ios211-compatible-fixtures-2026-10-01`.
