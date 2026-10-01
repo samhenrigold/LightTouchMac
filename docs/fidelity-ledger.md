@@ -58,11 +58,11 @@ in the summary, in the order R > H > P > S; qualifiers such as "(unverified)", "
 
 | Board | R | H | P | S | rows |
 |---|---|---|---|---|---|
-| K48 iPad 1 | 25 | 8 | 7 | 20 | 60 |
+| K48 iPad 1 | 26 | 8 | 7 | 19 | 60 |
 | N72 iPod touch 2G (and the N45 1G parts it shares or adds) | 20 | 7 | 8 | 24 | 59 |
 | Guest side (both boards: boot-args, injected components, image edits, synthesised state) | 0 | 0 | 43 | 0 | 43 |
 
-Counted from the rows on 2026-09-30. The two board lines were one off before: K48 #47 (`R (+P gate)`) and N72 #47
+Counted from the rows on 2026-09-30; K48 watchdog updated after the overnight audit confirmed the already-landed timed reset model. The two board lines were one off before: K48 #47 (`R (+P gate)`) and N72 #47
 (`R (custom) / S (GID, UID) / P (preserve)`) had been counted as R. Guest side: the 34 rows of its three tables (the
 historical `nand-enable-reformat` row not counted) plus the 9 per-build assumptions still live (items 1, 4 and 5
 retired).
@@ -94,7 +94,7 @@ uses `iboot=`.
 | 8 | DMC @0xbf800000 | `hw/arm/s5l8930_dmc.c:30-41` | S | "Immediate DLL calibration": writes set lock plus a fixed delay; everything else reads back. | Training state machine |
 | 9 | PMGR PLLs, clock config, gates, POWER_ID | `hw/arm/s5l8930_pmgr.c:84-146, 258-267, 316-351` | S | "Nothing here decodes clock frequencies." Reconstructed values, lock/busy bits faked, gates settle instantly and gate nothing. Only the I2S NCO (+0x104) feeds anything. | A clock tree that derives timer/UART/I2S rates and gates peripherals; unknown: the PLL/divider encoding, and 4.3+'s new pmgr properties (`voltage-states0`, performance domains) |
 | 10 | PMGR 24 MHz timebase + 2 event timers | `s5l8930_pmgr.c:158-211, 239-253, 290-304` | R | Counts down in virtual time with the kernel's FIQ ack protocol. | – |
-| 11 | Watchdog (PMGR +0x2020) | `s5l8930_pmgr.c:213-226` | S | Never counts; only the "reset now" pattern fires. iOS 5 adds a `wdt` node (`wdt-version 1`) at this address. | Ticking timer with expiry |
+| 11 | Watchdog (PMGR +0x2020) | `hw/arm/s5l8930_pmgr.c` | R (driver-backed reset/count contract) | Since `4ecef106c1`, the counter advances on the 24 MHz virtual timebase and schedules reset at the compare, including without further MMIO. Feed, disable/resume, compare changes and immediate reset pass production board qtests. This does not establish watchdog interrupt-mode behavior. | Interrupt threshold/IRQ contract remains unverified |
 | 12 | GPIO + interrupt controller @0xbfa00000 | `hw/arm/s5l8930_gpio.c:1-16` | R | 176 pin configs, group mask/status, IRQ 0x74. | – |
 | 13 | Buttons | `ipad1.c:381-389, 509-577, 1517-1546` | R | Host keys drive GPIO port 0 levels and PMU wake events. | – |
 | 14 | I2C0 / I2C2 | `hw/arm/s5l8930_i2c.c:26-160` | R | FIFO block driven by the stock kext; a transfer completes inside the command write. I2C1 absent. | – |

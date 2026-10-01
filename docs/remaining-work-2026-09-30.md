@@ -137,3 +137,22 @@ black display during the unlock judge, with LCD enable/disable transitions and
 no demonstrated NAND error. Both runs are retained; the isolated pass does not
 explain or fix the earlier failure. Touch/sleep timing under load remains an
 acceptance investigation, not a claimed storage regression fix.
+
+## Overnight fidelity pass
+
+Authorized September 30; hourly continuation through October 1, 08:00 Eastern.
+All changes stay in the existing worktrees. Native Finder virtual USB work
+remains excluded. Do not mark the whole backlog complete because a run ends.
+
+First audit corrected a stale claim: K48 watchdog timed reset already landed in
+`4ecef106c1`. Production board qtests now cover feed/expiry, disable/resume and
+compare changes (5/5 pass), alongside the sanitizer-enabled PMGR contract test.
+Evidence: `/private/tmp/ltm-overnight-pmgr-qtest.log`. No new timer model is claimed.
+N72 watchdog timed expiry still requires timeout-field and clock evidence.
+
+Next: reproduce N45 hard-stop recovery with the retained native evidence and
+trace the ADM/FMC interrupt/completion/reset contract before choosing a fix.
+The existing report attributes the panic to an IOKit scheduling race; that is
+a research hypothesis, not permission to add another guest patch. Then advance
+physical NAND/crypto and native boot handoff with one independently verified
+contract per commit. GPU remains a separate feasibility gate.
