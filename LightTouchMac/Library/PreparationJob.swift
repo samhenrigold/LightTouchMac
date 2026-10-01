@@ -1,3 +1,4 @@
+import HostRuntime
 // One IPSW → device preparation: runs `firmwarekit create` into
 // State/Preparing/<id>/, reads its JSON Lines, and publishes the result as
 // Devices/<id>/base plus device.json. See "Preparer contract" in
@@ -255,7 +256,7 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         let fm = FileManager.default
         let profile = entry.profile ?? .iPad1
         let lockURL = staging.appendingPathComponent(lockName)
-        let boot = profile.preparedBoot(strategy: BootRecipe.bootStrategy(lockURL))
+        let boot = try profile.preparedBoot(strategy: BootRecipe.bootStrategy(lockURL))
         for name in [boot.boot, "nand", "identity.json", lockName] + boot.files
             where !fm.fileExists(atPath: staging.appendingPathComponent(name).path) {
             throw FirmwareError.failed("The prepared device is incomplete (\(name) is missing).")

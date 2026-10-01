@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Production keyboard preference and power-state gate, with an isolated defaults domain."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
@@ -36,5 +40,5 @@ source=r"""import Foundation
 """
 with tempfile.TemporaryDirectory() as tmp:
  tmp=Path(tmp);(tmp/'check.swift').write_text(source)
- subprocess.run(['xcrun','swiftc','-parse-as-library',str(root/'Shared/DeviceLinkProtocol.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+ subprocess.run(['xcrun','swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]),'-parse-as-library',str(root/'Shared/DeviceLinkProtocol.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
  subprocess.run([str(tmp/'check')],check=True)

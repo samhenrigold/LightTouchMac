@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Compile the production boot recipe; strategies own their required inputs."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess
 import tempfile
 from pathlib import Path
@@ -59,5 +63,5 @@ require(BootRecipe.lockMachine(lock).isEmpty, "legacy N72 with no identity prese
 print("PASS: explicit kernel/iBoot/ROM strategies, missing inputs and unknown strategy rejection")
 ''')
     exe = work / 'check'
-    subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-module-cache-path', str(work/'modules'), str(root/'LightTouchMac/Device/BootRecipe.swift'), str(root/'Shared/DeviceLinkProtocol.swift'), str(work/'main.swift'), '-o', str(exe)], check=True)
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-swift-version', '5', '-module-cache-path', str(work/'modules'), str(root/'Shared/DeviceLinkProtocol.swift'), str(work/'main.swift'), '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

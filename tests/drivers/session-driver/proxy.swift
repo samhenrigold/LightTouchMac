@@ -1,3 +1,4 @@
+import HostRuntime
 // The web proxy's certificate, trusted the way the app does it (tests/sessions/check-proxy-trust.py): one prepared
 // base (or the shipping iPod image) booted with the helper's web proxy on the wifi guestfwd, the CA from WebProxyCA
 // trusted through the guest agent (GuestServices.trustCertificate: the package's ittrust or the app's copy

@@ -22,6 +22,10 @@ catalog and a small base in the shape `firmwarekit create` makes, in a temp stat
 
 Also the catalog's shape: no entry ships prepared, and the first-run entry is an available build from Apple.
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import json, os, re, subprocess, sys, tempfile
 from firmwarekit_leaf import capacity_sources, schema_sources
@@ -120,7 +124,7 @@ case "fresh":
     expect(instance.storage.writableNOR == "Devices/\(instance.id.uuidString)/nor.bin" && instance.storage.usbmuxConf == "Devices/\(instance.id.uuidString)/usbmuxd-conf", "\(instance.storage)")
     expect(instance.identity?.udid != nil && instance.provenance?.sha256 != nil && instance.storage.key.count == 16, "identity and provenance from the lock")
     let paths = instance.paths
-    let boot = DeviceProfile.iPodTouch2G.preparedBoot(strategy: BootRecipe.bootStrategy(paths.base.appendingPathComponent("device.lock.json")))
+    let boot = try DeviceProfile.iPodTouch2G.preparedBoot(strategy: BootRecipe.bootStrategy(paths.base.appendingPathComponent("device.lock.json")))
     let files = try BootRecipe.preparedFiles(base: paths.base, overlay: paths.overlay, writableNOR: paths.writableNOR, boot: boot.boot, also: boot.files)
     expect(files.boot.lastPathComponent == "iBoot.bin" && fm.fileExists(atPath: files.nand.appendingPathComponent("cs0/1.page").path), "the boot files BootRecipe wants")
     expect(files.writableNOR.map { fm.fileExists(atPath: $0.path) && mode($0) & 0o200 != 0 } == true, "a writable NOR clone on first boot")
@@ -221,7 +225,7 @@ def main():
 
         (tmp / 'stubs.swift').write_text(STUBS)
         (tmp / 'main.swift').write_text(CHECK)
-        subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-O', '-suppress-warnings', '-swift-version', '5', *capacity_sources(ROOT, tmp), '-default-isolation', 'MainActor', str(APP / 'Device/BootRecipe.swift'),
+        subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), *schema_sources(), '-O', '-suppress-warnings', '-swift-version', '5', *capacity_sources(ROOT, tmp), '-default-isolation', 'MainActor',
                         '-parse-as-library', '-module-cache-path', tmp / 'modules', *[APP / s for s in SOURCES], ROOT / 'Shared/DeviceLinkProtocol.swift',
                         tmp / 'stubs.swift', tmp / 'main.swift', '-o', tmp / 'check'], check=True)
         catalog_path = APP / 'Resources/firmware-catalog.json'

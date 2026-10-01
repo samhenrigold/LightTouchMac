@@ -12,6 +12,10 @@ device, the component upgrade (agent path from its own job, never a downgrade, t
 sequenced SpringBoard reload (loaded again after a failed write), legacy it-pbd retired with stock launchctl, and nothing on a
 packaged image), halt submission, stale/absent agents and cancellation (agentCancel).
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
@@ -211,7 +215,7 @@ func expectFailure(_ what: String, _ body: () async throws -> Void) async {
 with tempfile.TemporaryDirectory() as temp:
     p = Path(temp)
     (p / 'check.swift').write_text(fixture + main)
-    subprocess.run(['swiftc', '-module-cache-path', str(p / 'cache'), '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
+    subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-module-cache-path', str(p / 'cache'), '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
                     str(root / 'Shared/DeviceLinkProtocol.swift'), str(root / 'LightTouchMac/Device/DeviceProfile.swift'),
                     str(root / 'LightTouchMac/Guest/GuestServices.swift'), str(root / 'LightTouchMac/Guest/GuestAgent.swift'),
                     str(root / 'LightTouchMac/Transport/DeviceExecution.swift'), str(p / 'check.swift'), '-o', str(p / 'check')], check=True)

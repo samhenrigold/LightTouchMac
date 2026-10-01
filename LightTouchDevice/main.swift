@@ -1,3 +1,4 @@
+import HostRuntime
 // LightTouchDevice: one emulated device per process (docs/multi-device-plan.md, section A).
 //
 //   LightTouchDevice --connect SERVICE --token T --instance UUID [--lease PATH]

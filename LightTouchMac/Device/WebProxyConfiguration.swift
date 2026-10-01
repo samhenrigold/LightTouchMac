@@ -1,3 +1,4 @@
+import HostRuntime
 import Foundation
 
 enum WebProxyStatus: Equatable {

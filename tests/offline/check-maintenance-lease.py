@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Actual erase/delete methods must refuse an external owner and pending edit."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import fcntl, pathlib, subprocess, tempfile
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 SOURCE=r'''import Foundation
@@ -28,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-maintenance-") as temporary:
  (device/'device.json').write_text('{}')
  main=folder/'main.swift';main.write_text(SOURCE)
  executable=folder/'probe'
- subprocess.run(['xcrun','swiftc','-parse-as-library',str(ROOT/'LightTouchMac/Library/DeviceStateStorage.swift'),str(main),'-o',str(executable)],check=True)
+ subprocess.run(['xcrun','swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]),'-parse-as-library',str(ROOT/'LightTouchMac/Library/DeviceStateStorage.swift'),str(main),'-o',str(executable)],check=True)
  with (work/'lease').open('wb') as owner:
   fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
   subprocess.run([str(executable),str(folder),identity],check=True)

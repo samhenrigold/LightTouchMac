@@ -1,3 +1,4 @@
+import HostRuntime
 // One VM in this process: QEMU's thread, the frame/status pump, commands,
 // requests, agent RPC, audio capture and the clean shutdown. Mode-agnostic:
 // main.swift wires it to the app's link, or to the headless/one-shot runners.

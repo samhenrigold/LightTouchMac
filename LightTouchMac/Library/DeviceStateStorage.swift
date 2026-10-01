@@ -1,3 +1,4 @@
+import HostRuntime
 import Foundation
 import Darwin
 
@@ -146,27 +147,7 @@ nonisolated enum DeviceStateStorage {
     /// Publish a complete private NOR copy beside the NAND pages. Keeping it
     /// inside the overlay also includes it in erase and snapshot freshness.
     static func writableNOR(base: URL, overlay: URL) throws -> URL {
-        let fm = FileManager.default
-        let destination = overlay.appendingPathComponent("nor.bin")
-        try fm.createDirectory(at: overlay, withIntermediateDirectories: true)
-        if !fm.fileExists(atPath: destination.path) {
-            let staged = overlay.appendingPathComponent(".nor-\(UUID().uuidString).tmp")
-            defer { try? fm.removeItem(at: staged) }
-            try fm.copyItem(at: base, to: staged)
-            let size = try fm.attributesOfItem(atPath: staged.path)[.size] as? NSNumber
-            guard size?.intValue == 1_048_576 else { throw CocoaError(.fileReadCorruptFile) }
-            try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staged.path)
-            let handle = try FileHandle(forWritingTo: staged)
-            defer { try? handle.close() }
-            try handle.synchronize()
-            try fm.moveItem(at: staged, to: destination)
-        }
-        let attributes = try fm.attributesOfItem(atPath: destination.path)
-        guard attributes[.type] as? FileAttributeType == .typeRegular,
-              (attributes[.size] as? NSNumber)?.intValue == 1_048_576 else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        return destination
+        try PreparedDeviceBoot.writableNOR(base: base, overlay: overlay)
     }
 
     /// A copy-on-write overlay is only valid over the exact base it was made
@@ -176,14 +157,6 @@ nonisolated enum DeviceStateStorage {
     /// or predates pinning, and must not be booted. An empty or missing
     /// overlay is adopted by the base.
     static func pinOverlay(_ overlay: URL, toBase identity: String) throws -> Bool {
-        let fm = FileManager.default
-        let stamp = overlay.appendingPathComponent(".base-identity")
-        let contents = (try? fm.contentsOfDirectory(atPath: overlay.path)) ?? []
-        if contents.isEmpty {
-            try fm.createDirectory(at: overlay, withIntermediateDirectories: true)
-            try Data(identity.utf8).write(to: stamp, options: .atomic)
-            return true
-        }
-        return (try? String(contentsOf: stamp, encoding: .utf8)) == identity
+        try PreparedDeviceBoot.pinOverlay(overlay, toBase: identity)
     }
 }

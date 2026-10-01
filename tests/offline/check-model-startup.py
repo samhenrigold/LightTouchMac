@@ -3,6 +3,10 @@
 
 The stubbed-renderer half never shows its windows (attached, never ordered in). The actual-renderer half needs
 ARView to present in a visible window, which RealityKit only draws in: it runs with LTM_DISPLAY_CHECKS=1."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import ast
 from pathlib import Path
 import os, subprocess, tempfile
@@ -146,7 +150,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-model-startup-') as tmp:
         swift=work/f'{name}.swift';swift.write_text(source);exe=app/'MacOS'/name
         sources=['UI/DisplayView','Device/DeviceProfile','Device/DeviceProfile+Display','UI/DisplayMeasurements','UI/AttitudeIndicatorButton','UI/InlineLiveTextView','UI/DroppedFiles','UI/DropHighlight']
         if actual_model: sources.append('UI/DeviceModelView')
-        subprocess.run(['swiftc','-module-cache-path',str(work/'modules'),'-default-isolation','MainActor',
+        subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]),'-module-cache-path',str(work/'modules'),'-default-isolation','MainActor',
                         *[str(root/'LightTouchMac'/f'{item}.swift') for item in sources],
                         str(root/'Shared/DeviceLinkProtocol.swift'),str(swift),'-o',str(exe)],check=True)
         subprocess.run([str(exe)],check=True,timeout=30)

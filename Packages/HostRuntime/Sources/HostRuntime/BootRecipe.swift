@@ -6,30 +6,45 @@ import Foundation
 
 /// argv and environment for one boot, from paths alone. EmulatorController
 /// fills it from the device record; tests from fixtures.
-nonisolated enum BootRecipe {
-    static func escape(_ value: String) -> String { value.replacingOccurrences(of: ",", with: ",,") }
+public nonisolated enum BootRecipe {
+    public static func escape(_ value: String) -> String { value.replacingOccurrences(of: ",", with: ",,") }
 
-    struct IPod {
-        var bootArgs: String
+    public struct IPod {
+        public init(bootArgs: String, iBoot: String, bootrom: String, nand: String, nor: String, writableNOR: String, overlay: String, usbAddress: String?, wifi: Bool, memory: String = "128M", gidBlobs: String? = nil, guestPackage: String? = nil, machineOptions: [String: String] = [:]) {
+            self.bootArgs = bootArgs
+            self.iBoot = iBoot
+            self.bootrom = bootrom
+            self.nand = nand
+            self.nor = nor
+            self.writableNOR = writableNOR
+            self.overlay = overlay
+            self.usbAddress = usbAddress
+            self.wifi = wifi
+            self.memory = memory
+            self.gidBlobs = gidBlobs
+            self.guestPackage = guestPackage
+            self.machineOptions = machineOptions
+        }
+        public var bootArgs: String
         /// The machine's direct-iboot; "" boots the SecureROM -> NOR LLB -> iBoot chain (2.x).
-        var iBoot: String
-        var bootrom: String
-        var nand: String
-        var nor: String
-        var writableNOR: String
-        var overlay: String
-        var usbAddress: String?
-        var wifi: Bool
-        var memory = "128M"
+        public var iBoot: String
+        public var bootrom: String
+        public var nand: String
+        public var nor: String
+        public var writableNOR: String
+        public var overlay: String
+        public var usbAddress: String?
+        public var wifi: Bool
+        public var memory = "128M"
         /// A device.py/prepared device's KBAG table (the emulated AES has no GID key).
-        var gidBlobs: String? = nil
+        public var gidBlobs: String? = nil
         /// This boot's guest-package offer directory (GuestPackage).
-        var guestPackage: String? = nil
+        public var guestPackage: String? = nil
         /// The -machine options the device was made for (device.lock.json "machine", e.g. aes-uid=engine).
-        var machineOptions: [String: String] = [:]
+        public var machineOptions: [String: String] = [:]
     }
 
-    enum IPadBoot: Equatable {
+    public enum IPadBoot: Equatable {
         case kernel(image: String, writableNOR: String?)
         case iBoot(image: String, writableNOR: String, gidBlobs: String)
         case secureROM(image: String, writableNOR: String, gidBlobs: String, developmentFuses: Bool)
@@ -37,7 +52,7 @@ nonisolated enum BootRecipe {
 
     /// Legacy locks with no strategy retain the explicit direct-kernel fallback.
     /// New boot paths cannot be inferred from whether a key file happens to exist.
-    static func preparedIPadBoot(strategy: String?, image: String, writableNOR: String?, gidBlobs: String?) throws -> IPadBoot {
+    public static func preparedIPadBoot(strategy: String?, image: String, writableNOR: String?, gidBlobs: String?) throws -> IPadBoot {
         switch strategy {
         case nil, "kboot": return .kernel(image: image, writableNOR: writableNOR)
         case "iboot", "bootrom":
@@ -51,38 +66,59 @@ nonisolated enum BootRecipe {
         }
     }
 
-    struct IPad {
-        var boot: IPadBoot
-        var nand: String
-        var overlay: String
+    public struct IPad {
+        public init(boot: IPadBoot, nand: String, overlay: String, dieID: String?, usbAddress: String?, wifi: Bool, guestPackage: String? = nil, machineOptions: [String: String] = [:]) {
+            self.boot = boot
+            self.nand = nand
+            self.overlay = overlay
+            self.dieID = dieID
+            self.usbAddress = usbAddress
+            self.wifi = wifi
+            self.guestPackage = guestPackage
+            self.machineOptions = machineOptions
+        }
+        public var boot: IPadBoot
+        public var nand: String
+        public var overlay: String
         /// "0xWORD2:0xWORD3" (identity.json); the machine uses zeros without it.
-        var dieID: String?
-        var usbAddress: String?
-        var wifi: Bool
-        var guestPackage: String? = nil
-        var machineOptions: [String: String] = [:]
+        public var dieID: String?
+        public var usbAddress: String?
+        public var wifi: Bool
+        public var guestPackage: String? = nil
+        public var machineOptions: [String: String] = [:]
     }
 
     /// The iPod touch 1G (qemu-ios `-M iPod-Touch-1G`): the S5L8900 bootrom and the base's iBoot-204 (IMG2 payload),
     /// the base's NAND under a page overlay, and the NOR as a pflash drive on the private writable copy (iBoot and
     /// the kernel write it). Wi-Fi is the machine's Marvell 88W8686 (default on; `wifi: false` removes the card).
     /// No GID blobs on this machine.
-    struct IPod1G {
-        var bootrom: String
-        var iBoot: String
-        var nand: String
-        var writableNOR: String
-        var overlay: String
-        var usbAddress: String? = nil
-        var wifi = true
+    public struct IPod1G {
+        public init(bootrom: String, iBoot: String, nand: String, writableNOR: String, overlay: String, usbAddress: String? = nil, wifi: Bool = true, guestPackage: String? = nil, machineOptions: [String: String] = [:]) {
+            self.bootrom = bootrom
+            self.iBoot = iBoot
+            self.nand = nand
+            self.writableNOR = writableNOR
+            self.overlay = overlay
+            self.usbAddress = usbAddress
+            self.wifi = wifi
+            self.guestPackage = guestPackage
+            self.machineOptions = machineOptions
+        }
+        public var bootrom: String
+        public var iBoot: String
+        public var nand: String
+        public var writableNOR: String
+        public var overlay: String
+        public var usbAddress: String? = nil
+        public var wifi = true
         /// This boot's guest-package offer directory (GuestPackage; n45-ios1 has it_boot since qemu-ios ff2f139cf9).
-        var guestPackage: String? = nil
-        var machineOptions: [String: String] = [:]
+        public var guestPackage: String? = nil
+        public var machineOptions: [String: String] = [:]
     }
 
     /// A board's SecureROM image (DeviceProfile.bootromName) under the device assets: `root/<name>` (the bundle's
     /// Resources/device, LTM_FILES), else a qemu-ios-files checkout's `root/ipod1g/<name>` (devos50's n45ap set).
-    static func bootrom(_ name: String, filesRoot root: String) -> String {
+    public static func bootrom(_ name: String, filesRoot root: String) -> String {
         let flat = "\(root)/\(name)", set = "\(root)/ipod1g/\(name)"
         return !FileManager.default.fileExists(atPath: flat) && FileManager.default.fileExists(atPath: set) ? set : flat
     }
@@ -91,13 +127,13 @@ nonisolated enum BootRecipe {
     /// Apple-ID page ignores "Skip This Step" for minutes (smoke #54). Such a boot runs Setup with slirp
     /// restrict=on (its no-network path) and opens networking once Setup finishes. 3.x/4.x Setup has
     /// no Apple-ID page and boots unrestricted.
-    static func setupPhonesHome(iosVersion: String) -> Bool {
+    public static func setupPhonesHome(iosVersion: String) -> Bool {
         iosVersion.compare("5.0", options: .numeric) != .orderedAscending
     }
 
     /// The wifi0 user netdev: the web proxy's guestfwd (a host-side chardev, reachable restricted or
     /// not) and restrict=on while Setup runs offline.
-    static func wifiNetdev(guestForward: String, restricted: Bool) -> String {
+    public static func wifiNetdev(guestForward: String, restricted: Bool) -> String {
         "user,id=wifi0" + guestForward + (restricted ? ",restrict=on" : "")
     }
 
@@ -106,10 +142,11 @@ nonisolated enum BootRecipe {
     /// 5.x shows exactly that before Setup starts, so SpringBoard alone is not the signal. Two polls in a
     /// row, so a transient unlocked state while the slide hands over to purplebuddy can't lift it early.
     /// `observe` answers true once: the moment to call qemu_ios_ui_net_restrict(off).
-    struct SetupNetworkGate {
+    public struct SetupNetworkGate {
+        public init() {}
         private var streak = 0
-        private(set) var lifted = false
-        mutating func observe(bundleID: String?, name: String?) -> Bool {
+        public private(set) var lifted = false
+        public mutating func observe(bundleID: String?, name: String?) -> Bool {
             guard !lifted else { return false }
             let unlockedOutsideSetup = bundleID.map { !$0.isEmpty && $0 != "com.apple.purplebuddy" } == true
                 && name != "Lock Screen"
@@ -121,10 +158,10 @@ nonisolated enum BootRecipe {
 
     /// The overlay has been through Setup (the app lifted restrict after it). Erase deletes the
     /// overlay and the mark with it, so the next boot runs Setup offline again.
-    static func setupDoneMark(overlay: URL) -> URL { overlay.appendingPathComponent(".setup-done") }
+    public static func setupDoneMark(overlay: URL) -> URL { overlay.appendingPathComponent(".setup-done") }
 
     /// A prepared base's device.lock.json "machine" options; none for a missing lock or field.
-    static func lockMachine(_ lock: URL) -> [String: String] {
+    public static func lockMachine(_ lock: URL) -> [String: String] {
         guard let data = try? Data(contentsOf: lock),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
         var machine = (object["machine"] as? [String: Any] ?? [:]).mapValues { "\($0)" }
@@ -154,24 +191,24 @@ nonisolated enum BootRecipe {
 
     /// A prepared base's boot_strategy ("iboot"/"kboot"); nil for a missing lock or field (the two older prepared
     /// iPads are kboot and carry no boot_strategy).
-    static func bootStrategy(_ lock: URL) -> String? {
+    public static func bootStrategy(_ lock: URL) -> String? {
         guard let data = try? Data(contentsOf: lock),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return object["boot_strategy"] as? String
     }
 
     /// A prepared iPod base's direct-iboot: its iBoot.bin, or "" for a "bootrom" (2.x) lock.
-    static func iPodIBoot(base: URL) -> String {
+    public static func iPodIBoot(base: URL) -> String {
         bootStrategy(base.appendingPathComponent("device.lock.json")) == "bootrom" ? "" : base.appendingPathComponent("iBoot.bin").path
     }
 
-    static func options(_ machine: [String: String]) -> String {
+    public static func options(_ machine: [String: String]) -> String {
         machine.sorted { $0.key < $1.key }.map { ",\($0.key)=\(escape($0.value))" }.joined()
     }
 
     /// `audio`: the app's CoreAudio arguments, or `-audio driver=none` in tests.
     /// `netdev`: the explicit wifi0 (with the web proxy's guestfwd), if any.
-    static func iPod(_ d: IPod, serial: String, audio: [String], netdev: String?, restore: [String]) -> BootConfig {
+    public static func iPod(_ d: IPod, serial: String, audio: [String], netdev: String?, restore: [String]) -> BootConfig {
         var machine = "iPod-Touch,h264-decode=on,scaler-decode=on,mpvd-decode=on,amc-mode=decode,lcd-planes=on"
             + ",boot-args=\(escape(d.bootArgs))"
             + ",boot-args-delay-ms=0,boot-args-repeat=200,boot-args-interval-ms=250"
@@ -192,7 +229,7 @@ nonisolated enum BootRecipe {
 
     /// `-drive` takes its own comma escaping (as -M does). No -m: the machine's 128 MiB.
     /// `netdev`: the explicit wifi0 (with the web proxy's guestfwd), if any; without one the machine makes its own.
-    static func iPod1G(_ d: IPod1G, serial: String, audio: [String], netdev: String?) -> BootConfig {
+    public static func iPod1G(_ d: IPod1G, serial: String, audio: [String], netdev: String?) -> BootConfig {
         let machine = "iPod-Touch-1G,bootrom=\(escape(d.bootrom)),iboot=\(escape(d.iBoot))"
             + ",nand=\(escape(d.nand)),nand-overlay=\(escape(d.overlay))"
             + (d.usbAddress.map { ",usb-tcp-addr=\($0)" } ?? "") + (d.wifi ? "" : ",wifi=off")
@@ -204,7 +241,7 @@ nonisolated enum BootRecipe {
 
     /// Wi-Fi is the machine's default (a BCM4329 on its own slirp wifi0); an
     /// explicit `netdev` replaces it. No -m: the machine's default is the K48's 256 MiB.
-    static func iPad(_ d: IPad, serial: String, audio: [String], netdev: String?, restore: [String]) -> BootConfig {
+    public static func iPad(_ d: IPad, serial: String, audio: [String], netdev: String?, restore: [String]) -> BootConfig {
         var machine: String
         switch d.boot {
         case let .kernel(image, nor):
@@ -234,7 +271,7 @@ nonisolated enum BootRecipe {
     /// on first boot the overlay directory and the writable NOR, cloned from
     /// base/nor.bin (cp -c) and made owner-writable. Nothing is written inside
     /// base/, which is read-only. usbmuxd-conf is created (and seeded) by USBMux.
-    static func preparedFiles(base: URL, overlay: URL, writableNOR: URL?, boot: String = "kboot.bin",
+    public static func preparedFiles(base: URL, overlay: URL, writableNOR: URL?, boot: String = "kboot.bin",
                               also: [String] = []) throws -> (boot: URL, nand: URL, writableNOR: URL?) {
         let fm = FileManager.default
         let kboot = base.appendingPathComponent(boot), nand = base.appendingPathComponent("nand", isDirectory: true)

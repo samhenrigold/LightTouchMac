@@ -213,7 +213,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 24 | H.264 (M2H264) | `hw/arm/ipod_touch_h264.c:248-760` | S (default) / H (`h264-decode`) | RAM window; opt-in synthesises SPS/PPS/slices for VideoToolbox/libavcodec. | Macroblock pipeline; unknown: the block's job interface below slice level (undocumented) |
 | 25 | DWC OTG | `hw/arm/ipod_touch_usb_otg.c` | R | Register-level, S5L8720 HWCFG. | – |
 | 26 | USB-over-TCP transport | `hw/arm/ipod_touch_tcp_usb.c` | R (transport) | Host side only. | – |
-| 27 | USB PHY | `hw/arm/ipod_touch_usb_phys.c:24-60` | S | Register file. | PHY registers with cable/charger detect |
+| 27 | USB PHY | `hw/arm/ipod_touch_usb_phys.c`; `hw/arm/ipod_touch_usb_otg.c` | S/R (partial) | N45/N72 ORSTCON reset gates physical traffic before DMA/IRQ; core pending IRQs preserved; snapshot replay tested. Other power/clock registers remain limited. | Charger/cable detect, power/clock behavior; K48 wiring remains separate |
 | 28 | I2C0/1 | `hw/i2c/ipod_touch_i2c.c:35-64, 185-330` | R | Samsung IIC; NAKs absent addresses. | – |
 | 29 | PMU (D1759, "pcf50633") | `hw/arm/ipod_touch_pcf50633_pmu.c:54-175, 218-300, 353-404` | R/S | Register file; RTC = host time (the D1759's LE seconds counter at 0x5c; on the N45 `rtc-bcd`: the PCF50633's own BCD calendar at 0x59-0x5f, host UTC, what 1.x's ApplePCF50635PMURTC reads); synthetic battery ADC; shutdown stops the host; backlight enable/level by register property (N45: LEDENA 0x29 bit 0, on/off only, LEDOUT not rendered). The N45 PCF50635 now has five status/mask banks (0x02-0x06 / 0x07-0x0b), USB edge events and EXTON1 Hold/Power edges. Production-board I2C/GPIO/VIC qtest verifies masked latching, parent level ACK, both edges and read-to-clear. Native hibernate still ends in a terminal branch with IRQ/FIQ masked; delivering an interrupt does not implement retained-RAM resume. | Full map with charger; unknown: the registers only some driver versions touch |
 | 30 | LIS302DL | `hw/arm/ipod_touch_lis302dl.c:153-246` | R | Register-level; host attitude; no INT/click. | INT/click interrupts |
@@ -240,7 +240,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 51 | SWI | `hw/arm/ipod_touch_swi.c` | S | RAM; busy bit self-clears. | SWI register semantics |
 | 52 | SDIO host controller | `hw/arm/ipod_touch_sdio.c:45-121, 983-1080` | R | CMD5/52/53, CCCR/FBR/CIS. N45: the same controller at IRQ 0x2A with the 88W8686 as its card (row 59): function 1's CMD52/CMD53 and the card's DAT1 interrupt are the card's; the FBR interface code (7, WLAN) and one function come from its identity. | – |
 | 53 | BCM4325 Wi-Fi dongle | `ipod_touch_sdio.c:127-178, 296-440, 540-680` | H | Firmware stored, never run; CDC/BDC in C; fake BSS; off by default. | Dongle SoC running its firmware (as K48 #32), infeasible |
-| 54 | Host input automation (keys→buttons, on-screen keyboard taps, power-off slide) | `ipod_touch_2g.c:2020-2145, 2435-2650` | H | Host synthesises GPIO/touch events. | None |
+| 54 | Host input automation (keys→buttons, on-screen keyboard taps, power-off slide) | `hw/arm/ipod_touch_2g.c` | H | Board still plans OS gestures/layout and virtual-time input sequences. | Host automation owner with virtual-time/display-state observation and explicit legacy raw-client transition |
 | 55 | Guest services (agent, keyboard, pasteboard, package) | `hw/arm/guest-services.c:98-183`, `hw/arm/ipod-agent.c` | P | Injected daemons/dylibs over the hypercall. | USB lockdown/AFC tooling for what it covers; unknown: which agent services have a stock USB equivalent on each iOS |
 | 56 | TCG `it-hle` | Retired from the candidate translator | — | Shared ARM translator no longer substitutes libc functions at firmware addresses. | Removed; excluded from active counts |
 | 57 | WM8758 codec (N45, i2c1 0x1a) | `hw/arm/ipod_touch_wm8758.c` | R/S | The write-only 2-wire control port (7-bit register, 9-bit value, register 0 resets): what AppleWM8758Audio's start needs. No analogue path (headphone jack, hp_detect), so no Beep reaches the host. | Output path + jack detect after smoke #56 |
@@ -681,3 +681,10 @@ two-boot regression8/8 pass. Full stock erase trace now reaches opcode0A
 No arithmetic, completion or physical erase qualification follows. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-opcode03-2026-10-01`. Source pin advances
 to verified descriptor support; targets remain unmerged and package unchanged.
+
+Shared prepared boot assembly now lives in Packages/HostRuntime and is imported
+by GUI and session driver. Ten package tests, actual app/helper/services builds,
+real helper preparation-failure cleanup and native prepared N72 startup/AFC
+checks pass. Broader service/process reuse, managed boot-path authority and
+malformed lock typing remain. Details and evidence: architecture-followup-2026-10-01.md
+and `/Users/shg/Developer/ltm-evidence/host-runtime-2026-10-01`.

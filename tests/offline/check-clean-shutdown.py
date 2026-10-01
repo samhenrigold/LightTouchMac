@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Execute the production Stop (EmulatorController.halt) against fake helpers: a hard halt, never a guest shutdown."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
@@ -69,5 +73,5 @@ nonisolated func logEvent(_ s: String) {}
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-halt-') as d:
     p = Path(d) / 'check.swift'; p.write_text(source)
-    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'Shared/DeviceLinkProtocol.swift'), str(root / 'LightTouchMac/Device/BootSessionScope.swift'), str(p), '-o', d + '/check'], check=True)
+    subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'Shared/DeviceLinkProtocol.swift'), str(root / 'LightTouchMac/Device/BootSessionScope.swift'), str(p), '-o', d + '/check'], check=True)
     subprocess.run([d + '/check'], check=True, timeout=8)

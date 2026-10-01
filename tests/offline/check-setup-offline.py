@@ -13,6 +13,10 @@ app's iPadBoot / foreground watch decide:
   - LinkCommand.netRestrict survives the app<->helper wire (JSON Codable).
 Temp dir only; deleted at the end.
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import subprocess, sys, tempfile
 
@@ -110,8 +114,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='check-setup-offline.') as t:
         tmp = Path(t)
         (tmp / 'main.swift').write_text(CHECK)
-        subprocess.run(['xcrun', 'swiftc', '-O', '-suppress-warnings', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
-                        str(APP / 'Device/BootRecipe.swift'), str(ROOT / 'Shared/DeviceLinkProtocol.swift'), str(tmp / 'main.swift'),
+        subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-O', '-suppress-warnings', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'), str(ROOT / 'Shared/DeviceLinkProtocol.swift'), str(tmp / 'main.swift'),
                         '-o', str(tmp / 'check')], check=True)
         seq = ROOT / 'tests/fixtures/frontmost-9B206-setup.tsv'
         return subprocess.run([str(tmp / 'check')] + ([str(seq)] if seq.exists() else [])).returncode

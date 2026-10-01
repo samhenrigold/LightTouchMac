@@ -1,3 +1,4 @@
+import HostRuntime
 // Created by Sam on 2026-08-05.
 //
 // Owns one device: builds its boot from the device record (a prepared base),
@@ -298,7 +299,7 @@ final class EmulatorController {
     private func bootConfiguration() -> BootConfig? {
         guard !isDead, !releasing else { return nil }
         proxyEndpoint = nil
-        var config = switch profile { case .iPad1: iPadBoot(); case .iPodTouch2G: iPodBoot(); case .iPodTouch1G: iPod1GBoot() }
+        var config = preparedBootConfiguration()
         config?.webProxy = proxyEndpoint
         if config != nil {
             publishDeveloperConnection()
@@ -309,121 +310,46 @@ final class EmulatorController {
         return config
     }
 
-    /// The overlay only fits the base it was made on (DeviceStateStorage.pinOverlay); a
-    /// refusal is a dead boot whose notice offers Erase.
-    private func pinOverlay(_ overlay: URL) throws -> Bool {
-        guard try DeviceStateStorage.pinOverlay(overlay, toBase: instance.storage.key) else {
+    /// Storage preparation and argv assembly are shared with headless callers.
+    /// DeviceProcess already holds the storage lease when this hello callback runs.
+    private func preparedBootConfiguration() -> BootConfig? {
+        let prepared: PreparedDeviceBoot
+        do {
+            guard let board = PreparedDeviceBoot.Board(rawValue: instance.board) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            prepared = try PreparedDeviceBoot.prepare(board: board, base: instance.paths.base,
+                overlay: overlayURL, writableNOR: instance.paths.writableNOR, storageKey: instance.storage.key,
+                bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Bundled.filesRoot), dieID: instance.identity?.dieID)
+        } catch PreparedDeviceBoot.Failure.baseMismatch {
             baseImageMismatch = true
             reportDeviceNotice("This \(profile.shortName)’s data was made with an older system image.", for: .erase)
             state = .dead(exitCode: 1)
-            return false
-        }
-        return true
-    }
-
-    /// The iPod boots its base/ (firmwarekit's n72 recipe): iBoot.bin (3.x+; 2.x boots the SecureROM), nor.bin with a private
-    /// writable copy, gid-blobs.bin (the emulated AES has no GID key) and nand/, with the machine
-    /// options its lock names, over the shipped bootrom (Bundled.filesRoot) and this device's
-    /// copy-on-write overlay.
-    private func iPodBoot() -> BootConfig? {
-        let overlay = overlayURL
-        let base = instance.paths.base
-        let lock = base.appendingPathComponent("device.lock.json")
-        let files: (boot: URL, nand: URL, writableNOR: URL?)
-        do {
-            let boot = profile.preparedBoot(strategy: BootRecipe.bootStrategy(lock))
-            files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: instance.paths.writableNOR,
-                                                 boot: boot.boot, also: boot.files)
-            guard files.writableNOR != nil else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
-            guard try pinOverlay(overlay) else { return nil }
+            return nil
         } catch {
             failBoot(error)
             return nil
         }
-        // usbmuxd must be listening before the guest USB core comes up.
+        // Keep the bridge listening before the guest USB starts.
         let usbSession = usbmux.start(paths: instance.paths)
         openSerialLog()
-        let netdev = network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
-        return BootRecipe.iPod(.init(bootArgs: Self.bootArgs, iBoot: files.boot.lastPathComponent == "iBoot.bin" ? files.boot.path : "", bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Bundled.filesRoot),
-                                     nand: files.nand.path, nor: base.appendingPathComponent("nor.bin").path,
-                                     writableNOR: files.writableNOR!.path, overlay: overlay.path,
-                                     usbAddress: usbSession?.guestAddress, wifi: network,
-                                     gidBlobs: base.appendingPathComponent("gid-blobs.bin").path, guestPackage: composeGuestOffer(),
-                                     machineOptions: BootRecipe.lockMachine(lock)),
-                               serial: serialCapture?.argument ?? "null",
-                               audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
-                               netdev: netdev, restore: [])
-    }
-
-    /// The iPod touch 1G boots its base/ (firmwarekit's n45 recipe): the S5L8900 bootrom, iBoot.bin, nand/ under
-    /// this device's overlay and a private writable NOR, USB to the device's usbmuxd (1.x lockdown is SSLv3:
-    /// the bundled libimobiledevice's libimobiledevice-sslv3-ios1.patch).
-    private func iPod1GBoot() -> BootConfig? {
-        let overlay = overlayURL
-        let base = instance.paths.base
-        let files: (boot: URL, nand: URL, writableNOR: URL?)
+        let netdev: String?
+        if profile == .iPad1 {
+            let setupDone = FileManager.default.fileExists(atPath: BootRecipe.setupDoneMark(overlay: overlayURL).path)
+            let restrict = network && BootRecipe.setupPhonesHome(iosVersion: iosVersion) && !setupDone
+            netdev = network ? proxyForward().map { BootRecipe.wifiNetdev(guestForward: $0, restricted: restrict) } : nil
+            setupGate = netdev != nil && restrict ? BootRecipe.SetupNetworkGate() : nil
+        } else {
+            netdev = network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
+        }
         do {
-            let boot = profile.preparedBoot(strategy: nil)
-            files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: instance.paths.writableNOR,
-                                                 boot: boot.boot, also: boot.files)
-            guard let nor = files.writableNOR else { throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: "writable NOR"]) }
-            guard try pinOverlay(overlay) else { return nil }
-            let usbSession = usbmux.start(paths: instance.paths)
-            openSerialLog()
-            // As the 2G: the web proxy's guestfwd rides on an explicit wifi0 (the machine's own has none).
-            let netdev = network ? "user,id=wifi0" + (proxyForward() ?? "") : nil
-            return BootRecipe.iPod1G(.init(bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Bundled.filesRoot),
-                                           iBoot: files.boot.path, nand: files.nand.path, writableNOR: nor.path, overlay: overlay.path,
-                                           usbAddress: usbSession?.guestAddress, wifi: network, guestPackage: composeGuestOffer(),
-                                           machineOptions: BootRecipe.lockMachine(base.appendingPathComponent("device.lock.json"))),
-                                     serial: serialCapture?.argument ?? "null", audio: ["-audio", "driver=coreaudio,out.buffer-count=16"],
-                                     netdev: netdev)
+            return try prepared.configuration(bootArgs: Self.bootArgs, usbAddress: usbSession?.guestAddress,
+                wifi: network, guestPackage: composeGuestOffer(), serial: serialCapture?.argument ?? "null",
+                audio: profile == .iPad1 ? [] : ["-audio", "driver=coreaudio,out.buffer-count=16"], netdev: netdev)
         } catch {
             failBoot(error)
             return nil
         }
-    }
-
-    /// iPad 1 boots its base/ by the lock's boot_strategy: iboot (default) = iBoot.bin + nor.bin +
-    /// gid-blobs.bin, kboot (the two older prepared iPads) = kboot.bin; both over a private writable
-    /// NOR clone, its die id and this device's copy-on-write overlay (so Erase is "delete the overlay",
-    /// as for the iPod). USB goes to the device's usbmuxd bridge; host keys to an emulated USB keyboard.
-    private func iPadBoot() -> BootConfig? {
-        let overlay = overlayURL
-        let lock = instance.paths.base.appendingPathComponent("device.lock.json")
-        let strategy = BootRecipe.bootStrategy(lock)
-        let bootPath: BootRecipe.IPadBoot
-        let files: (boot: URL, nand: URL, writableNOR: URL?)
-        do {
-            let boot = profile.preparedBoot(strategy: strategy)
-            files = try BootRecipe.preparedFiles(base: instance.paths.base, overlay: overlay,
-                                                 writableNOR: instance.paths.writableNOR, boot: boot.boot, also: boot.files)
-            bootPath = try BootRecipe.preparedIPadBoot(strategy: strategy, image: files.boot.path,
-                                                       writableNOR: files.writableNOR?.path,
-                                                       gidBlobs: instance.paths.base.appendingPathComponent("gid-blobs.bin").path)
-            guard try pinOverlay(overlay) else { return nil }
-        } catch {
-            failBoot(error)
-            return nil
-        }
-        let usbSession = usbmux.start(paths: instance.paths)
-        openSerialLog()
-        // The web proxy, as on the iPod: the helper's WebProxy behind a slirp guestfwd at 10.0.2.100:3128.
-        // This explicit wifi0 replaces the machine's own. The image's Wi-Fi service carries a PAC that
-        // uses the proxy and falls back to DIRECT, so Proxy off is purely host-side (the "off" mode).
-        // 5.x whose overlay hasn't been through Setup boots restricted (Setup's no-network path); the
-        // foreground watch lifts restrict in place once Setup is over and marks the overlay, so later
-        // boots start unrestricted (Erase deletes the overlay and the mark). restrict=on blocks only
-        // guest-direct outbound: the proxy guestfwd, a host-side chardev, works in both states.
-        let setupDone = FileManager.default.fileExists(atPath: BootRecipe.setupDoneMark(overlay: overlay).path)
-        let restrict = network && BootRecipe.setupPhonesHome(iosVersion: iosVersion) && !setupDone
-        let netdev = network ? proxyForward().map { BootRecipe.wifiNetdev(guestForward: $0, restricted: restrict) } : nil
-        setupGate = netdev != nil && restrict ? BootRecipe.SetupNetworkGate() : nil
-
-        return BootRecipe.iPad(.init(boot: bootPath, nand: files.nand.path, overlay: overlay.path, dieID: instance.identity?.dieID,
-                                     usbAddress: usbSession?.guestAddress, wifi: network,
-                                     guestPackage: composeGuestOffer(), machineOptions: BootRecipe.lockMachine(lock)),
-                               serial: serialCapture?.argument ?? "null", audio: [], netdev: netdev, restore: [])
     }
 
     private func openSerialLog() {

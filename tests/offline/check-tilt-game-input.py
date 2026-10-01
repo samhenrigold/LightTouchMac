@@ -6,6 +6,10 @@ ipod_attitude_vector function as the real bridge and LIS302DL, so a gesture
 that moves the rendered shell without changing guest gravity fails here.
 No app, emulator, saved device state, or preferences are opened.
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import argparse
 from pathlib import Path
 import subprocess
@@ -289,7 +293,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-tilt-game-") as directory:
         "-c", str(work / "bridge.c"), "-o", str(work / "bridge.o"),
     ], check=True)
     subprocess.run([
-        "swiftc", "-parse-as-library", "-module-cache-path", str(work / "module-cache"),
+        "swiftc", *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), "-parse-as-library", "-module-cache-path", str(work / "module-cache"),
         "-import-objc-header", str(work / "bridge.h"), str(root / "Shared/DeviceLinkProtocol.swift"), str(work / "check.swift"),
         str(work / "bridge.o"), "-o", str(work / "check"),
     ], check=True)

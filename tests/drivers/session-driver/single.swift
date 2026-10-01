@@ -1,3 +1,4 @@
+import HostRuntime
 // One prepared device (tests/sessions/check-sessions.py --single, build-release.py's verify, tests/matrix.py): a firmwarekit
 // base booted as the app boots it, through the bundled helper, dylib and usbmuxd. It must light, answer lockdown
 // over its own usbmuxd, take AFC round trips past 16 KiB (max-packet multiples, whose transfers end in a real ZLP),
@@ -47,6 +48,7 @@ struct SingleConfig: Decodable {
     let ipad = s.board == "ipad"
     let d = Device(name: s.board, profile: ipad ? .iPad1 : s.board == "ipod1g" ? .iPodTouch1G : .iPodTouch2G)
     let b = URL(fileURLWithPath: s.base)
+    if s.board == "ipod" { d.preparedBase = b }
     if !ipad {
         d.ipod = .init(nand: b.appendingPathComponent("nand").path, nor: b.appendingPathComponent("nor.bin").path,
                        iBoot: BootRecipe.iPodIBoot(base: b), gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,

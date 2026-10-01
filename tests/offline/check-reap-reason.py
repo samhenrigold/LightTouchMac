@@ -5,6 +5,10 @@ LightTouchMac/Device/DeviceProcess.swift, compiled whole, runs against a fake li
 reap retry (10 ms, DeviceLink.reap on waitpid == 0) after the helper dies. A requested stop whose qemuExited
 event was lost (the helper exited before sending it: DeviceHost.halt racing QEMU's own SIGTERM handler) is still
 "The iPod stopped."; a crash or kill nobody asked for is "stopped unexpectedly" (the code and signal go to the log)."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
@@ -104,12 +108,12 @@ drain = r'''import Foundation
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-reap-') as d:
     p = Path(d) / 'check.swift'; p.write_text(source)
-    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'LightTouchMac/Device/DeviceProcess.swift'),
+    subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'LightTouchMac/Device/DeviceProcess.swift'),
                     str(root / 'LightTouchMac/Device/DeviceProfile.swift'), str(root / 'LightTouchMac/Device/DeviceProfile+Display.swift'),
                     str(root / 'Shared/DeviceLinkProtocol.swift'), str(p),
                     '-o', d + '/check'], check=True)
     subprocess.run([d + '/check'], check=True, timeout=8)
     p = Path(d) / 'drain.swift'; p.write_text(drain)
-    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'Shared/DeviceLinkProtocol.swift'),
+    subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'Shared/DeviceLinkProtocol.swift'),
                     str(p), '-o', d + '/drain'], check=True)
     subprocess.run([d + '/drain'], check=True, timeout=8)

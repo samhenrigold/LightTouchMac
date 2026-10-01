@@ -56,6 +56,10 @@ each through the app's GuestServices/GuestAgent, DeviceServices, lockdown-tz and
 Run in the foreground; every process it starts is gone when it returns. Screenshots land in
 --work/<device>/*.png.
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import argparse, importlib.util, json, os, shlex, signal, subprocess, sys, tempfile, time
 from pathlib import Path
 
@@ -65,7 +69,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import sources  # the pinned checkouts (build-support/sources.json)
 import swift_subprocess
 import host_service
-APP_SOURCES = ["Services/DeviceServices", "Device/DeviceProcess", "Transport/DeviceExecution", "Device/BootRecipe", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
+APP_SOURCES = ["Services/DeviceServices", "Device/DeviceProcess", "Transport/DeviceExecution", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
                "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestAgent", "Guest/GuestPackage",
                "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
                "Device/WebProxyConfiguration", "Services/SpringBoardServices", "Services/LockdownState", "Services/HostServiceTypes", "Services/HostServiceProtocol", "Services/HostServiceResources", "Services/HostServiceWorkers", "Services/MediaStaging", "Services/HomeScreenOrdering"]
@@ -166,7 +170,7 @@ def build_lockdown_tz(out, frameworks=None):
 
 def build(args, out):
     subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)
-    subprocess.run(["xcrun", "swiftc", "-swift-version", "5", "-default-isolation", "MainActor", "-module-cache-path", out / "modules",
+    subprocess.run(["xcrun", "swiftc", *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), "-swift-version", "5", "-default-isolation", "MainActor", "-module-cache-path", out / "modules",
                     *swift_subprocess.swift_flags(ROOT), ROOT / "Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift",
                     "-I", ROOT / "Shared/CLink", out / "ltm_link.o", *sorted((ROOT / "Shared").glob("*.swift")),
                     ROOT / "LightTouchDevice/FrameTools.swift", *[ROOT / f"LightTouchMac/{n}.swift" for n in APP_SOURCES],

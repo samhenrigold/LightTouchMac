@@ -10,7 +10,7 @@ test receipts with current compatibility claims.
 | Stock restore transport | Real SecureROM/iBSS/ramdisk reaches stock restored protocol 11; legacy client boot-only run passes with original firmware metadata. Production bridge reset/enumeration and exclusive mux handoff tested; measured PHY-reset gating now passes rapid DFU trials and complete stock ramdisk handoff without diagnostic settling. | Stock erase reports Waiting for NAND. Full restore, cold boot and durable later writes required before deleting offline FTL preparation. |
 | FMSS | D4C CPU parameter latch/readback/reset/migration corrected from actual stock scripts; qtests 4/4, sanitizers and default native two-boot 8/8 pass. | D18/D28 CPU/sequencer parameters are also corrected (333bc8023c), with model tests and separate native 8/8. Opcode06 register copy also passes real model5/5 and native8/8 (c49f3cdae4); descriptor DMA also passes model6/6 and native8/8 (089b055d73); stock erase now reaches opcode0A. Arithmetic forms, actual erase and honest aborted-script completion remain separate contracts. |
 | Silent audio migration | 0ceac9c55e fixes legacy silent stream host rate bookkeeping; model 4/4 including N45 snapshot, audio sanitizers and native two-boot 8/8. | Native N45 guest suspend/wake and in-flight host USB snapshots remain unqualified. |
-| Host runtime | b5e9af2 moves package boot qualification, health budget and verdict updates out of EmulatorController into GuestPackageSession. Actual-owner cancellation/verdict tests and actual app build pass; test report stub replaced by shared ABI definition. | Controller still composes runtime and owns record I/O, readiness/provisioning/storage orchestration. GUI/CLI import of a shared runtime module remains unfinished. Net line reduction is not claimed. |
+| Host runtime | GuestPackageSession owns boot package qualification. GUI and session driver now import HostRuntime for prepared-device validation/assembly and actual wire values; package tests, real builds, failure cleanup and native N72 startup pass. | Broader process/service ownership, record I/O and session source/stub coupling remain. Managed boot-path authority and malformed-lock typing need separate contracts. |
 | MBX reuse | Independently captured real N72 stock-driver fill packet/GART agrees with pinned MIT S5LBox decoder in sanitizer replay. | Snapshot was after stall, not pre-submit. No live pixel/completion/IRQ or full compositor qualification yet. Unapplied narrow prototype rejects startup/context requests without success. Startup EVM metadata effects and trigger/tag semantics remain unknown; existing GLES transport remains needed. |
 | Packaging | Clean cc67737/31036cf8e9/e19fac2 universal candidate: actual 2.1.1 session 18/18, both Mach-O closures at macOS14.4 and ad hoc signature verification. | Later host/FMSS/PHY changes are not covered by that packaged candidate; Intel runtime and notarization unqualified. |
 
@@ -65,3 +65,27 @@ and the triggering operation are established.
 Durable reviewed proposal, MIT provenance and sanitizer receipts:
 `/Users/shg/Developer/ltm-evidence/mbx-reuse-2026-10-01`. No private raw RAM
 or guest firmware is copied into that evidence directory.
+
+## Reusable prepared-device boot boundary
+
+`Packages/HostRuntime` now owns BootConfig/WebProxyEndpoint, BootRecipe and
+PreparedDeviceBoot. GUI and session driver use the same implementation. The
+session driver now prepares storage after the helper hello/lease acquisition;
+its previous preparation before helper start is removed. An actual missing-NOR
+failure preserves its diagnostic, reaps the helper, releases its lease and
+stops its usbmuxd without sending a boot request. Wire compatibility and
+private NOR/base semantics are retained.
+
+Ten package tests, relevant offline checks and actual GUI/helper/services
+builds pass. The native N72 session reaches Home with matching identity and
+byte-exact AFC transfers, then performs bounded helper Stop/reaping. It uses
+a freshly relinked dylib from verified QEMU 089b055d73; this is not a new
+packaged release or clean guest FTL shutdown claim. Evidence:
+`/Users/shg/Developer/ltm-evidence/host-runtime-2026-10-01`.
+
+The runtime accepts caller-authorized URLs. Maintenance path containment is
+stronger than current managed-record boot authorization; extraction does not
+fix that seam. Malformed/non-string lock strategies can still fall into legacy
+nil handling. These need explicit managed-record and parsing contracts.
+DeviceProcess/services, record persistence and current session test replacement
+types remain outside the extracted module.

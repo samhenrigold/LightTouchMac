@@ -16,6 +16,10 @@ URLSession, and tests/fixtures/fake-firmwarekit.py as the preparer:
 
 Every path is a temp dir (HOME and CFFIXED_USER_HOME too, so Caches/ is inside it; checked before anything runs); everything is deleted at the end.
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import hashlib, json, os, subprocess, sys, tempfile
 from firmwarekit_leaf import capacity_sources, schema_sources
@@ -25,7 +29,7 @@ APP = ROOT / 'LightTouchMac'
 FAKE = ROOT / 'tests/fixtures/fake-firmwarekit.py'
 SOURCES = ['FirmwareJobs.swift', 'IPSWStore.swift', 'FirmwareDownloads.swift', 'PreparationJob.swift', 'DeviceInstance.swift',
            'FirmwareCatalog.swift', 'DeviceProfile.swift', 'StorageLocations.swift', 'DeviceStateStorage.swift',
-           'DeviceRow.swift', 'BootRecipe.swift']
+           'DeviceRow.swift']
 
 
 def source(name):
@@ -144,7 +148,7 @@ def main():
 
         (tmp / 'stubs.swift').write_text(STUBS)
         (tmp / 'main.swift').write_text(CHECK)
-        subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-O', '-suppress-warnings', '-swift-version', '5', *capacity_sources(ROOT, tmp), '-default-isolation', 'MainActor', '-D', 'DEBUG',
+        subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), *schema_sources(), '-O', '-suppress-warnings', '-swift-version', '5', *capacity_sources(ROOT, tmp), '-default-isolation', 'MainActor', '-D', 'DEBUG',
                         '-parse-as-library', '-module-cache-path', tmp / 'modules', *[source(s) for s in SOURCES],
                         ROOT / 'Shared/DeviceLinkProtocol.swift', tmp / 'stubs.swift', tmp / 'main.swift', '-o', tmp / 'check'], check=True)
 

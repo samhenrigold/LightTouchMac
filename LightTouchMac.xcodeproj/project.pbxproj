@@ -27,6 +27,8 @@
 		A1D0C0DE3100000000000002 /* LightTouchDevice in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3100000000000001 /* LightTouchDevice */; };
 		EA17D84D3023A55900BDF83E /* Subprocess in Frameworks */ = {isa = PBXBuildFile; productRef = EA17D84C3023A55900BDF83E /* Subprocess */; };
 		EA17D8503023A56800BDF83E /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = EA17D84F3023A56800BDF83E /* ArgumentParser */; };
+		A1D0C0DE35000000000000003 = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002; };
+		A1D0C0DE35000000000000004 = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -99,11 +101,13 @@
 		A1D0C0DE3100000000000008 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				A1D0C0DE35000000000000004,
 			);
 		};
 		EA17D82F30239D9B00BDF83E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				A1D0C0DE35000000000000003,
 				EA17D8503023A56800BDF83E /* ArgumentParser in Frameworks */,
 				EA17D84D3023A55900BDF83E /* Subprocess in Frameworks */,
 			);
@@ -171,6 +175,7 @@
 				A1D0C0DE3100000000000012 /* LightTouchDevice */,
 				A1D0C0DE3100000000000013 /* Shared */,
 			);
+			packageProductDependencies = (A1D0C0DE35000000000000002);
 			name = LightTouchDevice;
 			productName = LightTouchDevice;
 			productReference = A1D0C0DE3100000000000001 /* LightTouchDevice */;
@@ -197,6 +202,7 @@
 			);
 			name = "Light Touch";
 			packageProductDependencies = (
+				A1D0C0DE35000000000000002,
 				EA17D84C3023A55900BDF83E /* Subprocess */,
 				EA17D84F3023A56800BDF83E /* ArgumentParser */,
 			);
@@ -232,6 +238,7 @@
 			mainGroup = EA17D82930239D9B00BDF83E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A1D0C0DE35000000000000001,
 				EA17D84B3023A55900BDF83E /* XCRemoteSwiftPackageReference "swift-subprocess" */,
 				EA17D84E3023A56800BDF83E /* XCRemoteSwiftPackageReference "swift-argument-parser" */,
 			);
@@ -597,7 +604,12 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		A1D0C0DE35000000000000001 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/HostRuntime; };
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		A1D0C0DE35000000000000002 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE35000000000000001; productName = HostRuntime; };
 		EA17D84C3023A55900BDF83E /* Subprocess */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = EA17D84B3023A55900BDF83E /* XCRemoteSwiftPackageReference "swift-subprocess" */;

@@ -1,3 +1,4 @@
+import HostRuntime
 // One prepared base, booted as the app boots it, asked the question the app asks on the first
 // lockdown answer (tests/sessions/check-activation-gate.py): lockdown's ActivationState, mapped through
 // DeviceConnectionIssue.activation, and whether a service refusal (-34) maps to the same issue.

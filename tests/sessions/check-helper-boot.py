@@ -28,6 +28,10 @@ target (Debug). Bases are read-only; overlays, snapshots, logs and PNG dumps go 
 Every boot uses -audio driver=none: no test plays sound through the Mac.
 Run in the foreground; every process it starts is gone when it returns.
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import argparse, json, os, shutil, signal, subprocess, sys, tempfile, time, uuid
 from pathlib import Path
 
@@ -65,7 +69,7 @@ def wait_gone(pid, seconds):
 def build(args, out):
     """helper-driver (swiftc) and, unless given, the LightTouchDevice target (xcodebuild)."""
     subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)
-    subprocess.run(["swiftc", "-O", "-swift-version", "5", "-I", ROOT / "Shared/CLink", out / "ltm_link.o",
+    subprocess.run(["swiftc", *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), "-O", "-swift-version", "5", "-I", ROOT / "Shared/CLink", out / "ltm_link.o",
                     *sorted((ROOT / "Shared").glob("*.swift")), ROOT / "LightTouchDevice/FrameTools.swift",
                     ROOT / "LightTouchMac/Device/DeviceFileWatch.swift",
                     ROOT / "tests/drivers/helper-driver/main.swift", "-o", out / "helper-driver"], check=True)

@@ -1,3 +1,4 @@
+import HostRuntime
 // The guest-services scenario (tests/sessions/check-sessions.py --guest): iPods with no
 // SSH, through the app's own GuestServices/GuestAgent (typed agent ops, v1
 // exec fallback), DeviceServices (installs, AFC staging), GuestServices'

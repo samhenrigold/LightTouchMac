@@ -8,6 +8,10 @@ and the directory itself being renamed, once each. Wired as EmulatorController w
 base/, a NOR outside the overlay), the app's own boot-time writes under Devices/<uuid> (device.json,
 web-proxy.*, work/guest-offer, IPAs/) fire nothing; an outside unlink of overlay/bus0-ce0.pages does.
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import subprocess, tempfile
 
@@ -97,6 +101,6 @@ final class Seen: @unchecked Sendable {
 with tempfile.TemporaryDirectory(prefix='ltm-device-files-') as d:
     p = Path(d) / 'check.swift'
     p.write_text(source)
-    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'LightTouchMac/Library/DeviceStateStorage.swift'),
+    subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'LightTouchMac/Library/DeviceStateStorage.swift'),
                     str(root / 'LightTouchMac/Device/DeviceFileWatch.swift'), str(p), '-o', d + '/check'], check=True)
     subprocess.run([d + '/check'], check=True, timeout=20)

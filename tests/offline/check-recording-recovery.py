@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Launch recovery validates real MOVs, preserves failed saves, deletes unplayable takes, and skips current takes."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
@@ -77,7 +81,7 @@ import AVFoundation
 with tempfile.TemporaryDirectory(prefix='ltm-recording-recovery-') as directory:
     work = Path(directory)
     (work/'check.swift').write_text(fixture)
-    subprocess.run(['xcrun', 'swiftc', '-swift-version', '6', '-default-isolation', 'MainActor',
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-swift-version', '6', '-default-isolation', 'MainActor',
                     '-module-cache-path', str(work/'modules'), str(root/'LightTouchMac/Features/ScreenMovieWriter.swift'), str(root/'Shared/DeviceLinkProtocol.swift'),
                     str(root/'LightTouchMac/Features/ScreenRecordingSession.swift'), str(work/'check.swift'), '-o', str(work/'check')], check=True)
     subprocess.run([str(work/'check'), str(work)], check=True, timeout=30)

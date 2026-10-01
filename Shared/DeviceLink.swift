@@ -1,3 +1,4 @@
+import HostRuntime
 // The app's handle on one running LightTouchDevice helper.
 //
 //     let link = DeviceLink(configuration: .init(instance: id, outputDescriptor: capture.writeDescriptor))

@@ -681,3 +681,10 @@ two-boot regression8/8 pass. Full stock erase trace now reaches opcode0A
 No arithmetic, completion or physical erase qualification follows. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-opcode03-2026-10-01`. Source pin advances
 to verified descriptor support; targets remain unmerged and package unchanged.
+
+Shared prepared boot assembly now lives in Packages/HostRuntime and is imported
+by GUI and session driver. Ten package tests, actual app/helper/services builds,
+real helper preparation-failure cleanup and native prepared N72 startup/AFC
+checks pass. Broader service/process reuse, managed boot-path authority and
+malformed lock typing remain. Details and evidence: architecture-followup-2026-10-01.md
+and `/Users/shg/Developer/ltm-evidence/host-runtime-2026-10-01`.

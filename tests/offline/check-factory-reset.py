@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Erase completes after the helper exits, then restarts the device (never quits
 the app); a stopped device just erases; failures stay visible."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
@@ -84,5 +88,5 @@ nonisolated func logEvent(_ s:String){}
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-erase-') as d:
  p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc','-module-cache-path',d+'/modules',str(root/'LightTouchMac/Library/DeviceStateStorage.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]),'-module-cache-path',d+'/modules',str(root/'LightTouchMac/Library/DeviceStateStorage.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=10)

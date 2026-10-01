@@ -1,3 +1,4 @@
+import HostRuntime
 // The app <-> LightTouchDevice wire protocol (docs/multi-device-plan.md, section A).
 //
 // Control travels over a socketpair (the helper's end is fd 3) as length-framed
@@ -102,44 +103,6 @@ nonisolated enum LinkEvent: Codable, Sendable, Equatable {
     /// No more events for this generation: drained after `audioStop` (failed
     /// false), or the capture stopped or overflowed on its own (failed true).
     case audioEnded(generation: UInt64, failed: Bool)
-}
-
-nonisolated struct BootConfig: Codable, Sendable, Equatable {
-    /// argv for qemu_ios_main, argv[0] included.
-    var argv: [String]
-    /// setenv'd in the helper before QEMU starts (EmulatorController.setBootEnv).
-    var environment: [String: String] = [:]
-    /// The -M machine name ("iPod-Touch", "ipad1"). Picks the orphan shutdown.
-    var machine: String
-    /// The web proxy the helper serves before QEMU starts (argv's guestfwd connects to its socket).
-    var webProxy: WebProxyEndpoint?
-
-    init(argv: [String], environment: [String: String] = [:], machine: String) {
-        self.argv = argv
-        self.environment = environment
-        self.machine = machine
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        argv = try c.decode([String].self, forKey: .argv)
-        environment = try c.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
-        machine = try c.decode(String.self, forKey: .machine)
-        webProxy = try c.decodeIfPresent(WebProxyEndpoint.self, forKey: .webProxy)
-    }
-
-    /// argv's wifi0 user netdev boots restricted (BootRecipe.wifiNetdev): 5.x Setup runs offline. The
-    /// helper's web proxy starts offline to match and opens with `.netRestrict(false)`.
-    var wifiRestricted: Bool {
-        zip(argv, argv.dropFirst()).contains { $0 == "-netdev" && $1.hasPrefix("user,id=wifi0,") && $1.split(separator: ",").contains("restrict=on") }
-    }
-}
-
-nonisolated struct WebProxyEndpoint: Codable, Sendable, Equatable {
-    /// The device's web-proxy.conf: routing read per connection; the CA, cache and location beside it.
-    var config: String
-    /// The Unix socket the guestfwd's `nc -U` reaches.
-    var socket: String
 }
 
 nonisolated struct DeviceInfo: Codable, Sendable, Equatable {
