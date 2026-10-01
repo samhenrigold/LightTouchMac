@@ -417,5 +417,9 @@ match after reboot and fsck_hfs reports a valid volume. Existing graphics
 additions and legacy CPU storage execution remain in use. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-d3c-2026-10-01`.
 
-The next stock blank-flash erase trace is running; restored cold boot and
-durable physical writes remain unqualified.
+The next stock blank-flash erase trace reaches D24 at bulk+0x308
+(106343 unsupported reads), plus eight unsupported diagnostic immediate
+D7C writes. The D3C read no longer stops this trace. Stock restored still
+waits eight times for NAND; the harness intentionally exits1 and reaps its
+owned processes. Restored cold boot and durable physical writes remain
+unqualified.
