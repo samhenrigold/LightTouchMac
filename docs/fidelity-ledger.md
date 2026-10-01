@@ -653,3 +653,19 @@ Evidence: `/Users/shg/Developer/ltm-evidence/i2s-silent-2026-10-01`. This is
 silent-stream migration bookkeeping, not N45 native guest suspend/wake,
 in-flight USB snapshot qualification or a new packaged candidate. The app
 source pin includes the verified fix; targets remain unmerged.
+
+### Observed FMSS register copy (2026-10-01)
+
+QEMU c49f3cdae4 implements the stock immediate-zero opcode06 register-copy
+form; unknown forms remain unsupported. The actual-handler baseline fails
+the copy assertion; sanitizer fixtures, real FMSS qtests 5/5 and the separate
+default 7E18 native two-boot regression 8/8 pass. Actual target8720 dataflow
+corroborates [related hardware-tested8702 research](https://github.com/lemonjesus/S5L8702-FMISS-Tools/blob/70b45859af8807a7f841cf649564ce6638e1c112/Documentation.md);
+no reference implementation or documentation text was copied into production.
+
+The subsequent actual stock erase trace reaches opcode03
+`03010000 00000000` at +0x88, still waits for NAND and is intentionally stopped.
+No descriptor DMA, arithmetic, physical erase or completion qualification
+follows from the register-copy correction. Durable evidence:
+`/Users/shg/Developer/ltm-evidence/fmss-opcode06-2026-10-01`. Source pin advances
+to this verified correction; no new packaged candidate or target merge.
