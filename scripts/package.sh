@@ -166,7 +166,7 @@ copy_tool() {
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$dst" 2>/dev/null || true
 }
 
-# The dlopened device libraries (IMobileDevice.swift); no libimobiledevice command-line tool ships.
+# The worker dlopens device libraries; inetcat bridges stock host OpenSSH.
 for stem in libimobiledevice-1.0 libplist-2.0; do
     python3 "$CHECK" --no-weak-imports --minos "$MINOS" "${CHECK_ARCHS[@]}" "$DEPS/lib/$stem.dylib"
     copy_with_deps "$DEPS/lib/$stem.dylib"
@@ -183,6 +183,12 @@ MC_BIN="$WORK/lockdown-mcinstall"
 cc -O2 "${ARCH_FLAGS[@]}" -mmacosx-version-min="$MINOS" -o "$MC_BIN" "$SRC/scripts/lockdown-mcinstall.c" \
    -I"$DEPS/include" -L"$DEPS/lib" -limobiledevice-1.0 -lplist-2.0
 copy_tool "$MC_BIN"
+# Stock inetcat from the same pinned static dependency prefix. It is a separate
+# GPL tool, so its own license and source note must accompany the library notices.
+[ -f "$STATIC/share/licenses/inetcat/GPL-2.0.txt" ] && [ -f "$STATIC/share/licenses/inetcat/SOURCE.txt" ] || {
+    echo "missing inetcat license/provenance; rebuild the pinned static dependencies" >&2; exit 1;
+}
+copy_tool "${INETCAT_BIN:-$STATIC/bin/inetcat}"
 copy_tool "${USBMUXD_BIN:-$(python3 "$SRC/scripts/sources.py" usbmuxd)/src/usbmuxd}"
 # iBoot32Patcher (GPL-3.0, built by build-iboot32patcher.sh next to usbmuxd): firmwarekit's k48
 # real-iBoot recipe runs it from Contents/MacOS, where K48IBoot.patcher looks first.

@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 
 CHECK = pathlib.Path(__file__).resolve().parents[2] / 'scripts/check-macho.py'
 
@@ -115,8 +116,21 @@ def check_helper(app):
     subprocess.run(['codesign', '--verify', '--strict', helper], check=True)
     info = subprocess.run(['/usr/libexec/PlistBuddy', '-c', 'Print :LSMinimumSystemVersion', app / 'Contents/Info.plist'],
                           capture_output=True, text=True, check=True).stdout.strip()
+    worker = app / 'Contents/MacOS/LightTouchServices'
+    assert worker.is_file() and os.access(worker, os.X_OK), f'missing service worker {worker}'
+    subprocess.run(['codesign', '--verify', '--strict', worker], check=True)
+    # No request is sent: this proves the packaged process can launch/reap
+    # without probing a real device or loading QEMU.
+    socket = '127.0.0.1:1'
+    empty = subprocess.run([worker, '--socket', socket, '--udid', '', '--session', str(uuid.uuid4())],
+        input='', capture_output=True, text=True, timeout=10,
+        env={**os.environ, 'USBMUXD_SOCKET_ADDRESS': socket})
+    assert empty.returncode == 0 and not empty.stdout, empty
+    inetcat = app / 'Contents/MacOS/inetcat'
+    assert inetcat.is_file() and os.access(inetcat, os.X_OK), f'missing stock USB bridge {inetcat}'
+    assert run(inetcat, '--version').returncode == 0
     dylib = app / 'Contents/Frameworks/libqemu-arm.dylib'
-    closure = subprocess.run([sys.executable, CHECK, '--minos', info, '--bundle', app, helper, dylib],
+    closure = subprocess.run([sys.executable, CHECK, '--minos', info, '--bundle', app, helper, worker, inetcat, dylib],
                              capture_output=True, text=True)
     assert closure.returncode == 0, closure.stderr
     probe = subprocess.run([helper, '--probe', 'ipad1'], capture_output=True, text=True, timeout=60,

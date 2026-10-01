@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the static libraries from the product's pinned recipes: OpenSSL (the emulator's AES/SHA, the
 # web proxy's TLS) and the libimobiledevice stack the native shared libimobiledevice links against.
-# No command-line tools ship: the app calls libimobiledevice directly (IMobileDevice.swift).
+# inetcat is the stock stdin/stdout USB port bridge used by host OpenSSH.
 # Usage: build-static-deps.sh NEW-WORK-DIRECTORY (output: WORK-DIRECTORY/prefix)
 # LTM_SOURCE_CACHE optionally names a directory of source archives; each is verified.
 # LTM_ARCH=x86_64 cross-compiles the Intel slice on an Apple Silicon Mac (default arm64, built exactly as before).
@@ -103,6 +103,11 @@ for package in libimobiledevice-glue:libimobiledevice-glue-1.3.2 libusbmuxd:libu
     license "${package%%:*}" "${package#*:}" COPYING
     python3 "$SRC/scripts/dependency-sources.py" note "${package%%:*}" > "$PREFIX/share/licenses/${package%%:*}/SOURCE.txt"
 done
+# The library is LGPL-2.1, but tools/inetcat.c is GPL-2.0-or-later.
+# Preserve its notice, GPL text and the same pinned archive provenance.
+license inetcat "$SRC/build-support/licenses" GPL-2.0.txt
+cp "$ROOT/build/libusbmuxd-2.1.1/tools/inetcat.c" "$PREFIX/share/licenses/inetcat/"
+python3 "$SRC/scripts/dependency-sources.py" note libusbmuxd > "$PREFIX/share/licenses/inetcat/SOURCE.txt"
 python3 - "$SRC" "$ROOT" "$ARCH" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
 source, root = map(pathlib.Path, sys.argv[1:3])

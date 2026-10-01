@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = {
     'qemu': ('qemu', 'QEMU', True),
     'usbmuxd': ('usbmuxd', 'usbmuxd', True),
+    'inetcat': ('inetcat', 'inetcat', True),
     'libimobiledevice': ('libimobiledevice', 'libimobiledevice', True),
     'libimobiledevice-glue': ('libimobiledevice-glue', 'libimobiledevice-glue', True),
     'libusbmuxd': ('libusbmuxd', 'libusbmuxd', True),
@@ -47,6 +48,8 @@ COMPONENTS = {
 BINARIES = {
     'Contents/MacOS/Light Touch': (),
     'Contents/MacOS/LightTouchDevice': (),
+    'Contents/MacOS/LightTouchServices': (),
+    'Contents/MacOS/inetcat': ('inetcat', 'libusbmuxd', 'libimobiledevice-glue', 'libplist'),
     'Contents/MacOS/firmwarekit': (),
     'Contents/MacOS/lockdown-tz': (),
     'Contents/MacOS/lockdown-mcinstall': (),
@@ -139,18 +142,19 @@ def self_test():
         def bundle(label):
             app = tmp / f'{label}.app'
             for name, salt in (('Contents/MacOS/usbmuxd', b'u'), ('Contents/Frameworks/libplist-2.0.4.dylib', b'p'),
-                               ('Contents/Resources/guest-tools/it_agent', b'a')):
+                               ('Contents/Resources/guest-tools/it_agent', b'a'), ('Contents/MacOS/inetcat', b'i'),
+                               ('Contents/MacOS/LightTouchServices', b'w')):
                 (app / name).parent.mkdir(parents=True, exist_ok=True)
                 (app / name).write_bytes(stripped + salt)   # distinct contents, still a Mach-O
             licenses = app / 'Contents/Resources/licenses'
-            for directory in ('usbmuxd', 'glib', 'proxy-libintl', 'pcre2', 'libslirp', 'libimobiledevice-glue', 'libplist', 'qemu'):
+            for directory in ('usbmuxd', 'glib', 'proxy-libintl', 'pcre2', 'libslirp', 'libimobiledevice-glue', 'libplist', 'qemu', 'inetcat', 'libusbmuxd'):
                 (licenses / directory).mkdir(parents=True)
                 (licenses / directory / 'COPYING').write_text('license text')
                 (licenses / directory / 'SOURCE.txt').write_text(f'{directory}: https://example.invalid/{directory}.tar.gz')
             (licenses / 'swift/Example').mkdir(parents=True)
             (licenses / 'swift/Example/LICENSE.txt').write_text('MIT')
             (app / 'Contents/Resources/Help.txt').write_text('Licenses: usbmuxd, GLib, proxy-libintl, PCRE2, libslirp, '
-                                                             'libimobiledevice-glue, libplist, QEMU')
+                                                             'libimobiledevice-glue, libplist, QEMU, inetcat, libusbmuxd')
             return app
 
         def expect(app, text):
