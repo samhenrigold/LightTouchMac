@@ -9,7 +9,7 @@ import Foundation
 /// A command the sidebar, its context menu, the Device menu and the
 /// placeholder offer for one catalog entry.
 nonisolated enum DeviceAction: CaseIterable, Sendable {
-    case start, stop, downloadAndPrepare, importIPSW, cancel, erase, showInFinder, delete
+    case start, stop, downloadAndPrepare, importIPSW, cancel, erase, showInFinder, delete, prepareAgain
     case openFilesystem, commitFilesystem, discardFilesystem, recoverFilesystem
 }
 
@@ -79,13 +79,18 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     let state: DeviceRowState
     /// The device's lock records no activation (DeviceInstance.lockLacksActivation).
     let preparedWithoutActivation: Bool
+    /// The device's base was made by a recipe older than its catalog entry's (`baseRecipe` below the entry's
+    /// recipe.version): Erase keeps the old base, so only preparing it again brings the fix.
+    let preparedByOlderRecipe: Bool
 
-    /// `downloaded`: IPSWStore has this entry's IPSW.
+    /// `downloaded`: IPSWStore has this entry's IPSW. `baseRecipe`: DeviceRow.baseRecipeVersion of the device's lock.
     init(entry: FirmwareCatalog.Entry, instanceID: UUID?, session: SessionPhase?,
-         job: FirmwareJob?, failure: String?, downloaded: Bool = false, preparedWithoutActivation: Bool = false) {
+         job: FirmwareJob?, failure: String?, downloaded: Bool = false, preparedWithoutActivation: Bool = false,
+         baseRecipe: Int? = nil) {
         self.entry = entry
         self.instanceID = instanceID
         self.preparedWithoutActivation = preparedWithoutActivation
+        preparedByOlderRecipe = instanceID != nil && baseRecipe.map { $0 < entry.recipe?.version ?? 0 } ?? false
         hasSession = session != nil
         state = Self.state(entry: entry, startable: instanceID != nil,
                            session: session, job: job, failure: failure, downloaded: downloaded)
@@ -242,6 +247,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
             return instanceID != nil && !working && state != .running && state != .stopping
         case .showInFinder: return instanceID != nil
         case .delete: return instanceID != nil && !hasSession && !working
+        case .prepareAgain: return preparedByOlderRecipe && canDownload && allows(.delete, canDownload: canDownload)
         }
     }
 
@@ -270,6 +276,22 @@ nonisolated struct DeviceRow: Equatable, Sendable {
 
     /// The row's note beside a quiet accessory: a device prepared without activation says so.
     var note: String? { preparedWithoutActivation && instanceID != nil ? "Prepared without activation" : nil }
+
+    /// The placeholder's line for a base made by an older recipe, beside Prepare Again.
+    var olderRecipeNote: String? {
+        preparedByOlderRecipe ? "This \(entry.profile?.shortName ?? "device") was prepared by an older version of Light Touch." : nil
+    }
+
+    /// The recipe version that made a base: firmwarekit's lock keeps the catalog entry it was prepared from
+    /// (`entry.content.recipe.version`, every lock since the first firmwarekit). Nil for an unreadable lock or one
+    /// without it (a device.py base): nothing to claim.
+    static func baseRecipeVersion(_ lock: URL) -> Int? {
+        guard let data = try? Data(contentsOf: lock),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entry = json["entry"] as? [String: Any], let content = entry["content"] as? [String: Any],
+              let recipe = content["recipe"] as? [String: Any] else { return nil }
+        return recipe["version"] as? Int
+    }
 
     /// The accessory's words: what VoiceOver reads after the version.
     var stateDescription: String {

@@ -17,6 +17,7 @@ final class DevicePlaceholderViewController: NSViewController {
     private let reason = NSTextField(wrappingLabelWithString: "")
     private let showLog = NSButton(title: "Show Logs", target: nil, action: nil)
     private let primary = NSButton(title: "", target: nil, action: nil)
+    private let prepareAgain = NSButton(title: "Prepare Again…", target: nil, action: nil)
     private let space = NSTextField(wrappingLabelWithString: "")
     /// The build's catalog note (untested, experimental, where a beta came from), in a popover.
     private let info = NSButton(image: NSImage(systemSymbolName: "info.circle", accessibilityDescription: "About This Build")!,
@@ -57,19 +58,20 @@ final class DevicePlaceholderViewController: NSViewController {
         progress.maxValue = 1
         step.textColor = .secondaryLabelColor
         step.font = .monospacedDigitSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .subheadline).pointSize, weight: .regular)
-        for button in [showLog, primary] {
+        for button in [showLog, prepareAgain, primary] {
             button.bezelStyle = .push
             button.controlSize = .large
             button.target = self
         }
         showLog.action = #selector(showLogClicked(_:))
         primary.action = #selector(primaryClicked(_:))
+        prepareAgain.action = #selector(prepareAgainClicked(_:))
 
         let versionLine = NSStackView(views: [version, info])
         versionLine.spacing = 4
         let identity = column([model, versionLine], spacing: 2)
         let state = column([status, progress, step, reason], spacing: 6)
-        let actions = NSStackView(views: [showLog, primary])
+        let actions = NSStackView(views: [showLog, prepareAgain, primary])
         actions.spacing = 12
         // The row keeps its height with no button (running), so the lockup doesn't move between states.
         actions.heightAnchor.constraint(greaterThanOrEqualTo: primary.heightAnchor).isActive = true
@@ -117,6 +119,7 @@ final class DevicePlaceholderViewController: NSViewController {
         step.isHidden = true
         reason.isHidden = true
         showLog.isHidden = true
+        prepareAgain.isHidden = true
         status.isHidden = false
         switch row.state {
         case .notDownloaded, .downloaded:
@@ -130,7 +133,15 @@ final class DevicePlaceholderViewController: NSViewController {
             status.stringValue = "Preparing…"
             progress.setAccessibilityLabel("Preparation progress")
             show(row)
-        case .ready: status.stringValue = "Ready"
+        case .ready:
+            status.stringValue = "Ready"
+            // Start stays the default: an older base still runs.
+            if let note = row.olderRecipeNote {
+                reason.stringValue = note
+                reason.isHidden = false
+                prepareAgain.isHidden = false
+                prepareAgain.isEnabled = row.allows(.prepareAgain, canDownload: canDownload)
+            }
         case .running: status.stringValue = "Running"
         case .stopping: status.stringValue = "Stopping…"
         case let .error(message):
@@ -213,6 +224,8 @@ final class DevicePlaceholderViewController: NSViewController {
         guard let action = row?.primaryAction else { return }
         onAction?(action)
     }
+
+    @objc private func prepareAgainClicked(_ sender: Any?) { onAction?(.prepareAgain) }
 
     @objc private func showLogClicked(_ sender: Any?) { onShowLog?() }
 }

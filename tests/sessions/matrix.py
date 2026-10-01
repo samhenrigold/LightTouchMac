@@ -251,7 +251,7 @@ def boot(entry, base, a, helper, work, env, app):
            "bundleID": app["bundle_id"], "work": str(work), "files": str(a.files),
            "ipodNAND": str(a.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(base) if board == "ipad" else "", "timeout": a.boot_timeout - 20,
-           "single": {"board": board, "base": str(base), "reboot": True, "lockdownTZ": str(a.lockdown_tz),
+           "single": {"board": board, "base": str(base), "reboot": True, "hardStop": a.hard_stop, "lockdownTZ": str(a.lockdown_tz),
                       "install": (entry.get("recipe") or {}).get("options", {}).get("appsync", False), "launch": a.launch,
                       **({"launchAt": [float(v) for v in a.launch_at.split(",")]} if a.launch_at else {}),
                       **({"tapAfterLaunch": [float(v) for v in a.gl_tap.split(",")]} if a.gl_tap else {})}}
@@ -429,8 +429,18 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base, ti
     # shutdown: judge boot 2's clean power-off too (audit gap #2 / finding 4: 8L1's boot-2 stalls and
     # the matrix judged only boot 1). If a second boot ran, its quit must confirm PMU standby / exit.
     quits = find("quit")
+    hard = bool(quits) and bool(quits[0].get("hard"))
+    if hard:
+        # --hard-stop: boot 1 ended with the app's Stop. The leg is boot 2 coming back from it: lit, lockdown and
+        # home (judged above on home2), then a clean power-off. `restored` says the FTL really ran _FTLRestore.
+        text = Path(serial).read_text(errors="replace") if Path(serial).exists() else ""
+        r["persist"] = {"ok": len(find("lit")) > 1 and len(find("usb")) > 1, "hard_stop": True,
+                        "restored": "Recovering NAND Data Structures" in text, "restore_ok": "_FTLRestore OK!" in text,
+                        "second_boot": r["persist"]["second_boot"]}
+        r["afc"] = {"ok": None, "note": "--hard-stop: boot 1 stops at its home check"}
+        quits = quits[1:]   # boot 2's clean power-off is the one judged
     q = quits[0] if quits else {}
-    did_boot2 = len(find("lit")) > 1
+    did_boot2 = len(find("lit")) > 1 and not hard
     q2 = quits[1] if len(quits) > 1 else {}
     def _clean(qq):
         return qq.get("confirmed", -1) >= 0 and qq.get("exited") and str(qq.get("reason")).endswith(" stopped.")
@@ -575,6 +585,8 @@ def main():
     ap.add_argument("--ipa", type=Path, help="the install check's IPA (default: per the entry's iOS, see test_app)")
     ap.add_argument("--bundle-id", help="with --ipa: its bundle id (default: its Info.plist's)")
     ap.add_argument("--launch-at", help="--launch on 2.x (no springboardservices): the icon's normalized X,Y")
+    ap.add_argument("--hard-stop", action="store_true", help="end boot 1 with the app's Stop (a hard halt) at its home check; "
+                    "the second boot must come back from it (smoke #70); persist judges that boot, shutdown its power-off")
     ap.add_argument("--launch", action="store_true", help="after the install, open the app from the Home screen (screenshots launched1-3)")
     ap.add_argument("--gl-tap", help="--launch: then tap this normalized X,Y (the Harness's GL row: iPad panel 0.343,0.5; "
                                      "iPod screen 0.5,0.165) and screenshot tapped1-2")

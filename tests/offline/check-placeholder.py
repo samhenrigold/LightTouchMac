@@ -74,6 +74,7 @@ import Cocoa
             ("preparing", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .preparing(prep), failure: nil)),
             ("error", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .failed(unsupported), failure: nil)),
             ("ready", DeviceRow(entry: ipad, instanceID: id, session: nil, job: nil, failure: nil)),
+            ("older-recipe", DeviceRow(entry: entry("n45ap-4B1"), instanceID: id, session: nil, job: nil, failure: nil, baseRecipe: 1)),
             ("stopped", DeviceRow(entry: ipad, instanceID: id, session: .dead("The iPad stopped unexpectedly."), job: nil, failure: nil)),
             ("requires-ipsw", DeviceRow(entry: ipod, instanceID: nil, session: nil, job: nil, failure: nil)),
         ]
@@ -118,6 +119,11 @@ import Cocoa
                 if p.keyEquivalent == "\r" && row.primaryAction == .cancel { fail("Return cancels") }
             }
             if row.isError && !buttons.contains(where: { $0.title == "Show Logs" }) { fail("an error without Show Logs") }
+            // A base from an older recipe: its line and Prepare Again beside Start (still the default); no other state shows them.
+            let again = buttons.first { $0.title == "Prepare Again…" }
+            if (name == "older-recipe") != (again != nil) { fail("Prepare Again shown: \(again != nil)") }
+            if let note = row.olderRecipeNote, !texts.contains(note) { fail("no older-recipe line: \(texts)") }
+            if row.preparedByOlderRecipe, again?.isEnabled != true || row.primaryTitle != "Start" { fail("Prepare Again disabled or Start not the default") }
             if row.isError && !texts.contains(where: { $0.hasPrefix("Couldn’t ") || $0 == "Stopped unexpectedly" }) { fail("an error headline that doesn't say what failed: \(texts)") }
             if texts.contains("Error") { fail("a bare Error headline") }
             if let bar = all(view).compactMap({ $0 as? NSProgressIndicator }).first(where: visible), !["Download progress", "Preparation progress"].contains(bar.accessibilityLabel() ?? "") {
@@ -181,7 +187,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-placeholder-') as tmp:
     art = 'NSImage(named: $0.shellImageName)'
     assert art in source, 'the art lookup moved: update this check'
     assets = app / 'Assets.xcassets'
-    (tmp / 'placeholder.swift').write_text(source.replace(art, f'NSImage(contentsOfFile: "{assets}/" + $0.shellImageName + ".imageset/" + ($0.shellImageName == "shell" ? "shell_opaque.png" : "ipad-frame.png"))'))
+    (tmp / 'placeholder.swift').write_text(source.replace(art, f'NSImage(contentsOfFile: "{assets}/" + $0.shellImageName + ".imageset/" + ["shell": "shell_opaque.png", "shell-1g": "shell-1g.png"][$0.shellImageName, default: "ipad-frame.png"])'))
     (tmp / 'stubs.swift').write_text(stubs)
     (tmp / 'main.swift').write_text(check)
     subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),

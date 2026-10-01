@@ -146,10 +146,12 @@ final class ConsoleSplitView: NSView {
         updatePolling()
     }
 
-    /// Show or hide, as Xcode's toggleDebuggerVisibility: animated unless Reduce Motion is on.
+    /// Show or hide, as Xcode's toggleDebuggerVisibility: animated unless Reduce Motion is on, or nothing
+    /// shows it (no visible window: the animator is driven by a display link, which never fires offscreen
+    /// or with the display asleep, and the height would stay where it was).
     func toggle() {
         layout.toggle()
-        apply(animated: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        apply(animated: window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         commit()
     }
 

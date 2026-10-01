@@ -359,6 +359,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 NSWorkspace.shared.activateFileViewerSelecting([instance.paths.directory])
             }
         case .delete: confirmDelete(entry)
+        case .prepareAgain: confirmDelete(entry, thenPrepare: true)
         }
     }
 
@@ -418,18 +419,22 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         FirmwareJobs.shared.importIPSW(url, for: entry)
     }
 
-    private func confirmDelete(_ entry: FirmwareCatalog.Entry) {
+    /// Delete, or with `thenPrepare` delete and prepare the entry again (a base from an older recipe): the same question.
+    private func confirmDelete(_ entry: FirmwareCatalog.Entry, thenPrepare: Bool = false) {
         guard let window, let instance = host.instance(for: entry) else { return }
         let alert = NSAlert()
         alert.alertStyle = .critical
-        alert.messageText = "Delete \(name(entry))?"
+        alert.messageText = thenPrepare ? "Prepare \(name(entry)) again?" : "Delete \(name(entry))?"
         alert.informativeText = "This permanently removes its apps, settings, and saved state."
-        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: thenPrepare ? "Prepare Again" : "Delete")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            do { try host.delete(instance); library.removeFromList(entry) }
+            do {
+                try host.delete(instance)
+                if thenPrepare { FirmwareJobs.shared.downloadAndPrepare(entry) } else { library.removeFromList(entry) }
+            }
             catch { NSAlert(error: error).beginSheetModal(for: window) }
         }
     }

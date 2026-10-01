@@ -90,7 +90,17 @@ import Cocoa
         return DeviceRow(entry: entry, instanceID: instance?.id, session: session(for: entry)?.phase,
                          job: FirmwareJobs.shared.jobs[entry.id], failure: failures[entry.id],
                          downloaded: entry.source.sha1.map { IPSWStore.shared.existing($0) != nil } ?? false,
-                         preparedWithoutActivation: instance.map(lacksActivation) ?? false)
+                         preparedWithoutActivation: instance.map(lacksActivation) ?? false,
+                         baseRecipe: instance.flatMap(baseRecipe))
+    }
+
+    /// Read once per device, like lacksActivation.
+    private var baseRecipes: [UUID: Int?] = [:]
+    private func baseRecipe(_ instance: DeviceInstance) -> Int? {
+        if let known = baseRecipes[instance.id] { return known }
+        let version = DeviceRow.baseRecipeVersion(instance.paths.base.appendingPathComponent("device.lock.json"))
+        baseRecipes[instance.id] = version
+        return version
     }
 
     /// Read once per device: the lock doesn't change while the app runs.
