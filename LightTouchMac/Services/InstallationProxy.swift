@@ -3,12 +3,6 @@
 
 import Foundation
 
-struct InstalledApp: Identifiable, Sendable {
-    /// The `CFBundleIdentifier`
-    let id: String
-    let name: String
-    let version: String
-}
 
 extension DeviceServices {
     // MARK: - List
@@ -16,7 +10,11 @@ extension DeviceServices {
     /// Installed third-party apps, via instproxy_browse with an
     /// ApplicationType=User filter. Replaces parsing `ideviceinstaller list`.
     func installedApps() async throws -> [InstalledApp] {
-        try await run(Timeouts.browse, "list apps") { imd, device in
+        if !local {
+            guard case .apps(let apps) = try await remote(.apps, seconds: Timeouts.browse) else { throw DeviceError.unavailable }
+            return apps
+        }
+        return try await run(Timeouts.browse, "list apps") { imd, device in
             guard let browse = imd.instproxy_browse,
                   let plistFree = imd.plist_free else { throw DeviceError.unavailable }
 
@@ -54,7 +52,8 @@ extension DeviceServices {
     // MARK: - Uninstall
 
     func uninstall(_ bundleID: String) async throws {
-        try await run(Timeouts.uninstall, "uninstall \(bundleID)") { imd, device in
+        if !local { _ = try await remote(.uninstall(bundleID), seconds: Timeouts.uninstall); return }
+        return try await run(Timeouts.uninstall, "uninstall \(bundleID)") { imd, device in
             guard let uninstall = imd.instproxy_uninstall else { throw DeviceError.unavailable }
             let client = try imd.startInstallationProxy(device: device)
             defer { _ = imd.instproxy_client_free?(client) }
@@ -75,6 +74,12 @@ extension DeviceServices {
     /// resets mid-install nothing arrives at all — so the idle timer, not the
     /// library, is what ends the wait.
     func install(stagedPath: String, progress: @escaping @Sendable (Int, String) -> Void) async throws {
+        if !local {
+            _ = try await remote(.install(stagedPath), seconds: Timeouts.installAbsolute + Timeouts.serviceProbe * 2) {
+                if case .install(let percent, let phase) = $0 { progress(percent, phase) }
+            }
+            return
+        }
         let socket = self.clientSocket
         try await DeviceGate.shared.serialized(socket: socket) {
             let cancellation = InstallCancellation()
@@ -128,10 +133,10 @@ extension DeviceServices {
 
     private nonisolated static func openInstallConnection() throws -> InstallConnection {
         let imd = IMobileDevice.self
-        guard imd.isAvailable, let idevice_new = imd.idevice_new,
+        guard imd.isAvailable, imd.idevice_new != nil,
               imd.instproxy_install != nil else { throw DeviceError.unavailable }
         var device: OpaquePointer?
-        guard idevice_new(&device, nil) == imd.success, let device else { throw DeviceError.notAttached }
+        guard imd.openDevice(&device) == imd.success, let device else { throw DeviceError.notAttached }
         let client: OpaquePointer
         do {
             try Task.checkCancellation()
@@ -253,7 +258,11 @@ extension DeviceServices {
     /// Does installation_proxy answer right now? A fresh boot brings lockdownd
     /// up ~40s before its services, so "lockdown replies" ≠ "installd is ready".
     func installProxyReady() async -> Bool {
-        (try? await run(Timeouts.serviceProbe, "installd probe") { imd, device in
+        if !local {
+            guard case .boolean(let ready) = try? await remote(.installReady, seconds: Timeouts.serviceProbe) else { return false }
+            return ready
+        }
+        return (try? await run(Timeouts.serviceProbe, "installd probe") { imd, device in
             let client = try imd.startInstallationProxy(device: device)
             _ = imd.instproxy_client_free?(client)
             return true

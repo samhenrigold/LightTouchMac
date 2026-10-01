@@ -19,7 +19,11 @@ extension DeviceServices {
     /// Bytes free on the media partition, via AFC. The pre-flight that names a
     /// full device before installd fails opaquely with PackageExtractionFailed.
     func freeSpaceBytes() async throws -> Int64 {
-        try await run(Timeouts.query, "free space") { imd, device in
+        if !local {
+            guard case .integer(let bytes) = try await remote(.freeSpace, seconds: Timeouts.query) else { throw DeviceError.unavailable }
+            return bytes
+        }
+        return try await run(Timeouts.query, "free space") { imd, device in
             guard let infoKey = imd.afc_get_device_info_key else { throw DeviceError.unavailable }
             let client = try imd.startAFC(device: device)
             defer { _ = imd.afc_client_free?(client) }
@@ -47,30 +51,6 @@ extension DeviceServices {
         try await stageFile(ipa, remote: "PublicStaging/\(Self.stagingName(ipa))", progress: progress)
     }
 
-    func stageSong(_ song: MediaSong, progress: @escaping @Sendable (Double) -> Void) async throws {
-        guard UUID(uuidString: song.id) != nil,
-              MediaSong.extensions.contains(song.audio.pathExtension),
-              song.audio.lastPathComponent == "audio." + song.audio.pathExtension else {
-            throw DeviceError.preflight("Invalid media staging path.")
-        }
-        _ = try await stageFile(song.audio, remote: "LightTouch/\(song.id)/\(song.audio.lastPathComponent)",
-                                reuseIdentical: true, progress: progress)
-    }
-
-    func stagePhoto(_ photo: MediaPhoto, progress: @escaping @Sendable (Double) -> Void) async throws {
-        guard UUID(uuidString: photo.id) != nil, photo.image.lastPathComponent == "image.jpg" else {
-            throw DeviceError.preflight("Invalid photo staging path.")
-        }
-        _ = try await stageFile(photo.image, remote: "LightTouch/\(photo.id)/image.jpg", reuseIdentical: true, progress: progress)
-    }
-
-    func stageVideo(_ video: MediaVideo, progress: @escaping @Sendable (Double) -> Void) async throws {
-        guard UUID(uuidString: video.id) != nil, video.video.lastPathComponent == "video.m4v" else {
-            throw DeviceError.preflight("Invalid video staging path.")
-        }
-        _ = try await stageFile(video.video, remote: "LightTouch/\(video.id)/video.m4v", reuseIdentical: true, progress: progress)
-    }
-
     func uploadFile(_ source: URL, into directory: String,
                     progress: @escaping @Sendable (Double) -> Void) async throws {
         try Self.validateFilePath(directory)
@@ -82,8 +62,14 @@ extension DeviceServices {
 
     /// Callers supply a validated relative destination. The same chunked AFC
     /// upload, cancellation and incomplete-file cleanup serve apps and songs.
-    private func stageFile(_ ipa: URL, remote: String, reuseIdentical: Bool = false, allowEmpty: Bool = false,
+    func stageFile(_ ipa: URL, remote: String, reuseIdentical: Bool = false, allowEmpty: Bool = false,
                            progress: @escaping @Sendable (Double) -> Void) async throws -> String {
+        if !local {
+            guard case .string(let path) = try await self.remote(.upload(source: ipa.path, remote: remote, reuse: reuseIdentical, allowEmpty: allowEmpty), seconds: Timeouts.stage, progress: {
+                if case .fraction(let value) = $0 { progress(value) }
+            }), let path else { throw DeviceError.unavailable }
+            return path
+        }
         return try await run(Timeouts.stage, "upload") { imd, device in
             // File I/O stays on the detached worker, including opening the file.
             let input = try FileHandle(forReadingFrom: ipa)
@@ -188,9 +174,9 @@ extension DeviceServices {
     /// attempt — AFC refused it (the bare "File-transfer error: code 1") — and
     /// one install's fire-and-forget cleanup could delete the next install's
     /// upload out from under it. A unique suffix removes both.
-    static let stagingSession = UUID().uuidString
+    nonisolated static let stagingSession = HostServiceResources.stagingSession
 
-    static func stagingName(_ ipa: URL) -> String {
+    nonisolated static func stagingName(_ ipa: URL) -> String {
         let base = ipa.deletingPathExtension().lastPathComponent
         let safe = String(base.map { $0.isLetter || $0.isNumber ? $0 : "_" }.prefix(48))
         return "\(safe)-\(stagingSession)-\(UUID().uuidString.prefix(8)).ipa"
@@ -199,12 +185,12 @@ extension DeviceServices {
     /// Startup cleanup can run after a new upload begins. Session-tagged names
     /// protect every upload from this process, including ones not yet queued.
     /// Internal, with the names above, for tests/offline/check-upload.py.
-    static func isOrphanedStagingName(_ name: String) -> Bool {
+    nonisolated static func isOrphanedStagingName(_ name: String) -> Bool {
         !name.isEmpty && name != "." && name != ".." && !name.contains("/")
             && !name.contains("-\(stagingSession)-")
     }
 
-    static func isOrphanedMediaUpload(_ name: String) -> Bool {
+    nonisolated static func isOrphanedMediaUpload(_ name: String) -> Bool {
         let parts = name.components(separatedBy: ".upload-")
         guard parts.count == 2,
               ["audio.mp3", "audio.m4a", "audio.aac", "audio.wav", "image.jpg"].contains(parts[0]),
@@ -217,6 +203,7 @@ extension DeviceServices {
     }
 
     func sweepStaging() async {
+        if !local { _ = try? await remote(.sweep, seconds: Timeouts.query); return }
         _ = try? await run(Timeouts.query, "staging sweep") { imd, device in
             guard let readDir = imd.afc_read_directory,
                   let remove = imd.afc_remove_path,
@@ -252,6 +239,7 @@ extension DeviceServices {
 
     /// Best-effort cleanup of a staged upload.
     func removeStaged(_ path: String) async {
+        if !local { _ = try? await remote(.remove(path), seconds: Timeouts.query); return }
         _ = try? await run(Timeouts.query, "cleanup") { imd, device in
             guard let remove = imd.afc_remove_path else { return }
             guard let client = try? imd.startAFC(device: device) else { return }
@@ -261,16 +249,13 @@ extension DeviceServices {
     }
 }
 
-struct DeviceFile: Sendable {
-    let name: String
-    let path: String
-    let isDirectory: Bool
-    let isRegular: Bool
-    let size: UInt64
-}
 
 extension DeviceServices {
     func files(in path: String) async throws -> [DeviceFile] {
+        if !local {
+            guard case .files(let files) = try await remote(.files(path), seconds: Timeouts.browse) else { throw DeviceError.unavailable }
+            return files
+        }
         try Self.validateFilePath(path)
         return try await run(Timeouts.browse, "browse files") { imd, device in
             guard let read = imd.afc_read_directory,
@@ -321,11 +306,27 @@ extension DeviceServices {
     /// Save to a private adjacent file, then publish only a completed transfer.
     func download(_ file: DeviceFile, to destination: URL,
                   progress: @escaping @Sendable (Double) -> Void) async throws {
+        if !local {
+            // The GUI owns publication. A killed transfer leaves only this
+            // private candidate, never a late replacement of the user's file.
+            let staging = destination.deletingLastPathComponent().appendingPathComponent(".LightTouch-host-" + UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+            defer { try? FileManager.default.removeItem(at: staging) }
+            let candidate = staging.appendingPathComponent("file")
+            _ = try await remote(.download(file, destination: candidate.path), seconds: Timeouts.stage) {
+                if case .fraction(let value) = $0 { progress(value) }
+            }
+            try Task.checkCancellation()
+            guard Darwin.rename(candidate.path, destination.path) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            return
+        }
         try Self.validateFilePath(file.path)
         guard file.isRegular, !file.path.isEmpty else {
             throw DeviceError.preflight("Select a regular file to export.")
         }
-        try await run(Timeouts.stage, "export file") { imd, device in
+        return try await run(Timeouts.stage, "export file") { imd, device in
             guard let open = imd.afc_file_open, let read = imd.afc_file_read,
                   let close = imd.afc_file_close else { throw DeviceError.unavailable }
             let client = try imd.startAFC(device: device)

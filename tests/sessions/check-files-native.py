@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import os, subprocess, sys, tempfile, time
 APP=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(APP/'scripts'))
+import swift_subprocess
+import host_service
 import sources  # the pinned checkouts (build-support/sources.json)
 ROOT=sources.path('qemu-ios')
 sys.path.insert(0,str(ROOT/'tests/ipod'))
@@ -12,7 +14,6 @@ import regress as r
 out=Path(tempfile.mkdtemp(prefix='ltm-files-native-'))
 swift=r'''import Foundation
 nonisolated func logEvent(_ message: String) { print(message) }
-struct InstalledApp: Sendable { let id, name, version: String }
 struct MediaVideo: Sendable { let id: String; let video: URL }
 struct MediaPhoto: Sendable { let id: String; let image: URL }
 struct MediaSong: Sendable { let id: String; let audio: URL; static let extensions: Set<String> = ["m4a"] }
@@ -63,13 +64,15 @@ func tryEqual(_ url:URL,_ bytes:Data)->Bool { (try? Data(contentsOf:url))==bytes
   let names=try FileManager.default.contentsOfDirectory(atPath:directory.path)
   precondition(names.allSatisfy{!$0.hasPrefix(".LightTouch-")})
   let free=try await service.freeSpaceBytes();precondition(free>0)
+  await service.stopWorker()
   print("PASS: native AFC listing, binary import/export, duplicate import, mismatch preservation and temporary cleanup")
  }
 }
 '''
 (out/'check.swift').write_text(swift)
-subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',
- '-module-cache-path',str(out/'modules'),*[str(APP/'LightTouchMac'/f'{name}.swift') for name in ['Services/DeviceServices','Services/AFC','Transport/IMobileDevice','Transport/DeviceExecution']],
+host_service.build_worker(APP, out/'LightTouchServices', swift_subprocess.swift_flags(APP))
+subprocess.run(['xcrun','swiftc', *swift_subprocess.swift_flags(APP), *host_service.client_sources(APP),'-swift-version','5','-default-isolation','MainActor',
+ '-module-cache-path',str(out/'modules'),
  str(out/'check.swift'),'-o',str(out/'check')],check=True)
 files=APP.parent/'qemu-ios-files'
 cfg=SimpleNamespace(out=str(out),files=str(files),base_nand=str(files/'nand-current'),nor=str(files/'ios3/nor_7E18.bin'),overlay=str(out/'overlay'),
@@ -82,7 +85,7 @@ try:
  d.start()
  ok,detail,_=d.wait_for_home(240);assert ok,detail
  udid,detail=r.wait_for_device(cfg,timeout=120);assert udid,detail
- subprocess.run([str(out/'check'),'127.0.0.1:'+str(cfg.mux_port),str(ROOT/'build-native14/Light Touch-latest.app/Contents/Frameworks'),str(out)],check=True,timeout=180)
+ subprocess.run([str(out/'check'),'127.0.0.1:'+str(cfg.mux_port),str(ROOT/'build-native14/Light Touch-latest.app/Contents/Frameworks'),str(out)],check=True,timeout=180,env=os.environ | {'LTM_HOST_SERVICE_WORKER':str(out/'LightTouchServices'),'LTM_SERVICE_FRAMEWORKS':str(ROOT/'build-native14/Light Touch-latest.app/Contents/Frameworks')})
  d.powerdown()
 finally:
  if d.qmp:d.qmp.close()

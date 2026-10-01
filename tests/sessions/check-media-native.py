@@ -34,6 +34,8 @@ args = parser.parse_args()
 if args.recording and not args.aac: parser.error('--recording requires --aac')
 APP = Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(APP/'scripts'))
+import swift_subprocess
+import host_service
 import sources  # the pinned checkouts (build-support/sources.json)
 ROOT = sources.path('qemu-ios')
 sys.path.insert(0,str(ROOT/'tests/ipod'))
@@ -52,7 +54,6 @@ cfg = SimpleNamespace(out=str(out),files=files,base_nand=files+'/nand-current',
 swift = r"""
 import Foundation
 nonisolated func logEvent(_ message: String) { NSLog("%@", message) }
-struct InstalledApp: Sendable { let id, name, version: String }
 nonisolated enum Bundled {
     static var frameworksDirectory: String? { CommandLine.arguments[5] }
     static var filesRoot: String { CommandLine.arguments[2] }
@@ -167,6 +168,7 @@ final class Progress: @unchecked Sendable {
             "id":id,"filename":file.lastPathComponent,"title":media.title,
         ])
         try manifest.write(to:URL(fileURLWithPath:CommandLine.arguments[6]))
+        await services.stopWorker()
         print("PASS: actual Swift preflight, AFC upload/progress, guest import commands and duplicate reconciliation")
     }
 }
@@ -174,12 +176,13 @@ final class Progress: @unchecked Sendable {
 driver = out/'driver.swift'
 driver.write_text(swift)
 executable = out/'driver'
-subprocess.run(['xcrun','swiftc', DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
+subprocess.run(['xcrun','swiftc', *swift_subprocess.swift_flags(APP), *[APP / f'LightTouchMac/Services/{name}.swift' for name in ['HostServiceTypes','HostServiceProtocol','HostServiceResources','HostServiceWorkers','MediaStaging']], DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
     '-module-cache-path',str(out/'modules'),
     str(APP/'LightTouchMac/Features/MediaIdentity.swift'),str(APP/'LightTouchMac/Features/MediaSong.swift'),str(APP/'LightTouchMac/Services/DeviceServices.swift'),str(APP/'LightTouchMac/Services/AFC.swift'),str(APP/'LightTouchMac/Transport/DeviceExecution.swift'),
     str(APP/'LightTouchMac/Transport/IMobileDevice.swift'),str(APP/'LightTouchMac/Features/MediaPhoto.swift'),
     str(APP/'LightTouchMac/Features/MediaVideo.swift'),str(APP/'LightTouchMac/Features/PreparedMedia.swift'),
     str(APP/'LightTouchMac/Guest/GuestServices.swift'),str(APP/'LightTouchMac/Features/MediaImport.swift'),str(APP/'LightTouchMac/Guest/GuestAgent.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
+host_service.build_worker(APP, out / "LightTouchServices", swift_subprocess.swift_flags(APP))
 if args.photo:
     from PIL import Image,ImageDraw
     source = out/"Photo 'quoted' $title — été.png"
@@ -258,7 +261,7 @@ try:
     command = [str(executable),str(source),files,'127.0.0.1:'+str(cfg.mux_port),
         'http://127.0.0.1:'+str(server.server_port),str(frameworks),str(manifest)]
     if args.guest_tools: command.append(str(args.guest_tools.resolve()))
-    subprocess.run(command,check=True,timeout=180)
+    subprocess.run(command,check=True,timeout=180, env=os.environ | {"LTM_HOST_SERVICE_WORKER": str(out / "LightTouchServices"), "LTM_SERVICE_FRAMEWORKS": str(frameworks)})
     server.shutdown()
     server.server_close()
     server = None

@@ -27,6 +27,11 @@ nonisolated enum IMobileDevice {
 
     static var isAvailable: Bool { handles.isEmpty == false && idevice_new != nil }
 
+    static func openDevice(_ device: inout OpaquePointer?) -> Int32 {
+        guard let new = idevice_new else { return -1 }
+        return HostServiceResources.udid.map { id in id.withCString { new(&device, $0) } } ?? new(&device, nil)
+    }
+
     // MARK: - Loading
 
     /// Contents/Frameworks first, so a packaged app uses the dylibs shipped
@@ -37,7 +42,7 @@ nonisolated enum IMobileDevice {
     /// not (a static libplist, say).
     private static let handles: [UnsafeMutableRawPointer] = {
         let names = ["libimobiledevice-1.0.dylib", "libplist-2.0.dylib"]
-        let directories = [Bundled.frameworksDirectory, "/opt/homebrew/lib", "/usr/local/lib"]
+        let directories = [HostServiceResources.frameworksDirectory, "/opt/homebrew/lib", "/usr/local/lib"]
             .compactMap { $0 }
         return names.compactMap { name in
             directories.lazy
@@ -245,9 +250,9 @@ nonisolated enum IMobileDevice {
     /// only the USB bridge check; it says nothing about app-service readiness.
     /// The caller must select the endpoint through DeviceGate before opening.
     static func checkAttachment() throws {
-        guard let idevice_new else { throw DeviceError.unavailable }
+        guard idevice_new != nil else { throw DeviceError.unavailable }
         var device: OpaquePointer?
-        guard idevice_new(&device, nil) == success, let device else { throw DeviceError.notAttached }
+        guard openDevice(&device) == success, let device else { throw DeviceError.notAttached }
         _ = idevice_free?(device)
     }
 }

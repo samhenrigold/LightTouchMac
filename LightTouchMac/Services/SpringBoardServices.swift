@@ -22,7 +22,11 @@ extension DeviceServices {
     /// caller can tell "SpringBoard says there is nothing" from "we couldn't
     /// ask" — an empty list would silently reorder the sidebar to nothing.
     func homeScreenOrder() async throws -> [String] {
-        try await withIconState { state, _ in HomeScreenLayout.flatten(state) }
+        if !local {
+            guard case .strings(let ids) = try await remote(.homeOrder, seconds: Timeouts.query) else { throw DeviceError.unavailable }
+            return ids
+        }
+        return try await withIconState { state, _ in HomeScreenLayout.flatten(state) }
     }
 
     /// Move `bundleID` into the slot `other` currently occupies, or to the end
@@ -35,8 +39,12 @@ extension DeviceServices {
     /// Every page keeps its icon count: icons after the insertion point shuffle
     /// up one slot, exactly as dragging on the device does.
     @discardableResult
-    func moveOnHomeScreen(_ bundleID: String, before other: String?, profile: DeviceProfile) async throws -> [String] {
-        try await withIconState { state, client in
+    func moveOnHomeScreen(_ bundleID: String, before other: String?, deviceName: String) async throws -> [String] {
+        if !local {
+            guard case .strings(let ids) = try await remote(.move(bundle: bundleID, before: other, deviceName: deviceName), seconds: Timeouts.query) else { throw DeviceError.unavailable }
+            return ids
+        }
+        return try await withIconState { state, client in
             var ids = HomeScreenLayout.flatten(state)
             // Not "return ids". Returning the unchanged order looked like a
             // successful move to the caller, which kept its optimistic row
@@ -46,7 +54,7 @@ extension DeviceServices {
             guard let from = ids.firstIndex(of: bundleID) else {
                 throw DeviceToolsError.failed(
                     "This app isn’t on the Home screen yet. "
-                    + "Restart the \(profile.shortName), then try moving it again.")
+                    + "Restart the \(deviceName), then try moving it again.")
             }
             ids.remove(at: from)
             let to = other.flatMap { ids.firstIndex(of: $0) } ?? ids.count
@@ -60,7 +68,11 @@ extension DeviceServices {
     /// 3 landscape right, 4 landscape left). 3.2's springboardservicesrelay
     /// answers it; 3.1.3's doesn't (see EmulatorController's auto-rotation).
     func interfaceOrientation() async throws -> Int {
-        try await withSpringBoard { client in
+        if !local {
+            guard case .integer(let orientation) = try await remote(.orientation, seconds: Timeouts.query) else { throw DeviceError.unavailable }
+            return Int(orientation)
+        }
+        return try await withSpringBoard { client in
             guard let get = IMobileDevice.sbservices_get_interface_orientation else {
                 throw DeviceToolsError.failed("App services are missing from this copy of Light Touch. Reinstall Light Touch.")
             }
@@ -81,7 +93,7 @@ extension DeviceServices {
     private func withIconState<T: Sendable>(
         _ body: @Sendable @escaping ([Any], OpaquePointer) throws -> T
     ) async throws -> T {
-        try await withSpringBoard { client in
+        return try await withSpringBoard { client in
             let imd = IMobileDevice.self
             guard let sbservices_get_icon_state = imd.sbservices_get_icon_state,
                   let plist_free = imd.plist_free else {
@@ -113,7 +125,7 @@ extension DeviceServices {
     private func withSpringBoard<T: Sendable>(
         _ body: @Sendable @escaping (OpaquePointer) throws -> T
     ) async throws -> T {
-        try await run(Timeouts.browse, "home-screen layout") { imd, device in
+        return try await run(Timeouts.browse, "home-screen layout") { imd, device in
             guard let lockdownd_client_new_with_handshake = imd.lockdownd_client_new_with_handshake,
                   let lockdownd_start_service = imd.lockdownd_start_service,
                   let sbservices_client_new = imd.sbservices_client_new else {

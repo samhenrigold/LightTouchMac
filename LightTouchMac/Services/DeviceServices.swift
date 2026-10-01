@@ -1,39 +1,18 @@
-// Created by Sam on 2026-08-05.
-//
-// One device's stock lockdown services, in-process through the dlopen'd
-// libimobiledevice (Transport/IMobileDevice.swift): the struct and its `run`
-// kernel (and the bounded attachment probe) here, one file per service beside
-// it — InstallationProxy (list, install, uninstall), AFC (free space, staging,
-// the Files browser), SpringBoardServices (icon order, orientation),
-// LockdownTools (ActivationState, the lockdown-tz and lockdown-mcinstall
-// children); NotificationProxy keeps its own long-lived session. This is what
-// retires ideviceinstaller and the 579-line install script from the app's
-// path, and with them a week of glue
-// bugs: the unbounded idevice_wait_for_command_to_complete hang, retry logic
-// that string-matched stderr, and an ssh ControlPath that silently disabled
-// every guest command.
-//
-// Three rules hold this together:
-//   1. Blocking C calls run on a detached task and race an explicit deadline.
-//      A deadline loss abandons (leaks) the still-blocked task — a blocked C
-//      call cannot be cancelled — and reconnects fresh. Never free a handle
-//      from the watchdog side; that frees under a live library thread.
-//   2. One process-wide serial gate. setenv(USBMUXD_SOCKET_ADDRESS) is global
-//      and the guest serves ~one lockdown session, so all of this is one at a
-//      time — across devices too: with several running, the gate is what keeps
-//      each operation on its own device's usbmuxd (DeviceGate.serialized(socket:)).
-//      An abandoned call also prevents switching to another device until it returns.
-//      The devices wait for each other; the phase-4 option is to
-//      run these services inside each device's helper, one process per daemon. The gate does NOT bound the leaked threads on its own — what
-//      releases it is the deadline, not the thread — so they are counted
-//      (AbandonedWork) and the gate refuses new work past the cap.
-//   3. Errors are typed (the C libraries' own return codes), and the retry
-//      policy is expressed over those codes, not over the text of a message.
+// Stock host services execute in an immutable-endpoint, killable host worker.
+// Only the worker calls the local C engine; no shipping GUI fallback exists.
 
 import Foundation
 
 nonisolated struct DeviceServices: Sendable {
+    static let session = UUID()
     let clientSocket: String
+    let endpoint: HostServiceEndpoint
+    let local: Bool
+    init(clientSocket: String, udid: String? = nil, session: UUID = Self.session, local: Bool = false) {
+        self.clientSocket = clientSocket
+        self.endpoint = HostServiceEndpoint(socket: clientSocket, udid: udid, session: session)
+        self.local = local
+    }
 
     // MARK: - Execution: gate + deadline + fresh handles
 
@@ -45,6 +24,7 @@ nonisolated struct DeviceServices: Sendable {
                           _ body: @escaping @Sendable (IMobileDevice.Type, OpaquePointer) throws -> T)
         async throws -> T
     {
+        guard local else { throw DeviceToolsError.failed("Unrouted host service operation.") }
         let socket = clientSocket
         return try await DeviceGate.shared.serialized(socket: socket) {
             let started = ContinuousClock.now
@@ -55,7 +35,8 @@ nonisolated struct DeviceServices: Sendable {
                         throw DeviceError.unavailable
                     }
                     var device: OpaquePointer?
-                    guard idevice_new(&device, nil) == imd.success, let device else {
+                    let opened = endpoint.udid.map { id in id.withCString { idevice_new(&device, $0) } } ?? idevice_new(&device, nil)
+                    guard opened == imd.success, let device else {
                         throw DeviceError.notAttached
                     }
                     defer { _ = imd.idevice_free?(device) }
@@ -78,6 +59,7 @@ nonisolated struct DeviceServices: Sendable {
     /// path — so a wedged socket hung the quit itself. `withDeadline` abandons
     /// the blocked thread; the gate keeps it from racing other device work.
     func checkAttachment() async throws {
+        if !local { _ = try await remote(.attachment, seconds: Timeouts.serviceProbe * 2); return }
         let socket = clientSocket
         // Bounded INCLUDING the wait for the gate. withDeadline bounds the probe
         // itself, but not the queue in front of it, and this is called from the

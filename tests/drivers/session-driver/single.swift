@@ -153,6 +153,7 @@ struct SingleConfig: Decodable {
         d.process.terminate()
         let exited = await d.process.waitForExit(timeout: 30)
         emit("quit", ["device": d.name, "generation": generation, "confirmed": confirmed, "exited": exited, "reason": d.process.deathReason ?? ""])
+        await d.services.stopWorker()
         d.mux.stop()
     }
 
@@ -187,7 +188,8 @@ struct SingleConfig: Decodable {
             }
             d.process.terminate()
             _ = await d.process.waitForExit(timeout: 30)
-            d.mux.stop()
+            await d.services.stopWorker()
+        d.mux.stop()
             d.serial?.removeEndpoints()
         }
         d.serial?.finish()

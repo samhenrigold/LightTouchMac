@@ -111,6 +111,9 @@ APP_BIN="$APP/Contents/MacOS/$APP_EXECUTABLE"
 # links only system libraries and dlopens Frameworks/libqemu-arm.dylib, whose
 # closure is embedded above; its build-tree rpath is dropped below.
 DEVICE_HELPER="$APP/Contents/MacOS/LightTouchDevice"
+SERVICE_HELPER="$APP/Contents/MacOS/LightTouchServices"
+[ -f "$SERVICE_HELPER" ] || { echo "missing $SERVICE_HELPER; build the LightTouchMac scheme" >&2; exit 1; }
+python3 "$CHECK" --minos "$MINOS" "${CHECK_ARCHS[@]}" "$SERVICE_HELPER"
 [ -f "$DEVICE_HELPER" ] || { echo "missing $DEVICE_HELPER; build the LightTouchMac scheme (it embeds the helper)" >&2; exit 1; }
 python3 "$CHECK" --minos "$MINOS" "${CHECK_ARCHS[@]}" "$DEVICE_HELPER"   # Swift binaries weak-import their FORCE_LOAD markers
 # The firmware preparer (Packages/FirmwareKit's CLI), when built: hardened
@@ -305,7 +308,7 @@ if [ -n "${LTM_BUILD_RECORD:-}" ]; then
 fi
 
 # Drop the build-tree rpath so resolution goes through Contents/Frameworks only.
-for f in "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
+for f in "$APP_BIN" "$DEVICE_HELPER" "$SERVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
     while IFS= read -r path; do
         case "$path" in /*) install_name_tool -delete_rpath "$path" "$f" ;; esac
     done < <(python3 "$CHECK" --rpaths "$f")
@@ -314,7 +317,7 @@ done
 # No debug symbols or build paths ship: each binary's dSYM (crash symbolication) goes to LTM_DSYM_DIR when it
 # still has a debug map (build-release.py's dylib stage already stripped libqemu-arm.dylib and kept its dSYMs),
 # then strip -S -x (debug and local symbols) before signing.
-for f in "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
+for f in "$APP_BIN" "$DEVICE_HELPER" "$SERVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
     [ -L "$f" ] && continue
     if [ -n "${LTM_DSYM_DIR:-}" ] && nm -ap "$f" 2>/dev/null | grep ' OSO ' >/dev/null; then
         mkdir -p "$LTM_DSYM_DIR"
@@ -327,7 +330,7 @@ done
 # Guest ARMv6 helpers are resources, not executable on macOS.
 echo "sealing…"
 python3 "$CHECK" --minos "$MINOS" "${CHECK_ARCHS[@]}" --bundle "$APP" \
-    "$APP_BIN" "$DEVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}
+    "$APP_BIN" "$DEVICE_HELPER" "$SERVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}
 
 # Ad-hoc signatures have no Team ID, so hardened library validation cannot
 # establish shared identity between a helper and its bundled dylibs. Use plain
@@ -343,7 +346,7 @@ sign_nested_code() {
 # QEMU entitlements: JIT, unsigned executable memory, no library validation),
 # then the app with entitlements.
 echo "signing (id: $SIGN_ID)…"
-for f in "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
+for f in "$SERVICE_HELPER" "$FRAMEWORKS"/*.dylib "${HOST_TOOLS[@]}" ${FIRMWAREKIT[@]+"${FIRMWAREKIT[@]}"}; do
     [ -L "$f" ] && continue
     # Scripts are not signable and do not need to be; the app's signature covers
     # them as resources.

@@ -64,11 +64,12 @@ HOME = Path.home()
 sys.path.insert(0, str(ROOT / "scripts"))
 import sources  # the pinned checkouts (build-support/sources.json)
 import swift_subprocess
+import host_service
 TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
 APP_SOURCES = ["Services/DeviceServices", "Device/DeviceProcess", "Transport/DeviceExecution", "Device/BootRecipe", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
                "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestAgent", "Guest/GuestPackage",
                "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
-               "Device/WebProxyConfiguration", "Services/SpringBoardServices"]
+               "Device/WebProxyConfiguration", "Services/SpringBoardServices", "Services/LockdownState", "Services/HostServiceTypes", "Services/HostServiceProtocol", "Services/HostServiceResources", "Services/HostServiceWorkers", "Services/MediaStaging", "Services/HomeScreenOrdering"]
 
 
 def tree(root):
@@ -168,6 +169,12 @@ def build(args, out):
                     ROOT / "tests/drivers/session-driver/deadline.swift", ROOT / "tests/drivers/session-driver/proxy.swift",
                     "-o", out / "session-driver"],
                    check=True, stdout=open(out / "swiftc.log", "w"), stderr=subprocess.STDOUT)
+    worker = out / "LightTouchServices"
+    if getattr(args, "service_worker", None):
+        worker.symlink_to(Path(args.service_worker).resolve())
+    else:
+        with open(out / "service-swiftc.log", "w") as log:
+            host_service.build_worker(ROOT, worker, swift_subprocess.swift_flags(ROOT), log=log)
     if args.helper:
         return Path(args.helper)
     qemu = sources.path("qemu-ios")
@@ -201,6 +208,7 @@ def main():
     ap.add_argument("--board", choices=("ipod", "ipad"), help="--single: the base's board")
     ap.add_argument("--afc-race", type=int, metavar="N", help="--single: N boots, AFC at lockdown's first answer, then Stop (smoke.md #5)")
     ap.add_argument("--afc-race-dirty", action="store_true", help="--afc-race: install, upload and halt first, stopping mid-shutdown")
+    ap.add_argument("--service-worker", help="explicit executable host-service worker (otherwise compile production sources)")
     ap.add_argument("--frameworks", help="where libimobiledevice is loaded from (default Homebrew's)")
     ap.add_argument("--ipad-itpack", type=Path, help="boot the iPad with the app's offer from this armv7.itpack and check "
                     "the loader's report and the agent (foreground app, lock state, launch)")
@@ -251,7 +259,7 @@ def main():
                                     {"name": "fresh", "nand": str(dev / "nand"), "nor": str(dev / "nor.bin"), "iBoot": str(dev / "iBoot.bin"),
                                      "gidBlobs": str(dev / "gid-blobs.bin"), "lock": str(dev / "device.lock.json"), "rollback": True}]}
     (work / "config.json").write_text(json.dumps(cfg, indent=1))
-    env = dict(os.environ, LTM_QEMU_DYLIB=args.dylib)
+    env = dict(os.environ, LTM_QEMU_DYLIB=args.dylib, LTM_HOST_SERVICE_WORKER=str(work / "LightTouchServices"), LTM_SERVICE_FRAMEWORKS=args.frameworks or "/opt/homebrew/lib")
     driver = subprocess.Popen([work / "session-driver", work / "config.json"], stdout=open(work / "driver.jsonl", "w"),
                               stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env)
     events = []

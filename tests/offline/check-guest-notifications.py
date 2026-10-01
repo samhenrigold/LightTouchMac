@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the production notification watcher with a controllable C-service boundary."""
 from pathlib import Path
+from host_service_fixtures import leaves
 import subprocess
 import tempfile
 
@@ -14,6 +15,13 @@ watcher = watcher.replace(".seconds(ok ? 2 : 10)", ".milliseconds(ok ? 5 : 10)")
 fixture = r'''
 import Foundation
 import Dispatch
+nonisolated enum DeviceServices { static let session = UUID() }
+actor HostServiceWorkers {
+ static let shared = HostServiceWorkers()
+ func observe(endpoint: HostServiceEndpoint, onChange: @escaping @Sendable () -> Void) async -> Bool {
+  fatalError("notification C-engine fixture must inject its observer")
+ }
+}
 nonisolated func logEvent(_ message: String) { }
 
 nonisolated final class Library: @unchecked Sendable {
@@ -70,6 +78,7 @@ nonisolated enum IMobileDevice {
     typealias Observe = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
     typealias SetCallback = @convention(c) (OpaquePointer?, NpNotifyCB?, UnsafeMutableRawPointer?) -> Int32
     static let idevice_new: NewDevice? = { output, _ in output.pointee = OpaquePointer(bitPattern: 42); return 0 }
+    static func openDevice(_ output: inout OpaquePointer?) -> Int32 { idevice_new!(&output, nil) }
     static let idevice_free: FreeHandle? = { _ in 0 }
     static let np_client_start_service: NewClient? = { _, output, _ in Library.shared.start(output) }
     static let np_client_free: FreeHandle? = { Library.shared.free($0) }
@@ -105,7 +114,9 @@ nonisolated enum IMobileDevice {
         Timeouts.serviceProbe = 0.025
         let library = Library.shared
         let activity = Activity()
-        let watcher = NotificationProxy(clientSocket: "127.0.0.1:1") { 0 }
+        let watcher = NotificationProxy(clientSocket: "127.0.0.1:1", observe: { endpoint, allowed, change in
+            await NotificationProxy.localObserveOnce(socket: endpoint.socket, attachAllowed: allowed, onChange: change)
+        }) { 0 }
         func start() {
             watcher.start(attachAllowed: { await activity.canAttach() }) {
                 Task { @MainActor in activity.changed() }
@@ -203,7 +214,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-notifications-") as directory:
     source = Path(directory) / "check.swift"
     source.write_text(fixture + execution + watcher)
     binary = Path(directory) / "check"
-    subprocess.run(["xcrun", "swiftc", "-parse-as-library", "-swift-version", "6",
+    subprocess.run(["xcrun", "swiftc", *leaves(root), "-parse-as-library", "-swift-version", "6",
                     "-default-isolation", "MainActor", "-module-cache-path", directory + "/modules",
                     str(source), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=15)

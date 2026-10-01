@@ -123,6 +123,7 @@ extension String {
     let profile: DeviceProfile
     var process: DeviceProcess!
     var mux: Mux!
+    private var serviceSession = UUID()
     var serial: SerialLogCapture?
     /// The app's serial watch (EmulatorController.openSerialLog): phrases and what to do on the first sight.
     var serialWatch: (phrases: [String], onMatch: @Sendable (String) -> Void)?
@@ -139,6 +140,7 @@ extension String {
     /// What EmulatorController.start + iPodBoot/iPadBoot do, with test paths and no audio.
     func boot(generation: Int, guestPackage: String? = nil) throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        serviceSession = UUID()
         mux = try Mux(name: name)
         serial = try SerialLogCapture(url: dir.appendingPathComponent("serial.log"), temporaryRoot: work,
                                       watch: serialWatch?.phrases ?? [], onMatch: serialWatch?.onMatch ?? { _ in })
@@ -230,7 +232,7 @@ extension String {
     static var ipodNAND: String { config.ipodNAND }
     static var ipadBase: String { config.ipadBase }
 
-    var services: DeviceServices { DeviceServices(clientSocket: mux.clientSocket) }
+    var services: DeviceServices { DeviceServices(clientSocket: mux.clientSocket, session: serviceSession) }
 
     func brightness() -> Double? { process.link.frontSurface().map { FrameTools.brightness($0.surface) } }
     /// A screenshot as DisplayView takes one: the newest ring surface under a use count.
@@ -298,19 +300,7 @@ extension String {
 
     /// One lockdown value (a string) through this device's socket, under the gate.
     func lockdownValue(_ key: String) async -> String? {
-        try? await services.run(Timeouts.query, key) { imd, device in
-            guard let newClient = imd.lockdownd_client_new_with_handshake, let getValue = imd.lockdownd_get_value,
-                  let plistFree = imd.plist_free else { throw DeviceError.unavailable }
-            var client: OpaquePointer?
-            let rc = newClient(device, &client, "LightTouchMac")
-            guard rc == imd.success, let client else { throw DeviceError.lockdown(rc) }
-            defer { _ = imd.lockdownd_client_free?(client) }
-            var value: OpaquePointer?
-            let vr = key.withCString { getValue(client, nil, $0, &value) }
-            guard vr == imd.success, let value else { throw DeviceError.lockdown(vr) }
-            defer { plistFree(value) }
-            return IMobileDevice.decode(value) as? String
-        }
+        try? await services.lockdownValue(key)
     }
 }
 

@@ -34,7 +34,7 @@ final class NotificationProxy {
     ]
 
     private var running = false
-    private let socket: String
+    private let endpoint: HostServiceEndpoint
     /// The device's NAND icon-state write counter, read from its helper.
     private let iconGeneration: () -> UInt64?
     /// Held so the watcher can actually be stopped. Both of these used to be
@@ -70,9 +70,17 @@ final class NotificationProxy {
         }
     }
 
-    init(clientSocket: String, iconGeneration: @escaping () -> UInt64?) {
-        self.socket = clientSocket
+    typealias Observer = @Sendable (HostServiceEndpoint, @escaping @Sendable () async -> Bool, @escaping @Sendable () -> Void) async -> Bool
+    private let observe: Observer
+
+    init(clientSocket: String, udid: String? = nil, session: UUID = DeviceServices.session,
+         observe: @escaping Observer = { endpoint, allowed, change in
+             guard await allowed() else { return false }
+             return await HostServiceWorkers.shared.observe(endpoint: endpoint, onChange: change)
+         }, iconGeneration: @escaping () -> UInt64?) {
+        self.endpoint = HostServiceEndpoint(socket: clientSocket, udid: udid, session: session)
         self.iconGeneration = iconGeneration
+        self.observe = observe
     }
 
     /// The C callback runs on libimobiledevice's own thread. Classify the
@@ -87,9 +95,10 @@ final class NotificationProxy {
     /// service, so there is no extra USB health probe to queue behind transfers.
     func start(attachAllowed: @escaping @Sendable () async -> Bool,
                onChange: @escaping @Sendable () -> Void) {
-        guard !running, IMobileDevice.isAvailable else { return }
+        guard !running else { return }
         running = true
-        let socket = self.socket
+        let endpoint = self.endpoint
+        let observe = self.observe
 
         // The home screen is the one change the guest will never announce, so
         // take it from underneath instead: the icon layout can only reach flash
@@ -123,8 +132,7 @@ final class NotificationProxy {
                     do { try await Task.sleep(for: .seconds(1)) } catch { break }
                     continue
                 }
-                let ok = await Self.observeOnce(socket: socket, attachAllowed: attachAllowed,
-                                               onChange: onChange)
+                let ok = await observe(endpoint, attachAllowed, onChange)
                 // A failed attach usually means the guest is still booting;
                 // a successful session that ended means the link dropped.
                 do { try await Task.sleep(for: .seconds(ok ? 2 : 10)) } catch { break }
@@ -143,7 +151,7 @@ final class NotificationProxy {
 
     /// Opens one session and blocks until it dies. Returns whether it ever got
     /// as far as observing, so the caller can back off sensibly.
-    private nonisolated static func observeOnce(socket: String,
+    nonisolated static func localObserveOnce(socket: String,
                                                 attachAllowed: @escaping @Sendable () async -> Bool,
                                                 onChange: @escaping @Sendable () -> Void) async -> Bool {
         // np_client_start_service does a full lockdown handshake and start_service
@@ -188,13 +196,13 @@ final class NotificationProxy {
         -> Session?
     {
         let imd = IMobileDevice.self
-        guard let idevice_new = imd.idevice_new,
+        guard imd.idevice_new != nil,
               let start = imd.np_client_start_service,
               let observe = imd.np_observe_notification,
               let setCB = imd.np_set_notify_callback else { return nil }
 
         var device: OpaquePointer?
-        guard idevice_new(&device, nil) == imd.success, let device else { return nil }
+        guard imd.openDevice(&device) == imd.success, let device else { return nil }
         defer { _ = imd.idevice_free?(device) }
 
         var client: OpaquePointer?

@@ -4,6 +4,9 @@
 inspector's read-suppression predicate (one declaration, looked up by name)."""
 from pathlib import Path
 import subprocess, tempfile
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import swift_subprocess
 
 root = Path(__file__).resolve().parents[2]
 app = root / 'LightTouchMac'
@@ -50,7 +53,7 @@ nonisolated final class Signal: @unchecked Sendable {
 @main struct Check {
  @MainActor static func main() async throws {
   Timeouts.serviceProbe = 0.015
-  let device = DeviceServices(clientSocket: "fixture")
+  let device = DeviceServices(clientSocket: "fixture", local: true)
   try await device.checkAttachment()
   IMobileDevice.setFailure(.unavailable)
   do { try await device.checkAttachment(); preconditionFailure() }
@@ -98,7 +101,7 @@ nonisolated final class Signal: @unchecked Sendable {
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-health-') as d:
     p = Path(d)/'check.swift'; p.write_text(source)
-    subprocess.run(['swiftc', '-swift-version', '6', '-parse-as-library', '-module-cache-path', d+'/modules',
+    subprocess.run(['swiftc', *swift_subprocess.swift_flags(root), *[str(app/'Services'/name) for name in ['HostServiceTypes.swift','HostServiceProtocol.swift','HostServiceResources.swift','HostServiceWorkers.swift']], '-swift-version', '6', '-parse-as-library', '-module-cache-path', d+'/modules',
                     str(app / 'Services/DeviceServices.swift'), str(app / 'Transport/DeviceExecution.swift'), str(p),
                     '-o', d+'/check'], check=True)
     subprocess.run([d+'/check'], check=True, timeout=10)

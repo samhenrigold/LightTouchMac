@@ -3,6 +3,7 @@
 startup sweep may remove. Compiles Services/AFC.swift and Transport/DeviceExecution.swift whole, against a fake
 libimobiledevice and a DeviceServices whose run kernel calls straight through."""
 from pathlib import Path
+from host_service_fixtures import leaves, local_engine_stub
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
 app = root / 'LightTouchMac'
@@ -142,6 +143,6 @@ func stagingNames() {
 with tempfile.TemporaryDirectory() as work:
     swift=Path(work)/'check.swift'; swift.write_text(source)
     exe=Path(work)/'check'
-    subprocess.run(['swiftc','-parse-as-library','-module-cache-path','/tmp/ltm-module-cache',str(app/'Services/AFC.swift'),
+    subprocess.run(['swiftc', *leaves(root), *local_engine_stub(Path(work)),'-parse-as-library','-module-cache-path','/tmp/ltm-module-cache',str(app/'Services/AFC.swift'), str(app/'Services/MediaStaging.swift'),
                     str(app/'Transport/DeviceExecution.swift'),str(swift),'-o',str(exe)],check=True)
     subprocess.run([str(exe),str(Path(work)/'fixture.ipa')],check=True)

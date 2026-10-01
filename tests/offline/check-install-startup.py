@@ -4,6 +4,7 @@ and Transport/DeviceExecution.swift whole against a fake libimobiledevice, with 
 (after openBeforeDeadline stores the connection for the deadline's loser, and after it is handed to the install) so the races
 run deterministically; no production deadline, cancellation or cleanup is replaced."""
 from pathlib import Path
+from host_service_fixtures import leaves, local_engine_stub
 import subprocess
 import tempfile
 
@@ -85,6 +86,7 @@ nonisolated enum IMobileDevice {
         output.pointee = OpaquePointer(bitPattern: 17)
         return 0
     }
+    static func openDevice(_ output: inout OpaquePointer?) -> Int32 { idevice_new!(&output, nil) }
     static let idevice_free: Free? = { pointer in
         precondition(pointer == OpaquePointer(bitPattern: 17))
         Fixture.shared.lock.withLock { Fixture.shared.deviceFrees += 1; precondition(Fixture.shared.deviceFrees == 1) }
@@ -258,7 +260,7 @@ with tempfile.TemporaryDirectory(prefix="ltm-install-startup-") as directory:
     (path / "InstallationProxy.swift").write_text(install)
     (path / "DeviceExecution.swift").write_text(execution)
     binary = path / "check"
-    subprocess.run(["xcrun", "swiftc", "-parse-as-library", "-swift-version", "6",
+    subprocess.run(["xcrun", "swiftc", *leaves(root), *local_engine_stub(path), "-parse-as-library", "-swift-version", "6",
                     "-default-isolation", "MainActor", "-module-cache-path", str(path / "modules"),
                     str(path / "InstallationProxy.swift"), str(path / "DeviceExecution.swift"),
                     str(swift), "-o", str(binary)], check=True)

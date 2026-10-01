@@ -1,4 +1,4 @@
-// The device-operation kernel every service runs on: the deadline race (withDeadline / withSoftDeadline,
+// The local C engine used inside LightTouchServices: the deadline race (withDeadline / withSoftDeadline,
 // abandoned blocked C calls, handles a late open leaves behind), the one serial gate per process
 // (DeviceGate), the errors and the timeout knobs. Foundation only; the offline checks compile this file whole.
 
@@ -9,7 +9,8 @@ import Foundation
 /// Race blocking work against a timeout. The loser is abandoned: a blocked C
 /// call ignores cancellation, so on a timeout the detached task keeps running
 /// until the call returns and its result is discarded — the deliberate leak the
-/// serial gate bounds to one.
+/// service process owns. The host registry kills and reaps the whole process
+/// before reporting a terminal timeout to the GUI.
 /// The race MUST be unstructured. A task group awaits every child before its
 /// scope unwinds — and `await Task.detached{}.value` is not interrupted by
 /// cancellation — so racing inside a group produced the timeout error but then
@@ -291,7 +292,7 @@ actor DeviceGate {
 
 // MARK: - Errors
 
-nonisolated enum DeviceError: Error, LocalizedError {
+nonisolated enum DeviceError: Error, LocalizedError, Codable, Sendable {
     case unavailable                                   // library not loaded
     case notAttached                                   // idevice_new failed
     case lockdown(Int32)
@@ -357,7 +358,7 @@ nonisolated enum DeviceError: Error, LocalizedError {
 }
 
 /// A failure the app words itself: a missing bundled tool, or a message for the alert.
-nonisolated enum DeviceToolsError: LocalizedError {
+nonisolated enum DeviceToolsError: LocalizedError, Codable, Sendable {
     case toolMissing(String)
     case failed(String)
     /// lockdown took the time zone, but the device kept this one (lockdown-tz's exit 4).
@@ -374,7 +375,7 @@ nonisolated enum DeviceToolsError: LocalizedError {
 
 /// installation_proxy error codes (installation_proxy.h). Only the ones the
 /// retry policy keys on are named; everything else is `.other`.
-nonisolated enum InstproxyError: Equatable, CustomStringConvertible {
+nonisolated enum InstproxyError: Equatable, CustomStringConvertible, Codable, Sendable {
     case success, connFailed, opInProgress, opFailed, receiveTimeout
     case packageExtractionFailed, alreadyInstalled
     case other(Int32)
@@ -417,7 +418,7 @@ nonisolated enum InstproxyError: Equatable, CustomStringConvertible {
 }
 
 /// AFC error codes (afc.h). Named subset; the rest is `.other`.
-nonisolated enum AFCError: Equatable, CustomStringConvertible {
+nonisolated enum AFCError: Equatable, CustomStringConvertible, Codable, Sendable {
     case success, opTimeout, noMem, internalError, other(Int32)
     init(code: Int32) {
         switch code {

@@ -663,7 +663,7 @@ def check_prepare(args, log, state, app):
         lock_base(work / 'out')
         boot = [sys.executable, ROOT / 'tests/sessions/check-sessions.py', '--single', work / 'out', '--board', board,
                 '--helper', app / 'Contents/MacOS/LightTouchDevice', '--dylib', app / 'Contents/Frameworks/libqemu-arm.dylib',
-                '--usbmuxd', app / 'Contents/MacOS/usbmuxd', '--frameworks', app / 'Contents/Frameworks',
+                '--service-worker', app / 'Contents/MacOS/LightTouchServices', '--usbmuxd', app / 'Contents/MacOS/usbmuxd', '--frameworks', app / 'Contents/Frameworks',
                 '--files', app / 'Contents/Resources/device', '--work', frames]
         print('+ ' + shlex.join(map(str, boot)), flush=True)
         checked = subprocess.run(list(map(str, boot)), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,

@@ -68,6 +68,7 @@ final class AppsInspectorViewController: NSViewController {
     /// A refresh arrived while one was running; run once more when it finishes.
     private var needsReload = false
     private var notifications: NotificationProxy?
+    private var notificationEndpoint: HostServiceEndpoint?
 
     init(emulator: EmulatorController) {
         self.emulator = emulator
@@ -585,8 +586,15 @@ final class AppsInspectorViewController: NSViewController {
 
     /// Subscribe to the guest's own install/uninstall notifications.
     private func startGuestNotifications() {
-        guard notifications == nil, let session = emulator.usbmuxSession else { return }
-        let watcher = NotificationProxy(clientSocket: session) { [weak emulator] in emulator?.status?.iconGeneration }
+        guard let services = try? emulator.services else {
+            notifications?.stop(); notifications = nil; notificationEndpoint = nil
+            return
+        }
+        let endpoint = services.endpoint
+        guard notificationEndpoint != endpoint else { return }
+        notifications?.stop()
+        notificationEndpoint = endpoint
+        let watcher = NotificationProxy(clientSocket: endpoint.socket, udid: endpoint.udid, session: endpoint.session) { [weak emulator] in emulator?.status?.iconGeneration }
         notifications = watcher
         let emulator = self.emulator
         watcher.start(attachAllowed: {
@@ -597,6 +605,7 @@ final class AppsInspectorViewController: NSViewController {
         }) {
             // Off the library's callback thread and onto ours.
             Task { @MainActor in
+                guard (try? emulator.services.endpoint) == endpoint else { return }
                 NotificationCenter.default.post(name: .ltmAppsChanged, object: emulator.instance.id)
             }
         }

@@ -37,7 +37,8 @@ int instproxy_client_free(void *connection) { assert(connection == &client); rec
 '''
 swift_source = r'''
 import Foundation
-nonisolated enum Bundled {
+nonisolated enum HostServiceResources {
+    static let udid: String? = nil
     static let frameworksDirectory: String? = CommandLine.arguments[1]
 }
 nonisolated struct InstproxyError: Equatable { let code: Int32 }
