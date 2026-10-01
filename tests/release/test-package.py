@@ -119,6 +119,8 @@ def check_helper(app):
     worker = app / 'Contents/MacOS/LightTouchServices'
     assert worker.is_file() and os.access(worker, os.X_OK), f'missing service worker {worker}'
     subprocess.run(['codesign', '--verify', '--strict', worker], check=True)
+    worker_deps = subprocess.run(['otool', '-L', worker], capture_output=True, text=True, check=True).stdout
+    assert 'libqemu' not in worker_deps, 'service worker must not load the emulator: ' + worker_deps
     # No request is sent: this proves the packaged process can launch/reap
     # without probing a real device or loading QEMU.
     socket = '127.0.0.1:1'
