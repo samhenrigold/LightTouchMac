@@ -615,13 +615,47 @@ passes5/5 hello-only lease admission/refusal cases with this dylib; no boot
 request is sent. This updates local build identity, not universal packaging,
 Intel runtime, signing/notarization or native dylib guest qualification.
 
-A non-mutating2.1.1 trace records updated primary HFS headers through
-VNOP_BWRITE and correlates them one-to-one with FMSS KEEP mapping receipts,
-including clean unmount. No alternate headers were observed at these traced
-boundaries; debugger timing and possible untraced paths qualify that absence.
-Public XNU1228.7.58 (near target1228.7.27, not identical shipping code)
-updates the alternate header only when requested and disables its sector when
-partition slack exceeds one allocation block. Our prepared11-block gap is
-therefore an evidence-backed geometry lead; target disassembly and a matched
-disposable geometry experiment remain pending. This does not establish NAND
-is dropping the header or authorize filesystem-aware hardware behavior.
+## N72 partition extent correction qualified
+
+App0b43f26 and QEMUb2090969d4 remove the synthetic11 allocation blocks
+beyond the supplied HFS extent in both maintained preparers. Protective MBR,
+NAND format, freepool and filesystem contents remain unchanged. The low-level
+writers consume caller-supplied counts; the preparation paths validate or
+derive the actual HFS extent. This is not an arbitrary backing-file parser.
+
+The original2.1.1 trace correlated primary-header writes with FMSS KEEP but
+observed no alternate update. Near-target public XNU1228.7.58 explains why
+excess partition slack disables the alternate location; it is not identical
+to the shipping1228.7.27 source. Controlled private clones changed only two
+GPT metadata pages and their CRCs. The actual2.1.1 guest then emitted its
+alternate-header write, matched to FMSS KEEP. Unpaused2.1.1 and3.1.3 runs
+both pass boot/persistence/fsck3/3, with two clean guest shutdowns and matching
+catalog sizes. The earlier debugger/input race remains a failed diagnostic
+run, not native qualification. No header copy or repair supplied the result.
+
+Swift geometry/CRC/golden gates, Python12-size selfcheck and native-fixture
+page comparisons, actual DeviceRow12-lock policy cases and GUI/helper/service/
+CLI builds pass. Exactly22 N72 catalog recipes move to revision2 so existing
+bases request Prepare Again. No automatic migration of user images occurs;
+Erase with an existing base does not rebuild it.4.x native qualification and
+an offline migration for old bases remain separate work. Evidence:
+`/Users/shg/Developer/ltm-evidence/nand-boundaries-2026-10-01`.
+
+## Legacy graphics first divergence
+
+QEMU75704ad744 balances CoreSurface locks and ownership across the stock2.x
+callback lifetime; actual callback sanitizer tests and3.1.3 native5/5 pass.
+The2.1.1 mapping now has real dimensions/stride/base and no strict bridge
+refusals, but its graphics gate still fails. QEMU a85802ffb8 strengthens that
+gate to require the known inset cyan/magenta/yellow scene geometry in both
+samples: equal total color areas cannot qualify striped or packed scanout.
+Retained3.1.3 frames pass, and retained2.1.1 frames fail this geometry check.
+
+Stock2.1.1 programs plane1 control, then reads it to OR in rotation. With the
+native default lcd-planes option off, the model's missing+0x40 readback returns
+zero, which the guest writes back. Stock3.1.3 constructs rotation before its
+initial write and avoids that read. A narrow register-latch readback candidate
+passes private actual-handler sanitizer reproduction; production QTests and
+native qualification are pending. No zero-format reinterpretation or guest
+patch is justified. Evidence:
+`/Users/shg/Developer/ltm-evidence/coresurface-lifetime-2026-10-01`.

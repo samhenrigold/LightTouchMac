@@ -8,9 +8,9 @@ test receipts with current compatibility claims.
 | Area | Verified progress | Remaining acceptance boundary |
 |---|---|---|
 | Stock restore transport | Real SecureROM/iBSS/ramdisk reaches stock restored protocol 11; legacy client boot-only run passes with original firmware metadata. Production bridge reset/enumeration and exclusive mux handoff tested; measured PHY-reset gating now passes rapid DFU trials and complete stock ramdisk handoff without diagnostic settling. | Stock erase reports Waiting for NAND. Full restore, cold boot and durable later writes required before deleting offline FTL preparation. |
-| FMSS | CPU/sequence scalar state through D7C/D3C, zero-immediate mask/shift forms and erased physical reads have model/native gates; latest43858b7318 passes FMSS22 and native3.1.3 eight checks. | Stock erase stops at D24. Its isolated latch candidate failed both native boots because newly reached FMC reads overwrite preloaded spare data; it was withdrawn. Physical commands, checked DMA, timing and honest completion remain separate contracts; restore/cold boot is unqualified. |
+| FMSS | CPU/sequence scalar state through D7C/D3C, zero-immediate mask/shift forms and erased physical reads have model/native gates; latest340978ff58 checks sequencer DMA and passes FMSS23 and native3.1.3 eight checks. | Stock erase stops at D24. Its isolated latch candidate failed both native boots because newly reached FMC reads overwrite preloaded spare data; it was withdrawn. Physical commands, CPU DMA, timing and honest completion remain separate contracts; restore/cold boot is unqualified. |
 | Silent audio migration | 0ceac9c55e fixes legacy silent stream host rate bookkeeping; model 4/4 including N45 snapshot, audio sanitizers and native two-boot 8/8. | Native N45 guest suspend/wake and in-flight host USB snapshots remain unqualified. |
-| Host runtime | GuestPackageSession owns boot package qualification. GUI and session driver now import HostRuntime for prepared-device validation/assembly and actual wire values; package tests, real builds, failure cleanup and native N72 startup pass. | Broader process/service ownership, record I/O and session source/stub coupling remain. Managed GUI boot-path authority and strict present-lock parsing are now verified; CLI record authority remains separate. |
+| Host runtime | GuestPackageSession owns boot package qualification. GUI and session driver now import HostRuntime for prepared-device validation/assembly and actual wire values; package tests, real builds, failure cleanup and native N72 startup pass. | Broader process/service ownership and session source/stub coupling remain; async record/storage lifecycle and CLI cleanup are now qualified. Managed GUI boot-path authority and strict present-lock parsing are now verified; CLI record authority remains separate. |
 | MBX reuse | Independently captured real N72 stock-driver fill packet/GART agrees with pinned MIT S5LBox decoder in sanitizer replay. | Snapshot was after stall, not pre-submit. No live pixel/completion/IRQ or full compositor qualification yet. Unapplied narrow prototype rejects startup/context requests without success. Startup EVM metadata effects and trigger/tag semantics remain unknown; existing GLES transport remains needed. |
 | Packaging | Clean cc67737/31036cf8e9/e19fac2 universal candidate: actual 2.1.1 session 18/18, both Mach-O closures at macOS14.4 and ad hoc signature verification. | Later host/FMSS/PHY changes are not covered by that packaged candidate; Intel runtime and notarization unqualified. |
 
@@ -236,9 +236,9 @@ actual HFS, helper admission and build gates pass. Full qualification, the
 Source API change and retained lifetime failures are recorded in the
 [shared journal](fidelity-evidence-2026-10-01.md#stopped-record-ownership-qualified).
 
-Parallel disk-image work separately exposed cooperative-worker starvation in
-the synchronous subprocess bridge. That remains open; the next refactor must
-carry await through the boundary while retaining exclusion and cleanup.
+Parallel disk-image work exposed cooperative-worker starvation in the old
+synchronous subprocess bridge. Appbf72e7416c replaces that bridge with awaited
+execution and qualifies exclusion, cancellation and cleanup through real CLI gates.
 
 D38 is also qualified through model/migration and native8/8 gates; it retains
 the scalar while preserving the still-required CPU storage shortcut. Watchdog
@@ -248,19 +248,29 @@ physical expiry unmodeled. Detailed receipts are in the shared journal.
 The D7C result latch is now qualified through native8/8 as well. Stock restore
 moves to D3C and the diagnostic immediate D7C form; controller execution is
 still missing. The managed published-generation admission regression is
-corrected in dd9d66a. The broader async host migration remains unqualified
-while cancellation and explicit descriptor release are tested. Current
+corrected in dd9d66a. The broader async host migration was subsequently qualified in bf72e7416c
+with cancellation and explicit descriptor release gates. Current
 receipts and limits are maintained in the shared evidence journal.
 
 The genuine2.x private regression fixtures now pass installation, foreground
-launch and measured stereo audio. The2.1.1 native gate remains6/8, failing
-filesystem consistency and strict graphics bridge refusal checks. Latest
+launch and measured stereo audio. That initial2.1.1 gate was6/8. Subsequent work qualifies the CoreSurface
+callback mapping, while strict scene geometry still fails at LCD scanout.
+The GPT extent correction independently passes boot/persistence/fsck3/3
+on2.1.1 and3.1.3; a combined full gate remains pending. Latest
 stock erase still stops at D24; the literal initializer no longer stops it.
 Exact receipts and remaining limits are recorded in the shared journal.
 
 App bf72e7416c now carries async disk tools through the maintained firmware
 CLI, with actor-owned publication and native pipe cancellation/cleanup gates.
 QEMU340978ff58 checks sequencer fetch/store transaction results and passes
-all eight native3.1.3 checks. The app source pin is aligned; current dylib
-packaging and full stock restore remain separate gates. Full receipts and
+all eight native3.1.3 checks. The app source pin is aligned; the current arm64 dylib passes hello-only helper admission. Universal packaging,
+native dylib guest qualification and full stock restore remain separate gates. Full receipts and
 retained failures are recorded in the shared evidence journal.
+
+App0b43f26 and QEMUb2090969d4 correct the N72 prepared GPT extent without
+filesystem-aware hardware changes. Existing N72 bases request Prepare Again;
+automatic old-image migration and4.x native qualification remain separate.
+QEMU75704ad744 qualifies CoreSurface callback ownership; a85802ffb8 rejects
+incorrectly packed graphics even when aggregate color areas match. A measured
+stock2.x control-register RMW exposes missing LCD plane1 readback. Its narrow
+hardware correction is being tested; no full2.x graphics pass is claimed.
