@@ -385,3 +385,19 @@ at+0x60. The measured D7C result read no longer stops this trace. Stock
 restored still waits eight times for NAND; the bounded harness intentionally
 exits1 and reaps its owned processes. Full restore, restored cold boot, and
 durable subsequent writes remain unqualified.
+
+## Published-generation admission regression corrected
+
+Review found a regression in2137e27: treating the entire generations container
+as mutable rejected a supported immutable base inside a published generation.
+The compiled baseline fixture reproduces invalidPath(generations).
+App dd9d66a separates container confinement from disjoint writable leaves,
+allowing immutable published descendants while rejecting a base equal to or
+above the container, mutable/base overlap and foreign generation symlinks.
+Pending edit admission still requires explicit recovery authorization.
+
+All24 actual HostRuntime tests pass. This is a path-admission correction;
+the broader asynchronous storage transaction migration remains unqualified,
+including newly exposed lease-release lifetime failures. Earlier receipts
+are retained, with the new failing baseline and passing fixtures at
+`/Users/shg/Developer/ltm-evidence/host-generation-policy-2026-10-01`.
