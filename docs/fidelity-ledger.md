@@ -631,3 +631,10 @@ Stock bulk scripts still encounter opcode06 before descriptor opcode03;
 read/status scripts encounter opcode03. These and real physical erase are
 unqualified. The source pin advances to the verified parameter correction;
 the earlier universal package does not include it.
+
+The subsequent actual stock erase trace uses the production USB bridge with
+no diagnostic settling wrapper. It connects to restored version11 and is
+stopped after repeated Waiting for NAND. The bulk script's next measured
+divergence is opcode06 `06040003 00000000` at +0x78; its semantics remain
+unimplemented. Owned subprocesses are reaped. Text/trace evidence is retained
+in the fmss-parameters-2026-10-01 directory above; this is not restore success.
