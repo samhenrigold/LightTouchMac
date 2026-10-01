@@ -156,7 +156,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-store-compat-') as directory:
     sources = ['Features/CatalogClient', 'Features/CatalogCopy', 'Library/Bundled', 'Transport/AppEventLog', 'Library/StorageLocations',
                'Transport/NativeLogging', 'Library/IPALibrary', 'Library/DeviceInstance', 'Device/DeviceProfile', 'Library/FirmwareCatalog']
     subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-module-cache-path', str(work / 'modules'),
-                    *[str(root / f'LightTouchMac/{s}.swift') for s in sources], str(work / 'paths.swift'), str(work / 'check.swift'),
+                    str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), *[str(root / f'LightTouchMac/{s}.swift') for s in sources], str(work / 'paths.swift'), str(work / 'check.swift'),
                     '-o', str(work / 'check')], check=True)
     for shape in ('old', 'new'):
         env = dict(os.environ, CFFIXED_USER_HOME=str(work / 'home'), LTM_STATE_DIR=str(work / f'state-{shape}'))

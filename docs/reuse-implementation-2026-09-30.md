@@ -21,9 +21,9 @@ None has been merged into the target branches.
 | Physical storage durability | Latch failures from both iPad page and dirty-map flushes; the GUI save/resume gate sees the failure and a later successful flush cannot clear it. | Injected page/map `msync` failures reach the actual stop callback and UI guard. This does not establish power-loss atomicity across separate backing files. |
 | Offline ownership | FirmwareKit device-directory exports acquire the helper's existing exclusive lease. Boot checks durable edit intent under the same lease. | Swift tests and a real cross-process lease conflict reject access before export creates output. Pause is not treated as a clean shutdown. |
 | Host mounts | Use macOS HFS and disk-image tools. Validate export paths and current attachment identity; retain staging on failed discovery/eject/repair. | Existing directories are preserved, stale disk nodes are not force-ejected, and failed filesystem repair cannot produce a successful export. |
-| Stopped edits | Opt-in N72 proof on a disposable APFS-cloned device: edit a plist, rebuild with Swift, compare logical bytes and boot the candidate. | Two native cold boots, byte-identical AFC reads of the offline-added plist, persistence of a subsequent guest write, and both clean shutdowns pass. This is an experiment, not a production writable mount. |
-| Device routing | Select the private usbmux endpoint before entering the C library. Refuse a switch while an abandoned call could reconnect. | A compiled delayed-connect regression preserves routing; install/recovery/notification/AFC checks pass. Calls remain process-wide serialized; full killable service workers are still needed. |
-| Developer access | Small host CLI delegates SSH/SFTP to OpenSSH and usbmux forwarding to `inetcat`, with explicit loopback endpoint and per-instance host-key identity. Use the existing QEMU GDB protocol. | Real SSH parsing/proxy execution tests cover quoting and endpoint isolation. A compatible guest SSH server and user-facing provisioning are not yet provided. |
+| Stopped edits | Production CLI and Finder actions for explicit N72 generated stores; lease, durable edit intent, HFS metadata preservation, certified generation publication and recovery. | Actual editor replacement and metadata fixtures pass. A published generation passes two native cold boots, exact edited AFC reads and subsequent guest-write persistence. N45 and native K48 FTL remain unsupported. |
+| Device routing | Killable per-device command/notification processes with immutable socket, UDID and boot session. GUI uses a typed subprocess boundary. | Actual stalled C calls are killed/reaped; B remains usable while A stalls, next A gets a new PID, retired sessions refuse requests. Native guest services pass 12/12. |
+| Developer access | Small host CLI delegates SSH/SFTP to OpenSSH and usbmux forwarding to `inetcat`, with explicit loopback endpoint and per-instance host-key identity. Use the existing QEMU GDB protocol. | Real SSH parsing/proxy execution tests cover quoting and endpoint isolation. Live guest OpenSSH and modern host SSH/SFTP interoperability pass; reproducible redistributable shell packaging is still being completed. |
 | Lifecycle | Retire timezone observer/task on stop, helper death and power-off; establish a new scope on power-on. Use the existing Swift Subprocess library to bound, cancel and reap timezone children. Preserve the catalog boot recipe through GUI serialization. | Actual-function lifecycle fixtures and a compiled Swift catalog round trip pass. A child ignoring SIGTERM is killed/reaped; cancelled readiness cannot trigger a timezone mutation or retry. |
 | Capacity | Share a Foundation-only capacity leaf between GUI and FirmwareKit. Fall back to physical free space when macOS reports unusable ImportantUsage capacity. | Real preparation exposed the false zero; tests retain true disk-full refusal. The GUI adds no IPSW/Mach-O preparation dependency. |
 | Acceptance provenance | Bind matrix reuse to hashed inputs/options, immutable attempt evidence, and host identity. Serialize result publication with a stable lock and reread before merging. | Same-size binary changes invalidate reuse; simultaneous processes with separate scratch roots preserve all 40 result records and history. |
@@ -58,8 +58,9 @@ daemon reproduces 128/149-byte truncation. Prepared-device identity, AFC size
 boundaries and persistence pass with the new daemon.
 
 Stock cold boot still fails the identity judge after 300 seconds. Read-only gdb
-sampling finds a busy loop in IMGSGX535; its polled virtual address has not been
-mapped to distinguish MMIO from GPU-shared memory. There is no native SGX model.
+sampling finds a busy loop in IMGSGX535; its polled virtual address maps to ordinary DRAM at physical `0x4112e018`,
+with a driver-allocated descriptor and GPU address. The microkernel producer
+contract remains undecoded. There is no native SGX model.
 Prepared images explicitly set `arm-io/sgx` compatible to `none` in KBoot and use
 the guest graphics bridge. The stock restored DeviceTree exercises the missing
 GPU path. This is a concrete fidelity lead, not justification for inventing a
@@ -92,32 +93,34 @@ hashes and acceptance output are preserved under
 Large trace logs are compressed; physical flash stores, runtime overlays and
 pairing material remain in their isolated working directories.
 
-## Responsibilities we have not transferred yet
+## Boundaries still requiring work
 
-Production stopped editing needs atomic generation publication/rollback,
-preservation of all metadata, saved-state invalidation and provenance changes.
-K48 also needs partition 3/MBR, NOR keybag/encryption and YaFTL state preserved.
-The preparation builder is not a safe generic editor. Live read-only views must
-read through guest services or explicitly publish a frozen generation.
+The stopped-edit implementation owns one N72 generated storage format. It does
+not use that builder to rewrite native restored FTL. K48's stock physical format
+requires VFL/YaFTL and keybag/crypto support; its reader now rejects v2/unknown
+formats before publishing an export. Guest SSH/SFTP provides a live root-file
+route through stock guest filesystem drivers instead.
 
-The next physical-storage milestone is a shared backend below the controllers,
-using QEMU block infrastructure where it fits, with explicit erased-state and
-NAND bit-transition semantics. Current mapped overlays and sparse zero handling
-still constrain fidelity. Stock restore is the gate for retiring generated FTL
-and host construction policy, not a reason to seed more guest tables.
+Apple controllers now use QEMU BlockBackend for data/spare I/O and ownership.
+The explicit `nand-xor-ff-v2` format represents erased FF and one-to-zero
+programming without changing legacy sparse-store meanings. Stock blank erase
+restore and prepared-device persistence pass after the migration. Page/bitmap
+crash atomicity, N72 logical relocation retirement and encrypted restored-store
+execution remain separate fidelity gates. Unsupported populated FMSS snapshots
+now refuse rather than silently lose physical state.
 
-The endpoint guard closes a demonstrated routing hazard but cannot kill a wedged
-C thread. Move service execution to restartable per-device workers with immutable
-endpoint/UDID and one reusable GUI/CLI contract; do not put these workers inside
-the emulator process. A host SSH wrapper likewise does not constitute guest SSH
-provisioning, root filesystem mounting or Finder media sync.
+BootSessionScope owns controller boot tasks and observation. Further reductions
+should move stable responsibilities into owners with clear lifetimes; merely
+splitting this controller into extension files would not establish that boundary.
+The shared FirmwareWire and cache maintenance API are now implemented without
+making the GUI import FirmwareKit.
 
-The merged ANGLE evaluation remains the decision: native ES viability is proven,
-guest surface/snapshot compatibility and a net reduction in owned code are not.
-Keep CGL until a comparative guest gate justifies replacing it. Shipping another
-adapter backend simply to claim adoption would add responsibility. FirmwareKit's
-Swift orchestration and the earlier Python retirement are already in the bases;
-this branch builds on them rather than introducing another preparation system.
+ANGLE remains subject to the same guest workload, surface/sharegroup and snapshot
+comparison. Explicit API context and snapshot versioning are being tested; no
+shipping backend replacement or code reduction is claimed from native probes
+alone. Native Finder USB discovery and sync were removed from scope at the
+user’s request. No entitlement request or virtual USB adapter will be pursued;
+ordinary stopped Finder filesystem mounts remain.
 
 Future Retina boards and telephony remain scoped bring-up work. Preserve stock
 guest UI and protocols; reuse modem/network helpers after measuring the Apple
@@ -137,6 +140,6 @@ branches are integrated, development builds must resolve the candidate paths
 with `QEMU_IOS_DIR`, `QEMU_BUILD_DIR` and `USBMUXD_SOURCE_DIR`; the canonical
 checkout paths intentionally remain the integration targets. The recorded native
 build uses `build-reuse` and `/private/tmp/ltm-reuse-xcode`, not a universal signed
-release. The prepared K48 boot/graphics/persistence checks, N72 stopped-edit proof,
+release. The prepared K48 boot/graphics/persistence checks, N72 certified stopped-edit publication,
 and stock blank restore are distinct results; none substitutes for the failed
 stock cold-boot identity gate.

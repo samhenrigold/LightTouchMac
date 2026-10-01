@@ -177,7 +177,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-store-ui-') as directory:
                'UI/CatalogDetailsViewController', 'Library/Bundled', 'Transport/AppEventLog', 'Library/StorageLocations',
                'Transport/NativeLogging', 'Library/IPALibrary', 'Library/DeviceInstance', 'Device/DeviceProfile', 'Library/FirmwareCatalog']
     subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-module-cache-path', str(work / 'modules'),
-                    *[str(root / f'LightTouchMac/{s}.swift') for s in sources], str(work / 'paths.swift'), str(work / 'check.swift'),
+                    str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), *[str(root / f'LightTouchMac/{s}.swift') for s in sources], str(work / 'paths.swift'), str(work / 'check.swift'),
                     '-o', str(work / 'check')], check=True)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
