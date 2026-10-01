@@ -35,6 +35,7 @@ def offline():
     died = s[a:s.index("    // MARK: - Liveness", a)]
     a = s.index("    private func stopTimeZoneSync() {")
     timezone_stop = s[a:s.index("    private func startTimeZoneSync()", a)]
+    retire = s[s.index("    private func retireBoot()"):s.index("    func stop()", s.index("    private func retireBoot()"))]
     source = r'''import Foundation
 nonisolated func logEvent(_ message: String) {}
 enum DeviceProfile { case iPodTouch2G, iPad1
@@ -64,10 +65,15 @@ struct Serial { func finish() {} }
  var isDead: Bool { if case .dead = state { return true } else { return false } }
  var isPoweredOff: Bool { state == .poweredOff }
  var shuttingDown = false, halting = false
- var bootGeneration = 0
+ let bootScope = BootSessionScope()
+ var bootGeneration: Int { bootScope.generation }
+ var workerRetirement: Task<Void, Never>?
+ func retireDeveloperConnection() {}
+ struct Service { func stopWorker() async {} }
+ var services: Service { get throws { Service() } }
  var timeZoneScope = 0
- var timeZoneObserver: NSObjectProtocol?
- var timeZoneTask: Task<Void, Never>?
+ var timeZoneObserver: NSObjectProtocol? { get { bootScope.timeZoneObserver } set { bootScope.timeZoneObserver = newValue } }
+ var timeZoneTask: Task<Void, Never>? { get { bootScope[.timeZone] } set { bootScope[.timeZone] = newValue } }
  var status: Status? = Status()
  var deviceReachable: Bool?
  var bootStage = BootStage.poweringOn
@@ -86,7 +92,7 @@ struct Serial { func finish() {} }
   timeZoneTask = Task { try? await Task.sleep(for: .seconds(5)) }
   process!.onDeath = { [weak self] reason in self?.helperDied(reason) }
  }
-''' + deadline.replace("private func", "func").replace("private var", "var") + timezone_stop.replace("private func", "func") + died.replace("audioSink?(.audioEnded(generation: 0, failed: true))", "audioSink?(0)") + r'''}
+''' + deadline.replace("private func", "func").replace("private var", "var") + timezone_stop.replace("private func", "func") + retire + died.replace("audioSink?(.audioEnded(generation: 0, failed: true))", "audioSink?(0)") + r'''}
 @main struct Check {
  @MainActor static func main() async throws {
   // Waits on the watch's own task, or on the condition; the deadline is only a hang guard (host load).
@@ -195,7 +201,7 @@ final class Matches: @unchecked Sendable {
         p.write_text(source)
         if os.environ.get("LTM_DUMP"):
             Path(os.environ["LTM_DUMP"]).write_text(source)
-        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/BootStage.swift"),
+        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/BootStage.swift"), str(ROOT / "LightTouchMac/Device/BootSessionScope.swift"),
                         str(p), "-o", d + "/check"], check=True)
         subprocess.run([d + "/check"], check=True, timeout=120)
         w = Path(d) / "watch.swift"

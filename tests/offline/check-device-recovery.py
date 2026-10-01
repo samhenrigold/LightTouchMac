@@ -24,6 +24,8 @@ struct FakeGuest {
 }
 struct Instance { let id=UUID() }
 @MainActor final class Controller {
+ let bootScope = BootSessionScope()
+ var bootGeneration:Int { bootScope.generation }
  let profile = DeviceProfile.iPodTouch2G
  let instance=Instance()
  var isRunning=true,isInstalling=false,hasFileTransfer=false,preparingDevice=false
@@ -78,5 +80,5 @@ struct Instance { let id=UUID() }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-recovery-') as d:
  p=Path(d)/'check.swift';p.write_text(errors+issue+source)
- subprocess.run(['swiftc', DEVICE_PROFILE,'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc', DEVICE_PROFILE,str(root/'LightTouchMac/Device/BootSessionScope.swift'),'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=8)

@@ -18,6 +18,7 @@ final class EmulatorController {
     let network: Bool
     private let usbmux = USBMux()
     private var started = false
+    private var stopped = false
     private var serialCapture: SerialLogCapture?
     private var haltTask: Task<Void, Never>?
     private(set) var isErasing = false { didSet { trackStartup(was: oldValue || state == .booting || preparingDevice); onStatusChange?() } }
@@ -82,15 +83,23 @@ final class EmulatorController {
         if noticeOperation == operation.rawValue { dismissDeviceNotice() }
     }
 
-    private var foregroundTask: Task<Void, Never>?
+    private var foregroundTask: Task<Void, Never>? {
+        get { bootScope[.foreground] }
+        set { bootScope[.foreground] = newValue }
+    }
     /// Set when this boot came up with slirp restrict=on (5.x, Setup not yet done on this overlay):
     /// the foreground watch feeds it frontmost and lifts restrict in place once Setup is over.
     private var setupGate: BootRecipe.SetupNetworkGate?
-    private var bootGeneration = 0
+    private let bootScope = BootSessionScope()
+    private var bootGeneration: Int { bootScope.generation }
+    private var workerRetirement: Task<Void, Never>?
     var isPoweredOff: Bool { state == .poweredOff }
 
     private var reportedStorageFailure = false
-    private var readinessTask: Task<Void, Never>?
+    private var readinessTask: Task<Void, Never>? {
+        get { bootScope[.readiness] }
+        set { bootScope[.readiness] = newValue }
+    }
     /// From the boot until SpringBoard answers over lockdown (startReadinessWatch); the status line says where it is.
     private(set) var preparingDevice = false {
         didSet { trackStartup(was: isErasing || state == .booting || oldValue); onStatusChange?() }
@@ -142,7 +151,8 @@ final class EmulatorController {
             if deviceReachable == true, !didSweepStaging {
                 didSweepStaging = true
                 if let socket = usbmux.session?.clientSocket {
-                    Task { await DeviceServices(clientSocket: socket).sweepStaging() }
+                    let endpoint = DeviceServices(clientSocket: socket, udid: instance.identity?.udid, session: bootScope.id)
+                    bootScope[.staging] = Task { await endpoint.sweepStaging() }
                 }
             }
         }
@@ -168,7 +178,10 @@ final class EmulatorController {
         onStatusChange?()
     }
     private var connectionFailures = 0
-    private var connectionRecoveryTask: Task<Void, Never>?
+    private var connectionRecoveryTask: Task<Void, Never>? {
+        get { bootScope[.recovery] }
+        set { bootScope[.recovery] = newValue }
+    }
     private var lastConnectionRecovery = Date.distantPast
     private(set) var isReconnecting = false { didSet { onStatusChange?() } }
 
@@ -186,9 +199,10 @@ final class EmulatorController {
         lastConnectionRecovery = Date()
         connectionFailures = 0
         isReconnecting = true
+        let generation = bootGeneration
         connectionRecoveryTask = Task { [weak self] in
             guard let self else { return }
-            defer { connectionRecoveryTask = nil; isReconnecting = false }
+            defer { if generation == bootGeneration { connectionRecoveryTask = nil; isReconnecting = false } }
             do {
                 guard isRunning, !preparingDevice, !isInstalling, !hasFileTransfer, !AppInstaller.isUsingDevice(instance.id) else { return }
                 // Not through the management transport that broke: the agent
@@ -197,7 +211,7 @@ final class EmulatorController {
                     try await guest.reconnectManagement()
                     logEvent("device: restarted unresponsive management service; reconnecting")
                     try await Task.sleep(for: .seconds(2))
-                    guard isRunning else { return }
+                    guard !Task.isCancelled, generation == bootGeneration, isRunning else { return }
                     NotificationCenter.default.post(name: .ltmAppsChanged, object: instance.id)
                 }
             } catch {
@@ -287,6 +301,7 @@ final class EmulatorController {
         var config = switch profile { case .iPad1: iPadBoot(); case .iPodTouch2G: iPodBoot(); case .iPodTouch1G: iPod1GBoot() }
         config?.webProxy = proxyEndpoint
         if config != nil {
+            publishDeveloperConnection()
             logEmulatorBuild()
             startGuestPackageWatch()  // after composeGuestOffer(): a watch with no offer judges nothing
             startBootWatch()
@@ -486,7 +501,10 @@ final class EmulatorController {
         state = .dead(exitCode: 1)
     }
 
-    private var bootWatchTask: Task<Void, Never>?
+    private var bootWatchTask: Task<Void, Never>? {
+        get { bootScope[.watchdog] }
+        set { bootScope[.watchdog] = newValue }
+    }
 
     /// iOS is up: lockdown answered (the helper's uiReady is QEMU's display, lit
     /// by iBoot too). Without a USB bridge (--no-appsync) painting has to do.
@@ -560,6 +578,7 @@ final class EmulatorController {
     func release() async -> Bool {
         releasing = true
         stop()
+        await workerRetirement?.value
         guard let process, process.link.pid > 0 else { return true }
         if !process.isDead { process.kill() }
         return await process.waitForExit(timeout: 10)
@@ -651,15 +670,20 @@ final class EmulatorController {
     /// first lock screen is drawn before lockdown answers and shows the
     /// restore's Pacific zone until this lands (smoke #58). The guest's clock
     /// itself is UTC from the RTC model; only the zone needs the host's help.
-    private var timeZoneObserver: NSObjectProtocol?
+    private var timeZoneObserver: NSObjectProtocol? {
+        get { bootScope.timeZoneObserver }
+        set { bootScope.timeZoneObserver = newValue }
+    }
     private var timeZoneScope = 0
-    private var timeZoneTask: Task<Void, Never>?
+    private var timeZoneTask: Task<Void, Never>? {
+        get { bootScope[.timeZone] }
+        set { bootScope[.timeZone] = newValue }
+    }
 
     private func stopTimeZoneSync() {
         timeZoneScope += 1
         timeZoneTask?.cancel()
         timeZoneTask = nil
-        if let observer = timeZoneObserver { NotificationCenter.default.removeObserver(observer) }
         timeZoneObserver = nil
     }
 
@@ -708,8 +732,34 @@ final class EmulatorController {
     /// App quit (after the clean shutdowns) and restarts. The helper gets
     /// SIGTERM: a guest that already powered off quits at once; one that
     /// didn't gets the helper's own bounded clean shutdown after we are gone.
-    func stop() {
+    private func publishDeveloperConnection() {
+        guard let socket = usbmux.session?.clientSocket else { return }
+        do {
+            try DeveloperConnectionProfile.publish(instance: instance.id, session: bootScope.id,
+                socket: socket, udid: instance.identity?.udid)
+        } catch { logEvent("developer access: \(error.localizedDescription)") }
+    }
+
+    private func retireDeveloperConnection() {
+        DeveloperConnectionProfile.retire(instance: instance.id, session: bootScope.id)
+    }
+
+    private func retireBoot() {
+        guard !bootScope.retired else { return }
+        let endpoint = try? services
+        retireDeveloperConnection()
+        let previousRetirement = workerRetirement
         stopTimeZoneSync()
+        bootScope.retire()
+        workerRetirement = Task {
+            await previousRetirement?.value
+            await endpoint?.stopWorker()
+        }
+    }
+
+    func stop() {
+        stopped = true
+        retireBoot()
         connectionRecoveryTask?.cancel()
         statusTimer?.invalidate()
         statusTimer = nil
@@ -737,7 +787,7 @@ final class EmulatorController {
     /// `.dead`; the window shows a Restart overlay, and the other devices keep running.
     private func helperDied(_ reason: String) {
         guard !isDead else { return }
-        stopTimeZoneSync()
+        retireBoot()
         if !halting, deathReason == nil { deathReason = reason }   // an aborted boot keeps its own reason
         bootWatchTask?.cancel()
         fileWatch = nil
@@ -808,7 +858,7 @@ final class EmulatorController {
             // Publish terminal state before observable fields: their callbacks
             // must never render a stale running/sleeping subtitle mid-shutdown.
             state = .poweredOff
-            foregroundTask?.cancel()
+            retireBoot()
             foregroundAppName = nil
             isSleeping = false
             deviceReachable = false
@@ -921,9 +971,11 @@ final class EmulatorController {
     /// A control request; `done(true)` when the machine applied it (false on a
     /// machine without the control, the iPod, or from a helper that's gone).
     private func control(_ request: LinkRequest, _ done: @escaping (Bool) -> Void = { _ in }) {
-        guard let link else { return done(false) }
-        link.request(request) { reply in
+        guard let link, !bootScope.retired else { return done(false) }
+        let session = bootScope.id
+        link.request(request) { [weak self] reply in
             MainActor.assumeIsolated {
+                guard let self, !self.bootScope.retired, session == self.bootScope.id else { return }
                 if case .success(.ok(true)) = reply { done(true) } else { done(false) }
             }
         }
@@ -956,8 +1008,12 @@ final class EmulatorController {
             highPowerUSB = on
             // The host grants current at enumeration: replug so it asks again.
             control(.usbConnection(false)) { [weak self] unplugged in
-                guard unplugged else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.control(.usbConnection(true)) }
+                guard unplugged, let self else { return }
+                bootScope[.usbReconnect] = Task { [weak self] in
+                    do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                    guard !Task.isCancelled else { return }
+                    self?.control(.usbConnection(true))
+                }
             }
         }
     }
@@ -1099,7 +1155,10 @@ final class EmulatorController {
     /// this, so a watcher that attaches to an already-running guest never yanks
     /// the shell around on connect.
     private var lastGuestOrientation: Int?
-    private var orientationTask: Task<Void, Never>?
+    private var orientationTask: Task<Void, Never>? {
+        get { bootScope[.orientation] }
+        set { bootScope[.orientation] = newValue }
+    }
 
     /// SpringBoard's degrees are the angle the *content* is rotated by; ours are
     /// the angle the *device* is turned clockwise. They are mirror images.
@@ -1195,7 +1254,10 @@ final class EmulatorController {
     private(set) var guestToolsStatus: GuestPackage.Status = .unknown {
         didSet { if oldValue != guestToolsStatus { onStatusChange?() } }
     }
-    private var guestPackageTask: Task<Void, Never>?
+    private var guestPackageTask: Task<Void, Never>? {
+        get { bootScope[.guestPackage] }
+        set { bootScope[.guestPackage] = newValue }
+    }
     private var guestOfferDirectory: URL { instance.paths.work.appendingPathComponent("guest-offer", isDirectory: true) }
     private var recordURL: URL {
         DeviceInstance.directory(instance.id, state: stateDir).appendingPathComponent(DeviceInstance.recordName)
@@ -1234,7 +1296,8 @@ final class EmulatorController {
         do {
             try FileManager.default.createDirectory(at: instance.paths.work, withIntermediateDirectories: true)
             guestOffer = try GuestPackage.compose(itpack: pack, board: instance.board, build: build,
-                                                  lock: lockRecord, guest: guestRecord, into: guestOfferDirectory)
+                                                  lock: lockRecord, guest: guestRecord, into: guestOfferDirectory,
+                                                  augment: GuestDeveloperTools.augmentation(instance: instance, build: build))
         } catch {
             logEvent("guest package: no offer: \(error.localizedDescription)")
         }
@@ -1362,7 +1425,6 @@ final class EmulatorController {
         if isPoweredOff { powerOn(); return }
         guard !shuttingDown else { return }
         guard !storageFailed else { return }
-        reconnectUSB()
         // Flush first. A bare system_reset is the same hard cut as a SIGKILL as
         // far as the guest's filesystem is concerned — it loses the HFS+ catalog
         // updates still in memory, which is how a device ends up on the
@@ -1371,22 +1433,49 @@ final class EmulatorController {
         // the dangerous way.
         let preparation = readinessTask
         preparation?.cancel()
-        Task { [weak self] in
+        let generation = bootGeneration
+        bootScope[.reset] = Task { [weak self] in
             guard let self else { return }
             await preparation?.value
+            guard !Task.isCancelled, generation == bootGeneration else { return }
             if !self.hasGuestTools {
                 // No guest to sync through: a hard halt (storage flushed, the
                 // journal replays), then a fresh helper, as Stop then Start.
                 self.halt { [weak self] _ in self?.onRestartRequested?() }
                 return
-            } else if self.canManageApps {
-                _ = await withSoftDeadline(20) { try? await self.guestAgent.sync() }
             }
-            guard !self.storageFailed else { return }
+            let synced = await withSoftDeadline(20) {
+                do { try await self.guestAgent.sync(); return true }
+                catch { return false }
+            }
+            guard !Task.isCancelled, generation == bootGeneration, !storageFailed, !shuttingDown, !isDead else { return }
+            guard synced == true else {
+                reportDeviceNotice("Couldn’t restart because the device did not finish syncing its filesystem.", for: .powerOff)
+                if state == .booting { startReadinessWatch() }
+                return
+            }
+            resolveDeviceNotice(for: .powerOff)
+            retireBoot()
+            let retiredGeneration = bootGeneration
+            // Retirement intentionally cancels this boot's reset task. Finish
+            // only this transition after old workers are reaped; a concurrent
+            // halt/death prevents renewing the scope.
+            await workerRetirement?.value
+            guard retiredGeneration == bootGeneration, !stopped, !releasing, !storageFailed, !shuttingDown, !isDead, !isPoweredOff else { return }
+            bootScope.renew()
+            publishDeveloperConnection()
+            reconnectUSB()
+            didSweepStaging = false
+            isReconnecting = false
+            deviceReachable = nil
+            reachableSince = nil
+            startTimeZoneSync()
             self.link?.send(.machine(.reset))
             self.rotationDegrees = 0
             self.setAccelerometer(for: 0)
             self.state = .booting
+            self.startForegroundWatch()
+            if hasGuestTools { startOrientationWatch() }
             self.startReadinessWatch()
             self.startGuestPackageWatch()
             self.startBootWatch()
@@ -1406,9 +1495,12 @@ final class EmulatorController {
         // Stopped by a halt: the helper is gone, so start a fresh one. A guest
         // that powered itself off (-no-shutdown) keeps its helper: reset and resume.
         if process?.isDead != false { onRestartRequested?(); return }
+        bootScope.renew()
+        publishDeveloperConnection()
         reconnectUSB()
         poweringOn = true
-        bootGeneration += 1
+        didSweepStaging = false
+        isReconnecting = false
         foregroundAppName = nil
         isSleeping = false
         deviceReachable = nil
@@ -1419,8 +1511,11 @@ final class EmulatorController {
         state = .booting
         startTimeZoneSync()
         link?.send(.machine(.reset))
-        Task { [weak self] in
+        let generation = bootGeneration
+        bootScope[.powerOn] = Task { [weak self] in
             guard let self else { return }
+            await workerRetirement?.value
+            guard !Task.isCancelled, generation == bootGeneration else { return }
             let deadline = ContinuousClock.now + .seconds(5)
             // system_reset is queued. Wait until the PMU reset clears its
             // shutdown latch (the helper republishes it at 20 Hz) before
@@ -1428,7 +1523,9 @@ final class EmulatorController {
             while status?.shutdownConfirmed == true, ContinuousClock.now < deadline {
                 try? await Task.sleep(for: .milliseconds(50))
             }
+            guard !Task.isCancelled, generation == bootGeneration else { return }
             guard status?.shutdownConfirmed == false, !self.isDead else {
+                self.retireBoot()
                 self.poweringOn = false
                 self.state = .poweredOff
                 return
@@ -1549,6 +1646,7 @@ final class EmulatorController {
         if haltTask != nil { haltCompletions.append(completion); return }
         shuttingDown = true
         halting = true
+        retireBoot()
         connectionRecoveryTask?.cancel()
         bootWatchTask?.cancel()
         orientationTask?.cancel()
@@ -1565,6 +1663,7 @@ final class EmulatorController {
             process?.terminate()
         }
         haltTask = Task { [weak self] in
+            await self?.workerRetirement?.value
             var exited = await process?.waitForExit(timeout: Self.haltBudget) ?? true
             if !exited {
                 logEvent("stop: the device helper did not exit in \(Int(Self.haltBudget)) s; killing it")
@@ -1673,10 +1772,10 @@ final class EmulatorController {
     /// springboardservices, lockdownd) on its usbmuxd; throws until usbmuxd is up.
     var services: DeviceServices {
         get throws {
-            guard let session = usbmux.session else {
+            guard !bootScope.retired, let session = usbmux.session else {
                 throw DeviceToolsError.failed("The device is not reachable over USB yet.")
             }
-            return DeviceServices(clientSocket: session.clientSocket)
+            return DeviceServices(clientSocket: session.clientSocket, udid: instance.identity?.udid, session: bootScope.id)
         }
     }
 
@@ -1713,13 +1812,17 @@ final class EmulatorController {
         try Task.checkCancellation()
         guard usbConnected, !isPoweredOff, !shuttingDown,
               let socket = usbmux.session?.clientSocket else { throw DeviceError.notAttached }
-        try await DeviceServices(clientSocket: socket).checkAttachment()
+        _ = socket
+        try await services.checkAttachment()
     }
 
     // MARK: - Activation (prepared offline, completed and verified per boot)
 
     private var activationCheckedGeneration: Int?
-    private var activationTask: Task<Void, Never>?
+    private var activationTask: Task<Void, Never>? {
+        get { bootScope[.activation] }
+        set { bootScope[.activation] = newValue }
+    }
     /// Between the three answers a verdict needs (the check shortens it).
     static var activationRetryDelay: Duration = .seconds(10)
 
@@ -1735,7 +1838,7 @@ final class EmulatorController {
         activationCheckedGeneration = bootGeneration
         let generation = bootGeneration
         activationTask = Task { [weak self] in
-            defer { self?.activationTask = nil }
+            defer { if generation == self?.bootGeneration { self?.activationTask = nil } }
             var state: String?
             for attempt in 0..<3 {
                 if attempt > 0 { try? await Task.sleep(for: Self.activationRetryDelay) }

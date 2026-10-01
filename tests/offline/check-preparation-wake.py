@@ -25,8 +25,13 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
  func setAccelerometer(for degrees:Int){}
  var isSleeping=false,preparingDevice=false,isDead=false,storageFailed=false,shuttingDown=false
  var readinessFailure:String?,readinessTask:Task<Void,Never>?
- var bootGeneration=0,homes=0,rotationDegrees=0
- var poweringOn=false
+ let bootScope=BootSessionScope()
+ var bootGeneration:Int {bootScope.generation}
+ var homes=0,rotationDegrees=0
+ var workerRetirement:Task<Void,Never>?
+ func publishDeveloperConnection(){}
+ func retireBoot(){bootScope.retire()}
+ var poweringOn=false,didSweepStaging=false,isReconnecting=false
  var reachableSince:Date?,ethlinkUp=false
  var status:Status? { queryHook?(); return Status(displaySleeping: sleeping) }
  var link:FakeLink?=FakeLink()
@@ -78,7 +83,7 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
   let deadline=ContinuousClock.now + .seconds(2)
   while cold.readinessTask==nil,ContinuousClock.now<deadline {await Task.yield()}
   await cold.readinessTask?.value;precondition(cold.homes==1)
-  let stale=Controller();stale.onReady={stale.bootGeneration+=1}
+  let stale=Controller();stale.onReady={stale.bootScope.retire()}
   stale.startReadinessWatch();await stale.readinessTask?.value
   precondition(stale.preparingDevice)
   let cancelled=Controller();cancelled.onReady={cancelled.readinessTask?.cancel()}
@@ -105,5 +110,5 @@ struct FakeLink { func send(_ c: LinkCommand) {} }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-wake-') as d:
  p=Path(d)/'check.swift';p.write_text(source)
- subprocess.run(['swiftc', DEVICE_PROFILE,str(root/'Shared/DeviceLinkProtocol.swift'),str(root/'LightTouchMac/Device/BootStage.swift'),'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc', DEVICE_PROFILE,str(root/'LightTouchMac/Device/BootSessionScope.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(root/'LightTouchMac/Device/BootStage.swift'),'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=10)

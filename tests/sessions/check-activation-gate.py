@@ -48,7 +48,8 @@ nonisolated func logEvent(_ message: String) {}
  let profile = DeviceProfile.iPodTouch2G
  var usbConnected = true, liveAgentStatus = 1, connectionFailures = 0
  var onStatusChange: (() -> Void)?
- var bootGeneration = 0
+ let bootScope = BootSessionScope()
+ var bootGeneration: Int { bootScope.generation }
  var preparingDevice = true
  var readinessTask: Task<Void, Never>? = Task { try? await Task.sleep(for: .seconds(60)) }
  var notices: [String] = [], resolved: [String] = []
@@ -105,7 +106,7 @@ enum Lock {
   c.deviceReachable = true; await settle()
   precondition(c.asked == 3 && c.connectionIssue == nil && c.deviceReachable == true && c.resolved == ["activation"], "\(c.asked)")
   // The next boot asks again.
-  c.bootGeneration += 1; c.answers = ["Activated"]
+  c.bootScope.renew(); c.answers = ["Activated"]
   c.deviceReachable = true; await settle()
   precondition(c.asked == 4 && c.connectionIssue == nil && c.resolved == ["activation", "activation"])
   // Services that answer win over the string: the built-in iPod reports Unactivated and works (Sam's screenshot 17).
@@ -155,7 +156,7 @@ enum Lock {
     with tempfile.TemporaryDirectory(prefix="ltm-activation-") as d:
         p = Path(d) / "check.swift"
         p.write_text(source)
-        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/DeviceProfile.swift"),
+        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/DeviceProfile.swift"), str(ROOT / "LightTouchMac/Device/BootSessionScope.swift"),
                         str(ROOT / "LightTouchMac/Device/DeviceConnectionIssue.swift"), str(ROOT / "LightTouchMac/Transport/DeviceExecution.swift"), str(p), "-o", d + "/check"], check=True)
         subprocess.run([d + "/check"], check=True, timeout=60)
 

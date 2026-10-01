@@ -5,6 +5,7 @@ import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
 s = (root / 'LightTouchMac/Device/EmulatorController.swift').read_text()
 a = s.index('    static let haltBudget:'); b = s.index('    /// Stop the guest and its helper, erase this device', a)
+retire = s[s.index("    private func retireBoot()"):s.index("    func stop()", s.index("    private func retireBoot()"))]
 halt = s[a:b].replace('haltBudget: TimeInterval = 10', 'haltBudget: TimeInterval = 0.3')
 source = r'''import Foundation
 nonisolated func logEvent(_ s: String) {}
@@ -24,12 +25,18 @@ nonisolated func logEvent(_ s: String) {}
  var state = State.booting, isDead = false, isErasing = false, shuttingDown = false, halting = false
  var isPoweredOff: Bool { state == .poweredOff }
  var connectionRecoveryTask: Task<Void, Never>?, orientationTask: Task<Void, Never>?, foregroundTask: Task<Void, Never>?, readinessTask: Task<Void, Never>?, haltTask: Task<Void, Never>?, bootWatchTask: Task<Void, Never>?
+ let bootScope = BootSessionScope()
+ var workerRetirement: Task<Void, Never>?
+ func retireDeveloperConnection() {}
+ struct Service { func stopWorker() async {} }
+ var services: Service { get throws { Service() } }
+ func stopTimeZoneSync() {}
  var haltCompletions: [(Bool) -> Void] = []
  var process: FakeProcess? = FakeProcess()
  var filesMeddled = false
  @MainActor struct FakeLink { let process: FakeProcess?; func send(_ c: LinkCommand) { if case .machine(.quit) = c { process?.quits += 1; process?.terminate() } } }
  var link: FakeLink? { FakeLink(process: process) }
-''' + halt + r'''}
+''' + retire + halt + r'''}
 @main struct Main {
  @MainActor static func main() async throws {
   // Mid-boot (never lit, no guest services): Stop still halts, and requests join.
@@ -62,5 +69,5 @@ nonisolated func logEvent(_ s: String) {}
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-halt-') as d:
     p = Path(d) / 'check.swift'; p.write_text(source)
-    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'Shared/DeviceLinkProtocol.swift'), str(p), '-o', d + '/check'], check=True)
+    subprocess.run(['swiftc', '-parse-as-library', '-module-cache-path', d + '/modules', str(root / 'Shared/DeviceLinkProtocol.swift'), str(root / 'LightTouchMac/Device/BootSessionScope.swift'), str(p), '-o', d + '/check'], check=True)
     subprocess.run([d + '/check'], check=True, timeout=8)
