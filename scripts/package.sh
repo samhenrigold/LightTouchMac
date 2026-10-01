@@ -201,6 +201,22 @@ cp "$(dirname "$PATCHER")/LICENSE" "$(dirname "$PATCHER")/SOURCE.txt" "$(dirname
 # and a pairing record per device). The app copies the bundled seed out to
 # Application Support before use — see USBMux.confDirectory — because the bundle
 # is read-only and signed. Ship only the seed, never a pairing record.
+# Developer access uses standard upstream guest services. Audit the complete
+# qualified public payload before copying; per-device keys never enter resources.
+DEVELOPER="${LTM_DEVELOPER_TOOLS_DIR:-$SRC/.build/developer-tools}"
+if [ ! -d "$DEVELOPER" ]; then
+    LTM_QEMU_SOURCE_DIR="$QEMU" "$SRC/tools/developer-packages/fetch.sh" "$DEVELOPER"
+fi
+[ ${#FIRMWAREKIT[@]} -gt 0 ] || { echo 'developer payload audit requires bundled firmwarekit' >&2; exit 1; }
+"${FIRMWAREKIT[0]}" developer-audit --payload "$DEVELOPER"
+DEVELOPER_DST="$APP/Contents/Resources/developer-tools"
+rm -rf "$DEVELOPER_DST"
+mkdir -p "$DEVELOPER_DST"
+cp -R "$DEVELOPER/" "$DEVELOPER_DST/"
+find "$DEVELOPER_DST" -type d -exec chmod 755 {} +
+find "$DEVELOPER_DST" -type f -exec chmod a+r {} +
+"${FIRMWAREKIT[0]}" developer-audit --payload "$DEVELOPER_DST"
+
 # Guest-side binaries the app uploads through the guest agent to images without
 # the guest-package loader, and the helper that stands in for the python3 a clean
 # Mac does not have. Nothing here needs a guest shell or SSH.

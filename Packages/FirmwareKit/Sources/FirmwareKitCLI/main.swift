@@ -33,6 +33,7 @@ let command = args.popFirst()
 if command == "mount" || command == "export" || command == "unmount" {
     volumeCommand(command!, Array(args))
 }
+if command == "developer-audit" { developerAuditCommand(Array(args)) }
 if command == "developer-offer" { developerOfferCommand(Array(args)) }
 if command == "cache-prune" { cacheCommand(Array(args)) }
 if command == "edit" { stoppedEditCommand(Array(args)) }

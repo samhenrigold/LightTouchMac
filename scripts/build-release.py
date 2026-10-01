@@ -168,6 +168,19 @@ def manifest_hashes(entries, description):
     return hashes([{'path': name, 'sha256': checksum} for name, checksum in (entries or {}).items()], description)
 
 
+def prepare_developer_tools(args, env, log):
+    # Engineering override only; the shipped app always uses bundled resources.
+    payload = Path(env.get('LTM_DEVELOPER_TOOLS_DIR', str(args.output / 'developer-tools'))).resolve()
+    if not payload.exists():
+        developer_env = dict(env, LTM_QEMU_SOURCE_DIR=str(args.qemu_source))
+        if args.sdk:
+            developer_env['LTM_BASH_SDK'] = str(args.sdk)
+        run(['bash', ROOT / 'tools/developer-packages/fetch.sh', payload], developer_env, log)
+    run(['bash', ROOT / 'tools/developer-packages/audit.sh', payload], env, log)
+    env['LTM_DEVELOPER_TOOLS_DIR'] = str(payload)
+    return payload
+
+
 def validate_guest(args, guest):
     """The export's manifest is the record: every staged file at its hash, the required names present, and the
     sources it read (commit and input hashes) unchanged in the checkout."""
@@ -825,6 +838,7 @@ def staged(args, env, log):
             state['universal'] = inputs
             save_state(args, state)
     if need('guest'):
+        prepare_developer_tools(args, env, log)
         try:
             validate_guest(args, guest)
             print('guest: current')
@@ -843,7 +857,9 @@ def staged(args, env, log):
         app = args.output / product.name
         require(build / 'libqemu-arm.dylib', 'QEMU library built by --stage dylib')
         validate_guest(args, guest)
-        inputs = tree_stamp(product, build / 'libqemu-arm.dylib', guest, guest.parent / 'ipad-guest-tools', firmwarekit, SCRIPTS / 'package.sh',
+        developer = prepare_developer_tools(args, env, log)
+        run([firmwarekit, 'developer-audit', '--payload', developer], env, log)
+        inputs = tree_stamp(product, build / 'libqemu-arm.dylib', guest, guest.parent / 'ipad-guest-tools', developer, firmwarekit, SCRIPTS / 'package.sh',
                             *(args.assets / name for name in BOOTROMS)) + args.sign_id
         if app.is_dir() and state.get('package', {}).get('inputs') == inputs:
             print('package: current')
@@ -962,6 +978,8 @@ def main(argv=None):
     firmwarekit = build_firmwarekit(args, log)
     app = args.output / product.name
     run(['ditto', product, app], env, log)
+    developer = prepare_developer_tools(args, env, log)
+    run([firmwarekit, 'developer-audit', '--payload', developer], env, log)
     env['LTM_FIRMWAREKIT'] = str(firmwarekit)
     env.update(package_env(args))
     build_record = write_build_record(args, sources, native_root, native_root / 'qemu-build', guest)

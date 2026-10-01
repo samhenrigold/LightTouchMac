@@ -54,10 +54,13 @@ mkdir -p "$DEST/Sources/armv6-toolchain"
 for adapter in armv6.sh legacy.h crt1old.c subtype.py mkold.py README.md; do
     cp "$LTM_QEMU_SOURCE_DIR/contrib/armv6-toolchain/$adapter" "$DEST/Sources/armv6-toolchain/"
 done
+# Normalize a development-only default in the retained upstream build adapter.
+# shell-cc always supplies ARMV6_SDK explicitly; this does not change built bytes.
+sed -i '' 's|/Users/shg/Downloads/OldSDK|$HOME/Developer/ipod2g-re/OldSDK|' "$DEST/Sources/armv6-toolchain/armv6.sh"
 cp "$LTM_QEMU_SOURCE_DIR/COPYING" "$DEST/Licenses/QEMU-COPYING"
 cp "$HERE/licenses/Bash-GPL-3.txt" "$DEST/Licenses/"
-xcrun clang --version > "$DEST/Sources/toolchain.txt"
+xcrun clang --version | sed '/^InstalledDir:/d' > "$DEST/Sources/toolchain.txt"
 autoconf --version >> "$DEST/Sources/toolchain.txt"
-shasum -a256 "$LTM_BASH_SDK/usr/lib/libSystem.B.dylib" "$LTM_BASH_SDK/usr/lib/libgcc_s.1.dylib" >> "$DEST/Sources/toolchain.txt"
+shasum -a256 "$LTM_BASH_SDK/usr/lib/libSystem.B.dylib" "$LTM_BASH_SDK/usr/lib/libgcc_s.1.dylib" | awk '{ n = split($2, p, "/"); print $1 " " p[n] }' >> "$DEST/Sources/toolchain.txt"
 otool -L "$DEST/bash"
 shasum -a256 "$DEST/bash"

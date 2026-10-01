@@ -24,3 +24,16 @@ func developerOfferCommand(_ argv: [String]) -> Never {
         FileHandle.standardError.write(Data("developer-offer: \(error)\n".utf8)); exit(1)
     }
 }
+
+func developerAuditCommand(_ argv: [String]) -> Never {
+    do {
+        guard argv.count == 2, argv[0] == "--payload" else {
+            throw FirmwareError(.unsupported, "developer-audit --payload DIR")
+        }
+        try DeveloperTools.audit(payload: URL(fileURLWithPath: argv[1]), redistribution: true)
+        print("PASS: qualified developer binaries, sources and notices; no instance state")
+        exit(0)
+    } catch {
+        FileHandle.standardError.write(Data("developer-audit: \(error)\n".utf8)); exit(1)
+    }
+}

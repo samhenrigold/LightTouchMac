@@ -73,4 +73,34 @@ struct DeveloperToolsTests {
         }
     }
 
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_DEVELOPER_PAYLOAD"] != nil,
+                   "Complete qualified release payload fixture required"),
+          arguments: ["missing-binary", "tampered-binary", "missing-source", "tampered-source", "missing-notice", "tampered-notice", "private-key", "symlink"])
+    func releaseAuditRejectsIncompleteOrPrivatePayload(damage: String) throws {
+        let original = URL(fileURLWithPath: ProcessInfo.processInfo.environment["FK_DEVELOPER_PAYLOAD"]!)
+        try DeveloperTools.audit(payload: original, redistribution: true)
+        try Oracle.withTemp { root in
+            let payload = root.appendingPathComponent("payload")
+            try FileManager.default.copyItem(at: original, to: payload)
+            let target: String
+            switch damage {
+            case "missing-binary", "tampered-binary": target = "usr/sbin/sshd"
+            case "missing-source", "tampered-source": target = "Sources/bash-4.0.tar.gz"
+            case "missing-notice", "tampered-notice": target = "Licenses/Bash-GPL-3.txt"
+            default: target = "ssh_host_ecdsa_key"
+            }
+            let file = payload.appendingPathComponent(target)
+            if damage.hasPrefix("missing") {
+                try FileManager.default.removeItem(at: file)
+            } else if damage == "symlink" {
+                try FileManager.default.createSymbolicLink(at: file, withDestinationURL: original.appendingPathComponent("bin/bash"))
+            } else {
+                try Data("altered or private material".utf8).write(to: file)
+            }
+            #expect(throws: (any Error).self) {
+                try DeveloperTools.audit(payload: payload, redistribution: true)
+            }
+        }
+    }
+
 }

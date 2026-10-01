@@ -48,17 +48,7 @@ nonisolated public enum DeveloperTools {
               lines[serialIndex].split(separator: " ").count == 3,
               let previous = Int(lines[serialIndex].split(separator: " ")[1]), previous > 0, serial > previous, serial <= Int(Int32.max),
               !lines.contains(where: { $0.contains(" developer/") }) else { throw fail("developer offer needs a fresh package and newer serial") }
-        let manifest = try JSONDecoder().decode(BundleManifest.self, from: Data(contentsOf: payload.appendingPathComponent("developer-tools.json")))
-        guard manifest.source == source, manifest.files == expectedHashes else { throw fail("developer bundle does not match the supported upstream payload") }
-        var binaries: [(String, Data)] = []
-        for target in targets {
-            let file = payload.appendingPathComponent(target)
-            let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-            guard values.isRegularFile == true, values.isSymbolicLink != true else { throw fail("developer payload must be regular files") }
-            let data = try Data(contentsOf: file)
-            guard hash(data) == manifest.files[target], data.count <= 16 * 1024 * 1024 else { throw fail("developer payload hash mismatch: \(target)") }
-            binaries.append((target, data))
-        }
+        let binaries = try validatedBinaries(payload: payload)
         var count = lines.filter { ["file", "hook", "job"].contains(String($0.split(separator: " ").first ?? "")) }.count
         let hooks = lines.filter { $0.hasPrefix("hook ") }.count
         guard count + binaries.count + 5 <= 64, hooks + binaries.count + 2 <= 32 else { throw fail("developer tools exceed guest-package loader limits") }
@@ -141,9 +131,55 @@ nonisolated public enum DeveloperTools {
         }
         lines[serialIndex] = "serial \(serial) developer-openssh-6.7p1"
         try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: offer.appendingPathComponent("offer"), options: .atomic)
-        return Result(instance: instance, serial: serial, hostPublicKey: publicKey, payloadSource: manifest.source,
+        return Result(instance: instance, serial: serial, hostPublicKey: publicKey, payloadSource: source,
                       clientIdentity: authorizedPublicKey == nil ? client.path : nil)
     }
+    /// Read-only audit for both composition and release packaging. Redistribution
+    /// requires the exact qualified source/notice inventory as well as binaries.
+    public static func audit(payload: URL, redistribution: Bool = false) throws {
+        _ = try validatedBinaries(payload: payload)
+        guard redistribution else { return }
+        let fm = FileManager.default
+        let allowed = Set(targets + ["developer-tools.json"])
+        let root = payload.resolvingSymlinksInPath()
+        guard let enumerator = fm.enumerator(atPath: root.path) else {
+            throw fail("cannot enumerate developer payload")
+        }
+        var sourceLines: [String] = []
+        for case let relative as String in enumerator {
+            let file = root.appendingPathComponent(relative)
+            let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey])
+            guard values.isSymbolicLink != true else { throw fail("developer payload must not contain symlinks") }
+            if values.isDirectory == true { continue }
+            guard values.isRegularFile == true else { throw fail("developer payload must contain regular files") }
+            if relative.hasPrefix("Sources/") || relative.hasPrefix("Licenses/") {
+                let data = try Data(contentsOf: file)
+                sourceLines.append("\(relative) \(hash(data))\n")
+            } else if !allowed.contains(relative) {
+                throw fail("unexpected developer resource (instance state must never ship): \(relative)")
+            }
+        }
+        let inventory = Data(sourceLines.sorted().joined().utf8)
+        guard hash(inventory) == "5a7e7dc7a4df23e40ba055022a3544c0473d877215f4d041d4e0cf818625bc3c" else {
+            throw fail("developer redistribution sources or notices are missing or changed")
+        }
+    }
+
+    private static func validatedBinaries(payload: URL) throws -> [(String, Data)] {
+        let manifest = try JSONDecoder().decode(BundleManifest.self, from: Data(contentsOf: payload.appendingPathComponent("developer-tools.json")))
+        guard manifest.source == source, manifest.files == expectedHashes else { throw fail("developer bundle does not match the supported upstream payload") }
+        var binaries: [(String, Data)] = []
+        for target in targets {
+            let file = payload.appendingPathComponent(target)
+            let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isRegularFile == true, values.isSymbolicLink != true else { throw fail("developer payload must be regular files") }
+            let data = try Data(contentsOf: file)
+            guard hash(data) == manifest.files[target], data.count <= 16 * 1024 * 1024 else { throw fail("developer payload hash mismatch: \(target)") }
+            binaries.append((target, data))
+        }
+        return binaries
+    }
+
     private static func publicKey(for key: URL) throws -> String {
         let values = try key.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true else { throw fail("instance private key must be a regular file") }
