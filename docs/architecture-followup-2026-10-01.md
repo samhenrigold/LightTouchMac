@@ -181,3 +181,43 @@ Evidence: `/Users/shg/Developer/ltm-evidence/host-shared-lease-2026-10-01`.
 
 The next host boundary is lock-before-record-read and retention of the exact
 record generation throughout export/edit. That work remains unqualified.
+
+## Controller execution must have one owner
+
+Read-only stock instruction inventories expose a silent gap beyond unsupported
+opcodes: bulk scripts write CSGENRC to controller offset0x804 and use0x810.
+Both lie outside the current 256-byte local FMC shadow, so writes are dropped
+and reads return zero. Status scripts issue60/row/D0 erase and70 status, but
+these currently change only the command shadow. Even a script that reaches
+END would therefore not establish flash work.
+
+CPU D38 currently invokes host read/write helpers independently of the script.
+A future physical controller path must replace that dispatch, not run beside
+it. The existing store helper infers block erase and performs generated-image
+relocation; reusing it for real flash programming risks losing neighboring
+pages or mapping twice. A single execution owner, bounded checked DMA and
+explicit command/status/abort behavior must precede shortcut deletion. Stock
+restore, cold boot and durable subsequent writes remain the final gate.
+
+D38 scalar CPU/sequence ownership is separately evidenced and has a scratch
+proposal; it has not been promoted by this audit. Raw NAND program encodings,
+AES/ECC and complete spare layout remain unmeasured. Findings and explicitly
+unqualified proposal: `/Users/shg/Developer/ltm-evidence/fmss-controller-audit-2026-10-01`.
+
+## D54 sequencer loop state qualified
+
+QEMU 0a602cca75 implements the observed D54 register-write/read pair as
+sequencer-owned CSGENR15 state. The stock read script seeds it from D28,
+decrements it and writes it back for its chunk loop. The model retains a
+full-width scalar across script invocations, exposes observed CPU diagnostic
+readback, and saves it in VMState v9. No CPU-write form, other Dxx mutation,
+forced chunk count, crypto or completion behavior was introduced.
+
+Six actual-source suites and 17 real model tests pass; the baseline fails a
+loop-count assertion. Tests vary counts1/2/3/7, exercise independent scalar
+values, reset and actual snapshot replacement. A real retained v8 stream
+clears preinitialized D54 while preserving D34/D48. Default native checks
+pass 8/8, including clean guest shutdown, reboot persistence and fsck.
+Default diagnostics still stop at D38 reads; existing false-completion and
+CPU storage shortcuts remain. Stock physical restore is not qualified.
+Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d54-2026-10-01`.
