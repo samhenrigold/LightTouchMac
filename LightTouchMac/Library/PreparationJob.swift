@@ -256,7 +256,8 @@ nonisolated final class PreparationJob: @unchecked Sendable {
         let fm = FileManager.default
         let profile = entry.profile ?? .iPad1
         let lockURL = staging.appendingPathComponent(lockName)
-        let boot = try profile.preparedBoot(strategy: BootRecipe.bootStrategy(lockURL))
+        let strategy = try BootRecipe.bootStrategy(lockURL)
+        let boot = try profile.preparedBoot(strategy: strategy)
         for name in [boot.boot, "nand", "identity.json", lockName] + boot.files
             where !fm.fileExists(atPath: staging.appendingPathComponent(name).path) {
             throw FirmwareError.failed("The prepared device is incomplete (\(name) is missing).")

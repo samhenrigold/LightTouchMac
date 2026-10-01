@@ -50,8 +50,11 @@ struct SingleConfig: Decodable {
     let b = URL(fileURLWithPath: s.base)
     if s.board == "ipod" { d.preparedBase = b }
     if !ipad {
+        let iBoot: String
+        do { iBoot = try BootRecipe.iPodIBoot(base: b) }
+        catch { fail("boot lock: \(error)") }
         d.ipod = .init(nand: b.appendingPathComponent("nand").path, nor: b.appendingPathComponent("nor.bin").path,
-                       iBoot: BootRecipe.iPodIBoot(base: b), gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,
+                       iBoot: iBoot, gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,
                        machine: BootRecipe.lockMachine(b.appendingPathComponent("device.lock.json")))
     }
     var offer: String?

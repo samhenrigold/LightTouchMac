@@ -178,3 +178,53 @@ extension BootTests {
         // and maintenance path containment remain separate caller responsibilities.
     }
 }
+
+extension BootTests {
+    @Test(arguments: PreparedDeviceBoot.Board.allCases, [
+        "{", "[]", "true", "42", "null", "\"iboot\"",
+        "{\"boot_strategy\":null}", "{\"boot_strategy\":true}",
+        "{\"boot_strategy\":17}", "{\"boot_strategy\":[]}", "{\"boot_strategy\":{}}"
+    ])
+    func invalidPresentLockRejectedBeforeStorage(board: PreparedDeviceBoot.Board, json: String) throws {
+        let f = try Fixture(board: board, strategy: nil)
+        let lock = f.base.appendingPathComponent("device.lock.json")
+        let data = Data(json.utf8)
+        try data.write(to: lock)
+        let norBefore = try Data(contentsOf: f.base.appendingPathComponent("nor.bin"))
+        do { _ = try f.prepare(board); Issue.record("accepted invalid present boot lock: \(json)") }
+        catch let error as CocoaError {
+            #expect(error.code == .fileReadCorruptFile)
+            #expect(error.userInfo[NSFilePathErrorKey] as? String == lock.path)
+        }
+        #expect(throws: CocoaError.self) { _ = try BootRecipe.iPodIBoot(base: f.base) }
+        #expect(try Data(contentsOf: lock) == data)
+        #expect(try Data(contentsOf: f.base.appendingPathComponent("nor.bin")) == norBefore)
+        #expect(!FileManager.default.fileExists(atPath: f.overlay.path))
+        #expect(!FileManager.default.fileExists(atPath: f.nor.path))
+    }
+
+    @Test(arguments: PreparedDeviceBoot.Board.allCases, [false, true])
+    func missingLegacyStrategyKeepsBoardDefault(board: PreparedDeviceBoot.Board, missingLock: Bool) throws {
+        let f = try Fixture(board: board, strategy: nil)
+        let lock = f.base.appendingPathComponent("device.lock.json")
+        if missingLock { try FileManager.default.removeItem(at: lock) }
+        #expect(try BootRecipe.bootStrategy(lock) == nil)
+        let c = try f.prepare(board).configuration(bootArgs: "", usbAddress: nil, wifi: false,
+            guestPackage: nil, serial: "null", audio: [], netdev: nil)
+        switch board {
+        case .k48: #expect(c.argv[2].contains(",kboot="))
+        case .n72: #expect(c.argv[2].contains(",direct-iboot=" + BootRecipe.escape(f.base.appendingPathComponent("iBoot.bin").path)))
+        case .n45: #expect(c.argv[2].contains(",iboot=" + BootRecipe.escape(f.base.appendingPathComponent("iBoot.bin").path)))
+        }
+    }
+
+    @Test func presentLockReadFailureDoesNotBecomeLegacyDefault() throws {
+        let f = try Fixture(board: .k48, strategy: nil)
+        let lock = f.base.appendingPathComponent("device.lock.json")
+        try FileManager.default.removeItem(at: lock)
+        try FileManager.default.createDirectory(at: lock, withIntermediateDirectories: false)
+        #expect(throws: CocoaError.self) { _ = try f.prepare(.k48) }
+        #expect(!FileManager.default.fileExists(atPath: f.overlay.path))
+        #expect(!FileManager.default.fileExists(atPath: f.nor.path))
+    }
+}

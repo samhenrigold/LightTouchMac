@@ -114,6 +114,30 @@ func publishPrepared() throws -> DeviceInstance {
 func mode(_ url: URL) -> Int { (try! fm.attributesOfItem(atPath: url.path)[.posixPermissions] as! NSNumber).intValue }
 
 switch args[3] {
+case "invalid-lock":
+    let invalid = ["{", "[]", "{\"boot_strategy\":null}", "{\"boot_strategy\":17}",
+                   "{\"boot_strategy\":false}", "{\"boot_strategy\":[]}", "{\"boot_strategy\":{}}"]
+    for json in invalid {
+        let id = UUID()
+        let staging = PreparationJob.preparing(state).appendingPathComponent(id.uuidString)
+        try StorageLocations.privateDirectory(staging.deletingLastPathComponent())
+        try fm.copyItem(at: base, to: staging)
+        let lock = staging.appendingPathComponent("device.lock.json")
+        let data = Data(json.utf8)
+        try data.write(to: lock)
+        do {
+            _ = try PreparationJob.publish(staging: staging, entry: entry, id: id, state: state)
+            expect(false, "published invalid lock: \(json)")
+        } catch let error as CocoaError {
+            expect(error.code == .fileReadCorruptFile, "wrong invalid-lock error: \(error)")
+        }
+        expect(try Data(contentsOf: lock) == data, "invalid staging lock remains intact")
+        expect(fm.fileExists(atPath: staging.appendingPathComponent("nand").path), "staging not moved")
+        expect(!fm.fileExists(atPath: DeviceInstance.directory(id, state: state).path), "no record published")
+        try fm.removeItem(at: staging)
+    }
+    print("PASS invalid-lock: malformed and non-string strategies refuse before publication")
+
 case "fresh":
     expect(LegacyState.find(state: state, applicationSupport: nil) == nil, "a fresh state has nothing legacy")
     expect(DeviceInstance.all(state: state).isEmpty, "no devices yet")
@@ -234,6 +258,7 @@ def main():
             state.mkdir(parents=True, exist_ok=True)
             subprocess.run([tmp / 'check', catalog_path, base, case, support], check=True, env=dict(os.environ, LTM_STATE_DIR=str(state)))
 
+        run('invalid-lock', tmp / 'invalid-lock')
         run('fresh', tmp / 'fresh')
 
         # The old layout: a 1.0 root, plus a multidevice state with an adopted (legacyBundled) iPod.

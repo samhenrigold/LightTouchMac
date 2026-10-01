@@ -52,7 +52,7 @@ public struct PreparedDeviceBoot {
     public static func prepare(board: Board, base: URL, overlay: URL, writableNOR: URL?,
                                storageKey: String?, bootrom: String, dieID: String? = nil) throws -> Self {
         let lock = base.appendingPathComponent("device.lock.json")
-        let strategy = BootRecipe.bootStrategy(lock)
+        let strategy = try BootRecipe.bootStrategy(lock)
         let required = try board.requiredFiles(strategy: strategy)
         let files = try BootRecipe.preparedFiles(base: base, overlay: overlay, writableNOR: writableNOR,
                                                   boot: required.boot, also: required.files)

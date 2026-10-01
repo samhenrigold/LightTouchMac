@@ -189,17 +189,32 @@ public nonisolated enum BootRecipe {
         return machine
     }
 
-    /// A prepared base's boot_strategy ("iboot"/"kboot"); nil for a missing lock or field (the two older prepared
-    /// iPads are kboot and carry no boot_strategy).
-    public static func bootStrategy(_ lock: URL) -> String? {
-        guard let data = try? Data(contentsOf: lock),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return object["boot_strategy"] as? String
+    /// Missing legacy locks and valid objects without boot_strategy retain the board default.
+    /// A present unreadable or malformed lock must never silently choose another boot path.
+    public static func bootStrategy(_ lock: URL) throws -> String? {
+        let data: Data
+        do { data = try Data(contentsOf: lock) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            return nil
+        }
+        func invalid(_ detail: String, underlying: Error? = nil) -> CocoaError {
+            var info: [String: Any] = [NSFilePathErrorKey: lock.path,
+                NSLocalizedDescriptionKey: "Invalid boot lock at \(lock.path): \(detail)"]
+            if let underlying { info[NSUnderlyingErrorKey] = underlying }
+            return CocoaError(.fileReadCorruptFile, userInfo: info)
+        }
+        let value: Any
+        do { value = try JSONSerialization.jsonObject(with: data) }
+        catch { throw invalid("malformed JSON", underlying: error) }
+        guard let object = value as? [String: Any] else { throw invalid("expected a JSON object") }
+        guard let strategy = object["boot_strategy"] else { return nil }
+        guard let strategy = strategy as? String else { throw invalid("boot_strategy must be a string") }
+        return strategy
     }
 
-    /// A prepared iPod base's direct-iboot: its iBoot.bin, or "" for a "bootrom" (2.x) lock.
-    public static func iPodIBoot(base: URL) -> String {
-        bootStrategy(base.appendingPathComponent("device.lock.json")) == "bootrom" ? "" : base.appendingPathComponent("iBoot.bin").path
+    /// A prepared iPod base's direct-iBoot, or empty for a bootrom lock. Invalid present locks propagate.
+    public static func iPodIBoot(base: URL) throws -> String {
+        try bootStrategy(base.appendingPathComponent("device.lock.json")) == "bootrom" ? "" : base.appendingPathComponent("iBoot.bin").path
     }
 
     public static func options(_ machine: [String: String]) -> String {

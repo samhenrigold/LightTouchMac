@@ -20,8 +20,11 @@ struct DeadlineConfig: Decodable {
     let b = URL(fileURLWithPath: c.base)
     if !ipad {
         let gid = b.appendingPathComponent("gid-blobs.bin").path
+        let iBoot: String
+        do { iBoot = try BootRecipe.iPodIBoot(base: b) }
+        catch { fail("boot lock: \(error)") }
         d.ipod = .init(nand: b.appendingPathComponent("nand").path, nor: b.appendingPathComponent("nor.bin").path,
-                       iBoot: BootRecipe.iPodIBoot(base: b), gidBlobs: FileManager.default.fileExists(atPath: gid) ? gid : nil,
+                       iBoot: iBoot, gidBlobs: FileManager.default.fileExists(atPath: gid) ? gid : nil,
                        machine: BootRecipe.lockMachine(b.appendingPathComponent("device.lock.json")))
     }
     let matched = Matched()
