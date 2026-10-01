@@ -216,4 +216,22 @@ artwork format/pixels, duplicate reconciliation, and guest-confirmed shutdown.
 Evidence: `/private/tmp/ltm-media-merged-native.log` and its retained output path.
 Four offline checks pass without skips in `/private/tmp/ltm-media-merged-offline`.
 The native harness now accepts explicit asset/base paths for isolated worktrees.
-The additional cold-reopen decoded-artwork check is running on the merged path.
+The additional cold-reopen check passes on the merged path: full tags, exactly
+one song after repeated import, and a PNG decoded through the guest's MediaPlayer
+on both boots. Evidence: `/private/tmp/ltm-media-merged-cold-boot2` and its `.log`.
+
+The rebuilt universal ad hoc candidate is
+`/private/tmp/ltm-universal-candidate/Light Touch.app`, pinned to QEMU
+`9d2d3c2f0beb5756b302d19441b6e602e3fed81e` and the USB host candidate above.
+Guest payload serial 11 and both host architectures are included. Release fixture
+checks pass 8/8 with the dependency-download network check skipped; actual bundle
+hygiene passes. This is not Developer ID/notarization or supported-host runtime
+qualification. Evidence: `/private/tmp/ltm-overnight-release-final.log` and
+`/private/tmp/ltm-overnight-bundle-hygiene.log`.
+
+The broader offline run passes 100 checks, skips two opt-in GUI checks, and fails
+one metadata check because that invocation selected the separate main checkout
+instead of the candidate QEMU source. The focused rerun with the explicit
+candidate path passes, including fractional-tag and unsafe-artwork-path rejection.
+Keep both results: `/private/tmp/ltm-overnight-offline-final.log` and
+`/private/tmp/ltm-overnight-metadata-candidate.log`.
