@@ -645,8 +645,8 @@ an offline migration for old bases remain separate work. Evidence:
 
 QEMU75704ad744 balances CoreSurface locks and ownership across the stock2.x
 callback lifetime; actual callback sanitizer tests and3.1.3 native5/5 pass.
-The2.1.1 mapping now has real dimensions/stride/base and no strict bridge
-refusals, but its graphics gate still fails. QEMU a85802ffb8 strengthens that
+The2.1.1 mapping now has real dimensions/stride/base and clears the
+previous surface-contract refusal, but its graphics gate still fails. QEMU a85802ffb8 strengthens that
 gate to require the known inset cyan/magenta/yellow scene geometry in both
 samples: equal total color areas cannot qualify striped or packed scanout.
 Retained3.1.3 frames pass, and retained2.1.1 frames fail this geometry check.
@@ -654,8 +654,50 @@ Retained3.1.3 frames pass, and retained2.1.1 frames fail this geometry check.
 Stock2.1.1 programs plane1 control, then reads it to OR in rotation. With the
 native default lcd-planes option off, the model's missing+0x40 readback returns
 zero, which the guest writes back. Stock3.1.3 constructs rotation before its
-initial write and avoids that read. A narrow register-latch readback candidate
-passes private actual-handler sanitizer reproduction; production QTests and
-native qualification are pending. No zero-format reinterpretation or guest
+initial write and avoids that read. QEMU8e9fac00f6 supplies the narrow register-latch readback. Actual-handler
+sanitizer reproduction,13 model suites and five LCD QTests pass, including
+reset, existing VMState off/on roundtrips and N45 mapping. No zero-format reinterpretation or guest
 patch is justified. Evidence:
 `/Users/shg/Developer/ltm-evidence/coresurface-lifetime-2026-10-01`.
+
+The combined private exact-GPT/preboot-CoreSurface candidate passes all eight
+3.1.3 native checks, with two guest-confirmed exit0 shutdowns, clean fsck,
+durable reboot writes, correct scene geometry and6.45s440/880Hz audio. The
+same frozen executable88ba2cd4e414 runs2.1.1 at6/8: boot,fsck,installation,
+foreground,agent and6.76s stereo pass; graphics is black in the correct inset
+and gesture shutdown times out, so persistence explicitly fails. Fsck0 after
+that forced teardown does not certify clean shutdown or durability.
+
+Live qom-get confirms lcd-planes false. The failing2.x run never programs
+plane1; its zero latch therefore reads identically in baseline/candidate. Its
+black pixels are already in the flat CoreAnimation framebuffer, so this run
+does not establish native exercise of the measured plane1 RMW correction or
+causality for the change from earlier stripes. Identical installed GLTest and
+guest-addition hashes are verified; two late context/batch refusals occur in
+both old and new traces and need exact packet/interval attribution. Do not
+reinterpret format zero, reorder planes, or reset counters to pass the gate.
+Evidence: `/Users/shg/Developer/ltm-evidence/lcd-control-readback-2026-10-01`.
+The source pin names8e9fac00f6; current arm64 dylib still represents340978ff58
+until relinked. Universal packaging/native dylib guest qualification remain
+unverified.
+
+## Maintained fixture eligibility and offline linkage
+
+QEMU c27bb514f5 accepts separate installation IPA, audio Harness, GLES app
+and slot-map inputs. Declared full numeric deployment versions are checked
+before output/overlay creation or guest/service launch. Seven meaningful
+preflight tests and registry validation pass, including malformed XML,
+multiple IPA apps, unknown explicit guest versions and incompatible patch
+versions. Actual old3.x Harness is rejected for2.1.1; the genuine privateSDK2
+fixtures pass declared eligibility. Eligibility does not prove API or runtime
+compatibility; historical raw-NAND defaults without a declared version retain
+the earlier unchecked behavior.
+
+App648a471 links23 existing offline probes to the actual shared HostRuntime
+module, with separate package outputs for explicit compiler targets. All23
+compile and execute, including arm64 and x86_64 under Rosetta. Four native
+window/capture/media tests need normal macOS access; sandbox-only failures
+are retained alongside successful native retries. No production Swift logic,
+replacement app types or assertions changed. Native Intel hardware is not
+qualified by the Rosetta result. Evidence:
+`/Users/shg/Developer/ltm-evidence/host-runtime-2026-10-01/offline-module-linkage`.

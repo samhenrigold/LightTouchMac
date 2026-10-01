@@ -272,5 +272,10 @@ filesystem-aware hardware changes. Existing N72 bases request Prepare Again;
 automatic old-image migration and4.x native qualification remain separate.
 QEMU75704ad744 qualifies CoreSurface callback ownership; a85802ffb8 rejects
 incorrectly packed graphics even when aggregate color areas match. A measured
-stock2.x control-register RMW exposes missing LCD plane1 readback. Its narrow
-hardware correction is being tested; no full2.x graphics pass is claimed.
+stock2.x control-register RMW exposes missing LCD plane1 readback. QEMU8e9fac00f6 qualifies the narrow
+readback through13 models/five LCD QTests and native3.1.3 eight checks. The
+combined2.1.1 run is6/8: graphics and clean-shutdown persistence still fail;
+that run does not exercise the plane1 correction. No full2.x graphics pass is
+claimed. App648a471 also repairs actual shared-module linkage in23 existing
+offline probes, all compiling and executing. Current receipts and remaining
+first-divergence research are recorded once in the evidence journal.
