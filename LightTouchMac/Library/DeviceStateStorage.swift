@@ -68,6 +68,45 @@ nonisolated enum DeviceStateStorage {
         }.map { canonicalPath(devices.appendingPathComponent($0)) }
     }
 
+    /// Managed GUI records must keep writable state under their own record directory.
+    /// Explicit external read-only bases and caller-authorized raw CLI fixtures are separate policy.
+    /// This read-only preflight must run before helper spawn or storage preparation.
+    static func checkBootPaths(base: URL, mutable: [URL], state: URL, owner: UUID) throws {
+        let directory = state.appendingPathComponent("Devices/\(owner.uuidString)")
+        func invalid(_ url: URL) -> CocoaError {
+            CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: url.path,
+                NSLocalizedDescriptionKey: "Light Touch can’t start this device because \(url.path) isn’t its writable storage."])
+        }
+        func checkLinks(_ url: URL) throws {
+            // canonicalPath resolves existing links; a dangling/cyclic link has no
+            // realpath result and must not be mistaken for an uncreated private suffix.
+            var component = URL(fileURLWithPath: "/")
+            var followedLink = false
+            for part in url.pathComponents.dropFirst() {
+                // Lexical standardization would erase link/.. before realpath,
+                // although the OS traverses the link before moving to its parent.
+                if part == "..", followedLink { throw invalid(url) }
+                component.appendPathComponent(part)
+                if (try? FileManager.default.destinationOfSymbolicLink(atPath: component.path)) != nil {
+                    followedLink = true
+                    if !FileManager.default.fileExists(atPath: component.path) { throw invalid(url) }
+                }
+            }
+        }
+        try checkLinks(directory)
+        try checkRemovable(directory, state: state, owner: owner)
+        let owned = canonicalPath(directory)
+        let immutable = canonicalPath(base)
+        for url in mutable {
+            try checkLinks(url)
+            try checkRemovable(url, state: state, owner: owner)
+            let path = canonicalPath(url)
+            guard path.hasPrefix(owned + "/"),
+                  path != immutable, !path.hasPrefix(immutable + "/"),
+                  !immutable.hasPrefix(path + "/") else { throw invalid(url) }
+        }
+    }
+
     /// Erase and Delete only remove paths strictly inside the state root that
     /// are neither the root, Devices/, nor inside another record's directory.
     /// A damaged or hand-edited record can't reach anything else.

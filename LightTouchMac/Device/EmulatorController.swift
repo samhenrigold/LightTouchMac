@@ -258,10 +258,16 @@ final class EmulatorController {
 
     func start() {
         guard !started else { return }
-        do { try Bundled.requireStorage() }
-        catch {
+        let paths = instance.paths
+        do {
+            try Bundled.requireStorage()
+            try DeviceStateStorage.checkBootPaths(base: paths.base,
+                mutable: [paths.overlay, paths.snapshot, paths.snapshotMeta, paths.snapshotTmp, paths.snapshotBad,
+                          paths.usbmuxConf, paths.work, paths.lease] + [paths.writableNOR].compactMap { $0 },
+                state: Bundled.stateDirectory, owner: instance.id)
+        } catch {
             logEvent("storage: \(error.localizedDescription)")
-            state = .dead(exitCode: 1)
+            failBoot(error)
             return
         }
         started = true
