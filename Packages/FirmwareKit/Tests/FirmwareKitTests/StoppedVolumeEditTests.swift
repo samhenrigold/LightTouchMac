@@ -45,6 +45,15 @@ struct StoppedVolumeEditTests {
                         "snapshot": "old-snapshot", "writableNOR": device.appendingPathComponent("nor.bin").path,
                         "usbmuxConf": "conf"]]
         try JSONSerialization.data(withJSONObject: record).write(to: device.appendingPathComponent("device.json"))
+        // A mounted/exported copy must not keep the stopped owner alive merely
+        // because the declarative selection remains retained by its caller.
+        let selection = try VolumeExport.Source(device: device)
+        let readOnlyCopy = try VolumeExport.export(selection, out: root.appendingPathComponent("read-only-export"))
+        #expect(readOnlyCopy.count == 1)
+        do {
+            let released = try StoppedStorageLease(device.appendingPathComponent("work/lease"))
+            withExtendedLifetime((selection, released)) {}
+        }
         let session = try StoppedVolumeEdit.begin(device: device)
         try VolumeMount.withMounted(session.image, at: root.appendingPathComponent("edit")) { mount in
             try Data("after-atomic-save".utf8).write(to: mount.appendingPathComponent("Settings.plist"), options: .atomic)
