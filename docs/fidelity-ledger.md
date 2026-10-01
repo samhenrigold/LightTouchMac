@@ -638,3 +638,18 @@ stopped after repeated Waiting for NAND. The bulk script's next measured
 divergence is opcode06 `06040003 00000000` at +0x78; its semantics remain
 unimplemented. Owned subprocesses are reaped. Text/trace evidence is retained
 in the fmss-parameters-2026-10-01 directory above; this is not restore success.
+
+### Silent I2S migration correction (2026-10-01)
+
+QEMU 0ceac9c55e corrects the N45 silent-sink rate initialization and accepts
+legacy zero host voice rate only without a realized/active host voice, after
+all stream/ring/queued PCM/rate/pacing/FIFO validations pass. Guest TX/DMA
+activity is valid in silent streams; it does not justify rejecting them.
+The permanent whole-board PHY model suite passes 4/4 including N45 migration,
+whose baseline failed in I2S. Actual audio sanitizer/alignment tests and the
+separate default 7E18 native two-boot regression 8/8 pass.
+
+Evidence: `/Users/shg/Developer/ltm-evidence/i2s-silent-2026-10-01`. This is
+silent-stream migration bookkeeping, not N45 native guest suspend/wake,
+in-flight USB snapshot qualification or a new packaged candidate. The app
+source pin includes the verified fix; targets remain unmerged.
