@@ -43,7 +43,9 @@ struct IdentityTests {
     /// ipod2g_device.identity(seed, {"model_number": "MC086", "region_info": "LL/A"}).
     @Test func iPod() throws {
         let id = try UnitIdentity.synthesizeIPod(seed: "ipod2g-8C148-default", modelNumber: "MC086", regionInfo: "LL/A")
-        #expect(Oracle.sha256(id.json()) == "cdd30a95a8297be0b8cd336e28311f604e64409d60849323ced09695165c34d0")
+        let legacy = UnitIdentity(fields: id.fields.filter { $0.key != "unique-chip-id" })
+        #expect(Oracle.sha256(legacy.json()) == "cdd30a95a8297be0b8cd336e28311f604e64409d60849323ced09695165c34d0")
+        #expect(id["unique-chip-id"] == (try UnitIdentity.synthesize(seed: "ipod2g-8C148-default"))["unique-chip-id"])
         #expect(id["battery-serial"] == "142503116299" && id.udid == "0129500823c3921495fbea0555169adc11312b63")
     }
 
@@ -51,6 +53,7 @@ struct IdentityTests {
     @Test func iPod1G() throws {
         let pod = try UnitIdentity.synthesizeIPod(seed: "ipod1g-test", modelNumber: "MA623", regionInfo: "LL/A")
         let id = try UnitIdentity.synthesizeIPod(seed: "ipod1g-test", modelNumber: "MA623", regionInfo: "LL/A", bluetooth: false)
+        #expect(id["unique-chip-id"] == nil)
         #expect(id["bt-mac"] == nil && id["wifi-mac"] == pod["wifi-mac"] && id["serial-number"] == pod["serial-number"])
         #expect(id.udid == Data(Insecure.SHA1.hash(data: Data((id["serial-number"]! + id["wifi-mac"]!).utf8))).hexString)
         #expect(id.udid != pod.udid)

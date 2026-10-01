@@ -84,6 +84,7 @@ public struct UnitIdentity: Equatable, Sendable {
             ("battery-serial", .string(h[0..<12].map { String($0 % 10) }.joined())),
             ("model-number", .string(modelNumber)), ("region-info", .string(regionInfo)), ("seed", .string(seed)),
         ])
+        if bluetooth { id.fields.append(("unique-chip-id", .string(base["unique-chip-id"]!))) }
         id.fields.append(("udid", .string(bluetooth ? base["udid"]! : udid(serial: base["serial-number"]!, wifiMAC: base["wifi-mac"]!, btMAC: ""))))
         return id
     }

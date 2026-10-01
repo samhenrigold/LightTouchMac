@@ -473,3 +473,23 @@ of hard-coded zero. Stock idevicerestore selects the configured identity; its
 next stop on 2.1.1 is host firmware suitability validation. Eleven model suites
 and the default eight-check iPod tier pass. Automatic N72 ECID provisioning,
 iBEC/ramdisk/physical restore and cold stock GPU remain unqualified.
+
+### N72 unit ECID provisioning, 2026-10-01
+
+New N72 identities now include the existing seed-derived ECID; their machine
+lock passes it to immutable CHIPID fuses. Legacy bases recover that same value
+from their stored seed at the boot-recipe boundary without modifying the base,
+serial/MAC/UDID, or N45 identity. Explicit machine ECID overrides win. QEMU pin
+53e722ae63 carries the model and reusable stock SecureROM/iBSS identity test.
+Swift identity tests (11) and the compiled production BootRecipe check pass;
+CHIPID qtests pass 3/3 and default native 7E18 regression passes 8/8.
+
+Stock 5F138 SecureROM and unmodified iBSS report the same unit ECID
+`0x98e452f953`. This test uses a private all-FF NOR and NAND overlay and allows
+USB reinitialization to settle. Tight descriptor polling reproduces a return
+to DFU; its cause remains a transport/controller research lead. A private
+host-only legacy Restore.plist compatibility experiment reached iBSS and
+uploaded the ramdisk, then failed before DeviceTree upload. Full stock restore
+and removal of generated FTL relocation remain open. Existing restored K48
+cold-boot and graphics limitations are unchanged. Packaged new-ECID native
+qualification is pending; do not apply the older package receipt to this pin.

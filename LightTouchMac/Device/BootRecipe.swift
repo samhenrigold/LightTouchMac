@@ -1,6 +1,7 @@
 // argv and environment for one boot, from paths alone (DeviceSession.swift's helper section fills it from
 // the device record). Foundation only; the offline checks and tests/drivers/session-driver compile it whole.
 
+import CryptoKit
 import Foundation
 
 /// argv and environment for one boot, from paths alone. EmulatorController
@@ -134,6 +135,18 @@ nonisolated enum BootRecipe {
            let identity = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             for key in ["wifi-mac", "bt-mac"] where machine[key] == nil {
                 if let mac = identity[key] as? String, !mac.isEmpty { machine[key] = mac }
+            }
+            if machine["ecid"] == nil {
+                if let ecid = identity["unique-chip-id"] as? String {
+                    machine["ecid"] = ecid
+                } else if let seed = identity["seed"] as? String {
+                    // Legacy N72 identities omitted ECID. Recover the same
+                    // 40-bit seed value UnitIdentity uses, without rewriting
+                    // the immutable base or changing its serial/MAC/UDID.
+                    let hash = Array(SHA256.hash(data: Data(seed.utf8)))
+                    let ecid = hash[20..<25].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) } | 1
+                    machine["ecid"] = String(format: "0x%010llx", ecid)
+                }
             }
         }
         return machine

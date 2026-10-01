@@ -192,7 +192,7 @@ final class N72Board: Board {
             "boot_strategy": major >= 3 ? "iboot" : "bootrom",
             // The BCM4325 CIS and NOR wifiaddr belong to the same unit. Older drivers
             // obtain the card's address before downloading its firmware.
-            "machine": Self.machine.merging(["wifi-mac": ident["wifi-mac"]!, "bt-mac": ident["bt-mac"]!]) { _, card in card },
+            "machine": Self.machine.merging(["wifi-mac": ident["wifi-mac"]!, "bt-mac": ident["bt-mac"]!, "ecid": ident["unique-chip-id"]!]) { _, card in card },
         ]
     }
 

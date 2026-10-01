@@ -487,3 +487,23 @@ The app source pin advances to that individually tested follow-up. A new
 bundle's build receipt must match the new pin before its native lifecycle
 result can be combined with the preceding qualification. The consolidated
 [overnight notes](overnight-fidelity-2026-10-01.md) preserve what remains.
+
+### N72 unit ECID provisioning, 2026-10-01
+
+New N72 identities now include the existing seed-derived ECID; their machine
+lock passes it to immutable CHIPID fuses. Legacy bases recover that same value
+from their stored seed at the boot-recipe boundary without modifying the base,
+serial/MAC/UDID, or N45 identity. Explicit machine ECID overrides win. QEMU pin
+53e722ae63 carries the model and reusable stock SecureROM/iBSS identity test.
+Swift identity tests (11) and the compiled production BootRecipe check pass;
+CHIPID qtests pass 3/3 and default native 7E18 regression passes 8/8.
+
+Stock 5F138 SecureROM and unmodified iBSS report the same unit ECID
+`0x98e452f953`. This test uses a private all-FF NOR and NAND overlay and allows
+USB reinitialization to settle. Tight descriptor polling reproduces a return
+to DFU; its cause remains a transport/controller research lead. A private
+host-only legacy Restore.plist compatibility experiment reached iBSS and
+uploaded the ramdisk, then failed before DeviceTree upload. Full stock restore
+and removal of generated FTL relocation remain open. Existing restored K48
+cold-boot and graphics limitations are unchanged. Packaged new-ECID native
+qualification is pending; do not apply the older package receipt to this pin.
