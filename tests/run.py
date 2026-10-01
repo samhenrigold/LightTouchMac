@@ -159,6 +159,14 @@ def session_checks():
         skips.append((name, f'no {what} at {path}'))
         return False
 
+    # Hello-only host gate: an explicitly supplied built helper, no guest.
+    exit_wait = 'sessions/check-exit-wait.py'
+    helper = os.environ.get('LTM_DEVICE_HELPER')
+    if not helper:
+        skips.append((exit_wait, 'manual host gate: supply LTM_DEVICE_HELPER and LTM_QEMU_DYLIB'))
+    elif want(exit_wait, helper, 'built helper (LTM_DEVICE_HELPER)') and want(exit_wait, dylib, 'dylib (LTM_QEMU_DYLIB)'):
+        checks.append([S / 'check-exit-wait.py', '--helper', Path(helper), '--dylib', dylib])
+
     if want('sessions/check-helper-boot.py', dylib, 'emulator dylib (LTM_QEMU_DYLIB)'):
         # The check's own iPad recipe is the direct-kernel bring-up (kboot.bin + nand/); an iBoot device has no
         # kboot.bin, so its iPad cases run only for a kboot device and are otherwise skipped by the check itself.

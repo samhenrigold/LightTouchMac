@@ -89,10 +89,18 @@ import IOSurface
     func kill() { if !isDead { link.kill() } }
 
     /// True once the helper is gone, false after `timeout`.
+    /// This bounded cleanup wait finishes even if its caller is cancelled;
+    /// DeviceLink continues to own and reap the helper after a timeout.
     func waitForExit(timeout: TimeInterval) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !isDead, Date() < deadline { try? await Task.sleep(for: .milliseconds(50)) }
-        return isDead
+        let wait = Task { @MainActor in
+            let clock = ContinuousClock()
+            let deadline = clock.now.advanced(by: .seconds(timeout))
+            while !isDead, clock.now < deadline {
+                try? await clock.sleep(until: min(deadline, clock.now.advanced(by: .milliseconds(50))))
+            }
+            return isDead
+        }
+        return await wait.value
     }
 
     private func received(_ event: LinkEvent) {
