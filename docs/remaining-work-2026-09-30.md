@@ -26,7 +26,7 @@ refuses physical formats it cannot interpret correctly.
 | Raw H2FMI commands / spare FIFO / completion | Implemented, qtested, restore and prepared-device regressed | Broader chip/controller contracts still require firmware evidence. |
 | Physical flash semantics / shared backend | Explicit `nand-xor-ff-v2` and upstream QEMU BlockBackend implemented | Erased FF, one-to-zero programming, erase row addressing, exclusive block ownership, flush and snapshot reopen tested; legacy formats retain their old semantics. RAM-owned bitmap changes publish only after page flush; crash/reopen and nonempty FIFO snapshots are tested. Per-operation crash atomicity remains. |
 | N72 logical relocation in hardware model | Open | Stock physical commands/guest FTL must replace the compatibility mapping, with restore, large writes/deletes and cold-boot evidence. |
-| FMSS snapshot equivalence | Unsupported physical-state snapshots explicitly rejected | Empty state migrates; populated physical state and uncertified old snapshot versions refuse save/load. Full physical-state migration remains a future capability. |
+| FMSS snapshot equivalence | Physical-page cache and erase map serialized through upstream VMState trees | Four production-board qtests and native 7E18 file/USB/clock/live GL/audio/new Wi-Fi HTTP resume pass. Mode mismatch and uncertified old streams refuse load. Exact flash generation must still match; in-flight host TCP and other firmware remain unqualified. |
 | NAND crypto fidelity | Open | Plaintext generated stores still permit bypasses; prove encrypted restored-store execution through hardware engines. |
 | Native boot arguments / N45 early touch | SYSIC touch masking corrected and older/newer runs pass | Native NOR/NVRAM handoff and downloaded touch firmware readiness remain research leads. Historical early-touch panic was not reproduced, so no readiness gate was invented. The incoming N45 four-page map-context fix removes the hard-stop FTLRestore corruption. Old-format baseline reproduces the kernel abort; two independent fixed-format reopens reach FTL_Open/BSD root without it. The retained 240-second baseline reaches a visible home screen. This was an out-of-bounds map restore, not an IOKit race. |
 | Per-device service routing | Demonstrated hazard guarded and regression tested | Immutable per-device endpoint workers replace GUI C calls; stalled A does not block B, cancellation kills/reaps children, and a retired session cannot reopen. Native guest services pass 12/12. |
@@ -89,7 +89,7 @@ flush ordering. Preserve controller-specific MMIO/DMA/IRQ behavior and keep the
 guest FTL above the hardware boundary. Migrate existing store formats explicitly;
 do not change sparse zero meaning underneath users' devices.
 
-Unsupported FMSS physical snapshots now fail explicitly; complete state migration is still needed for full save/resume equivalence.
+FMSS physical-page and erase maps now migrate. Native 7E18 resume passes files, USB, clock, live graphics, audio and new HTTP requests; snapshots still require the exact storage generation and startup modes.
 Then retire logical relocation and crypto shortcuts individually through physical
 restore/write/delete/interruption gates. Investigate native boot-argument and
 multitouch divergences as separate hardware fixes, not another broad rewrite.
@@ -348,3 +348,46 @@ Evidence: `/private/tmp/ltm-n72-{211,30,421}-legacy13-signed-session` and
 `/private/tmp/ltm-n72-313-legacy13-session`. The iPad's armv7 helpers are unchanged.
 This closes the absent 2.x/3.0 core-helper seam; typing, clipboard, download
 placeholders, media and developer SSH still require older-firmware API proofs.
+
+### FMSS state migration (October 1)
+
+QEMU `4a16474d1a` replaces the nonempty-FMSS-snapshot refusal with upstream
+QEMU VMState GTree serialization. Four real-board qtests pass, including
+RAM-only programmed pages, erase-map recovery with its disk fixture marker
+removed, and startup-mode mismatch refusal. Version 4's certified-empty streams
+remain accepted; older omitted-map streams remain refused. Generated FTL
+relocation is still provisional and is not retired by this change.
+
+Native 7E18 save/resume into a fresh process passes agent rekey, saved file,
+clock, USB re-enumeration/pairing, continuing GL pixels/presentation and a separate
+active stereo DMA/new Wi-Fi HTTP run. The final default tier passes 8/8. Evidence:
+`/private/tmp/ltm-fmss-map-final-qtest2.log`,
+`/private/tmp/ltm-fmss-tree-native-snapshot2.log`,
+`/private/tmp/ltm-fmss-tree-audio-network-snapshot.log`,
+`/private/tmp/ltm-fmss-tree-final-native-regress.log`.
+The HTTP probe starts new requests; it does not certify open host socket migration.
+The updated harness shares matched-device resolution with the default runner and
+uses agent file/spawn plus stock lockdown clock services, requiring no guest shell.
+
+### Physical combo-chip presence and iBoot rewrite retirement
+
+QEMU `cbf1000344` deletes the Bluetooth UART-path string rewrite in iBoot.
+Four native firmware lifecycle runs (2.1.1, 3.0, 3.1.3, 4.2.1) pass 18/18 each
+with generated factory identity on both cold boots and untouched bootloader
+code/literals. Their evidence is `/private/tmp/ltm-n72-{211,30,313,421}-no-btpatch-session`.
+
+The network-disabled control exposed a remaining unfaithful device absence:
+`wifi=off` removed the soldered BCM4325. Enumeration and OTP identity now remain
+present regardless of host bridge policy. A disabled bridge has no NIC/backend;
+it does not remove hardware. Four board SDIO qtests pass, and native save/resume
+with networking off passes all four identity fields, guest files, clock and USB
+pairing on every version above. 7E18 also keeps a live GL scene presenting.
+The final default regression passes 8/8 and reports the expected UDID.
+Evidence: `/private/tmp/ltm-n72-physical-combo-final-qtest.log`,
+`/private/tmp/ltm-n72-{211,30,313,421}-physical-combo-snapshot`, and
+`/private/tmp/ltm-n72-physical-combo-default-regress.log`.
+
+This closes the rewrite and absence seams. The BCM dongle firmware remains HLE;
+normal-boot command-line data injection and generated FTL relocation remain
+explicit compatibility boundaries. Fetching upstream again at 10:00 UTC found
+unchanged refs; no blind merge of the rewritten remote ipad1 history was made.

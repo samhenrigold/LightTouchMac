@@ -32,7 +32,7 @@ The unmerged `codex/reuse-implementation` candidates add explicit physical
 `nand-xor-ff-v2` erase/program semantics and upstream QEMU BlockBackend ownership,
 with stock blank erase restore and prepared-device persistence gates. This does
 not upgrade generated FTL mappings or missing NAND crypto to register fidelity.
-Unsupported populated FMSS snapshots now fail explicitly. N45 touch interrupt
+FMSS physical-page and erase maps now serialize through QEMU VMState trees; native 7E18 file/USB/clock/live graphics/audio/new HTTP resume passes. Other firmware and already-open host sockets remain unqualified. N45 touch interrupt
 requests obey the measured SYSIC pending/enable contract; touch firmware remains
 high-level emulation, and the historical early-touch panic was not reproduced.
 
@@ -180,7 +180,7 @@ uses `iboot=`.
 ## N72 (iPod touch 2G, S5L8720)
 
 Machine: `hw/arm/ipod_touch_2g.c`. Boot paths: SecureROM (default; the boot ROM runs LLB from NOR
-and iBoot, and FMSS NAND reads patch iBoot in RAM, P), `direct-iboot=`/`direct-llb=` (decrypted
+and iBoot; a board compatibility observer still supplies command-line data, P), `direct-iboot=`/`direct-llb=` (decrypted
 images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine file alone.
 
 | # | Component | Model, key lines | Class | Why | Faithful version, scope |
@@ -226,7 +226,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 39 | FMSS page I/O | `ipod_touch_fmss.c:1058-1288, 1340-1418` | H | 0xD38 + csgenrc 0xa01/0xa02 decoded in C from descriptors; erase inferred from writes; no ECC. | Execute read/write/erase programs against an FMC + NAND model |
 | 40 | FMSS store / overlay | `ipod_touch_fmss.c:360-909` | R (backend) | ITNAND01 mmap or directory; copy-on-write overlay. | – |
 | 41 | FMSS generated-image FTL compatibility | `ipod_touch_fmss.c:687-824, 1244-1276` | P | Moves writes to their logical home and rewrites the FTL free pool when cs3 page 255 is read (`FMSS_PHYSICAL` off). | Image builder emitting real VFL/FTL metadata |
-| 42 | iBoot RAM patches before NAND reads | `ipod_touch_2g.c` (board observer of the FMSS pre-read notification), `hw/arm/it_iboot.c` (pattern-found legacy command-line buffer) | P | Before the first NAND read the Bluetooth DT node name iBoot carries is rewritten uart3→uart1 (every n72 iBoot; without it lockdownd's BluetoothAddress and UDID are not the identity's) and a hard-coded boot-args string is written into `gBootArgs.commandLine`. | Root-cause the DT difference |
+| 42 | Legacy normal-boot command-line data | `ipod_touch_2g.c` (board observer of the FMSS pre-read notification), `hw/arm/it_iboot.c` (pattern-found legacy command-line buffer) | P | The Bluetooth literal rewrite is removed: real stock drivers read the modeled combo-chip identity. A hard-coded boot-args string is still written into `gBootArgs.commandLine`. | Define the guest provisioning handoff without normal-boot RAM argument injection |
 | 43 | MIPI-DSI + panel | `hw/arm/ipod_touch_mipi_dsi.c:27-40, 50-100` | H | Canned panel-ID reply; handshake bits only in direct boot. | DSIM + panel |
 | 44 | LCD/CLCD | `hw/arm/ipod_touch_lcd.c:136-258, 377-540` | R (partial) | Window-1 registers kept but scanout fixed 320×480 x8r8g8b8; `lcd-planes` adds BGRA + NV12 planes. | Depth/stride/formats/blending; unknown: which modes the guests program |
 | 45 | Scaler/CSC | `ipod_touch_2g.c:3398-3406`, `hw/arm/ipod_touch_scaler.c` | S (default) | `create_unimplemented_device`; opt-in NV12→RGB only. | Scaler/CSC with every format (today NV12→RGB only) |
@@ -445,3 +445,18 @@ Evidence: `/private/tmp/ltm-n72-{211,30,421}-legacy13-signed-session` and
 `/private/tmp/ltm-n72-313-legacy13-session`. The iPad's armv7 helpers are unchanged.
 This closes the absent 2.x/3.0 core-helper seam; typing, clipboard, download
 placeholders, media and developer SSH still require older-firmware API proofs.
+
+### Radio identity and network presence (2026-10-01)
+
+The candidate removes the iBoot Bluetooth UART-path rewrite. With the modeled
+BCM4325 vendor CIS/OTP and HCI identity, native 2.1.1, 3.0, 3.1.3 and 4.2.1
+lifecycle gates pass 18/18 each on two cold boots without changing iBoot bytes.
+The follow-up network-disabled run exposed that `wifi=off` removed the soldered
+combo chip. Chip enumeration and OTP identity now remain present independently
+of the optional host data bridge. This does not turn the dongle firmware HLE
+into a real microcontroller or remove the command-line provisioning boundary.
+
+The network-disabled identity/snapshot controls now pass 2.1.1, 3.0, 3.1.3 and
+4.2.1 before and after resume. The default eight-check 7E18 tier also passes.
+QEMU candidate: `cbf1000344`; evidence and residual contracts are recorded in
+[remaining work](remaining-work-2026-09-30.md).
