@@ -470,3 +470,27 @@ is one measured NAND transfer owner and command/CE/row/column/read-data
 transport. Mirroring the last CPU-loaded spare, suppressing guest stores,
 or inventing successful ECC results would conceal the boundary problem.
 Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d24-deferred-2026-10-01`.
+
+## D7C literal initializer qualified; older-firmware failures classified
+
+QEMU43858b7318 implements the observed opcode01 literal write to D7C,
+retaining the register-write form and limits for other registers. The
+initializer is present in five inspected stock kernels; it supplies an
+immediate value rather than a source register. No D24, FIFO, ECC, shift14,
+DMA or completion change is combined. VMState v12 remains unchanged.
+
+The compiled baseline fails initializer readback; six source/sanitizer
+checks and22 FMSS tests pass. Independent3.1.3 native checks pass8/8.
+A broader2.1.1 comparison against exactly the previous280e source and the
+same untouched base yields the same3pass/5fail in both: boot, reboot
+persistence and agent transport pass; fsck_hfs reports minor header repair,
+and incompatible IPA verification blocks install/launch/graphics/audio.
+This is not a passing2.1.1 gate. The base independently passes read-only
+fsck. Default Harness/GLTest minimum OS versions3.1/3.0 exceed2.1.1;
+AppSync-enabled manifests alone do not establish runtime injection.
+
+Source and candidate/baseline/rebuilt executable hashes are kept separately.
+The diagnostic wrapper ignores main's return value, so results.json and
+actual checks are authoritative rather than its shell exit code. Stock
+restore on the committed rebuild is in progress. Evidence:
+`/Users/shg/Developer/ltm-evidence/fmss-d7c-initializer-2026-10-01`.
