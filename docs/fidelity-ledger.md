@@ -752,3 +752,44 @@ Evidence: `/Users/shg/Developer/ltm-evidence/fmss-opcode14-2026-10-01`.
 The completed production-bridge stock5F138 erase trace now reaches D34
 at bulk +0xda0, D54 at read +0x330 and D48 at status +0x30. Eight Waiting
 for NAND responses trigger research stop/reap; no restore pass is claimed.
+
+## One lease owner across host clients
+
+App 41637a5 replaces three descriptor implementations with HostRuntime's
+StorageLease. The helper, GUI maintenance and FirmwareKit share exclusive
+nonblocking locking, close-on-exec/nofollow admission and durable edit checks
+after locking. Caller path policy and exact resume-session validation remain
+separate. FirmwareKit uses a value error adapter retaining the shared owner;
+no lease inode is removed.
+
+HostRuntime 16/16, stopped storage/generation 10/10 and five actual hello-only
+helper checks pass. The GUI/helpers and actual session driver build. Tests
+verify independent contention, descriptor release, unchanged symlink targets
+and pending intents, and exact resume refusal. An initial extra class adapter
+held a lease longer in two tests; failures are retained. Removing that extra
+reference layer passed unchanged tests without waits or instrumentation; the
+Swift runtime/compiler cause is not established. No guest ran in these tests.
+Evidence: `/Users/shg/Developer/ltm-evidence/host-shared-lease-2026-10-01`.
+
+The next host boundary is lock-before-record-read and retention of the exact
+record generation throughout export/edit. That work remains unqualified.
+
+## FMSS D34/D48 parameters qualified
+
+QEMU cf8c118a8e retains independent full-width CPU-supplied D34/D48
+parameters, makes them available to the sequencer, clears them on reset and
+saves them in VMState v8. A retained actual v7 stream loads with absent new
+fields cleared and prior D4C/D28 values preserved. No guest address, timing
+value, ECC result or completion behavior was added.
+
+Actual-source baseline compiles and fails D48 readback; fixed sanitizer checks
+and all 15 model tests pass. Six source gates include 18 persistence faults
+and 1024 page writes. Default native checks pass 8/8, including clean shutdown,
+reboot persistence and fsck. The D48 test uses an immediate OR observation
+oracle; it does not certify the still-unfixed stock register-OR instruction.
+Default traces now reach D38 reads at +0x158 in iBoot and XNU. Native success
+still relies on the existing incomplete-script completion shortcut and stock
+graphics additions; it does not qualify physical restore or raw graphics.
+Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d34-d48-2026-10-01`.
+A separate disposable stock erase restore trace is in progress. D54 loop
+state and Dxx writes remain distinct contracts.

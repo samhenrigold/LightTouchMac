@@ -160,3 +160,24 @@ private owned state, rather than descriptor-relative protection from concurrent
 renames. FirmwareKit record export/edit admission remains a separate shared
 resolver/lease boundary. Evidence:
 `/Users/shg/Developer/ltm-evidence/host-managed-storage-2026-10-01`.
+
+## One lease owner across host clients
+
+App 41637a5 replaces three descriptor implementations with HostRuntime's
+StorageLease. The helper, GUI maintenance and FirmwareKit share exclusive
+nonblocking locking, close-on-exec/nofollow admission and durable edit checks
+after locking. Caller path policy and exact resume-session validation remain
+separate. FirmwareKit uses a value error adapter retaining the shared owner;
+no lease inode is removed.
+
+HostRuntime 16/16, stopped storage/generation 10/10 and five actual hello-only
+helper checks pass. The GUI/helpers and actual session driver build. Tests
+verify independent contention, descriptor release, unchanged symlink targets
+and pending intents, and exact resume refusal. An initial extra class adapter
+held a lease longer in two tests; failures are retained. Removing that extra
+reference layer passed unchanged tests without waits or instrumentation; the
+Swift runtime/compiler cause is not established. No guest ran in these tests.
+Evidence: `/Users/shg/Developer/ltm-evidence/host-shared-lease-2026-10-01`.
+
+The next host boundary is lock-before-record-read and retention of the exact
+record generation throughout export/edit. That work remains unqualified.
