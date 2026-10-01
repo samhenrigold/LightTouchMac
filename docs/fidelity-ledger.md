@@ -41,6 +41,25 @@ an MMIO register. The firmware producer remains undecoded and the stock cold-boo
 identity gate fails; no invented completion is claimed. Current status and
 acceptance boundaries are in [remaining work](remaining-work-2026-09-30.md).
 
+## October 1 candidate findings
+
+QEMU candidate `2659e4f08f` removes the direct-iBoot empty-root literal redirect.
+It skipped stock iBoot's factory root properties and produced a different UDID.
+Stock 7E18 now publishes its generated serial; identity, full music tags and
+stock-decoded artwork pass import and cold reopen. Early kernel UART also passes
+with bounded fast handoff discovery followed by the normal refresh cadence.
+A fresh 8C148 prepared device completes its host-owned keybag one-shot, then
+passes factory USB identity and early BSD mount logging with the current emulator.
+The UART3-to-UART1 Bluetooth string rewrite remains P; a correct ReadBDADDR alone
+was insufficient to replace the missing iBoot DeviceTree address handoff.
+
+The N72 root clock now derives a peripheral output and PLL lock status from
+registers, with production board snapshot restoration tests. Peripheral consumers
+are not connected to it yet, clock gates are partial, and timed watchdog expiry
+still lacks the S5L8720 counter/divider contract. These do not become R by passing
+boot tests. See QEMU `docs/ipod/clock-n72.md` and
+`docs/research/ipod-identity-handoff.md` for the precise evidence.
+
 ## Classes
 
 | Class | Meaning |
@@ -161,10 +180,10 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 6 | EdgeIC @0x38E02000 | `ipod_touch_2g.c:1381` | S | 4 KB of RAM. | Register-level EdgeIC (edge latching in front of the VICs) |
 | 7 | VIC0/1 (PL192) | `ipod_touch_2g.c:2934-2952` | R | Register-level. | – |
 | 8 | Timer | `hw/arm/ipod_touch_timer.c` | R/S | Timer 4 + 64-bit tick counter real; timers 0-3 hold their registers, latch on STATE bit 1, run, one-shot and report the output pin's waveform at `input-hz` (N45: 24 MHz; the N45 buzzer's PWM, row 58), no 0-3 interrupts (none enabled by any kernel seen); 6 vs 10 MHz mismatch kept; time-dilation knob. | 0-3 interrupts when a consumer appears; timer 4 at its configured rate |
-| 9 | Clock0/1 | `hw/arm/ipod_touch_clock.c` | S | Register file, PLLs always locked, no frequency derivation. | PLLs and dividers that derive frequencies; unknown: the S5L8720 clock encoding (no datasheet) |
+| 9 | Clock0/1 | `hw/arm/ipod_touch_clock.c`; `docs/ipod/clock-n72.md` | R for N72 root PLL/PCLK; S for consumers/secondary block | Root PLL locks follow valid enabled PLLs; PCLK derives from reference, MDIV/PDIV and peripheral divider. Reset and actual VMState round trip pass production board qtests. Native SecureROM/LLB programs these registers; direct-iBoot leaves them zero. Analog settling, gates and peripheral timing remain incomplete. | Restore the earlier clock handoff for the direct-iBoot shortcut; prove each consumer's clock/divider/gate contract before connecting it. S5L8900/secondary block retain their existing stubs |
 | 10 | SYSIC (power + GPIO IC) | `hw/arm/ipod_touch_sysic.c:52-70, 110-200` | R/S/P | GPIO IC real; ONCTRL drops some bits; epoch 4 synthesised for direct boot. | Power-domain machine |
 | 11 | GPIO | `hw/arm/ipod_touch_gpio.c:20-60, 97-130` | R/S | Only FSEL out-lo/hi modelled. | All FSEL modes, inputs and interrupts |
-| 12 | WDT | `hw/arm/ipod_touch_wdt.c:17-64` | S | One exact command resets; no timed expiry. | Timed expiry and reset |
+| 12 | WDT | `hw/arm/ipod_touch_wdt.c`; `docs/ipod/clock-n72.md` | S | One exact command resets; no timed expiry. Native timed write trace establishes the regular feed value and cadence. OpeniBoot's disabled enable function and older-chip counter widths are leads, not N72 timing proof. | Establish N72 counter width, selectors and overflow timing; resolve missing direct-iBoot clock setup before enabling a timed reset |
 | 13 | UART0-3 | `ipod_touch_2g.c:3017-3042` | R | Exynos UART; UART4 never created. | UART4 |
 | 14 | Bluetooth HCI (BCM4325 BT on UART1) | `hw/arm/ipod_touch_bt.c:93-170, 242-287` | H | Command Complete from tables; no ACL/SCO; fake 0xfc2e banner for BlueTool. | BT core running patchram; unknown: the BCM4325's BT core (undocumented) |
 | 15 | PL080 DMAC0/1 | `ipod_touch_2g.c:3151-3238` | R | Stock PL080 with paced request lines. | – |
@@ -194,7 +213,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 39 | FMSS page I/O | `ipod_touch_fmss.c:1058-1288, 1340-1418` | H | 0xD38 + csgenrc 0xa01/0xa02 decoded in C from descriptors; erase inferred from writes; no ECC. | Execute read/write/erase programs against an FMC + NAND model |
 | 40 | FMSS store / overlay | `ipod_touch_fmss.c:360-909` | R (backend) | ITNAND01 mmap or directory; copy-on-write overlay. | – |
 | 41 | FMSS generated-image FTL compatibility | `ipod_touch_fmss.c:687-824, 1244-1276` | P | Moves writes to their logical home and rewrites the FTL free pool when cs3 page 255 is read (`FMSS_PHYSICAL` off). | Image builder emitting real VFL/FTL metadata |
-| 42 | iBoot RAM patches before NAND reads | `ipod_touch_2g.c` (board observer of the FMSS pre-read notification), `hw/arm/it_iboot.c` (pattern-found boot-args literal) | P | Before the first NAND read the Bluetooth DT node name iBoot carries is rewritten uart3→uart1 (every n72 iBoot; without it lockdownd's BluetoothAddress and UDID are not the identity's) and a hard-coded boot-args string is written into `gBootArgs.commandLine`. | Root-cause the DT difference |
+| 42 | iBoot RAM patches before NAND reads | `ipod_touch_2g.c` (board observer of the FMSS pre-read notification), `hw/arm/it_iboot.c` (pattern-found legacy command-line buffer) | P | Before the first NAND read the Bluetooth DT node name iBoot carries is rewritten uart3→uart1 (every n72 iBoot; without it lockdownd's BluetoothAddress and UDID are not the identity's) and a hard-coded boot-args string is written into `gBootArgs.commandLine`. | Root-cause the DT difference |
 | 43 | MIPI-DSI + panel | `hw/arm/ipod_touch_mipi_dsi.c:27-40, 50-100` | H | Canned panel-ID reply; handshake bits only in direct boot. | DSIM + panel |
 | 44 | LCD/CLCD | `hw/arm/ipod_touch_lcd.c:136-258, 377-540` | R (partial) | Window-1 registers kept but scanout fixed 320×480 x8r8g8b8; `lcd-planes` adds BGRA + NV12 planes. | Depth/stride/formats/blending; unknown: which modes the guests program |
 | 45 | Scaler/CSC | `ipod_touch_2g.c:3398-3406`, `hw/arm/ipod_touch_scaler.c` | S (default) | `create_unimplemented_device`; opt-in NV12→RGB only. | Scaler/CSC with every format (today NV12→RGB only) |
@@ -275,7 +294,7 @@ From the consolidation survey (`docs/sweep/emulator.md` (b)), with the iOS 5 spi
 4. ~~IOP HLE v1/v2 by firmware string + `cnfg` scan.~~ The IOP core runs whatever firmware the kernel uploads (2026-09-29, default); the v1/v2 HLE is left behind `iop-core=off` for iOS 3.2-4.2 only.
 5. Kernel banner table `ipod_touch_firmware.c`: deleted (D6, 2026-09-29).
 6. GID KBAG hex in C (`ipod_touch_aes.c:52-383`): delete after the nand-current swap.
-7. iPod boot-args delivery (DRAM scan, literal redirect, `IT_BOOT_ARGS*`).
+7. iPod boot-args delivery (bounded DRAM scan and compatibility writes). The direct-iBoot literal redirect and `IT_BOOT_ARGS*` environment input are removed; early console/identity pass on 7E18 and 8C148. The ramdisk one-shot owns its arguments in the existing host debugger handoff.
 8. Power-off knob coordinates per orientation (`ipad1.c:376-383`, iPod `PWROFF_KNOB_Y`).
 9. Test/tool defaults keyed to 7B500 (`boot-smoke.py` markers name `iBoot-817.29`, `AppleS5L8920XARM7M`, `AppleS5L8920XIOPFMI`; 4.3+ renamed the kexts to `AppleARM7M`/`AppleIOPFMI`).
 10. `fb-base 0x4f700000` (iBoot's logo framebuffer).

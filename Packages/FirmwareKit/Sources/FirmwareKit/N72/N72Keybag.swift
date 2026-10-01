@@ -3,10 +3,10 @@
 // them: the IPSW's own Update ramdisk with it_keybag as restored_external, booted as md0.
 //
 // Everything iBoot loads is a signed img3, so the ramdisk cannot come through iBoot. iBoot boots the device
-// normally (rd=md0 in the machine's command line), and at the kernel's entry (LC_UNIXTHREAD pc, MMU off) this
+// normally, and at the kernel's entry (LC_UNIXTHREAD pc, MMU off) this
 // stages what iBoot's restore path would have, over the helper's gdbstub: the ramdisk at topOfKernelData, a
 // chosen/memory-map RAMDisk (pa, len) in a spare MemoryMapReserved slot, an empty chosen/root-matching, and
-// topOfKernelData past the ramdisk. The 4.x DeviceTree's secure-root-prefix "md" makes md0 a SecureRoot.
+// topOfKernelData past the ramdisk and the one-shot command line. The 4.x DeviceTree's secure-root-prefix "md" makes md0 a SecureRoot.
 // Then the overlay's pages (stored at their logical homes) are folded into nand/ and the written NOR
 // replaces nor.bin. The boot uses aes-uid=engine, as the device's own boots do (the keybag's keys are
 // UID-derived).
@@ -14,7 +14,7 @@
 import Foundation
 
 enum N72Keybag {
-    /// rd=md0 rides the machine's command line (early iBoot literal and late write).
+    /// The host stages these with the ramdisk at the paused kernel handoff.
     static let bootArgs = "rd=md0 serial=3 debug=0x8 -v amfi_allow_any_signature=1 cs_enforcement_disable=1"
     static let physBase: UInt32 = 0x0800_0000, cmdlineOffset = 0x38, cmdlineLength = 256
 
@@ -33,7 +33,7 @@ enum N72Keybag {
         let file = { (n: String) in Preparer.esc(out.appendingPathComponent(n)) }
         let machine = ["iPod-Touch,bootrom=\(Preparer.esc(bootrom))", "nand=\(file("nand"))", "nor=\(file("nor.bin"))",
                        "nor-rw=\(Preparer.esc(nor))", "nandrw=\(Preparer.esc(ovl))", "direct-iboot=\(file("iBoot.bin"))",
-                       "gid-blobs=\(file("gid-blobs.bin"))", "aes-uid=engine", "boot-args=\(bootArgs.replacingOccurrences(of: ",", with: ",,"))"]
+                       "gid-blobs=\(file("gid-blobs.bin"))", "aes-uid=engine", "boot-args="]
             .joined(separator: ",")
         let argv = ["LightTouchDevice", "-M", machine, "-m", "128M", "-display", "none", "-audio", "driver=none", "-monitor", "none",
                     "-serial", "file:\(serial.path)", "-gdb", "tcp:127.0.0.1:\(port)", "-S"]
@@ -114,12 +114,14 @@ enum N72Keybag {
         let dtPA = dtp - virt + phys
         try gdb.write(dtPA, try addRamdisk(try gdb.read(dtPA, Int(dtlen)), pa: rdPA, length: UInt32(ramdisk.count)))
         try gdb.write(rdPA, ramdisk)
-        let line = String(decoding: args[cmdlineOffset..<cmdlineOffset + cmdlineLength].prefix { $0 != 0 }, as: UTF8.self)
-        guard line.split(separator: " ").contains("rd=md0") else { throw FirmwareError(.oneshotFailed, "iBoot's command line lacks rd=md0: [\(line)]") }
+        var command = Data(bootArgs.utf8)
+        guard command.count < cmdlineLength else { throw FirmwareError(.internal, "keybag command line exceeds boot_args capacity") }
+        command.append(Data(repeating: 0, count: cmdlineLength - command.count))
+        args.replaceSubrange(cmdlineOffset..<cmdlineOffset + cmdlineLength, with: command)
         withUnsafeBytes(of: newTop.littleEndian) { args.replaceSubrange(0x10..<0x14, with: $0) }
         try gdb.write(ba, args)
         try gdb.send("c")
-        return String(format: "keybag boot: ramdisk %d bytes at 0x%08x, topOfKernelData 0x%08x -> 0x%08x, [%@]", ramdisk.count, rdPA, top, newTop, line)
+        return String(format: "keybag boot: ramdisk %d bytes at 0x%08x, topOfKernelData 0x%08x -> 0x%08x, [%@]", ramdisk.count, rdPA, top, newTop, bootArgs)
     }
 
     /// ipod2g_keybag.fold_overlay: the overlay's page files over the device's.

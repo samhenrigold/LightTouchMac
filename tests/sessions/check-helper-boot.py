@@ -142,7 +142,7 @@ def ipod_boot(files, ovl):
     nor.chmod(0o600)
     boot_args = "amfi_allow_any_signature=1 cs_enforcement_disable=1"
     machine = ("iPod-Touch,h264-decode=on,scaler-decode=on,mpvd-decode=on,amc-mode=decode,lcd-planes=on"
-               f",boot-args={esc(boot_args)},boot-args-delay-ms=1500,boot-args-repeat=200,boot-args-interval-ms=250"
+               f",boot-args={esc(boot_args)},boot-args-delay-ms=0,boot-args-repeat=200,boot-args-interval-ms=250"
                f",direct-iboot={esc(files / 'ios3/iBoot.bin')},direct-llb=,bootrom={files}/bootrom_240_4"
                f",nand={files / os.readlink(files / 'nand-current')},nor={files}/ios3/nor_7E18.bin"
                f",nor-rw={nor},nandrw={ovl},wifi=on")

@@ -235,3 +235,34 @@ instead of the candidate QEMU source. The focused rerun with the explicit
 candidate path passes, including fractional-tag and unsafe-artwork-path rejection.
 Keep both results: `/private/tmp/ltm-overnight-offline-final.log` and
 `/private/tmp/ltm-overnight-metadata-candidate.log`.
+
+## October 1 overnight continuation
+
+Candidate QEMU `2659e4f08f` adds the register-derived N72 root peripheral clock
+and removes the direct-iBoot shared empty-literal argument patch. That patch also
+redirected DeviceTree root lookup, so it erased the effective serial/model/region
+handoff and changed the USB UDID. The existing argument data writer now discovers
+promptly, refreshes at its normal cadence, and stops an unsuccessful search.
+The app's shared boot recipe starts discovery without delay. The Swift/Python
+ramdisk one-shot owns its `rd=md0` command line at the existing debugger handoff,
+where it already stages RAMDisk and topOfKernelData; emulator argument injection
+is disabled for that one-shot.
+
+Evidence: 109 registered QEMU host checks pass (28 declared manual-input skips),
+seven registered actual-board model suites pass without skips, and the Swift
+preparer test run succeeds (145 tests reported, corpus checks remain opt-in).
+Native 7E18 passes early kernel UART and factory serial/UDID/both MACs; full tags,
+repeat-import reconciliation and stock-decoded cover art persist across two cold
+boots at `/private/tmp/ltm-n72-identity-media-phased/`. Native 8C148 completes fresh
+production Swift preparation, including its Update ramdisk keybag boot, then
+passes factory identity and early BSD mount logging at
+`/private/tmp/ltm-n72-identity-ios4/`. The one-shot used the existing ad hoc helper
+(source 9d2d3c2f0b) with argument injection disabled; its cold boot used the current
+emulator. The optional 3.1.3-linked IORegistry probe fails to execute on 4.2.1 and
+is not counted as guest-tool qualification. The obsolete 8C148-b prepared base
+fails iBoot VFL checks and was not altered.
+
+Open: root clock consumers/gates, S5L8720 watchdog timed expiry, the Bluetooth
+DeviceTree path rewrite, other direct-iBoot firmware timing, and the previously
+listed NAND/GPU/power-resume boundaries. The existing universal package is still
+source 9d2d3c2f0b until rebuilt; it does not yet contain this new clock/identity work.
