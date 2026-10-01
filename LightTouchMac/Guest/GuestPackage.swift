@@ -163,7 +163,7 @@ nonisolated enum GuestPackage {
     /// device lacks (libappsync without AppSync), are dropped.
     /// Nil (and no directory) when the itpack has nothing for this device.
     static func compose(itpack: URL, board: String, build: String, lock: LockRecord?, guest: DeviceInstance.Guest?,
-                        into dir: URL) throws -> Offer? {
+                        into dir: URL, augment: ((URL, Int64) throws -> (serial: Int64, version: String))? = nil) throws -> Offer? {
         let fm = FileManager.default
         try? fm.removeItem(at: dir)
         guard let found = try package(in: itpack, board: board, build: build) else { return nil }
@@ -195,8 +195,15 @@ nonisolated enum GuestPackage {
         let text = offerText(manifest, build: build, serial: builtIn ? 0 : nil,
                              good: guest?.lastGood.map { [$0] } ?? [], bad: guest?.bad ?? [])
         try Data(text.utf8).write(to: staging.appendingPathComponent("offer"))
+        var offeredSerial = builtIn ? 0 : manifest.serial
+        var offeredVersion = manifest.version
+        if !builtIn, let augment {
+            let developer = try augment(staging, manifest.serial)
+            offeredSerial = developer.serial
+            offeredVersion = developer.version
+        }
         try fm.moveItem(at: staging, to: dir)
-        return Offer(bundled: manifest.serial, version: manifest.version, serial: builtIn ? 0 : manifest.serial,
+        return Offer(bundled: manifest.serial, version: offeredVersion, serial: offeredSerial,
                      glHook: !builtIn && manifest.hooks.contains { Manifest.glTargets.contains($0.target) })
     }
 

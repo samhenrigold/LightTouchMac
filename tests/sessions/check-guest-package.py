@@ -114,6 +114,18 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   check(builtIn.serial == 0 && files(dir).keys.sorted() == ["offer"])
   let zero = String(decoding: try Data(contentsOf: dir.appendingPathComponent("offer")), as: UTF8.self)
   check(zero == "ltpkg 1\nbuild 7E18\nserial 0 1.7.0\nverdict good 5\nverdict bad 6\n", zero)
+  var augmented = false
+  let safe = try GuestPackage.compose(itpack: pack, board: "n72ap", build: "7E18", lock: nil, guest: record, into: dir,
+    augment: { _, _ in augmented = true; return (1007, "developer") })!
+  check(safe.serial == 0 && !augmented, "built-in safe mode must never augment the package")
+  let developer = try GuestPackage.compose(itpack: pack, board: "n72ap", build: "7E18", lock: nil, guest: nil, into: dir,
+    augment: { staged, bundled in
+      check(bundled == 7 && files(staged).count > 1, "augmentation receives the validated complete package")
+      augmented = true
+      return (1007, "developer")
+    })!
+  check(augmented && developer.serial == 1007 && developer.version == "developer" && developer.bundled == 7)
+
   record.builtIn = 6
   check(try GuestPackage.compose(itpack: pack, board: "n72ap", build: "7E18", lock: nil, guest: record, into: dir)!.serial == 7,
                "a newer bundled package ends the built-in choice")

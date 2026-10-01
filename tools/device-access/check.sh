@@ -35,4 +35,31 @@ rg -q 'Host lighttouch-4dceceb7-1b4c-4f12-9f9d-3b4f93f5ba45' "$CASE/other"
 if "$CASE/access" gdb --instance "$ID" --gdb 0.0.0.0:1234 2>/dev/null; then exit 1; fi
 if "$CASE/access" config --instance "$ID" --usbmux 127.0.0.1:0 --inetcat "$PROXY" 2>/dev/null; then exit 1; fi
 if "$CASE/access" config --instance "$ID" --usbmux 127.0.0.1:22 --inetcat "$PROXY" --state relative 2>/dev/null; then exit 1; fi
+# A provisioned profile needs no user-selected key, tool or endpoint.
+INSTANCE="$CASE/known hosts/7dceceb7-1b4c-4f12-9f9d-3b4f93f5ba45"
+/usr/bin/ssh-keygen -q -t ecdsa -b 256 -m PEM -N '' -f "$INSTANCE/id_ecdsa"
+printf '%s %s\n' "$HOST" "$(cat "$INSTANCE/id_ecdsa.pub")" > "$INSTANCE/known_hosts"
+python3 - "$INSTANCE/connection.json" "$ID" "$PROXY" <<'PYPROFILE'
+import json,sys
+with open(sys.argv[1], 'w') as file:
+    json.dump(dict(instance=sys.argv[2],usbmux='127.0.0.1:27019',inetcat=sys.argv[3]),file)
+PYPROFILE
+"$CASE/access" config --instance "$ID" --state "$CASE/known hosts" > "$CASE/provisioned"
+/usr/bin/ssh -G -F "$CASE/provisioned" "$HOST" > "$CASE/provisioned-resolved" 2>/dev/null
+rg -q '^stricthostkeychecking true$|^stricthostkeychecking yes$' "$CASE/provisioned-resolved"
+rg -q '^identitiesonly yes$' "$CASE/provisioned-resolved"
+rg -q 'identityfile .*id_ecdsa' "$CASE/provisioned-resolved"
+if "$CASE/access" ssh --instance "$ID" --state "$CASE/known hosts" > "$CASE/out" 2> "$CASE/err"; then exit 1; fi
+[ "$(sed -n '1p' "$CASE/capture")" = 127.0.0.1:27019 ]
+"$CASE/access" enable --instance "$ID" --state "$CASE/known hosts" > /dev/null
+[ -f "$INSTANCE/enabled" ]
+"$CASE/access" disable --instance "$ID" --state "$CASE/known hosts" > /dev/null
+[ ! -f "$INSTANCE/enabled" ]
+python3 - "$INSTANCE/connection.json" "$OTHER" <<'PYPROFILE'
+import json,sys
+with open(sys.argv[1]) as file: profile=json.load(file)
+profile['instance']=sys.argv[2]
+with open(sys.argv[1],'w') as file: json.dump(profile,file)
+PYPROFILE
+if "$CASE/access" config --instance "$ID" --state "$CASE/known hosts" > /dev/null 2>&1; then exit 1; fi
 printf '%s\n' 'PASS: OpenSSH config, quoted inetcat invocation, immutable endpoint, per-instance identity, GDB command, invalid endpoint/path rejection'

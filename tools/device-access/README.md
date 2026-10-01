@@ -1,67 +1,43 @@
 # Conventional developer access
 
-This opt-in tool delegates to the host's OpenSSH/SFTP clients and libusbmuxd's
-`inetcat`; it implements no guest file, command or debugger protocol. It does
-not modify NAND, provision an SSH server, enable QEMU's GDB stub, or change the
-app's USB endpoint. Compile once:
+Enable developer SSH for a supported instance from a development checkout:
+
+```sh
+./tools/device-access/enable.sh INSTANCE-UUID
+```
+
+This fetches pinned historical upstream tools into private host state and opts
+in the selected instance. Restart it; the app composes its developer offer and
+creates unique private host/client keys automatically. Supported live-tested
+profiles: K48 iOS 3.2.2/7B500 and N72 iOS 3.1.3/7E18. Release bundling is gated by the source/license audit in
+[the payload notes](../developer-packages/README.md).
+
+Compile the host wrapper once:
 
 ```sh
 swiftc tools/device-access/main.swift -o /tmp/ltm-device-access
+/tmp/ltm-device-access ssh --instance INSTANCE-UUID
+/tmp/ltm-device-access sftp --instance INSTANCE-UUID
+/tmp/ltm-device-access sftp --instance INSTANCE-UUID --batch /absolute/batch-file
 ```
 
-Supply the selected device's instance UUID and its **current private usbmuxd
-client endpoint** (`USBMux.Session.clientSocket`). The endpoint changes when a
-new session starts. Use the client endpoint, not the guest TCP USB endpoint;
-never substitute the system usbmuxd socket. The app does not yet publish these
-values as a developer connection profile.
+The app writes `DeveloperSSH/<UUID>/connection.json` during an active session and
+retires its own profile on stop. The wrapper checks the instance identity and
+uses that private usbmuxd endpoint, bundled inetcat, generated `id_ecdsa`, and
+pinned `known_hosts`. It never changes the process-global endpoint. Standard
+OpenSSH owns authentication and remote-shell semantics; `-- COMMAND` passes a
+remote command. The separate QEMU debugger uses `gdb --instance UUID` when its
+endpoint is included, or `gdb --instance UUID --gdb 127.0.0.1:PORT`.
 
-```sh
-/tmp/ltm-device-access ssh \
-  --instance 7DCECEB7-1B4C-4F12-9F9D-3B4F93F5BA45 \
-  --usbmux 127.0.0.1:27017 --inetcat /opt/homebrew/bin/inetcat \
-  --identity /absolute/path/to/developer-key
-```
+`disable --instance UUID` removes the opt-in; restart to stop sshd and revert its
+package hooks. The app's built-in safe mode bypasses all developer augmentation.
+State defaults to `~/Library/Application Support/Light Touch/DeveloperSSH`.
+`--state`, `--usbmux`, `--inetcat`, and `--identity` remain explicit diagnostic
+overrides. A manually configured server without generated pinning follows
+normal OpenSSH first-contact host-key confirmation.
 
-Replace `ssh` with `sftp` for interactive file access. After SSH options, `--`
-passes a remote command with standard OpenSSH remote-shell semantics. `config`
-emits a conventional SSH configuration; save it and use `ssh -F FILE HOST`,
-`sftp -F FILE HOST`, or SSHFS's `ssh_command` option. SSHFS/Finder mounting needs
-a compatible separately installed filesystem implementation; this tool does
-not mount a live raw NAND image. Regenerate saved profiles after restarting the
-session.
-
-The tool pins the loopback endpoint inside each ProxyCommand and uses
-`HostKeyAlias=lighttouch-<instance UUID>` with a separate known-hosts file in
-`~/Library/Application Support/Light Touch/DeveloperSSH/<UUID>/`. Normal host-key
-verification remains enabled. Confirm a first key against the provisioned
-instance; a changed key must be investigated. `--identity` restricts auth to the
-specified key. Without it, standard SSH authentication applies. There are no
-embedded passwords or shared keys. `--state /absolute/private/directory`
-overrides the known-hosts location.
-
-For system debugging, enable a **loopback-only** QEMU stub explicitly when
-running a development emulator, for example `-gdb tcp:127.0.0.1:1234`. Add `-S`
-only if you want the CPU initially stopped. This command emits a standard GDB
-command for the supplied stub:
-
-```sh
-/tmp/ltm-device-access gdb \
-  --instance 7DCECEB7-1B4C-4F12-9F9D-3B4F93F5BA45 \
-  --gdb 127.0.0.1:1234
-# target remote 127.0.0.1:1234
-```
-
-The UUID here is an explicit user-selected association; unauthenticated QEMU
-GDB has no instance-identity handshake. This is kernel/ROM/system debugging,
-not an automatically provisioned guest `debugserver` or LLDB session. The GUI
-helper currently does not expose a GDB launch setting.
-
-## Guest provisioning still required
-
-A supported developer package needs a compatible `sshd`, SFTP server, shell and
-runtime dependencies, a dedicated launchd job, per-instance generated host keys,
-and the developer's authorized public key. Test each supported old dyld/ABI and
-use the project's existing signing/guest-package policy. Do not copy the old
-`qemu-ios-files/ssh` image's shared keys, default password, disabled ownership
-checks, fixed boot-args address or cache patches. The current guest package does
-not contain SSH; OpenSSH sources were not present to build a verified package.
+`config` emits standard SSH configuration for other clients. SSHFS/Finder needs
+a separately installed compatible filesystem; this helper does not mount raw
+live NAND. Keys are isolated per instance, and session endpoints are refreshed
+each boot. The deprecated historical shell bootstrap and shared keys are not
+used.
