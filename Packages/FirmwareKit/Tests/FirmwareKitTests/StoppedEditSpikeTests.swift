@@ -25,9 +25,10 @@ struct StoppedEditSpikeTests {
         try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: device.path)
         let lease = try StoppedStorageLease(device.appendingPathComponent("work/lease"))
         defer { withExtendedLifetime(lease) {} }
-        let src = try VolumeExport.Source(device: device)
-        #expect(try VolumeRebuild.board(of: src.base) == .ipod)
-        let volume = try #require(try VolumeExport.export(.init(base: src.base, overlay: src.overlay),
+        let base = device.appendingPathComponent("nand")
+        let overlay = fm.fileExists(atPath: device.appendingPathComponent("overlay").path) ? device.appendingPathComponent("overlay") : nil
+        #expect(try VolumeRebuild.board(of: base) == .ipod)
+        let volume = try #require(try VolumeExport.export(.init(base: base, overlay: overlay),
             out: out.appendingPathComponent("export")).first).image
         let image = URL(fileURLWithPath: volume)
         let before = try HFSPlusVolume(image).record(at: "System/Library/CoreServices/SystemVersion.plist")
@@ -57,10 +58,10 @@ struct StoppedEditSpikeTests {
         let actual = SHA256.hash(data: try Data(contentsOf: roundtrip.image, options: .alwaysMapped))
         #expect(actual == expected)
         // Replace NAND only in the disposable clone, retaining original for inspection.
-        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: src.base.path)
-        try fm.moveItem(at: src.base, to: out.appendingPathComponent("original-nand"))
-        try fm.moveItem(at: candidate, to: src.base)
-        if let overlay = src.overlay { try fm.moveItem(at: overlay, to: out.appendingPathComponent("original-overlay")) }
+        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: base.path)
+        try fm.moveItem(at: base, to: out.appendingPathComponent("original-nand"))
+        try fm.moveItem(at: candidate, to: base)
+        if let overlay = overlay { try fm.moveItem(at: overlay, to: out.appendingPathComponent("original-overlay")) }
         try marker.write(to: out.appendingPathComponent("expected-marker.plist"))
         print("N72 offline edit candidate ready: \(device.path); native boot/readback/persistence NOT implied")
     }

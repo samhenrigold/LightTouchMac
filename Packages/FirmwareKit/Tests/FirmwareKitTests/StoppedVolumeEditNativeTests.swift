@@ -24,7 +24,7 @@ struct StoppedVolumeEditNativeTests {
                         "writableNOR": device.appendingPathComponent("nor.bin").path,
                         "usbmuxConf": device.appendingPathComponent("conf").path]]
         try JSONSerialization.data(withJSONObject: record).write(to: device.appendingPathComponent("device.json"))
-        let edit = try StoppedVolumeEdit.begin(device: device, log: { print($0) })
+        let edit = try StoppedVolumeEdit.begin(device: device, policy: try .managedDeviceDirectory(device), log: { print($0) })
         let marker = Data("<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>probe</key><string>published-storage-generation</string></dict></plist>".utf8)
         try VolumeMount.withMounted(edit.image, at: out.appendingPathComponent("edit")) { root in
             let plist = root.appendingPathComponent("System/Library/CoreServices/SystemVersion.plist")
@@ -33,7 +33,7 @@ struct StoppedVolumeEditNativeTests {
             try PropertyListSerialization.data(fromPropertyList: value, format: .xml, options: 0).write(to: plist, options: .atomic)
             try marker.write(to: root.appendingPathComponent("private/var/mobile/Media/ltm-stopped-edit.plist"), options: .atomic)
         }
-        try StoppedVolumeEdit.commit(device: device, id: edit.id, log: { print($0) })
+        try StoppedVolumeEdit.commit(device: device, id: edit.id, policy: try .managedDeviceDirectory(device), log: { print($0) })
         let published = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: device.appendingPathComponent("device.json"))) as? [String: Any])
         let generation = try #require((published["base"] as? [String: String])?["path"])
         try marker.write(to: out.appendingPathComponent("expected-marker.plist"))

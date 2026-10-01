@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import HostRuntime
 
 /// The N72 generated-store adapter is provisional. Transactions are shared;
 /// physical FTL/crypto formats require their own guest-mediated writer.
@@ -13,12 +14,15 @@ public enum StoppedVolumeEdit {
     }
     private static var fm: FileManager { .default }
 
-    public static func begin(device: URL, log: (String) -> Void = { _ in }) throws -> Session {
-        let record = try object(device.appendingPathComponent("device.json"))
+    public static func begin(device: URL, policy: StorageRecordPolicy = .standalone, log: (String) -> Void = { _ in }) throws -> Session {
+        let owner = try OwnedStorageRecord.acquire(device: device, policy: policy)
+        guard let bytes = owner.bytes, let record = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              let paths = owner.paths else { throw FirmwareError(.unsupported, "invalid device metadata") }
+        defer { withExtendedLifetime(owner) {} }
         guard record["board"] as? String == "n72ap" else {
             throw FirmwareError(.unsupported, "stopped writable volumes currently support the N72 generated store only")
         }
-        let source = try VolumeExport.Source(device: device)
+        let source = VolumeExport.ResolvedSource(owner: owner)
         guard try VolumeRebuild.board(of: source.base) == .ipod else {
             throw FirmwareError(.unsupported, "this device does not have a supported writable store")
         }
@@ -34,7 +38,7 @@ public enum StoppedVolumeEdit {
                 throw FirmwareError(.unsupported, "N72 mapping metadata differs; use guest services for this store")
             }
         }
-        let transaction = try StorageGeneration.begin(device: device)
+        let transaction = try StorageGeneration.begin(owner: owner)
         let exported = try VolumeExport.export(.init(base: source.base, overlay: source.overlay),
                                                out: transaction.volumes, log: log)
         guard exported.count == 1 else { throw FirmwareError(.unsupported, "N72 edit requires one logical volume") }
@@ -50,10 +54,9 @@ public enum StoppedVolumeEdit {
         let oldNAND = transaction.base.appendingPathComponent("nand")
         try fm.removeItem(at: oldNAND)
         try fm.createDirectory(at: transaction.overlay, withIntermediateDirectories: false)
-        let state = device.deletingLastPathComponent().deletingLastPathComponent()
         let storage = record["storage"] as! [String: Any]
         if let path = storage["writableNOR"] as? String {
-            let nor = resolve(path, state: state)
+            let nor = StorageRecordPaths.resolve(path, relativeRoot: paths.relativeRoot)
             let original = fm.fileExists(atPath: nor.path) ? nor : originalBase.appendingPathComponent("nor.bin")
             try clone(original, to: transaction.root.appendingPathComponent("nor.bin"))
             try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: transaction.root.appendingPathComponent("nor.bin").path)
@@ -65,8 +68,8 @@ public enum StoppedVolumeEdit {
 
     /// The durable edit intent, rather than a long-lived CLI process, excludes
     /// guest boot for the entire Finder mount. Closing Finder is not commit.
-    public static func mount(device: URL, id: UUID) throws -> Session {
-        let edit = try StorageGeneration.resume(device: device, id: id)
+    public static func mount(device: URL, id: UUID, policy: StorageRecordPolicy = .standalone) throws -> Session {
+        let edit = try StorageGeneration.resume(device: device, id: id, policy: policy)
         let session = try readSession(edit)
         try eject(edit)
         let attached = try DiskImage.attach(session.image, mount: true)
@@ -75,8 +78,8 @@ public enum StoppedVolumeEdit {
         return mounted
     }
 
-    public static func commit(device: URL, id: UUID, log: (String) -> Void = { _ in }) throws {
-        let edit = try StorageGeneration.resume(device: device, id: id)
+    public static func commit(device: URL, id: UUID, policy: StorageRecordPolicy = .standalone, log: (String) -> Void = { _ in }) throws {
+        let edit = try StorageGeneration.resume(device: device, id: id, policy: policy)
         let session = try readSession(edit)
         try eject(edit)
         let before = try JSONDecoder().decode([HFSPlusVolume.Entry].self, from: Data(contentsOf: edit.root.appendingPathComponent("metadata.json")))
@@ -135,13 +138,13 @@ public enum StoppedVolumeEdit {
         log("published storage generation \(id.uuidString)")
     }
 
-    public static func discard(device: URL, id: UUID) throws {
-        let edit = try StorageGeneration.resume(device: device, id: id)
+    public static func discard(device: URL, id: UUID, policy: StorageRecordPolicy = .standalone) throws {
+        let edit = try StorageGeneration.resume(device: device, id: id, policy: policy)
         try eject(edit)
         try edit.discard()
     }
-    public static func recover(device: URL, id: UUID) throws {
-        let edit = try StorageGeneration.resume(device: device, id: id)
+    public static func recover(device: URL, id: UUID, policy: StorageRecordPolicy = .standalone) throws {
+        let edit = try StorageGeneration.resume(device: device, id: id, policy: policy)
         try edit.recoverPublication()
     }
 
@@ -232,9 +235,6 @@ public enum StoppedVolumeEdit {
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
         }
-    }
-    private static func resolve(_ path: String, state: URL) -> URL {
-        path.hasPrefix("/") ? URL(fileURLWithPath: path) : state.appendingPathComponent(path)
     }
     private static func object(_ url: URL) throws -> [String: Any] {
         guard let value = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] else {

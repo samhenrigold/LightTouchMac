@@ -39,7 +39,7 @@ final class DeviceFilesystemEdits {
                     throw DeviceToolsError.failed("Stop the device before opening its filesystem.")
                 }
                 var intent = pending(instance)
-                let prefix = ["edit", "--device", instance.paths.directory.path]
+                let prefix = ["edit", "--device", instance.paths.directory.path, "--record-policy", "managed"]
                 if action == .openFilesystem, intent == nil {
                     let result = try await FirmwareTool.run(prefix + ["--action", "begin"], executable: executable)
                     let created = try JSONDecoder().decode(Mounted.self, from: result)

@@ -15,7 +15,7 @@ func volumeCommand(_ command: String, _ argv: [String]) -> Never {
     var flags: [String: String] = [:]
     var it = argv.makeIterator()
     while let a = it.next() {
-        guard ["--device", "--volume", "--out"].contains(a), let v = it.next() else { fail("bad argument \(a)") }
+        guard ["--device", "--volume", "--out", "--record-policy"].contains(a), let v = it.next() else { fail("bad argument \(a)") }
         flags[a] = v
     }
     let url = { (p: String) in URL(fileURLWithPath: (p as NSString).expandingTildeInPath).standardizedFileURL }
@@ -34,7 +34,13 @@ func volumeCommand(_ command: String, _ argv: [String]) -> Never {
         }
         let out = flags["--out"].map(url) ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("firmwarekit-\(command)-\(UUID().uuidString)")
-        let src = try VolumeExport.Source(device: url(device))
+        let policy: VolumeRecordPolicy
+        switch flags["--record-policy"] ?? "standalone" {
+        case "standalone": policy = .standalone
+        case "managed": policy = try .managedDeviceDirectory(url(device))
+        default: fail("--record-policy must be standalone or managed")
+        }
+        let src = try VolumeExport.Source(device: url(device), policy: policy)
         let log = { (s: String) in FileHandle.standardError.write(Data("firmwarekit: \(s)\n".utf8)) }
         let vols = command == "mount" ? try VolumeExport.mount(src, volumes: volumes, out: out, log: log)
             : try VolumeExport.export(src, volumes: volumes, out: out, log: log)

@@ -11,39 +11,41 @@
 // exclusive storage lease. Direct base/overlay sources are for already isolated research fixtures.
 
 import Foundation
+import HostRuntime
 
 public enum VolumeExport {
-    public struct Source: Sendable {
-        public let base: URL
-        public let overlay: URL?
-        let lease: URL?
-        public init(base: URL, overlay: URL?) { self.base = base; self.overlay = overlay; lease = nil }
+    public enum Source: Sendable {
+        case raw(base: URL, overlay: URL?)
+        case device(URL, policy: StorageRecordPolicy)
 
-        /// A device directory: an app instance (device.json; paths relative to the state root two levels up),
-        /// or an imgtools device (nand/ or base/, with overlay/ beside it). A base holding nand/ uses that.
-        public init(device dir: URL) throws {
-            let fm = FileManager.default
-            var base: URL, overlay: URL
-            let json = dir.appendingPathComponent("device.json")
-            if fm.fileExists(atPath: json.path) {
-                struct Instance: Decodable {
-                    struct Base: Decodable { var path: String }
-                    struct Storage: Decodable { var overlay: String }
-                    var base: Base, storage: Storage
-                }
-                let i = try JSONDecoder().decode(Instance.self, from: Data(contentsOf: json))
-                let state = dir.deletingLastPathComponent().deletingLastPathComponent()
-                func url(_ p: String) -> URL { p.hasPrefix("/") ? URL(fileURLWithPath: p) : state.appendingPathComponent(p) }
-                base = url(i.base.path); overlay = url(i.storage.overlay)
-            } else {
-                base = fm.fileExists(atPath: dir.appendingPathComponent("nand").path) ? dir.appendingPathComponent("nand")
-                    : dir.appendingPathComponent("base")
-                overlay = dir.appendingPathComponent("overlay")
+        /// Raw sources must already be isolated or retained by an explicit owner.
+        public init(base: URL, overlay: URL?) { self = .raw(base: base, overlay: overlay) }
+        /// Declarative selection: device.json is never inspected before exclusion.
+        public init(device: URL, policy: StorageRecordPolicy = .standalone) throws {
+            self = .device(device, policy: policy)
+        }
+        func admit() throws -> (StoppedRecordOwner?, ResolvedSource) {
+            switch self {
+            case let .raw(base, overlay): return (nil, ResolvedSource(base: base, overlay: overlay))
+            case let .device(device, policy):
+                let owner = try OwnedStorageRecord.acquire(device: device, policy: policy, allowRaw: true)
+                return (owner, ResolvedSource(owner: owner))
             }
-            if fm.fileExists(atPath: base.appendingPathComponent("nand").path) { base = base.appendingPathComponent("nand") }
+        }
+    }
+
+    struct ResolvedSource {
+        let base: URL
+        let overlay: URL?
+        init(base: URL, overlay: URL?) { self.base = base; self.overlay = overlay }
+        init(owner: StoppedRecordOwner) {
+            let fm = FileManager.default
+            var base = owner.paths?.base ?? (fm.fileExists(atPath: owner.device.appendingPathComponent("nand").path)
+                ? owner.device.appendingPathComponent("nand") : owner.device.appendingPathComponent("base"))
+            let overlay = owner.paths?.overlay ?? owner.device.appendingPathComponent("overlay")
+            if fm.fileExists(atPath: base.appendingPathComponent("nand").path) { base.appendPathComponent("nand") }
             self.base = base
             self.overlay = fm.fileExists(atPath: overlay.path) ? overlay : nil
-            lease = dir.appendingPathComponent("work/lease")
         }
     }
 
@@ -63,11 +65,11 @@ public enum VolumeExport {
 
     /// Steps 1-4: images in a fresh `out` directory, ready to attach or keep.
     public static func export(_ src: Source, volumes: Set<String>? = nil, out: URL, log: (String) -> Void = { _ in }) throws -> [Exported] {
-        let lease = try src.lease.map { try StoppedStorageLease($0) }
-        defer { withExtendedLifetime(lease) {} }
+        let (owner, resolved) = try src.admit()
+        defer { withExtendedLifetime(owner) {} }
         let fm = FileManager.default
         let dest = out.resolvingSymlinksInPath().standardizedFileURL.path
-        for source in [src.base, src.overlay].compactMap({ $0 }) {
+        for source in [resolved.base, resolved.overlay].compactMap({ $0 }) {
             let path = source.resolvingSymlinksInPath().standardizedFileURL.path
             guard dest != path, !dest.hasPrefix(path + "/"), !path.hasPrefix(dest + "/") else {
                 throw FirmwareError(.internal, "export destination must be separate from source storage")
@@ -88,7 +90,7 @@ public enum VolumeExport {
         }
         var t = Date()
         var overlay: URL?
-        if let o = src.overlay {
+        if let o = resolved.overlay {
             let clone = out.appendingPathComponent("overlay")
             guard clonefile(o.path, clone.path, 0) == 0 else {
                 throw FirmwareError(.internal, "clonefile \(o.path) -> \(clone.path): \(String(cString: strerror(errno))) (out must be on the overlay's APFS volume)")
@@ -98,7 +100,7 @@ public enum VolumeExport {
         }
         defer { if let overlay { try? fm.removeItem(at: overlay) } }
         t = Date()
-        let vols = try VolumeRebuild.rebuild(base: src.base, overlay: overlay, into: out, only: volumes)
+        let vols = try VolumeRebuild.rebuild(base: resolved.base, overlay: overlay, into: out, only: volumes)
         let rebuildTime = Date().timeIntervalSince(t)
         log(String(format: "rebuilt %@ in %.1f s", vols.map { "\($0.name) (\($0.pagesWritten) pages)" }.joined(separator: ", "), rebuildTime))
         var result: [Exported] = []

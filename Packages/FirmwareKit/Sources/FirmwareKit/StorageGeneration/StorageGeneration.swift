@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import HostRuntime
 
 /// A stopped-device transaction. The record is the atomic generation pointer;
 /// old flash/NOR and saved states remain intact until a validated candidate is
@@ -20,7 +21,8 @@ public final class StorageGeneration {
     public var base: URL { root.appendingPathComponent("base") }
     public var overlay: URL { root.appendingPathComponent("overlay") }
     public var volumes: URL { root.appendingPathComponent("volumes") }
-    private let lease: StoppedStorageLease
+    private let lease: StorageLease
+    private let paths: StorageRecordPaths?
     private let original: Data
     private var intent: Intent
     private var recordURL: URL { device.appendingPathComponent("device.json") }
@@ -28,41 +30,47 @@ public final class StorageGeneration {
     private var candidateURL: URL { root.appendingPathComponent("device.json") }
 
     /// Existing app records only. Format-specific editing is a separate adapter.
-    public static func begin(device: URL) throws -> StorageGeneration {
-        try StorageGeneration(device: device, resume: nil)
+    public static func begin(device: URL, policy: StorageRecordPolicy = .standalone) throws -> StorageGeneration {
+        try StorageGeneration(owner: OwnedStorageRecord.acquire(device: device, policy: policy), resume: nil)
     }
-    public static func resume(device: URL, id: UUID) throws -> StorageGeneration {
-        try StorageGeneration(device: device, resume: id)
+    static func begin(owner: StoppedRecordOwner) throws -> StorageGeneration {
+        try StorageGeneration(owner: owner, resume: nil)
     }
-    private init(device: URL, resume: UUID?) throws {
-        self.device = device.standardizedFileURL.resolvingSymlinksInPath()
-        lease = try StoppedStorageLease(self.device.appendingPathComponent("work/lease"), allowPendingEdit: resume != nil)
-        original = try Data(contentsOf: self.device.appendingPathComponent("device.json"))
-        guard let object = try JSONSerialization.jsonObject(with: original) as? [String: Any],
+    public static func resume(device: URL, id: UUID, policy: StorageRecordPolicy = .standalone) throws -> StorageGeneration {
+        let owner = try OwnedStorageRecord.acquire(device: device, policy: policy, resume: true)
+        let intent = try JSONDecoder().decode(Intent.self, from: Data(contentsOf: owner.device.appendingPathComponent("work/edit.json")))
+        guard intent.id == id else { throw FirmwareError(.internal, "edit session does not match this device") }
+        return try StorageGeneration(owner: owner, resume: intent)
+    }
+    private init(owner: StoppedRecordOwner, resume: Intent?) throws {
+        let device = owner.device
+        guard let snapshot = owner.bytes,
+              let object = try JSONSerialization.jsonObject(with: snapshot) as? [String: Any],
               object["id"] is String, object["base"] is [String: Any], object["storage"] is [String: Any] else {
             throw FirmwareError(.unsupported, "storage transactions require a valid device record")
         }
-        if let resume {
-            intent = try JSONDecoder().decode(Intent.self, from: Data(contentsOf: self.device.appendingPathComponent("work/edit.json")))
-            guard intent.id == resume else { throw FirmwareError(.internal, "edit session does not match this device") }
-        } else {
-            intent = Intent(id: UUID(), originalRecord: Self.hash(original), phase: .editing)
-        }
-        id = intent.id
-        root = self.device.appendingPathComponent("generations/\(id.uuidString)")
-        guard root.resolvingSymlinksInPath().path.hasPrefix(self.device.path + "/generations/") else {
+        let intent: Intent
+        if let resume { intent = resume }
+        else { intent = Intent(id: UUID(), originalRecord: Self.hash(snapshot), phase: .editing) }
+        let root = device.appendingPathComponent("generations/\(intent.id.uuidString)")
+        guard root.resolvingSymlinksInPath().path.hasPrefix(device.path + "/generations/") else {
             throw FirmwareError(.internal, "invalid storage generation path")
         }
         if resume == nil {
             guard !FileManager.default.fileExists(atPath: root.path) else {
                 throw FirmwareError(.internal, "storage generation already exists")
             }
+        }
+        // Keep failed admission out of a partially initialized class owner.
+        lease = owner.lease; paths = owner.paths; self.device = device; original = snapshot
+        self.intent = intent; id = intent.id; self.root = root
+        if resume == nil {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
                                                   attributes: [.posixPermissions: 0o700])
-            try Self.write(original, to: root.appendingPathComponent("original-device.json"))
+            try Self.write(snapshot, to: root.appendingPathComponent("original-device.json"))
             try saveIntent()
             try Self.sync(root.deletingLastPathComponent())
-            try Self.sync(self.device)
+            try Self.sync(device)
         }
     }
 
@@ -86,16 +94,12 @@ public final class StorageGeneration {
     /// Preserve the record's state-root-relative convention so a device library
     /// remains movable. Legacy absolute records keep their original convention.
     public func recordPath(_ url: URL) throws -> String {
-        let record = try Self.object(Data(contentsOf: root.appendingPathComponent("original-device.json")))
-        if ((record["base"] as? [String: Any])?["path"] as? String)?.hasPrefix("/") == true { return url.path }
-        let state = device.deletingLastPathComponent().deletingLastPathComponent().path + "/"
-        guard url.path.hasPrefix(state) else { throw FirmwareError(.internal, "generation is outside device state") }
-        return String(url.path.dropFirst(state.count))
+        guard let paths else { throw FirmwareError(.unsupported, "missing record paths") }
+        return try paths.recordPath(url)
     }
     private func resolves(_ path: String?, to url: URL) -> Bool {
-        guard let path else { return false }
-        let candidate = path.hasPrefix("/") ? URL(fileURLWithPath: path)
-            : device.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(path)
+        guard let path, let paths else { return false }
+        let candidate = StorageRecordPaths.resolve(path, relativeRoot: paths.relativeRoot)
         return candidate.standardizedFileURL.resolvingSymlinksInPath() == url.standardizedFileURL.resolvingSymlinksInPath()
     }
 
