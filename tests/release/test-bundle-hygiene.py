@@ -64,7 +64,7 @@ BINARIES = {
     'Contents/Resources/guest-tools/*': ('qemu',),   # the guest tools: qemu-ios contrib, built for the guest
     'Contents/Resources/tools/*': ('qemu',),
 }
-LICENSE_TEXTS = ('LICENSE*', 'LICENCE*', 'COPYING*', 'COPYRIGHT*')
+LICENSE_TEXTS = ('LICENSE*', 'LICENCE*', 'COPYING*', 'COPYRIGHT*', 'GPL-*.txt')
 RESOLVED = (ROOT / 'LightTouchMac.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
             ROOT / 'Packages/FirmwareKit/Package.resolved')
 
@@ -88,6 +88,11 @@ def problems(app, packages):
     licenses = app / 'Contents/Resources/licenses'
     found, needed, seen = [], set(), {}
     local = (b'/Users/', str(Path.home()).encode())
+    developer = app / 'Contents/Resources/developer-tools'
+    if developer.exists():
+        audited = subprocess.run([app / 'Contents/MacOS/firmwarekit', 'developer-audit', '--payload', developer], capture_output=True, text=True)
+        if audited.returncode:
+            found.append('developer source/license/binary audit failed: ' + audited.stderr.strip())
     for path in sorted(app.rglob('*')):
         name = str(path.relative_to(app))
         if path.is_dir() and path.suffix == '.dSYM':
@@ -99,6 +104,8 @@ def problems(app, packages):
             found.append(f'names a local path: {name}')
         if not macho(path):
             continue
+        if name.startswith('Contents/Resources/developer-tools/'):
+            continue  # Exact binaries and complete sources/licenses are certified above.
         owners = [components for pattern, components in BINARIES.items() if fnmatch.fnmatch(name, pattern)]
         if not owners:
             found.append(f'unattributed Mach-O (add it to BINARIES with its licenses): {name}')
