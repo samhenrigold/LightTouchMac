@@ -7,18 +7,23 @@ entry the base was prepared from, every lock since the first firmwarekit):
 
   n45 old       an N45 base from before the 4-page map context fix (recipe 1): flagged, Prepare Again allowed
   n45 current   the catalog's own recipe: not flagged
-  n72 / k48     RC4 (firmwarekit 0.1.0) and RC5 (0.2.0) bases, recipe 1, their entries unchanged: not flagged
+  n72 old       recipe 1 bases before exact GPT/HFS size: flagged across 2.x/3.x/4.x
+  n72 current   current recipe, even an older tool-version field: not flagged
+  k48           unchanged recipe 1 entries: not flagged
   device.py     a lock with no entry (the Python preparer): not flagged; nor an unreadable lock
 Also: Prepare Again needs the preparer and a stopped device; Start stays the placeholder's button.
 """
 from pathlib import Path
-import copy, json, subprocess, tempfile
+import copy, json, subprocess, tempfile, sys
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'scripts'))
+import host_runtime
 app = root / 'LightTouchMac'
 catalog = json.loads((app / 'Resources/firmware-catalog.json').read_text())
 entries = {e['id']: e for e in catalog['entries']}
 assert entries['n45ap-4B1']['recipe']['version'] > 1, 'the N45 entries require the fixed recipe'
+assert all(e['recipe']['version'] > 1 for e in entries.values() if e['board'] == 'n72ap'), 'all N72 recipes mark the corrected partition geometry'
 
 
 def lock(entry_id, recipe=None, tool='0.2.0'):
@@ -33,8 +38,11 @@ cases = [  # name, entry, lock (dict, or raw text), flagged
     ('n45-old', 'n45ap-4B1', lock('n45ap-4B1', recipe=1), True),
     ('n45-old-3A101a', 'n45ap-3A101a', lock('n45ap-3A101a', recipe=1), True),
     ('n45-current', 'n45ap-4B1', lock('n45ap-4B1'), False),
-    ('n72-rc4', 'n72ap-7E18', lock('n72ap-7E18', tool='0.1.0'), False),
-    ('n72-rc5', 'n72ap-8C148', lock('n72ap-8C148'), False),
+    ('n72-old-2x', 'n72ap-5F138', lock('n72ap-5F138', recipe=1), True),
+    ('n72-old-3x', 'n72ap-7E18', lock('n72ap-7E18', recipe=1), True),
+    ('n72-old-4x', 'n72ap-8C148', lock('n72ap-8C148', recipe=1), True),
+    ('n72-current', 'n72ap-7E18', lock('n72ap-7E18'), False),
+    ('n72-current-old-tool-field', 'n72ap-7E18', lock('n72ap-7E18', tool='0.1.0'), False),
     ('k48-rc4', 'k48ap-7B500', lock('k48ap-7B500', tool='0.1.0'), False),
     ('k48-rc5', 'k48ap-8C148', lock('k48ap-8C148'), False),
     ('device-py', 'n45ap-4B1', {'format': 1, 'board': 'n45ap', 'activation_hook': None}, False),
@@ -80,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-stale-base-') as tmp:
         path.write_text(body if isinstance(body, str) else json.dumps(body))
         specs.append(f'{name}:{entry_id}:{path}:{int(flagged)}')
     (tmp / 'main.swift').write_text(check)
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(root), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
                     str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), str(app / 'Library/FirmwareCatalog.swift'), str(app / 'Device/DeviceProfile.swift'),
                     str(app / 'Device/DeviceRow.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'check')], check=True)
     subprocess.run([str(tmp / 'check'), str(app / 'Resources/firmware-catalog.json'), *specs], check=True, timeout=60)

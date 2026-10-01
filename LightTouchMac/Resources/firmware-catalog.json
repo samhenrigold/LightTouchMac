@@ -932,7 +932,7 @@
    "rootfs": {"file": "018-4160-1.dmg", "key": "d1b957a0a5e56903adc523c5fa99f5d165c3963aea48274770b766b44ecdebab7b5a8f30"},
    "UpdateRamDisk": {"file": "018-4177-1.dmg", "iv": "5447fa2ce0e2a6e39ffe8983be161e88", "key": "87ecb5a20030a9350cf50de6a43413ac"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
  },
@@ -961,7 +961,7 @@
    "rootfs": {"file": "018-4056-128.dmg", "key": "148025cde5c51d51d7733e74c6857dfca70d7240287d6eb039a1ed835413120b0af1e296"},
    "UpdateRamDisk": {"file": "018-4112-121.dmg", "iv": "6f711568306ac332f1743a06f0498714", "key": "76a5da7da3d81035c9f0c636846e92e0"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
  },
@@ -990,7 +990,7 @@
    "rootfs": {"file": "018-4491-11.dmg", "key": "2611c9f73504344fb22c93791659ec92e65f914025c5814d708b2023ab67229d89c39791"},
    "UpdateRamDisk": {"file": "018-4493-11.dmg", "iv": "db00b42474d99ca300c2891b33540e5b", "key": "784f133c2882376341b9e276da966c0f"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 0, "peak_bytes": 0, "seconds": 0}
  },
@@ -1025,7 +1025,7 @@
    "rootfs": {"file": "018-5300-002.dmg", "key": "415225778e1bebf8eeff2a9050b04ce429de9680e4acba50820a3fa453897bc4a4b307e2"},
    "UpdateRamDisk": {"file": "018-5310-002.dmg", "iv": "395f0ec18c19f302298c0fd49b75c6e6", "key": "8f4a88ab8acf4bed06a5f641ba804c50"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 907124736, "peak_bytes": 2410758859, "seconds": 50}
  },
@@ -1060,7 +1060,7 @@
    "rootfs": {"file": "018-6027-001.dmg", "key": "abef664a55de10472c076fa633f47a7c3567239e9af3c73dac4c8683c75f3be27b508eb2"},
    "UpdateRamDisk": {"file": "018-6048-001.dmg", "iv": "bbbd60012088d253bf3648285a735e13", "key": "7b0a441f1b70943461c4444300a8f455"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 907124736, "peak_bytes": 2410758859, "seconds": 50}
  },
@@ -1095,7 +1095,7 @@
    "rootfs": {"file": "018-6133-014.dmg", "key": "fc68c25f1dcc929f37c2be82b94e4c92b48eac3ddd67adefd462404663265e3dca43a930"},
    "UpdateRamDisk": {"file": "018-6142-014.dmg", "iv": "00c0685faeeebc48cb457e679bea9be7", "key": "db7fee02b08b5c9efaae920fdd9ad4f9"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 907124736, "peak_bytes": 2410758859, "seconds": 50}
  },
@@ -1129,7 +1129,7 @@
    "rootfs": {"file": "018-6481-015.dmg", "key": "2360d83b606481a5ca080fe7a6fc64f8d5a5556413dfcf3e1277fe564734ee0b188798b8"},
    "UpdateRamDisk": {"file": "018-6509-015.dmg", "iv": "c23f914e487b35897d065202db69a507", "key": "45544b6e783b0d80da04ad6cbcf55175"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 907124736, "peak_bytes": 2410758859, "seconds": 50},
   "status_note": "Apple never hosted this paid update; the download is a third-party mirror."
@@ -1166,7 +1166,7 @@
    "RestoreRamDisk": {"file": "018-7286-035.dmg", "iv": "d7b27f785cd6420e17e2b33f8db7cc10", "key": "0a255f207a0e48fa1b9741d1e29b53a3"},
    "rootfs": {"file": "018-7337-033.dmg", "key": "d88fa434f6a8c50fd49cd0923879da5c3079c59c0e534cff521a9cecbcad48d84b4daef0"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1201,7 +1201,7 @@
    "RestoreRamDisk": {"file": "018-7431-002.dmg", "iv": "5ec2a37b8caf580228f8c790ea994795", "key": "be79b8f17c2eee3b6af40d793abed807"},
    "rootfs": {"file": "018-7449-002.dmg", "key": "80ad427daeaa34ce51d6f85510c9b69e97ac81961a0b0a7f0c1d4bc61a8d7d02d46d8a7e"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1236,7 +1236,7 @@
    "RestoreRamDisk": {"file": "018-7663-006.dmg", "iv": "f1b516f9fb2ed5e79b458fdb639857c4", "key": "eece7085c092a32e827e45ddc7510222"},
    "rootfs": {"file": "018-7685-006.dmg", "key": "f23cd8de458bf2234a84f3f0069c96cc901a30d2bed4f53e479d4033ba75026d6848f286"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1271,7 +1271,7 @@
    "RestoreRamDisk": {"file": "018-7715-001.dmg", "iv": "c540a700bd79ff48de05f3f90eb8b715", "key": "be8daf4b4782b722a302710364f0d95c"},
    "rootfs": {"file": "018-7720-001.dmg", "key": "a11b9a603bd1bfe5f4aa2a6a708c0038b94c51b91b04ece49b842266f4afada60ff2c995"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1303,7 +1303,7 @@
    "RestoreRamDisk": {"file": "018-6462-368.dmg", "iv": "b2b8949bd33b65f22bd0c7e55ccc836b", "key": "1e3e144a55fa8d1782db5153796238f0"},
    "rootfs": {"file": "018-5533-585.dmg", "key": "fcada08311f553b2d7194c97922e01c821b632bf62e64500056ea37e56343e6131a9839b"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1336,7 +1336,7 @@
    "rootfs": {"file": "018-8080-012.dmg", "key": "5d1655d3cd7c6ffb4a5e48a52ea8a265579c655aa39ed8613239e57f20f132e4e3b5ffa1"},
    "UpdateRamDisk": {"file": "018-5545-582.dmg", "iv": "943b9252ebc5336143a967dee2d438a6", "key": "42ec7ca2c8d42a00d57d2718a7eb7ef9"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1372,7 +1372,7 @@
    "rootfs": {"file": "018-8217-003.dmg", "key": "5aa1334dd6c2315554711585210a0afeb3acfab36185a13e58046e529b9aea2b75a42cec"},
    "UpdateRamDisk": {"file": "018-8188-003.dmg", "iv": "251bacb110823882abae5e6aa396aef5", "key": "0f3b4bce0d713c1dd88e65bacbe07a94"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1408,7 +1408,7 @@
    "rootfs": {"file": "018-8275-002.dmg", "key": "a50be41d68ed8cd9f0e49eb33ad8ded84b397f1ad2c8f0bf9782856eb57d3fd153f8ca0f"},
    "UpdateRamDisk": {"file": "018-8271-002.dmg", "iv": "3fa31a215dd6b1c40e221cc022186195", "key": "128a66a45a85d03cefa7631efb6f26cb"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1444,7 +1444,7 @@
    "rootfs": {"file": "018-8348-005.dmg", "key": "ecd6907171f293b23524343fae45422eeffdac9efb0f282357e8e38418dc96cff9aae968"},
    "UpdateRamDisk": {"file": "018-8330-005.dmg", "iv": "6cb46785ebd83588b20686e27629dcc6", "key": "6fa46141469bcd2392f14825c7133fb1"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1477,7 +1477,7 @@
    "rootfs": {"file": "018-7058-113.dmg", "key": "aec4d2f3c6a4e70ea6cea074f65812d2a34b180cc92b817edcd867167e7a91c5beb942f0"},
    "UpdateRamDisk": {"file": "018-7104-078.dmg", "iv": "14a6e0d2cabcc52db99cb9174d2f8b4d", "key": "52d4dac40dbbcdf6511ae9f7e24025ef"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1513,7 +1513,7 @@
    "rootfs": {"file": "018-9179-004.dmg", "key": "76bcb5face1fbb31d1c4be81a9b5ad2409efdfac9757185af472dad9482ce18ee44b8d83"},
    "UpdateRamDisk": {"file": "018-8907-012.dmg", "iv": "298ea718fb9c754f743e5c675d0de52d", "key": "db6efe2e28455dbba87a711859fa045a"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1549,7 +1549,7 @@
    "rootfs": {"file": "018-9493-003.dmg", "key": "88c28b50065c1131f8898c97643b885e05c1c5cad83fbf6efc1c44baca5fbf44ea3ec155"},
    "UpdateRamDisk": {"file": "018-9486-005.dmg", "iv": "64c1ce1e7936d632e8d39e28350f3427", "key": "f46cbf9b214aaa0795afabd2e3d19e3a"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1585,7 +1585,7 @@
    "rootfs": {"file": "018-9700-005.dmg", "key": "da0243fa2e3e42356c2453b300c4579d500023a9b939d4f19e336228663628cfa9c2e8b3"},
    "UpdateRamDisk": {"file": "018-9695-004.dmg", "iv": "6701252486818890d2f757ac734bc020", "key": "0b36475553b09a48166ab942d9851bf6"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1621,7 +1621,7 @@
    "rootfs": {"file": "018-7738-161.dmg", "key": "6099be47ee6b867eb85aca33eab34d0713cdc7a6a017c91b537f3dfd8c8370e03b7e7a1c"},
    "UpdateRamDisk": {"file": "018-7786-108.dmg", "iv": "5525657488b7f9129be4866780da17fa", "key": "fbee5d8a6a31833dd83f6406b6abe3de"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  },
@@ -1654,7 +1654,7 @@
    "rootfs": {"file": "038-0014-002.dmg", "key": "519ec112b4af0a65eab6ea65b222c5b7f605ce52ad9195640e3309de58dd54ab0a0c9607"},
    "UpdateRamDisk": {"file": "038-0050-002.dmg", "iv": "d67c8ecae9d5278eb61766370fc37c29", "key": "822296fc0d914b5665c6934be21b763e"}
   },
-  "recipe": {"name": "n72", "version": 1, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
+  "recipe": {"name": "n72", "version": 2, "storage": "8g", "system_mib": 7168, "data_size": "none", "options": {"gles_shim": true, "appsync": true, "web_proxy": true, "data_protection": true}},
   "emulator": {"min_protocol": 1},
   "estimates": {"prepared_bytes": 1292075008, "peak_bytes": 2687140552, "seconds": 35}
  }

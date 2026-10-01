@@ -51,13 +51,38 @@ import Testing
         #expect(p.count == 50 && p.values.allSatisfy { $0.count == 4096 + 64 })
         let hdr = try #require(p[.init(cs: 1, page: 256)])
         #expect(N72NAND.crc(hdr[0..<0x10] + [0, 0, 0, 0] + hdr[0x14..<0x5C]) == UInt32(hdr[0x10]) | UInt32(hdr[0x11]) << 8 | UInt32(hdr[0x12]) << 16 | UInt32(hdr[0x13]) << 24)
-        #expect(p[.init(cs: 2, page: 256)]![0x28..<0x30].reversed().reduce(0) { $0 << 8 | Int($1) } == 128013)
+        #expect(p[.init(cs: 2, page: 256)]![0x28..<0x30].reversed().reduce(0) { $0 << 8 | Int($1) } == 128002)
         #expect(N72NAND.predict(0) == .init(cs: 3, page: 256) && N72NAND.predict(1) == .init(cs: 0, page: 384))
     }
 
-    /// Every metadata page, byte for byte, for the 7E18 volume and epoch.
-    @Test func metadataMatchesLegacyReference() throws {
-        let want = LegacyPreparationGoldens.n72Metadata
+    @Test(arguments: [1, 127, 128, 129, 255, 256, 257, 1023, 1024, 1025, 128000, 1835008])
+    func partitionAndFilesystemHaveTheSameAlternateHeader(_ blocks: Int) throws {
+        let pages = N72NAND.gptPages(blocks)
+        func le(_ data: [UInt8], _ offset: Int, _ count: Int) -> UInt64 {
+            (0..<count).reduce(0) { $0 | UInt64(data[offset + $1]) << (8 * $1) }
+        }
+        let first = le(pages[2], 0x20, 8), last = le(pages[2], 0x28, 8)
+        #expect(first == 3)
+        // Covers small/unaligned geometries too: even a one-block excess moves
+        // the device-end alternate away from the filesystem's actual header.
+        #expect(last - first + 1 == UInt64(blocks))
+        #expect((last - first + 1) * 4096 - 1024 == UInt64(blocks) * 4096 - 1024)
+        #expect(UInt64(N72NAND.crc(pages[2][0..<0x80])) == le(pages[1], 0x58, 4))
+        var header = pages[1]; header.replaceSubrange(0x10..<0x14, with: [0, 0, 0, 0])
+        #expect(UInt64(N72NAND.crc(header[0..<0x5C])) == le(pages[1], 0x10, 4))
+        // Protective MBR geometry is deliberately outside this correction.
+        #expect(le(pages[0], 0x1BE + 8, 4) == 3)
+        #expect(le(pages[0], 0x1BE + 12, 4) == UInt64(blocks + 10))
+    }
+
+    /// Preserve48 historical metadata pages and qualify exactly the two GPT
+    /// geometry replacements from independently captured Python output.
+    @Test func metadataPreservesLegacyExceptExactPartitionGPT() throws {
+        let want = LegacyPreparationGoldens.n72Metadata.map { line in
+            let fields = line.split(separator: " ")
+            let key = "\(fields[0]) \(fields[1])"
+            return LegacyPreparationGoldens.n72ExactPartitionGPT[key].map { "\(key) \($0)" } ?? line
+        }
         let got = N72NAND.metadataPages(blocks: 1835008, epoch: 4).sorted { ($0.key.cs, $0.key.page) < ($1.key.cs, $1.key.page) }
             .map { "\($0.key.cs) \($0.key.page) \(Oracle.sha256(Data($0.value)))" }
         #expect(got == want)

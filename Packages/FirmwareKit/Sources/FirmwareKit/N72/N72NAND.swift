@@ -12,7 +12,7 @@ import zlib
 
 public enum N72NAND {
     public static let page = 4096, spare = 64, pagesPerBlock = 128
-    static let bbtPage = 4095 * 128, mapPages = 18, gptSlack = 11
+    static let bbtPage = 4095 * 128, mapPages = 18
     static let blankSpare: [UInt8] = [0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0, 0xFF, 0] + [UInt8](repeating: 0, count: 52)
     static let vflSpare: [UInt8] = [1] + [UInt8](repeating: 0, count: 8) + [0x80] + [UInt8](repeating: 0, count: 54)
     static let metaSpare: [UInt8] = [UInt8](repeating: 0, count: 9) + [0x43] + [UInt8](repeating: 0, count: 54)
@@ -77,7 +77,11 @@ public enum N72NAND {
         for k in 0..<n { b[o + k] = UInt8(truncatingIfNeeded: v >> (8 * k)) }
     }
 
-    /// Device LBA 0-2: protective MBR, GPT header, one Apple_HFS entry sized to the volume.
+    /// Device LBA 0-2: protective MBR, GPT header, one Apple_HFS entry sized
+    /// exactly to the filesystem. `blocks` is the validated HFS extent in 4 KiB
+    /// pages supplied by the preparer, not a rounded backing-file length.
+    /// Older HFS disables alternate-header writes
+    /// when the partition extends more than one allocation block beyond it.
     static func gptPages(_ blocks: Int) -> [[UInt8]] {
         var mbr = [UInt8](repeating: 0, count: page)
         mbr[8] = 0xFF; mbr[10] = 0xFF                    // as generated: a spare pattern in the data area
@@ -86,7 +90,7 @@ public enum N72NAND {
         mbr[0x1FE] = 0x55; mbr[0x1FF] = 0xAA
         var ent = [UInt8](repeating: 0, count: page)
         ent.replaceSubrange(0..<16, with: hfsType)
-        put(&ent, 0x20, 3, 8); put(&ent, 0x28, UInt64(3 + blocks - 1 + gptSlack), 8)
+        put(&ent, 0x20, 3, 8); put(&ent, 0x28, UInt64(3 + blocks - 1), 8)
         var hdr = [UInt8](repeating: 0, count: page)
         hdr.replaceSubrange(0..<8, with: Array("EFI PART".utf8))
         put(&hdr, 8, 0x00010000, 4); put(&hdr, 12, 0x5C, 4)
@@ -125,6 +129,8 @@ public enum N72NAND {
     static func path(_ out: URL, _ p: Page) -> URL { out.appendingPathComponent("cs\(p.cs)/\(p.page).page") }
 
     /// The page directory for a flat volume of `blocks` 4 KiB blocks: metadata pages, then every non-zero block.
+    /// Callers supply the actual HFS extent; this low-level writer does not parse
+    /// arbitrary backing-file padding or repair a malformed filesystem.
     @discardableResult
     public static func write(volume: URL, blocks: Int, epoch: Int, out: URL) throws -> (volume: Int, metadata: Int) {
         let fm = FileManager.default

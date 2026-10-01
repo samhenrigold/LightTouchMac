@@ -84,7 +84,7 @@ public enum VolumeRebuild {
             return buf.contains { $0 != 0 }
         }
 
-        // The volume's own size, not the GPT partition's (11 blocks longer as generated): macOS looks for the
+        // The volume's own size, not a legacy overlong GPT partition's: macOS looks for the
         // alternate volume header 1 KiB before the end of the device.
         guard try read(0), buf[1024] == 0x48, buf[1025] == 0x2B || buf[1025] == 0x58 else {
             throw FirmwareError(.unsupported, "\(base.path): no HFS+ volume header at block 0")
