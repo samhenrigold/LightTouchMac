@@ -602,3 +602,26 @@ ba38dfefdce6 executable hashes are recorded separately. The app source pin
 now names340978ff58; full restore and updated dylib/release packaging remain
 unqualified. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-checked-dma-2026-10-01`.
+
+The committed checked-DMA stock blank-flash erase probe still stops only at
+D24+0x308 (59028 occurrences), with no checked-transaction error before that
+stop. Stock restored waits eight times for NAND; research-stop exit1 reaps
+owned processes. Counts are trace observations, not an execution-rate or
+performance comparison. Full restore remains failed.
+
+The current arm64 dylib was relinked from340978ff58 (SHA256 acf1f57659a4,
+UUID AEE4DBA6-695D-3965-BA55-EDC226DDC500). The real production helper
+passes5/5 hello-only lease admission/refusal cases with this dylib; no boot
+request is sent. This updates local build identity, not universal packaging,
+Intel runtime, signing/notarization or native dylib guest qualification.
+
+A non-mutating2.1.1 trace records updated primary HFS headers through
+VNOP_BWRITE and correlates them one-to-one with FMSS KEEP mapping receipts,
+including clean unmount. No alternate headers were observed at these traced
+boundaries; debugger timing and possible untraced paths qualify that absence.
+Public XNU1228.7.58 (near target1228.7.27, not identical shipping code)
+updates the alternate header only when requested and disables its sector when
+partition slack exceeds one allocation block. Our prepared11-block gap is
+therefore an evidence-backed geometry lead; target disassembly and a matched
+disposable geometry experiment remain pending. This does not establish NAND
+is dropping the header or authorize filesystem-aware hardware behavior.
