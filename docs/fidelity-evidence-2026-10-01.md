@@ -546,3 +546,59 @@ claiming the graphics or storage model is correct. The graphics callback's
 CoreSurface locking contract and the stale alternate HFS header's actual
 block-write path are being measured separately. Text-only evidence:
 `/Users/shg/Developer/ltm-evidence/ios211-compatible-fixtures-2026-10-01`.
+
+## Async firmware tools and owned cancellation qualified
+
+App bf72e7416c replaces the synchronous semaphore bridge with awaited
+Swift Subprocess calls through firmware preparation, HFS mount/export/edit
+and storage publication. StorageGeneration is an actor with explicit overlap
+refusal and record/storage rechecks after suspension. Owners keep exclusion
+through awaited teardown and close explicitly; retained aliases become closed
+owners. StorageLease releases flock before closing its descriptor, so a
+transient pre-exec inherited alias cannot extend an ended ownership scope.
+The unused StoppedStorageLease adapter is deleted; callers and tests use the
+actual shared record owner. No alternate process framework was introduced.
+
+The CLI uses one native ordered stream writer for stdout and resource-owning
+diagnostics. A closed or blocked pipe cannot prevent child/disk teardown.
+Actual closed-parent-pipe testing first exposed a Foundation stderr SIGABRT
+before cancellation; that failed receipt is retained alongside the fixed
+real CLI tests. Normal output is awaited. Cancellation diagnostics are best
+effort: stopped streams can discard queued lines even for healthy consumers;
+cleanup failure is observable as exit1 and retained staging. SIGINT/SIGTERM
+retain the CLI's existing143 cancellation policy.
+
+HostRuntime29/29, storage/module contracts21/21, helper admission5/5 and
+actual HFS cleanup/metadata3/3 pass. The real GUI/helper/service/CLI builds
+pass. Ordinary-executor64-command progress, typed cancellation/reaping,
+blocked stdout/stderr, closed parent pipes, parent death and cleanup-failure
+gates pass. No thread-pool tuning or test sleeps were added to mask failures.
+Earlier adapter/lease failures and a wrong-manifest test-fixture failure remain
+documented; deleting the unused adapter does not establish their compiler
+cause. Attachment compensation assumes serialized ownership of a given image
+and does not claim to distinguish unrelated concurrent same-image attaches.
+These host tests did not run a guest or qualify current QEMU dylib packaging.
+Evidence: `/Users/shg/Developer/ltm-evidence/host-async-runtime-2026-10-01`.
+
+## Checked sequencer memory transactions qualified
+
+QEMU340978ff58 checks actual address-space results for eight-byte instruction
+fetches and opcode11 four-byte stores, with explicit little-endian wire bytes.
+Any non-MEMTX_OK result stops interpretation rather than executing subsequent
+instructions using failed data. Earlier instructions and any partial effects
+of the failed transaction are not rolled back. This does not supply an abort
+IRQ contract: C00's existing completion behavior remains unchanged, and CPU
+NAND descriptor/data transactions remain separately unchecked. No D24, ECC,
+FIFO, flash execution, timer or VMState change is included.
+
+The actual-source baseline compiles then fails separate fetch/store assertions;
+seven source/sanitizer gates,12 model suites and23 FMSS QTests pass. QTests
+exercise normal byte output, failed initial/mid fetch and unmapped stores,
+preserving earlier writes and preventing later sentinel overwrite. Native
+3.1.3 checks pass8/8 with no skips: guest-confirmed shutdowns, cold reboot
+persistence, clean fsck, installation/foreground, graphics, agent and stereo
+audio (6.45s,440/880Hz). Candidate99769a9c674b and committed rebuild
+ba38dfefdce6 executable hashes are recorded separately. The app source pin
+now names340978ff58; full restore and updated dylib/release packaging remain
+unqualified. Evidence:
+`/Users/shg/Developer/ltm-evidence/fmss-checked-dma-2026-10-01`.

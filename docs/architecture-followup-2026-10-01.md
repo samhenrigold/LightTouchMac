@@ -257,3 +257,10 @@ launch and measured stereo audio. The2.1.1 native gate remains6/8, failing
 filesystem consistency and strict graphics bridge refusal checks. Latest
 stock erase still stops at D24; the literal initializer no longer stops it.
 Exact receipts and remaining limits are recorded in the shared journal.
+
+App bf72e7416c now carries async disk tools through the maintained firmware
+CLI, with actor-owned publication and native pipe cancellation/cleanup gates.
+QEMU340978ff58 checks sequencer fetch/store transaction results and passes
+all eight native3.1.3 checks. The app source pin is aligned; current dylib
+packaging and full stock restore remain separate gates. Full receipts and
+retained failures are recorded in the shared evidence journal.
