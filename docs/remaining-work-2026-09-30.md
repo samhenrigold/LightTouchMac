@@ -701,3 +701,26 @@ separate contracts. The production-bridge stock5F138 erase trace now stops at op
 `14000001 00000010` at +0x128, after eight Waiting for NAND responses.
 The research harness stops/reaps its own children; no full physical
 restore/coldboot qualification follows from this correction.
+
+### October 1: physical erased reads and maintained persistence gates
+
+QEMU 8b3856af65 gives confirmed physical holes and erased markers exact FF
+bytes, preserving generated storage and invalid/truncated/I/O-error fallbacks.
+The packed parser distinguishes holes from invalid records. Stored spare
+remains a 64-byte projection with 12 guest-visible bytes; raw OOB/ECC is
+not qualified. Actual-source sanitizer behavioral baseline fails, fixed gates
+pass, real FMSS qtests12/12 and independent default native8/8 pass. Persistence
+fixture declarations now match the existing GTree caches: all 18 fault cases
+and the 1,024-page bulk write pass.
+
+Stock physical erase remains at opcode14/imm16+0x128 with eight Waiting for
+NAND responses. The research harness stops/reaps its own children. Experimental
+MMIO capture cannot expose unimplemented pointer-register readbacks; those
+zeros are not parameter-state evidence. No stock restore/coldboot pass follows.
+Evidence: `/Users/shg/Developer/ltm-evidence/fmss-physical-blank-2026-10-01`.
+
+Further storage gaps: payloads are controller DMA bytes, not proven raw flash;
+bitwise programming cannot be added blindly. First/repeated writes still infer
+block erases, stock FMC erase commands do not execute against the backend, and
+aborted sequencer runs still receive deferred completion. Directory fsync and
+full command/error/timing contracts remain distinct from erased-read fidelity.
