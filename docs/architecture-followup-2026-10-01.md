@@ -225,3 +225,16 @@ Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d54-2026-10-01`.
 The detailed gate chronology is maintained once in the
 [fidelity evidence journal](fidelity-evidence-2026-10-01.md); the ledger and
 remaining-work report link to it. Their earlier dated entries remain history.
+
+## Stopped record ownership qualified
+
+App2137e27 now locks before reading device.json and retains one record snapshot
+and descriptor through export/edit. GUI and FirmwareKit share managed path
+authority; explicit standalone sources keep their prior convention. Package,
+actual HFS, helper admission and build gates pass. Full qualification, the
+Source API change and retained lifetime failures are recorded in the
+[shared journal](fidelity-evidence-2026-10-01.md#stopped-record-ownership-qualified).
+
+Parallel disk-image work separately exposed cooperative-worker starvation in
+the synchronous subprocess bridge. That remains open; the next refactor must
+carry await through the boundary while retaining exclusion and cleanup.

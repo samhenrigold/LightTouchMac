@@ -250,3 +250,47 @@ pass 8/8, including clean guest shutdown, reboot persistence and fsck.
 Default diagnostics still stop at D38 reads; existing false-completion and
 CPU storage shortcuts remain. Stock physical restore is not qualified.
 Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d54-2026-10-01`.
+
+The completed stock5F138 physical erase trace after D54 records only D38
+reads at bulk+0x158 (105600 stops), with no D54 stop. Stock restored again
+waited eight times for NAND; the harness stopped deliberately and reaped its
+own processes. This narrows the next contract without establishing restore
+success. Logs are preserved in the D54 evidence directory's stock-restore receipt.
+
+## Stopped record ownership qualified
+
+App2137e27 acquires the shared lease before reading device.json and retains
+one immutable snapshot through export or generation creation. Edit preflight
+uses that same snapshot and descriptor; it cannot certify one generation then
+publish another observation. Export selections are declarative and release
+the lease at return/error even while the selection lives. Public Source
+.base/.overlay previews were removed; raw isolated sources remain explicit.
+
+Managed GUI edits select strict record policy through the CLI. Shared path
+authority now serves both GUI and FirmwareKit: UUID/directory agreement,
+private work admission, actual-base disjointness and mutable state beneath
+the owner. Caller-selected standalone paths retain their legacy relative-root
+convention and external-source support. Unknown record fields and output
+style are preserved. Present malformed optional mutable fields reject;
+deliberately absent ones remain supported. Private lease creation may precede
+invalid-record rejection; descriptor-relative hostile-rename protection is
+not established. Physical FTL editing is still unsupported.
+
+HostRuntime21/21, FirmwareKit14/14 and the unchanged stopped-store10/10
+selection pass, including16 weak-owner lifetime cases, wrong resume, snapshot
+selection and failure release. Actual native HFS tests verify successful
+export releases its lease with Source alive, resource forks/hardlinks/owners
+and exact generated NAND publication. GUI/helper/session builds and five
+actual hello-only helper checks pass. No guest launched in these gates;
+updated managed prepared-firmware cold boot was not run. Initial nested-owner
+lifetime failures remain recorded; direct descriptor/snapshot transfer passes
+without retries, test waits or a speculative compiler-cause claim.
+Evidence: `/Users/shg/Developer/ltm-evidence/host-owned-record-2026-10-01`.
+
+A separate parallel discard stress exposed synchronous DiskImage.exec
+blocking16 Swift cooperative workers while detached Subprocess work needed
+that pool. This deadlock remains unfixed in2137e27. The owner-only stress
+omits disk operations; existing discard/recovery and native HFS tests retain
+them. Next investigate an async subprocess boundary, preserving transaction
+exclusion and cancellation cleanup; extra threads or pool knobs are not a
+qualification gate. The sampled failure is retained with the host receipts.
