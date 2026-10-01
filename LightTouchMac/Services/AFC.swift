@@ -53,6 +53,10 @@ extension DeviceServices {
               song.audio.lastPathComponent == "audio." + song.audio.pathExtension else {
             throw DeviceError.preflight("Invalid media staging path.")
         }
+        if let artwork = song.artwork {
+            guard artwork.lastPathComponent == "artwork.jpg" else { throw DeviceError.preflight("Invalid media staging path.") }
+            _ = try await stageFile(artwork, remote: "LightTouch/\(song.id)/artwork.jpg", reuseIdentical: true) { _ in }
+        }
         _ = try await stageFile(song.audio, remote: "LightTouch/\(song.id)/\(song.audio.lastPathComponent)",
                                 reuseIdentical: true, progress: progress)
     }

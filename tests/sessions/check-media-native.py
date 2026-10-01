@@ -28,6 +28,7 @@ mode = parser.add_mutually_exclusive_group()
 mode.add_argument('--photo',action='store_true')
 mode.add_argument('--video',action='store_true',help='convert and import a movie into the Videos library')
 mode.add_argument('--aac',action='store_true',help='convert raw AAC, import it and verify native Music playback')
+mode.add_argument('--tagged',action='store_true',help='import a fully tagged song with embedded art; read the library and ArtworkCache back over AFC')
 parser.add_argument('--recording',action='store_true',help='record embedded QEMU video and guest audio across a pause (requires --aac)')
 parser.add_argument('--guest-tools',type=Path,help='freshly built guest payloads to use instead of checkout binaries')
 args = parser.parse_args()
@@ -48,7 +49,8 @@ cfg = SimpleNamespace(out=str(out),files=files,base_nand=files+'/nand-current',
     qemu=str(sources.qemu_build()/'qemu-system-arm'),
     usbmuxd=str(sources.path('usbmuxd')/'src/usbmuxd'),usbmuxd_ok=True,
     usb_port=r.free_port(1520,1539),mux_port=r.free_port(27400,27419),
-    qmp_port=r.free_port(28200,28219),wifi=False,cpu=None,mem='128M',kernel_console=True)
+    qmp_port=r.free_port(28200,28219),wifi=False,cpu=None,mem='128M',kernel_console=True,board='n72ap',
+    home_lit_min=r.HOME_LIT_MIN,device_version=None,device_machine={})
 swift = r"""
 import Foundation
 nonisolated func logEvent(_ message: String) { NSLog("%@", message) }
@@ -167,6 +169,14 @@ final class Progress: @unchecked Sendable {
             "id":id,"filename":file.lastPathComponent,"title":media.title,
         ])
         try manifest.write(to:URL(fileURLWithPath:CommandLine.arguments[6]))
+        // The library and the purchased-item ArtworkCache, over AFC with the Files browser's code.
+        if let readback = ProcessInfo.processInfo.environment["LTM_AFC_READBACK"] {
+            for folder in ["iTunes_Control/iTunes/iTunes Library.itlp", "Purchases/MobileArtworkDB"] {
+                for file in try await services.files(in: folder) where file.isRegular {
+                    try await services.download(file, to: URL(fileURLWithPath: readback).appendingPathComponent(file.name)) { _ in }
+                }
+            }
+        }
         print("PASS: actual Swift preflight, AFC upload/progress, guest import commands and duplicate reconciliation")
     }
 }
@@ -192,6 +202,26 @@ if args.photo:
 elif args.video:
     source = out/"Movie 'quoted' $title — été.mp4"
     shutil.copyfile(ROOT/'contrib/it-harness/build/Payload/Harness.app/h264.mp4',source)
+elif args.tagged:
+    from PIL import Image,ImageDraw
+    import math, struct, wave
+    QUADRANTS = [((0.25,0.25),(200,40,40)),((0.75,0.25),(40,180,60)),((0.25,0.75),(40,60,200)),((0.75,0.75),(240,220,30))]
+    cover = Image.new('RGB',(1000,1000))
+    draw = ImageDraw.Draw(cover)
+    for (x,y),colour in QUADRANTS:
+        draw.rectangle((int((x-0.25)*1000),int((y-0.25)*1000),int((x+0.25)*1000)-1,int((y+0.25)*1000)-1),fill=colour)
+    cover.save(out/'cover.png')
+    with wave.open(str(out/'tone.wav'),'wb') as w:
+        w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100)
+        w.writeframes(b''.join(struct.pack('<hh',v,v) for v in (int(8000*math.sin(2*math.pi*440*i/44100)) for i in range(44100*6))))
+    subprocess.run(['afconvert','-f','m4af','-d','aac','-b','128000',str(out/'tone.wav'),str(out/'plain.m4a')],check=True)
+    source = out/'Tagged Song.m4a'
+    subprocess.run(['ffmpeg','-v','error','-i',str(out/'plain.m4a'),'-i',str(out/'cover.png'),'-map','0','-map','1','-c','copy',
+        '-disposition:v','attached_pic','-metadata','title=Tagged Tïtle','-metadata','artist=Track Artist',
+        '-metadata','album=The Album','-metadata','album_artist=Album Artist','-metadata','composer=Some Composer',
+        '-metadata','genre=Synthpop','-metadata','track=3/12','-metadata','disc=2/3','-metadata','date=1987',
+        '-metadata','compilation=1',str(source)],check=True)
+    os.environ['LTM_AFC_READBACK'] = str(out/'afc'); (out/'afc').mkdir()
 elif args.aac:
     source = out/"Song 'quoted' $title — été.aac"
     subprocess.run(['ffmpeg','-v','error','-i',str(ROOT/'contrib/it-harness/build/Payload/Harness.app/aac.m4a'),
@@ -216,6 +246,40 @@ if args.recording:
     p = Embedded()
 else:
     p = r.Procs()
+
+def readback(folder, quadrants):
+    """What the device keeps, read back over AFC: the item's tags in Library.itdb and its cover
+    rendered into the purchased-item ArtworkCache under the item's store ID."""
+    with sqlite3.connect(folder/'Library.itdb') as db:
+        db.execute("ATTACH DATABASE ? AS loc", (str(folder/'Locations.itdb'),))
+        row = db.execute("""SELECT item.title, item.artist, item.album, item.album_artist, item.composer,
+                (SELECT genre FROM genre_map WHERE id=item.genre_id), item.track_number, item.track_count,
+                item.disc_number, item.disc_count, item.year, item.is_compilation, item.total_time_ms,
+                item.artwork_cache_id, (SELECT store_item_id FROM store_info WHERE item_pid=item.pid)
+            FROM item NOT INDEXED WHERE is_song=1""").fetchone()
+    print('LIBRARY', row, flush=True)
+    *tags, duration, artwork_id, _ = row   # artwork_cache_id is the artworkDBRecordID MusicLibrary looks up
+    tags = [unicodedata.normalize('NFC', t) if isinstance(t, str) else t for t in tags]
+    expected = ['Tagged Tïtle','Track Artist','The Album','Album Artist','Some Composer','Synthpop',3,12,2,3,1987,1]
+    assert tags == [unicodedata.normalize('NFC', t) if isinstance(t, str) else t for t in expected], (tags, expected)
+    assert 5900 < duration < 6200, duration
+    assert artwork_id, 'no artworkDBRecordID: MusicLibrary has no artwork key for the item'
+    with sqlite3.connect(folder/'artwork.db') as db:
+        formats = db.execute('SELECT format, offset, length, width, height, bytesPerRow, bitsPerPixel FROM artwork WHERE key=?',
+                             (str(artwork_id),)).fetchall()
+    print('ARTWORK', formats, flush=True)
+    large = [f for f in formats if f[0] == 3005]
+    assert large, ('no 3005 (320x320) rendering of the cover', formats)
+    _, offset, length, width, height, row_bytes, bpp = large[0]
+    assert (width, height, bpp) == (320, 320, 16), large
+    pixels = (folder/'artwork.pix').read_bytes()[offset:offset+length]
+    for (x, y), colour in quadrants:
+        at = int(y*height)*row_bytes + int(x*width)*2
+        v = pixels[at] | pixels[at+1] << 8   # L555: x1r5g5b5, little-endian
+        actual = tuple(((v >> s) & 31) * 255 // 31 for s in (10, 5, 0))
+        assert all(abs(a-b) <= 16 for a, b in zip(actual, colour)), ((x, y), actual, colour)
+    print('PASS: tags and the cover read back over AFC from the device library and ArtworkCache', flush=True)
+
 d = r.Device(cfg,p,'device')
 server = None
 def recording_marker(name, reply):
@@ -292,11 +356,15 @@ try:
         database.write_bytes(data)
         with sqlite3.connect(database) as db:
             rows = db.execute('SELECT title FROM item WHERE is_song=0 AND media_kind=2' if args.video else 'SELECT title FROM item WHERE is_song=1').fetchall()
-        assert len(rows) == 1 and unicodedata.normalize('NFC',rows[0][0]) == unicodedata.normalize('NFC',source.stem), rows
+        title = 'Tagged Tïtle' if args.tagged else source.stem
+        assert len(rows) == 1 and unicodedata.normalize('NFC',rows[0][0]) == unicodedata.normalize('NFC',title), rows
+        if args.tagged:
+            readback(out/'afc', QUADRANTS)
         bundle = 'com.apple.mobileipod'
-    if args.video:
+    if args.video or args.tagged:
         assert d.powerdown(), 'guest shutdown not confirmed'
-        print('PASS: native video conversion, AFC upload, one Videos library item, repeated import reconciliation and guest shutdown',flush=True)
+        print('PASS: native video conversion, AFC upload, one Videos library item, repeated import reconciliation and guest shutdown' if args.video
+              else 'PASS: tagged song with art imported, tags and cover read back over AFC, guest shutdown',flush=True)
         sys.exit(0)
     control = r.prepare_app_control(cfg,p,d,r.Result('media control'))
     ok, detail = r.unlock(cfg,control,d)

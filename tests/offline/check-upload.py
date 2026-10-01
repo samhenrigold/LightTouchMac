@@ -13,6 +13,7 @@ struct MediaPhoto: Sendable { let id: String; let image: URL }
 struct MediaSong: Sendable {
  let id: String
  let audio: URL
+ var artwork: URL? = nil
  static let extensions: Set<String> = ["mp3", "m4a", "wav"]
 }
 final class State: @unchecked Sendable {
