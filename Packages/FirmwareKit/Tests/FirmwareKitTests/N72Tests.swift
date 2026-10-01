@@ -4,6 +4,47 @@ import Testing
 
 /// N72 format contracts, independent legacy digests, and optional stock-firmware bake checks.
 @Suite struct N72Tests {
+    /// Restore ramdisks are encrypted IMG3s outside all_flash. Omitting their
+    /// KBAGs aborts the AES model during a stock USB restore, before bootx.
+    @Test func restoreRamdiskKeysAreExported() throws {
+        let entry = try Oracle.entry("n72ap-5F138")
+        try Oracle.withTemp { dir in
+            let plist: [String: Any] = [
+                "ProductType": "iPod2,1", "ProductVersion": "2.1.1", "ProductBuildVersion": "5F138",
+                "DeviceMap": [["BoardConfig": "n72ap", "Platform": "s5l8720x"]],
+                "KernelCachesByPlatform": ["s5l8720x": ["Release": "kernelcache.release.s5l8720x"]],
+                "SystemRestoreImages": ["User": "rootfs.dmg"],
+                "RestoreRamDisks": ["User": "018-4166-1.dmg", "Update": "018-4177-1.dmg"],
+            ]
+            let metadata = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+            try metadata.write(to: dir.appendingPathComponent("Restore.plist"))
+            let components = try BuildComponents.fromRestore(RestoreInfo(plistData: metadata))
+            for member in Set(components.values) {
+                let path = dir.appendingPathComponent(member)
+                try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try (Data("3gmI".utf8) + DeviceTree.Value.le([20, 0, 0, 0])).write(to: path)
+            }
+            var expected = Data()
+            for (index, component) in ["RestoreRamDisk", "UpdateRamDisk"].enumerated() {
+                let kbag = Data((0..<32).map { UInt8($0 + index * 32) })
+                let le = { (words: [UInt32]) in DeviceTree.Value.le(words) }
+                let tag = Data("GABK".utf8) + le([52, 40, 1, 128]) + kbag
+                let image = Data("3gmI".utf8) + le([UInt32(20 + tag.count), UInt32(tag.count), 0, 0]) + tag
+                try image.write(to: dir.appendingPathComponent(try #require(components[component])))
+                let key = try #require(entry.keys[component])
+                let ivHex = try #require(key.iv)
+                let iv = try #require(Data(hex: ivHex))
+                let aesKey = try #require(Data(hex: key.key))
+                expected += kbag + iv + aesKey
+            }
+            try K48Oracle.sh(["/usr/bin/zip", "-q", "-r", "fixture.ipsw", "Restore.plist", "Firmware",
+                              "rootfs.dmg", "kernelcache.release.s5l8720x", "018-4166-1.dmg", "018-4177-1.dmg"], cwd: dir)
+            let (blobs, names) = try N72Board.gidBlobs(IPSWArchive(dir.appendingPathComponent("fixture.ipsw")), entry: entry)
+            #expect(blobs == expected)
+            #expect(names == ["018-4166-1.dmg", "018-4177-1.dmg"])
+        }
+    }
+
     /// ipod2g_nand.selfcheck.
     @Test func metadataSelfcheck() throws {
         let p = N72NAND.metadataPages(blocks: 128000, epoch: 1)

@@ -505,5 +505,16 @@ to DFU; its cause remains a transport/controller research lead. A private
 host-only legacy Restore.plist compatibility experiment reached iBSS and
 uploaded the ramdisk, then failed before DeviceTree upload. Full stock restore
 and removal of generated FTL relocation remain open. Existing restored K48
-cold-boot and graphics limitations are unchanged. Packaged new-ECID native
-qualification is pending; do not apply the older package receipt to this pin.
+cold-boot and graphics limitations are unchanged. A private universal bundle from app bb5e6e2 / QEMU 53e722ae63 passed
+18/18 on a native 2.1.1 session, including foreground launch, persistence and
+cold reboot. These results do not qualify later source changes.
+
+The traced restore-ramdisk failure was an explicit fatal unknown GID KBAG
+(`d39f8a35...1ea87bd`), not simply an unexplained USB loss. N72 key export
+omitted restore components. Adding the catalog Update/Restore ramdisk keys on
+a disposable clone lets the existing idevicerestore upload ramdisk, DeviceTree,
+and kernel without that fatal error. Final boot still returns to DFU; no stock
+restore completion or physical NAND replacement is claimed. N72 preparation
+now exports available keys for all resolved normal/restore components, with a
+production archive/component test covering both ramdisks. No firmware patch
+or permissive unknown-key fallback was added.

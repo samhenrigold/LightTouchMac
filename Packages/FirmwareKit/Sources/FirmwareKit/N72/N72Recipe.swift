@@ -98,7 +98,8 @@ final class N72Board: Board {
         let e = c.e, ipsw = c.ipsw
         let iboot = try Data(contentsOf: c.decFile("iBoot.bin"))
         kcPath = try Self.kernelcachePath(iboot)
-        guard let kc = try BuildComponents.load(ipsw, board: c.e.board)["KernelCache"] else { throw FirmwareError(.unsupported, "\(e.id): the IPSW names no KernelCache") }
+        let components = try BuildComponents.load(ipsw, board: c.e.board)
+        guard let kc = components["KernelCache"] else { throw FirmwareError(.unsupported, "\(e.id): the IPSW names no KernelCache") }
         kcMember = kc
         // the machine boots every n72 device with the AMFI pair (qemu-ios ipod_touch_2g.c; N72Keybag.bootArgs)
         let kernel = try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped)
@@ -126,7 +127,9 @@ final class N72Board: Board {
         let wrap = major >= 3 ? norTypes : epoch >= 2 ? norTypes.filter { $0 != "illb" } : ["ibot"]
         derived["wrap_shsh_types"] = wrap
         try N72NOR.build(identity: ident, images: images, types: norTypes, wrapTypes: major >= 3 ? nil : wrap).write(to: c.file("nor.bin"))
-        let (blobs, blobNames) = try Self.gidBlobs(ipsw, members: img3Members + [kcMember], entry: e)
+        // Stock DFU/recovery also decrypts the restore ramdisks and boot images.
+        // Their silicon-bound GID inputs belong in the same per-IPSW table.
+        let (blobs, blobNames) = try Self.gidBlobs(ipsw, entry: e)
         derived["gid_blobs"] = blobNames
         try blobs.write(to: c.file("gid-blobs.bin"))
         if major >= 3 { try iboot.write(to: c.file("iBoot.bin")) }
@@ -224,8 +227,12 @@ final class N72Board: Board {
         return hits.first!
     }
 
-    /// KBAG || IV-key for every img3 the entry has a 16+16-byte IV/key for (the emulated AES engine's GID table).
-    static func gidBlobs(_ ipsw: IPSWArchive, members: [String], entry: FirmwareEntry) throws -> (Data, [String]) {
+    /// KBAG || IV-key for NOR, normal boot and stock restore (the emulated AES engine's GID table).
+    static func gidBlobs(_ ipsw: IPSWArchive, entry: FirmwareEntry) throws -> (Data, [String]) {
+        let prefix = "Firmware/all_flash/all_flash.\(entry.board).production/"
+        let images = try ipsw.names().filter { $0.hasPrefix(prefix) && $0.hasSuffix(".img3") }
+        let components = try BuildComponents.load(ipsw, board: entry.board)
+        let members = images + Set(components.values).subtracting(images).sorted()
         var out = Data(), names: [String] = []
         for n in members {
             let name = (n as NSString).lastPathComponent
