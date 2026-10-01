@@ -334,8 +334,8 @@ def main():
               ("" if activation and all(e.get("ok") for e in activation) else f": {activation}"))
         if d == "ipod":
             ids = find("identity", device=d)
-            check(ids and all(e["bt"] == e["want"] for e in ids),
-                  f"{d}: lockdown's BluetoothAddress is the identity's bt-mac: " + ", ".join(f"{e['bt']} (want {e['want']})" for e in ids))
+            check(ids and all(e.get("matches") for e in ids),
+                  f"{d}: lockdown factory identity matches the prepared identity: " + ", ".join(f"{e['bt']} (want {e['want']})" for e in ids))
         for a in find("afc", device=d):
             check(a.get("same") and a.get("listed") == a["bytes"], f"{d}: AFC round trip of {a['bytes']} bytes"
                   + (f" ({a.get('seconds', 0):.1f} s)" if a.get("same") else f": {a.get('error', 'content differs')}"))

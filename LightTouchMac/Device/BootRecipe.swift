@@ -125,9 +125,18 @@ nonisolated enum BootRecipe {
     /// A prepared base's device.lock.json "machine" options; none for a missing lock or field.
     static func lockMachine(_ lock: URL) -> [String: String] {
         guard let data = try? Data(contentsOf: lock),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let machine = object["machine"] as? [String: Any] else { return [:] }
-        return machine.mapValues { "\($0)" }
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        var machine = (object["machine"] as? [String: Any] ?? [:]).mapValues { "\($0)" }
+        // Prepared N72 bases predating card provisioning already have the unit's
+        // identity beside the lock. Use it without changing the immutable base.
+        if object["board"] as? String == "n72ap",
+           let data = try? Data(contentsOf: lock.deletingLastPathComponent().appendingPathComponent("identity.json")),
+           let identity = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["wifi-mac", "bt-mac"] where machine[key] == nil {
+                if let mac = identity[key] as? String, !mac.isEmpty { machine[key] = mac }
+            }
+        }
+        return machine
     }
 
     /// A prepared base's boot_strategy ("iboot"/"kboot"); nil for a missing lock or field (the two older prepared

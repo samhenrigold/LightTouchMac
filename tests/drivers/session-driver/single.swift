@@ -57,10 +57,14 @@ struct SingleConfig: Decodable {
         do { offer = try d.offer(base: b, board: s.board == "ipod1g" ? "n45ap" : "n72ap", itpack: itpack) } catch { emit("offerError", ["error": "\(error)"]) }
     }
     let offered = offer != nil || (ipad && config.ipadItpack != nil)
-    // The lock says whether the bake installed it_agent (3.1+); 2.x and 3.0 have none to halt the guest.
+    // The lock says whether the bake installed it_agent, including a fitted legacy build.
     let lock = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("device.lock.json")))) as? [String: Any]
     let identity = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("identity.json")))) as? [String: Any]
     let agent = d.profile.hasGuestTools && (((lock?["derived"] as? [String: Any])?["guest_tools"] as? String)?.hasPrefix("installed") ?? true)
+    // 2.x reboot(RB_HALT) unmounts then halts the CPU without writing PMU standby.
+    // Its stock power sheet does power off, even when a legacy agent is installed.
+    let agentCanPowerOff = agent && ((lock?["product_version"] as? String ?? "3.1")
+        .compare("3.1", options: .numeric) != .orderedAscending)
 
     func boot(_ generation: Int) async {
         do { try d.boot(generation: generation, guestPackage: offer) } catch { fail("boot \(generation): \(error)") }
@@ -90,9 +94,26 @@ struct SingleConfig: Decodable {
             emit("timezone", ["device": d.name, "generation": generation, "zone": zone ?? ""])
         }
         emit("activation", ["device": d.name, "generation": generation, "state": await d.lockdownValue("ActivationState") ?? ""])
-        if s.board == "ipod", let want = identity?["bt-mac"] as? String {   // the n72 iBoot fills the DT's Bluetooth node from it
-            emit("identity", ["device": d.name, "generation": generation, "want": want.lowercased(),
-                              "bt": (await d.lockdownValue("BluetoothAddress") ?? "").lowercased()])
+        if s.board == "ipod", let identity {
+            let keys = [("SerialNumber", "serial-number"), ("UniqueDeviceID", "udid"),
+                        ("WiFiAddress", "wifi-mac"), ("BluetoothAddress", "bt-mac")]
+            let expected = Dictionary(uniqueKeysWithValues: keys.compactMap { key, field in
+                (identity[field] as? String).map { (key, $0.lowercased()) }
+            })
+            let start = Date()
+            var values: [String: String] = [:]
+            repeat {
+                for (key, _) in keys where expected[key] != nil {
+                    values[key] = (await d.lockdownValue(key) ?? "").lowercased()
+                }
+                if values == expected || Date().timeIntervalSince(start) >= 60 { break }
+                emit("identityPending", ["device": d.name, "generation": generation, "values": values])
+                try? await Task.sleep(for: .seconds(2))
+            } while !d.process.isDead
+            emit("identity", ["device": d.name, "generation": generation,
+                              "want": expected["BluetoothAddress"] ?? "", "bt": values["BluetoothAddress"] ?? "",
+                              "expected": expected, "values": values, "matches": !expected.isEmpty && values == expected,
+                              "seconds": Date().timeIntervalSince(start)])
         }
         if offered {   // the loader's report: it_boot reports the serial it ran and R_* (GuestPackage.ReportCode)
             let start = Date()
@@ -152,8 +173,8 @@ struct SingleConfig: Decodable {
     func shutdown(_ generation: Int) async {
         let quit = Date()
         if ipad { d.process.link.send(.machine(.powerdown)) }
-        else if agent { _ = try? await d.process.link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5) }
-        else {   // no guest agent (2.x, 3.0): the machine's own hold-power-and-slide sequence
+        else if agentCanPowerOff { _ = try? await d.process.link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5) }
+        else {   // the machine's own hold-power-and-slide sequence
             d.process.link.send(.machine(.powerdown))
         }
         var confirmed = -1.0, shots = ipad ? [7.0, 12.0] : []   // the iPad gesture's power-off sheet, then after its drag

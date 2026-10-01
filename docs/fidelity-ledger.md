@@ -58,6 +58,14 @@ is still H, with no radio/link transport or patchram execution.
 The UART3-to-UART1 Bluetooth string rewrite remains P; a correct ReadBDADDR alone
 was insufficient to replace the missing iBoot DeviceTree address handoff.
 
+QEMU `69db528b32` also provisions the BCM4325 CIS Wi-Fi address and Apple's
+combo-card Bluetooth OTP record from the generated unit. The 2.x driver otherwise
+overwrites Bluetooth with a fallback derived from Wi-Fi. Stock 5F138 now matches
+serial, UDID and both MACs with Wi-Fi enabled, reaches agent-confirmed Home and
+powers off through its stock gesture. Three production SDIO qtests and all eight
+native 7E18 default regressions pass. This improves factory identity; the radio
+and downloaded firmware remain H. See QEMU `docs/research/n72-radio-identity.md`.
+
 The N72 root clock now derives a peripheral output and PLL lock status from
 registers, with production board snapshot restoration tests. Peripheral consumers
 are not connected to it yet, clock gates are partial, and timed watchdog expiry

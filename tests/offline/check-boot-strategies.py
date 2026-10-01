@@ -30,6 +30,23 @@ do { _ = try BootRecipe.preparedIPadBoot(strategy: "typo", image: "image", writa
 catch { }
 let legacy = try BootRecipe.preparedIPadBoot(strategy: nil, image: "image", writableNOR: nil, gidBlobs: "stray keys") == .kernel(image: "image", writableNOR: nil)
 require(legacy, "legacy lock explicitly defaults to kernel, independent of keys")
+let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: dir) }
+let lock = dir.appendingPathComponent("device.lock.json")
+func writeLock(_ board: String, _ machine: [String: String]) throws {
+    try JSONSerialization.data(withJSONObject: ["board": board, "machine": machine]).write(to: lock)
+}
+try JSONSerialization.data(withJSONObject: ["wifi-mac": "02:11:22:33:44:66", "bt-mac": "02:11:22:33:44:67"]).write(to: dir.appendingPathComponent("identity.json"))
+try writeLock("n72ap", ["aes-uid": "engine"])
+require(BootRecipe.lockMachine(lock) == ["aes-uid": "engine", "wifi-mac": "02:11:22:33:44:66", "bt-mac": "02:11:22:33:44:67"], "existing N72 unit provisions card from identity")
+try writeLock("n72ap", ["wifi-mac": "02:11:22:33:44:88"])
+require(BootRecipe.lockMachine(lock)["wifi-mac"] == "02:11:22:33:44:88", "explicit card provisioning wins")
+try writeLock("k48ap", [:])
+require(BootRecipe.lockMachine(lock).isEmpty, "other boards do not acquire an N72 card option")
+try writeLock("n72ap", [:])
+try FileManager.default.removeItem(at: dir.appendingPathComponent("identity.json"))
+require(BootRecipe.lockMachine(lock).isEmpty, "legacy N72 with no identity preserves default")
 print("PASS: explicit kernel/iBoot/ROM strategies, missing inputs and unknown strategy rejection")
 ''')
     exe = work / 'check'

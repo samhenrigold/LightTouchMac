@@ -190,9 +190,9 @@ final class N72Board: Board {
             // 3.x+ enters its decrypted iBoot directly (the bootrom rejects a personalised LLB); 2.x runs the real
             // bootrom -> NOR LLB -> iBoot chain and ships no iBoot.bin (ipod2g_device.py direct_iboot)
             "boot_strategy": major >= 3 ? "iboot" : "bootrom",
-            // machine options the device must boot with (ipod2g_device.py): every device built here uses the
-            // engine UID path; adopted and shipping images keep the legacy default
-            "machine": Self.machine,
+            // The BCM4325 CIS and NOR wifiaddr belong to the same unit. Older drivers
+            // obtain the card's address before downloading its firmware.
+            "machine": Self.machine.merging(["wifi-mac": ident["wifi-mac"]!, "bt-mac": ident["bt-mac"]!]) { _, card in card },
         ]
     }
 

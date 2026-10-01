@@ -310,13 +310,25 @@ Fresh 5F138 follow-up: the production preparation and boot chain now work, and
 the app's first-host activation handshake reaches a usable Home screen. The
 headless session omitted that operation; it now uses the same child protocol.
 Four AFC round trips, compatible cached IPA installation and guest-confirmed
-shutdown pass in `/private/tmp/ltm-n72-211-handshake-pacman`. Bluetooth identity
-still fails; do not promote 2.1.1 to qualified from these partial checks. The
+shutdown pass in `/private/tmp/ltm-n72-211-handshake-pacman`. The remaining radio
+identity defect is fixed in QEMU `69db528b32`: the card uses the unit's Wi-Fi MAC
+and its Apple OTP carries the Bluetooth address. Native 5F138 now matches all
+four generated identity values with Wi-Fi enabled, reaches actual Home and
+powers off through the stock gesture. The complete matching bundled session
+still needs requalification; these constituent probes do not certify it. The
 3.1-only Harness IPA's BundleVerificationFailed result was a test input mismatch.
 The shared Home judge rejects Connect to iTunes and preserves unknown when no
 agent/reference evidence exists. Test helpers now use the app's signing identity
 check by default, including ad hoc bundles, rather than requiring a maintainer
 Team ID. Explicit test signing requirements remain available.
+
+The shared boot recipe provisions both card addresses for new and existing N72
+bases without modifying immutable storage. Its session identity gate checks
+serial, UDID and both MACs with bounded retries. A legacy agent's `RB_HALT`
+does not establish PMU power-off on 2.x; the native tests now select the stock
+power sheet for those kernels. The existing legacy ABI toolchain can build all
+five otherwise-omitted helpers, and the fitted 2.x agent reports Home correctly;
+promoting that build across 3.x/4.x and into release packages remains pending.
 
 Upstream fetch on October 1 found no new app commits beyond the already
 integrated main/multidevice refs. The rewritten remote emulator history remains
