@@ -43,13 +43,18 @@ acceptance boundaries are in [remaining work](remaining-work-2026-09-30.md).
 
 ## October 1 candidate findings
 
-QEMU candidate `2659e4f08f` removes the direct-iBoot empty-root literal redirect.
+QEMU candidate `7eadb42b54` removes the direct-iBoot empty-root literal redirect.
 It skipped stock iBoot's factory root properties and produced a different UDID.
 Stock 7E18 now publishes its generated serial; identity, full music tags and
 stock-decoded artwork pass import and cold reopen. Early kernel UART also passes
 with bounded fast handoff discovery followed by the normal refresh cadence.
 A fresh 8C148 prepared device completes its host-owned keybag one-shot, then
 passes factory USB identity and early BSD mount logging with the current emulator.
+The BCM HCI stand-in now stores BlueTool’s provisioned address and returns it
+through ReadBDADDR, including across HCI reset and actual VMState restoration.
+Three UART1 production-board qtests and a native 7E18 stack probe pass; the
+observed programmed address matches the fixture’s generated MAC. The controller
+is still H, with no radio/link transport or patchram execution.
 The UART3-to-UART1 Bluetooth string rewrite remains P; a correct ReadBDADDR alone
 was insufficient to replace the missing iBoot DeviceTree address handoff.
 
@@ -185,7 +190,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 11 | GPIO | `hw/arm/ipod_touch_gpio.c:20-60, 97-130` | R/S | Only FSEL out-lo/hi modelled. | All FSEL modes, inputs and interrupts |
 | 12 | WDT | `hw/arm/ipod_touch_wdt.c`; `docs/ipod/clock-n72.md` | S | One exact command resets; no timed expiry. Native timed write trace establishes the regular feed value and cadence. OpeniBoot's disabled enable function and older-chip counter widths are leads, not N72 timing proof. | Establish N72 counter width, selectors and overflow timing; resolve missing direct-iBoot clock setup before enabling a timed reset |
 | 13 | UART0-3 | `ipod_touch_2g.c:3017-3042` | R | Exynos UART; UART4 never created. | UART4 |
-| 14 | Bluetooth HCI (BCM4325 BT on UART1) | `hw/arm/ipod_touch_bt.c:93-170, 242-287` | H | Command Complete from tables; no ACL/SCO; fake 0xfc2e banner for BlueTool. | BT core running patchram; unknown: the BCM4325's BT core (undocumented) |
+| 14 | Bluetooth HCI (BCM4325 BT on UART1) | `hw/arm/ipod_touch_bt.c`; `docs/research/ipod-bluetooth-address.md` | H | Command Complete from tables, provisioned Write/ReadBDADDR state with reset and VMState coverage; no ACL/SCO; fake 0xfc2e banner for BlueTool. | BT core running patchram; unknown: the BCM4325's BT core (undocumented) |
 | 15 | PL080 DMAC0/1 | `ipod_touch_2g.c:3151-3238` | R | Stock PL080 with paced request lines. | – |
 | 16 | SPI0-4 | `hw/arm/ipod_touch_spi.c:124-260` | R | FIFO/IRQ model. | – |
 | 17 | NOR (SPI0) | `hw/arm/ipod_touch_nor_spi.c:236-349` | R | JEDEC flash, program/erase, `nor-rw` overlay. | – |

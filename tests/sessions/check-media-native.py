@@ -28,13 +28,16 @@ mode = parser.add_mutually_exclusive_group()
 mode.add_argument('--photo',action='store_true')
 mode.add_argument('--video',action='store_true',help='convert and import a movie into the Videos library')
 mode.add_argument('--aac',action='store_true',help='convert raw AAC, import it and verify native Music playback')
+mode.add_argument('--tagged-aac',action='store_true',help='convert ID3-tagged ADTS AAC and verify full tags/art over AFC')
 mode.add_argument('--tagged',action='store_true',help='import a fully tagged song with embedded art; read the library and ArtworkCache back over AFC')
 parser.add_argument('--recording',action='store_true',help='record embedded QEMU video and guest audio across a pause (requires --aac)')
 parser.add_argument('--files', type=Path, default=Path(__file__).resolve().parents[3] / 'qemu-ios-files',
                     help='firmware assets (explicit when running from a worktree)')
 parser.add_argument('--device', type=Path, help='isolated generated N72 base to test; copied NOR and fresh overlay')
+parser.add_argument('--guest-package',type=Path,help='guest package offered to QEMU at boot (separate from flat upload tools)')
 parser.add_argument('--guest-tools' ,type=Path,help='freshly built guest payloads to use instead of checkout binaries')
 args = parser.parse_args()
+args.tagged = args.tagged or args.tagged_aac
 if args.recording and not args.aac: parser.error('--recording requires --aac')
 APP = Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(APP/'scripts'))
@@ -64,6 +67,9 @@ if args.device:
     cfg.nor = str(out / 'nor.bin')
     cfg.direct_iboot = str(base / 'iBoot.bin')
     cfg.gid_blobs = str(base / 'gid-blobs.bin')
+    cfg.device_machine = json.loads((base / 'device.lock.json').read_text()).get('machine', {})
+if args.guest_package:
+    cfg.guest_package = str(args.guest_package.resolve())
 swift = r"""
 import Foundation
 nonisolated func logEvent(_ message: String) { NSLog("%@", message) }
@@ -79,9 +85,9 @@ nonisolated enum Bundled {
     }
 }
 /// DeviceLink's agent surface, relayed over HTTP to the guest's QMP agent.
-struct SharedStatus { var agentStatus: Int }
+nonisolated struct SharedStatus { var agentStatus: Int }
 enum DeviceLinkError: Error { case timedOut, closed(String) }
-final class DeviceLink: Sendable {
+nonisolated final class DeviceLink: Sendable {
     var status: SharedStatus? { SharedStatus(agentStatus: 1) }
     func send(_ command: LinkCommand) {}
     func request(_ request: LinkRequest, timeout: TimeInterval = 10) async throws -> LinkReply {
@@ -126,9 +132,12 @@ final class Progress: @unchecked Sendable {
         let device = MediaImport(services: DeviceServices(clientSocket: CommandLine.arguments[3]),
                                  guest: GuestServices(agent: GuestAgent(link: DeviceLink(), cache: GuestAgentCache())))
         let progress = Progress()
+        print("STAGING", id, file.lastPathComponent)
         try await device.stage(media) { progress.update($0) }
+        print("STAGED")
         precondition(progress.complete())
         try await device.commit(media)
+        print("COMMITTED")
         try await device.commit(media) // Reconcile an uncertain reply.
         let repeated = try await prepare()
         defer { try? FileManager.default.removeItem(at: repeated.directory) }
@@ -236,6 +245,20 @@ elif args.tagged:
         '-metadata','album=The Album','-metadata','album_artist=Album Artist','-metadata','composer=Some Composer',
         '-metadata','genre=Synthpop','-metadata','track=3/12','-metadata','disc=2/3','-metadata','date=1987',
         '-metadata','compilation=1',str(source)],check=True)
+    if args.tagged_aac:
+        subprocess.run(['ffmpeg','-v','error','-i',str(out/'plain.m4a'),
+                        '-c:a','copy','-f','adts',str(out/'plain.aac')],check=True)
+        def frame(key, body):
+            return key.encode() + struct.pack('>I',len(body)) + b'\0\0' + body
+        tags = [('TIT2','Tagged Tïtle'),('TPE1','Track Artist'),('TALB','The Album'),
+                ('TPE2','Album Artist'),('TCOM','Some Composer'),('TCON','Synthpop'),
+                ('TRCK','3/12'),('TPOS','2/3'),('TYER','1987'),('TCMP','1')]
+        frames = b''.join(frame(key,b'\1'+value.encode('utf-16')) for key,value in tags)
+        frames += frame('APIC',b'\0image/png\0\3\0'+(out/'cover.png').read_bytes())
+        size = len(frames)
+        header = b'ID3\3\0\0' + bytes([(size>>21)&127,(size>>14)&127,(size>>7)&127,size&127])
+        source = out/'Tagged Song.aac'
+        source.write_bytes(header+frames+(out/'plain.aac').read_bytes())
     os.environ['LTM_AFC_READBACK'] = str(out/'afc'); (out/'afc').mkdir()
 elif args.aac:
     source = out/"Song 'quoted' $title — été.aac"
@@ -363,7 +386,7 @@ try:
     else:
         status, data = r.itqmp.agent(d.qmp,'get',remote)
         assert status == 0 and data == (out/('prepared.m4v' if args.video else 'prepared.m4a')).read_bytes(), 'AFC bytes changed'
-        if not args.aac and not args.video: assert data == source.read_bytes(), 'immutable copy changed'
+        if not args.aac and not args.tagged_aac and not args.video: assert data == source.read_bytes(), 'immutable copy changed'
         status, data = r.itqmp.agent(d.qmp,'get',
             '/var/mobile/Media/iTunes_Control/iTunes/iTunes Library.itlp/Library.itdb')
         assert status == 0

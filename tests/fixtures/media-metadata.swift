@@ -7,7 +7,11 @@ enum DeviceToolsError: Error { case failed(String) }
         let song = try await MediaSong.prepare(URL(fileURLWithPath: CommandLine.arguments[1]))
         defer { try? FileManager.default.removeItem(at: song.directory) }
         let unchanged = try Data(contentsOf: song.audio) == Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
-        precondition(unchanged, "audio bytes changed")
+        if CommandLine.arguments[1].hasSuffix(".aac") {
+            precondition(song.audio.pathExtension == "m4a", "AAC was not converted")
+        } else {
+            precondition(unchanged, "audio bytes changed")
+        }
         let repeated = try await MediaSong.prepare(URL(fileURLWithPath: CommandLine.arguments[1]))
         defer { try? FileManager.default.removeItem(at: repeated.directory) }
         precondition(repeated.id == song.id && repeated.directory != song.directory)

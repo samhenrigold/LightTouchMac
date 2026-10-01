@@ -2,7 +2,7 @@
 """Every Music-library tag and the cover art survive the way from a tagged file to the device's library writer.
 
 Builds an AAC M4A (afconvert, tagged by ffmpeg with iTunes atoms and a PNG cover) and an MP3
-(ffmpeg-encoded, with an iTunes-style ID3v2.3 tag: TCMP, TPE2, a JPEG APIC and an ID3v1-number genre), runs the production
+(ffmpeg-encoded, with an iTunes-style ID3v2.3 tag: TCMP, TPE2, a JPEG APIC and an ID3v1-number genre), plus ID3-tagged ADTS AAC that must be converted without losing tags, runs the production
 MediaSong.prepare on each, then the guest's own itmedia mapping (qemu-ios contrib/it-media/itmedia.c built with
 -DITMEDIA_HOST_CHECK) on what AFC would stage. Checks the properties itmedia hands 7E18 MusicLibrary's
 insertItemFromPurchaseFolder, the year it writes, and the cover it hands ArtworkCache for the native library's artwork ID: each field's value, and the decoded art's size and four quadrant colours.
@@ -73,12 +73,28 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-metadata-') as work:
     size = len(frames)
     header = b'ID3\3\0\0' + bytes([(size >> 21) & 127, (size >> 14) & 127, (size >> 7) & 127, size & 127])
     (work/'Song.mp3').write_bytes(header + frames + (work/'untagged.mp3').read_bytes())
+    # Real ADTS AAC can carry ID3 tags. Conversion must preserve these separately
+    # because AVAudioFile writes audio samples, not the source's metadata.
+    subprocess.run([ffmpeg, '-v', 'error', '-i', str(work/'plain.m4a'),
+                    '-c:a', 'copy', '-f', 'adts', str(work/'untagged.aac')], check=True)
+    (work/'Song.aac').write_bytes(header + frames + (work/'untagged.aac').read_bytes())
+    # Same AAC samples with different readable tags are distinct import candidates.
+    other_frames = frames.replace(text('TIT2', 'Tagged Tïtle'), text('TIT2', 'Another Title'), 1)
+    size = len(other_frames)
+    other_header = b'ID3\3\0\0' + bytes([(size >> 21) & 127, (size >> 14) & 127, (size >> 7) & 127, size & 127])
+    (work/'Other.aac').write_bytes(other_header + other_frames + (work/'untagged.aac').read_bytes())
     failures = []
-    for name, genre in (('Song.m4a', 'Synthpop'), ('Song.mp3', 'Rock')):
+    identities = {}
+    for name, genre in (('Song.m4a', 'Synthpop'), ('Song.mp3', 'Rock'), ('Song.aac', 'Rock')):
         out = work/(name + '.out')
         out.mkdir()
-        staging = subprocess.run([str(executable), str(work/name), str(out)], check=True,
-                                 capture_output=True, text=True).stdout.strip()
+        prepared = subprocess.run([str(executable), str(work/name), str(out)],
+                                  capture_output=True, text=True)
+        if prepared.returncode:
+            print(f'{name}: preparation failed ({prepared.returncode})\n{prepared.stdout}\n{prepared.stderr}')
+            raise SystemExit(1)
+        staging = prepared.stdout.strip()
+        identities[name] = staging
         subprocess.run([str(mapping), str(out/'metadata.plist'), staging, str(out/'guest.plist')], check=True)
         guest = plistlib.loads((out/'guest.plist').read_bytes())
         properties = guest['properties']
@@ -86,10 +102,13 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-metadata-') as work:
                     'playlistArtistName': COMMON['album_artist'], 'composerName': COMMON['composer'], 'genre': genre,
                     'trackNumber': 3, 'trackCount': 12, 'discNumber': 2, 'discCount': 3, 'compilation': True,
                     'kind': 'song',
-                    'com.apple.iTunesStore.downloadInfo': {'mediaAssetFilename': 'audio' + Path(name).suffix}}
+                    'com.apple.iTunesStore.downloadInfo': {'mediaAssetFilename': 'audio.m4a' if Path(name).suffix == '.aac' else 'audio' + Path(name).suffix}}
         for field, value in expected.items():
             if properties.get(field) != value:
                 failures.append(f'{name}: MusicLibrary {field} = {properties.get(field)!r}, expected {value!r}')
+        supplied_duration = plistlib.loads((out/'metadata.plist').read_bytes())['duration_ms']
+        if not isinstance(properties.get('duration'), int) or properties['duration'] != max(1, int(supplied_duration + 0.5)):
+            failures.append(f'{name}: purchase duration is not whole milliseconds: {properties.get("duration")!r}')
         if not 2900 < properties.get('duration', 0) < 3200:
             failures.append(f'{name}: MusicLibrary duration = {properties.get("duration")!r}')
         if guest.get('year') != COMMON['year']:
@@ -105,6 +124,12 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-metadata-') as work:
                 actual = rgb.getpixel((int(x*image.width), int(y*image.height)))
                 if any(abs(a-b) > 12 for a, b in zip(actual, colour)):
                     failures.append(f'{name}: artwork pixel at {(x, y)} is {actual}, expected {colour}')
+    other_out = work/'Other.aac.out'
+    other_out.mkdir()
+    other = subprocess.run([str(executable), str(work/'Other.aac'), str(other_out)],
+                           check=True, capture_output=True, text=True).stdout.strip()
+    if other == identities['Song.aac']:
+        failures.append('different AAC tags collapsed into one import identity')
     # Invalid numeric tags must fail rather than being truncated or redirected.
     valid = plistlib.loads((out/'metadata.plist').read_bytes())
     for key, value in [('track_number', 3.5), ('year', 1987.5), ('artwork', '../cover.jpg')]:
@@ -115,4 +140,4 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-metadata-') as work:
             failures.append(f'invalid {key} was accepted: {result.returncode}')
     if failures:
         print('FAIL:\n  ' + '\n  '.join(failures)); sys.exit(1)
-    print('PASS: M4A and MP3 title/artist/album/album artist/composer/genre/track/disc/year/compilation/duration and cover art reach MusicLibrary and ArtworkCache')
+    print('PASS: M4A, MP3 and converted ADTS AAC title/artist/album/album artist/composer/genre/track/disc/year/compilation/duration and cover art reach MusicLibrary and ArtworkCache')

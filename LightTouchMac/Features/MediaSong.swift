@@ -55,6 +55,13 @@ struct MediaSong: Sendable {
                 throw DeviceToolsError.failed("The audio file changed while it was being prepared.")
             }
             try output.close()
+            // Include the source tags in identity, including those lost from the
+            // converted AAC container. Distinct tagged tracks must not reconcile
+            // as one song merely because their encoded samples match.
+            let contentID = try MediaIdentity.identifier(for: audio)
+            // AVAudioFile converts samples, not ID3 tags. Read the immutable
+            // source before converting ADTS AAC and deleting that staging file.
+            var (properties, cover) = try await tags(of: AVURLAsset(url: audio))
             if ext == "aac" {
                 let converted = directory.appendingPathComponent("audio.m4a")
                 try convertAAC(audio, to: converted)
@@ -89,7 +96,6 @@ struct MediaSong: Sendable {
             }) else {
                 throw DeviceToolsError.failed("Use AAC, MP3, Apple Lossless or PCM audio, with one or two channels at 8–48 kHz.")
             }
-            var (properties, cover) = try await tags(of: asset)
             properties["filename"] = audio.lastPathComponent
             properties["duration_ms"] = duration * 1000
             if properties["title"] == nil { properties["title"] = source.deletingPathExtension().lastPathComponent }
@@ -112,7 +118,7 @@ struct MediaSong: Sendable {
             try PropertyListSerialization.data(fromPropertyList: properties, format: .xml, options: 0)
                 .write(to: metadata, options: .atomic)
             try Task.checkCancellation()
-            let result = MediaSong(id: try MediaIdentity.identifier(for: audio), directory: directory, audio: audio,
+            let result = MediaSong(id: contentID, directory: directory, audio: audio,
                                    metadata: metadata, title: properties["title"] as! String, artwork: artwork)
             complete = true
             return result

@@ -238,7 +238,7 @@ Keep both results: `/private/tmp/ltm-overnight-offline-final.log` and
 
 ## October 1 overnight continuation
 
-Candidate QEMU `2659e4f08f` adds the register-derived N72 root peripheral clock
+Candidate QEMU `7eadb42b54` adds the register-derived N72 root peripheral clock
 and removes the direct-iBoot shared empty-literal argument patch. That patch also
 redirected DeviceTree root lookup, so it erased the effective serial/model/region
 handoff and changed the USB UDID. The existing argument data writer now discovers
@@ -249,7 +249,7 @@ where it already stages RAMDisk and topOfKernelData; emulator argument injection
 is disabled for that one-shot.
 
 Evidence: 109 registered QEMU host checks pass (28 declared manual-input skips),
-seven registered actual-board model suites pass without skips, and the Swift
+eight registered actual-board model suites pass without skips, and the Swift
 preparer test run succeeds (145 tests reported, corpus checks remain opt-in).
 Native 7E18 passes early kernel UART and factory serial/UDID/both MACs; full tags,
 repeat-import reconciliation and stock-decoded cover art persist across two cold
@@ -266,3 +266,41 @@ Open: root clock consumers/gates, S5L8720 watchdog timed expiry, the Bluetooth
 DeviceTree path rewrite, other direct-iBoot firmware timing, and the previously
 listed NAND/GPU/power-resume boundaries. The existing universal package is still
 source 9d2d3c2f0b until rebuilt; it does not yet contain this new clock/identity work.
+
+### Additional October 1 contracts
+
+N72 BCM HCI now stores BlueTool’s six-byte provisioned address instead of blindly
+acknowledging it while returning a shared placeholder. Reads, invalid parameters,
+HCI/board reset and partially received command migration pass UART1 qtests. The
+native guest programs its generated MAC and BluetoothManager probes return in
+9.7–10.5 ms. `/private/tmp/ltm-n72-bt-native/` and QEMU
+`docs/research/ipod-bluetooth-address.md` preserve the scope and evidence.
+
+A genuine ID3-tagged ADTS AAC fixture reproduced a second metadata-loss point:
+conversion wrote only samples, then the importer read tags from that tagless M4A.
+MediaSong now extracts tags and cover from its immutable source copy before
+conversion. Its content identity uses those source bytes too, so two AAC files
+with identical samples but different tags do not collapse into one import.
+M4A and MP3 retain their previous byte-preserving identity. The host check covers
+all twelve tags, baseline cover pixels, distinct AAC metadata identities and
+stable repeated conversion. Native stock MediaPlayer decodes the imported cover,
+and the library keeps full tags after hard-stop cold reopen at
+`/private/tmp/ltm-aac-native-cold/`. Existing stripped imports are not rewritten;
+remove/reimport to rebuild their missing tags/art.
+
+The complete production Swift→AFC→guest path also passes for tagged ADTS AAC:
+all tags and native artwork formats survive, retries leave one song, and the
+guest confirms shutdown (`/private/tmp/ltm-aac-production-native-final.log`).
+A controlled native test found the purchase API silently stores zero for
+fractional durations; the guest adapter now rounds to positive whole milliseconds
+before invoking that API. The same cold-reopen gate now requires exact duration
+as well as tags and stock-decoded art (`/private/tmp/ltm-aac-duration-native-cold/`).
+Payload serial 12 / 1.1.10 is the new candidate minimum. See QEMU
+`docs/research/media-duration-contract.md`.
+
+The native app harness now reads the prepared device’s machine settings and
+separates its boot guest-package offer from flat upload tools. Its transport stubs
+use the actual nonisolated contract. Qualification uses bundled service libraries;
+the Homebrew library set returned AFC code 8 and is not counted as a passing
+pipeline check. The candidate host gate passes 109 checks with 28 declared manual
+input skips. All eight model suites passed for the clock/identity/BT code.
