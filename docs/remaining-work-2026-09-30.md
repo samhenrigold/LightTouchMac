@@ -724,3 +724,17 @@ bitwise programming cannot be added blindly. First/repeated writes still infer
 block erases, stock FMC erase commands do not execute against the backend, and
 aborted sequencer runs still receive deferred completion. Directory fsync and
 full command/error/timing contracts remain distinct from erased-read fidelity.
+
+### October 1: chip-selector host bounds and default sequencer dependency
+
+QEMU 2020f66cde checks the populated-chip bound before shifting by ctz32(sel).
+Empty selection previously shifted by 32 in host C. Strict sanitizer baseline
+fails; corrected actual-source/IRQ and real model13/13 pass. Independent
+default native7E18 two-boot8/8 passes with diagnostic-only QEMU logging.
+
+Those diagnostics show incomplete opcode14/imm16 in both iBoot/XNU, plus an
+unmodeled D48 read in a separate XNU script. Deferred completion currently
+hides these gaps even in normal boot. Honest completion must be gated against
+these measured dependencies; passing boot is not complete sequencer fidelity.
+Evidence: `/Users/shg/Developer/ltm-evidence/fmss-ce-2026-10-01`.
+No physical restore or full flash-command qualification follows.
