@@ -669,3 +669,15 @@ No descriptor DMA, arithmetic, physical erase or completion qualification
 follows from the register-copy correction. Durable evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-opcode06-2026-10-01`. Source pin advances
 to this verified correction; no new packaged candidate or target merge.
+
+### Stock FMSS descriptor DMA (2026-10-01)
+
+QEMU 089b055d73 supports observed opcode03 immediate-zero little-endian32
+descriptor loads using QEMU guest memory transactions. Unsupported forms and
+failed transactions stop before fabricated data or later stores. Actual-handler
+sanitizer tests, real FMSS qtests6/6 and the separate default native7E18
+two-boot regression8/8 pass. Full stock erase trace now reaches opcode0A
+`0a000004 00000000` at +0xa8, still waits for NAND and is intentionally stopped.
+No arithmetic, completion or physical erase qualification follows. Evidence:
+`/Users/shg/Developer/ltm-evidence/fmss-opcode03-2026-10-01`. Source pin advances
+to verified descriptor support; targets remain unmerged and package unchanged.
