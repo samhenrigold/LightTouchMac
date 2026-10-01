@@ -61,7 +61,7 @@ nonisolated enum Bundled {
 }
 extension DeviceInstance { var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) } }
 struct MediaVideo: Sendable { let id: String; let video: URL }
-struct MediaSong: Sendable { let id: String; let audio: URL; static let extensions: Set<String> = ["m4a"] }
+struct MediaSong: Sendable { let id: String; let audio: URL; var artwork: URL? = nil; static let extensions: Set<String> = ["m4a"] }
 
 // --selftest-walk: the Setup walk's retry core (Setup5.tapUntil) against fake taps, no emulator
 // (tests/sessions/check-setup-walk.py).
