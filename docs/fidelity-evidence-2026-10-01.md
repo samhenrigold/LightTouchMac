@@ -321,3 +321,25 @@ without substituting QEMU PCLK or a12MHz constant. Runtime-selected property,
 bootloader clock publication, counter/clear/expiry semantics and clock-change
 behavior still need observations. No countdown or clock wiring was changed.
 Evidence: `/Users/shg/Developer/ltm-evidence/watchdog-provider-2026-10-01`.
+
+The completed stock physical erase trace after D38 reaches one explicit
+unsupported D7C read at bulk+0x218 (106112 stops). No D38/D54 stop remains
+in this capture. Stock restored still waits eight times for NAND; owned
+processes were reaped. D7C ownership and silent controller transfers remain
+research leads, not capabilities inferred from reaching the ramdisk.
+
+## Register OR retains destination bits
+
+QEMU1c3417a255 corrects opcode0B's observed zero-immediate register form
+to union the existing destination and source. Previously the destination
+configuration bits were lost. The nonzero-immediate source|constant form
+remains unchanged. Captured stock D4C→FMCTRL0 dataflow is exercised without
+assuming the hardware effect of those controller bits. No shift, DMA, flash
+command, crypto or completion behavior changed.
+
+The baseline fails configuration preservation; six actual-source checks,
+19 FMSS model tests and independent native8/8 pass, including persistence
+after guest shutdown/reboot and fsck. This qualifies the register form that
+earlier D48 tests deliberately avoided; it does not qualify auxiliary
+controller operations. Evidence:
+`/Users/shg/Developer/ltm-evidence/fmss-register-or-2026-10-01`.
