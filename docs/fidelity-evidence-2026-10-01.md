@@ -439,5 +439,8 @@ including guest shutdown, reboot persistence and fsck_hfs. D3C VMState v12
 and other hardware contracts remain unchanged. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-register-shl-2026-10-01`.
 
-The subsequent bounded stock blank-flash erase trace is running. Physical
-controller execution, full restore and restored durability remain unqualified.
+The subsequent bounded stock blank-flash erase trace still reaches D24
+at+0x308 (106118 unsupported reads) and seven diagnostic immediate D7C
+writes. Stock restored waits eight times for NAND; the intentional
+research-stop exit1 reaps owned processes. Physical controller execution,
+full restore and restored durability remain unqualified.
