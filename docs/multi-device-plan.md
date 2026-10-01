@@ -124,7 +124,7 @@ Callbacks run on `queue`. Pending requests fail with `.closed` when the link goe
 | `snapshot_save2/_status/_resume` | `command` + `request(.snapshotStatus)` polled every 100 ms |
 | `audio_capture_*` (ScreenMovieWriter) | `request(.audioStart)`, then pushed `.audio` events, then `command(.audioStop)` and `.audioEnded` |
 | Audio playback | Stays in the helper |
-| `setenv USBMUXD_SOCKET_ADDRESS` + DeviceGate | In the app for phase 1, with per-instance sockets. Phase 4 option: move services into the helper. |
+| Host services | Separate `LightTouchServices` workers own immutable per-device socket/UDID/boot session. They do not load QEMU. See `host-service-worker.md`. |
 
 EC stays in the app: every `qemu_ios_*` call becomes a `link.…` call. `NativeLogging.swift` stays in the app: the helper writes plain stdout/stderr, and `DeviceLink` takes `ProcessLogCapture.writeDescriptor`.
 
@@ -610,7 +610,7 @@ The app publishes STAGING_DIR by rename (`PreparationJob.publish`, also used for
 - **EmulatorController polls the status block on its own 30 Hz timer** (liveness, storage failure, power-off, sleep), so a hidden device with no display link still flips booting → running. DisplayView only draws: `layer.contents` is the front IOSurface; the 3D model and captures make a CGImage from it under a use count.
 - **The helper forces the alpha byte opaque** when it copies a frame (`FrameRingWriter.copy`, vImage): iBoot and the iPod framebuffer leave it 0, and a layer showing the surface directly would honour it.
 - **Restart replaces the session** (`DeviceSessionHost.restart`): the old helper is killed if alive and must have exited before a new one opens the overlay. It serves the dead overlay's Restart, a restore that never came alive, and the boot after erasing a running device. Erasing a stopped device just erases. Nothing quits the app.
-- **One app-wide DeviceGate** sets the right device's `USBMUXD_SOCKET_ADDRESS` inside each operation (`DeviceGate.point(at:)`); devices wait for each other. A thread abandoned past its deadline could still connect after a switch; that case is logged. Phase-4 option: services in each helper.
+- **Historical W2 DeviceGate arrangement (superseded September 30):** shipping GUI services now use killable `LightTouchServices` children with immutable endpoints, separate from the emulator helper. See [service ownership](host-service-worker.md).
 - **Web-proxy files are per device**: `Devices/<uuid>/web-proxy.{conf,json}` and its CA; the device that kept `work/usbmuxd-conf` keeps the state-directory files, so the CA its guest trusts is unchanged.
 - **Prepared devices**: usbmuxd-conf is created (and seeded) by USBMux on first start, not pre-created, since USBMux only seeds a missing directory.
 - **Recording audio**: the clock is the dylib's (monotonic seconds since the capture started), kept in the app; packets arrive as `.audio` events.

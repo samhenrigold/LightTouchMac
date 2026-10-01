@@ -77,15 +77,26 @@ cannot be assigned to another firmware, and missing coverage explicitly fails.
 
 ## Verification and evidence
 
-The app offline tier passes 91 checks, with two display checks explicitly
+The first implementation pass recorded 91 app offline checks, with two display checks explicitly
 skipped. The app release tier passes eight checks, with its network fetch check
 explicitly skipped. The emulator host tier passes 106 checks, with 27 input/guest-dependent
 checks explicitly skipped; targeted native acceptance runs cover the changes
-listed above. All three model qtest suites pass, including the existing
+listed above. That pass included three model qtest suites, including the existing
 CDMA/AES/SHA suite. Xcode builds the GUI and helper against the final emulator
 library. The incoming CoreAudio fake-HAL check passes all six device-rate and
 device-switch cases after integration. These results do not imply that every catalog firmware or the full
 native corpus has been rerun.
+
+The second implementation pass records 96 offline checks passing, with two
+opt-in display checks skipped (`ltm-offline-confirmed`). FirmwareKit completes
+144 tests in 34 suites, including 65 explicitly skipped corpus checks
+(`ltm-firmwarekit-final.log`). These counts precede the additional control-reply
+regression and final SSH/graphics integration. The certified N72 edited-generation
+acceptance passes both boot and persistence; the native service-worker gate
+passes 12/12. The pinned native arm64 dependency build passes macOS 14.0 Mach-O
+closure without Homebrew imports, but final candidate pairing, universal builds,
+Developer ID signing and actual supported-host runtime verification remain
+separate gates. No distribution release is implied.
 
 Logs, full independent renderer captures, preparation metadata, restore input
 hashes and acceptance output are preserved under

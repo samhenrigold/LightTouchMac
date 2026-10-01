@@ -18,19 +18,20 @@ Direct `VolumeExport.Source(base:overlay:)` is a low-level API for isolated
 research fixtures whose caller already controls concurrency. Research runners
 that launch QEMU without the device lease remain outside this guarantee.
 
-The user-facing rule is writable while stopped, read-only while running. A
-stopped writable device mount is not implemented yet: these commands provide
-read-only independent exports. A running read-only mount must use an immutable
-storage snapshot, not concurrently read the changing live FTL. VM pause or host
-flush establishes neither clean guest unmount nor application consistency.
+The user-facing rule is writable while stopped, read-only while running. The
+supported N72 generated format now has a production stopped-edit transaction and
+Finder actions; see [the editing workflow](stopped-filesystem-editing.md).
+`StorageGeneration` owns the lease, durable intent, certified NAND/NOR generation,
+atomic record publication and recovery. `StoppedVolumeEdit` uses the native HFS
+driver and preserves metadata across editor saves. New snapshot paths prevent
+resuming RAM against edited storage. Boot, erase and deletion all refuse a
+pending edit.
 
-Writable device editing needs a staging generation, persistent edit intent,
-exclusive lease through eject/publication, RAM snapshot invalidation, metadata
-and ownership preservation across atomic editor saves, and a verified NAND
-writeback mechanism. No unproven physical NAND writeback is exposed here. The
-existing host HFS+ driver remains the filesystem implementation. The safe current
-engineering alternatives are editing an exported image as a separate artifact,
-or using guest-mediated services while running.
+Running reads must use guest services or an independent frozen export, never the
+changing live FTL. Pause or host flush establishes neither clean guest unmount
+nor application consistency. No physical K48 or N45 writeback is exposed: K48's
+reader now refuses v2/unknown native physical layouts before it could publish a
+filesystem reconstructed through the generated-store mapping.
 
 Verification: `swift test --filter StoppedStorageTests` covers helper-compatible
 lock contention, release, pending edit refusal, failed reconstruction cleanup,
@@ -39,7 +40,7 @@ An independent Python flock holder and the built CLI also verified cross-process
 busy refusal before output creation. Existing synthetic volume reconstruction
 and busy mounted-volume checks passed; optional firmware corpus checks skipped.
 
-## Disposable writable-edit experiment
+## Historical disposable experiment (superseded for N72)
 
 `StoppedEditSpikeTests.n72Candidate` clones a prepared N72 device with APFS,
 reconstructs its volume using FirmwareKit, and edits it with macOS's HFS+ driver.
@@ -69,9 +70,9 @@ Earlier candidates reached the logical round-trip check but failed the final
 directory move because cloned prepared roots were read-only; those experiments
 are retained. The final spike makes only the private cloned roots writable.
 
-A general commit implementation still needs full metadata preservation (including
-xattrs, resource forks and hard-link identity), recovery across publication
-failure, generation-bound saved states, and storage-family gates. The N72
+The subsequent production N72 transaction implements metadata preservation
+(including xattrs, resource forks and hardlinks), publication recovery,
+generation-bound saved states and explicit format gates. The N72
 experiment uses the generated-layout builder and resets its FTL metadata; it
 does not establish fidelity for arbitrary physically managed flash.
 
@@ -83,8 +84,7 @@ file semantics. A read-only reconstruction round trip is not proof that such a
 rebuilt device preserves encryption or will boot. No K48 edit publication is
 enabled on the basis of this experiment.
 
-For an app-managed device, successful candidate boot is still only one commit
-gate: publication must bind the new base/overlay/NOR to an instance generation,
-update provenance, discard incompatible saved RAM, and provide rollback without
-overwriting a shared prepared base. Those operations must use the app's existing
-device lifecycle rather than introducing a competing storage manager here.
+For an app-managed N72 edit, publication now binds base/overlay/NOR and
+provenance to one generation and creates fresh snapshot paths without overwriting
+the original prepared base. These guarantees are implemented at the shared
+preparation/device API boundary and called by the GUI, not duplicated in it.

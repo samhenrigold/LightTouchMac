@@ -26,6 +26,21 @@ Sources: qemu-ios `ipad1` @ `082b45e77d` (paths below are relative to that tree)
 tested it is qemu-ios `docs/ipad1/ios5.md` (branch `ios5-spike`). Activation is Sam's and is not
 described here.
 
+## September 30 candidate findings
+
+The unmerged `codex/reuse-implementation` candidates add explicit physical
+`nand-xor-ff-v2` erase/program semantics and upstream QEMU BlockBackend ownership,
+with stock blank erase restore and prepared-device persistence gates. This does
+not upgrade generated FTL mappings or missing NAND crypto to register fidelity.
+Unsupported populated FMSS snapshots now fail explicitly. N45 touch interrupt
+requests obey the measured SYSIC pending/enable contract; touch firmware remains
+high-level emulation, and the historical early-touch panic was not reproduced.
+
+Read-only stock K48 sampling maps the SGX polled word to DRAM (`0x4112e018`), not
+an MMIO register. The firmware producer remains undecoded and the stock cold-boot
+identity gate fails; no invented completion is claimed. Current status and
+acceptance boundaries are in [remaining work](remaining-work-2026-09-30.md).
+
 ## Classes
 
 | Class | Meaning |

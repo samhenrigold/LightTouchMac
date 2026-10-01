@@ -1,5 +1,10 @@
 # Holistic architecture and fidelity review
 
+Native Finder USB discovery and sync were subsequently removed from scope at the
+user’s request. The historical proposals below are retained as review context;
+ordinary stopped HFS Finder mounts remain in scope. See the current disposition
+report for implemented boundaries.
+
 Current finding dispositions and next steps: [remaining work](remaining-work-2026-09-30.md).
 
 2026-09-30. Consolidated from four parallel read-only reviews of the application,
