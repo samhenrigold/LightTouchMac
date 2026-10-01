@@ -155,13 +155,13 @@ import Testing
     /// 3A101a's rootfs vfdecrypt key (022-3601-4.dmg).
     static let rootfsKey = "6f021b478cc21ff77f775850c0efc2e66fd015f6a6894be079ee1351dce9af069f915f3d"
 
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func stockUnsignedActivation() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func stockUnsignedActivation() async throws {
         guard Self.available else { try FixtureRequirements.missing(#"N45Tests.swift: Self.available"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             let enc = dir.appendingPathComponent("enc.dmg"), dmg = dir.appendingPathComponent("rootfs.dmg"), raw = dir.appendingPathComponent("rootfs.hfs")
             try IPSWArchive(Self.ipsw).extract("022-3601-4.dmg", to: enc)
             try VFDecrypt.decrypt(input: enc, output: dmg, key: Data(hex: Self.rootfsKey)!)
-            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            try await UDIF.extractRootfs(dmg: dmg, to: raw)
             let volume = try HFSPlusVolume(raw)
             let stock = try volume.contents(volume.record(at: "usr/libexec/lockdownd"))
             let target = dir.appendingPathComponent("lockdownd")
@@ -180,16 +180,16 @@ import Testing
     /// an armv6.itpack at hand, N45Board.bake as ipod1g_device.bake on the same three stock files (OpenGLES,
     /// SpringBoard's job, SystemVersion), with the GL front end and without: the same paths written (all to be
     /// root-owned, the loader among them), the same record, the hook's and OpenGLES.baked's bytes and modes, the same LK_* job.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func frontEndAndBakeMatchPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func frontEndAndBakeMatchPython() async throws {
         let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles"), list = it.appendingPathComponent(N45Board.openGLESExports)
         let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
         guard Self.available, Oracle.exists(list) else { try FixtureRequirements.missing(#"N45Tests.swift: Self.available, Oracle.exists(list)"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             let fm = FileManager.default
             let enc = dir.appendingPathComponent("enc.dmg"), dmg = dir.appendingPathComponent("rootfs.dmg"), raw = dir.appendingPathComponent("rootfs.hfs")
             try IPSWArchive(Self.ipsw).extract("022-3601-4.dmg", to: enc)
             try VFDecrypt.decrypt(input: enc, output: dmg, key: Data(hex: Self.rootfsKey)!)
-            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            try await UDIF.extractRootfs(dmg: dmg, to: raw)
             var stock: [String: Data] = [:]
             do {
                 let v = try HFSPlusVolume(raw)
@@ -279,14 +279,14 @@ import Testing
     /// 1.1.3+ (4A93, 4B1) ship com.apple.mobile.lockbot, through which their lockdownd starts every service (AFC):
     /// the bake keeps it; 1.1.1 (3A110a) has none. Read off the real system volumes.
     @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: [("n45ap-4A93", true), ("n45ap-4B1", true), ("n45ap-3A110a", false)])
-    func lockbotKeptWhereShipped(_ id: String, _ ships: Bool) throws {
+    func lockbotKeptWhereShipped(_ id: String, _ ships: Bool) async throws {
         guard let url = try K48IBootTests.cachedIPSW(id) else { try FixtureRequirements.missing("cached IPSW for " + id) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             let ipsw = IPSWArchive(url), e = try Oracle.entry(id), os = try BuildComponents.load(ipsw, board: e.board)["OS"]!
             let key = try #require(Data(hex: e.key(forPath: os).key))
             let dmg = dir.appendingPathComponent("rootfs.dmg"), raw = dir.appendingPathComponent("rootfs.hfs")
             try ipsw.stream(os) { try VFDecrypt.decrypt(from: $0.fileDescriptor, output: dmg, key: key) }
-            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            try await UDIF.extractRootfs(dmg: dmg, to: raw)
             let jobs = try HFSPlusVolume(raw).listing(under: SystemEdits.daemons, hashes: false)
                 .map { ($0.path as NSString).lastPathComponent }.filter { $0.hasSuffix(".plist") }
             let lockbot = "com.apple.mobile.lockbot.plist", removed = N45Board.removedDaemons(jobs)

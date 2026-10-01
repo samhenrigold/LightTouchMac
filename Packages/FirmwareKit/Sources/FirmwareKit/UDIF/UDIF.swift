@@ -2,13 +2,13 @@
 // apm_hfs_slice: DiskImage.convertToRaw (hdiutil UDTO / diskutil RAW) makes the raw disk, then the Apple_HFS(X) partition of its
 // Apple Partition Map is copied out. A source that already is a bare HFS volume is copied as is.
 //
-//   try UDIF.extractRootfs(dmg: rootfsDMG, to: rawVolume)             // work files go next to `to`
+//   try await UDIF.extractRootfs(dmg: rootfsDMG, to: rawVolume)             // work files go next to `to`
 //   try APM.hfsSlice(headerBytes)                                     // (offset, length) in bytes
 
 import Foundation
 
 public enum UDIF {
-    public static func extractRootfs(dmg src: URL, to out: URL) throws {
+    public static func extractRootfs(dmg src: URL, to out: URL) async throws {
         let fm = FileManager.default
         if let h = try? FileHandle(forReadingFrom: src) {
             defer { try? h.close() }
@@ -23,7 +23,7 @@ public enum UDIF {
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: work) }
         let raw = work.appendingPathComponent("raw")
-        try DiskImage.convertToRaw(src, to: raw)
+        try await DiskImage.convertToRaw(src, to: raw)
         let f = try FileHandle(forReadingFrom: raw)
         defer { try? f.close() }
         let (off, len) = try APM.hfsSlice(f.read(upToCount: 64 * 512) ?? Data())

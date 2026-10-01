@@ -142,6 +142,13 @@ enum Oracle {
         return try body(dir)
     }
 
+    nonisolated(nonsending) static func withTemp<T>(_ body: (URL) async throws -> T) async throws -> T {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("FirmwareKitTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        return try await body(dir)
+    }
+
     static func sha256(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 
     static func sha256(file: URL) throws -> String {
@@ -157,4 +164,10 @@ enum Oracle {
         defer { print("timing: \(label) \(ContinuousClock.now - t0)") }
         return try body()
     }
+    nonisolated(nonsending) static func time<T>(_ label: String, _ body: () async throws -> T) async rethrows -> T {
+        let t0 = ContinuousClock.now
+        defer { print("timing: \(label) \(ContinuousClock.now - t0)") }
+        return try await body()
+    }
+
 }

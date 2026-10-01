@@ -6,7 +6,7 @@ import HostRuntime
 /// A stopped-device transaction. The record is the atomic generation pointer;
 /// old flash/NOR and saved states remain intact until a validated candidate is
 /// published. Persistent intent blocks helper boot even after this owner dies.
-public final class StorageGeneration {
+public actor StorageGeneration {
     public enum Phase: String, Codable, Sendable { case editing, ready, published }
     public struct Intent: Codable, Sendable {
         public let id: UUID
@@ -15,15 +15,16 @@ public final class StorageGeneration {
         public var candidateRecord: String?
         public var storageManifest: String? = nil
     }
-    public let device: URL
-    public let id: UUID
-    public let root: URL
-    public var base: URL { root.appendingPathComponent("base") }
-    public var overlay: URL { root.appendingPathComponent("overlay") }
-    public var volumes: URL { root.appendingPathComponent("volumes") }
-    private let lease: StorageLease
-    private let paths: StorageRecordPaths?
+    nonisolated public let device: URL
+    nonisolated public let id: UUID
+    nonisolated public let root: URL
+    nonisolated public var base: URL { root.appendingPathComponent("base") }
+    nonisolated public var overlay: URL { root.appendingPathComponent("overlay") }
+    nonisolated public var volumes: URL { root.appendingPathComponent("volumes") }
+    private var lease: StorageLease?
+    private nonisolated let paths: StorageRecordPaths?
     private let original: Data
+    private var operationActive = false
     private var intent: Intent
     private var recordURL: URL { device.appendingPathComponent("device.json") }
     private var intentURL: URL { device.appendingPathComponent("work/edit.json") }
@@ -44,6 +45,7 @@ public final class StorageGeneration {
     }
     private init(owner: StoppedRecordOwner, resume: Intent?) throws {
         let device = owner.device
+        guard !owner.lease.isClosed else { throw FirmwareError(.internal, "storage transaction is closed") }
         guard let snapshot = owner.bytes,
               let object = try JSONSerialization.jsonObject(with: snapshot) as? [String: Any],
               object["id"] is String, object["base"] is [String: Any], object["storage"] is [String: Any] else {
@@ -68,15 +70,42 @@ public final class StorageGeneration {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
                                                   attributes: [.posixPermissions: 0o700])
             try Self.write(snapshot, to: root.appendingPathComponent("original-device.json"))
-            try saveIntent()
+            try Self.write(JSONEncoder().encode(intent), to: device.appendingPathComponent("work/edit.json"))
             try Self.sync(root.deletingLastPathComponent())
             try Self.sync(device)
         }
     }
 
+    /// Explicit actor ownership boundary: await before returning to another
+    /// owner. Pending intent and the lease inode remain for exact recovery.
+    public func close() throws {
+        guard !operationActive else { throw FirmwareError(.internal, "storage transaction operation is already in progress") }
+        lease?.close()
+        lease = nil
+    }
+
+    nonisolated(nonsending) static func withOwner<T>(_ transaction: StorageGeneration,
+        body: (StorageGeneration) async throws -> T) async throws -> T {
+        do {
+            let value = try await body(transaction)
+            try await transaction.close()
+            return value
+        } catch {
+            do { try await transaction.close() }
+            catch { FirmwareDiagnostics.write(Data("storage transaction release failed: \(error)\n".utf8)) }
+            throw error
+        }
+    }
+
+    private func requireOwner() throws {
+        guard let lease, !lease.isClosed else { throw FirmwareError(.internal, "storage transaction is closed") }
+    }
+
     /// Preserve unknown record fields. All mutable storage and snapshots move as
     /// one generation. A snapshot of the old flash cannot be selected afterward.
-    public func candidateRecord(provenance: [String: Any]? = nil) throws -> Data {
+    public func candidateRecord(provenance: sending [String: Any]? = nil) throws -> Data {
+        try requireOwner()
+        guard !operationActive else { throw FirmwareError(.internal, "storage transaction operation is already in progress") }
         let data = try Data(contentsOf: root.appendingPathComponent("original-device.json"))
         var record = try Self.object(data)
         var base = record["base"] as! [String: Any]
@@ -93,7 +122,7 @@ public final class StorageGeneration {
 
     /// Preserve the record's state-root-relative convention so a device library
     /// remains movable. Legacy absolute records keep their original convention.
-    public func recordPath(_ url: URL) throws -> String {
+    nonisolated public func recordPath(_ url: URL) throws -> String {
         guard let paths else { throw FirmwareError(.unsupported, "missing record paths") }
         return try paths.recordPath(url)
     }
@@ -103,9 +132,19 @@ public final class StorageGeneration {
         return candidate.standardizedFileURL.resolvingSymlinksInPath() == url.standardizedFileURL.resolvingSymlinksInPath()
     }
 
-    public func publish(record: Data) throws { try publish(record: record, checkpoint: { _ in }) }
+    public func publish(record: Data) async throws { try await publish(record: record, checkpoint: { _ in }) }
     enum Checkpoint: Sendable, Equatable { case ready, recordPublished }
-    func publish(record: Data, checkpoint: (Checkpoint) throws -> Void) throws {
+    func publish(record: Data, checkpoint: @Sendable (Checkpoint) async throws -> Void) async throws {
+        try beginOperation()
+        defer { operationActive = false }
+        try await publishCore(record: record, checkpoint: checkpoint)
+    }
+    private func beginOperation() throws {
+        try requireOwner()
+        guard !operationActive else { throw FirmwareError(.internal, "storage transaction operation is already in progress") }
+        operationActive = true
+    }
+    private func publishCore(record: Data, checkpoint: @Sendable (Checkpoint) async throws -> Void) async throws {
         guard intent.phase == .editing || intent.phase == .ready else {
             throw FirmwareError(.internal, "edit generation has already been published")
         }
@@ -113,7 +152,12 @@ public final class StorageGeneration {
             throw FirmwareError(.internal, "device record changed during editing; original generation retained")
         }
         try validate(record)
-        try ensureDetached()
+        try await ensureDetached()
+        try requireOwner()
+        try Task.checkCancellation()
+        guard Self.hash(try Data(contentsOf: recordURL)) == intent.originalRecord else {
+            throw FirmwareError(.internal, "device record changed while checking attachment state")
+        }
         try Self.syncTree(base)
         try Self.syncTree(overlay)
         if FileManager.default.fileExists(atPath: root.appendingPathComponent("nor.bin").path) {
@@ -129,15 +173,24 @@ public final class StorageGeneration {
         try Self.write(record, to: candidateURL)
         intent.phase = .ready; intent.candidateRecord = Self.hash(record)
         try saveIntent()
-        try checkpoint(.ready)
+        try await checkpoint(.ready)
+        try requireOwner()
+        try Task.checkCancellation()
+        guard Self.hash(try Data(contentsOf: recordURL)) == intent.originalRecord else {
+            throw FirmwareError(.internal, "device record changed before publication; original generation retained")
+        }
+        try verifyStorage()
         try Self.write(record, to: recordURL)
-        try checkpoint(.recordPublished)
-        try finishPublished()
+        try await checkpoint(.recordPublished)
+        try await finishPublished()
     }
 
     /// A crash may occur before or after the one record rename. Resume either
     /// finishes that exact validated publication or retains the old generation.
-    public func recoverPublication() throws {
+    public func recoverPublication() async throws {
+        try beginOperation()
+        defer { operationActive = false }
+        try Task.checkCancellation()
         guard let expected = intent.candidateRecord, intent.phase != .editing else {
             throw FirmwareError(.internal, "edit is not ready to publish; resume editing or discard it")
         }
@@ -145,21 +198,29 @@ public final class StorageGeneration {
         if current == expected {
             try validate(Data(contentsOf: recordURL))
             try verifyStorage()
-            try finishPublished(); return
+            try await finishPublished(); return
         }
         guard current == intent.originalRecord else {
             throw FirmwareError(.internal, "device record is neither transaction generation; manual recovery required")
         }
         let record = try Data(contentsOf: candidateURL)
         guard Self.hash(record) == expected else { throw FirmwareError(.internal, "candidate record changed") }
-        try publish(record: record)
+        try await publishCore(record: record, checkpoint: { _ in })
     }
 
-    public func discard() throws {
+    public func discard() async throws {
+        try beginOperation()
+        defer { operationActive = false }
+        try Task.checkCancellation()
         guard Self.hash(try Data(contentsOf: recordURL)) == intent.originalRecord else {
             throw FirmwareError(.internal, "published edits cannot be discarded; finish recovery instead")
         }
-        try ensureDetached()
+        try await ensureDetached()
+        try requireOwner()
+        try Task.checkCancellation()
+        guard Self.hash(try Data(contentsOf: recordURL)) == intent.originalRecord else {
+            throw FirmwareError(.internal, "device record changed while checking attachment state")
+        }
         // Clear intent first, keeping the lease until return. Crash afterward
         // leaves an orphan candidate, never a half-applied current generation.
         try Self.writableDirectories(root)
@@ -225,13 +286,18 @@ public final class StorageGeneration {
             throw FirmwareError(.internal, "candidate storage changed or is damaged; original generation retained")
         }
     }
-    private func ensureDetached() throws {
-        guard try DiskImage.checkedAttachedImages().allSatisfy({
+    private func ensureDetached() async throws {
+        guard try await DiskImage.checkedAttachedImages().allSatisfy({
             !URL(fileURLWithPath: $0.image).resolvingSymlinksInPath().path.hasPrefix(root.path + "/")
         }) else { throw FirmwareError(.internal, "eject edit volumes before committing or discarding") }
     }
-    private func finishPublished() throws {
-        try ensureDetached()
+    private func finishPublished() async throws {
+        try await ensureDetached()
+        try requireOwner()
+        try Task.checkCancellation()
+        guard let expected = intent.candidateRecord, Self.hash(try Data(contentsOf: recordURL)) == expected else {
+            throw FirmwareError(.internal, "published device record changed while checking attachment state")
+        }
         try Self.sync(recordURL); try Self.sync(device)
         intent.phase = .published; try saveIntent()
         try FileManager.default.removeItem(at: intentURL)
@@ -248,7 +314,7 @@ public final class StorageGeneration {
     static func sync(_ url: URL) throws {
         let fd = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
         guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
-        defer { close(fd) }
+        defer { Darwin.close(fd) }
         guard fsync(fd) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
     }
     private static func writableDirectories(_ directory: URL) throws {
@@ -274,7 +340,7 @@ public final class StorageGeneration {
         let temporary = destination.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).tmp")
         let fd = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600)
         guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
-        defer { close(fd); unlink(temporary.path) }
+        defer { Darwin.close(fd); unlink(temporary.path) }
         try data.withUnsafeBytes { bytes in
             var offset = 0
             while offset < bytes.count {

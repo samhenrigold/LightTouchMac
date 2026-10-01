@@ -76,7 +76,7 @@ public nonisolated struct StorageRecordPaths: Sendable {
 
 /// Acquires exclusion before inspecting device.json and retains the exact
 /// snapshot and descriptor through reconstruction or generation publication.
-public nonisolated struct StoppedRecordOwner {
+public nonisolated struct StoppedRecordOwner: Sendable {
     /// Retain this shared descriptor owner when transferring the snapshot into
     /// a transaction; taking another lease would contend with this admission.
     public let lease: StorageLease

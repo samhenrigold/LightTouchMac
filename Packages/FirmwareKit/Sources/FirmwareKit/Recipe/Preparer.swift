@@ -4,8 +4,8 @@
 // contributes only what differs.
 //
 //   let o = Preparer.Options(entry: e, ipsw: ipsw, out: staging, helper: helper, guestTools: dir, cache: cache)
-//   try Preparer.create(o) { event in print(event.json) }     // throws; Preparer.errorEvent(error) is the last line
-//   Preparer.cancel(staging:)                                  // SIGTERM: descendants killed, images under staging detached
+//   try await Preparer.create(o) { event in print(event.json) }     // throws; Preparer.errorEvent(error) is the last line
+//   try await Preparer.cancel(staging:)                                  // SIGTERM: descendants killed, images under staging detached
 //
 // STAGING_DIR gets the board's boot files, nand/ (sparse), identity.json (600), device.lock.json; scratch goes
 // to STAGING_DIR/work and is removed before `done`. Decrypted components are cached as CACHE/<ipsw sha1>/ (a
@@ -61,7 +61,7 @@ public enum Preparer {
     static let keybagDone = "it_keybag: effaceable formatted, system keybag created", keybagHelper = "usr/local/bin/restored_external"
 
     /// The board's recipe, by the entry's board and recipe name.
-    public static func create(_ o: Options, emit: @escaping @Sendable (PrepareEvent) -> Void) throws {
+    @concurrent public static func create(_ o: Options, emit: @escaping @Sendable (PrepareEvent) -> Void) async throws {
         let e = o.entry
         let board: Board = switch (e.board, e.recipe?.name) {
         case ("k48ap", "k48"): try K48Board(o)
@@ -69,7 +69,7 @@ public enum Preparer {
         case ("n45ap", "n45"): try N45Board(o)
         default: throw FirmwareError(.unsupported, "\(e.id): no preparer for board \(e.board) recipe \(e.recipe?.name ?? "none")")
         }
-        try Recipe.create(o, board: board, emit: emit)
+        try await Recipe.create(o, board: board, emit: emit)
     }
 
     /// The contract's error event for anything `create` throws.
@@ -162,13 +162,13 @@ public enum Preparer {
 
     /// ipad1_keybag.ramdisk_with_helper: a private copy of the restore ramdisk, 1 MiB larger, with `helper` as
     /// root's restored_external (mode 755), which the ramdisk's rc.boot runs first.
-    static func ramdiskWithHelper(_ src: URL, helper: URL, work: URL) throws -> URL {
+    nonisolated(nonsending) static func ramdiskWithHelper(_ src: URL, helper: URL, work: URL) async throws -> URL {
         let fm = FileManager.default
         let rd = work.appendingPathComponent("keybag-ramdisk.dmg")
         try fm.copyItem(at: src, to: rd)
-        try VolumeMount.grow(rd, toBytes: (VolumeMount.size(rd) + (1 << 20) + 4095) / 4096 * 4096)
+        try await VolumeMount.grow(rd, toBytes: (VolumeMount.size(rd) + (1 << 20) + 4095) / 4096 * 4096)
         let it = try Data(contentsOf: helper)
-        try VolumeMount.withMounted(rd, at: work.appendingPathComponent("mnt-keybag")) { m in
+        try await VolumeMount.withMounted(rd, at: work.appendingPathComponent("mnt-keybag")) { m in
             let dst = m.appendingPathComponent(keybagHelper)
             try it.write(to: dst)
             guard chmod(dst.path, 0o755) == 0 else { throw FirmwareError(.internal, "chmod \(dst.path)") }
@@ -181,12 +181,28 @@ public enum Preparer {
     // MARK: cancel
 
     /// SIGTERM: every descendant gets SIGTERM (SIGKILL after 1 s), then disk images under `staging` are
-    /// force-detached, so the app can delete the staging directory. Bounded to well under 2 s.
-    public static func cancel(staging: URL) {
-        terminateDescendants(of: getpid(), grace: 1)
+    /// force-detached before successful return. Child termination is bounded; disk
+    /// query/detach retries may take longer. Failure retains staging for inspection.
+    /// Signal cancellation first stops owned recipe/helper descendants; no disk query is hidden.
+    public struct ChildProcess: Sendable {
+        let pid: pid_t
+        let seconds: UInt64
+        let microseconds: UInt64
+    }
+    /// Capture before cancelling the operation; cleanup tools spawned afterward
+    /// are different work and must not be swept into a later kill pass.
+    public static func childrenForCancellation() -> [ChildProcess] {
+        childProcesses(of: getpid())
+    }
+    public static func stopChildren(_ children: [ChildProcess]) async {
+        await Task.detached { await terminate(children, grace: 1) }.value
+    }
+
+    public static func cancel(staging: URL) async throws {
+        await terminateDescendants(of: getpid(), grace: 1)
         let root = staging.resolvingSymlinksInPath().path + "/"
-        for (path, dev) in DiskImage.attachedImages() where URL(fileURLWithPath: path).resolvingSymlinksInPath().path.hasPrefix(root) {
-            DiskImage.detach(dev, force: true)
+        for (path, dev) in try await DiskImage.attachedImages() where URL(fileURLWithPath: path).resolvingSymlinksInPath().path.hasPrefix(root) {
+            try await DiskImage.detach(dev, force: true)
         }
     }
 
@@ -197,17 +213,30 @@ public enum Preparer {
         return buf.prefix(max(0, min(n, buf.count))).filter { $0 > 0 }.flatMap { descendants(of: $0) + [$0] }
     }
 
-    static func terminateDescendants(of root: pid_t, grace: TimeInterval) {
-        let all = descendants(of: root)
-        for p in all { kill(p, SIGTERM) }
-        let deadline = Date().addingTimeInterval(grace)
-        while Date() < deadline, all.contains(where: { kill($0, 0) == 0 && !zombie($0) }) { usleep(20_000) }
-        for p in all + descendants(of: root) where kill(p, 0) == 0 { kill(p, SIGKILL) }
+    private static func childProcesses(of root: pid_t) -> [ChildProcess] {
+        descendants(of: root).compactMap { pid in
+            var info = proc_bsdinfo()
+            guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 else { return nil }
+            return ChildProcess(pid: pid, seconds: info.pbi_start_tvsec, microseconds: info.pbi_start_tvusec)
+        }
     }
-
-    static func zombie(_ pid: pid_t) -> Bool {
+    private static func isSameProcess(_ process: ChildProcess) -> Bool {
         var info = proc_bsdinfo()
-        return proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 && info.pbi_status == SZOMB
+        return proc_pidinfo(process.pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0
+            && info.pbi_start_tvsec == process.seconds && info.pbi_start_tvusec == process.microseconds
+            && info.pbi_status != SZOMB
+    }
+    static func terminateDescendants(of root: pid_t, grace: TimeInterval) async {
+        let children = childProcesses(of: root)
+        await Task.detached { await terminate(children, grace: grace) }.value
+    }
+    private static func terminate(_ children: [ChildProcess], grace: TimeInterval) async {
+        for process in children where isSameProcess(process) { kill(process.pid, SIGTERM) }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(grace))
+        while ContinuousClock.now < deadline, children.contains(where: isSameProcess) {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        for process in children where isSameProcess(process) { kill(process.pid, SIGKILL) }
     }
 
     // MARK: files

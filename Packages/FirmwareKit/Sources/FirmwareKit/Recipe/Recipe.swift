@@ -34,10 +34,10 @@ protocol Board: AnyObject {
     func inspect(_ c: Recipe.Context) throws
     func identity(seed: String) throws -> UnitIdentity
     func bootFiles(_ c: Recipe.Context) throws
-    func volumes(_ c: Recipe.Context) throws
+    nonisolated(nonsending) func volumes(_ c: Recipe.Context) async throws
     /// Writes nand/ from the volumes (the volumes are deleted after).
-    func store(_ c: Recipe.Context) throws
-    func keybag(_ c: Recipe.Context) throws
+    nonisolated(nonsending) func store(_ c: Recipe.Context) async throws
+    nonisolated(nonsending) func keybag(_ c: Recipe.Context) async throws
     func seal(_ c: Recipe.Context) throws
     /// The board's lock keys, merged (dictionaries recursively) onto the shared ones.
     func lock(_ c: Recipe.Context) throws -> [String: Any]
@@ -45,7 +45,7 @@ protocol Board: AnyObject {
 
 extension Board {
     func inspect(_ c: Recipe.Context) throws {}
-    func keybag(_ c: Recipe.Context) throws {}
+    nonisolated(nonsending) func keybag(_ c: Recipe.Context) async throws {}
     func seal(_ c: Recipe.Context) throws {}
 }
 
@@ -76,12 +76,12 @@ public enum Recipe {
         var warnings: [String] = []
         func log(_ s: String) {
             if s.hasPrefix("warning: ") { warnings.append(String(s.dropFirst(9))); emit(.warning(String(s.dropFirst(9)))) }
-            FileHandle.standardError.write(Data((s + "\n").utf8))
+            FirmwareDiagnostics.write(Data((s + "\n").utf8))
         }
         func warn(_ s: String) { log("warning: " + s) }
     }
 
-    static func create(_ o: Preparer.Options, board: Board, emit: @escaping @Sendable (PrepareEvent) -> Void) throws {
+    nonisolated(nonsending) static func create(_ o: Preparer.Options, board: Board, emit: @escaping @Sendable (PrepareEvent) -> Void) async throws {
         let fm = FileManager.default, e = o.entry
         guard let recipe = e.recipe else { throw FirmwareError(.unsupported, "\(e.id): no recipe") }
         let c = Context(o, recipe: recipe, emit: emit)
@@ -129,7 +129,7 @@ public enum Recipe {
         try board.bootFiles(c)
 
         step()   // volumes (+ the shared bake, activation, guest package)
-        try board.volumes(c)
+        try await board.volumes(c)
         if o.stopAfterVolumes {
             let survey: [String: Any] = ["entry": e.id, "build": e.build, "board": e.board, "fit": c.fit.object,
                                          "guest_package": c.guestPackage?.object ?? NSNull(), "warnings": c.warnings]
@@ -141,13 +141,13 @@ public enum Recipe {
         }
 
         step()   // the store, and its listing before any boot writes into it (the lock's built_listing_sha256)
-        try board.store(c)
+        try await board.store(c)
         c.built = try Preparer.nandListing(c.nand, files: try nandFiles(c.nand)).sha256
         c.log("store as built: listing sha256 \(c.built)")
 
         if board.dataProtection {
             step()   // 4.x data protection: effaceable + system keybag from the IPSW's own ramdisk
-            try board.keybag(c)
+            try await board.keybag(c)
         }
         if board.needsSeal {
             step()   // one clean halt, then a check boot on a throwaway overlay
@@ -211,7 +211,7 @@ public enum Recipe {
     /// The ramdisk the keybag one-shot boots: the build's own Update (else Restore) ramdisk out of the decrypt cache,
     /// or, for a build without ramdisk keys (recipe.keybag_ramdisk_from), the sibling entry's, decrypted into work.
     /// Returns (its URL, the lock's name for it).
-    static func keybagRamdisk(_ c: Context) throws -> (URL, String) {
+    nonisolated(nonsending) static func keybagRamdisk(_ c: Context) async throws -> (URL, String) {
         // A restore-only build ships just the Restore ramdisk; a build whose Update ramdisk has no public key (the 5.0
         // betas, 9A334) boots its keyed Restore ramdisk: it runs the same restored_external.
         let comp = try BuildComponents.load(c.ipsw, board: c.e.board)

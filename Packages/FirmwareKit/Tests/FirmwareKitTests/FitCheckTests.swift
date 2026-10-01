@@ -26,10 +26,10 @@ enum FitFixture {
 
     /// `files` (those the image has, and listed directories as empty ones; re-exported libraries of the on-disk ones too,
     /// and with `links` every linked one) under `dir`/`name`; nil when the fixture is absent.
-    static func volume(_ id: String, _ files: [String], in dir: URL, name: String = "stock", links: Bool = false) throws -> URL? {
+    static func volume(_ id: String, _ files: [String], in dir: URL, name: String = "stock", links: Bool = false) async throws -> URL? {
         guard let dmg = dmgs[id], Oracle.exists(dmg) else { return nil }
         let raw = dir.appendingPathComponent("\(name).hfs"), out = dir.appendingPathComponent(name)
-        try UDIF.extractRootfs(dmg: dmg, to: raw)
+        try await UDIF.extractRootfs(dmg: dmg, to: raw)
         defer { try? FileManager.default.removeItem(at: raw) }
         let v = try HFSPlusVolume(raw)
         var queue = files, seen = Set<String>()
@@ -50,10 +50,10 @@ enum FitFixture {
     }
 
     /// The volume's framework binaries (<dir>/<Name>.framework/<Name>), for FitCheck.readers.
-    static func frameworks(_ id: String, in dir: URL) throws -> [String] {
+    static func frameworks(_ id: String, in dir: URL) async throws -> [String] {
         guard let dmg = dmgs[id], Oracle.exists(dmg) else { return [] }
         let raw = dir.appendingPathComponent("list.hfs")
-        try UDIF.extractRootfs(dmg: dmg, to: raw)
+        try await UDIF.extractRootfs(dmg: dmg, to: raw)
         defer { try? FileManager.default.removeItem(at: raw) }
         return try HFSPlusVolume(raw).paths().map(\.path).filter { p in
             let c = p.split(separator: "/")
@@ -91,11 +91,11 @@ enum FitFixture {
     /// FitCheck.loads on real firmware: the iPod agent (linked for 3.1's dyld, LC_DYLD_INFO_ONLY) fits 3.1.3 and 4.2.1,
     /// and does not fit 3.0 or 2.1.1, whose own executables carry no such command (the dyld that refused it with
     /// "unknown required load command 0x80000022"); the legacy-linked loader fits all four.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func iPodAgentNeedsTheShippingCacheDyld() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func iPodAgentNeedsTheShippingCacheDyld() async throws {
         guard let agent = try FitFixture.payload("armv6", "n72-ios3/bin/it_agent"), let loader = try FitFixture.payload("armv6", "loader/it_boot") else { try FixtureRequirements.missing(#"FitCheckTests.swift: let agent = try FitFixture.payload("armv6", "n72-ios3/bin/it_agent"), let loader = try FitFixture.payload("armv6", "loader/it_boot")"#) }
         for (id, fits) in [("n72ap-7E18", true), ("n72ap-8C148", true), ("n72ap-7A341", false), ("n72ap-5F138", false)] {
-            try Oracle.withTemp { dir in
-                guard let v = try FitFixture.volume(id, FitFixture.stock(id), in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume(id, FitFixture.stock(id), in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await FitFixture.volume(id, FitFixture.stock(id), in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume(id, FitFixture.stock(id), in: dir)"#) }
                 let fw = FitCheck.Firmware(root: v, arch: "armv6")
                 let f = FitCheck.loads("it_agent", agent, on: fw)
                 #expect(f.fits == fits, "\(id): \(f.proof)")
@@ -109,12 +109,12 @@ enum FitFixture {
     /// Imports are checked against what the firmware exports: an armv7 binary whose import this firmware lacks does
     /// not fit (a copy of the agent with one import renamed to a name no image exports), and a DYLD_INSERT dylib that
     /// imports by dynamic lookup fits only in its host process (it_msmquiet: CoreFoundation comes from the mounter).
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func importsAndHosts() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func importsAndHosts() async throws {
         guard let agent = try FitFixture.payload("armv7", "k48-ios4/bin/it_agent"),
               let quiet = try FitFixture.payload("armv7", "k48-ios4/hooks/it_msmquiet.dylib") else { return }
         for id in ["k48ap-7B500", "k48ap-8C148", "k48ap-9B206"] {
-            try Oracle.withTemp { dir in
-                guard let v = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter], in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter], in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter], in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter], in: dir)"#) }
                 let fw = FitCheck.Firmware(root: v, arch: "armv7")
                 #expect(FitCheck.loads("it_agent", agent, on: fw).fits, "\(id)")
                 // the string table's _write -> _wrizz: same length, so the table stays valid; no image exports it
@@ -133,7 +133,7 @@ enum FitFixture {
     /// The GL front end (qemu-ios contrib/gles-public: one fat OpenGLES for every build) fits the iPad's 3.2.2, 4.2.1,
     /// 5.0 beta 1 and 5.1.1 and the iPod's 2.1.1, 3.1.3 and 4.2.1, and each lookup decides: an export renamed away fails every build,
     /// and a dispatch field the name table lacks fails 5.1.1 alone (the one compositor that asks for a macro context).
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func glesFrontEndFits() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func glesFrontEndFits() async throws {
         let bin = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.openGLES)
         let table = Oracle.guestPackages.appendingPathComponent(SystemEdits.Helpers.glesNames)
         guard Oracle.exists(bin), Oracle.exists(table) else { try FixtureRequirements.missing(#"FitCheckTests.swift: Oracle.exists(bin), Oracle.exists(table)"#) }
@@ -147,8 +147,8 @@ enum FitFixture {
                      FitCheck.sgxEngine, "System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
                      "System/Library/Frameworks/Foundation.framework/Foundation", "usr/lib/libobjc.A.dylib"] + FitCheck.coreSurfaces
         for id in ["k48ap-7B500", "k48ap-8C148", "k48ap-9A5220p", "k48ap-9B206", "n72ap-5F138", "n72ap-7E18", "n72ap-8C148"] {
-            try Oracle.withTemp { dir in
-                guard let v = try FitFixture.volume(id, FitFixture.stock(id) + files, in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume(id, FitFixture.stock(id) + files, in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await FitFixture.volume(id, FitFixture.stock(id) + files, in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume(id, FitFixture.stock(id) + files, in: dir)"#) }
                 let fw = { FitCheck.Firmware(root: v, arch: FitFixture.arch(id)) }
                 let f = FitCheck.glesFrontEnd(fw(), binary: front, names: names)
                 #expect(f.fits, "\(id): \(f.proof)")
@@ -169,11 +169,11 @@ enum FitFixture {
     /// The seed refuses a loader that does not load here: armv6.itpack with its legacy-linked it_boot swapped for the
     /// modern-linked iPod agent, seeded onto 2.1.1, throws and records the misfit; the real itpack seeds and records
     /// the loader's proof.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func seedChecksTheLoader() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func seedChecksTheLoader() async throws {
         let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
         guard Oracle.exists(itpack) else { try FixtureRequirements.missing(#"FitCheckTests.swift: Oracle.exists(itpack)"#) }
-        try Oracle.withTemp { dir in
-            guard let v = try FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138") + [N72Board.openGLES], in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138") + [N72Board.openGLES], in: dir)"#) }
+        try await Oracle.withTemp { dir in
+            guard let v = try await FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138") + [N72Board.openGLES], in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138") + [N72Board.openGLES], in: dir)"#) }
             let bad = dir.appendingPathComponent("armv6.itpack")
             try K48Oracle.sh(["python3", "-c", """
                 import sys; sys.path.insert(0, sys.argv[1]); import mkpkg
@@ -192,16 +192,16 @@ enum FitFixture {
 
     /// The K48 bake proves every baked helper before it writes one: a helpers directory whose it_ethlink imports a
     /// name 3.2.2 does not export fails SystemEdits.buildK48 on 7B500 with that helper's misfit recorded.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func k48BakeChecksItsHelpers() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func k48BakeChecksItsHelpers() async throws {
         let fw = Oracle.firmware("k48ap-7B500")
         guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg)"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             guard let helpers = try FitFixture.helpers(in: dir, replacing: "it_ethlink", with: { FitFixture.renaming($0, "_dlopen", "_dlopex") }) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let helpers = try FitFixture.helpers(in: dir, replacing: "it_ethlink", with: { FitFixture.renaming($0, "_dlopen", "_dlopex") })"#) }
             let recipe = try #require(try Oracle.entry(fw.entryID).recipe), log = FitCheck.Log()
             let work = dir.appendingPathComponent("work")
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-            #expect(throws: FirmwareError.self) {
-                try SystemEdits.buildK48(rootfs: dmg, work: work, systemBytes: 1_500_000_000, dataBytes: 1 << 30, options: .init(recipe: recipe),
+            await #expect(throws: FirmwareError.self) {
+                try await SystemEdits.buildK48(rootfs: dmg, work: work, systemBytes: 1_500_000_000, dataBytes: 1 << 30, options: .init(recipe: recipe),
                                          helpers: helpers, fit: log)
             }
             let f = log.fits.first { $0.piece == "it_ethlink" }
@@ -214,14 +214,14 @@ enum FitFixture {
     /// CFUserNotificationDisplayNotice), 4.2.1's (UNSUPPORTED_FAILURE_BODY through CFUserNotificationCreate); on 5.1.1
     /// not the mounter, which names neither key (its strings file still has them), but USBDeviceArbitrator, the 5.x
     /// catch-all for an unclaimed IOUSBDevice (the emulated keyboard; LightTouchMac smoke #49).
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func msmQuietFitsWhereTheNoticeIsRaised() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func msmQuietFitsWhereTheNoticeIsRaised() async throws {
         guard let quiet = try FitFixture.payload("armv7", "k48-ios4/hooks/it_msmquiet.dylib") else { try FixtureRequirements.missing(#"FitCheckTests.swift: let quiet = try FitFixture.payload("armv7", "k48-ios4/hooks/it_msmquiet.dylib")"#) }
         for (id, program, fits, key) in [("k48ap-7B500", FitFixture.mounter, true, "UNSUPPORTED_FAILURE through CFUserNotificationDisplayNotice"),
                                          ("k48ap-8C148", FitFixture.mounter, true, "UNSUPPORTED_FAILURE_BODY"),
                                          ("k48ap-9B206", FitFixture.mounter, false, "names neither"),
                                          ("k48ap-9B206", FitFixture.usbArbitrator, true, "UNSUPPORTED_FAILURE_BODY through CFUserNotificationCreate")] {
-            try Oracle.withTemp { dir in
-                guard let v = try FitFixture.volume(id, FitFixture.stock(id) + [program], in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume(id, FitFixture.stock(id) + [program], in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await FitFixture.volume(id, FitFixture.stock(id) + [program], in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume(id, FitFixture.stock(id) + [program], in: dir)"#) }
                 let f = FitCheck.msmQuiet(FitCheck.Firmware(root: v, arch: "armv7"), program: "/" + program, dylib: quiet)
                 #expect(f.fits == fits && f.proof.contains(key), "\(id) \(program): \(f.proof)")
             }
@@ -231,13 +231,13 @@ enum FitFixture {
     /// The whole K48 bake on 5.1.1 (9B206): it_msmquiet does not fit the mounter, so storage_mounter's job stays as
     /// shipped with the misfit recorded, and it fits USBDeviceArbitrator, whose job loads it; the dylib is installed
     /// and the guest package keeps its hook.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func k48BakeQuietsTheNoticeWhereItFits() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func k48BakeQuietsTheNoticeWhereItFits() async throws {
         guard let dmg = FitFixture.dmgs["k48ap-9B206"], Oracle.exists(dmg), let helpers = K48Oracle.guestTools else { try FixtureRequirements.missing(#"FitCheckTests.swift: let dmg = FitFixture.dmgs["k48ap-9B206"], Oracle.exists(dmg), let helpers = K48Oracle.guestTools"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             let recipe = try #require(try Oracle.entry("k48ap-9B206").recipe), log = FitCheck.Log()
             let parts = K48NAND.partitions(mbr: [UInt8](try K48NAND.makeMBR(systemMiB: recipe.systemMiB)))
             let kernel = try Data(contentsOf: dmg.deletingLastPathComponent().appendingPathComponent("kernelcache.mach"), options: .alwaysMapped)
-            let r = try SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: parts[0].count * 4096, dataBytes: Int64(parts[1].count) * 4096,
+            let r = try await SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: parts[0].count * 4096, dataBytes: Int64(parts[1].count) * 4096,
                                              options: .init(recipe: recipe), helpers: helpers, kernel: kernel, fit: log)
             #expect(log.fits.contains { $0.piece.hasPrefix("USB Ethernet") && $0.fits }, "\(log.fits.map(\.piece))")
             #expect(log.fits.filter { $0.piece.hasPrefix("it_prefs ") && $0.fits }.count == 3)
@@ -264,12 +264,12 @@ enum FitFixture {
     /// A seeded hook whose target the firmware lacks is a recorded misfit, unless the preparer left the target out on
     /// purpose: armv7.itpack onto 7B500's files without it_msmquiet or libappsync installed records two dropped hooks;
     /// with both named as omitted it records none.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func seedRecordsDroppedHooks() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func seedRecordsDroppedHooks() async throws {
         let itpack = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
         guard Oracle.exists(itpack) else { try FixtureRequirements.missing(#"FitCheckTests.swift: Oracle.exists(itpack)"#) }
         for omitted in [Set<String>(), ["/usr/local/lib/it_msmquiet.dylib", "/" + SystemEdits.appsyncPath]] {
-            try Oracle.withTemp { dir in
-                guard let v = try FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500"), in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500"), in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500"), in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500"), in: dir)"#) }
                 let log = FitCheck.Log()
                 let (_, record) = try GuestPackage.seed(volume: v, itpack: itpack, gles: false, omitted: omitted, fit: log)
                 let drops = log.fits.filter { $0.piece.hasSuffix("(hook)") }
@@ -282,28 +282,28 @@ enum FitFixture {
     /// The iPod's guest tools go in only where they load: they fit 3.1.3 and 4.2.1, not 3.0 or 2.1.1 (no firmware
     /// executable there carries LC_DYLD_INFO_ONLY); and the bake follows the proof, not the shared cache: 7E18 baked
     /// with an it_agent that imports a name 3.1.3 lacks leaves every tool out with a warning, the cache notwithstanding.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func iPodToolsOnlyWhereTheyLoad() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func iPodToolsOnlyWhereTheyLoad() async throws {
         guard let helpers = K48Oracle.guestTools else { try FixtureRequirements.missing(#"FitCheckTests.swift: let helpers = K48Oracle.guestTools"#) }
         for (id, fits) in [("n72ap-7E18", true), ("n72ap-8C148", true), ("n72ap-7A341", false), ("n72ap-5F138", false)] {
-            try Oracle.withTemp { dir in
-                guard let v = try FitFixture.volume(id, FitFixture.stock(id), in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume(id, FitFixture.stock(id), in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await FitFixture.volume(id, FitFixture.stock(id), in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume(id, FitFixture.stock(id), in: dir)"#) }
                 let f = try N72Board.guestToolsFit(FitCheck.Firmware(root: v, arch: "armv6"), helpers: helpers)
                 #expect(f.fits == fits && f.piece.contains("it_typein.dylib"), "\(id): \(f.proof)")
                 if !fits { #expect(f.proof.contains("it_agent: load command 0x80000022")) }
             }
         }
         guard let dmg = FitFixture.dmgs["n72ap-7E18"], Oracle.exists(dmg) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let dmg = FitFixture.dmgs["n72ap-7E18"], Oracle.exists(dmg)"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             guard let bad = try FitFixture.helpers(in: dir, replacing: "it_agent", with: { FitFixture.renaming($0, "_reboot2", "_rebooz2") }) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let bad = try FitFixture.helpers(in: dir, replacing: "it_agent", with: { FitFixture.renaming($0, "_reboot2", "_rebooz2") })"#) }
             let entry = try Oracle.entry("n72ap-7E18"), o = Preparer.Options(entry: entry, ipsw: dir, out: dir, helper: nil, guestTools: bad)
             final class Events: @unchecked Sendable { var warnings: [String] = [] }
             let events = Events()
             let c = Recipe.Context(o, recipe: try #require(entry.recipe)) { if case .warning(let w) = $0 { events.warnings.append(w) } }
             let raw = dir.appendingPathComponent("volume.img")
-            try UDIF.extractRootfs(dmg: dmg, to: raw)
-            try VolumeMount.grow(raw, toBytes: try #require(entry.recipe).systemMiB << 20)
+            try await UDIF.extractRootfs(dmg: dmg, to: raw)
+            try await VolumeMount.grow(raw, toBytes: try #require(entry.recipe).systemMiB << 20)
             var owners: [(UInt32, String)] = []
-            let report = try VolumeMount.withMounted(raw, at: dir.appendingPathComponent("mnt")) { m -> [String: Any] in
+            let report = try await VolumeMount.withMounted(raw, at: dir.appendingPathComponent("mnt")) { m -> [String: Any] in
                 let r = try N72Board(o).bake(m, c, owners: &owners)
                 #expect(!FileManager.default.fileExists(atPath: m.appendingPathComponent("usr/local/bin/it_agent").path))
                 return r
@@ -340,12 +340,12 @@ enum FitFixture {
 
     /// it_prefs' keys are named by their readers on the iPad (3.2.2 to 5.1.1: all three) and the reorder tip on every
     /// iPod build at hand; 2.1.1 and 3.1.3 locationd name neither location key, 4.2.1 both (the iPod sets only the tip).
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func prefsKeysNamedByTheirReaders() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func prefsKeysNamedByTheirReaders() async throws {
         let readers = Set(FitCheck.itPrefs.map(\.1))
         for (id, fits) in [("k48ap-7B500", [true, true, true]), ("k48ap-8C148", [true, true, true]), ("k48ap-9B206", [true, true, true]),
                            ("n72ap-5F138", [true, false, false]), ("n72ap-7E18", [true, false, false]), ("n72ap-8C148", [true, true, true])] {
-            try Oracle.withTemp { dir in
-                guard let v = try FitFixture.volume(id, Array(readers), in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume(id, Array(readers), in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await FitFixture.volume(id, Array(readers), in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume(id, Array(readers), in: dir)"#) }
                 let f = FitCheck.prefs(FitCheck.Firmware(root: v, arch: FitFixture.arch(id)), FitCheck.itPrefs)
                 #expect(f.map(\.fits) == fits, "\(id): \(f.map(\.proof))")
             }
@@ -356,16 +356,16 @@ enum FitFixture {
     /// itself: the GL front end needs no switch of its own) on 3.2.2 and 5.1.1; the iPod's
     /// CoreAnimation/LayerKit pairs on 2.1.1 (frameworks on disk), 3.1.3 and 4.2.1; not a LayerKit-only switch on
     /// the iPad's 4.2.1, which reads no LK_ name.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func springBoardSwitchesHaveReaders() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func springBoardSwitchesHaveReaders() async throws {
         let ipad = SystemEdits.sbEnvCAOGL.keys.sorted().map { [$0] }
         let cases: [(String, [[String]], [(String, Data)], Bool)] = [
             ("k48ap-7B500", ipad, [], true), ("k48ap-9B206", ipad, [], true),
             ("k48ap-8C148", [["LK_ENABLE_OGL"]], [], false),
             ("n72ap-5F138", N72Board.sbSwitches, [], true), ("n72ap-7E18", N72Board.sbSwitches, [], true), ("n72ap-8C148", N72Board.sbSwitches, [], true)]
         for (id, switches, also, fits) in cases {
-            try Oracle.withTemp { dir in
-                let files = FitFixture.stock(id) + [FitCheck.itPrefs[0].1] + (try FitFixture.frameworks(id, in: dir))
-                guard let v = try FitFixture.volume(id, files, in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume(id, files, in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                let files = FitFixture.stock(id) + [FitCheck.itPrefs[0].1] + (try await FitFixture.frameworks(id, in: dir))
+                guard let v = try await FitFixture.volume(id, files, in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume(id, files, in: dir)"#) }
                 let fw = FitCheck.Firmware(root: v, arch: FitFixture.arch(id))
                 let f = FitCheck.environment(fw, switches, also: also)
                 #expect(f.fits == fits, "\(id) \(switches): \(f.proof)")
@@ -441,15 +441,15 @@ enum FitFixture {
 
     /// The 1.x recipe through `create --stop-after volumes` on 3A101a (the survey mode): fit.json records the kept
     /// LaunchDaemons present, the loader and the LayerKit switches; without usbptpd's job the keep-list does not fit.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func n45SurveyRecordsTheKeptJobs() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func n45SurveyRecordsTheKeptJobs() async throws {
         let ipsw = N45Tests.ipsw
         guard Oracle.exists(ipsw), let helpers = K48Oracle.guestTools else { try FixtureRequirements.missing(#"FitCheckTests.swift: Oracle.exists(ipsw), let helpers = K48Oracle.guestTools"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             var o = Preparer.Options(entry: try Oracle.entry("n45ap-3A101a"), ipsw: ipsw, out: dir.appendingPathComponent("out"), helper: nil,
                                      guestTools: helpers, cache: dir.appendingPathComponent("cache"))
             o.stopAfterVolumes = true
             try FileManager.default.createDirectory(at: o.out, withIntermediateDirectories: true)
-            try Preparer.create(o) { _ in }
+            try await Preparer.create(o) { _ in }
             let survey = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: o.out.appendingPathComponent("fit.json"))) as? [String: Any])
             let fits = try #require(survey["fit"] as? [[String: Any]])
             #expect(fits.contains { ($0["piece"] as? String)?.hasPrefix("LaunchDaemons kept on 1.x") == true && $0["fits"] as? Bool == true }, "\(fits)")
@@ -503,18 +503,18 @@ enum FitFixture {
                                "System/Library/Lockdown/Services.plist"]
 
     /// The installation service's volume for `id`: its program, everything it links, the jobs, the precedent binaries.
-    static func appSyncVolume(_ id: String, in dir: URL) throws -> URL? {
-        try FitFixture.volume(id, FitFixture.stock(id) + appSyncFiles, in: dir, links: true)
+    static func appSyncVolume(_ id: String, in dir: URL) async throws -> URL? {
+        try await FitFixture.volume(id, FitFixture.stock(id) + appSyncFiles, in: dir, links: true)
     }
 
     /// AppSync fits every AppSync-on family at hand, in the service installAppSync puts it in: installd on 3.0
     /// (prebound imports), 3.1.3, 3.2.2 and 4.2.1 (iPod and iPad), and on 2.1.1 mobile_installation_proxy, whose
     /// MobileInstallation framework makes the libmis and Security calls, with appsync-launch in front of it.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func appSyncFitsEveryAppSyncFamily() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func appSyncFitsEveryAppSyncFamily() async throws {
         guard let helpers = K48Oracle.guestTools else { try FixtureRequirements.missing(#"FitCheckTests.swift: let helpers = K48Oracle.guestTools"#) }
         for id in ["k48ap-7B500", "k48ap-8C148", "n72ap-5F138", "n72ap-7A341", "n72ap-7E18", "n72ap-8C148"] {
-            try Oracle.withTemp { dir in
-                guard let v = try Self.appSyncVolume(id, in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try Self.appSyncVolume(id, in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await Self.appSyncVolume(id, in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await Self.appSyncVolume(id, in: dir)"#) }
                 let log = FitCheck.Log()
                 try FitCheck.checkAppSync(log, FitCheck.Firmware(root: v, arch: FitFixture.arch(id)), helpers: helpers)
                 let lockbot = id == "n72ap-5F138"
@@ -544,12 +544,12 @@ enum FitFixture {
     /// the 2.x gate; its armv6 slice carries LC_DYLD_INFO_ONLY) in 2.1.1's and 3.0's installation services, while it
     /// still fits 3.1.3's installd. Corrupted copies: 3.2.2's installd with its libmis check renamed (only the hook
     /// misses), the dylib with its gate renamed (only the gate misses), the launcher inserting another path.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func appSyncDoesNotFitWhereItCannotWork() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func appSyncDoesNotFitWhereItCannotWork() async throws {
         guard let helpers = K48Oracle.guestTools else { try FixtureRequirements.missing(#"FitCheckTests.swift: let helpers = K48Oracle.guestTools"#) }
         let dylib = try Data(contentsOf: helpers.appendingPathComponent(SystemEdits.Helpers.appsync))
         let launcher = try Data(contentsOf: helpers.appendingPathComponent(SystemEdits.Helpers.appsyncLauncher))
-        try Oracle.withTemp { dir in
-            guard let v = try FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500") + Self.appSyncFiles + [FitFixture.mounter], in: dir, links: true) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500") + Self.appSyncFiles + [FitFixture.mounter], in: dir, links: true)"#) }
+        try await Oracle.withTemp { dir in
+            guard let v = try await FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500") + Self.appSyncFiles + [FitFixture.mounter], in: dir, links: true) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await FitFixture.volume("k48ap-7B500", FitFixture.stock("k48ap-7B500") + Self.appSyncFiles + [FitFixture.mounter], in: dir, links: true)"#) }
             let f = FitCheck.appSync(FitCheck.Firmware(root: v, arch: "armv7"), host: "/" + FitFixture.mounter, dylib: dylib)
             #expect(!f.fits && f.proof.contains("gate does not name MobileStorageMounter")
                     && f.proof.contains("imports MISValidateSignatureAndCopyInfo or MISValidateSignature, SecCertificateCreateWithData"), "\(f.proof)")
@@ -564,8 +564,8 @@ enum FitFixture {
             let h = FitCheck.appSync(FitCheck.Firmware(root: v, arch: "armv7"), host: "/usr/libexec/installd", dylib: dylib)
             #expect(!h.fits && h.proof == "nothing in installd's process imports MISValidateSignatureAndCopyInfo or MISValidateSignature, which the dylib hooks", "\(h.proof)")
         }
-        try Oracle.withTemp { dir in
-            guard let v = try Self.appSyncVolume("n72ap-5F138", in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try Self.appSyncVolume("n72ap-5F138", in: dir)"#) }
+        try await Oracle.withTemp { dir in
+            guard let v = try await Self.appSyncVolume("n72ap-5F138", in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await Self.appSyncVolume("n72ap-5F138", in: dir)"#) }
             let fw = FitCheck.Firmware(root: v, arch: "armv6"), proxy = "/usr/libexec/mobile_installation_proxy"
             let elsewhere = Self.renamingAll(launcher, "/" + SystemEdits.appsyncPath, "/usr/lib/libappsynX.dylib")
             let l = FitCheck.appSyncLauncher(fw, program: proxy, launcher: elsewhere)
@@ -577,8 +577,8 @@ enum FitFixture {
         guard Oracle.exists(old), let modern = MachO32.slice(try Data(contentsOf: old), arch: "armv6"),
               modern.image.commands.contains(where: { $0.cmd == 0x8000_0022 }) else { return }
         for (id, fits) in [("n72ap-5F138", false), ("n72ap-7A341", false), ("n72ap-7E18", true)] {
-            try Oracle.withTemp { dir in
-                guard let v = try Self.appSyncVolume(id, in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try Self.appSyncVolume(id, in: dir)"#) }
+            try await Oracle.withTemp { dir in
+                guard let v = try await Self.appSyncVolume(id, in: dir) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let v = try await Self.appSyncVolume(id, in: dir)"#) }
                 let host = id == "n72ap-5F138" ? "/usr/libexec/mobile_installation_proxy" : "/usr/libexec/installd"
                 let f = FitCheck.appSync(FitCheck.Firmware(root: v, arch: "armv6"), host: host, dylib: try Data(contentsOf: old))
                 #expect(f.fits == fits, "\(id): \(f.proof)")
@@ -591,17 +591,17 @@ enum FitFixture {
     /// The K48 bake checks AppSync before it installs it: 7B500 (appsync on) with a libappsync whose gate names no
     /// installd fails SystemEdits.buildK48 with that misfit recorded; the 9B206 bake (appsync off) records
     /// "not installed (appsync off)" (k48BakeLeavesOutWhatDoesNotFit).
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func k48BakeChecksAppSync() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func k48BakeChecksAppSync() async throws {
         let fw = Oracle.firmware("k48ap-7B500")
         guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg)"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             guard let helpers = try FitFixture.helpers(in: dir, replacing: SystemEdits.Helpers.appsync, with: { Self.renamingAll($0, "installd", "installx") }) else { try FixtureRequirements.missing(#"FitCheckTests.swift: let helpers = try FitFixture.helpers(in: dir, replacing: SystemEdits.Helpers.appsync, with: { Self.renamingAll($0, "installd", "installx") })"#) }
             let recipe = try #require(try Oracle.entry(fw.entryID).recipe), log = FitCheck.Log()
             #expect(recipe.options["appsync"] == true)
             let work = dir.appendingPathComponent("work")
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-            let error = #expect(throws: FirmwareError.self) {
-                try SystemEdits.buildK48(rootfs: dmg, work: work, systemBytes: 1_500_000_000, dataBytes: 1 << 30, options: .init(recipe: recipe),
+            let error = await #expect(throws: FirmwareError.self) {
+                try await SystemEdits.buildK48(rootfs: dmg, work: work, systemBytes: 1_500_000_000, dataBytes: 1 << 30, options: .init(recipe: recipe),
                                          helpers: helpers, fit: log)
             }
             #expect(error?.message.contains("libappsync.dylib (in installd) does not fit this firmware: its getprogname gate does not name installd") == true, "\(String(describing: error))")

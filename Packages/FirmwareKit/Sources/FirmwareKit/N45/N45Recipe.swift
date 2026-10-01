@@ -103,17 +103,20 @@ final class N45Board: Board {
                    "iboot": N72Board.firstMatch(iboot, /iBoot-[0-9.]+/) ?? "?"]
     }
 
-    func volumes(_ c: Recipe.Context) throws {
+    nonisolated(nonsending) func volumes(_ c: Recipe.Context) async throws {
         volume = c.work.appendingPathComponent("volume.img")
-        try UDIF.extractRootfs(dmg: c.decFile("rootfs.dmg"), to: volume)
-        try VolumeMount.grow(volume, toBytes: bytes)
+        try await UDIF.extractRootfs(dmg: c.decFile("rootfs.dmg"), to: volume)
+        try await VolumeMount.grow(volume, toBytes: bytes)
         // Modern HFS checks reject the stock 1.x catalog's legacy folder counts.
         // Normalize the private working volume before mounting/editing it, then verify it.
-        let device = try VolumeMount.attach(volume)
+        let device = try await VolumeMount.attach(volume)
         do {
-            defer { VolumeMount.detach(device) }
-            c.log(try VolumeMount.run("/sbin/fsck_hfs", ["-fy", device]))
-            let check = VolumeMount.check(device)
+            let check: (ok: Bool, output: String)
+            do {
+                c.log(try await VolumeMount.run("/sbin/fsck_hfs", ["-fy", device]))
+                check = try await VolumeMount.check(device)
+            } catch { await VolumeMount.cleanupDetach(device); throw error }
+            try await VolumeMount.detach(device)
             guard check.ok else { throw FirmwareError(.internal, "1.x root filesystem repair failed: \(check.output)") }
         }
         let newest: UInt32
@@ -124,7 +127,7 @@ final class N45Board: Board {
             newest = try v.newestDate()
         }
         var owners: [(UInt32, String)] = [(0, kcPath), (0, SystemEdits.lockdownd)]
-        let (activation, removed) = try VolumeMount.withMounted(volume, at: c.work.appendingPathComponent("mnt")) { m -> (Activation.Result, [String]) in
+        let (activation, removed) = try await VolumeMount.withMounted(volume, at: c.work.appendingPathComponent("mnt")) { m -> (Activation.Result, [String]) in
             let fm = FileManager.default, at = { (rel: String) in m.appendingPathComponent(rel) }
             try SystemEdits.put(Data(N72Board.fstabRW.utf8), at(SystemEdits.fstab))
             try SystemEdits.mkdirs(at(kcPath).deletingLastPathComponent())
@@ -162,7 +165,7 @@ final class N45Board: Board {
             // One partition, so the root holds what a device keeps in its journaled /private/var: journaled, so a
             // hard power-off is replayed at mount (the stock root is unjournaled and 1.x runs no fsck or update);
             // the journal itself is left for the device's first mount to initialize (leaveJournalToDevice).
-            try VolumeMount.run("/usr/sbin/diskutil", ["enableJournal", m.path])
+            try await VolumeMount.run("/usr/sbin/diskutil", ["enableJournal", m.path])
             return (try SystemEdits.activate(m, log: c.log), removed)
         }
         c.activation = activation
@@ -202,7 +205,7 @@ final class N45Board: Board {
         return (report, record, [SystemEdits.springBoardJob] + seeded)
     }
 
-    func store(_ c: Recipe.Context) throws {
+    nonisolated(nonsending) func store(_ c: Recipe.Context) async throws {
         let fil = try N45NAND.filID(iBoot: Data(contentsOf: c.file("iBoot.bin")))
         let (written, meta) = try N45NAND.write(volume: volume, out: c.nand, filID: fil)
         c.log("\(written) filesystem pages, \(meta) metadata pages generated (NAND signature 0x\(String(fil, radix: 16)))")

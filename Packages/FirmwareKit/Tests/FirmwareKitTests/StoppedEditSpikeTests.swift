@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import HostRuntime
 import Testing
 @testable import FirmwareKit
 
@@ -8,7 +9,7 @@ import Testing
 struct StoppedEditSpikeTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_EDIT_SPIKE_DEVICE"] != nil,
                    "Set FK_EDIT_SPIKE_DEVICE and FK_EDIT_SPIKE_OUT for the disposable N72 edit spike"))
-    func n72Candidate() throws {
+    func n72Candidate() async throws {
         let env = ProcessInfo.processInfo.environment
         let source = URL(fileURLWithPath: try #require(env["FK_EDIT_SPIKE_DEVICE"]))
         let out = URL(fileURLWithPath: try #require(env["FK_EDIT_SPIKE_OUT"]))
@@ -23,17 +24,17 @@ struct StoppedEditSpikeTests {
         // Prepared device roots are intentionally read-only. Only the private
         // candidate root becomes writable, to swap its cloned NAND directory.
         try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: device.path)
-        let lease = try StoppedStorageLease(device.appendingPathComponent("work/lease"))
+        let lease = try StorageLease(device.appendingPathComponent("work/lease"))
         defer { withExtendedLifetime(lease) {} }
         let base = device.appendingPathComponent("nand")
         let overlay = fm.fileExists(atPath: device.appendingPathComponent("overlay").path) ? device.appendingPathComponent("overlay") : nil
         #expect(try VolumeRebuild.board(of: base) == .ipod)
-        let volume = try #require(try VolumeExport.export(.init(base: base, overlay: overlay),
+        let volume = try #require(try await VolumeExport.export(.init(base: base, overlay: overlay),
             out: out.appendingPathComponent("export")).first).image
         let image = URL(fileURLWithPath: volume)
         let before = try HFSPlusVolume(image).record(at: "System/Library/CoreServices/SystemVersion.plist")
         let marker = Data("<?xml version=\"1.0\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>probe</key><string>stopped-edit-candidate</string></dict></plist>".utf8)
-        try VolumeMount.withMounted(image, at: out.appendingPathComponent("mnt")) { root in
+        try await VolumeMount.withMounted(image, at: out.appendingPathComponent("mnt")) { root in
             let file = root.appendingPathComponent("System/Library/CoreServices/SystemVersion.plist")
             var plist = try #require(try PropertyListSerialization.propertyList(from: Data(contentsOf: file), format: nil) as? [String: Any])
             plist["LTStoppedEditProbe"] = "stopped-edit-candidate"

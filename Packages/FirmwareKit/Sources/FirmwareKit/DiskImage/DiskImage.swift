@@ -3,12 +3,12 @@
 // other way round). Every attach/detach/resize/convert of FirmwareKit goes through here; mount/unmount, newfs_hfs
 // and fsck_hfs are not disk-image operations and stay with VolumeMount.
 //
-//   let dev = try DiskImage.attach(image)                       // -nomount, nobrowse: "/dev/diskN"
-//   let a = try DiskImage.attach(image, readOnly: true, mount: true)   // browsable, for Finder: a.mountPoint
-//   DiskImage.detach(dev, force: true)                          // never throws: cleanup
-//   try DiskImage.resize(image, toBytes: n)                     // grows the image and its volume
-//   try DiskImage.convertToRaw(dmg, to: raw)                    // UDIF -> raw disk (hdiutil UDTO / diskutil RAW)
-//   DiskImage.attachedImages()                                  // [(image path, /dev/diskN)] (hdiutil info: no
+//   let dev = try await DiskImage.attach(image)                       // -nomount, nobrowse: "/dev/diskN"
+//   let a = try await DiskImage.attach(image, readOnly: true, mount: true)   // browsable, for Finder: a.mountPoint
+//   try await DiskImage.detach(dev, force: true)                // checked cleanup
+//   try await DiskImage.resize(image, toBytes: n)                     // grows the image and its volume
+//   try await DiskImage.convertToRaw(dmg, to: raw)                    // UDIF -> raw disk (hdiutil UDTO / diskutil RAW)
+//   try await DiskImage.attachedImages()                                  // [(image path, /dev/diskN)] (hdiutil info: no
 //                                                               // diskutil equivalent lists image paths)
 //
 // The argv of each operation is a pure function of (backend, arguments), so both backends are unit-tested on
@@ -83,10 +83,41 @@ public enum DiskImage {
 
     // MARK: operations
 
-    public static func attach(_ image: URL, readOnly: Bool = false, mount: Bool = false, backend: Backend = backend) throws -> Attached {
-        let out = try run(attachCommand(image, readOnly: readOnly, mount: mount, backend: backend))
-        guard let a = parseAttach(out) else { throw FirmwareError(.internal, "attach \(image.lastPathComponent): no device in \(out.suffix(600))") }
-        return a
+    /// The caller must serialize attachment of this image (managed storage owns
+    /// its lease). Compensation cannot distinguish a simultaneous raw attach of
+    /// the same image from a newly attached device owned by this operation.
+    public static func attach(_ image: URL, readOnly: Bool = false, mount: Bool = false, backend: Backend = backend) async throws -> Attached {
+        try await attach(image, readOnly: readOnly, mount: mount, backend: backend, execute: run)
+    }
+    /// Internal executor boundary lets fixtures pause after an actual OS attach
+    /// but before its result is delivered; production always uses the same runner.
+    static func attach(_ image: URL, readOnly: Bool = false, mount: Bool = false, backend: Backend = backend,
+                       execute: @Sendable ([String]) async throws -> String) async throws -> Attached {
+        let prior = Set(try await checkedAttachedImages().map(\.device))
+        do {
+            let out = try await execute(attachCommand(image, readOnly: readOnly, mount: mount, backend: backend))
+            guard let attached = parseAttach(out) else {
+                throw FirmwareError(.internal, "attach \(image.lastPathComponent): no device in \(out.suffix(600))")
+            }
+            try Task.checkCancellation()
+            return attached
+        } catch {
+            // An attach can take effect before its interrupted tool returns a
+            // plist. Only detach newly observed devices for this exact image.
+            do {
+                try await Task.detached {
+                    let path = image.resolvingSymlinksInPath().path
+                    for item in try await checkedAttachedImages()
+                        where !prior.contains(item.device)
+                        && URL(fileURLWithPath: item.image).resolvingSymlinksInPath().path == path {
+                        try await detach(item.device, force: true, backend: backend)
+                    }
+                }.value
+            } catch {
+                FirmwareDiagnostics.write(Data("attach cleanup failed; image retained: \(error)\n".utf8))
+            }
+            throw error
+        }
     }
 
     /// The whole-disk entry (shortest dev-entry) of an attach plist, and the mount point of whichever entity has one.
@@ -99,45 +130,53 @@ public enum DiskImage {
         return Attached(device: dev, mountPoint: entities.compactMap { $0["mount-point"] as? String }.first)
     }
 
-    /// Detaches `dev`, retrying for 5 s; with `force`, the retries force it. Never throws: it is cleanup.
-    public static func detach(_ dev: String, force: Bool = false, backend: Backend = backend) {
-        for i in 0..<10 {
-            if exec(detachCommand(dev, force: force && i > 0, backend: backend)).0 == 0 {
-                if backend == .diskutil, force, i > 0 { _ = exec(["/usr/sbin/diskutil", "eject", dev]) }
-                return
+    /// Detaches `dev`, retrying for 5 s; failed cleanup remains an explicit error.
+    public static func detach(_ dev: String, force: Bool = false, backend: Backend = backend) async throws {
+        // Cleanup is awaited, but independent of the operation's cancellation.
+        try await Task.detached {
+            for i in 0..<10 {
+                let (status, _) = try await exec(detachCommand(dev, force: force && i > 0, backend: backend))
+                if status == 0 {
+                    if backend == .diskutil, force, i > 0 { try await run(["/usr/sbin/diskutil", "eject", dev]) }
+                    return
+                }
+                try await Task.sleep(for: .milliseconds(500))
             }
-            usleep(500_000)
-        }
+            throw FirmwareError(.internal, "could not detach \(dev); attached image retained")
+        }.value
     }
 
     /// Grows the image file and its HFS+ volume to `bytes` (a multiple of 4096) the way hdiutil does (see resizeCommand).
-    public static func resize(_ image: URL, toBytes bytes: Int, backend: Backend = backend) throws {
+    public static func resize(_ image: URL, toBytes bytes: Int, backend: Backend = backend) async throws {
         var slack = 0
         if backend == .diskutil, let v = try? HFSPlusVolume(image),
            let size = (try? FileManager.default.attributesOfItem(atPath: image.path)[.size] as? Int) {
             slack = max(0, size - v.totalBlocks * v.blockSize) % v.blockSize
         }
-        try run(resizeCommand(image, bytes: bytes, slack: slack, backend: backend))
+        try await run(resizeCommand(image, bytes: bytes, slack: slack, backend: backend))
     }
 
     /// The raw disk (partition map and all) of a UDIF image, at `out`.
-    public static func convertToRaw(_ src: URL, to out: URL, backend: Backend = backend) throws {
+    public static func convertToRaw(_ src: URL, to out: URL, backend: Backend = backend) async throws {
         let fm = FileManager.default
         try? fm.removeItem(at: out)
-        do { try run(convertCommand(src, raw: out, backend: backend)) }
+        do { try await run(convertCommand(src, raw: out, backend: backend)) }
         catch let e as FirmwareError { throw FirmwareError(.unsupported, "convert \(src.lastPathComponent): \(e.message.suffix(600))") }
         try fm.moveItem(at: URL(fileURLWithPath: out.path + (backend == .hdiutil ? ".cdr" : ".raw")), to: out)
     }
 
     /// Every attached disk image: (image path, its whole-disk /dev entry). `hdiutil info` (deprecated, still
     /// functional on 27) is the only listing that names the image file; diskutil's info has no path.
-    public static func attachedImages() -> [(image: String, device: String)] {
-        (try? checkedAttachedImages()) ?? []
+    public static func attachedImages() async throws -> [(image: String, device: String)] {
+        try await checkedAttachedImages()
     }
 
     /// Cleanup must distinguish an empty attachment list from a failed query.
-    public static func checkedAttachedImages() throws -> [(image: String, device: String)] {
-        let (status, out) = exec(["/usr/bin/hdiutil", "info", "-plist"])
+    public static func checkedAttachedImages() async throws -> [(image: String, device: String)] {
+        let (status, out) = try await exec(["/usr/bin/hdiutil", "info", "-plist"])
+        return try parseAttachments(status: status, output: out)
+    }
+    static func parseAttachments(status: Int32, output out: String) throws -> [(image: String, device: String)] {
         guard status == 0, let start = out.range(of: "<?xml"),
               let info = try? PropertyListSerialization.propertyList(from: Data(out[start.lowerBound...].utf8), format: nil) as? [String: Any],
               let images = info["images"] as? [[String: Any]] else {
@@ -155,29 +194,24 @@ public enum DiskImage {
 
     /// Runs a tool; throws with its output on a non-zero exit. Returns its output.
     @discardableResult
-    static func run(_ argv: [String]) throws -> String {
-        let (status, out) = exec(argv)
+    static func run(_ argv: [String]) async throws -> String {
+        let (status, out) = try await exec(argv)
         guard status == 0 else {
             throw FirmwareError(.internal, "\((argv[0] as NSString).lastPathComponent) \(argv.dropFirst().prefix(2).joined(separator: " ")) failed (\(status)): \(out)")
         }
         return out
     }
 
-    /// (status, stdout then stderr), stdin closed. Synchronous over swift-subprocess: the callers are the
-    /// synchronous recipe and mount paths, run on their own threads.
-    static func exec(_ argv: [String]) -> (Int32, String) {
-        final class Box: @unchecked Sendable { var result: (Int32, String) = (-1, "") }
-        let box = Box(), done = DispatchSemaphore(value: 0)
-        Task.detached {
-            do {
-                let r = try await Subprocess.run(.path(FilePath(argv[0])), arguments: Arguments(Array(argv.dropFirst())),
-                                                 output: .string(limit: 1 << 24), error: .string(limit: 1 << 24))
-                let status: Int32 = switch r.terminationStatus { case .exited(let c): c; case .signaled(let s): -s }
-                box.result = (status, r.standardOutput + r.standardError)
-            } catch { box.result = (-1, "\(error)") }
-            done.signal()
+    /// (status, stdout then stderr), stdin closed. Suspends while the actual
+    /// library owns and reaps the child; cancellation/spawn failure stay errors.
+    static func exec(_ argv: [String]) async throws -> (Int32, String) {
+        let result = try await Subprocess.run(.path(FilePath(argv[0])), arguments: Arguments(Array(argv.dropFirst())),
+            input: .none, output: .string(limit: 1 << 24), error: .string(limit: 1 << 24))
+        try Task.checkCancellation()
+        let status: Int32 = switch result.terminationStatus {
+        case .exited(let code): code
+        case .signaled(let signal): -signal
         }
-        done.wait()
-        return box.result
+        return (status, result.standardOutput + result.standardError)
     }
 }

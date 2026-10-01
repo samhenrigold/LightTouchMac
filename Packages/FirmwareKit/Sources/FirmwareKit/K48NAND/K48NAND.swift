@@ -423,7 +423,7 @@ public enum K48NAND {
     }
 
     /// A bare case-sensitive journaled HFS+ volume (like iOS's data partition) in a sparse raw file.
-    public static func makeHFSImage(at url: URL, size: Int64) throws { try VolumeMount.makeHFS(url, size: size) }
+    nonisolated(nonsending) public static func makeHFSImage(at url: URL, size: Int64) async throws { try await VolumeMount.makeHFS(url, size: size) }
 
     // MARK: build
 
@@ -440,8 +440,8 @@ public enum K48NAND {
 
     /// ipad1_nand.py build: the store for `system` (+ `s3` + the data volume) at the MBR's partitions, into `out`.
     @discardableResult
-    public static func build(geometry geo: Geometry = .k48_16g, mbr: URL, kernelVersion: [UInt8], epoch: UInt8 = 1, system: URL, s3: URL? = nil,
-                             data: DataVolume, out: URL, force: Bool = false, log: (String) -> Void = { _ in }) throws -> BuildResult {
+    nonisolated(nonsending) public static func build(geometry geo: Geometry = .k48_16g, mbr: URL, kernelVersion: [UInt8], epoch: UInt8 = 1, system: URL, s3: URL? = nil,
+                             data: DataVolume, out: URL, force: Bool = false, log: (String) -> Void = { _ in }) async throws -> BuildResult {
         let fm = FileManager.default
         if fm.fileExists(atPath: out.appendingPathComponent("geometry.json").path) && !force {
             throw FirmwareError(.internal, "\(out.path) exists; pass force to overwrite")
@@ -470,7 +470,7 @@ public enum K48NAND {
             try fm.createDirectory(at: work!, withIntermediateDirectories: true)
             let u = work!.appendingPathComponent("data.dmg")
             log("creating \(n)-byte HFS+ data volume")
-            try makeHFSImage(at: u, size: n)
+            try await makeHFSImage(at: u, size: n)
             dataPages = try FilePages(u, page: ps)
         }
         if let d = dataPages {

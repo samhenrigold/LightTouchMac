@@ -64,9 +64,9 @@ public enum VolumeExport {
     public static func manifest(_ out: URL) -> URL { out.appendingPathComponent("export.json") }
 
     /// Steps 1-4: images in a fresh `out` directory, ready to attach or keep.
-    public static func export(_ src: Source, volumes: Set<String>? = nil, out: URL, log: (String) -> Void = { _ in }) throws -> [Exported] {
+    nonisolated(nonsending) public static func export(_ src: Source, volumes: Set<String>? = nil, out: URL, log: (String) -> Void = { _ in }) async throws -> [Exported] {
         let (owner, resolved) = try src.admit()
-        defer { withExtendedLifetime(owner) {} }
+        defer { owner?.lease.close() }
         let fm = FileManager.default
         let dest = out.resolvingSymlinksInPath().standardizedFileURL.path
         for source in [resolved.base, resolved.overlay].compactMap({ $0 }) {
@@ -81,63 +81,64 @@ public enum VolumeExport {
         }
         try fm.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
         try fm.createDirectory(at: out, withIntermediateDirectories: false)
-        var completed = false
-        defer {
-            if !completed {
-                do { try removeDetachedOutput(out) }
-                catch { log("export staging retained at \(out.path): \(error)") }
-            }
-        }
-        var t = Date()
-        var overlay: URL?
-        if let o = resolved.overlay {
-            let clone = out.appendingPathComponent("overlay")
-            guard clonefile(o.path, clone.path, 0) == 0 else {
-                throw FirmwareError(.internal, "clonefile \(o.path) -> \(clone.path): \(String(cString: strerror(errno))) (out must be on the overlay's APFS volume)")
-            }
-            overlay = clone
-            log(String(format: "cloned overlay in %.1f s", Date().timeIntervalSince(t)))
-        }
-        defer { if let overlay { try? fm.removeItem(at: overlay) } }
-        t = Date()
-        let vols = try VolumeRebuild.rebuild(base: resolved.base, overlay: overlay, into: out, only: volumes)
-        let rebuildTime = Date().timeIntervalSince(t)
-        log(String(format: "rebuilt %@ in %.1f s", vols.map { "\($0.name) (\($0.pagesWritten) pages)" }.joined(separator: ", "), rebuildTime))
-        var result: [Exported] = []
-        for v in vols {
-            t = Date()
-            let clean = try isClean(v.image)
-            var repaired = false
-            if !clean {
-                let dev = try VolumeMount.attach(v.image)
-                let (status, output) = VolumeMount.exec("/sbin/fsck_hfs", ["-fy", dev])
-                VolumeMount.detach(dev)
-                log("\(v.name): not cleanly unmounted; fsck_hfs -fy exit \(status): \(output.suffix(300))")
-                repaired = true
-                guard status == 0 else {
-                    throw FirmwareError(.internal, "\(v.name): filesystem repair failed: \(output.suffix(600))")
+        do {
+            var t = Date()
+            var overlay: URL?
+            if let o = resolved.overlay {
+                let clone = out.appendingPathComponent("overlay")
+                guard clonefile(o.path, clone.path, 0) == 0 else {
+                    throw FirmwareError(.internal, "clonefile \(o.path) -> \(clone.path): \(String(cString: strerror(errno))) (out must be on the overlay's APFS volume)")
                 }
+                overlay = clone
+                log(String(format: "cloned overlay in %.1f s", Date().timeIntervalSince(t)))
             }
-            let mnt = out.appendingPathComponent(".mnt-\(v.name)")
-            try VolumeMount.withMounted(v.image, at: mnt) { root in
-                _ = fm.createFile(atPath: root.appendingPathComponent(".metadata_never_index").path, contents: nil)
+            defer { if let overlay { try? fm.removeItem(at: overlay) } }
+            t = Date()
+            let vols = try VolumeRebuild.rebuild(base: resolved.base, overlay: overlay, into: out, only: volumes)
+            let rebuildTime = Date().timeIntervalSince(t)
+            log(String(format: "rebuilt %@ in %.1f s", vols.map { "\($0.name) (\($0.pagesWritten) pages)" }.joined(separator: ", "), rebuildTime))
+            var result: [Exported] = []
+            for v in vols {
+                t = Date()
+                let clean = try isClean(v.image)
+                var repaired = false
+                if !clean {
+                    let dev = try await VolumeMount.attach(v.image)
+                    let status: Int32, output: String
+                    do { (status, output) = try await VolumeMount.exec("/sbin/fsck_hfs", ["-fy", dev]) }
+                    catch { await VolumeMount.cleanupDetach(dev); throw error }
+                    try await VolumeMount.detach(dev)
+                    log("\(v.name): not cleanly unmounted; fsck_hfs -fy exit \(status): \(output.suffix(300))")
+                    repaired = true
+                    guard status == 0 else {
+                        throw FirmwareError(.internal, "\(v.name): filesystem repair failed: \(output.suffix(600))")
+                    }
+                }
+                let mnt = out.appendingPathComponent(".mnt-\(v.name)")
+                try await VolumeMount.withMounted(v.image, at: mnt) { root in
+                    _ = fm.createFile(atPath: root.appendingPathComponent(".metadata_never_index").path, contents: nil)
+                }
+                try? fm.removeItem(at: mnt)
+                result.append(Exported(volume: v.name, image: v.image.path, clean: clean, repaired: repaired, device: nil, mountPoint: nil,
+                                       seconds: rebuildTime / Double(vols.count) + Date().timeIntervalSince(t)))
             }
-            try? fm.removeItem(at: mnt)
-            result.append(Exported(volume: v.name, image: v.image.path, clean: clean, repaired: repaired, device: nil, mountPoint: nil,
-                                   seconds: rebuildTime / Double(vols.count) + Date().timeIntervalSince(t)))
+            try write(result, out)
+            return result
+        } catch {
+            let original = error
+            do { try await Task.detached { try await removeDetachedOutput(out) }.value }
+            catch { log("export staging retained at \(out.path): \(error)") }
+            throw original
         }
-        try write(result, out)
-        completed = true
-        return result
     }
 
     /// Export, then attach every image read-only where Finder shows it.
-    public static func mount(_ src: Source, volumes: Set<String>? = nil, out: URL, log: (String) -> Void = { _ in }) throws -> [Exported] {
-        var vols = try export(src, volumes: volumes, out: out, log: log)
+    nonisolated(nonsending) public static func mount(_ src: Source, volumes: Set<String>? = nil, out: URL, log: (String) -> Void = { _ in }) async throws -> [Exported] {
+        var vols = try await export(src, volumes: volumes, out: out, log: log)
         do {
             for i in vols.indices {
                 let t = Date()
-                let a = try DiskImage.attach(URL(fileURLWithPath: vols[i].image), readOnly: true, mount: true)
+                let a = try await DiskImage.attach(URL(fileURLWithPath: vols[i].image), readOnly: true, mount: true)
                 vols[i].device = a.device
                 vols[i].mountPoint = a.mountPoint
                 vols[i].seconds += Date().timeIntervalSince(t)
@@ -145,25 +146,26 @@ public enum VolumeExport {
             }
         } catch {
             // `vols` includes an attachment even if publishing export.json failed.
-            for v in vols { if let device = v.device { VolumeMount.detach(device) } }
-            try? unmount(out: out)
+            for v in vols { if let device = v.device { await VolumeMount.cleanupDetach(device) } }
+            do { try await Task.detached { try await unmount(out: out) }.value }
+            catch { log("export staging retained at \(out.path): \(error)") }
             throw error
         }
         return vols
     }
 
     /// Detaches what `out`'s export.json says is attached, then deletes `out`.
-    public static func unmount(out: URL) throws {
+    nonisolated(nonsending) public static func unmount(out: URL) async throws {
         let vols = try readManifest(out)
         let paths = Set(vols.map { URL(fileURLWithPath: $0.image).resolvingSymlinksInPath().path })
-        for attached in try DiskImage.checkedAttachedImages() where paths.contains(URL(fileURLWithPath: attached.image).resolvingSymlinksInPath().path) {
+        for attached in try await DiskImage.checkedAttachedImages() where paths.contains(URL(fileURLWithPath: attached.image).resolvingSymlinksInPath().path) {
             // Query the current device node: a manifest's old /dev/diskN may have been reused.
-            VolumeMount.detach(attached.device)
+            try await VolumeMount.detach(attached.device)
         }
-        for attached in try DiskImage.checkedAttachedImages() where paths.contains(URL(fileURLWithPath: attached.image).resolvingSymlinksInPath().path) {
+        for attached in try await DiskImage.checkedAttachedImages() where paths.contains(URL(fileURLWithPath: attached.image).resolvingSymlinksInPath().path) {
             throw FirmwareError(.internal, "\(attached.image) is still attached; close its files before unmounting")
         }
-        try removeDetachedOutput(out)
+        try await removeDetachedOutput(out)
     }
 
     static func readManifest(_ out: URL) throws -> [Exported] {
@@ -177,9 +179,9 @@ public enum VolumeExport {
 
     /// Used only for staging directories created by this operation. On failed
     /// eject or image discovery, retain the artifact rather than unlink a live disk.
-    static func removeDetachedOutput(_ out: URL) throws {
+    nonisolated(nonsending) static func removeDetachedOutput(_ out: URL) async throws {
         let root = out.resolvingSymlinksInPath().path + "/"
-        guard try DiskImage.checkedAttachedImages().allSatisfy({
+        guard try await DiskImage.checkedAttachedImages().allSatisfy({
             !URL(fileURLWithPath: $0.image).resolvingSymlinksInPath().path.hasPrefix(root)
         }) else {
             throw FirmwareError(.internal, "export still has attached disk images")

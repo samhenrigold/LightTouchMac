@@ -20,9 +20,9 @@ import Testing
     /// The raw HFS volume against ipad1_rootfs.extract_rootfs. Input: the Python cache's rootfs.dmg (read
     /// only) when there is one, else our own vfdecrypt of the IPSW.
     @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: Oracle.firmwares)
-    func rawVolumeMatchesPython(_ fw: Oracle.Firmware) throws {
+    func rawVolumeMatchesPython(_ fw: Oracle.Firmware) async throws {
         guard fw.available else { try FixtureRequirements.missing(fw.ipsw.path) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             var dmg = fw.cache?.appendingPathComponent("rootfs.dmg")
             if dmg == nil || !Oracle.exists(dmg!) {
                 let ipsw = IPSWArchive(fw.ipsw), os = try BuildComponents.load(ipsw, board: Oracle.entry(fw.entryID).board)["OS"]!
@@ -31,7 +31,7 @@ import Testing
                 try ipsw.stream(os) { try VFDecrypt.decrypt(from: $0.fileDescriptor, output: dmg!, key: key) }
             }
             let raw = dir.appendingPathComponent("rootfs.hfs")
-            try Oracle.time("UDIF convert + APM slice \(fw.entryID)") { try UDIF.extractRootfs(dmg: dmg!, to: raw) }
+            try await Oracle.time("UDIF convert + APM slice \(fw.entryID)") { try await UDIF.extractRootfs(dmg: dmg!, to: raw) }
             #expect(try Oracle.sha256(file: raw) == fw.rawVolume)
         }
     }

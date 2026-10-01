@@ -92,7 +92,7 @@ final class K48Board: Board {
     }
 
     /// MBR, system + data volumes (+ activation); the iBoot fsboot kernelcache goes in the system volume.
-    func volumes(_ c: Recipe.Context) throws {
+    nonisolated(nonsending) func volumes(_ c: Recipe.Context) async throws {
         mbr = c.work.appendingPathComponent("mbr.bin")
         try K48NAND.makeMBR(geometry: .k48_16g, systemMiB: recipe.systemMiB).write(to: mbr)
         let parts = K48NAND.partitions(mbr: [UInt8](try Data(contentsOf: mbr)))
@@ -101,7 +101,7 @@ final class K48Board: Board {
             guard let kc = try BuildComponents.load(c.ipsw, board: c.e.board)["KernelCache"] else { throw FirmwareError(.unsupported, "\(c.e.id): the IPSW names no KernelCache") }
             kernelcacheImg3 = try c.ipsw.read(kc)
         }
-        vols = try SystemEdits.buildK48(rootfs: c.decFile("rootfs.dmg"), work: c.work, systemBytes: parts[0].count * 4096,
+        vols = try await SystemEdits.buildK48(rootfs: c.decFile("rootfs.dmg"), work: c.work, systemBytes: parts[0].count * 4096,
                                         dataBytes: Int64(parts[1].count) * 4096, options: .init(recipe: recipe),
                                         helpers: c.o.guestTools, kernelcache: kernelcacheImg3,
                                         kernel: try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped),
@@ -110,10 +110,10 @@ final class K48Board: Board {
         c.activation = vols.activation; c.guestPackage = vols.guestPackage; c.engine = vols.engine
     }
 
-    func store(_ c: Recipe.Context) throws {
+    nonisolated(nonsending) func store(_ c: Recipe.Context) async throws {
         let epoch = try K48NAND.signatureEpoch(kernelcache: c.decFile("kernelcache.mach"))
         c.log("NAND signature epoch \(epoch) (this kernel's FIL)")
-        try K48NAND.build(geometry: .k48_16g, mbr: mbr, kernelVersion: K48NAND.kernelVersion(kernelcache: c.decFile("kernelcache.mach")),
+        try await K48NAND.build(geometry: .k48_16g, mbr: mbr, kernelVersion: K48NAND.kernelVersion(kernelcache: c.decFile("kernelcache.mach")),
                           epoch: epoch, system: vols.system, data: .image(vols.data), out: c.nand, log: c.log)
         try? FileManager.default.removeItem(at: vols.system); try? FileManager.default.removeItem(at: vols.data)
     }
@@ -123,13 +123,13 @@ final class K48Board: Board {
     /// 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk (ipad1_keybag): the
     /// ramdisk with it_keybag as restored_external, booted once as md0 on the store + NOR; retried (from copies
     /// taken before the first) when it panics or does not halt.
-    func keybag(_ c: Recipe.Context) throws {
+    nonisolated(nonsending) func keybag(_ c: Recipe.Context) async throws {
         let fm = FileManager.default, nor = norURL(c)!
         if !iboot { try Data(repeating: 0xFF, count: 1 << 20).write(to: nor) }   // iboot already built the packed NOR
-        let (source, name) = try Recipe.keybagRamdisk(c)
+        let (source, name) = try await Recipe.keybagRamdisk(c)
         ramdisk = name
         let work = c.work, store = c.nand
-        let rd = try Preparer.ramdiskWithHelper(source, helper: c.o.guestTools.appendingPathComponent(SystemEdits.Helpers.name("it_keybag", arch)), work: work)
+        let rd = try await Preparer.ramdiskWithHelper(source, helper: c.o.guestTools.appendingPathComponent(SystemEdits.Helpers.name("it_keybag", arch)), work: work)
         let kboot = work.appendingPathComponent("kboot-restore.bin")
         try KBoot.write(decrypted: c.dec, to: kboot, identity: ident, ramdisk: rd)
         let norBefore = try Data(contentsOf: nor)

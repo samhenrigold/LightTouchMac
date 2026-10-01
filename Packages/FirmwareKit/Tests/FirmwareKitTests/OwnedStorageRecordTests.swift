@@ -14,7 +14,7 @@ struct OwnedStorageRecordTests {
         try JSONSerialization.data(withJSONObject: ["id": device.lastPathComponent,
             "unknown": ["preserved": true], "base": ["path": base], "storage": ["overlay": "missing-overlay"]])
     }
-    @Test func selectedDeviceResolvesLatestRecordOnlyAfterAdmission() throws {
+    @Test func selectedDeviceResolvesLatestRecordOnlyAfterAdmission() async throws {
         let device = try fixture()
         defer { try? FileManager.default.removeItem(at: device.deletingLastPathComponent().deletingLastPathComponent()) }
         let url = device.appendingPathComponent("device.json")
@@ -30,26 +30,27 @@ struct OwnedStorageRecordTests {
             let transaction = try StorageGeneration.begin(owner: admitted)
             #expect(try Data(contentsOf: transaction.root.appendingPathComponent("original-device.json")) == latest)
             #expect(throws: StorageLease.Failure.inUse) { _ = try StorageLease(device.appendingPathComponent("work/lease")) }
-            let candidate = try JSONSerialization.jsonObject(with: transaction.candidateRecord()) as? [String: Any]
+            let candidateBytes = try await transaction.candidateRecord()
+            let candidate = try JSONSerialization.jsonObject(with: candidateBytes) as? [String: Any]
             #expect((candidate?["unknown"] as? [String: Bool])?["preserved"] == true)
-            try transaction.discard()
+            try await transaction.discard()
             withExtendedLifetime((transaction, admitted)) {}
         }
         let held = try StorageLease(device.appendingPathComponent("work/lease"))
         withExtendedLifetime((held, selected)) {}
     }
-    @Test func exportFailureReleasesLeaseWithSelectionStillAlive() throws {
+    @Test func exportFailureReleasesLeaseWithSelectionStillAlive() async throws {
         let device = try fixture()
         defer { try? FileManager.default.removeItem(at: device.deletingLastPathComponent().deletingLastPathComponent()) }
         try record(device, base: "missing-generation").write(to: device.appendingPathComponent("device.json"))
         let selected = try VolumeExport.Source(device: device)
         let out = device.appendingPathComponent("export")
-        #expect(throws: (any Error).self) { _ = try VolumeExport.export(selected, out: out) }
+        await #expect(throws: (any Error).self) { _ = try await VolumeExport.export(selected, out: out) }
         let held = try StorageLease(device.appendingPathComponent("work/lease"))
         #expect(!FileManager.default.fileExists(atPath: device.appendingPathComponent("work/edit.json").path))
         withExtendedLifetime((held, selected)) {}
     }
-    @Test func busyRecordRefusesBeforeParseOrStagingAndUnsupportedEditLeavesNoIntent() throws {
+    @Test func busyRecordRefusesBeforeParseOrStagingAndUnsupportedEditLeavesNoIntent() async throws {
         let device = try fixture()
         defer { try? FileManager.default.removeItem(at: device.deletingLastPathComponent().deletingLastPathComponent()) }
         let recordURL = device.appendingPathComponent("device.json")
@@ -58,31 +59,33 @@ struct OwnedStorageRecordTests {
         let out = device.appendingPathComponent("export")
         do {
             let held = try StorageLease(device.appendingPathComponent("work/lease"))
-            #expect(throws: FirmwareError.self) { _ = try VolumeExport.export(selected, out: out) }
+            await #expect(throws: FirmwareError.self) { _ = try await VolumeExport.export(selected, out: out) }
             #expect(!FileManager.default.fileExists(atPath: out.path))
             #expect(try Data(contentsOf: recordURL) == Data("malformed".utf8))
             withExtendedLifetime(held) {}
         }
         try record(device, base: "unsupported").write(to: recordURL)
-        #expect(throws: FirmwareError.self) { _ = try StoppedVolumeEdit.begin(device: device) }
+        await #expect(throws: FirmwareError.self) { _ = try await StoppedVolumeEdit.begin(device: device) }
         #expect(!FileManager.default.fileExists(atPath: device.appendingPathComponent("work/edit.json").path))
         let held = try StorageLease(device.appendingPathComponent("work/lease"))
         withExtendedLifetime(held) {}
     }
-    @Test(arguments: 0..<16) func functionReturnReleasesTransactionOwner(_ iteration: Int) throws {
+    @Test(arguments: 0..<16) func awaitedCloseReleasesTransactionOwner(_ iteration: Int) async throws {
         let device = try fixture()
         defer { try? FileManager.default.removeItem(at: device.deletingLastPathComponent().deletingLastPathComponent()) }
         try record(device, base: "original").write(to: device.appendingPathComponent("device.json"))
         weak var previous: StorageGeneration?
-        func start() throws -> UUID {
+        func start() async throws -> UUID {
             let edit = try StorageGeneration.begin(device: device)
             previous = edit
+            try await edit.close()
             return edit.id
         }
-        let id = try start()
+        let id = try await start()
         #expect(previous == nil, "transaction instance survived its owning function in iteration \(iteration)")
         let resumed = try StorageGeneration.resume(device: device, id: id)
         // Resource lifetime only: do not fan out synchronous disk-image subprocess checks.
+        try await resumed.close()
         withExtendedLifetime(resumed) {}
     }
 

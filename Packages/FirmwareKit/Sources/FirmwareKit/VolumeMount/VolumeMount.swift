@@ -3,11 +3,11 @@
 // The disk-image operations (attach, detach, resize) go through DiskImage; mount/unmount, newfs_hfs and
 // fsck_hfs are run here.
 //
-//   try VolumeMount.withMounted(image, at: mountPoint) { root in ... }   // attach + diskutil mount (noowners,
+//   try await VolumeMount.withMounted(image, at: mountPoint) { root in ... }   // attach + diskutil mount (noowners,
 //                                                                        // nobrowse); then junk removed, unmount
 //                                                                        // (retried), fsck_hfs -fn, detach
-//   try VolumeMount.makeHFS(image, size: bytes, name: "Data")            // sparse, case-sensitive, journaled
-//   try VolumeMount.grow(image, toBytes: n)                              // resize + alternate header fix
+//   try await VolumeMount.makeHFS(image, size: bytes, name: "Data")            // sparse, case-sensitive, journaled
+//   try await VolumeMount.grow(image, toBytes: n)                              // resize + alternate header fix
 //
 // The mount is noowners: everything written lands as the host user and chown is refused, so owners are
 // patched offline afterwards with HFSPlusVolume.setOwner. Write files in place (never replace them by
@@ -23,68 +23,89 @@ public enum VolumeMount {
     /// removes `junk`, unmounts (retrying while Spotlight or fseventsd hold the volume), checks it with
     /// `fsck_hfs -fn` and detaches. A volume that would not unmount is never fsck'd (a mounted volume
     /// reports bogus damage); it is force-detached and the call throws. When `body` throws, its error wins.
-    public static func withMounted<T>(_ image: URL, at mountPoint: URL, _ body: (URL) throws -> T) throws -> T {
+    nonisolated(nonsending) public static func withMounted<T>(_ image: URL, at mountPoint: URL,
+        _ body: (URL) async throws -> T) async throws -> T {
+        try Task.checkCancellation()
         try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
-        // A journaled volume gets its (empty) journal back as it was: the mount fills it with transactions
-        // and moves its header, run-to-run noise in the image (HFSPlusVolume.journalSnapshot).
         let journal = (try? HFSPlusVolume(image).journalSnapshot()) ?? nil
-        let dev = try attach(image)
-        let result: Result<T, Error>
+        let dev = try await attach(image)
+        let value: T
         do {
-            try run("/usr/sbin/diskutil", ["mount", "-mountOptions", "nobrowse", "-mountPoint", mountPoint.path, dev])
-            result = Result { try body(mountPoint) }
+            try await run("/usr/sbin/diskutil", ["mount", "-mountOptions", "nobrowse", "-mountPoint", mountPoint.path, dev])
+            try Task.checkCancellation()
+            value = try await body(mountPoint)
+            try Task.checkCancellation()
         } catch {
-            detach(dev)
+            // Original body/cancellation diagnostic wins; cleanup failure is explicit.
+            do { _ = try await finish(dev: dev, mountPoint: mountPoint, check: false) }
+            catch { FirmwareDiagnostics.write(Data("mount cleanup: \(error)\n".utf8)) }
             throw error
         }
-        for j in junk { try? FileManager.default.removeItem(at: mountPoint.appendingPathComponent(j)) }
-        var unmounted = false
-        for _ in 0..<20 {
-            if (try? run("/usr/sbin/diskutil", ["unmount", dev])) != nil { unmounted = true; break }
-            usleep(500_000)
-        }
-        var fsck: (ok: Bool, output: String) = (false, "")
-        if unmounted, case .success = result { fsck = check(dev) }
-        detach(dev, force: !unmounted)
-        let value = try result.get()
-        guard unmounted else { throw FirmwareError(.internal, "could not unmount \(mountPoint.path) (\(dev))") }
-        guard fsck.ok else {
-            throw FirmwareError(.internal, "fsck_hfs is not happy with \(image.lastPathComponent): \(fsck.output.suffix(600))")
-        }
+        let fsck = try await finish(dev: dev, mountPoint: mountPoint, check: true)
+        guard fsck.ok else { throw FirmwareError(.internal, "fsck_hfs is not happy with \(image.lastPathComponent): \(fsck.output.suffix(600))") }
         if let journal { try HFSPlusVolume(image, writable: true).restore(journal) }
         return value
     }
 
-    /// Attaches a raw image without mounting it; returns its /dev/diskN.
-    public static func attach(_ image: URL) throws -> String { try DiskImage.attach(image).device }
+    private static func finish(dev: String, mountPoint: URL, check shouldCheck: Bool) async throws -> (ok: Bool, output: String) {
+        try await Task.detached {
+            for name in junk { try? FileManager.default.removeItem(at: mountPoint.appendingPathComponent(name)) }
+            var unmounted = false
+            for _ in 0..<20 {
+                if (try? await run("/usr/sbin/diskutil", ["unmount", dev])) != nil { unmounted = true; break }
+                try await Task.sleep(for: .milliseconds(500))
+            }
+            var checked: (ok: Bool, output: String) = (false, "")
+            do {
+                if unmounted && shouldCheck { checked = try await check(dev) }
+            } catch {
+                await cleanupDetach(dev)
+                throw error
+            }
+            try await detach(dev, force: !unmounted)
+            guard unmounted else { throw FirmwareError(.internal, "could not unmount \(mountPoint.path) (\(dev))") }
+            return checked
+        }.value
+    }
 
-    /// Detaches `dev`, retrying; with `force`, the retries force it. Never throws: it is cleanup.
-    public static func detach(_ dev: String, force: Bool = false) { DiskImage.detach(dev, force: force) }
+    /// Awaited independent teardown; callers retain their resource owner until it returns.
+    static func cleanupDetach(_ dev: String, force: Bool = false) async {
+        do { try await detach(dev, force: force) }
+        catch { FirmwareDiagnostics.write(Data("detach cleanup: \(error)\n".utf8)) }
+    }
+
+    /// Attaches a raw image without mounting it; returns its /dev/diskN.
+    public static func attach(_ image: URL) async throws -> String { try await DiskImage.attach(image).device }
+
+    /// Detaches `dev`, retrying; with `force`, the retries force it.
+    /// Failure remains observable so callers cannot release ownership as if detached.
+    public static func detach(_ dev: String, force: Bool = false) async throws { try await DiskImage.detach(dev, force: force) }
 
     /// `fsck_hfs -fn` (check only; -f because the data volume is journaled) of an attached, unmounted device.
-    public static func check(_ dev: String) -> (ok: Bool, output: String) {
-        let (status, out) = exec("/sbin/fsck_hfs", ["-fn", dev])
+    public static func check(_ dev: String) async throws -> (ok: Bool, output: String) {
+        let (status, out) = try await exec("/sbin/fsck_hfs", ["-fn", dev])
         return (status == 0 && out.contains("appears to be OK"), out)
     }
 
     /// A bare (no partition map) case-sensitive journaled HFS+ volume in a sparse raw file of `size` bytes
     /// (rounded down to 4 KiB): newfs_hfs writes only metadata, so a 14.7 GB data volume costs ~40 MB.
-    public static func makeHFS(_ image: URL, size: Int64, name: String = "Data") throws {
+    public static func makeHFS(_ image: URL, size: Int64, name: String = "Data") async throws {
         guard FileManager.default.createFile(atPath: image.path, contents: nil), truncate(image.path, off_t(size / 4096 * 4096)) == 0 else {
             throw FirmwareError(.internal, "cannot create \(image.path)")
         }
-        let dev = try attach(image)
-        defer { detach(dev) }
-        try run("/sbin/newfs_hfs", ["-s", "-J", "-v", name, dev])
+        let dev = try await attach(image)
+        do { try await run("/sbin/newfs_hfs", ["-s", "-J", "-v", name, dev]) }
+        catch { await cleanupDetach(dev); throw error }
+        try await detach(dev)
     }
 
     /// Grows the volume in `image` to `bytes` (a multiple of 4096). The resize grows the file and the file
     /// system, but keeps the file's slack past the volume (the iPad IPSW volumes: one 4 KiB sector), so the file
     /// system stops that short; pad the file and move the alternate volume header to the new end - 1024, where
     /// fsck_hfs and the kernel look for it.
-    public static func grow(_ image: URL, toBytes bytes: Int, backend: DiskImage.Backend = DiskImage.backend) throws {
+    public static func grow(_ image: URL, toBytes bytes: Int, backend: DiskImage.Backend = DiskImage.backend) async throws {
         guard try size(image) != bytes else { return }
-        try DiskImage.resize(image, toBytes: bytes, backend: backend)
+        try await DiskImage.resize(image, toBytes: bytes, backend: backend)
         let old = try size(image)
         guard old <= bytes else { throw FirmwareError(.internal, "resize overshot \(bytes) bytes (\(old))") }
         let f = try FileHandle(forUpdating: image)
@@ -102,8 +123,8 @@ public enum VolumeMount {
 
     /// Runs a tool; throws with its output on a non-zero exit. Returns its output.
     @discardableResult
-    static func run(_ tool: String, _ args: [String]) throws -> String { try DiskImage.run([tool] + args) }
+    static func run(_ tool: String, _ args: [String]) async throws -> String { try await DiskImage.run([tool] + args) }
 
     /// (status, stdout and stderr).
-    static func exec(_ tool: String, _ args: [String]) -> (Int32, String) { DiskImage.exec([tool] + args) }
+    static func exec(_ tool: String, _ args: [String]) async throws -> (Int32, String) { try await DiskImage.exec([tool] + args) }
 }

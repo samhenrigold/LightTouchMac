@@ -16,7 +16,7 @@
 // Owners: the mount is noowners, so every file written lands as the host user; the catalog records are
 // patched offline afterwards (HFSPlusVolume.setOwner), as the oracle does.
 //
-//   let r = try SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: p1 * 4096, dataBytes: p2 * 4096,
+//   let r = try await SystemEdits.buildK48(rootfs: dmg, work: dir, systemBytes: p1 * 4096, dataBytes: p2 * 4096,
 //                                    options: .init(recipe: entry.recipe!), helpers: guestTools) { print($0) }
 //   r.system, r.data, r.activation
 //
@@ -120,9 +120,9 @@ public enum SystemEdits {
     /// for the real-iBoot chain (ipad1_rootfs.build --kernelcache). kboot omits it (the kernel is in the bundle).
     public static let kernelcachePath = "System/Library/Caches/com.apple.kernelcaches/kernelcache"
 
-    public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
+    nonisolated(nonsending) public static func buildK48(rootfs: URL, work: URL, systemBytes: Int, dataBytes: Int64, options o: Options, helpers: URL,
                                 kernelcache: Data? = nil, kernel: Data? = nil, dataVolumeUUID: [UInt8]? = nil, fit: FitCheck.Log = FitCheck.Log(),
-                                log: (String) -> Void = { _ in }) throws -> Result {
+                                log: (String) -> Void = { _ in }) async throws -> Result {
         let fm = FileManager.default
         let system = work.appendingPathComponent("system.img"), data = work.appendingPathComponent("data.img")
         var result = Result(system: system, data: data)
@@ -148,7 +148,7 @@ public enum SystemEdits {
         }
 
         log("system volume from \(rootfs.lastPathComponent)")
-        try UDIF.extractRootfs(dmg: rootfs, to: system)
+        try await UDIF.extractRootfs(dmg: rootfs, to: system)
         let newest: UInt32   // the IPSW's newest file: everything the recipe writes gets dated as of it
         do {
             let v = try HFSPlusVolume(system)
@@ -158,13 +158,13 @@ public enum SystemEdits {
             log("\(v.signature) \(v.totalBlocks) x \(v.blockSize) B blocks, \(v.freeBlocks) free; partition 1 is \(systemBytes >> 20) MiB")
             newest = try v.newestDate()
         }
-        try VolumeMount.grow(system, toBytes: systemBytes)
+        try await VolumeMount.grow(system, toBytes: systemBytes)
 
         log("editing the system volume")
         let skeleton = work.appendingPathComponent("var-skeleton")
         try? fm.removeItem(at: skeleton)
         var rootOwned: [String] = []
-        try VolumeMount.withMounted(system, at: work.appendingPathComponent("mnt-system")) { m in
+        try await VolumeMount.withMounted(system, at: work.appendingPathComponent("mnt-system")) { m in
             let at = { (rel: String) in m.appendingPathComponent(rel) }
             // every baked helper proven to load on this firmware (FitCheck.loads), read before any edit
             let fw = FitCheck.Firmware(root: m, arch: "armv7", kernelcache: kernel)
@@ -257,9 +257,9 @@ public enum SystemEdits {
         }
         if o.webProxy { try seedPlist(sc.appendingPathComponent("preferences.plist"), wifiProxyPrefs) }
         try? fm.removeItem(at: data)
-        try VolumeMount.makeHFS(data, size: dataBytes)
+        try await VolumeMount.makeHFS(data, size: dataBytes)
         var byOwner: [[UInt32]: [String]] = [:]
-        try VolumeMount.withMounted(data, at: work.appendingPathComponent("mnt-data")) { m in
+        try await VolumeMount.withMounted(data, at: work.appendingPathComponent("mnt-data")) { m in
             try copyTree(skeleton, m)   // merges into the root, which takes /private/var's mode
             try walk(m) { rel in
                 let own: [UInt32] = owners[rel].map { [$0.uid, $0.gid] } ?? (mobileTop.contains(String(rel.prefix { $0 != "/" })) ? [501, 501] : [0, 0])

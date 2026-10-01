@@ -138,10 +138,10 @@ final class N72Board: Board {
     var volume: URL!
 
     /// The system volume: IPSW rootfs grown to the recipe, fstab, kernelcache, the bake; owners and dates patched.
-    func volumes(_ c: Recipe.Context) throws {
+    nonisolated(nonsending) func volumes(_ c: Recipe.Context) async throws {
         volume = c.work.appendingPathComponent("volume.img")
-        try UDIF.extractRootfs(dmg: c.decFile("rootfs.dmg"), to: volume)
-        try VolumeMount.grow(volume, toBytes: blocks * 4096)
+        try await UDIF.extractRootfs(dmg: c.decFile("rootfs.dmg"), to: volume)
+        try await VolumeMount.grow(volume, toBytes: blocks * 4096)
         let newest: UInt32   // the IPSW's newest file: everything the recipe writes gets dated as of it
         do {
             let v = try HFSPlusVolume(volume)
@@ -150,7 +150,7 @@ final class N72Board: Board {
             newest = try v.newestDate()
         }
         var owners: [(UInt32, String)] = [(0, kcPath)]
-        let report = try VolumeMount.withMounted(volume, at: c.work.appendingPathComponent("mnt")) { m -> [String: Any] in
+        let report = try await VolumeMount.withMounted(volume, at: c.work.appendingPathComponent("mnt")) { m -> [String: Any] in
             try SystemEdits.put(Data(Self.fstabRW.utf8), m.appendingPathComponent(SystemEdits.fstab))
             let kc = m.appendingPathComponent(kcPath)
             try SystemEdits.mkdirs(kc.deletingLastPathComponent())
@@ -168,7 +168,7 @@ final class N72Board: Board {
         c.log("\(try hfs.normalize(after: newest, to: newest)) catalog records dated as of the IPSW's newest file")
     }
 
-    func store(_ c: Recipe.Context) throws {
+    nonisolated(nonsending) func store(_ c: Recipe.Context) async throws {
         let (written, meta) = try N72NAND.write(volume: volume, blocks: blocks, epoch: epoch, out: c.nand)
         c.log("\(written) filesystem pages, \(meta) metadata pages generated (epoch \(epoch))")
         try FileManager.default.removeItem(at: volume)
@@ -176,9 +176,9 @@ final class N72Board: Board {
 
     /// 4.x data protection: effaceable + system keybag from the IPSW's own Update ramdisk (a restore-only build such
     /// as 8A293 ships just the Restore one; restored_external runs first on either).
-    func keybag(_ c: Recipe.Context) throws {
-        let (source, name) = try Recipe.keybagRamdisk(c)
-        _ = try N72Keybag.run(out: c.o.out, dec: c.dec, ramdisk: source,
+    nonisolated(nonsending) func keybag(_ c: Recipe.Context) async throws {
+        let (source, name) = try await Recipe.keybagRamdisk(c)
+        _ = try await N72Keybag.run(out: c.o.out, dec: c.dec, ramdisk: source,
                               itKeybag: c.o.guestTools.appendingPathComponent(itKeybag), bootrom: bootrom!, helper: helper!, work: c.work, log: c.log)
         derived["keybag_ramdisk"] = name
     }

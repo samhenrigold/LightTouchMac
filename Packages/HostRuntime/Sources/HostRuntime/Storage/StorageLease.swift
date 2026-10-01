@@ -1,15 +1,16 @@
 import Darwin
 import Foundation
+import os
 
 /// Owns the stopped/live device exclusion descriptor, never the lease pathname.
 /// Keep the inode in place: unlinking it permits another owner to lock a new file.
-public nonisolated final class StorageLease {
+public nonisolated final class StorageLease: Sendable {
     public enum Failure: Error, Equatable {
         case openFailed(Int32)
         case inUse
         case pendingEdit
     }
-    private let descriptor: Int32
+    private let descriptor: OSAllocatedUnfairLock<Int32?>
 
     /// Resume callers may allow a pending edit only while validating their exact
     /// durable session under this same lease; ordinary boot/export/maintenance deny it.
@@ -26,11 +27,25 @@ public nonisolated final class StorageLease {
             if !allowPendingEdit && FileManager.default.fileExists(atPath: directory.appendingPathComponent("edit.json").path) {
                 throw Failure.pendingEdit
             }
-            descriptor = fd
+            descriptor = OSAllocatedUnfairLock(initialState: fd)
         } catch {
-            close(fd)
+            Darwin.close(fd)
             throw error
         }
     }
-    deinit { close(descriptor) }
+    public var isClosed: Bool { descriptor.withLock { $0 == nil } }
+
+    /// End an explicitly shared ownership scope after all operations finish.
+    /// Retained aliases are then closed owners; the inode remains in place.
+    public func close() {
+        descriptor.withLock { descriptor in
+            guard let fd = descriptor else { return }
+            descriptor = nil
+            // Closing only this reference can leave a transient inherited
+            // pre-exec alias holding flock despite FD_CLOEXEC. End the scope.
+            flock(fd, LOCK_UN)
+            Darwin.close(fd)
+        }
+    }
+    deinit { close() }
 }

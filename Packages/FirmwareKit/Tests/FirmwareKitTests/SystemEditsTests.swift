@@ -81,14 +81,14 @@ enum K48Oracle {
 
     /// GuestPackage.seed against mkpkg.seed on a plain directory with the real armv7.itpack: the same tree
     /// (paths, modes, bytes, symlinks) and the same record, for a shim image and a no-shim one.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: [("7B500", true), ("8C148", false), ("9B206", true)]) func seedMatchesPython(_ build: String, _ gles: Bool) throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: [("7B500", true), ("8C148", false), ("9B206", true)]) func seedMatchesPython(_ build: String, _ gles: Bool) async throws {
         let itpack = Oracle.guestPackages.appendingPathComponent("armv7.itpack")
         guard Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py")) else { try FixtureRequirements.missing(#"SystemEditsTests.swift: Oracle.exists(itpack), Oracle.exists(K48Oracle.qemu.appendingPathComponent("contrib/guest-package/mkpkg.py"))"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             // the firmware the seed's load checks read: its executables, libSystem, cache, and the mounter's job
             // inserting it_msmquiet as the bake leaves it
             let id = "k48ap-" + build
-            guard let stock = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter, SystemEdits.msmJob], in: dir) else { try FixtureRequirements.missing(#"SystemEditsTests.swift: let stock = try FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter, SystemEdits.msmJob], in: dir)"#) }
+            guard let stock = try await FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter, SystemEdits.msmJob], in: dir) else { try FixtureRequirements.missing(#"SystemEditsTests.swift: let stock = try await FitFixture.volume(id, FitFixture.stock(id) + [FitFixture.mounter, SystemEdits.msmJob], in: dir)"#) }
             try FitFixture.insert("/usr/local/lib/it_msmquiet.dylib", into: SystemEdits.msmJob, at: stock)
             func volume(_ name: String) throws -> URL {
                 let v = dir.appendingPathComponent(name), sv = v.appendingPathComponent(GuestPackage.systemVersion)
@@ -150,10 +150,10 @@ enum K48Oracle {
     /// Level 2: the Swift-built system and data volumes against ipad1_rootfs.py build + bake --seal
     /// --activation-hook on the same rootfs.dmg: every path with owner, mode, flags, size, content sha256 and
     /// symlink target; plists written by either side compared parsed. Expected difference: lockdownd, whose ad-hoc signature representation differs between signers.
-    @Test(arguments: HFSOracle.ipads) func volumesMatchPython(_ fw: Oracle.Firmware) throws {
+    @Test(arguments: HFSOracle.ipads) func volumesMatchPython(_ fw: Oracle.Firmware) async throws {
         guard K48Oracle.available, let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg),
               let hook = K48Oracle.hooks[fw.entryID], FileManager.default.isExecutableFile(atPath: hook.path) else { return }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             let entry = try Oracle.entry(fw.entryID), recipe = try #require(entry.recipe)
             let parts = try JSONSerialization.jsonObject(with: HFSOracle.python("""
                 import json, ipad1_nand as n
@@ -177,8 +177,8 @@ enum K48Oracle {
             let swift = dir.appendingPathComponent("swift")
             try FileManager.default.createDirectory(at: swift, withIntermediateDirectories: true)
             let helpers = try K48Oracle.helpers(in: dir)
-            let r = try Oracle.time("SystemEdits.buildK48 \(fw.entryID)") {
-                try SystemEdits.buildK48(rootfs: dmg, work: swift, systemBytes: parts[0] * 4096, dataBytes: Int64(parts[1]) * 4096,
+            let r = try await Oracle.time("SystemEdits.buildK48 \(fw.entryID)") {
+                try await SystemEdits.buildK48(rootfs: dmg, work: swift, systemBytes: parts[0] * 4096, dataBytes: Int64(parts[1]) * 4096,
                                          options: .init(recipe: recipe), helpers: helpers) { print("  \($0)") }
             }
             #expect(r.activation != nil)
@@ -241,10 +241,10 @@ enum K48Oracle {
     /// lock's built_listing_sha256 (the golden-lock oracle) relies on it. Dates, the data volume's identifier and
     /// the journals are normalized after the mount (HFSPlusVolume.normalize, VolumeMount.withMounted). A
     /// difference is reported by 4 KiB page, HFS+ region and its first differing bytes.
-    @Test(arguments: HFSOracle.ipads) func volumesAreReproducible(_ fw: Oracle.Firmware) throws {
+    @Test(arguments: HFSOracle.ipads) func volumesAreReproducible(_ fw: Oracle.Firmware) async throws {
         guard let cache = fw.cache, Oracle.exists(cache.appendingPathComponent("rootfs.dmg")),
               K48Oracle.guestTools != nil || K48Oracle.available else { return }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             let entry = try Oracle.entry(fw.entryID), recipe = try #require(entry.recipe)
             let mbr = dir.appendingPathComponent("mbr.bin")
             try K48NAND.makeMBR(systemMiB: recipe.systemMiB).write(to: mbr)
@@ -254,8 +254,8 @@ enum K48Oracle {
             for run in ["a", "b"] {
                 let work = dir.appendingPathComponent(run)
                 try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-                let r = try Oracle.time("SystemEdits.buildK48 \(fw.entryID) \(run)") {
-                    try SystemEdits.buildK48(rootfs: cache.appendingPathComponent("rootfs.dmg"), work: work, systemBytes: parts[0].count * 4096,
+                let r = try await Oracle.time("SystemEdits.buildK48 \(fw.entryID) \(run)") {
+                    try await SystemEdits.buildK48(rootfs: cache.appendingPathComponent("rootfs.dmg"), work: work, systemBytes: parts[0].count * 4096,
                                              dataBytes: Int64(parts[1].count) * 4096, options: .init(recipe: recipe), helpers: helpers,
                                              dataVolumeUUID: [1, 2, 3, 4, 5, 6, 7, 8]) { _ in }
                 }
@@ -272,7 +272,7 @@ enum K48Oracle {
             var listings: [String] = []
             for run in ["a", "b"] {
                 let store = dir.appendingPathComponent("store-" + run)
-                try K48NAND.build(mbr: mbr, kernelVersion: kv, system: volumes[0][0], data: .image(volumes[0][1]), out: store)
+                try await K48NAND.build(mbr: mbr, kernelVersion: kv, system: volumes[0][0], data: .image(volumes[0][1]), out: store)
                 let files = try FileManager.default.contentsOfDirectory(atPath: store.path).sorted()
                 listings.append(try Preparer.nandListing(store, files: files).sha256)
             }

@@ -32,7 +32,9 @@ let package = Package(
             .product(name: "MachOKit", package: "MachOKit"),
             .product(name: "Subprocess", package: "swift-subprocess"),
         ]),
-        .executableTarget(name: "FirmwareKitCLI", dependencies: ["FirmwareKit"]),
+        .executableTarget(name: "FirmwareKitCLI", dependencies: ["FirmwareKit",
+            .product(name: "HostRuntime", package: "HostRuntime"),
+        ]),
         .testTarget(name: "FirmwareKitTests", dependencies: ["FirmwareKit"]),
     ]
 )

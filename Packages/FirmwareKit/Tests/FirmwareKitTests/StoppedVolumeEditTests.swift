@@ -7,7 +7,7 @@ import Testing
 struct StoppedVolumeEditTests {
     /// Real macOS HFS driver, ordinary atomic editor save, resource fork,
     /// symlink and case-sensitive names, then exact NAND logical roundtrip.
-    @Test func nativeMetadataAndPublication() throws {
+    @Test func nativeMetadataAndPublication() async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("stopped-native-edit")
         defer {
@@ -18,8 +18,8 @@ struct StoppedVolumeEditTests {
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let image = root.appendingPathComponent("volume.img")
-        try VolumeMount.makeHFS(image, size: 32 << 20, name: "Edit metadata test")
-        try VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { mount in
+        try await VolumeMount.makeHFS(image, size: 32 << 20, name: "Edit metadata test")
+        try await VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { mount in
             try fm.createDirectory(at: mount.appendingPathComponent("private/var/mobile/Media"), withIntermediateDirectories: true)
             try Data("before".utf8).write(to: mount.appendingPathComponent("Settings.plist"))
             try Data("Alpha".utf8).write(to: mount.appendingPathComponent("Alpha"))
@@ -48,18 +48,18 @@ struct StoppedVolumeEditTests {
         // A mounted/exported copy must not keep the stopped owner alive merely
         // because the declarative selection remains retained by its caller.
         let selection = try VolumeExport.Source(device: device)
-        let readOnlyCopy = try VolumeExport.export(selection, out: root.appendingPathComponent("read-only-export"))
+        let readOnlyCopy = try await VolumeExport.export(selection, out: root.appendingPathComponent("read-only-export"))
         #expect(readOnlyCopy.count == 1)
         do {
-            let released = try StoppedStorageLease(device.appendingPathComponent("work/lease"))
+            let released = try OwnedStorageRecord.acquire(device: device)
             withExtendedLifetime((selection, released)) {}
         }
-        let session = try StoppedVolumeEdit.begin(device: device)
-        try VolumeMount.withMounted(session.image, at: root.appendingPathComponent("edit")) { mount in
+        let session = try await StoppedVolumeEdit.begin(device: device)
+        try await VolumeMount.withMounted(session.image, at: root.appendingPathComponent("edit")) { mount in
             try Data("after-atomic-save".utf8).write(to: mount.appendingPathComponent("Settings.plist"), options: .atomic)
             try Data("new-mobile-file".utf8).write(to: mount.appendingPathComponent("private/var/mobile/Media/new.plist"))
         }
-        try StoppedVolumeEdit.commit(device: device, id: session.id)
+        try await StoppedVolumeEdit.commit(device: device, id: session.id)
         let published = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: device.appendingPathComponent("device.json"))) as? [String: Any])
         let generationBase = URL(fileURLWithPath: try #require((published["base"] as? [String: String])?["path"]))
         let logical = try #require(try VolumeRebuild.rebuild(base: generationBase.appendingPathComponent("nand"), overlay: nil,

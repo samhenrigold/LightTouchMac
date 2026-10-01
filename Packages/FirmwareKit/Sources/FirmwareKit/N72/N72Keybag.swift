@@ -20,10 +20,10 @@ enum N72Keybag {
 
     /// `out` holds nand/, nor.bin, iBoot.bin and gid-blobs.bin (writable); `dec` the decrypt cache (the kernelcache);
     /// `ramdisk` the decrypted restore ramdisk to boot (this build's, or a sibling's: Recipe.keybagRamdisk).
-    static func run(out: URL, dec: URL, ramdisk: URL, itKeybag: URL, bootrom: URL, helper: URL, work: URL,
-                    log: (String) -> Void) throws -> Int {
+    nonisolated(nonsending) static func run(out: URL, dec: URL, ramdisk: URL, itKeybag: URL, bootrom: URL, helper: URL, work: URL,
+                    log: (String) -> Void) async throws -> Int {
         let fm = FileManager.default
-        let rd = try Preparer.ramdiskWithHelper(ramdisk, helper: itKeybag, work: work)
+        let rd = try await Preparer.ramdiskWithHelper(ramdisk, helper: itKeybag, work: work)
         let nor = work.appendingPathComponent("nor.rw"), ovl = work.appendingPathComponent("keybag-overlay")
         let serial = work.appendingPathComponent("keybag.log")
         try fm.copyItem(at: out.appendingPathComponent("nor.bin"), to: nor)

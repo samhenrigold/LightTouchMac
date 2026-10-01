@@ -114,7 +114,7 @@ import Testing
     }
 
     /// Cancel's process sweep: a grandchild is found and stopped.
-    @Test func terminatesDescendants() throws {
+    @Test func terminatesDescendants() async throws {
         let sh = Process()
         sh.executableURL = URL(fileURLWithPath: "/bin/sh")
         sh.arguments = ["-c", "sleep 60 & wait"]
@@ -124,7 +124,7 @@ import Testing
         for _ in 0..<100 where kids.isEmpty { usleep(20_000); kids = Preparer.descendants(of: sh.processIdentifier) }
         #expect(kids.count == 1)
         let t0 = Date()
-        Preparer.terminateDescendants(of: sh.processIdentifier, grace: 1)
+        await Preparer.terminateDescendants(of: sh.processIdentifier, grace: 1)
         sh.waitUntilExit()   // its `wait` returns once sleep is gone
         #expect(Date().timeIntervalSince(t0) < 2)
         #expect(kids.allSatisfy { kill($0, 0) != 0 })

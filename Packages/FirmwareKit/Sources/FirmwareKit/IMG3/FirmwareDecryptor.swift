@@ -85,7 +85,7 @@ public enum FirmwareDecryptor {
             } else {
                 let p = try path(c)
                 if ["iBSS", "iBEC"].contains(c), !keyed(p), try IMG3.tags(ipsw.read(p))["KBAG"] != nil {
-                    FileHandle.standardError.write(Data("warning: \(entry.id): no key for \(c) (\(p)); skipped\n".utf8))
+                    FirmwareDiagnostics.write(Data("warning: \(entry.id): no key for \(c) (\(p)); skipped\n".utf8))
                     continue
                 }
                 try dec(p, plainTail: plainTail).write(to: dir.appendingPathComponent("\(name).bin"))
@@ -95,7 +95,7 @@ public enum FirmwareDecryptor {
         for c in ["RestoreRamDisk", "UpdateRamDisk"] {
             guard let p = comp[c] else { continue }
             guard keyed(p) else {
-                FileHandle.standardError.write(Data("warning: \(entry.id): no key for \(c) (\(p)); skipped\n".utf8))
+                FirmwareDiagnostics.write(Data("warning: \(entry.id): no key for \(c) (\(p)); skipped\n".utf8))
                 continue
             }
             let out = String(p.dropLast(4)) + "-ramdisk.dmg"

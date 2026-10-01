@@ -91,10 +91,10 @@ enum HFSOracle {
         """
 
     /// The raw system volume of a firmware (UDIF slice of the Python cache's rootfs.dmg), in `dir`.
-    static func rawSystem(_ fw: Oracle.Firmware, in dir: URL) throws -> URL? {
+    static func rawSystem(_ fw: Oracle.Firmware, in dir: URL) async throws -> URL? {
         guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { return nil }
         let raw = dir.appendingPathComponent("rootfs.hfs")
-        try UDIF.extractRootfs(dmg: dmg, to: raw)
+        try await UDIF.extractRootfs(dmg: dmg, to: raw)
         return raw
     }
 
@@ -104,9 +104,9 @@ enum HFSOracle {
 @Suite(.serialized) struct HFSPlusTests {
     /// Every catalog path, owner, mode, flags, size, content sha256 and symlink target against a listing of
     /// the same image through hdiutil mounts, and the (parent, name) -> CNID index against setowner.py.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: HFSOracle.ipads) func readerMatchesMountAndSetowner(_ fw: Oracle.Firmware) throws {
-        try Oracle.withTemp { dir in
-            guard HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir) else { try FixtureRequirements.missing(#"HFSPlusTests.swift: HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir)"#) }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: HFSOracle.ipads) func readerMatchesMountAndSetowner(_ fw: Oracle.Firmware) async throws {
+        try await Oracle.withTemp { dir in
+            guard HFSOracle.available, let raw = try await HFSOracle.rawSystem(fw, in: dir) else { try FixtureRequirements.missing(#"HFSPlusTests.swift: HFSOracle.available, let raw = try await HFSOracle.rawSystem(fw, in: dir)"#) }
             let vol = try HFSPlusVolume(raw)
             #expect(vol.signature == "HX" && vol.blockSize == 8192)
             let mine = try Oracle.time("HFSPlus listing \(fw.entryID)") { try vol.listing() }
@@ -133,9 +133,9 @@ enum HFSOracle {
     }
 
     /// In-place owner and mode edits: the image bytes after Swift's edits equal those after Python's.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: HFSOracle.ipads) func ownershipEditsMatchPython(_ fw: Oracle.Firmware) throws {
-        try Oracle.withTemp { dir in
-            guard HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir) else { try FixtureRequirements.missing(#"HFSPlusTests.swift: HFSOracle.available, let raw = try HFSOracle.rawSystem(fw, in: dir)"#) }
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: HFSOracle.ipads) func ownershipEditsMatchPython(_ fw: Oracle.Firmware) async throws {
+        try await Oracle.withTemp { dir in
+            guard HFSOracle.available, let raw = try await HFSOracle.rawSystem(fw, in: dir) else { try FixtureRequirements.missing(#"HFSPlusTests.swift: HFSOracle.available, let raw = try await HFSOracle.rawSystem(fw, in: dir)"#) }
             let py = dir.appendingPathComponent("py.hfs")
             try FileManager.default.copyItem(at: raw, to: py)
             let specs = ["private/var/mobile:0:0", "System/Library/LaunchDaemons/com.apple.SpringBoard.plist:501:20",

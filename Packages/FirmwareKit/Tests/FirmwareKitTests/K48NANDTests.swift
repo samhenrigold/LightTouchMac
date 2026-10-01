@@ -44,14 +44,14 @@ struct K48NANDTests {
         }
     }
 
-    @Test func physicalExportRefusalPublishesNoFilesystem() throws {
-        try Oracle.withTemp { dir in
+    @Test func physicalExportRefusalPublishesNoFilesystem() async throws {
+        try await Oracle.withTemp { dir in
             let base = dir.appendingPathComponent("nand"), out = dir.appendingPathComponent("export")
             try FileManager.default.createDirectory(at: base, withIntermediateDirectories: false)
             var geometry = try #require(JSONSerialization.jsonObject(with: Data(K48NAND.Geometry.k48_16g.json.utf8)) as? [String: Any])
             geometry["storage_format"] = "nand-xor-ff-v2"
             try JSONSerialization.data(withJSONObject: geometry).write(to: base.appendingPathComponent("geometry.json"))
-            #expect(throws: FirmwareError.self) { try VolumeExport.export(.init(base: base, overlay: nil), out: out) }
+            await #expect(throws: FirmwareError.self) { try await VolumeExport.export(.init(base: base, overlay: nil), out: out) }
             #expect(!FileManager.default.fileExists(atPath: out.path))
         }
     }
@@ -99,7 +99,7 @@ struct K48NANDTests {
 
     /// Small synthetic store (Python's selfcheck geometry): byte-identical files vs ipad1_nand.build on the same
     /// inputs, including a sparse data image and an fstab line, and both checkers accept the Swift store.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func syntheticStoreMatchesPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func syntheticStoreMatchesPython() async throws {
         guard Fixtures.hasPython else { try FixtureRequirements.missing(#"K48NANDTests.swift: Fixtures.hasPython"#) }
         let dir = try Fixtures.tempDir("nand")
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -130,7 +130,7 @@ struct K48NANDTests {
 
         let kv = Array("Darwin Kernel Version selfcheck".utf8)
         let mine = dir.appendingPathComponent("swift"), theirs = dir.appendingPathComponent("python")
-        try K48NAND.build(geometry: .selfcheck, mbr: paths[0], kernelVersion: kv, system: paths[1], s3: paths[2],
+        try await K48NAND.build(geometry: .selfcheck, mbr: paths[0], kernelVersion: kv, system: paths[1], s3: paths[2],
                           data: .image(paths[3]), out: mine)
         let py = """
             import sys, argparse; sys.path.insert(0, sys.argv[1]); import ipad1_nand as n
@@ -151,7 +151,7 @@ struct K48NANDTests {
 
     /// The real thing (FK_NAND_FULL=1): the 7B500 pristine system + 14.7 GB sparse data volume into a
     /// k48-16g store, every file compared with `ipad1_nand.py build` on the same inputs.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func fullStoreMatchesPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func fullStoreMatchesPython() async throws {
         let u = Fixtures.files.appendingPathComponent("ipad1/userland/pristine"), hw2 = Fixtures.files.appendingPathComponent("ipad1/hw2")
         let inputs = [hw2.appendingPathComponent("rdisk0-head4M.bin"), u.appendingPathComponent("system.img"),
                       hw2.appendingPathComponent("rdisk0s3.bin"), u.appendingPathComponent("data.img"),
@@ -162,7 +162,7 @@ struct K48NANDTests {
         let oracle = ProcessInfo.processInfo.environment["FK_NAND_ORACLE"]      // a prebuilt ipad1_nand.py store, if given
         let mine = dir.appendingPathComponent("swift"), theirs = oracle.map { URL(fileURLWithPath: $0) } ?? dir.appendingPathComponent("python")
         let t0 = Date()
-        let res = try K48NAND.build(mbr: inputs[0], kernelVersion: try K48NAND.kernelVersion(kernelcache: inputs[4]), system: inputs[1],
+        let res = try await K48NAND.build(mbr: inputs[0], kernelVersion: try K48NAND.kernelVersion(kernelcache: inputs[4]), system: inputs[1],
                                     s3: inputs[2], data: .image(inputs[3]), out: mine)
         let swiftTime = Date().timeIntervalSince(t0)
         if oracle == nil {

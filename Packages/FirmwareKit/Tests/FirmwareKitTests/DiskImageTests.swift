@@ -6,8 +6,10 @@ import Testing
 /// (hdiutil everywhere; `diskutil image` on macOS 27+), and that both produce the same grown volume and raw disk.
 /// (Editing through a diskutil attach lays files out differently, the solid-state allocation policy: DiskImage.backend.)
 @Suite(.serialized) struct DiskImageTests {
-    static let hasDiskutilImage = DiskImage.exec(["/usr/sbin/diskutil", "image"]).0 == 0
-    static var backends: [DiskImage.Backend] { [.hdiutil] + (hasDiskutilImage ? [.diskutil] : []) }
+    static func backends() async throws -> [DiskImage.Backend] {
+        let hasDiskutilImage = try await DiskImage.exec(["/usr/sbin/diskutil", "image"]).0 == 0
+        return [.hdiutil] + (hasDiskutilImage ? [.diskutil] : [])
+    }
 
     @Test func argv() {
         let img = URL(fileURLWithPath: "/tmp/v.img"), raw = ["-imagekey", "diskimage-class=CRawDiskImage"]
@@ -53,29 +55,29 @@ import Testing
     /// grown volumes of both backends are byte-identical, for 4 KiB and 8 KiB allocation blocks (iOS's two sizes)
     /// with 0, 4 and 8 KiB of file slack past the volume (the iPad IPSW volumes carry 4 KiB; hdiutil then stops a
     /// block short).
-    @Test(arguments: [(4096, 0), (8192, 0), (8192, 4096), (4096, 4096), (8192, 8192)]) func backendsAgree(blockSize: Int, slack: Int) throws {
-        try Oracle.withTemp { dir in
+    @Test(arguments: [(4096, 0), (8192, 0), (8192, 4096), (4096, 4096), (8192, 8192)]) func backendsAgree(blockSize: Int, slack: Int) async throws {
+        try await Oracle.withTemp { dir in
             let base = dir.appendingPathComponent("base.img")
             #expect(FileManager.default.createFile(atPath: base.path, contents: nil) && truncate(base.path, 32 << 20) == 0)
-            let dev0 = try DiskImage.attach(base)
-            try DiskImage.run(["/sbin/newfs_hfs", "-s", "-J", "-b", String(blockSize), "-v", "Data", dev0.device])
-            DiskImage.detach(dev0.device)
+            let dev0 = try await DiskImage.attach(base)
+            try await DiskImage.run(["/sbin/newfs_hfs", "-s", "-J", "-b", String(blockSize), "-v", "Data", dev0.device])
+            try await DiskImage.detach(dev0.device)
             #expect(truncate(base.path, off_t((32 << 20) + slack)) == 0)
             var grown: [DiskImage.Backend: Data] = [:]
-            for b in Self.backends {
+            for b in try await Self.backends() {
                 let img = dir.appendingPathComponent("\(b.rawValue).img")
                 try FileManager.default.copyItem(at: base, to: img)
-                let a = try DiskImage.attach(img, backend: b)
+                let a = try await DiskImage.attach(img, backend: b)
                 #expect(a.device.hasPrefix("/dev/disk") && a.mountPoint == nil, "\(b)")
-                #expect(DiskImage.attachedImages().contains { $0.image == img.path && $0.device == a.device }, "\(b): listed while attached")
-                DiskImage.detach(a.device, backend: b)
-                #expect(!DiskImage.attachedImages().contains { $0.image == img.path }, "\(b): gone after detach")
-                try VolumeMount.grow(img, toBytes: 64 << 20, backend: b)   // resize, then the pad + alternate header move
+                #expect(try await DiskImage.attachedImages().contains { $0.image == img.path && $0.device == a.device }, "\(b): listed while attached")
+                try await DiskImage.detach(a.device, backend: b)
+                #expect(!(try await DiskImage.attachedImages()).contains { $0.image == img.path }, "\(b): gone after detach")
+                try await VolumeMount.grow(img, toBytes: 64 << 20, backend: b)   // resize, then the pad + alternate header move
                 let v = try HFSPlusVolume(img)
                 #expect(v.blockSize == blockSize && v.totalBlocks == ((64 << 20) - slack % blockSize) / blockSize, "\(b): \(v.totalBlocks) x \(v.blockSize)")
-                let dev = try DiskImage.attach(img, backend: b).device
-                let fsck = VolumeMount.check(dev)
-                DiskImage.detach(dev, backend: b)
+                let dev = try await DiskImage.attach(img, backend: b).device
+                let fsck = try await VolumeMount.check(dev)
+                try await DiskImage.detach(dev, backend: b)
                 #expect(fsck.ok, "\(b): \(fsck.output.suffix(300))")
                 grown[b] = try Data(contentsOf: img)
             }
@@ -86,16 +88,16 @@ import Testing
     }
 
     /// Each backend converts a UDIF (zlib) image to the same raw disk.
-    @Test func convertToRaw() throws {
-        try Oracle.withTemp { dir in
+    @Test func convertToRaw() async throws {
+        try await Oracle.withTemp { dir in
             let src = dir.appendingPathComponent("src"), dmg = dir.appendingPathComponent("a.dmg")
             try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
             try Data("hello\n".utf8).write(to: src.appendingPathComponent("f"))
-            try DiskImage.run(["/usr/bin/hdiutil", "create", "-quiet", "-format", "UDZO", "-fs", "HFS+", "-layout", "SPUD", "-srcfolder", src.path, "-o", dmg.path])
+            try await DiskImage.run(["/usr/bin/hdiutil", "create", "-quiet", "-format", "UDZO", "-fs", "HFS+", "-layout", "SPUD", "-srcfolder", src.path, "-o", dmg.path])
             var raws: [Data] = []
-            for b in Self.backends {
+            for b in try await Self.backends() {
                 let out = dir.appendingPathComponent("\(b.rawValue).raw")
-                try DiskImage.convertToRaw(dmg, to: out, backend: b)
+                try await DiskImage.convertToRaw(dmg, to: out, backend: b)
                 raws.append(try Data(contentsOf: out))
                 #expect(raws.last!.count > 0 && (try? APM.hfsSlice(raws.last!.prefix(64 * 512))) != nil, "\(b): an Apple partition map with an HFS slice")
             }

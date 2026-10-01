@@ -8,7 +8,7 @@ struct VolumeRebuildTests {
 
     /// iPad: a small selfcheck-geometry store round-trips its system/data images; then an overlay block with a
     /// higher USN supersedes one system page, a lower-USN copy elsewhere does not, and the base is untouched.
-    @Test func iPadStoreAndOverlay() throws {
+    @Test func iPadStoreAndOverlay() async throws {
         let dir = try Fixtures.tempDir("rebuild-ipad")
         defer { try? FileManager.default.removeItem(at: dir) }
         let ps = 4096, geo = K48NAND.Geometry.selfcheck
@@ -28,7 +28,7 @@ struct VolumeRebuildTests {
         let paths = ["mbr", "system.img", "data.img"].map { dir.appendingPathComponent($0) }
         try Data(mbr).write(to: paths[0]); try Data(sys).write(to: paths[1]); try Data(data).write(to: paths[2])
         let base = dir.appendingPathComponent("base")
-        try K48NAND.build(geometry: geo, mbr: paths[0], kernelVersion: Array("Darwin Kernel Version selfcheck".utf8),
+        try await K48NAND.build(geometry: geo, mbr: paths[0], kernelVersion: Array("Darwin Kernel Version selfcheck".utf8),
                           system: paths[1], data: .image(paths[2]), out: base)
         let baseDigest = try digest(base)
 
@@ -100,7 +100,7 @@ struct VolumeRebuildTests {
 
     /// The shipped bases rebuild into volumes fsck_hfs accepts (skips without them).
     @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"), arguments: ["nand-current", "ipad1/userland/golden-pristine"])
-    func baseRebuildsClean(_ name: String) throws {
+    func baseRebuildsClean(_ name: String) async throws {
         let base = Fixtures.files.appendingPathComponent(name)
         guard Fixtures.exists(base) else { try FixtureRequirements.missing(#"VolumeRebuildTests.swift: Fixtures.exists(base)"#) }
         let dir = try Fixtures.tempDir("rebuild-base")
@@ -109,33 +109,40 @@ struct VolumeRebuildTests {
         let vols = try VolumeRebuild.rebuild(base: base, overlay: nil, into: dir)
         print("\(name): rebuilt \(vols.map { "\($0.name) \($0.pagesWritten) pages" }) in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s")
         for v in vols {
-            let dev = try VolumeMount.attach(v.image)
-            let r = VolumeMount.exec("/sbin/fsck_hfs", ["-fn", dev])
-            VolumeMount.detach(dev)
+            let dev = try await VolumeMount.attach(v.image)
+            let r = try await VolumeMount.exec("/sbin/fsck_hfs", ["-fn", dev])
+            try await VolumeMount.detach(dev)
             #expect(r.0 == 0, "\(v.name): \(r.1.suffix(400))")
         }
     }
 
     /// The pipeline on the iPod base: mount read-only (never-index marker, writes refused), unmount cleans up.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func mountAndUnmount() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func mountAndUnmount() async throws {
         let base = Fixtures.files.appendingPathComponent("nand-current")
         guard Fixtures.exists(base) else { try FixtureRequirements.missing(#"VolumeRebuildTests.swift: Fixtures.exists(base)"#) }
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("fk-mount-\(UUID().uuidString)")
-        defer { try? VolumeExport.unmount(out: out) }
-        let vols = try VolumeExport.mount(.init(base: base, overlay: nil), out: out)
-        #expect(vols.count == 1 && vols[0].clean && !vols[0].repaired)
-        let mnt = try #require(vols[0].mountPoint.map(URL.init(fileURLWithPath:)))
-        #expect(Fixtures.exists(mnt.appendingPathComponent(".metadata_never_index")))
-        #expect(Fixtures.exists(mnt.appendingPathComponent("System/Library/CoreServices/SpringBoard.app")))
-        #expect(!FileManager.default.createFile(atPath: mnt.appendingPathComponent("x").path, contents: Data()))
-        try VolumeExport.unmount(out: out)
-        #expect(!Fixtures.exists(out) && !VolumeMount.exec("/usr/bin/hdiutil", ["info"]).1.contains(out.path))
+
+        let vols = try await VolumeExport.mount(.init(base: base, overlay: nil), out: out)
+        do {
+            #expect(vols.count == 1 && vols[0].clean && !vols[0].repaired)
+            let mnt = try #require(vols[0].mountPoint.map(URL.init(fileURLWithPath:)))
+            #expect(Fixtures.exists(mnt.appendingPathComponent(".metadata_never_index")))
+            #expect(Fixtures.exists(mnt.appendingPathComponent("System/Library/CoreServices/SpringBoard.app")))
+            #expect(!FileManager.default.createFile(atPath: mnt.appendingPathComponent("x").path, contents: Data()))
+        } catch {
+            do { try await VolumeExport.unmount(out: out) }
+            catch { Issue.record("fixture unmount failed: \(error)") }
+            throw error
+        }
+        try await VolumeExport.unmount(out: out)
+        let info = try await VolumeMount.exec("/usr/bin/hdiutil", ["info"])
+        #expect(!Fixtures.exists(out) && !info.1.contains(out.path))
     }
 
     /// U1 (FK_U1=DIR, written by tests/volume-rebuild-oracle.py or by hand for the iPod): the rebuilt volumes
     /// hold exactly the files the guest reported (size + sha256), none of the deleted ones, and each installed
     /// IPA's Payload; fsck_hfs -n passes; base and overlay are untouched.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func guestOracle() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func guestOracle() async throws {
         guard let u1 = ProcessInfo.processInfo.environment["FK_U1"] else { try FixtureRequirements.missing(#"VolumeRebuildTests.swift: let u1 = ProcessInfo.processInfo.environment["FK_U1"]"#) }
         struct Guest: Decodable {
             struct File: Decodable { var size: UInt64; var sha256: String }
@@ -155,14 +162,14 @@ struct VolumeRebuildTests {
         let t0 = Date()
         // After an unclean stop the journal must be replayed first: the export pipeline's fsck -fy + mount.
         let vols = g.clean ? try VolumeRebuild.rebuild(base: base, overlay: overlay, into: out)
-            : try VolumeExport.export(.init(base: base, overlay: overlay), out: out) { print($0) }.map {
+            : try await VolumeExport.export(.init(base: base, overlay: overlay), out: out) { print($0) }.map {
                 VolumeRebuild.Volume(name: $0.volume, image: URL(fileURLWithPath: $0.image), bytes: 0, pagesWritten: -1)
             }
         print("U1 rebuild: \(vols.map { "\($0.name) \($0.pagesWritten) pages" }) in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s")
         for v in vols {
-            let dev = try VolumeMount.attach(v.image)
-            let r = VolumeMount.exec("/sbin/fsck_hfs", ["-fn", dev])
-            VolumeMount.detach(dev)
+            let dev = try await VolumeMount.attach(v.image)
+            let r = try await VolumeMount.exec("/sbin/fsck_hfs", ["-fn", dev])
+            try await VolumeMount.detach(dev)
             print("fsck_hfs -n \(v.name): exit \(r.0); \(r.1.split(separator: "\n").suffix(2).joined(separator: " | "))")
             #expect(r.0 == 0 || !g.clean, "\(v.name) (clean shutdown): \(r.1.suffix(400))")
         }
@@ -189,7 +196,8 @@ struct VolumeRebuildTests {
             guard let appDir = installed.first else { continue }
             var n = 0, mismatched: [String] = []
             let e = FileManager.default.enumerator(at: payload, includingPropertiesForKeys: [.isRegularFileKey])!
-            for case let u as URL in e where (try? u.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+            while let u = e.nextObject() as? URL {
+                guard (try? u.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
                 let rel = String(u.resolvingSymlinksInPath().path.dropFirst(payload.resolvingSymlinksInPath().path.count + 1))
                 let want = SHA256.hash(data: try Data(contentsOf: u)).map { String(format: "%02x", $0) }.joined()
                 n += 1

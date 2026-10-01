@@ -79,4 +79,54 @@ struct StorageLeaseTests {
             #expect(try FileManager.default.destinationOfSymbolicLink(atPath: path.path) == target.path)
         }
     }
+    @Test func explicitCloseRetainedAliasDoesNotUnlockSuccessor() throws {
+        try fixture { root in
+            let path = root.appendingPathComponent("work/lease")
+            var previous: StorageLease? = try StorageLease(path)
+            let inode = try FileManager.default.attributesOfItem(atPath: path.path)[.systemFileNumber] as? NSNumber
+            previous?.close()
+            let successor = try StorageLease(path)
+            previous?.close()
+            previous = nil
+            #expect(throws: StorageLease.Failure.inUse) { _ = try StorageLease(path) }
+            #expect(try FileManager.default.attributesOfItem(atPath: path.path)[.systemFileNumber] as? NSNumber == inode)
+            withExtendedLifetime(successor) {}
+        }
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_ISOLATED_DESCRIPTOR_REUSE"] == "1", "Run alone with FK_ISOLATED_DESCRIPTOR_REUSE=1; descriptor-number allocation is process-wide"))
+    func closedOwnerCannotCloseReusedDescriptor() throws {
+        try fixture { root in
+            let path = root.appendingPathComponent("work/lease")
+            var previous: StorageLease? = try StorageLease(path)
+            let inode = try #require(try FileManager.default.attributesOfItem(atPath: path.path)[.systemFileNumber] as? NSNumber)
+            let old = try #require(FileManager.default.contentsOfDirectory(atPath: "/dev/fd").compactMap(Int32.init).first { fd in
+                var values = stat()
+                return fstat(fd, &values) == 0 && values.st_ino == inode.uint64Value
+            })
+            previous?.close()
+            let reused = open("/dev/null", O_RDONLY | O_CLOEXEC)
+            defer { if reused >= 0 { Darwin.close(reused) } }
+            #expect(reused == old, "run this descriptor-number reuse fixture in isolation")
+            previous?.close(); previous = nil
+            #expect(fcntl(reused, F_GETFD) >= 0)
+        }
+    }
+
+    @Test func concurrentCloseEndsOneSharedScopeBeforeReacquisition() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let path = root.appendingPathComponent("work/lease")
+        var previous: StorageLease? = try StorageLease(path)
+        let owner = try #require(previous)
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<64 { group.addTask { owner.close() } }
+            await group.waitForAll()
+        }
+        let successor = try StorageLease(path)
+        previous = nil; owner.close()
+        #expect(throws: StorageLease.Failure.inUse) { _ = try StorageLease(path) }
+        withExtendedLifetime((owner, successor)) {}
+    }
+
 }

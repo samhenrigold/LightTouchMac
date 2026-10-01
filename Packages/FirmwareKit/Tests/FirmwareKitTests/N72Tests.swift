@@ -82,13 +82,13 @@ import Testing
     /// The GL front end on 2.x against the oracle, 5F138's stock OpenGLES: the export scan as gles2x_exports.scan and,
     /// with an armv6.itpack at hand, GuestPackage.seed as mkpkg.seed: n72-ios2's hook puts the one front end
     /// (contrib/gles-public) over OpenGLES, the stock binary kept as OpenGLES.baked, every stock name still exported.
-    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func frontEndMatchesPython() throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run")) func frontEndMatchesPython() async throws {
         let fw = Oracle.firmware("n72ap-5F138"), dmg = fw.cache?.appendingPathComponent("rootfs.dmg")
         let it = Oracle.qemuIOS.appendingPathComponent("contrib/it-gles")
         guard let dmg, Oracle.exists(dmg) else { try FixtureRequirements.missing(#"N72Tests.swift: let dmg, Oracle.exists(dmg)"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             let raw = dir.appendingPathComponent("rootfs.hfs"), stock = dir.appendingPathComponent("OpenGLES")
-            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            try await UDIF.extractRootfs(dmg: dmg, to: raw)
             let v = try HFSPlusVolume(raw)
             try v.contents(v.record(at: N72Board.openGLES)).write(to: stock)
             try FileManager.default.removeItem(at: raw)
@@ -102,7 +102,7 @@ import Testing
             let itpack = Oracle.guestPackages.appendingPathComponent("armv6.itpack")
             guard Oracle.exists(itpack) else { try FixtureRequirements.missing(#"N72Tests.swift: Oracle.exists(itpack)"#) }
             // the firmware the seed's load checks read (5F138's own executables and libSystem)
-            guard let base = try FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138"), in: dir) else { try FixtureRequirements.missing(#"N72Tests.swift: let base = try FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138"), in: dir)"#) }
+            guard let base = try await FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138"), in: dir) else { try FixtureRequirements.missing(#"N72Tests.swift: let base = try await FitFixture.volume("n72ap-5F138", FitFixture.stock("n72ap-5F138"), in: dir)"#) }
             func volume(_ name: String) throws -> URL {
                 let m = dir.appendingPathComponent(name), sv = m.appendingPathComponent(GuestPackage.systemVersion)
                 try FileManager.default.copyItem(at: base, to: m)
@@ -153,12 +153,12 @@ import Testing
     }
 
     @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"))
-    func stock2xSpringBoardReadsReorderTip() throws {
+    func stock2xSpringBoardReadsReorderTip() async throws {
         let fw = Oracle.firmware("n72ap-5F138")
         guard let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg) else { try FixtureRequirements.missing(#"N72Tests.swift: let dmg = fw.cache?.appendingPathComponent("rootfs.dmg"), Oracle.exists(dmg)"#) }
-        try Oracle.withTemp { dir in
+        try await Oracle.withTemp { dir in
             let raw = dir.appendingPathComponent("rootfs.hfs")
-            try UDIF.extractRootfs(dmg: dmg, to: raw)
+            try await UDIF.extractRootfs(dmg: dmg, to: raw)
             let v = try HFSPlusVolume(raw)
             #expect(try v.contents(v.record(at: N72Board.springBoard)).range(of: Data(N72Board.reorderTip.utf8)) != nil)
         }
