@@ -423,3 +423,21 @@ D7C writes. The D3C read no longer stops this trace. Stock restored still
 waits eight times for NAND; the harness intentionally exits1 and reaps its
 owned processes. Restored cold boot and durable physical writes remain
 unqualified.
+
+## Register left shift preserves the accumulator
+
+QEMU280e4584cd corrects the observed opcode13 zero-immediate form to shift
+the existing destination by the source register count. Stock read/status
+programs use it to derive chip-selection bits. Nonzero-immediate behavior is
+unchanged. Counts32 or above explicitly stop as an unmodeled form; this is
+a model limitation, not a claim about hardware rejection. Chip0..3 and
+high-bit/count31 cases are fixture inputs, not captured live descriptors.
+
+The compiled baseline loses the zero-count destination. Six actual-source
+sanitizer checks,22 FMSS model tests and independent native8/8 pass,
+including guest shutdown, reboot persistence and fsck_hfs. D3C VMState v12
+and other hardware contracts remain unchanged. Evidence:
+`/Users/shg/Developer/ltm-evidence/fmss-register-shl-2026-10-01`.
+
+The subsequent bounded stock blank-flash erase trace is running. Physical
+controller execution, full restore and restored durability remain unqualified.
