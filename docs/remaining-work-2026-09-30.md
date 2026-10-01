@@ -28,7 +28,7 @@ refuses physical formats it cannot interpret correctly.
 | N72 logical relocation in hardware model | Open | Stock physical commands/guest FTL must replace the compatibility mapping, with restore, large writes/deletes and cold-boot evidence. |
 | FMSS snapshot equivalence | Unsupported physical-state snapshots explicitly rejected | Empty state migrates; populated physical state and uncertified old snapshot versions refuse save/load. Full physical-state migration remains a future capability. |
 | NAND crypto fidelity | Open | Plaintext generated stores still permit bypasses; prove encrypted restored-store execution through hardware engines. |
-| Native boot arguments / N45 early touch | SYSIC touch masking corrected and older/newer runs pass | Native NOR/NVRAM handoff and downloaded touch firmware readiness remain research leads. Historical early-touch panic was not reproduced, so no readiness gate was invented. The incoming N45 hard-stop/reboot smoke still exposes FTLRestore followed by the IOKit race panic; it remains an explicit lifecycle/fidelity lead. |
+| Native boot arguments / N45 early touch | SYSIC touch masking corrected and older/newer runs pass | Native NOR/NVRAM handoff and downloaded touch firmware readiness remain research leads. Historical early-touch panic was not reproduced, so no readiness gate was invented. The incoming N45 four-page map-context fix removes the hard-stop FTLRestore corruption. Old-format baseline reproduces the kernel abort; two independent fixed-format reopens reach FTL_Open/BSD root without it. The retained 240-second baseline reaches a visible home screen. This was an out-of-bounds map restore, not an IOKit race. |
 | Per-device service routing | Demonstrated hazard guarded and regression tested | Immutable per-device endpoint workers replace GUI C calls; stalled A does not block B, cancellation kills/reaps children, and a retired session cannot reopen. Native guest services pass 12/12. |
 | Timezone lifecycle and children | Implemented and cancellation/deadline tested | BootSessionScope now owns readiness, recovery, staging, activation, installation, reset and synchronization tasks plus the observer. Controller orchestration can be reduced further as responsibilities stabilize. |
 | Shared catalog / boot recipe types | Boot-field loss fixed and round-trip tested | Shared Foundation-only FirmwareWire preserves all catalog fields, including source resources. GUI does not import preparation machinery. |
@@ -150,9 +150,52 @@ compare changes (5/5 pass), alongside the sanitizer-enabled PMGR contract test.
 Evidence: `/private/tmp/ltm-overnight-pmgr-qtest.log`. No new timer model is claimed.
 N72 watchdog timed expiry still requires timeout-field and clock evidence.
 
-Next: reproduce N45 hard-stop recovery with the retained native evidence and
-trace the ADM/FMC interrupt/completion/reset contract before choosing a fix.
-The existing report attributes the panic to an IOKit scheduling race; that is
-a research hypothesis, not permission to add another guest patch. Then advance
-physical NAND/crypto and native boot handoff with one independently verified
-contract per commit. GPU remains a separate feasibility gate.
+The N45 failure is now explained by incoming commit `14c5c0e`: four physical
+map pages, not eighteen, belong to its one-bank 8 KiB table. `_FTLRestore`
+copied the extra pages into kernel memory. Recipe version 2 and Prepare Again
+are integrated from the multidevice target. Fixed and old bases were prepared
+from the same 3A101a IPSW. Evidence: `/private/tmp/ltm-n45-hardstop-fresh`
+(old-format abort), `/private/tmp/ltm-n45-hardstop-fixed` and
+`/private/tmp/ltm-n45-hardstop-awake` (fixed reopens, no abort). The longer
+`/private/tmp/ltm-n45-pmu-baseline/screen.png` shows the stock home screen.
+The N45 layout checks pass; seven corpus cases were explicitly skipped.
+
+Music import investigation found two real seams: only title/artist/album were
+forwarded and no artwork cache was built; older guest packages could silently
+ignore new fields. Host staging now carries album artist, composer, genre,
+track/disc numbers and a bounded JPEG alongside unchanged MP3/M4A bytes. The
+current app helper is uploaded for every media commit. Stock MusicLibrary and
+ArtworkCache own all library/cache writes; the host never writes these databases.
+Native 7E18 tests pass fresh import, duplicate reconciliation and cold reopen,
+including actual MediaPlayer decoded artwork. Evidence:
+`/private/tmp/ltm-media-artwork-regression2`, with `import-artwork.png` and
+`reboot-artwork.png`. MP3/ID3 and M4A preparation, AFC transfer, helper selection
+and stale-base checks pass 4/4 in `/private/tmp/ltm-music-offline-results`.
+This remains the existing 7E18-only native media service. Already-imported tracks
+with artwork ID zero require removal in Music and reimport; no silent upgrade or
+broader firmware compatibility is claimed.
+
+The repeat-import regression exposed a legacy SQLite schema race while Apple's
+sync service updates the attached Locations database. Read-only reconciliation
+now reopens and reprepares only on SQLITE_SCHEMA, at most three attempts; all
+other errors remain fatal. Fault injection covers ATTACH, prepare and step.
+The native rerun passes import/repeat and cold reopen with decoded artwork in
+`/private/tmp/ltm-media-artwork-schema-regression`.
+
+N45 interrupt contract committed in QEMU `9114592748`: PCF50635 five status/mask
+banks, correct USB edge bank, EXTON1 both edges, configured shutdown reset and
+VMState version boundary. Production-board qtest passes I2C -> GPIO source 0x55
+-> VIC source 0x1f, including masked latching and parent ACK while held. D1759
+ADC/RTC/shutdown tests and the native 7E18 media/reboot gate pass. Evidence:
+`/private/tmp/ltm-n45-pmu-qtest.log` and
+`/private/tmp/ltm-media-artwork-schema-regression`.
+
+The native N45 170-second run remains black after `pmu go hib`: the CPU ends at
+c005a6d0 with IRQ/FIQ masked after PCF standby 0x0c=2. This is not evidence of
+working sleep/resume. Correct interrupt delivery cannot replace the retained-RAM
+resume/ROM handoff. Evidence: `/private/tmp/ltm-n45-pmu-candidate`. The PCF ADC,
+charger/regulator sequencing and native resume remain open. No guest-code patch
+or invented wake vector was added.
+
+Continue physical NAND/crypto and native boot/power handoff one independently
+verified contract at a time. GPU remains a separate feasibility gate.
