@@ -199,8 +199,9 @@ pages or mapping twice. A single execution owner, bounded checked DMA and
 explicit command/status/abort behavior must precede shortcut deletion. Stock
 restore, cold boot and durable subsequent writes remain the final gate.
 
-D38 scalar CPU/sequence ownership is separately evidenced and has a scratch
-proposal; it has not been promoted by this audit. Raw NAND program encodings,
+D38 scalar CPU/sequence ownership was subsequently qualified separately
+(see the evidence journal); this audit did not qualify physical execution.
+Raw NAND program encodings,
 AES/ECC and complete spare layout remain unmeasured. Findings and explicitly
 unqualified proposal: `/Users/shg/Developer/ltm-evidence/fmss-controller-audit-2026-10-01`.
 
@@ -243,3 +244,10 @@ D38 is also qualified through model/migration and native8/8 gates; it retains
 the scalar while preserving the still-required CPU storage shortcut. Watchdog
 research establishes the guest's cached bus-frequency source but leaves
 physical expiry unmodeled. Detailed receipts are in the shared journal.
+
+The D7C result latch is now qualified through native8/8 as well. Stock restore
+moves to D3C and the diagnostic immediate D7C form; controller execution is
+still missing. The managed published-generation admission regression is
+corrected in dd9d66a. The broader async host migration remains unqualified
+while cancellation and explicit descriptor release are tested. Current
+receipts and limits are maintained in the shared evidence journal.
