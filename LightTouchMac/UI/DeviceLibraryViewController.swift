@@ -293,7 +293,7 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
 
     private static let menuActions: [(DeviceAction?, String)] = [
         (.start, "Start"), (.stop, "Stop"), (nil, ""),
-        (.downloadAndPrepare, "Download & Prepare"), (.importIPSW, "Import IPSW…"), (.cancel, "Cancel"), (nil, ""),
+        (.downloadAndPrepare, "Download and Prepare"), (.importIPSW, "Import IPSW…"), (.cancel, "Cancel"), (nil, ""),
         (.showInFinder, "Show in Finder"),
         (.openFilesystem, "Open Filesystem in Finder"), (.commitFilesystem, "Save Filesystem Edits"),
         (.discardFilesystem, "Discard Filesystem Edits"), (.recoverFilesystem, "Finish Filesystem Recovery"), (nil, ""),
@@ -474,7 +474,7 @@ final class DeviceRowCell: NSTableCellView {
         subtitle.stringValue = label.subtitle ?? ""
         subtitle.isHidden = label.subtitle == nil
         let size = row.entry.source.bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
-        toolTip = (["\(row.entry.productType) · iOS \(row.entry.version) (\(row.entry.build))",
+        toolTip = (["iOS \(row.entry.version) (\(row.entry.build))",
                     row.supportNote, row.accessory == .notDownloaded ? size.map { "Not downloaded, \($0)" } ?? "Not downloaded" : nil]
                    + row.progressDetail + [row.progressLine]).compactMap { $0 }.joined(separator: "\n")
         badge.stringValue = label.badge ?? ""

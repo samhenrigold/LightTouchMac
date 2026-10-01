@@ -261,7 +261,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         if isError { return "Try Again" }
         return switch primaryAction {
         case .start: "Start"
-        case .downloadAndPrepare: state == .downloaded ? "Prepare" : "Download & Prepare"
+        case .downloadAndPrepare: state == .downloaded ? "Prepare" : "Download and Prepare"
         case .importIPSW: "Import IPSW…"
         case .cancel: "Cancel"
         default: nil

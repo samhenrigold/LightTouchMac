@@ -19,7 +19,7 @@ struct MediaVideo: Sendable {
             }
             let values = try source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true, let size = values.fileSize, size > 0, size <= 1 << 30 else {
-                throw DeviceToolsError.failed("Videos must be nonempty and no larger than 1 GB.")
+                throw DeviceToolsError.failed("Videos must be smaller than 1 GB.")
             }
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("ltm-video-" + UUID().uuidString, isDirectory: true)

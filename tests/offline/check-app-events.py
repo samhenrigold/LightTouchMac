@@ -7,7 +7,7 @@ controller=(root/'LightTouchMac/Device/EmulatorController.swift').read_text()
 notice=controller[controller.index('    enum NoticeOperation:'):controller.index('    private var foregroundTask:')].replace('UserDefaults.standard','defaults')
 with tempfile.TemporaryDirectory(prefix='ltm-events-') as temp:
  p=Path(temp)
- (p/'check.swift').write_text('import Foundation\nlet domain=UUID().uuidString\nlet defaults=UserDefaults(suiteName:domain)!\n@MainActor final class NoticeDevice { var storageFailed=false; var onStatusChange:(()->Void)?\n struct Instance { func defaultsKey(_ name:String)->String { name } }\n let instance=Instance()\n'+notice+'}\n'+r'''
+ (p/'check.swift').write_text('import Foundation\nlet domain=UUID().uuidString\nlet defaults=UserDefaults(suiteName:domain)!\n@MainActor final class NoticeDevice { var storageFailed=false; var onStatusChange:(()->Void)?\n struct Instance { func defaultsKey(_ name:String)->String { name } }\n let instance=Instance()\n struct Profile { let shortName=\"iPod\" }\n let profile=Profile()\n'+notice+'}\n'+r'''
 @main struct Check {
  static func main() async throws {
   let device=NoticeDevice();var changes=0;device.onStatusChange={changes+=1}
@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-events-') as temp:
   device.resolveDeviceNotice(for:.powerOff);precondition(device.deviceNotice != nil)
   device.resolveDeviceNotice(for:.preparation);precondition(NoticeDevice().deviceNotice==nil)
   device.storageFailed=true;device.reportDeviceNotice("Another failure",for:.powerOff)
-  precondition(device.deviceNotice!.hasPrefix("Couldn’t save to disk."))
+  precondition(device.deviceNotice!.hasPrefix("Couldn’t save to disk, so the iPod stopped"))
   device.dismissDeviceNotice();precondition(device.deviceNotice != nil)
   device.storageFailed=false;device.dismissDeviceNotice()
   defaults.removePersistentDomain(forName:domain)

@@ -12,8 +12,8 @@ final class CaptureOptionsView: NSView {
     private let reveal = NSButton(checkboxWithTitle: "Show captures in Finder", target: nil, action: nil)
     private let copy = NSButton(checkboxWithTitle: "Copy screenshots to the clipboard", target: nil, action: nil)
     private let sound = NSButton(checkboxWithTitle: "Play sound effects", target: nil, action: nil)
-    private let recovery = NSButton(checkboxWithTitle: "Notify when interrupted recordings are recovered", target: nil, action: nil)
-    private let notificationSettings = NSButton(title: "Notifications are disabled. Open System Settings…", target: nil, action: nil)
+    private let recovery = NSButton(checkboxWithTitle: "Notify when a recording is recovered", target: nil, action: nil)
+    private let notificationSettings = NSButton(title: "Turn On Notifications in System Settings…", target: nil, action: nil)
     private let stack = NSStackView()
     private var isChoosing = false
     private var isAuthorizing = false
@@ -34,9 +34,9 @@ final class CaptureOptionsView: NSView {
         saveLocation.action = #selector(locationChanged(_:))
         saveLocation.setAccessibilityLabel("Save location")
         openInApplication.action = #selector(applicationChanged(_:))
-        openInApplication.setAccessibilityLabel("Open in application")
+        openInApplication.setAccessibilityLabel("Open screenshots in")
         spaceBar.action = #selector(spaceBarChanged(_:))
-        spaceBar.setAccessibilityLabel("Space bar")
+        spaceBar.setAccessibilityLabel("Space bar captures")
         reminder.action = #selector(reminderChanged(_:))
         reminder.setAccessibilityLabel("Recording reminder")
         for choice in CaptureSpaceBarAction.allCases {
@@ -61,9 +61,9 @@ final class CaptureOptionsView: NSView {
 
         let locations = grid([
             [NSTextField(labelWithString: "Save location:"), saveLocation],
-            [NSTextField(labelWithString: "“Open in” application:"), openInApplication],
+            [NSTextField(labelWithString: "Open screenshots in:"), openInApplication],
         ])
-        let shortcuts = grid([[NSTextField(labelWithString: "Space bar:"), spaceBar]])
+        let shortcuts = grid([[NSTextField(labelWithString: "Space bar captures:"), spaceBar]])
         let reminders = grid([[NSTextField(labelWithString: "Remind me if away for:"), reminder]])
         let afterCapture = NSStackView(views: [reveal, copy, sound])
         afterCapture.orientation = .vertical
@@ -262,3 +262,5 @@ final class CaptureOptionsView: NSView {
         onResize?()
     }
 }
+
+extension CaptureOptionsView: SettingsPane {}

@@ -19,14 +19,14 @@ nonisolated struct LegacyState {
     let records: [UUID]
 
     static let message = "The iPod from an earlier version of Light Touch can’t be used."
-    static let detail = "Erase it and continue (apps you’ve saved are kept), or quit."
+    static let detail = "Erasing it keeps the apps you’ve saved."
     /// The progress window's words while the erase runs.
     static let progressMessage = "Erasing the earlier iPod…"
 
-    /// Written when Erase & Continue starts, removed once it has finished: a
+    /// Written when Erase and Continue starts, removed once it has finished: a
     /// launch that finds it (the app quit midway) carries on without asking again.
     static func marker(_ state: URL) -> URL { state.appendingPathComponent(".legacy-erase") }
-    /// The user already chose Erase & Continue; this launch finishes it.
+    /// The user already chose Erase and Continue; this launch finishes it.
     var resuming: Bool { FileManager.default.fileExists(atPath: Self.marker(state).path) }
 
     /// Whether anything of the old layout is here. `applicationSupport` is
@@ -66,7 +66,7 @@ nonisolated struct LegacyState {
         return dirs
     }
 
-    /// Erase & Continue: the .ipa files into the library, then everything
+    /// Erase and Continue: the .ipa files into the library, then everything
     /// else of the old layout removed, the old root included. Never a path outside `state` or the
     /// old root. Off the main actor (hashing the IPAs and removing the old
     /// trees takes a while), and idempotent: a run the app quit in the middle

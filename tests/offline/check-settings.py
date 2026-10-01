@@ -11,6 +11,8 @@ fixture=r'''import Cocoa
 @MainActor enum NetworkAccessPreference { static let key="guestNetworkEnabled" }
 @MainActor final class EmulatorController {
  var network = true
+ struct Profile { let shortName = "iPod" }
+ let profile = Profile()
  static let autoRotateDefaultsKey="autoRotateWithGuest"
  static var autoRotateEnabled:Bool { UserDefaults.standard.object(forKey:autoRotateDefaultsKey) as? Bool ?? true }
  var autoRotateEnabled:Bool { Self.autoRotateEnabled }
@@ -35,13 +37,13 @@ fixture=r'''import Cocoa
   precondition(delegate.validateMenuItem(rotation) && rotation.state == .off && !EmulatorController.autoRotateEnabled)
   precondition(delegate.validateMenuItem(network) && network.state == .on)
   delegate.toggleInternetAccess(nil)
-  precondition(delegate.validateMenuItem(network) && network.state == .off && network.title.contains("After Reopening"))
+  precondition(delegate.validateMenuItem(network) && network.state == .off && network.title == "Connect to the Internet" && network.toolTip == "Takes effect the next time Light Touch opens the iPod.")
   delegate.toggleInternetAccess(nil)
-  precondition(delegate.validateMenuItem(network) && network.state == .on && !network.title.contains("After Reopening"))
+  precondition(delegate.validateMenuItem(network) && network.state == .on && network.title == "Connect to the Internet" && network.toolTip == nil)
   delegate.emulator!.network=false
   defaults.removeObject(forKey:NetworkAccessPreference.key)
-  precondition(delegate.validateMenuItem(network) && network.state == .off && !network.title.contains("After Reopening"))
-  print("PASS: menu preferences apply rotation immediately and show pending internet changes")
+  precondition(delegate.validateMenuItem(network) && network.state == .off && network.toolTip == nil)
+  print("PASS: menu preferences apply rotation immediately and show pending internet changes in the tooltip, never the title")
  }
 }
 '''

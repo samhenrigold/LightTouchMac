@@ -9,5 +9,5 @@ struct RotationControlAction {
 
     var title: String { clockwise ? "Rotate Right" : "Rotate Left" }
     var symbol: String { clockwise ? "rotate.right" : "rotate.left" }
-    var help: String { title + " (hold Option to reverse)" }
+    var help: String { title + (clockwise ? " (Option rotates left)" : " (Option rotates right)") }
 }

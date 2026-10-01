@@ -419,7 +419,7 @@ final class AppsInspectorViewController: NSViewController {
         }
         return transfers + visibleApps.map { app in
             RowAppearance(title: displayName(app),
-                          subtitle: uninstalling.contains(app.id) ? removalStatus(for: app.id) : "\(app.id) · \(app.version)",
+                          subtitle: uninstalling.contains(app.id) ? removalStatus(for: app.id) : app.version,
                           icon: AppMetadataCache.shared.icon(for: app.id).map(ObjectIdentifier.init),
                           kind: uninstalling.contains(app.id) ? .progress : .app)
         }
@@ -632,7 +632,7 @@ final class AppsInspectorViewController: NSViewController {
                 ? "USB connection unavailable"
                 : emulator.connectionIssue?.summary ?? "Connecting to \(emulator.profile.shortName)…"
         }
-        banner.toolTip = [emulator.connectionIssue?.detail, when, "Open Device Logs for details."]
+        banner.toolTip = [emulator.connectionIssue?.detail, when]
             .compactMap { $0 }.joined(separator: "\n")
         banner.isHidden = false
         bannerHeight?.constant = 18
@@ -767,7 +767,8 @@ final class AppsInspectorViewController: NSViewController {
         panel.allowedContentTypes = [UTType(filenameExtension: "ipa")].compactMap { $0 }
         // Several at once: ready files install one at a time.
         panel.allowsMultipleSelection = true
-        panel.message = "Choose one or more decrypted .ipa files to install."
+        panel.message = "Choose decrypted .ipa files to install."
+        panel.prompt = "Install"
         panel.beginSheetModal(for: view.window!) { [weak self] response in
             guard let self, response == .OK else { return }
             for url in panel.urls {
@@ -1061,8 +1062,8 @@ final class AppsInspectorViewController: NSViewController {
                 let alert = NSAlert()
                 if case AppLaunchError.locked = error {
                     alert.alertStyle = .informational
-                    alert.messageText = "Unlock the \(emulator.profile.shortName)"
-                    alert.informativeText = "Unlock the \(emulator.profile.shortName), then try opening “\(displayName(app))” again."
+                    alert.messageText = "“\(displayName(app))” couldn’t open because the \(emulator.profile.shortName) is locked."
+                    alert.informativeText = "Unlock it, then try again."
                 } else {
                     alert.alertStyle = .warning
                     alert.messageText = "Couldn’t open “\(displayName(app))”"
@@ -1347,7 +1348,7 @@ extension AppsInspectorViewController: NSTableViewDataSource, NSTableViewDelegat
         let cell = appCell(tableView)
         cell.textField?.stringValue = displayName(app)
         (cell.viewWithTag(Self.appSubtitleTag) as? NSTextField)?.stringValue =
-            "\(app.id)\(app.version.isEmpty ? "" : " · \(app.version)")"
+            app.version
         Self.setIcon(AppMetadataCache.shared.icon(for: app.id), on: cell.imageView)
         // AppKit only dims a *selected* row when the window resigns key,
         // leaving every other icon at full strength — inconsistent with the

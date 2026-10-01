@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-logs-') as tmp:
   let label=notice.view.subviews.compactMap{$0 as? NSTextField}.first!
   func allButtons(_ v:NSView)->[NSButton]{v.subviews.flatMap{($0 as? NSButton).map{[$0]} ?? allButtons($0)}}
   let buttons=allButtons(notice.view)
-  let logs=buttons.first{$0.title=="Show Logs"}!, dismiss=buttons.first{$0.accessibilityLabel()=="Dismiss status"}!
+  let logs=buttons.first{$0.title=="Show Logs"}!, dismiss=buttons.first{$0.accessibilityLabel()=="Dismiss" && $0.toolTip=="Dismiss"}!
   let action=buttons.first{$0 !== logs && $0 !== dismiss}!
   precondition(action.isHidden, "no remedy unless update() names one")
   precondition(label.stringValue==detail && label.toolTip==detail)

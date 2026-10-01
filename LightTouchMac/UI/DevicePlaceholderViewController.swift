@@ -15,7 +15,7 @@ final class DevicePlaceholderViewController: NSViewController {
     private let progress = NSProgressIndicator()
     private let step = NSTextField(wrappingLabelWithString: "")
     private let reason = NSTextField(wrappingLabelWithString: "")
-    private let showLog = NSButton(title: "Device Logs", target: nil, action: nil)
+    private let showLog = NSButton(title: "Show Logs", target: nil, action: nil)
     private let primary = NSButton(title: "", target: nil, action: nil)
     private let space = NSTextField(wrappingLabelWithString: "")
     /// The build's catalog note (untested, experimental, where a beta came from), in a popover.
@@ -55,7 +55,6 @@ final class DevicePlaceholderViewController: NSViewController {
         progress.isIndeterminate = false   // NSProgressIndicator starts indeterminate: a bar that never fills
         progress.minValue = 0
         progress.maxValue = 1
-        progress.setAccessibilityLabel("Progress")
         step.textColor = .secondaryLabelColor
         step.font = .monospacedDigitSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .subheadline).pointSize, weight: .regular)
         for button in [showLog, primary] {
@@ -125,15 +124,18 @@ final class DevicePlaceholderViewController: NSViewController {
             if !canDownload, let why = FirmwareJobs.shared.unavailableReason { reason.stringValue = why; reason.isHidden = false }
         case .downloading:
             status.stringValue = "Downloading…"
+            progress.setAccessibilityLabel("Download progress")
             show(row)
         case .preparing:
             status.stringValue = "Preparing…"
+            progress.setAccessibilityLabel("Preparation progress")
             show(row)
         case .ready: status.stringValue = "Ready"
         case .running: status.stringValue = "Running"
         case .stopping: status.stringValue = "Stopping…"
         case let .error(message):
-            status.stringValue = "Error"
+            // What failed, over why (the reason).
+            status.stringValue = row.hasSession ? "Stopped unexpectedly" : row.isStartable ? "Couldn’t start" : "Couldn’t prepare"
             reason.stringValue = message
             reason.isHidden = false
             showLog.isHidden = false
@@ -231,7 +233,10 @@ private final class IPSWDropView: NSView {
                                                                  options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [], .ipsw)
     }
 
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { ipsws(sender).isEmpty ? [] : .copy }
+    private lazy var highlight = DropHighlight.install(in: self)
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { highlight.show(for: ipsws(sender).isEmpty ? [] : .copy) }
+    override func draggingExited(_ sender: NSDraggingInfo?) { highlight.show(for: []) }
+    override func draggingEnded(_ sender: NSDraggingInfo) { highlight.show(for: []) }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         let urls = ipsws(sender)

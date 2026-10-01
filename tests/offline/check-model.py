@@ -508,8 +508,8 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
     profile=["Device/DeviceProfile", "Device/DeviceProfile+Display"]
     for name,source,extra in [
         ("model",model_source,profile),
-        ("layer",layer_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "../Shared/DeviceLinkProtocol"]),
-        *([("display",display_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "../Shared/DeviceLinkProtocol"])] if windowed else [])
+        ("layer",layer_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "UI/DropHighlight", "../Shared/DeviceLinkProtocol"]),
+        *([("display",display_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "UI/DropHighlight", "../Shared/DeviceLinkProtocol"])] if windowed else [])
     ]:
         swift=work/(name+".swift");swift.write_text(source)
         exe=app/"MacOS"/name

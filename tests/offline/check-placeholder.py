@@ -6,7 +6,8 @@ Compiles the real view controller with the real catalog and DeviceRow, stubs for
 nothing appears on screen. Each state renders to <out>/placeholder-<state>.png (--out DIR, default a temp dir).
 
 Checks: the name, version and state lines stack in that order in one column; the buttons share one row with the
-default button last (Device Logs to its left); no label is clipped; every state shows a state line. The info
+default button last (Show Logs to its left); an error's state line says what failed; an accepted IPSW drag
+rings the screen until it leaves; no label is clipped; every state shows a state line. The info
 popover (ⓘ) has a real size (RC1's was 0×0 and showed nothing) and shows the support status and its
 explanation, the source note and the release date for experimental, untested, beta and paid-update builds.
 """
@@ -25,11 +26,34 @@ import Cocoa
 final class FirmwareJobs { static let shared = FirmwareJobs(); var unavailableReason: String? = nil; var canDownload = true }
 enum IPSWStore { static func availableSpace(at url: URL) throws -> Int64 { 1 << 40 } }
 enum Bundled { static let stateDirectory = URL(fileURLWithPath: NSTemporaryDirectory()) }
-enum DroppedFiles { case ipsw; static func files(_ urls: [URL], _ kind: DroppedFiles) -> [URL] { urls } }
+enum DroppedFiles { case ipsw; static func files(_ urls: [URL], _ kind: DroppedFiles) -> [URL] { urls.filter { $0.pathExtension.lowercased() == "ipsw" } } }
 '''
 
 check = r'''
 import Cocoa
+@MainActor final class Drag: NSObject, NSDraggingInfo {
+    let draggingPasteboard = NSPasteboard.withUniqueName()
+    var draggingSource: Any? { nil }
+    var draggingDestinationWindow: NSWindow? { nil }
+    var draggingSourceOperationMask: NSDragOperation { .copy }
+    var draggingLocation: NSPoint { .zero }
+    var draggedImageLocation: NSPoint { .zero }
+    nonisolated var draggedImage: NSImage? { nil }
+    var draggingSequenceNumber: Int { 1 }
+    var draggingFormation = NSDraggingFormation.default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 0
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    override nonisolated func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
+    func resetSpringLoading() {}
+    func enumerateDraggingItems(options: NSDraggingItemEnumerationOptions = [], for view: NSView?, classes classArray: [AnyClass],
+                                searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:], using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+    func files(_ names: [String]) {
+        draggingPasteboard.clearContents()
+        precondition(draggingPasteboard.writeObjects(names.map { URL(fileURLWithPath: "/tmp/" + $0) as NSURL }))
+    }
+}
 @main struct Check {
     static func main() throws {
         _ = NSApplication.shared
@@ -50,7 +74,7 @@ import Cocoa
             ("preparing", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .preparing(prep), failure: nil)),
             ("error", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .failed(unsupported), failure: nil)),
             ("ready", DeviceRow(entry: ipad, instanceID: id, session: nil, job: nil, failure: nil)),
-            ("stopped", DeviceRow(entry: ipad, instanceID: id, session: .dead("The iPad stopped unexpectedly. Open Device Logs for details."), job: nil, failure: nil)),
+            ("stopped", DeviceRow(entry: ipad, instanceID: id, session: .dead("The iPad stopped unexpectedly."), job: nil, failure: nil)),
             ("requires-ipsw", DeviceRow(entry: ipod, instanceID: nil, session: nil, job: nil, failure: nil)),
         ]
         var failures: [String] = []
@@ -93,7 +117,35 @@ import Cocoa
                 }
                 if p.keyEquivalent == "\r" && row.primaryAction == .cancel { fail("Return cancels") }
             }
-            if row.isError && !buttons.contains(where: { $0.title == "Device Logs" }) { fail("an error without Device Logs") }
+            if row.isError && !buttons.contains(where: { $0.title == "Show Logs" }) { fail("an error without Show Logs") }
+            if row.isError && !texts.contains(where: { $0.hasPrefix("Couldn’t ") || $0 == "Stopped unexpectedly" }) { fail("an error headline that doesn't say what failed: \(texts)") }
+            if texts.contains("Error") { fail("a bare Error headline") }
+            if let bar = all(view).compactMap({ $0 as? NSProgressIndicator }).first(where: visible), !["Download progress", "Preparation progress"].contains(bar.accessibilityLabel() ?? "") {
+                fail("progress bar labelled \(bar.accessibilityLabel() ?? "nothing")")
+            }
+        }
+
+        // An .ipsw dragged over the placeholder lights the drop ring; anything else doesn't (HIG p.294).
+        do {
+            let vc = DevicePlaceholderViewController()
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 640), styleMask: [.titled], backing: .buffered, defer: true)
+            window.appearance = NSAppearance(named: .aqua)
+            window.contentView = vc.view
+            vc.update(states[1].1, canDownload: true)
+            let drop = vc.view as! NSDraggingDestination
+            let drag = Drag()
+            defer { drag.draggingPasteboard.releaseGlobally() }
+            func ring() -> NSView? { vc.view.subviews.first { $0 is DropHighlight } }
+            drag.files(["Notes.txt"])
+            if drop.draggingEntered?(drag) != [] || ring()?.isHidden == false { failures.append("drop: a non-IPSW drag was accepted or lit") }
+            drag.files(["iPad1,1_3.2.2_7B500_Restore.ipsw"])
+            if drop.draggingEntered?(drag) != .copy || ring()?.isHidden != false { failures.append("drop: an IPSW drag isn't highlighted") }
+            vc.view.layoutSubtreeIfNeeded()
+            let rep = vc.view.bitmapImageRepForCachingDisplay(in: vc.view.bounds)!
+            vc.view.cacheDisplay(in: vc.view.bounds, to: rep)
+            try rep.representation(using: .png, properties: [:])!.write(to: out.appendingPathComponent("placeholder-drop.png"))
+            drop.draggingExited?(drag)
+            if ring()?.isHidden != true { failures.append("drop: the ring stays after the drag leaves") }
         }
 
         // The ⓘ popover: a real size and the build's words, for experimental, untested and beta builds.
@@ -134,6 +186,6 @@ with tempfile.TemporaryDirectory(prefix='ltm-placeholder-') as tmp:
     (tmp / 'main.swift').write_text(check)
     subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
                     str(app / 'Library/FirmwareCatalog.swift'), str(app / 'Device/DeviceProfile.swift'),
-                    str(app / 'Device/DeviceProfile+Display.swift'), str(app / 'Device/DeviceRow.swift'),
+                    str(app / 'Device/DeviceProfile+Display.swift'), str(app / 'Device/DeviceRow.swift'), str(app / 'UI/DropHighlight.swift'),
                     str(tmp / 'placeholder.swift'), str(tmp / 'stubs.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'check')], check=True)
     subprocess.run([str(tmp / 'check'), str(app / 'Resources/firmware-catalog.json'), str(out)], check=True, timeout=60)

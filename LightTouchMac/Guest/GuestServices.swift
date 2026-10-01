@@ -90,7 +90,7 @@ nonisolated struct GuestServices: Sendable {
         catch { try? await agent.unlink(cert); throw error }
         try? await agent.unlink(cert)
         guard output.contains("Guest trust add: 0") else {
-            throw DeviceToolsError.failed("The device did not accept the certificate: \(output)")
+            throw DeviceToolsError.failed("The device didn’t accept the certificate: \(output)")
         }
     }
 
@@ -103,7 +103,7 @@ nonisolated struct GuestServices: Sendable {
         for pac in [Self.proxyPAC, Self.legacyProxyPAC] { if try await agent.get(pac) != nil { return } }
         let output = try await runTool("itproxy", ["on"], localTool: localTool)
         guard output.contains("Proxy enabled") else {
-            throw DeviceToolsError.failed("The device did not accept the proxy setting: \(output)")
+            throw DeviceToolsError.failed("The device didn’t accept the proxy setting: \(output)")
         }
     }
 

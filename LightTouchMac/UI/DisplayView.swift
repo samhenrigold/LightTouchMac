@@ -46,7 +46,6 @@ final class DisplayView: NSView {
     /// An IPSW from outside: the library's, whatever this device is doing.
     var onDropIPSW: ((URL) -> Void)?
     var onDropMedia: ((URL) -> Void)?
-    var onDropUnsupportedFiles: (([URL]) -> Void)?
     /// Called when a Legacy Store row is dropped on the screen.
     var onDropCatalogApp: ((CatalogApp) -> Void)?
 
@@ -273,7 +272,7 @@ final class DisplayView: NSView {
         registerForDraggedTypes([.fileURL, .ltmCatalogApp])
         setAccessibilityLabel("\(profile.displayName) screen")
         setAccessibilityRole(.image)
-        setAccessibilityHelp("Disable Keyboard Input in the Device menu to move a pointer with arrow keys. Hold Space to touch, or Shift-arrow to drag. Home is also available in the Device menu.")
+        setAccessibilityHelp("Turn off Send Keyboard Input (Device > Input) to move a pointer with the arrow keys. Hold Space to touch; Shift-arrow drags.")
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -1318,6 +1317,15 @@ final class DisplayView: NSView {
         sendVisualTouch(0, TouchPhase.end, keyboardPoint.x, keyboardPoint.y, keyboard: true)
     }
 
+    /// Tab leaves the screen while the arrow keys drive the pointer, and Control-Tab (with Shift,
+    /// backwards) always does, so a keyboard user is never trapped here (HIG p.266). Typing sends Tab to the device.
+    private func moveFocusOut(_ event: NSEvent) -> Bool {
+        guard event.keyCode == 48, event.modifierFlags.intersection([.command, .option]).isEmpty,
+              event.modifierFlags.contains(.control) || emulator?.keyboardInputEnabled == false else { return false }
+        if event.modifierFlags.contains(.shift) { window?.selectPreviousKeyView(self) } else { window?.selectNextKeyView(self) }
+        return true
+    }
+
     private func keyboardPointerKey(_ event: NSEvent, down: Bool) -> Bool {
         let code = event.keyCode
         guard [49, 123, 124, 125, 126].contains(code) else { return false }
@@ -1376,6 +1384,7 @@ final class DisplayView: NSView {
             else { super.keyDown(with: event) }
             return
         }
+        if moveFocusOut(event) { return }
         // Command combinations belong to the menu bar; let them pass.
         if !event.modifierFlags.intersection([.command, .control]).isEmpty {
             super.keyDown(with: event)
@@ -1421,7 +1430,13 @@ final class DisplayView: NSView {
 
     // MARK: - Drag & drop
 
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { dropHighlight.show(for: dropOperation(sender)) }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { dropHighlight.show(for: dropOperation(sender)) }
+    override func draggingExited(_ sender: NSDraggingInfo?) { dropHighlight.show(for: []) }
+    override func draggingEnded(_ sender: NSDraggingInfo) { dropHighlight.show(for: []) }
+    private lazy var dropHighlight = DropHighlight.install(in: self)
+
+    private func dropOperation(_ sender: NSDraggingInfo) -> NSDragOperation {
         // Refuse at the drag system, not with an alert per file. During the boot
         // the menu and toolbar items for this same operation are correctly
         // greyed out, but the drop still showed the green copy badge, accepted,
@@ -1449,14 +1464,10 @@ final class DisplayView: NSView {
         return .copy
     }
 
-    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        draggingEntered(sender)
-    }
-
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         // Readiness can change after the drag entered. Never animate a
         // successful drop when its owner will reject the import.
-        guard draggingEntered(sender) == .copy else { return false }
+        guard dropOperation(sender) == .copy else { return false }
         let ipsws = dropped(sender, .ipsw)
         if sender.draggingSource == nil, let onDropIPSW, !ipsws.isEmpty {
             ipsws.forEach(onDropIPSW)
@@ -1473,8 +1484,6 @@ final class DisplayView: NSView {
         guard !ipas.isEmpty || !media.isEmpty else { return false }
         ipas.forEach { onDropIPA?($0) }   // AppInstaller queues them
         media.forEach { onDropMedia?($0) }
-        let omitted = dropped(sender, .unsupported)
-        if !omitted.isEmpty { onDropUnsupportedFiles?(omitted) }
         return true
     }
 

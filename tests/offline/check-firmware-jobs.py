@@ -268,7 +268,7 @@ case "unit":
     expect(run.events.last == .failed("This IPSW doesn’t match the one Light Touch knows.") && !fm.fileExists(atPath: ipsw.path),
            "a sha_mismatch deletes the IPSW: \(run.events)")
     run = prepare(iPad32, state: state, cache: cache, mode: "crash")
-    expect(run.events.last == .failed("Preparation stopped unexpectedly. Open Device Logs for details."), "\(run.events)")
+    expect(run.events.last == .failed("Preparation stopped unexpectedly."), "\(run.events)")
     run = prepare(iPad32, state: state, cache: cache, mode: "incomplete")
     expect(run.events.last == .failed("Couldn’t save the prepared device: The prepared device is incomplete (device.lock.json is missing)."), "\(run.events)")
     expect(Set(devices()) == before && leftovers().isEmpty, "failures leave nothing: \(devices()) \(leftovers())")

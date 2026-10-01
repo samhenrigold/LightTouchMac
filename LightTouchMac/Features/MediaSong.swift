@@ -23,7 +23,7 @@ struct MediaSong: Sendable {
             let values = try source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true, let size = values.fileSize,
                   size > 0, size <= 1 << 30 else {
-                throw DeviceToolsError.failed("Audio files must be nonempty and no larger than 1 GB.")
+                throw DeviceToolsError.failed("Audio files must be smaller than 1 GB.")
             }
             let id = UUID().uuidString.lowercased()
             let directory = FileManager.default.temporaryDirectory
@@ -57,7 +57,7 @@ struct MediaSong: Sendable {
                 try convertAAC(audio, to: converted)
                 let size = try converted.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
                 guard size > 0, size <= 1 << 30 else {
-                    throw DeviceToolsError.failed("The prepared audio must be nonempty and no larger than 1 GB.")
+                    throw DeviceToolsError.failed("The converted audio must be smaller than 1 GB.")
                 }
                 try MediaIdentity.normalizeGeneratedMovie(converted)
                 try FileManager.default.removeItem(at: audio)

@@ -114,7 +114,7 @@ import IOSurface
 
     private func failStart(_ error: DeviceLinkError, _ completion: (Result<HelperInfo, DeviceLinkError>) -> Void) {
         let reason = if case .helperFailure(DeviceLinkWire.leaseRefusal) = error { DeviceLinkWire.leaseRefusal }
-            else { "The \(profile.shortName) didn’t start. Open Device Logs for details." }
+            else { "The \(profile.shortName) didn’t start." }
         logEvent("device helper: didn’t start: \(error)")
         if startFailure == nil { startFailure = reason }
         completion(.failure(error))
@@ -127,7 +127,7 @@ import IOSurface
         if let startFailure { reason = startFailure }
         // The user sees stopped or stopped unexpectedly; the exit code and signal go to the log.
         else if qemuExitCode == 0 || (qemuExitCode == nil && stopRequested && termination == .exited(0)) { reason = profile.stoppedReason }
-        else { reason = "The \(profile.shortName) stopped unexpectedly. Open Device Logs for details." }
+        else { reason = "The \(profile.shortName) stopped unexpectedly." }
         logEvent("device helper \(helperPID): \(termination), QEMU exit \(qemuExitCode.map(String.init) ?? "none") — \(reason)")
         died(reason)
     }

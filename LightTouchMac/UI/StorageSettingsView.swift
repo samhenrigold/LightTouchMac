@@ -136,7 +136,7 @@ final class StorageSettingsView: NSView {
         stack.addArrangedSubview(usage.devices.isEmpty ? detail("No devices.") : grid(usage.devices.map { device in
             let entry = catalog.entry(id: device.instance.firmware)
             return [NSTextField(labelWithString: name(device.instance.firmware)),
-                    detail("Base \(size(device.base)) · Data \(size(device.data)) · Snapshot \(size(device.snapshot))"),
+                    detail("System \(size(device.base)) · Data \(size(device.data + device.snapshot))"),
                     button("Delete Device…", enabled: entry.map(canDelete) ?? false) { [weak self] in entry.map { self?.delete($0) } }]
         }))
 
@@ -149,7 +149,7 @@ final class StorageSettingsView: NSView {
                     button("Remove IPSW", enabled: !busy) { [weak self] in self?.removeIPSW(ipsw.url) }]
         }))
 
-        stack.addArrangedSubview(heading("Caches and logs"))
+        stack.addArrangedSubview(heading("Caches and Logs"))
         let preparing = jobs.values.contains { if case .preparing = $0 { true } else { false } }
         stack.addArrangedSubview(grid([
             [NSTextField(labelWithString: "Decrypted firmware"), detail(size(usage.decrypted)),
@@ -162,8 +162,8 @@ final class StorageSettingsView: NSView {
         let unusedBytes = unused.values.reduce(0) { $0 + $1.size }
         stack.addArrangedSubview(grid([
             [NSTextField(labelWithString: "Library"),
-             detail("\(IPALibrary.index.count) IPAs · \(size(usage.library))" + (unused.isEmpty ? "" : " · \(size(unusedBytes)) on no device")),
-             button("Remove Unused", enabled: !unused.isEmpty) { [weak self] in self?.removeUnusedIPAs() }],
+             detail("\(IPALibrary.index.count) IPAs · \(size(usage.library))" + (unused.isEmpty ? "" : " · \(size(unusedBytes)) unused")),
+             button("Remove Unused Apps", enabled: !unused.isEmpty) { [weak self] in self?.removeUnusedIPAs() }],
         ]))
         layoutSubtreeIfNeeded()
         onResize?()
@@ -200,3 +200,5 @@ final class StorageSettingsView: NSView {
         }
     }
 }
+
+extension StorageSettingsView: SettingsPane {}

@@ -31,12 +31,12 @@ import Foundation
             Set(DeviceAction.allCases.filter { r.allows($0, canDownload: canDownload) }.map { "\($0)" })
         }
 
-        // A first launch selects a build Apple still serves, ready to Download & Prepare: no device ships in the app.
+        // A first launch selects a build Apple still serves, ready to Download and Prepare: no device ships in the app.
         let first = catalog.firstRunEntry!
         precondition(first.status == .available && first.source.url?.host == "secure-appldnld.apple.com", "first run: \(first.id)")
         var r = row(first)
         guard case .notDownloaded = r.state else { fatalError("first run: \(r.state)") }
-        precondition(r.primaryTitle == "Download & Prepare" && allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"])
+        precondition(r.primaryTitle == "Download and Prepare" && allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"])
         // iPod 3.1.3 (user_ipsw) with no record asks for its IPSW; nothing prepares it without one.
         r = row(iPod)
         precondition(r.state == .unavailable(.requiresIPSW) && r.primaryTitle == "Import IPSW…" && !r.isStartable, "\(r.state)")
@@ -49,7 +49,7 @@ import Foundation
         // An IPSW entry without a device is not downloaded, with its size.
         r = row(iPad)
         guard case let .notDownloaded(bytes) = r.state, bytes == 479001595 else { fatalError("\(r.state)") }
-        precondition(r.primaryAction == .downloadAndPrepare && r.primaryTitle == "Download & Prepare")
+        precondition(r.primaryAction == .downloadAndPrepare && r.primaryTitle == "Download and Prepare")
         precondition(allowed(r) == ["importIPSW"], "download stays off until W5/W6: \(allowed(r))")
         precondition(allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"])
         precondition(r.stateDescription.hasPrefix("Not downloaded, ") && r.stateDescription.contains("MB"))
@@ -157,7 +157,7 @@ import Foundation
             precondition(e.status == .untested && e.source.url?.scheme == "https", e.id)
             r = row(e)
             guard case .notDownloaded = r.state else { fatalError("\(e.id): \(r.state)") }
-            precondition(!r.isDimmed && r.primaryAction == .downloadAndPrepare && r.primaryTitle == "Download & Prepare", e.id)
+            precondition(!r.isDimmed && r.primaryAction == .downloadAndPrepare && r.primaryTitle == "Download and Prepare", e.id)
             precondition(allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"], "\(e.id): \(allowed(r, canDownload: true))")
             precondition(r.note == nil && r.supportNote == "Untested" && r.stateDescription.hasPrefix("Not downloaded"), e.id)
             precondition(row(e, job: .downloading(fraction: 0.5)).state == .downloading(fraction: 0.5), e.id)
