@@ -38,15 +38,16 @@ struct DeveloperToolsTests {
         }
     }
     @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_DEVELOPER_PAYLOAD"] != nil,
-                   "Pinned developer payload fixture; set FK_DEVELOPER_PAYLOAD to run"))
-    func isolatesAndRetainsKeysAndRejectsChangedPins() throws {
+                   "Pinned developer payload fixture; set FK_DEVELOPER_PAYLOAD to run"),
+          arguments: ["5F138", "7A341", "7E18", "8C148", "7B500"])
+    func isolatesAndRetainsKeysAndRejectsChangedPins(build: String) throws {
         let payload = URL(fileURLWithPath: ProcessInfo.processInfo.environment["FK_DEVELOPER_PAYLOAD"]!)
         try Oracle.withTemp { root in
             let state = root.appendingPathComponent("private"), id = UUID(), other = UUID()
             func offer(_ name: String) throws -> URL {
                 let path = root.appendingPathComponent(name)
                 try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
-                try Data("ltpkg 1\nbuild 7B500\nserial 9 seed\n".utf8).write(to: path.appendingPathComponent("offer"))
+                try Data("ltpkg 1\nbuild \(build)\nserial 9 seed\n".utf8).write(to: path.appendingPathComponent("offer"))
                 return path
             }
             let first = try DeveloperTools.augment(offer: offer("one"), payload: payload, state: state, instance: id, serial: 101)

@@ -6,9 +6,14 @@ import Foundation
 nonisolated public enum DeveloperTools {
     public static let targets = ["usr/sbin/sshd", "usr/libexec/sftp-server", "bin/bash",
         "usr/lib/libcrypto.0.9.8.dylib"]
-    public static let source = "Legacy-iOS-Kit/2f818780e5c808b09c3497f1745dde1bdce8e372+GNU/bash-4.0.40/minimal-v1"
+    public static let source = "Legacy-iOS-Kit/2f818780e5c808b09c3497f1745dde1bdce8e372+GNU/bash-4.0.40/minimal-v2"
+    public static let packageRevision = 2
+    /// Each profile is qualified with stock SSH/SFTP on a native guest boot.
+    public static func supports(build: String) -> Bool {
+        ["5F138", "7A341", "7E18", "8C148", "7B500"].contains(build)
+    }
     private static let expectedHashes: [String: String] = [
-        "bin/bash": "ef8ec95c81d8b48a088d5603bd4a652505b9f641ebafd9ba93e261074a4d971c",
+        "bin/bash": "27c3bb64b03a68e1266d4a90b74c922d68e65967aa3690894a3aac9a29ec14df",
         "usr/lib/libcrypto.0.9.8.dylib": "bb7cff246d604171a4179cd2fb1a1d97f06ac2e534342b7039ad40aed8bb30de",
         "usr/libexec/sftp-server": "c6ea137ba834febc9b69848f02a68b529a3eaa88a11768f6682e159c05db0906",
         "usr/sbin/sshd": "737a9b0decfe7008641b38f3be18c2bb9006f258f2fb81d3598f52f510b8357b"
@@ -43,7 +48,7 @@ nonisolated public enum DeveloperTools {
         let text = try String(contentsOf: offer.appendingPathComponent("offer"), encoding: .utf8)
         var lines = text.split(separator: "\n").map(String.init)
         guard lines.first == "ltpkg 1", let build = lines.first(where: { $0.hasPrefix("build ") })?.split(separator: " ").last,
-              ["7E18", "7B500"].contains(String(build)) else { throw fail("developer OpenSSH payload is limited to the 7E18 and 7B500 developer profiles") }
+              supports(build: String(build)) else { throw fail("developer OpenSSH payload is not qualified for this firmware") }
         guard let serialIndex = lines.firstIndex(where: { $0.hasPrefix("serial ") }),
               lines[serialIndex].split(separator: " ").count == 3,
               let previous = Int(lines[serialIndex].split(separator: " ")[1]), previous > 0, serial > previous, serial <= Int(Int32.max),
@@ -160,7 +165,7 @@ nonisolated public enum DeveloperTools {
             }
         }
         let inventory = Data(sourceLines.sorted().joined().utf8)
-        guard hash(inventory) == "adeed55eec6ae871617d20c79b2200db9776e3a6fc4eb9dddfd6600a73d8db90" else {
+        guard hash(inventory) == "fe564db1bc69f45cdce4732b3f2588dc78565801035eae9fe151e1e674af71ca" else {
             throw fail("developer redistribution sources or notices are missing or changed")
         }
     }

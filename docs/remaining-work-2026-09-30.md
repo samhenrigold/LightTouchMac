@@ -26,7 +26,7 @@ refuses physical formats it cannot interpret correctly.
 | Raw H2FMI commands / spare FIFO / completion | Implemented, qtested, restore and prepared-device regressed | Broader chip/controller contracts still require firmware evidence. |
 | Physical flash semantics / shared backend | Explicit `nand-xor-ff-v2` and upstream QEMU BlockBackend implemented | Erased FF, one-to-zero programming, erase row addressing, exclusive block ownership, flush and snapshot reopen tested; legacy formats retain their old semantics. RAM-owned bitmap changes publish only after page flush; crash/reopen and nonempty FIFO snapshots are tested. Per-operation crash atomicity remains. |
 | N72 logical relocation in hardware model | Open | Stock physical commands/guest FTL must replace the compatibility mapping, with restore, large writes/deletes and cold-boot evidence. |
-| FMSS snapshot equivalence | Physical-page cache and erase map serialized through upstream VMState trees | Four production-board qtests and native 7E18 file/USB/clock/live GL/audio/new Wi-Fi HTTP resume pass. Mode mismatch and uncertified old streams refuse load. Exact flash generation must still match; in-flight host TCP and other firmware remain unqualified. |
+| FMSS snapshot equivalence | Physical-page cache and erase map serialized through upstream VMState trees | Four production-board qtests and native 7E18 file/USB/clock/live GL/audio/new Wi-Fi HTTP resume pass. Mode mismatch and uncertified old streams refuse load. Identity/file/clock/USB resume also passes 2.1.1, 3.0 and 4.2.1. Exact flash generation must still match; live graphics/audio/new HTTP are qualified on 7E18, and in-flight host TCP remains unqualified. |
 | NAND crypto fidelity | Open | Plaintext generated stores still permit bypasses; prove encrypted restored-store execution through hardware engines. |
 | Native boot arguments / N45 early touch | SYSIC touch masking corrected and older/newer runs pass | Native NOR/NVRAM handoff and downloaded touch firmware readiness remain research leads. Historical early-touch panic was not reproduced, so no readiness gate was invented. The incoming N45 four-page map-context fix removes the hard-stop FTLRestore corruption. Old-format baseline reproduces the kernel abort; two independent fixed-format reopens reach FTL_Open/BSD root without it. The retained 240-second baseline reaches a visible home screen. This was an out-of-bounds map restore, not an IOKit race. |
 | Per-device service routing | Demonstrated hazard guarded and regression tested | Immutable per-device endpoint workers replace GUI C calls; stalled A does not block B, cancellation kills/reaps children, and a retired session cannot reopen. Native guest services pass 12/12. |
@@ -391,3 +391,75 @@ This closes the rewrite and absence seams. The BCM dongle firmware remains HLE;
 normal-boot command-line data injection and generated FTL relocation remain
 explicit compatibility boundaries. Fetching upstream again at 10:00 UTC found
 unchanged refs; no blind merge of the rewritten remote ipad1 history was made.
+
+### Legacy developer shell and fixed-address translator retirement
+
+The minimal-v2 GNU Bash recipe reserves iOS2.x's r9 thread pointer and proves
+classic non-PIE bindings complete before removing LC_DYLD_INFO_ONLY, which
+2.x dyld rejects. It retains Apple's SDK startup object, upstream GNU source,
+all40 patches and complete notices. Independent scratch and production builds
+produce the same qualified hash. Developer recipe revision2 updates existing
+offers; GUI and composition now share one qualified-build predicate.
+
+Production-composed offers install through the existing guest loader on
+5F138, 7A341, 7E18 and 8C148. Every version passes authenticated stock host SSH
+and byte-exact SFTP, then a cold reopen retaining the package, original keys,
+shell and previously written files. K48 7B500 also passes SSH/SFTP with the
+new shell and production offer. No new shell, SSH protocol or NAND writer was
+added, and no support beyond these builds is implied. Pinned payload/source
+audit and key-isolation/tamper tests pass. Evidence:
+`/private/tmp/ltm-developer-v2-ipod-native`,
+`/private/tmp/ltm-developer-v2-ipod-cold`,
+`/private/tmp/ltm-developer-v2-k48-native`,
+`/private/tmp/ltm-developer-v2-unit.log`, and
+`/private/tmp/ltm-developer-v2-audit.log`.
+
+QEMU `d1e43eb94c` removes 477 lines of optional fixed-address guest libc
+substitutions and the ARM translator interception. The guest's memcpy/memmove,
+memset and bzero execute through normal instruction translation. The default
+native iPod regression passes 8/8, including stereo audio, live GL and two-boot
+persistence. The iPad SSH/SFTP run uses this same translator. Evidence:
+`/private/tmp/ltm-retire-tcg-hle-default-regress.log`. This retires two board
+ledger P rows; it does not make guest GL/activation additions real hardware.
+
+The matching clean-commit universal bundle before these last changes passes
+hygiene, 32 provenance tests and the full 18/18 native lifecycle matrix on all
+four iPod firmwares. The new final bundle must be rebuilt and regated after
+commit/pin reconciliation; that earlier bundle is not proof of later source.
+
+### K48 physical Wi-Fi presence and matched audio oracle
+
+QEMU `a5e2c8c529` leaves the soldered BCM4329/SDHCI present with host
+networking disabled, and does not attach a supplied wifi0 backend in that mode.
+Startup policy cannot pretend to change physical topology at runtime. Three
+board qtests pass enumeration, CIS identity, reset and host bridge controls.
+Both SDIO boards now run through the explicit model gate: 10 suites pass,
+no skips. The required iPod default gate remains 8/8.
+
+Stock 7B500 enumerates/initializes the chip with no host NIC and reports all
+four generated identity fields. Save/new-process resume retains identity, USB
+and an exact guest file. The full iPad gate passes 9/9: boot/unlock/lock,
+qualified Home GL comparison, USB/AFC, clean two-boot persistence, Wi-Fi, early
+join, HTTP and four stock sounds. Evidence:
+`/private/tmp/ltm-k48-physical-card-final-models.log`,
+`/private/tmp/ltm-k48-physical-card-snapshot2`,
+`/private/tmp/ltm-k48-physical-card-final-regress.log`, and
+`/private/tmp/ltm-k48-physical-card-ipod-regress.log`.
+
+QEMU `ddc2764bd6` replaces a missing, fixed host-mounted sound oracle with
+references read through the tested guest's VFS. Standalone/default/snapshot
+audio share this capture; older images without an agent need an explicit
+matching extracted rootfs. Standalone audio reuses the existing Boot owner,
+private overlay/NOR and child cleanup. Its real four-sound test passes; it
+does not claim channel-order or all-version selector coverage.
+
+The suspected fixed-default K48 Wi-Fi address overwrite did not reproduce:
+stock firmware initializes with the generated unit address and lockdown matches
+serial/UDID/both MACs. No new factory-address shim was added. The initial native
+probe retried actual USB enumeration; the first missing-device sample is retained.
+The snapshot's first private harness failed only in its duplicate imported
+logging clock; the corrected full roundtrip passes.
+
+Upstream refs were refreshed at 11:28 UTC; requested local targets remain
+multidevice `af0c867` and ipad1 `fd5a1d0845`. Their working files remain untouched.
+The rewritten remote ipad1 history remains deliberately unmerged.

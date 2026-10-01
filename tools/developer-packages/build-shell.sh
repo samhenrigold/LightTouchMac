@@ -10,10 +10,18 @@ export LTM_BASH_WORK="$(mktemp -d "${TMPDIR:-/tmp}/ltm-bash-source.XXXXXX")"
 trap 'rm -rf "$LTM_BASH_WORK"' EXIT
 mkdir -p "$LTM_BASH_WORK/sources" "$LTM_BASH_WORK/build" "$LTM_BASH_WORK/link-sdk"
 SOURCE="$LTM_BASH_WORK/sources"
-curl -fLsS https://ftp.gnu.org/gnu/bash/bash-4.0.tar.gz -o "$SOURCE/bash-4.0.tar.gz"
+if [ -n "${LTM_BASH_LOCAL_SOURCES:-}" ]; then
+    cp "$LTM_BASH_LOCAL_SOURCES/bash-4.0.tar.gz" "$SOURCE/bash-4.0.tar.gz"
+else
+    curl -fLsS https://ftp.gnu.org/gnu/bash/bash-4.0.tar.gz -o "$SOURCE/bash-4.0.tar.gz"
+fi
 for n in $(seq 1 40); do
     patch="bash40-$(printf '%03d' "$n")"
-    curl -fLsS "https://ftp.gnu.org/gnu/bash/bash-4.0-patches/$patch" -o "$SOURCE/$patch"
+    if [ -n "${LTM_BASH_LOCAL_SOURCES:-}" ]; then
+        cp "$LTM_BASH_LOCAL_SOURCES/$patch" "$SOURCE/$patch"
+    else
+        curl -fLsS "https://ftp.gnu.org/gnu/bash/bash-4.0-patches/$patch" -o "$SOURCE/$patch"
+    fi
 done
 (cd "$SOURCE"; shasum -a256 -c "$HERE/bash-source.sha256")
 tar -xzf "$SOURCE/bash-4.0.tar.gz" -C "$LTM_BASH_WORK"
@@ -61,6 +69,6 @@ cp "$LTM_QEMU_SOURCE_DIR/COPYING" "$DEST/Licenses/QEMU-COPYING"
 cp "$HERE/licenses/Bash-GPL-3.txt" "$DEST/Licenses/"
 xcrun clang --version | sed '/^InstalledDir:/d' > "$DEST/Sources/toolchain.txt"
 autoconf --version >> "$DEST/Sources/toolchain.txt"
-shasum -a256 "$LTM_BASH_SDK/usr/lib/libSystem.B.dylib" "$LTM_BASH_SDK/usr/lib/libgcc_s.1.dylib" | awk '{ n = split($2, p, "/"); print $1 " " p[n] }' >> "$DEST/Sources/toolchain.txt"
+shasum -a256 "$LTM_BASH_SDK/usr/lib/libSystem.B.dylib" "$LTM_BASH_SDK/usr/lib/libgcc_s.1.dylib" "$LTM_BASH_SDK/usr/lib/crt1.3.1.o" | awk '{ n = split($2, p, "/"); print $1 " " p[n] }' >> "$DEST/Sources/toolchain.txt"
 otool -L "$DEST/bash"
 shasum -a256 "$DEST/bash"

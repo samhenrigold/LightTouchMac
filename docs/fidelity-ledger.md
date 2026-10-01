@@ -32,7 +32,7 @@ The unmerged `codex/reuse-implementation` candidates add explicit physical
 `nand-xor-ff-v2` erase/program semantics and upstream QEMU BlockBackend ownership,
 with stock blank erase restore and prepared-device persistence gates. This does
 not upgrade generated FTL mappings or missing NAND crypto to register fidelity.
-FMSS physical-page and erase maps now serialize through QEMU VMState trees; native 7E18 file/USB/clock/live graphics/audio/new HTTP resume passes. Other firmware and already-open host sockets remain unqualified. N45 touch interrupt
+FMSS physical-page and erase maps now serialize through QEMU VMState trees; native 7E18 file/USB/clock/live graphics/audio/new HTTP resume passes. Identity, file, clock and USB snapshot gates also pass 2.1.1, 3.0 and 4.2.1. Already-open host sockets remain unqualified. N45 touch interrupt
 requests obey the measured SYSIC pending/enable contract; touch firmware remains
 high-level emulation, and the historical early-touch panic was not reproduced.
 
@@ -55,8 +55,10 @@ through ReadBDADDR, including across HCI reset and actual VMState restoration.
 Three UART1 production-board qtests and a native 7E18 stack probe pass; the
 observed programmed address matches the fixture’s generated MAC. The controller
 is still H, with no radio/link transport or patchram execution.
-The UART3-to-UART1 Bluetooth string rewrite remains P; a correct ReadBDADDR alone
-was insufficient to replace the missing iBoot DeviceTree address handoff.
+The earlier ReadBDADDR-only change did not retire the UART-path rewrite.
+Candidate `cbf1000344` completes combo-chip OTP identity and physical presence
+independent of host networking, removing that rewrite. All four native
+firmware lifecycle gates pass without modifying iBoot bytes or literals.
 
 QEMU `69db528b32` also provisions the BCM4325 CIS Wi-Fi address and Apple's
 combo-card Bluetooth OTP record from the generated unit. The 2.x driver otherwise
@@ -90,11 +92,11 @@ in the summary, in the order R > H > P > S; qualifiers such as "(unverified)", "
 
 | Board | R | H | P | S | rows |
 |---|---|---|---|---|---|
-| K48 iPad 1 | 26 | 8 | 7 | 19 | 60 |
-| N72 iPod touch 2G (and the N45 1G parts it shares or adds) | 20 | 7 | 8 | 24 | 59 |
+| K48 iPad 1 | 26 | 8 | 6 | 19 | 59 |
+| N72 iPod touch 2G (and the N45 1G parts it shares or adds) | 20 | 7 | 7 | 24 | 58 |
 | Guest side (both boards: boot-args, injected components, image edits, synthesised state) | 0 | 0 | 43 | 0 | 43 |
 
-Counted from the rows on 2026-09-30; K48 watchdog updated after the overnight audit confirmed the already-landed timed reset model. The two board lines were one off before: K48 #47 (`R (+P gate)`) and N72 #47
+Counts exclude the retired fixed-address TCG libc substitution on October 1; K48 watchdog updated after the overnight audit confirmed the already-landed timed reset model. The two board lines were one off before: K48 #47 (`R (+P gate)`) and N72 #47
 (`R (custom) / S (GID, UID) / P (preserve)`) had been counted as R. Guest side: the 34 rows of its three tables (the
 historical `nand-enable-reformat` row not counted) plus the 9 per-build assumptions still live (items 1, 4 and 5
 retired).
@@ -172,7 +174,7 @@ uses `iboot=`.
 | 54 | SGX535 GPU @0x85100000 | nothing in `ipad1.c`; `imgtools/ipad1_kboot.py:304-307` sets `sgx` compatible=none (kboot only) | P (absent) | **There is no GPU model.** On the kboot path the driver is unmatched; on the iBoot path the stock node stays and IMGSGX535 hits the unimplemented window. | PowerVR SGX535 (USSE cores, TA/ISP/TSP, microcode) running the guest's kext: six phases (registers + MMU, driver init, USSE1 interpreter, TA/ISP, fragment/texture, host shader translation; docs/research/sgx535-feasibility.md §3), go/no-go on decoding the undocumented USSE1 encoding; the one row that would delete rows 55, 59-61 and most boot-args. **First milestone, separable: the SGX MMU** (page-directory base register + the kext's page tables, walked by the host). The kext already builds those tables for every surface; walking them could give the GL bridge each CA surface's physical pages with no CPU mapping (surfaces measured 09-29 as scattered 4 KiB pages, no DART, no carveout). Caveat (docs/research/sgx535-feasibility.md): the kext maps into the GPU tables from its GL-context paths, which our shim bypasses, so the walk may find no CA surfaces while the shim is in place; phase 1 must check whether IOSurface creation alone maps them |
 | 55 | GLES host bridge | `hw/arm/gles-host.c`, `hw/arm/guest-gles.c`, `ipad1.c:140-214` (cp15 hypercall) | P | The guest's OpenGLES.framework is replaced whole by one front end (qemu-ios `contrib/gles-public`, the same binary on every 3.2-5.1.1 build) that traps `QC_GLES` to a host GL context; nothing under OpenGLES (GLEngine, libGFXShared, a gld plugin) loads. ES 2.0 partial. The seam is the public API, which 4.2.1→4.3.5 did not change at all (qemu-ios `docs/ipad1/gles-public-seam.md`). | Replaced by row 54 |
 | 56 | cp15 hypercall register | `ipad1.c:140-214`, `include/hw/arm/guest-services/general.h` | P | A made-up coprocessor register (op1=3, c15,c15,0) only guest shims use. | None (not hardware) |
-| 57 | TCG `it-hle` hooks | `target/arm/tcg/it-hle.c`, `target/arm/tcg/translate.c:7828-7834` | P (inert) | memcpy/memset replacement at fixed iPod 3.1.3 addresses; off unless `IT_HLE`. | Delete |
+| 57 | TCG `it-hle` hooks | Retired from the candidate translator | — | The fixed-address memcpy/memset/bzero substitutions and their environment controls are deleted. Guest instructions execute normally. | Removed; excluded from active counts |
 | 58 | Guest pasteboard, packages, agent | `hw/arm/guest-pasteboard.c`, `hw/arm/guest-package.c`, `ipad1.c:175-203` | P | Reachable only through guest-installed daemons over the hypercall. | Stock USB services (lockdown/AFC) for what they cover; the pasteboard has no R form |
 | 59 | Rootfs bake shims | `imgtools/ipad1_rootfs.py` (see the guest-side table) | P | Guest edits the pipeline makes. | See guest-side table |
 | 60 | Unimplemented window | `ipad1.c:620-624` | S | One `create_unimplemented_device` over 0x80000000-0xBFFFFFFF: SGX, PWM 0x83500000 (codec MCLK), AMC aux, USB_CTL 0xbf108000, CE-ATA, I2C1, SPI3/4, UART6 all read 0. | Per block, above |
@@ -240,7 +242,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 53 | BCM4325 Wi-Fi dongle | `ipod_touch_sdio.c:127-178, 296-440, 540-680` | H | Firmware stored, never run; CDC/BDC in C; fake BSS; off by default. | Dongle SoC running its firmware (as K48 #32), infeasible |
 | 54 | Host input automation (keys→buttons, on-screen keyboard taps, power-off slide) | `ipod_touch_2g.c:2020-2145, 2435-2650` | H | Host synthesises GPIO/touch events. | None |
 | 55 | Guest services (agent, keyboard, pasteboard, package) | `hw/arm/guest-services.c:98-183`, `hw/arm/ipod-agent.c` | P | Injected daemons/dylibs over the hypercall. | USB lockdown/AFC tooling for what it covers; unknown: which agent services have a stock USB equivalent on each iOS |
-| 56 | TCG `it-hle` | `target/arm/tcg/it-hle.c` | P (inert) | Opt-in memcpy hoist at fixed 7E18 addresses. | Delete |
+| 56 | TCG `it-hle` | Retired from the candidate translator | — | Shared ARM translator no longer substitutes libc functions at firmware addresses. | Removed; excluded from active counts |
 | 57 | WM8758 codec (N45, i2c1 0x1a) | `hw/arm/ipod_touch_wm8758.c` | R/S | The write-only 2-wire control port (7-bit register, 9-bit value, register 0 resets): what AppleWM8758Audio's start needs. No analogue path (headphone jack, hp_detect), so no Beep reaches the host. | Output path + jack detect after smoke #56 |
 | 58 | Piezo buzzer (N45, timer 1) | `hw/arm/ipod_touch_piezo.c` | R | The stock chain drives it unmodified: mediaserverd (Celestial's Buzz, SystemSoundBuzzToneSequences.plist) → AppleS5L8900XTimerDevice → timer 1 registers (row 8). The pin's square wave is rendered into a 44.1 kHz host voice 40 ms behind the guest clock. The transducer is ideal (no resonance or filtering); `amplitude` is a loudness knob. | A piezo response curve, if anyone can measure one |
 | 59 | Marvell 88W8686 Wi-Fi card (N45, SDIO) | `hw/arm/mrvl8686.c`, `ipod_touch_1g.c` (the `wifi` property) | R (SDIO) / H (firmware) | AppleMRVL868x-69 runs unmodified. Register level: function 1's registers and I/O port, the helper download, the helper's EEPROM read (Wi-Fi MAC, TX calibration), the main program's block-by-block download with the image's CRC-32 per header and block (a bad one sets the error bit), FIRMWARE_OK, the host interrupt status (write 0 to clear) under its mask, deep sleep and its wake event. The helper and the 120 KiB firmware the kext carries are accepted and never run: the running firmware's host commands, events and TxPD/RxPD data path are answered in C, with one open access point ("qemu-ios", channel 6) behind slirp. The EEPROM's MAC is the unit identity's (machine `wifi-mac`, from FirmwareKit's device.lock.json; iBoot copies the same MAC from nvram `wifiaddr` into the DT, so lockdownd's UDID is the identity's); invented: the calibration bytes, the firmware version (9.70.3.p24), and 00:1b:63:45:1e:01 when no `wifi-mac` is given. The card ignores the slot's `function-power_enable` (GPIO 0x1701, which the S5L8900's FSEL at +0x320 drives on, off, on during boot: smoke #61). `tests/ipod/test_mrvl8686.py`. | Run the Marvell firmware (its ARM core, MAC and a radio model), infeasible |

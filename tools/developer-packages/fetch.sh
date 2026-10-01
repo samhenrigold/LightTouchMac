@@ -31,7 +31,7 @@ import Foundation
 import CryptoKit
 let root = URL(fileURLWithPath: CommandLine.arguments[1])
 let targets = ["usr/sbin/sshd", "usr/libexec/sftp-server", "bin/bash", "usr/lib/libcrypto.0.9.8.dylib"]
-let expected = ["usr/sbin/sshd": "737a9b0decfe7008641b38f3be18c2bb9006f258f2fb81d3598f52f510b8357b", "usr/libexec/sftp-server": "c6ea137ba834febc9b69848f02a68b529a3eaa88a11768f6682e159c05db0906", "usr/lib/libcrypto.0.9.8.dylib": "bb7cff246d604171a4179cd2fb1a1d97f06ac2e534342b7039ad40aed8bb30de", "bin/bash": "ef8ec95c81d8b48a088d5603bd4a652505b9f641ebafd9ba93e261074a4d971c"]
+let expected = ["usr/sbin/sshd": "737a9b0decfe7008641b38f3be18c2bb9006f258f2fb81d3598f52f510b8357b", "usr/libexec/sftp-server": "c6ea137ba834febc9b69848f02a68b529a3eaa88a11768f6682e159c05db0906", "usr/lib/libcrypto.0.9.8.dylib": "bb7cff246d604171a4179cd2fb1a1d97f06ac2e534342b7039ad40aed8bb30de", "bin/bash": "27c3bb64b03a68e1266d4a90b74c922d68e65967aa3690894a3aac9a29ec14df"]
 var hashes: [String: String] = [:]
 for target in targets {
     let data = try Data(contentsOf: root.appendingPathComponent(target))
@@ -41,7 +41,7 @@ for target in targets {
         exit(1)
     }
 }
-let manifest: [String: Any] = ["source": "Legacy-iOS-Kit/2f818780e5c808b09c3497f1745dde1bdce8e372+GNU/bash-4.0.40/minimal-v1", "files": hashes]
+let manifest: [String: Any] = ["source": "Legacy-iOS-Kit/2f818780e5c808b09c3497f1745dde1bdce8e372+GNU/bash-4.0.40/minimal-v2", "files": hashes]
 try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]).write(to: root.appendingPathComponent("developer-tools.json"))
 SWIFT
 swift -module-cache-path "$TMP/modules" "$TMP/manifest.swift" "$OUT"
