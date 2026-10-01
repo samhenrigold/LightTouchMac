@@ -504,3 +504,38 @@ restore completion or physical NAND replacement is claimed. N72 preparation
 now exports available keys for all resolved normal/restore components, with a
 production archive/component test covering both ramdisks. No firmware patch
 or permissive unknown-key fallback was added.
+
+### Complete restore crypto transfers (2026-10-01)
+
+QEMU `d2fb06759a` removes the 16 MiB AES register clamp while bounding host
+scratch storage to 64 KiB. Stock 5F138 iBSS decrypts its complete 25,313,280-byte
+update ramdisk byte-for-byte against the catalog-key reference. The old
+`Process 1 exec of /sbin/launchd failed, errno 8` panic was encrypted data left
+in the ramdisk tail, not a missing RAM region or a guest executable patch.
+Sanitized production-handler tests and the default native 7E18 8/8 regression
+pass independently for this correction.
+
+QEMU `31036cf8e9` fixes the same transfer-length issue in SHA DMA with bounded
+buffers, raw block chaining, and unchanged guest-owned padding. A new test
+reproduced the old register clamp and then compared the complete digest with
+hashlib; interrupt and snapshot-state tests pass. Its separate default native
+7E18 regression also passes 8/8. The app pins that verified QEMU revision.
+
+An unmodified stock 5F138 restore ramdisk now runs `launchd` and two
+`restored_update` processes after 60 seconds, without watchdog suppression.
+Process presence is not a restore protocol success. The kernel USB trace waits
+with RESET/ENUMDONE interrupts enabled while the retained recovery connection
+receives descriptor NAKs. Actual host bus reset/re-enumeration is being tested;
+no fabricated descriptor, forced guest completion, or production delay was
+added. Rapid post-DFU polling separately reproduces a SecureROM abort/reset.
+Physical N72 formatting, full restore, encrypted restored cold boot and removal
+of generated-store FTL relocation remain open.
+
+Before these crypto changes, the clean universal app ec3cdeb / QEMU 53e722
+candidate also passed native 3.1.3 lifecycle gates 18/18. Its complete Mach-O
+closure and ad hoc signature checks pass for the declared macOS 14.4 minimum.
+Those packaging results do not qualify the subsequent crypto revision.
+Evidence: `/private/tmp/ltm-aes-restore-default`,
+`/private/tmp/ltm-sha1-restore-default`,
+`/private/tmp/ltm-n72-ramdisk-aes-fixed/ramdisk-comparison.json`, and
+`/private/tmp/ltm-n72-kernel-processes/processes.json`.
