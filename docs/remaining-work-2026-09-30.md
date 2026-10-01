@@ -18,27 +18,27 @@ refuses physical formats it cannot interpret correctly.
 |---|---|---|
 | Swift preparation / Python retirement | Included in the starting consolidation | Keep production orchestration in Swift; Python remains useful for test/research harnesses. No blanket migration of tests. |
 | PVRTC reference decoder | Implemented and sanitizer/native-upload tested | Cross-platform EAGL integration and older/newer live snapshot round trips are not established by these tests. |
-| iPad flush failure propagation | Implemented and failure-injected | Storage-generation publication is implemented and interruption-tested. Cross-file page/bitmap crash atomicity remains open. |
+| iPad flush failure propagation | Implemented and failure-injected | Storage-generation publication is implemented and interruption-tested. Data-before-ownership publication is now ordered and SIGKILL/reopen tested; atomic guest operations and durability of every acknowledged program across host power loss remain open. |
 | Exclusive offline export ownership | Implemented at reusable device API/CLI boundary | Production edit, deletion and cache maintenance now use ownership checks. Continue auditing restore entry points; isolated fixture APIs intentionally bypass ownership. |
 | Safe HFS export/mount cleanup | Implemented | N72 edits preserve metadata and publish one recoverable generation containing NAND, NOR and fresh snapshot paths. Physical native FTL formats require separate support. |
 | Stopped writable / running read-only access | N72 transactional CLI and Finder workflow implemented; certified edited generation passes two native boots | N45 format unsupported; K48 coupled partitions/keybag/crypto/YaFTL unresolved. Running reads must use guest VFS or a frozen generation. |
 | Stock restore replacing generated stores | K48 geometry-only stock erase restore passes | Stock cold boot fails its identity gate; full activation/graphics/install/delete/persistence and interruption recovery are unproven on restored storage. |
 | Raw H2FMI commands / spare FIFO / completion | Implemented, qtested, restore and prepared-device regressed | Broader chip/controller contracts still require firmware evidence. |
-| Physical flash semantics / shared backend | Explicit `nand-xor-ff-v2` and upstream QEMU BlockBackend implemented | Erased FF, one-to-zero programming, erase row addressing, exclusive block ownership, flush and snapshot reopen tested; legacy formats retain their old semantics. Cross-file crash atomicity remains. |
+| Physical flash semantics / shared backend | Explicit `nand-xor-ff-v2` and upstream QEMU BlockBackend implemented | Erased FF, one-to-zero programming, erase row addressing, exclusive block ownership, flush and snapshot reopen tested; legacy formats retain their old semantics. RAM-owned bitmap changes publish only after page flush; crash/reopen and nonempty FIFO snapshots are tested. Per-operation crash atomicity remains. |
 | N72 logical relocation in hardware model | Open | Stock physical commands/guest FTL must replace the compatibility mapping, with restore, large writes/deletes and cold-boot evidence. |
 | FMSS snapshot equivalence | Unsupported physical-state snapshots explicitly rejected | Empty state migrates; populated physical state and uncertified old snapshot versions refuse save/load. Full physical-state migration remains a future capability. |
 | NAND crypto fidelity | Open | Plaintext generated stores still permit bypasses; prove encrypted restored-store execution through hardware engines. |
-| Native boot arguments / N45 early touch | Open | Trace NOR/NVRAM consumption and multitouch readiness/ATN; remove injections/stimulus restrictions only with older/newer regression proof. |
+| Native boot arguments / N45 early touch | SYSIC touch masking corrected and older/newer runs pass | Native NOR/NVRAM handoff and downloaded touch firmware readiness remain research leads. Historical early panic was not reproduced, so no readiness gate was invented. |
 | Per-device service routing | Demonstrated hazard guarded and regression tested | Immutable per-device endpoint workers replace GUI C calls; stalled A does not block B, cancellation kills/reaps children, and a retired session cannot reopen. Native guest services pass 12/12. |
 | Timezone lifecycle and children | Implemented and cancellation/deadline tested | BootSessionScope now owns readiness, recovery, staging, activation, installation, reset and synchronization tasks plus the observer. Controller orchestration can be reduced further as responsibilities stabilize. |
 | Shared catalog / boot recipe types | Boot-field loss fixed and round-trip tested | Shared Foundation-only FirmwareWire preserves all catalog fields, including source resources. GUI does not import preparation machinery. |
-| Developer SSH/SFTP/GDB | Host OpenSSH/inetcat wrapper and existing GDB protocol exposed | Guest server provisioning, fresh host keys, legacy compatibility and live root-file semantics remain. Application debugserver is a separate capability. |
+| Developer SSH/SFTP/GDB | Automatic opt-in guest offer and per-instance keys; modern host SSH/SFTP passes on clean 7E18 and 7B500 under load | Pinned-source shell and full source/license receipt are packaging-qualified. Older firmware requires its own ABI proof. QEMU GDB uses an explicitly enabled stub; automatic GUI launch and application debugserver remain separate capabilities. |
 | Native Finder discovery/media sync | Removed from scope at the user’s request | No virtual-controller adapter or entitlement request. Ordinary stopped HFS mounts and guest-mediated services remain. |
 | Matrix evidence identity/publication | Implemented and real concurrent-process tested | Broader corpus execution and acceptance inventory remain ongoing engineering work. |
 | Test prerequisites / real model coverage | Three explicit production qtest suites established | Explicit emulator test registrations replace source-text classification; physical flash and snapshot contracts now have actual model tests. Convert remaining high-risk DMA/IRQ/reset coverage incrementally. Skipped tests are not compatibility proof. |
 | Cache pruning ownership | Shared preparation leases and exclusive prune CLI implemented | GUI and matrix call the same maintenance boundary. Verified cache remains reusable; concurrent external consumers prevent pruning. |
 | Capacity handling | Implemented, shared GUI/preparation leaf, tested | Preserve the small dependency boundary; no need to introduce another storage framework. |
-| ANGLE adoption | Deferred after native probes | Same guest workload, surfaces/sharegroups and snapshot round trips must demonstrate benefit and deletable custom adaptation before changing the shipping backend. |
+| ANGLE adoption | Comparative ES1 prototype evaluated; CGL retained | Exact ES1 pixels/readback and native sharegroups pass, but K48 composition fails on ES2 and legacy N72 requires rectangle semantics. Snapshots refuse explicitly. No net code or stability benefit demonstrated; prototype is research-only. |
 | Factual docs / source pins / worktree hygiene | Matching candidate pins and durable evidence recorded | Historical reports now link here; generate current inventory from commits/artifacts. Integrate candidates and run the signed/universal supported-host release gate. |
 | Retina / original iPhone / telephony | Future scope | Matched IP reuse and board wiring; measure Apple's modem boundary before choosing protocol helpers. No new-device support is implied. |
 
@@ -128,3 +128,12 @@ remain supported. Other postponements are engineering decisions, not completed
 cleanup. More abstractions, a generic device plugin framework, a new filesystem
 implementation, or a second host media-database writer would add ownership before
 solving the boundaries above.
+
+## Retained acceptance seam
+
+The final ordered-ownership/snapshot-fixed K48 binary passes persistence and an
+isolated boot/unlock replay. A concurrent loaded-host run instead reaches a
+black display during the unlock judge, with LCD enable/disable transitions and
+no demonstrated NAND error. Both runs are retained; the isolated pass does not
+explain or fix the earlier failure. Touch/sleep timing under load remains an
+acceptance investigation, not a claimed storage regression fix.

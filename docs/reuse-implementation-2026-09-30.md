@@ -23,7 +23,7 @@ None has been merged into the target branches.
 | Host mounts | Use macOS HFS and disk-image tools. Validate export paths and current attachment identity; retain staging on failed discovery/eject/repair. | Existing directories are preserved, stale disk nodes are not force-ejected, and failed filesystem repair cannot produce a successful export. |
 | Stopped edits | Production CLI and Finder actions for explicit N72 generated stores; lease, durable edit intent, HFS metadata preservation, certified generation publication and recovery. | Actual editor replacement and metadata fixtures pass. A published generation passes two native cold boots, exact edited AFC reads and subsequent guest-write persistence. N45 and native K48 FTL remain unsupported. |
 | Device routing | Killable per-device command/notification processes with immutable socket, UDID and boot session. GUI uses a typed subprocess boundary. | Actual stalled C calls are killed/reaped; B remains usable while A stalls, next A gets a new PID, retired sessions refuse requests. Native guest services pass 12/12. |
-| Developer access | Small host CLI delegates SSH/SFTP to OpenSSH and usbmux forwarding to `inetcat`, with explicit loopback endpoint and per-instance host-key identity. Use the existing QEMU GDB protocol. | Real SSH parsing/proxy execution tests cover quoting and endpoint isolation. Live guest OpenSSH and modern host SSH/SFTP interoperability pass; reproducible redistributable shell packaging is still being completed. |
+| Developer access | Small host CLI delegates SSH/SFTP to OpenSSH and usbmux forwarding to `inetcat`, with explicit loopback endpoint and per-instance host-key identity. Use the existing QEMU GDB protocol. | Real SSH parsing/proxy execution tests cover quoting and endpoint isolation. Clean 7E18 and 7B500 guests pass strict pinned-key SSH and exact binary SFTP under concurrent builds. A pinned-source minimal Bash replaces opaque GPL shell/readline/ncurses artifacts; source and license receipts accompany the payload. |
 | Lifecycle | Retire timezone observer/task on stop, helper death and power-off; establish a new scope on power-on. Use the existing Swift Subprocess library to bound, cancel and reap timezone children. Preserve the catalog boot recipe through GUI serialization. | Actual-function lifecycle fixtures and a compiled Swift catalog round trip pass. A child ignoring SIGTERM is killed/reaped; cancelled readiness cannot trigger a timezone mutation or retry. |
 | Capacity | Share a Foundation-only capacity leaf between GUI and FirmwareKit. Fall back to physical free space when macOS reports unusable ImportantUsage capacity. | Real preparation exposed the false zero; tests retain true disk-full refusal. The GUI adds no IPSW/Mach-O preparation dependency. |
 | Acceptance provenance | Bind matrix reuse to hashed inputs/options, immutable attempt evidence, and host identity. Serialize result publication with a stable lock and reread before merging. | Same-size binary changes invalidate reuse; simultaneous processes with separate scratch roots preserve all 40 result records and history. |
@@ -126,10 +126,12 @@ splitting this controller into extension files would not establish that boundary
 The shared FirmwareWire and cache maintenance API are now implemented without
 making the GUI import FirmwareKit.
 
-ANGLE remains subject to the same guest workload, surface/sharegroup and snapshot
-comparison. Explicit API context and snapshot versioning are being tested; no
-shipping backend replacement or code reduction is claimed from native probes
-alone. Native Finder USB discovery and sync were removed from scope at the
+ANGLE has now been compared through the same transport. The opt-in ES1
+prototype renders exact primitive pixels, but K48 composition fails because its
+compositor uses ES2; legacy N72 additionally needs rectangle-texture semantics.
+The prototype refuses snapshots. CGL remains the default, and no reduction in
+code or improvement in stability is claimed. See the emulator’s
+`docs/research/angle-evaluation.md` for the reproducible comparison. Native Finder USB discovery and sync were removed from scope at the
 user’s request. No entitlement request or virtual USB adapter will be pursued;
 ordinary stopped Finder filesystem mounts remain.
 

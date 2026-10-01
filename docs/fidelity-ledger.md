@@ -1,6 +1,6 @@
 # Fidelity ledger
 
-What in the two emulated boards is a real hardware model, what is a high-level stand-in, what only
+What in the emulated boards is a real hardware model, what is a high-level stand-in, what only
 works because the guest is patched, and what is a stub. Kept honest so a new iOS build's failures can
 be named by component and class, and so the fix that raises the class (H→R, P→R) is preferred over
 another special case.

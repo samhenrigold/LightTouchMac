@@ -43,6 +43,9 @@ refused. For a running guest, use guest-mediated AFC or the opt-in SSH/SFTP tool
 those operations preserve guest filesystem/FTL ownership. A frozen export is a
 separate read-only view, not a writable live NAND mapping.
 
-Storage publication does not claim power-loss atomicity between the emulator's
-separate page and dirty-bitmap files. That remaining controller/backend boundary
-requires its own interruption tests and durability design.
+The physical NAND backend now keeps unpublished ownership in RAM, flushes page
+data before publishing ownership, and tests SIGKILL/reopen and failure paths.
+That ordering prevents incomplete first-owned overlay pages from becoming
+authoritative; it does not claim atomic guest operations or durable completion
+of every acknowledged program across a host power loss. Host edit generation
+publication and guest/controller persistence are separate contracts.
