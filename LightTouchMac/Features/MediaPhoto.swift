@@ -35,28 +35,6 @@ struct MediaPhoto: Sendable {
             guard width <= 100000, height <= 100000, width * height <= 100_000_000 else {
                 throw DeviceToolsError.failed("This photo is too large. Choose one below 100 megapixels.")
             }
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 2048,
-                kCGImageSourceShouldCacheImmediately: true,
-            ]
-            guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options as CFDictionary),
-                  CGImageSourceGetStatusAtIndex(imageSource, 0) == .statusComplete,
-                  let context = CGContext(data: nil, width: thumbnail.width, height: thumbnail.height,
-                    bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
-                throw DeviceToolsError.failed("This photo couldn’t be read.")
-            }
-            try Task.checkCancellation()
-            // JPEG has no alpha. Flatten transparent images against white.
-            let bounds = CGRect(x: 0, y: 0, width: thumbnail.width, height: thumbnail.height)
-            context.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
-            context.fill(bounds)
-            context.draw(thumbnail, in: bounds)
-            guard let image = context.makeImage() else {
-                throw DeviceToolsError.failed("The photo couldn’t be prepared.")
-            }
             let temporaryID = UUID().uuidString.lowercased()
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("ltm-photo-" + temporaryID, isDirectory: true)
@@ -64,18 +42,7 @@ struct MediaPhoto: Sendable {
             var complete = false
             defer { if !complete { try? FileManager.default.removeItem(at: directory) } }
             let output = directory.appendingPathComponent("image.jpg")
-            guard let destination = CGImageDestinationCreateWithURL(output as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
-                throw DeviceToolsError.failed("Couldn’t create the prepared photo.")
-            }
-            let encoding: [CFString: Any] = [
-                kCGImageDestinationLossyCompressionQuality: 0.9,
-                kCGImagePropertyOrientation: 1,
-                kCGImagePropertyJFIFDictionary: [kCGImagePropertyJFIFIsProgressive: false],
-            ]
-            CGImageDestinationAddImage(destination, image, encoding as CFDictionary)
-            guard CGImageDestinationFinalize(destination) else {
-                throw DeviceToolsError.failed("Couldn’t finish the prepared photo.")
-            }
+            try writeBaselineJPEG(imageSource, maxPixelSize: 2048, to: output)
             try Task.checkCancellation()
             let id = try MediaIdentity.identifier(for: output)
             let result = MediaPhoto(id: id, directory: directory, image: output,
@@ -91,5 +58,44 @@ struct MediaPhoto: Sendable {
             }
             return photo
         } onCancel: { worker.cancel() }
+    }
+
+    /// Upright, opaque (flattened on white), baseline JPEG no larger than `maxPixelSize` on
+    /// either side: what the legacy guests' Photos and Music artwork decoders accept.
+    nonisolated static func writeBaselineJPEG(_ imageSource: CGImageSource, maxPixelSize: Int, to output: URL) throws {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options as CFDictionary),
+              CGImageSourceGetStatusAtIndex(imageSource, 0) == .statusComplete,
+              let context = CGContext(data: nil, width: thumbnail.width, height: thumbnail.height,
+                bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
+            throw DeviceToolsError.failed("This photo couldn’t be read.")
+        }
+        try Task.checkCancellation()
+        // JPEG has no alpha. Flatten transparent images against white.
+        let bounds = CGRect(x: 0, y: 0, width: thumbnail.width, height: thumbnail.height)
+        context.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
+        context.fill(bounds)
+        context.draw(thumbnail, in: bounds)
+        guard let image = context.makeImage() else {
+            throw DeviceToolsError.failed("The photo couldn’t be prepared.")
+        }
+        guard let destination = CGImageDestinationCreateWithURL(output as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
+            throw DeviceToolsError.failed("Couldn’t create the prepared photo.")
+        }
+        let encoding: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: 0.9,
+            kCGImagePropertyOrientation: 1,
+            kCGImagePropertyJFIFDictionary: [kCGImagePropertyJFIFIsProgressive: false],
+        ]
+        CGImageDestinationAddImage(destination, image, encoding as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else {
+            throw DeviceToolsError.failed("Couldn’t finish the prepared photo.")
+        }
     }
 }

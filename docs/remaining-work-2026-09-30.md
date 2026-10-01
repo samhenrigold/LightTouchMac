@@ -199,3 +199,21 @@ or invented wake vector was added.
 
 Continue physical NAND/crypto and native boot/power handoff one independently
 verified contract at a time. GPU remains a separate feasibility gate.
+
+Latest local main reconciliation: multidevice `af0c867` and ipad1 `fd5a1d0845`
+now form the candidate base. Their full metadata work is integrated into one
+MediaSong tag reader and the shared MediaPhoto JPEG writer; the duplicate
+metadata regression was retired. The candidate retains bounded images, the
+current-helper route, schema retries and a native allocated artwork ID read
+back on retry, rather than deriving the cache key from a truncated hash.
+Year uses MusicLibrary's own writer connection because the purchase insert has
+no year property; no host database writer is added. Candidate guest package
+serial is 11 / 1.1.9 so the changed payload follows main's serial 10.
+
+The full app-side tagged test passes production Swift -> service worker -> AFC
+-> itmedia -> native library/cache, including year, compilation, genre and
+artwork format/pixels, duplicate reconciliation, and guest-confirmed shutdown.
+Evidence: `/private/tmp/ltm-media-merged-native.log` and its retained output path.
+Four offline checks pass without skips in `/private/tmp/ltm-media-merged-offline`.
+The native harness now accepts explicit asset/base paths for isolated worktrees.
+The additional cold-reopen decoded-artwork check is running on the merged path.
