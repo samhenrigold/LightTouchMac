@@ -738,3 +738,15 @@ hides these gaps even in normal boot. Honest completion must be gated against
 these measured dependencies; passing boot is not complete sequencer fidelity.
 Evidence: `/Users/shg/Developer/ltm-evidence/fmss-ce-2026-10-01`.
 No physical restore or full flash-command qualification follows.
+
+### October 1: observed bounded descriptor shift
+
+QEMU 865961d1e5 supports opcode14 immediate16 for bit31-clear sources, where
+logical and arithmetic shifts agree. Other forms remain explicitly unsupported;
+shift signedness is unmeasured. Strict behavioral baseline fails; actual-source
+sanitizer/IRQ gates, real model14/14 and independent native7E18 two-boot8/8 pass.
+Diagnostic-only traces now reach D34 reads in the iBoot/kernel bulk paths and
+D48 in a separate kernel script. The exact live descriptor word was not captured;
+this progress does not establish a complete ISA, flash execution or completion.
+Evidence: `/Users/shg/Developer/ltm-evidence/fmss-opcode14-2026-10-01`.
+A fresh stock erase trace is in progress; no restore pass is claimed.
