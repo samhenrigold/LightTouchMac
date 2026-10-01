@@ -116,3 +116,26 @@ driver compile. No guest was started by this admission test.
 Parent-directory containment and managed-record path authority remain
 separate; this single flag does not establish either. Evidence:
 `/Users/shg/Developer/ltm-evidence/host-lease-2026-10-01`.
+
+## Generic NAND reuse requires a measured storage boundary
+
+The existing QEMU NAND core is a useful future flash child, but it is not a
+drop-in replacement for FMSS. The advertised AD D5 14 B6 identity and current
+controller geometry describe 4 KiB pages and 128 pages per erase block. The
+generic core's D5 entry instead selects 2 KiB pages, 64 pages per block and a
+different extended ID. It needs explicit geometry, full ID, wider capacity
+and bounded 4 KiB support before this chip can use it.
+
+A combined data/OOB BlockBackend could avoid allocating whole flash or a
+large volatile spare area. Sparse file holes return zero, however, whereas
+erased flash returns FF. FF-valued backing, durable failure reporting and
+block snapshot/migration ownership need separate qualification. Current FMSS
+64-byte stored metadata and 12-byte guest projection are not a proven full
+raw OOB/ECC layout; generic ID decoding does not establish Apple's projection.
+
+Keep the generated-image compatibility format separate. First qualify stock
+restore, physical writes and cold boot; only then replace custom media
+operations with a tested generic flash child. A format adapter that merely
+moves current synthetic metadata into a new driver would not establish reuse
+or fidelity. Read-only source audit:
+`/Users/shg/Developer/ltm-evidence/nand-reuse-2026-10-01`.
