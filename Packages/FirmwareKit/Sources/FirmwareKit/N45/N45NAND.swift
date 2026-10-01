@@ -5,7 +5,7 @@
 //
 // - Real spares. Every page carries the 12 bytes the 1.x FTL itself writes (read off its own programs through
 //   the ADM): data  [lpn u32][write age u32 = 0][ff][0x40][ff][ff], context [age u32][index u16][ff ff][ff]
-//   [type][ff][ff] (0x43 index/meta, 0x46 map). A page never programmed reads erased (all ones), as on NAND,
+//   [type][ff][ff] (0x43 index/meta, 0x46 map, four pages). A page never programmed reads erased (all ones), as on NAND,
 //   so every page of the volume's blocks is written, zeros included (docs/smoke.md #12).
 // - The FTL's own blocks kept out of the data. The FTL context is virtual blocks 0-2 and its free pool 3-22
 //   (FTLCxt.awFreeVbList); the filesystem starts at virtual block 23. generate_nand.c mapped logical block n to
@@ -28,7 +28,12 @@ public enum N45NAND {
     /// The first physical block (all banks) the FTL's virtual block 0 lives in.
     static let ftlStart = 201
     static let cxtBlocks = 3, freeBlocks = 20, dataStart = 23
-    static let vflCxtBlock = 35, vflCxtCopies = 8, mapTables = 18, logCxts = 18
+    static let vflCxtBlock = 35, vflCxtCopies = 8, logCxts = 18
+    /// The map (logical -> virtual block, u16) is one bank's 4096 blocks: four 2 KiB pages, the 0x46 pages the
+    /// FTL itself flushes (indices 0-3; FTLCxt2 has 18 adwMapTablePtrs slots, it uses four). _FTLRestore copies
+    /// every 0x46 page it finds to map + index * 2 KiB, so an index past 3 writes over the kernel memory after
+    /// the table (smoke #70: 18 pages here put 28 KiB of 0xFF over a thread zone page).
+    static let mapTables = blocksPerBank * 2 / page
     /// The reserved (bad-block replacement) pool: after the four VFL info blocks, up to the FTL.
     static let reservedStart = vflCxtBlock + 4, maxReserved = 820
     /// Logical blocks mapped (2 MiB each); the rest are 0xffff. Below the FTL's share of a 4096-block bank.
@@ -103,7 +108,7 @@ public enum N45NAND {
         put(&d, 0, 0xFFFF_FFFE, 4); put(&d, 4, 1, 4)                          // dwAge, dwWriteAge (data pages are 0)
         put(&d, 8, UInt64(freeBlocks), 2)                                      // wNumOfFreeVb
         for i in 0..<freeBlocks { put(&d, 14 + 2 * i, UInt64(cxtBlocks + i), 2) }
-        for i in 0..<mapTables { put(&d, 56 + 4 * i, UInt64(1 + i), 4) }       // adwMapTablePtrs: pages 1-18 of block 0
+        for i in 0..<mapTables { put(&d, 56 + 4 * i, UInt64(1 + i), 4) }       // adwMapTablePtrs: pages 1-4 of block 0
         for i in 0..<logCxts { put(&d, 420 + 20 * i + 4, 0xFFFF, 2) }          // aLOGCxtTable[].wVbn: no log
         for i in 0..<cxtBlocks { put(&d, 786 + 2 * i, UInt64(i), 2) }          // awMapCxtVbn
         put(&d, 792, UInt64(pagesPerSuperblock - 1), 4)                        // dwCurrMapCxtPage: this page

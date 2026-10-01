@@ -88,10 +88,25 @@ import Testing
         let volume = dir.appendingPathComponent("volume.img"), out = dir.appendingPathComponent("nand")
         try vol.write(to: volume)
         let (written, meta) = try N45NAND.write(volume: volume, out: out, filID: 0x4330_3032)
-        #expect(written == 3 * ps - 3 && meta == 1 + 8 + 8 * 8 + 1 + 18 + 1 + 3)
+        #expect(written == 3 * ps - 3 && meta == 1 + 8 + 8 * 8 + 1 + 4 + 1 + 3)
         let file = { (p: N45NAND.Page) in out.appendingPathComponent("bank\(p.bank)/\(p.page).page") }
         let absent = (0..<3 * ps).filter { !fm.fileExists(atPath: file(N45NAND.location(lpn: $0)).path) }
         #expect(absent.isEmpty && !fm.fileExists(atPath: file(N45NAND.location(lpn: 3 * ps)).path), "absent lpns \(absent.prefix(8))")
+        // The map pages as _FTLRestore finds them (it scans the context blocks and copies each type-0x46 page to
+        // its in-RAM map at index * 2 KiB): one bank's 4096 entries, indices 0-3 only. An index past 3 overruns
+        // the kernel's 8 KiB map (smoke #70: a hard-Stopped 1.x device panicked on its next boot).
+        var maps: [Int: [UInt8]] = [:]
+        for bank in 0..<N45NAND.banks {
+            for blockPage in 0..<N45NAND.pagesPerBlock {
+                let raw = try? Data(contentsOf: file(N45NAND.Page(bank: bank, page: N45NAND.ftlStart * N45NAND.pagesPerBlock + blockPage)))
+                guard let raw, raw.count == pp + N45NAND.spare, raw[raw.startIndex + pp + 9] == 0x46 else { continue }
+                let b = [UInt8](raw)
+                maps[Int(b[pp + 4]) | Int(b[pp + 5]) << 8] = Array(b[0..<pp])
+            }
+        }
+        #expect(maps.keys.sorted() == [0, 1, 2, 3], "map page indices \(maps.keys.sorted())")
+        let entry = { (lbn: Int) -> Int in maps[lbn / 1024].map { Int($0[2 * (lbn % 1024)]) | Int($0[2 * (lbn % 1024) + 1]) << 8 } ?? -1 }
+        #expect(entry(0) == 23 && entry(3799) == 3799 + 23 && entry(3800) == 0xFFFF && entry(4095) == 0xFFFF)
 
         let r = try Fixtures.run(["python3", "-c", Self.oracle, out.path])
         #expect(r.status == 0, "\(r.err)")
