@@ -677,7 +677,7 @@ guest-addition hashes are verified; two late context/batch refusals occur in
 both old and new traces and need exact packet/interval attribution. Do not
 reinterpret format zero, reorder planes, or reset counters to pass the gate.
 Evidence: `/Users/shg/Developer/ltm-evidence/lcd-control-readback-2026-10-01`.
-The source pin names8e9fac00f6; current arm64 dylib still represents340978ff58
+The source pin now includes cf196aefd1 (LCD8e9fac00f6 and maintained fixtures); current arm64 dylib still represents340978ff58
 until relinked. Universal packaging/native dylib guest qualification remain
 unverified.
 
@@ -701,3 +701,31 @@ are retained alongside successful native retries. No production Swift logic,
 replacement app types or assertions changed. Native Intel hardware is not
 qualified by the Rosetta result. Evidence:
 `/Users/shg/Developer/ltm-evidence/host-runtime-2026-10-01/offline-module-linkage`.
+
+## Maintained SDK2 fixture backend qualified
+
+QEMUcf196aefd1 adds an explicit isolatedios2 fixture flavor using the actual
+SDK2.0, compiler API target2.0 and existing legacy ARMv6 link conversion.
+Harness uses AudioQueue PCM callbacks on UIKit's run loop with explicit
+failure/cleanup ownership; AVFoundation initialization is excluded in that
+flavor. Unsupported compressed playback, MPMediaQuery and UIPasteboard
+controls report their limits. Full3.x source still builds to the identical
+signed executable under the unchanged default flags.
+
+Both ios2 fixtures compile, sign and pass static ARMv6/entry/load-command/
+SDK-import audits. Their temporary SDK linker stub has a fresh owned directory
+with cleanup on success/error; pre-existing output children survive. PCM
+ASan/UBSan tests cover enqueue/read/alignment failures, failure before Start,
+retained failed-dispose ownership and idempotent close. Actual binary mutation
+audits reject PIE/subtype/entry/import changes; the manual audit requires
+explicit SDK and binary inputs rather than passing for missing assets.
+
+The new maintained Harness passes seven selected native2.1.1 checks, with no
+skips: boot,fsck,persistence,installation,foreground,agent and6.46s stereo
+440/880Hz audio. Both guest-confirmed shutdowns exit0 and reboot preserves
+the written bytes. GLES was deliberately a separate contract: this backend
+qualification does not replace the full2.x run's black scene/shutdown failure.
+GLTest's rebuilt executable is byte-identical to the prior genuineSDK2
+fixture; a complete graphics pass, all2.x/3.0 firmware runtime and automatic
+artifact selection remain unqualified. Evidence:
+`/Users/shg/Developer/ltm-evidence/maintained-ios2-fixtures-2026-10-01`.
