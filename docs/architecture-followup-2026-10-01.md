@@ -221,3 +221,7 @@ pass 8/8, including clean guest shutdown, reboot persistence and fsck.
 Default diagnostics still stop at D38 reads; existing false-completion and
 CPU storage shortcuts remain. Stock physical restore is not qualified.
 Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d54-2026-10-01`.
+
+The detailed gate chronology is maintained once in the
+[fidelity evidence journal](fidelity-evidence-2026-10-01.md); the ledger and
+remaining-work report link to it. Their earlier dated entries remain history.
