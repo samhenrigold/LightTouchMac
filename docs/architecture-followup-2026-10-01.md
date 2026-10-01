@@ -238,3 +238,8 @@ Source API change and retained lifetime failures are recorded in the
 Parallel disk-image work separately exposed cooperative-worker starvation in
 the synchronous subprocess bridge. That remains open; the next refactor must
 carry await through the boundary while retaining exclusion and cleanup.
+
+D38 is also qualified through model/migration and native8/8 gates; it retains
+the scalar while preserving the still-required CPU storage shortcut. Watchdog
+research establishes the guest's cached bus-frequency source but leaves
+physical expiry unmodeled. Detailed receipts are in the shared journal.

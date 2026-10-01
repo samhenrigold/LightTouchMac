@@ -294,3 +294,30 @@ omits disk operations; existing discard/recovery and native HFS tests retain
 them. Next investigate an async subprocess boundary, preserving transaction
 exclusion and cancellation cleanup; extra threads or pool knobs are not a
 qualification gate. The sampled failure is retained with the host receipts.
+
+## D38 transfer parameter qualified
+
+QEMU dd7e9e2102 independently retains the CPU-supplied D38 transfer-count
+parameter and exposes it to CPU diagnostics and sequencer reads. It preserves
+the existing legacy CPU page dispatch unchanged; it neither retires that
+shortcut nor runs physical NAND work. VMState v10 appends the scalar after
+D54 v9, with reset/older-stream initialization. No guest-address dispatch or
+fixed parameter value was added.
+
+Six actual-source sanitizer checks and18 FMSS model tests pass. Actual v9
+loading clears preseeded D38 while preserving D54 and older parameters;
+current physical/generated round trips retain D38. The baseline compiles and
+fails D38 readback. Independent default native checks pass8/8, including
+guest shutdown, persistence after reboot and fsck. Graphics still uses the
+stock additions and storage still uses the compatibility execution path.
+Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d38-2026-10-01`.
+
+## Watchdog provider source established, expiry still open
+
+Static stock7E18 analysis follows watchdog index0 through DT clock-ids[0]=2,
+its concrete provider and inherited getter to a cached platform bus-frequency
+field initialized from cpu0 DT properties. This explains the driver's source
+without substituting QEMU PCLK or a12MHz constant. Runtime-selected property,
+bootloader clock publication, counter/clear/expiry semantics and clock-change
+behavior still need observations. No countdown or clock wiring was changed.
+Evidence: `/Users/shg/Developer/ltm-evidence/watchdog-provider-2026-10-01`.
