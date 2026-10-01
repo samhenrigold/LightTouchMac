@@ -593,3 +593,26 @@ The post-D4C stock capture confirms nand-enable-reformat=1 is already in
 actual kernel BootArgs; the host argument-policy lead is not this blocker.
 Dynamic tracing advances to unsupported D18. The app pins verified ace95b664b;
 that does not qualify any subsequent hardware prototype.
+
+### Verified USB PHY reset boundary (2026-10-01)
+
+QEMU a2cc232364 gates physical traffic on ORSTCON bit 0 for N45/N72. The
+stock ROM had asserted reset and freed its USB queue while the model still
+injected SETUP DMA/interrupts, causing a data abort. Core registers and
+latched IRQs remain intact, and migration redrives the PHY signal. No guest
+patch or firmware-specific delay is used. Model qtests pass 3/3, rapid stock
+5F138 handoffs 3/3, native 5F138 boot/USB 2/2, and the separate default 7E18
+two-boot regression 8/8. The baseline binary fails the new reset gate.
+
+Stock SecureROM through the restore ramdisk now passes with the production
+bridge and no diagnostic settling wrapper. Descriptor polling keeps its
+one-second deadline (f4226be0ff); the preceding timeout failure is retained.
+This supersedes the earlier rapid-DFU research blocker for these measured
+trials, not the unresolved physical flash restore. N45 native boot passes,
+but native host USB is unsupported by that harness. N45 whole-board
+migration exposes a separate inactive I2S host voice-rate validation bug;
+K48 is not wired to this PHY signal.
+
+Evidence: `/Users/shg/Developer/ltm-evidence/usb-phy-2026-10-01`. The app's
+source pin now includes this verified QEMU correction; no new universal
+package qualification, target merge or installation is claimed.

@@ -7,11 +7,11 @@ test receipts with current compatibility claims.
 
 | Area | Verified progress | Remaining acceptance boundary |
 |---|---|---|
-| Stock restore transport | Real SecureROM/iBSS/ramdisk reaches stock restored protocol 11; legacy client boot-only run passes with original firmware metadata. Production bridge reset/enumeration and exclusive mux handoff tested. | Rapid DFU reconnect still aborts; stock erase reports Waiting for NAND. Full restore, cold boot and durable later writes required before deleting offline FTL preparation. |
+| Stock restore transport | Real SecureROM/iBSS/ramdisk reaches stock restored protocol 11; legacy client boot-only run passes with original firmware metadata. Production bridge reset/enumeration and exclusive mux handoff tested; measured PHY-reset gating now passes rapid DFU trials and complete stock ramdisk handoff without diagnostic settling. | Stock erase reports Waiting for NAND. Full restore, cold boot and durable later writes required before deleting offline FTL preparation. |
 | FMSS | D4C CPU parameter latch/readback/reset/migration corrected from actual stock scripts; qtests 4/4, sanitizers and default native two-boot 8/8 pass. | D18/D28 sequencer reads, descriptor loads, actual erase and honest aborted-script completion remain separate contracts. |
 | Host runtime | b5e9af2 moves package boot qualification, health budget and verdict updates out of EmulatorController into GuestPackageSession. Actual-owner cancellation/verdict tests and actual app build pass; test report stub replaced by shared ABI definition. | Controller still composes runtime and owns record I/O, readiness/provisioning/storage orchestration. GUI/CLI import of a shared runtime module remains unfinished. Net line reduction is not claimed. |
 | MBX reuse | Independently captured real N72 stock-driver fill packet/GART agrees with pinned MIT S5LBox decoder in sanitizer replay. | Snapshot was after stall, not pre-submit. No live pixel/completion/IRQ or full compositor qualification yet. Narrow integration under evaluation; existing GLES transport remains needed. |
-| Packaging | Clean cc67737/31036cf8e9/e19fac2 universal candidate: actual 2.1.1 session 18/18, both Mach-O closures at macOS14.4 and ad hoc signature verification. | Later host/FMSS changes are not covered by that packaged candidate; Intel runtime and notarization unqualified. |
+| Packaging | Clean cc67737/31036cf8e9/e19fac2 universal candidate: actual 2.1.1 session 18/18, both Mach-O closures at macOS14.4 and ad hoc signature verification. | Later host/FMSS/PHY changes are not covered by that packaged candidate; Intel runtime and notarization unqualified. |
 
 ## Reuse versus writing new compatibility logic
 
