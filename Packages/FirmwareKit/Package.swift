@@ -17,6 +17,7 @@ let package = Package(
         .executable(name: "firmwarekit", targets: ["FirmwareKitCLI"]),
     ],
     dependencies: [
+        .package(path: "../HostRuntime"),
         .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20"),
         .package(url: "https://github.com/p-x9/MachOKit.git", exact: "0.53.0"),
         .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "1.0.0"),
@@ -26,6 +27,7 @@ let package = Package(
         .target(name: "CActivation", cSettings: [.define("LT_ACTIVATION_LIBRARY")]),
         .target(name: "FirmwareKit", dependencies: [
             "CActivation", "FirmwareSchema",
+            .product(name: "HostRuntime", package: "HostRuntime"),
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             .product(name: "MachOKit", package: "MachOKit"),
             .product(name: "Subprocess", package: "swift-subprocess"),

@@ -618,9 +618,14 @@ func checkPreparedFiles() throws {
     let cases: [(String, URL, Bool)] = [
         ("ordinary", work.appendingPathComponent("Devices/\(UUID().uuidString)/work/lease"), true),
         ("external", external.appendingPathComponent("lease"), true),
+        ("busy", external.appendingPathComponent("lease"), false),
+        ("pending", external.appendingPathComponent("lease"), false),
         ("symlink", alias, false),
     ]
     for (name, lease, admitted) in cases {
+        let held = name == "busy" ? try! StorageLease(lease) : nil
+        let intent = lease.deletingLastPathComponent().appendingPathComponent("edit.json")
+        if name == "pending" { try! Data("unfinished-edit".utf8).write(to: intent) }
         let process = DeviceProcess(instance: UUID(), profile: .iPodTouch2G,
             log: work.appendingPathComponent("\(name).log"), lease: lease,
             helper: URL(fileURLWithPath: config.helper), requirement: config.requirement)
@@ -643,6 +648,11 @@ func checkPreparedFiles() throws {
               hello == admitted, completionError == expected else {
             fail("\(name) lease: expected admission \(admitted), hello \(hello), error \(String(describing: completionError)), reaped \(reaped)")
         }
+        if name == "busy" || name == "pending" {
+            let diagnostic = (try? String(contentsOf: work.appendingPathComponent("\(name).log"), encoding: .utf8)) ?? ""
+            let reason = name == "busy" ? "is held" : "unfinished storage edit"
+            guard diagnostic.contains(reason) else { fail("\(name) lease missed actual helper diagnostic: \(diagnostic)") }
+        }
         if admitted {
             let fd = open(lease.path, O_RDWR | O_NOFOLLOW)
             guard fd >= 0 else { fail("admitted lease missing") }
@@ -651,6 +661,11 @@ func checkPreparedFiles() throws {
             guard released else { fail("admitted lease still locked") }
         }
         guard (try? Data(contentsOf: target)) == sentinel else { fail("lease symlink target mutated") }
+        if name == "pending" {
+            guard (try? Data(contentsOf: intent)) == Data("unfinished-edit".utf8) else { fail("helper mutated pending intent") }
+            try! fm.removeItem(at: intent)
+        }
+        withExtendedLifetime(held) {}
         emit("leaseAdmissionVerified", ["case": name, "admitted": admitted, "hello": hello,
             "reaped": reaped, "targetUnchanged": true, "guestStarted": false])
     }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Actual helper hello-only lease checks: regular/external admission and symlink refusal.
+"""Actual helper hello-only lease checks: regular/external admission and busy/pending/symlink refusal.
 
 Uses built production helper/session-driver and loads the supplied dylib for
 hello only. No BootConfig is returned, so no .boot request or native guest runs.
@@ -37,11 +37,11 @@ def main():
         result.check_returncode()
         events = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
         verified = [e for e in events if e['event'] == 'leaseAdmissionVerified']
-        assert [(e['case'], e['admitted']) for e in verified] == [('ordinary', True), ('external', True), ('symlink', False)]
+        assert [(e['case'], e['admitted']) for e in verified] == [('ordinary', True), ('external', True), ('busy', False), ('pending', False), ('symlink', False)]
         assert all(e['reaped'] and e['targetUnchanged'] and not e['guestStarted'] for e in verified)
         assert (root / 'external-lease/target').read_bytes() == b'lease-target-must-stay-unchanged'
         assert (work / 'alias/lease').is_symlink()
-        print('PASS: actual helper admits regular/external caller leases, refuses symlink before hello, reaps all owned processes')
+        print('PASS: actual helper admits regular/external caller leases, refuses busy/pending/symlink before hello, reaps all owned processes')
 
 
 if __name__ == '__main__':

@@ -66,24 +66,19 @@ func emit(_ object: [String: Any]) {
 /// The device's lease (Devices/<uuid>/work/lease), held until this process
 /// exits: a second helper on the same storage, from another Light Touch or
 /// beside one still finishing its shutdown, is refused before it boots.
-var leaseDescriptor: Int32 = -1
+var storageLease: StorageLease?
 func takeLease(_ path: String?) -> Bool {
     guard let path else { return true }
-    try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent,
-                                             withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-    let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
-    guard fd >= 0 else { helperLog("lease \(path): \(String(cString: strerror(errno)))"); return false }
-    guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { helperLog("lease \(path) is held"); close(fd); return false }
-    // Check after taking the same lock as offline editing: an app relaunch must
-    // not boot while an edit's owner has exited but its durable intent remains.
-    let edit = ((path as NSString).deletingLastPathComponent as NSString).appendingPathComponent("edit.json")
-    guard !FileManager.default.fileExists(atPath: edit) else {
-        helperLog("unfinished storage edit \(edit); resolve it before booting")
-        close(fd)
-        return false
-    }
-    leaseDescriptor = fd
-    return true
+    do { storageLease = try StorageLease(URL(fileURLWithPath: path)); return true }
+    catch let error as StorageLease.Failure {
+        switch error {
+        case .openFailed(let code): helperLog("lease \(path): \(String(cString: strerror(code)))")
+        case .inUse: helperLog("lease \(path) is held")
+        case .pendingEdit:
+            helperLog("unfinished storage edit \(URL(fileURLWithPath: path).deletingLastPathComponent().appendingPathComponent("edit.json").path); resolve it before booting")
+        }
+    } catch { helperLog("lease \(path): \(error.localizedDescription)") }
+    return false
 }
 
 if let service = arguments["--connect"] {

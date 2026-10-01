@@ -99,4 +99,18 @@ struct StorageGenerationTests {
         try resumed.discard()
     }
 
+    @Test func wrongResumeCannotBypassPendingIntent() throws {
+        let device = try fixture()
+        defer { try? FileManager.default.removeItem(at: device) }
+        let original = try Data(contentsOf: device.appendingPathComponent("device.json"))
+        func start() throws -> UUID { try StorageGeneration.begin(device: device).id }
+        let id = try start()
+        #expect(throws: FirmwareError.self) { _ = try StorageGeneration.resume(device: device, id: UUID()) }
+        #expect(throws: FirmwareError.self) { _ = try StoppedStorageLease(device.appendingPathComponent("work/lease")) }
+        #expect(try Data(contentsOf: device.appendingPathComponent("device.json")) == original)
+        let resumed = try StorageGeneration.resume(device: device, id: id)
+        try resumed.discard()
+        #expect(!FileManager.default.fileExists(atPath: device.appendingPathComponent("work/edit.json").path))
+    }
+
 }

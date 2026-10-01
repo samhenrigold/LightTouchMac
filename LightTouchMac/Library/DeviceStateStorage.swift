@@ -20,25 +20,16 @@ nonisolated enum DeviceStateStorage {
 
     /// The helper/export/edit lock is the authority, including external CLI
     /// owners. A cached GUI "stopped" state cannot authorize deleting its files.
-    private final class Lease {
-        let descriptor: Int32
-        init(_ descriptor: Int32) { self.descriptor = descriptor }
-        deinit { close(descriptor) }
-    }
-    private static func stoppedLease(_ owner: UUID?, state: URL) throws -> Lease? {
+    private static func stoppedLease(_ owner: UUID?, state: URL) throws -> StorageLease? {
         guard let owner else { return nil } // legacy profile-only stores
         let work = state.appendingPathComponent("Devices/\(owner.uuidString)/work")
         try checkRemovable(work, state: state, owner: owner)
-        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-        let descriptor = open(work.appendingPathComponent("lease").path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
-        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
-        let lease = Lease(descriptor)
-        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0,
-              !FileManager.default.fileExists(atPath: work.appendingPathComponent("edit.json").path) else {
+        do { return try StorageLease(work.appendingPathComponent("lease")) }
+        catch let error as StorageLease.Failure {
+            if case let .openFailed(code) = error { throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO) }
             throw CocoaError(.fileWriteNoPermission, userInfo: [NSLocalizedDescriptionKey:
                 "This device’s storage is in use. Stop the device or finish its filesystem edit first."])
         }
-        return lease
     }
 
     // MARK: - Removal
