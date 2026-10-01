@@ -59,7 +59,7 @@ import Foundation
         for spec in args.dropFirst(2) {
             let f = spec.split(separator: ":").map(String.init)   // name:entry:lock path:flagged
             let entry = catalog.entry(id: f[1])!, want = f[3] == "1"
-            let row = DeviceRow(entry: entry, instanceID: UUID(), session: nil, job: nil, failure: nil,
+            let row = DeviceRow(entry: entry, instanceID: UUID(), session: nil, job: nil,
                                 baseRecipe: DeviceRow.baseRecipeVersion(URL(fileURLWithPath: f[2])))
             if row.preparedByOlderRecipe != want { failures.append("\(f[0]): flagged \(row.preparedByOlderRecipe), want \(want)") }
             if row.allows(.prepareAgain, canDownload: true) != want { failures.append("\(f[0]): Prepare Again allowed \(!want)") }
@@ -68,9 +68,9 @@ import Foundation
             guard want else { continue }
             if row.olderRecipeNote != "This iPod was prepared by an older version of Light Touch." { failures.append("\(f[0]): \(row.olderRecipeNote ?? "no note")") }
             if row.allows(.prepareAgain, canDownload: false) { failures.append("\(f[0]): Prepare Again without the preparer") }
-            let running = DeviceRow(entry: entry, instanceID: UUID(), session: .running, job: nil, failure: nil, baseRecipe: 1)
+            let running = DeviceRow(entry: entry, instanceID: UUID(), session: .running, job: nil, baseRecipe: 1)
             if running.allows(.prepareAgain, canDownload: true) { failures.append("\(f[0]): Prepare Again while running") }
-            if DeviceRow(entry: entry, instanceID: nil, session: nil, job: nil, failure: nil, baseRecipe: 1).preparedByOlderRecipe {
+            if DeviceRow(entry: entry, instanceID: nil, session: nil, job: nil, baseRecipe: 1).preparedByOlderRecipe {
                 failures.append("\(f[0]): flagged with no device")
             }
         }

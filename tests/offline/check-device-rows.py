@@ -27,8 +27,8 @@ import Foundation
         soon.status = .comingSoon
         let id = UUID()
         func row(_ e: FirmwareCatalog.Entry, instance: UUID? = nil, session: SessionPhase? = nil,
-                 job: FirmwareJob? = nil, failure: String? = nil) -> DeviceRow {
-            DeviceRow(entry: e, instanceID: instance, session: session, job: job, failure: failure)
+                 job: FirmwareJob? = nil) -> DeviceRow {
+            DeviceRow(entry: e, instanceID: instance, session: session, job: job)
         }
         func allowed(_ r: DeviceRow, canDownload: Bool = false) -> Set<String> {
             Set(DeviceAction.allCases.filter { r.allows($0, canDownload: canDownload) }.map { "\($0)" })
@@ -58,7 +58,7 @@ import Foundation
         precondition(r.stateDescription.hasPrefix("Not downloaded, ") && r.stateDescription.contains("MB"))
 
         // Its IPSW already in a store: Downloaded, and the button prepares.
-        r = DeviceRow(entry: iPad, instanceID: nil, session: nil, job: nil, failure: nil, downloaded: true)
+        r = DeviceRow(entry: iPad, instanceID: nil, session: nil, job: nil, downloaded: true)
         precondition(r.state == .downloaded && r.primaryTitle == "Prepare" && r.stateDescription == "Downloaded")
         precondition(allowed(r, canDownload: true) == ["importIPSW", "downloadAndPrepare"])
 
@@ -67,7 +67,7 @@ import Foundation
         precondition(r.state == .ready && allowed(r) == ["start", "erase", "showInFinder", "delete", "openFilesystem", "commitFilesystem", "discardFilesystem", "recoverFilesystem"], "\(allowed(r))")
 
         // Sessions outrank everything else.
-        r = row(iPad, instance: id, session: .running, job: .failed("x"), failure: "y")
+        r = row(iPad, instance: id, session: .running, job: .failed("x"))
         precondition(r.state == .running && r.primaryAction == nil && r.stateDescription == "Running")
         precondition(allowed(r) == ["stop", "erase", "showInFinder"], "no delete while running: \(allowed(r))")
         r = row(iPad, instance: id, session: .stopping)
@@ -120,7 +120,7 @@ import Foundation
         precondition(r.primaryAction == .downloadAndPrepare, "retrying a failed download downloads again")
 
         // A start failure: Try Again starts again.
-        r = row(iPod, instance: id, failure: "These device files are missing: /x")
+        r = row(iPod, instance: id, session: .dead("These device files are missing: /x"))
         precondition(r.state == .error("These device files are missing: /x") && r.primaryAction == .start)
         precondition(r.primaryTitle == "Try Again" && r.allows(.start, canDownload: false))
 
@@ -136,7 +136,7 @@ import Foundation
         precondition(r.state == .unavailable(.requiresIPSW) && r.primaryTitle == "Import IPSW…")
         precondition(allowed(r, canDownload: true) == ["importIPSW"] && r.stateDescription == "Requires an IPSW")
         precondition(row(beta, instance: id).state == .ready, "an imported beta runs like any device")
-        precondition(row(beta, failure: "x").primaryAction == .importIPSW, "a failed import offers the import again")
+        precondition(row(beta, job: .failed("x")).primaryAction == .importIPSW, "a failed import offers the import again")
 
         // Experimental carries the tag; a status note is the catalog's to add when it says more than the tag.
         r = row(entry("k48ap-8L1"))   // 4.2.1 is available since 09-29; 4.3.5 is still experimental
@@ -169,7 +169,7 @@ import Foundation
         precondition(row(beta1).badge == "Beta 1" && row(entry("n72ap-8B117")).badge == nil, "the badge stays on an offered beta")
         precondition(row(iPad).note == nil && row(iPod4).note == nil, "tested builds carry no note")
         // The sidebar shows only what differs from the usual (DeviceRow.accessory, what the cell draws).
-        let downloaded = DeviceRow(entry: iPad, instanceID: nil, session: nil, job: nil, failure: nil, downloaded: true)
+        let downloaded = DeviceRow(entry: iPad, instanceID: nil, session: nil, job: nil, downloaded: true)
         precondition(downloaded.accessory == .none, "Downloaded is the normal state: nothing after the title")
         precondition(row(iPad, instance: id).accessory == .none, "ready: nothing")
         precondition(row(iPad).accessory == .notDownloaded && row(beta1).accessory == .notDownloaded, "not here yet: the download glyph")
@@ -180,7 +180,7 @@ import Foundation
         precondition(row(beta).accessory == .text("Requires an IPSW"))
         let running = row(beta1, instance: id, session: .running)
         precondition(running.accessory == .running && running.note == nil, "a running untested build: the dot alone, no \"Untested\" beside it")
-        precondition(DeviceRow(entry: iPad, instanceID: id, session: nil, job: nil, failure: nil, preparedWithoutActivation: true).note
+        precondition(DeviceRow(entry: iPad, instanceID: id, session: nil, job: nil, preparedWithoutActivation: true).note
                      == "Prepared without activation")
         // The prepare screen: the catalog note (untested, experimental, a beta's source) is one popover's text,
         // and disk numbers appear only when the volume can't hold the download and the preparation.

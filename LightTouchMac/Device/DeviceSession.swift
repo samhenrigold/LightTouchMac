@@ -56,15 +56,13 @@ import Cocoa
 /// Every session this process has started, the library rows, and the one
 /// launch-selection default.
 @MainActor final class DeviceSessionHost {
-    /// Posted on the main actor when sessions or start failures change.
+    /// Posted on the main actor when the session collection changes.
     static let didChangeNotification = Notification.Name("DeviceSessionHostDidChange")
     private static let lastDeviceKey = "lastDevice"
 
     let library: DeviceLibrary
     let catalog: FirmwareCatalog
     private(set) var sessions: [DeviceSession] = []
-    /// Why a device last failed to start, by catalog entry id.
-    private var failures: [String: String] = [:]
 
     /// The one host this process runs (AppDelegate's), for the places that
     /// need every running device rather than their own: "Install on ▸".
@@ -88,7 +86,7 @@ import Cocoa
     func row(for entry: FirmwareCatalog.Entry) -> DeviceRow {
         let instance = instance(for: entry)
         return DeviceRow(entry: entry, instanceID: instance?.id, session: session(for: entry)?.phase,
-                         job: FirmwareJobs.shared.jobs[entry.id], failure: failures[entry.id],
+                         job: FirmwareJobs.shared.jobs[entry.id],
                          downloaded: entry.source.sha1.map { IPSWStore.shared.existing($0) != nil } ?? false,
                          preparedWithoutActivation: instance.map(lacksActivation) ?? false,
                          baseRecipe: instance.flatMap(baseRecipe))
@@ -125,8 +123,8 @@ import Cocoa
 
     // MARK: Starting
 
-    /// Starts the entry's device in its own helper, or records why it can't
-    /// for the row to show. Any number of devices can run at once.
+    /// Starts the entry's device in its own helper. The session reports any
+    /// boot failure through its controller. Any number of devices can run at once.
     @discardableResult
     func start(_ entry: FirmwareCatalog.Entry) -> DeviceSession? {
         if let session = session(for: entry) { return session }
@@ -136,7 +134,6 @@ import Cocoa
         let session = DeviceSession(instance: instance,
                                     emulator: EmulatorController(instance: instance, profile: profile, network: network))
         sessions.append(session)
-        failures[entry.id] = nil
         session.emulator.onRestartRequested = { [weak self, weak session] in
             if let self, let session { restart(session) }
         }
@@ -188,13 +185,6 @@ import Cocoa
     func stoppedController(for entry: FirmwareCatalog.Entry) -> EmulatorController? {
         guard session(for: entry) == nil, let instance = instance(for: entry), let profile = entry.profile else { return nil }
         return EmulatorController(instance: instance, profile: profile)
-    }
-
-    private func fail(_ entry: FirmwareCatalog.Entry, _ reason: String) -> DeviceSession? {
-        logEvent("device: \(entry.id) did not start: \(reason)")
-        failures[entry.id] = reason
-        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
-        return nil
     }
 
     // MARK: Deleting

@@ -93,7 +93,7 @@ import Foundation
         // Removal: prepared -> Delete Device… (asks, through delete); nothing on disk -> Remove Device.
         let e = entry("n72ap-8B117")
         func row(_ instance: UUID?, session: SessionPhase? = nil, job: FirmwareJob? = nil, downloaded: Bool = false) -> DeviceRow {
-            DeviceRow(entry: e, instanceID: instance, session: session, job: job, failure: nil, downloaded: downloaded)
+            DeviceRow(entry: e, instanceID: instance, session: session, job: job, downloaded: downloaded)
         }
         let prepared = row(UUID())
         precondition(prepared.removeTitle == "Delete Device…" && prepared.canRemoveFromSidebar, "prepared")

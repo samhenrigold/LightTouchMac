@@ -71,15 +71,15 @@ import Cocoa
         prep.remaining = 95
         let unsupported = "Light Touch can’t prepare this beta yet: its graphics library isn’t supported."
         let states: [(String, DeviceRow)] = [
-            ("not-downloaded", DeviceRow(entry: beta, instanceID: nil, session: nil, job: nil, failure: nil)),
-            ("downloaded", DeviceRow(entry: ipad, instanceID: nil, session: nil, job: nil, failure: nil, downloaded: true)),
-            ("downloading", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .downloading(fraction: 0.43, remaining: 70), failure: nil)),
-            ("preparing", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .preparing(prep), failure: nil)),
-            ("error", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .failed(unsupported), failure: nil)),
-            ("ready", DeviceRow(entry: ipad, instanceID: id, session: nil, job: nil, failure: nil)),
-            ("older-recipe", DeviceRow(entry: entry("n45ap-4B1"), instanceID: id, session: nil, job: nil, failure: nil, baseRecipe: 1)),
-            ("stopped", DeviceRow(entry: ipad, instanceID: id, session: .dead("The iPad stopped unexpectedly."), job: nil, failure: nil)),
-            ("requires-ipsw", DeviceRow(entry: ipod, instanceID: nil, session: nil, job: nil, failure: nil)),
+            ("not-downloaded", DeviceRow(entry: beta, instanceID: nil, session: nil, job: nil)),
+            ("downloaded", DeviceRow(entry: ipad, instanceID: nil, session: nil, job: nil, downloaded: true)),
+            ("downloading", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .downloading(fraction: 0.43, remaining: 70))),
+            ("preparing", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .preparing(prep))),
+            ("error", DeviceRow(entry: beta, instanceID: nil, session: nil, job: .failed(unsupported))),
+            ("ready", DeviceRow(entry: ipad, instanceID: id, session: nil, job: nil)),
+            ("older-recipe", DeviceRow(entry: entry("n45ap-4B1"), instanceID: id, session: nil, job: nil, baseRecipe: 1)),
+            ("stopped", DeviceRow(entry: ipad, instanceID: id, session: .dead("The iPad stopped unexpectedly."), job: nil)),
+            ("requires-ipsw", DeviceRow(entry: ipod, instanceID: nil, session: nil, job: nil)),
         ]
         var failures: [String] = []
         for (name, row) in states {
@@ -159,7 +159,7 @@ import Cocoa
 
         // The ⓘ popover: a real size and the build's words, for experimental, untested and beta builds.
         for e in [entry("k48ap-7B405"), entry("n45ap-3B48b"), beta, entry("n72ap-8C5091e"), entry("n72ap-7E18")] {
-            let row = DeviceRow(entry: e, instanceID: nil, session: nil, job: nil, failure: nil)
+            let row = DeviceRow(entry: e, instanceID: nil, session: nil, job: nil)
             guard let content = DevicePlaceholderViewController.infoContent(for: row) else { failures.append("\(e.id): no popover"); continue }
             let size = content.preferredContentSize
             content.view.layoutSubtreeIfNeeded()

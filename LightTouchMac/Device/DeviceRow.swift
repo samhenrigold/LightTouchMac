@@ -85,7 +85,7 @@ nonisolated struct DeviceRow: Equatable, Sendable {
 
     /// `downloaded`: IPSWStore has this entry's IPSW. `baseRecipe`: DeviceRow.baseRecipeVersion of the device's lock.
     init(entry: FirmwareCatalog.Entry, instanceID: UUID?, session: SessionPhase?,
-         job: FirmwareJob?, failure: String?, downloaded: Bool = false, preparedWithoutActivation: Bool = false,
+         job: FirmwareJob?, downloaded: Bool = false, preparedWithoutActivation: Bool = false,
          baseRecipe: Int? = nil) {
         self.entry = entry
         self.instanceID = instanceID
@@ -93,13 +93,13 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         preparedByOlderRecipe = instanceID != nil && baseRecipe.map { $0 < entry.recipe?.version ?? 0 } ?? false
         hasSession = session != nil
         state = Self.state(entry: entry, startable: instanceID != nil,
-                           session: session, job: job, failure: failure, downloaded: downloaded)
+                           session: session, job: job, downloaded: downloaded)
     }
 
     /// A session outranks everything; then the catalog's own verdict, a job
-    /// in flight, the last start failure, and finally whether a device exists.
+    /// in flight, and finally whether a device exists.
     private static func state(entry: FirmwareCatalog.Entry, startable: Bool, session: SessionPhase?,
-                              job: FirmwareJob?, failure: String?, downloaded: Bool) -> DeviceRowState {
+                              job: FirmwareJob?, downloaded: Bool) -> DeviceRowState {
         switch session {
         case .running?: return .running
         case .stopping?: return .stopping
@@ -114,7 +114,6 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         case let .failed(reason)?: return .error(reason)
         case nil: break
         }
-        if let failure { return .error(failure) }
         if startable { return .ready }
         if downloaded { return .downloaded }
         return entry.status == .userIPSW ? .unavailable(.requiresIPSW) : .notDownloaded(bytes: entry.source.bytes)

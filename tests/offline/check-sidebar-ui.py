@@ -55,7 +55,7 @@ final class DeviceSessionHost {
     func session(for entry: FirmwareCatalog.Entry) -> DeviceSession? { nil }
     func row(for entry: FirmwareCatalog.Entry) -> DeviceRow {
         DeviceRow(entry: entry, instanceID: prepared[entry.id], session: nil, job: FirmwareJobs.shared.jobs[entry.id],
-                  failure: nil, downloaded: downloaded.contains(entry.id))
+                  downloaded: downloaded.contains(entry.id))
     }
 }
 '''
