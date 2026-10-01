@@ -9,6 +9,9 @@ earlier date-first order interleaved them). The shipped catalog must load in tha
 dated, versions ascending per board, dates ascending within a version, 4.1 betas before 4.1.
 """
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from firmwarekit_leaf import schema_sources
 import json, subprocess, tempfile
 
@@ -75,6 +78,6 @@ with tempfile.TemporaryDirectory(prefix="ltm-catalog-order-") as d:
     p = Path(d) / "check.swift"
     p.write_text(source)
     (Path(d) / "catalog.json").write_text(json.dumps(fixture))
-    subprocess.run(["swiftc", *schema_sources(), "-parse-as-library", "-module-cache-path", d + "/modules", str(root / "LightTouchMac/Library/FirmwareCatalog.swift"),
+    subprocess.run(["swiftc", *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), *schema_sources(), "-parse-as-library", "-module-cache-path", d + "/modules", str(root / "LightTouchMac/Library/FirmwareCatalog.swift"),
                     str(root / "LightTouchMac/Device/DeviceProfile.swift"), str(p), "-o", d + "/check"], check=True)
     subprocess.run([d + "/check", d + "/catalog.json", str(shipped)], check=True, timeout=20)

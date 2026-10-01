@@ -4,6 +4,9 @@ against tests/fixtures/capture-controller.swift, with its AppKit sheets and the 
 (NSAlert(), NSSavePanel(), NSEvent's local monitor). The window controller's own Copy responder
 (MainWindowController.copy) is not part of this file."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess, tempfile
 
 root = Path(__file__).resolve().parents[2]
@@ -222,7 +225,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-capture-shortcuts-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
     (work / 'CaptureController.swift').write_text(capture)
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', '-default-isolation', 'MainActor',
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-parse-as-library', '-swift-version', '5', '-default-isolation', 'MainActor',
                     '-module-cache-path', str(work / 'modules'),
                     *[str(app / f) for f in ['Device/DeviceProfile.swift', 'Features/CapturePreferences.swift', 'Features/CaptureSound.swift']],
                     str(work / 'CaptureController.swift'), str(root / 'tests/fixtures/capture-controller.swift'),

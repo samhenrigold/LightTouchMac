@@ -2,6 +2,9 @@
 """Exercise the real proxy panel's choices and transient status layout, and the
 per-device proxy files (each device's helper proxy reads its own routing)."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import argparse, subprocess, tempfile
 ap = argparse.ArgumentParser()
 ap.add_argument('--out', help='keep the sheet render (proxy-sheet.png)')
@@ -115,7 +118,7 @@ func descendants(_ view: NSView) -> [NSView] {
 with tempfile.TemporaryDirectory(prefix='ltm-proxy-panel-') as directory:
  work = Path(directory)
  (work/'check.swift').write_text(fixture)
- subprocess.run(['swiftc', DEVICE_PROFILE, '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
+ subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), DEVICE_PROFILE, '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
    str(root/'LightTouchMac/Device/WebProxyConfiguration.swift'), str(root/'LightTouchMac/UI/ProxySettingsView.swift'), str(root/'LightTouchMac/UI/InlineActionButton.swift'),
    str(work/'check.swift'), '-o', str(work/'check')], check=True)
  for zone in ['America/New_York', 'America/Los_Angeles', 'Asia/Tokyo']:

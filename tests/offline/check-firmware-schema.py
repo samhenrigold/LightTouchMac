@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Actual shared catalog wire and GUI projection preserve the entire flat entry."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess
 import tempfile
 from firmwarekit_leaf import schema_sources
@@ -40,7 +43,7 @@ source = r'''import Foundation
 with tempfile.TemporaryDirectory(prefix='ltm-firmware-schema-') as directory:
     tmp=Path(directory)
     (tmp/'Check.swift').write_text(source)
-    subprocess.run(['xcrun','swiftc','-parse-as-library','-swift-version','5','-default-isolation','MainActor',
+    subprocess.run(['xcrun','swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]),'-parse-as-library','-swift-version','5','-default-isolation','MainActor',
         '-module-cache-path',str(tmp/'modules'),*schema_sources(),
         str(ROOT/'LightTouchMac/Library/FirmwareCatalog.swift'),str(ROOT/'LightTouchMac/Device/DeviceProfile.swift'),
         str(tmp/'Check.swift'),'-o',str(tmp/'check')],check=True)

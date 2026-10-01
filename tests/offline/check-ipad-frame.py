@@ -6,6 +6,9 @@ argument (a 1024x768 panel dump from qemu-ios docs/ipad1/screens), also writes
 docs/ipad-frame/composite-check.png: the frame with the panel turned upright into the cutout, the way
 DisplayView draws it."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess, sys, tempfile
 from PIL import Image
 
@@ -19,7 +22,7 @@ let p = DeviceProfile.iPad1
 print(Int(p.shellPixels.width), Int(p.shellPixels.height), Int(p.screenCutout.minX), Int(p.screenCutout.minY),
       Int(p.screenCutout.width), Int(p.screenCutout.height), p.homeButtonDiameter, p.homeButtonBottomInset)
 ''')
-    subprocess.run(['xcrun', 'swiftc', '-module-cache-path', str(tmp / 'modules'), str(root / 'LightTouchMac/Device/DeviceProfile.swift'),
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-module-cache-path', str(tmp / 'modules'), str(root / 'LightTouchMac/Device/DeviceProfile.swift'),
                     str(root / 'LightTouchMac/Device/DeviceProfile+Display.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'geometry')], check=True)
     values = subprocess.check_output([tmp / 'geometry'], text=True).split()
 shell = (int(values[0]), int(values[1]))

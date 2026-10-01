@@ -5,6 +5,9 @@ The arm64 build keeps the Apple silicon budgets (iPod 240 s, iPad 300 s); the x8
 here, natively on an Intel Mac) scales them by hostSlowdown, measured at 4-10x (DeviceProfile.hostSlowdown).
 """
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess, tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,7 +30,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-slowdown-') as d:
     (Path(d) / 'main.swift').write_text(main)
     for arch in ('arm64', 'x86_64'):
         exe = f'{d}/check-{arch}'
-        subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-target', f'{arch}-apple-macos14', '-module-cache-path', f'{d}/modules-{arch}',
+        target = f'{arch}-apple-macos14'
+        subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(ROOT, target=target), '-parse-as-library', '-target', target, '-module-cache-path', f'{d}/modules-{arch}',
                         str(ROOT / 'LightTouchMac/Device/DeviceProfile.swift'), f'{d}/main.swift', '-o', exe], check=True)
         out = subprocess.run(['arch', f'-{arch}', exe], check=True, capture_output=True, text=True, timeout=30).stdout.strip()
         print(f'{arch}: {out}')

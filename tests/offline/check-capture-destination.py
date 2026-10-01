@@ -2,6 +2,9 @@
 """Exercise the production capture destination without launching the emulator: Features/CaptureController.swift
 compiled whole against tests/fixtures/capture-controller.swift."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[2]
 app = root / 'LightTouchMac'
@@ -32,7 +35,7 @@ code = r'''import Cocoa
 with tempfile.TemporaryDirectory() as tmp:
     script = Path(tmp)/'main.swift'
     script.write_text(code)
-    subprocess.run(['swiftc', '-parse-as-library', '-default-isolation', 'MainActor', '-module-cache-path', str(Path(tmp)/'modules'),
+    subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-parse-as-library', '-default-isolation', 'MainActor', '-module-cache-path', str(Path(tmp)/'modules'),
                     *[str(app/f) for f in ['Device/DeviceProfile.swift', 'Features/CapturePreferences.swift', 'Features/CaptureSound.swift',
                                            'Features/CaptureController.swift']],
                     str(root/'tests/fixtures/capture-controller.swift'), str(script), '-o', str(Path(tmp)/'check')], check=True)

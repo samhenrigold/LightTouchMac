@@ -12,6 +12,9 @@ popover (ⓘ) has a real size (RC1's was 0×0 and showed nothing) and shows the 
 explanation, the source note and the release date for experimental, untested, beta and paid-update builds.
 """
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from firmwarekit_leaf import schema_sources
 import argparse, subprocess, tempfile
 
@@ -190,7 +193,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-placeholder-') as tmp:
     (tmp / 'placeholder.swift').write_text(source.replace(art, f'NSImage(contentsOfFile: "{assets}/" + $0.shellImageName + ".imageset/" + ["shell": "shell_opaque.png", "shell-1g": "shell-1g.png"][$0.shellImageName, default: "ipad-frame.png"])'))
     (tmp / 'stubs.swift').write_text(stubs)
     (tmp / 'main.swift').write_text(check)
-    subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), *schema_sources(), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
                     str(app / 'Library/FirmwareCatalog.swift'), str(app / 'Device/DeviceProfile.swift'),
                     str(app / 'Device/DeviceProfile+Display.swift'), str(app / 'Device/DeviceRow.swift'), str(app / 'UI/DropHighlight.swift'),
                     str(tmp / 'placeholder.swift'), str(tmp / 'stubs.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'check')], check=True)

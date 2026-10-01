@@ -4,6 +4,9 @@
 The guest side (the agent's launch, and lockstatus telling a locked refusal apart) is
 tests/offline/check-agent-transport.py; this checks the controller and the inspector around it."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess, tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root = Path(__file__).resolve().parents[2]
@@ -76,6 +79,6 @@ struct InstalledApp { let id: String; let name: String }
 with tempfile.TemporaryDirectory(prefix='ltm-app-launch-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
-    subprocess.run(['xcrun', 'swiftc', DEVICE_PROFILE, '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), DEVICE_PROFILE, '-parse-as-library', '-swift-version', '6', '-default-isolation', 'MainActor',
                     '-module-cache-path', str(work / 'modules'), str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
     subprocess.run([str(work / 'check')], check=True, timeout=20)

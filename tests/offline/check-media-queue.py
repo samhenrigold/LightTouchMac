@@ -3,6 +3,9 @@
 Features/AppInstaller.swift whole (with InstallationQueue, DeviceExecution and DeviceProfile) against
 tests/fixtures/app-installer*.swift and a scripted EmulatorController."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess, tempfile
 
 root = Path(__file__).resolve().parents[2]
@@ -149,7 +152,7 @@ extension AppInstaller {
 with tempfile.TemporaryDirectory(prefix='ltm-media-queue-check-') as directory:
     work = Path(directory)
     (work / 'check.swift').write_text(code)
-    subprocess.run(['xcrun', 'swiftc', '-swift-version', '6', '-default-isolation', 'MainActor',
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-swift-version', '6', '-default-isolation', 'MainActor',
                     '-module-cache-path', str(work / 'modules'), *[str(app / f) for f in [
                         'Features/AppInstaller.swift', 'Features/InstallationQueue.swift', 'Transport/DeviceExecution.swift',
                         'Device/DeviceProfile.swift']],

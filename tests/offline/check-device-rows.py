@@ -7,6 +7,9 @@ the placeholder's one button, and which commands each state allows. No app,
 no guest, no state directory.
 """
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 from firmwarekit_leaf import schema_sources
 import subprocess, tempfile
 
@@ -200,7 +203,7 @@ import Foundation
 with tempfile.TemporaryDirectory(prefix='ltm-device-rows-') as tmp:
     tmp = Path(tmp)
     (tmp / 'main.swift').write_text(check)
-    subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), *schema_sources(), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
                     str(root / 'Library/FirmwareCatalog.swift'), str(root / 'Device/DeviceProfile.swift'),
                     str(root / 'Device/DeviceRow.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'check')], check=True)
     subprocess.run([str(tmp / 'check'), str(root / 'Resources/firmware-catalog.json')], check=True)

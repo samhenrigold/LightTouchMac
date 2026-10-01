@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Capture only our own colored canvas, checking chrome exclusion and resize."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess,tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root=Path(__file__).resolve().parents[2]
@@ -43,5 +46,5 @@ nonisolated enum CaptureError: LocalizedError {case failed(String);var errorDesc
 }'''
 with tempfile.TemporaryDirectory(prefix='ltm-canvas-') as directory:
  work=Path(directory);(work/'check.swift').write_text(fixture)
- subprocess.run(['swiftc', DEVICE_PROFILE,'-swift-version','6','-default-isolation','MainActor','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/Features/CanvasCapture.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
+ subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), DEVICE_PROFILE,'-swift-version','6','-default-isolation','MainActor','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/Features/CanvasCapture.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
  subprocess.run([str(work/'check')],check=True,timeout=30)

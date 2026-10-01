@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Repeated management failures recover once, without reboot or transfer interruption."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess,tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root=Path(__file__).resolve().parents[2]
@@ -80,5 +83,5 @@ struct Instance { let id=UUID() }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-recovery-') as d:
  p=Path(d)/'check.swift';p.write_text(errors+issue+source)
- subprocess.run(['swiftc', DEVICE_PROFILE,str(root/'LightTouchMac/Device/BootSessionScope.swift'),'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
+ subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), DEVICE_PROFILE,str(root/'LightTouchMac/Device/BootSessionScope.swift'),'-parse-as-library','-module-cache-path',d+'/modules',str(p),'-o',d+'/check'],check=True)
  subprocess.run([d+'/check'],check=True,timeout=8)

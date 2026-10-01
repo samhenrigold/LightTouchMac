@@ -3,6 +3,9 @@
 panes' actions, and notification payloads. --out DIR keeps the panes' renders (settings-*.png); nothing is
 put on screen."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import argparse, subprocess, tempfile
 ap = argparse.ArgumentParser()
 ap.add_argument('--out')
@@ -151,7 +154,7 @@ func render(_ view: NSView, _ name: String) throws {
 with tempfile.TemporaryDirectory(prefix='ltm-capture-preferences-') as directory:
  work = Path(directory)
  (work/'check.swift').write_text(fixture)
- subprocess.run(['swiftc', DEVICE_PROFILE, '-swift-version', '6', '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
+ subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), DEVICE_PROFILE, '-swift-version', '6', '-default-isolation', 'MainActor', '-module-cache-path', str(work/'modules'),
    *[str(root/'LightTouchMac'/name) for name in ['Features/CapturePreferences.swift', 'UI/CaptureOptionsView.swift', 'Features/CaptureNotifications.swift',
                                                   'UI/SettingsWindowController.swift', 'App/WindowRestorationPolicy.swift', 'App/NetworkAccessPreference.swift']],
    str(work/'check.swift'), '-o', str(work/'check')], check=True)

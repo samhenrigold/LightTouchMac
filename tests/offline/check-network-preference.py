@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Saved guest-network choice and explicit CLI overrides do not show a prompt."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import subprocess,tempfile
 DEVICE_PROFILE = str(Path(__file__).resolve().parents[2] / 'LightTouchMac/Device/DeviceProfile.swift')
 root=Path(__file__).resolve().parents[2]
@@ -23,6 +26,6 @@ fixture=r'''import Cocoa
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-network-') as directory:
  work=Path(directory);(work/'check.swift').write_text(fixture)
- subprocess.run(['swiftc', DEVICE_PROFILE,'-default-isolation','MainActor','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/App/NetworkAccessPreference.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
+ subprocess.run(['swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), DEVICE_PROFILE,'-default-isolation','MainActor','-module-cache-path',str(work/'modules'),str(root/'LightTouchMac/App/NetworkAccessPreference.swift'),str(work/'check.swift'),'-o',str(work/'check')],check=True)
  for flags in [[],['--network'],['--no-network']]:
   subprocess.run([str(work/'check'),*flags],check=True,timeout=10)

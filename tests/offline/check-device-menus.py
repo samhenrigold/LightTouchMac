@@ -4,6 +4,9 @@
 EXPECTED is the whole menu bar as built for each board: every item, its menu, its shortcut, and
 which items start hidden or alternate; any move, rename or shortcut change fails here first."""
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import re,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]/'LightTouchMac'
 menu=(root/'App/MainMenu.swift').read_text()
@@ -369,5 +372,5 @@ struct Instance { let id=UUID() }
 '''
 with tempfile.TemporaryDirectory(prefix='ltm-menu-check-') as tmp:
     tmp=Path(tmp);(tmp/'check.swift').write_text(source)
-    subprocess.run(['xcrun','swiftc','-swift-version','5','-default-isolation','MainActor',str(root/'App/MainMenu.swift'),str(root/'Device/DeviceProfile.swift'),str(root/'UI/RotationControlAction.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
+    subprocess.run(['xcrun','swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]),'-swift-version','5','-default-isolation','MainActor',str(root/'App/MainMenu.swift'),str(root/'Device/DeviceProfile.swift'),str(root/'UI/RotationControlAction.swift'),str(tmp/'check.swift'),'-o',str(tmp/'check')],check=True)
     subprocess.run([str(tmp/'check'),IPOD_BAR,IPAD_BAR],check=True)

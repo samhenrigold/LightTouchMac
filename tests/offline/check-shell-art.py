@@ -7,6 +7,9 @@ asset name or identical pixels (the 1G showing the 2G's shell was the bug), or w
 profile's shellPixels (the screen cutout and Home circle are placed in those pixels).
 """
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import host_runtime
 import hashlib, json, subprocess, tempfile
 from PIL import Image
 
@@ -23,7 +26,7 @@ for board in CommandLine.arguments.dropFirst() {
     print(board, p.shellImageName, Int(p.shellPixels.width), Int(p.shellPixels.height), Int(c.midX), Int(c.midY), Int(c.minY / 2))
 }
 ''')
-    subprocess.run(['xcrun', 'swiftc', '-module-cache-path', str(tmp / 'modules'), str(root / 'LightTouchMac/Device/DeviceProfile.swift'),
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-module-cache-path', str(tmp / 'modules'), str(root / 'LightTouchMac/Device/DeviceProfile.swift'),
                     str(root / 'LightTouchMac/Device/DeviceProfile+Display.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'art')], check=True)
     rows = [line.split() for line in subprocess.check_output([tmp / 'art', *boards], text=True).splitlines()]
 
