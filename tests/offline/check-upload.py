@@ -14,16 +14,17 @@ struct MediaPhoto: Sendable { let id: String; let image: URL }
 struct MediaSong: Sendable {
  let id: String
  let audio: URL
+ var artwork: URL? = nil
  static let extensions: Set<String> = ["mp3", "m4a", "wav"]
 }
 final class State: @unchecked Sendable {
  let lock = NSLock()
  var existing: Data?, readOffset = 0
  var bytes = Data(), removed = false, closeCalls = 0
- var destination = "", directories: [String] = []
+ var destination = "", directories: [String] = [], published: [String: Data] = [:]
  var cancelOnClose = false
  var failure = false, badCount = false, closeFailure = false
- func reset() { lock.withLock { bytes = Data(); cancelOnClose = false; existing = nil; readOffset = 0; destination = ""; directories = []; removed = false; closeCalls = 0; failure = false; badCount = false; closeFailure = false } }
+ func reset() { lock.withLock { bytes = Data(); cancelOnClose = false; existing = nil; readOffset = 0; destination = ""; directories = []; published = [:]; removed = false; closeCalls = 0; failure = false; badCount = false; closeFailure = false } }
 }
 nonisolated enum IMobileDevice {
  static let state = State(), success: Int32 = 0, afcWriteMode: UInt64 = 3
@@ -34,8 +35,8 @@ nonisolated enum IMobileDevice {
  static let afc_client_new: Int? = 0
  static let afc_make_directory: ((OpaquePointer, UnsafePointer<CChar>)->Int32)? = { _,p in state.directories.append(String(cString:p)); return 0 }
  static let afc_file_open: ((OpaquePointer, UnsafePointer<CChar>, UInt64, inout UInt64)->Int32)? = { _,p,mode,h in
-  if mode == 1 { guard state.existing != nil else{return 8};state.readOffset=0;h=2;return 0 }
-  state.destination = String(cString:p);h=1;return 0
+  if mode == 1 { if !state.published.isEmpty { state.existing=state.published[String(cString:p)] };guard state.existing != nil else{return 8};state.readOffset=0;h=2;return 0 }
+  state.destination = String(cString:p);state.bytes=Data();h=1;return 0
  }
  static let afc_file_read: ((OpaquePointer, UInt64, UnsafeMutablePointer<CChar>, UInt32, inout UInt32)->Int32)? = { _,_,p,n,count in
   guard let bytes=state.existing else{return 8}
@@ -46,7 +47,7 @@ nonisolated enum IMobileDevice {
   state.readOffset+=Int(count);return 0
  }
  static let afc_rename_path: ((OpaquePointer, UnsafePointer<CChar>, UnsafePointer<CChar>)->Int32)? = { _,_,p in
-  state.destination=String(cString:p);state.existing=state.bytes;return 0
+  state.destination=String(cString:p);state.existing=state.bytes;state.published[state.destination]=state.bytes;return 0
  }
  static let afc_file_write: ((OpaquePointer, UInt64, UnsafePointer<CChar>, UInt32, inout UInt32)->Int32)? = { _,_,p,n,w in
   state.lock.withLock {
@@ -101,6 +102,12 @@ func stagingNames() {
   try await DeviceServices().stageSong(MediaSong(id:id,audio:audio)) { _ in }
   precondition(state.bytes == expected && state.destination == "LightTouch/\(id)/audio.m4a")
   precondition(state.directories == ["LightTouch","LightTouch/\(id)"])
+  state.reset()
+  let artwork = path.deletingLastPathComponent().appendingPathComponent("artwork.jpg")
+  let cover = Data("cover fixture".utf8)
+  try cover.write(to: artwork)
+  try await DeviceServices().stageSong(MediaSong(id:id,audio:audio,artwork:artwork)) { _ in }
+  precondition(state.published == ["LightTouch/\(id)/audio.m4a": expected, "LightTouch/\(id)/artwork.jpg": cover])
   state.reset();state.existing=expected
   try await DeviceServices().stageSong(MediaSong(id:id,audio:audio)) { _ in }
   precondition(state.bytes.isEmpty && state.closeCalls==1 && state.existing==expected)

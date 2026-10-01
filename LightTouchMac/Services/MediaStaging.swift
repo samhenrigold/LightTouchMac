@@ -4,11 +4,16 @@ extension DeviceServices {
     func stageSong(_ song: MediaSong, progress: @escaping @Sendable (Double) -> Void) async throws {
         guard UUID(uuidString: song.id) != nil,
               MediaSong.extensions.contains(song.audio.pathExtension),
-              song.audio.lastPathComponent == "audio." + song.audio.pathExtension else {
+              song.audio.lastPathComponent == "audio." + song.audio.pathExtension,
+              song.artwork == nil || song.artwork?.lastPathComponent == "artwork.jpg" else {
             throw DeviceError.preflight("Invalid media staging path.")
         }
         _ = try await stageFile(song.audio, remote: "LightTouch/\(song.id)/\(song.audio.lastPathComponent)",
                                 reuseIdentical: true, progress: progress)
+        if let artwork = song.artwork {
+            _ = try await stageFile(artwork, remote: "LightTouch/\(song.id)/artwork.jpg",
+                                    reuseIdentical: true, progress: { _ in })
+        }
     }
 
     func stagePhoto(_ photo: MediaPhoto, progress: @escaping @Sendable (Double) -> Void) async throws {

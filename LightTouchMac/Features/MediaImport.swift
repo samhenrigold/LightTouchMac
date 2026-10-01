@@ -44,7 +44,7 @@ struct MediaImport: Sendable {
         }
     }
 
-    /// The app's copy of a guest helper for images whose loader package lacks it.
+    /// The helper shipped with this app's media metadata contract.
     private static func guestTool(_ name: String) throws -> URL {
         guard let path = Bundled.resolve(name, fallbacks: ["\(Bundled.filesRoot)/../qemu-ios/contrib/it-media/\(name)"]) else {
             throw DeviceToolsError.toolMissing(name)

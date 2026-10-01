@@ -143,19 +143,16 @@ func expectFailure(_ what: String, _ body: () async throws -> Void) async {
   check(try await legacy.commitMedia(id: id, helper: "itphoto", localHelper: { helper }, metadata: nil))
   precondition(link.spawns.last == ["/tmp/ltm-itphoto-\(id)", id] && link.files["/tmp/ltm-itphoto-\(id)"] == nil)
   precondition(link.owners["/var/mobile/Media/LightTouch/\(id)"] == "501:501")
-  // ... the package's own copy on a packaged image, with the metadata plist.
+  // An older package's executable must never silently discard new fields.
   let packaged = GuestServices(agent: agent, packaged: true)
   let plist = try local("m.plist", Data("<plist/>".utf8))
+  let music = try local("itmedia", Data("current media helper".utf8))
   link.spawnOutput["/usr/local/lighttouch/current/bin/itmedia"] = (0, "imported\n")
-  check(try await packaged.commitMedia(id: id, helper: "itmedia", localHelper: { preconditionFailure("uploaded") }, metadata: plist))
-  precondition(link.spawns.last == ["/usr/local/lighttouch/current/bin/itmedia", "/tmp/ltm-media-\(id).plist", id])
-  precondition(link.files["/tmp/ltm-media-\(id).plist"] == nil, "metadata removed")
-  // ... falling back to an upload when the package lacks the helper (ENOENT).
   link.spawnOutput["/tmp/ltm-itmedia-\(id)"] = (0, "imported\n")
-  let music = try local("itmedia", Data("m".utf8))
-  link.spawnOutput["/usr/local/lighttouch/current/bin/itmedia"] = nil
   check(try await packaged.commitMedia(id: id, helper: "itmedia", localHelper: { music }, metadata: plist))
   precondition(link.spawns.last == ["/tmp/ltm-itmedia-\(id)", "/tmp/ltm-media-\(id).plist", id])
+  precondition(!link.spawns.contains { $0.first == "/usr/local/lighttouch/current/bin/itmedia" })
+  precondition(link.files["/tmp/ltm-media-\(id).plist"] == nil, "metadata removed")
   // ... and a failing helper still cleans up, and the error surfaces.
   link.spawnOutput["/tmp/ltm-itmedia-\(id)"] = (3, "no library")
   await expectFailure("failed commit succeeded") { _ = try await legacy.commitMedia(id: id, helper: "itmedia", localHelper: { music }, metadata: plist) }

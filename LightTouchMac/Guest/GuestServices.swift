@@ -40,8 +40,8 @@ nonisolated struct GuestServices: Sendable {
     // MARK: Media
 
     /// Commit staged media into the library with itmedia (Music, Videos: a
-    /// metadata plist) or itphoto (Saved Photos): the package's copy, or the
-    /// app's uploaded to /tmp for the one run. The tool must end with `imported`.
+    /// metadata plist) or itphoto (Saved Photos). Always use the app's helper:
+    /// older installed packages may silently ignore new metadata fields.
     func commitMedia(id: String, helper: String, localHelper: () throws -> URL, metadata: URL?) async throws -> Bool {
         guard UUID(uuidString: id) != nil else { throw DeviceToolsError.failed("Invalid media staging identifier.") }
         try await agent.chown(501, 501, "/var/mobile/Media/LightTouch")
@@ -55,19 +55,12 @@ nonisolated struct GuestServices: Sendable {
             arguments.insert(remote, at: 0)
         }
         do {
-            var output: Data?
-            if packaged {
-                do { output = try await agent.spawn(["\(Self.packageBin)/\(helper)"] + arguments) }
-                catch let error as GuestAgentError where error.status == GuestAgentError.notFound { output = nil }
-            }
-            if output == nil {
-                let executable = "/tmp/ltm-\(helper)-\(id)"
-                try await agent.put(executable, mode: 0o755, try Data(contentsOf: localHelper()))
-                temporary.append(executable)
-                output = try await agent.spawn([executable] + arguments)
-            }
+            let executable = "/tmp/ltm-\(helper)-\(id)"
+            try await agent.put(executable, mode: 0o755, try Data(contentsOf: localHelper()))
+            temporary.append(executable)
+            let output = try await agent.spawn([executable] + arguments)
             for path in temporary { try? await agent.unlink(path) }
-            return String(decoding: output ?? Data(), as: UTF8.self).hasSuffix("imported\n")
+            return String(decoding: output, as: UTF8.self).hasSuffix("imported\n")
         } catch {
             for path in temporary { try? await agent.unlink(path) }
             throw error

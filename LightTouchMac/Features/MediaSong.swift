@@ -1,6 +1,8 @@
 import Foundation
 import AVFoundation
 import AudioToolbox
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Immutable host staging copy. Metadata and uploaded bytes always describe
 /// the same file, even if the selected source is edited while a job waits.
@@ -9,6 +11,7 @@ struct MediaSong: Sendable {
     let directory: URL
     let audio: URL
     let metadata: URL
+    let artwork: URL?
     let title: String
 
     nonisolated static let extensions: Set<String> = ["mp3", "m4a", "aac", "wav"]
@@ -91,12 +94,18 @@ struct MediaSong: Sendable {
                 "title": source.deletingPathExtension().lastPathComponent,
                 "duration_ms": duration * 1000,
             ]
+            var artwork: URL?
             for item in try await asset.load(.commonMetadata) {
                 let key: String?
                 switch item.commonKey {
                 case .commonKeyTitle: key = "title"
                 case .commonKeyArtist: key = "artist"
                 case .commonKeyAlbumName: key = "album"
+                case .commonKeyArtwork:
+                    if artwork == nil, let bytes = try await item.load(.dataValue) {
+                        artwork = try prepareArtwork(bytes, in: directory)
+                    }
+                    key = nil
                 default: key = nil
                 }
                 if let key, let value = try await item.load(.stringValue),
@@ -104,12 +113,46 @@ struct MediaSong: Sendable {
                     properties[key] = value
                 }
             }
+            for item in try await asset.load(.metadata) {
+                let key: String?
+                switch item.identifier {
+                case .iTunesMetadataAlbumArtist, .id3MetadataBand: key = "album_artist"
+                case .iTunesMetadataComposer, .id3MetadataComposer: key = "composer"
+                case .iTunesMetadataUserGenre, .id3MetadataContentType: key = "genre"
+                default: key = nil
+                }
+                if let key, let value = try await item.load(.stringValue),
+                   !value.isEmpty, value.utf8.count <= 4096 {
+                    properties[key] = value
+                }
+                let pair: String?
+                switch item.identifier {
+                case .iTunesMetadataTrackNumber, .id3MetadataTrackNumber: pair = "track"
+                case .iTunesMetadataDiscNumber, .id3MetadataPartOfASet: pair = "disc"
+                default: pair = nil
+                }
+                if let pair {
+                    // ID3 represents these as "number/total"; MP4 uses four
+                    // big-endian u16s (reserved, number, total, reserved).
+                    var numbers: [Int] = []
+                    if let text = try await item.load(.stringValue) {
+                        numbers = text.split(separator: "/", omittingEmptySubsequences: false)
+                            .prefix(2).map { Int($0) ?? 0 }
+                    }
+                    if numbers.first ?? 0 == 0, let bytes = try await item.load(.dataValue), bytes.count >= 6 {
+                        numbers = [Int(bytes[2]) << 8 | Int(bytes[3]), Int(bytes[4]) << 8 | Int(bytes[5])]
+                    }
+                    if let number = numbers.first, (1...65535).contains(number) { properties[pair + "_number"] = number }
+                    if numbers.count > 1, (1...65535).contains(numbers[1]) { properties[pair + "_count"] = numbers[1] }
+                }
+            }
+            if let artwork { properties["artwork_filename"] = artwork.lastPathComponent }
             let metadata = directory.appendingPathComponent("metadata.plist")
             try PropertyListSerialization.data(fromPropertyList: properties, format: .xml, options: 0)
                 .write(to: metadata, options: .atomic)
             try Task.checkCancellation()
             let result = MediaSong(id: try MediaIdentity.identifier(for: audio), directory: directory, audio: audio,
-                                   metadata: metadata, title: properties["title"] as! String)
+                                   metadata: metadata, artwork: artwork, title: properties["title"] as! String)
             complete = true
             return result
         }
@@ -121,6 +164,31 @@ struct MediaSong: Sendable {
             }
             return song
         } onCancel: { worker.cancel() }
+    }
+
+    /// Give the old guest image decoder a bounded, orientation-correct JPEG.
+    /// Audio and its embedded tags remain byte-for-byte copies of the source.
+    nonisolated private static func prepareArtwork(_ data: Data, in directory: URL) throws -> URL? {
+        guard !data.isEmpty, data.count <= 16 << 20,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0, width <= 16384, height <= 16384,
+              width * height <= 32_000_000,
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 1024,
+              ] as CFDictionary) else { return nil }
+        let bytes = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(bytes, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+        guard CGImageDestinationFinalize(destination), bytes.length <= 2 << 20 else { return nil }
+        try Task.checkCancellation()
+        let url = directory.appendingPathComponent("artwork.jpg")
+        try (bytes as Data).write(to: url, options: .atomic)
+        return url
     }
 
     /// Stream raw ADTS AAC into an M4A file using macOS audio codecs. The
