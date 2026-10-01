@@ -616,3 +616,18 @@ K48 is not wired to this PHY signal.
 Evidence: `/Users/shg/Developer/ltm-evidence/usb-phy-2026-10-01`. The app's
 source pin now includes this verified QEMU correction; no new universal
 package qualification, target merge or installation is claimed.
+
+### Verified FMSS request parameters (2026-10-01)
+
+QEMU 333bc8023c adds sequencer access to the existing D18 request-count latch
+and models D28 as the guest-supplied count of 2048-byte page chunks. No fixed
+count, descriptor-load or erase behavior is invented. Reset and VMState7
+preserve D28; older supported streams initialize it to zero. Sanitized actual
+handler/script tests, real FMSS qtests 4/4 and the separate default native
+7E18 two-boot regression 8/8 pass, including filesystem health and persistence.
+Evidence: `/Users/shg/Developer/ltm-evidence/fmss-parameters-2026-10-01`.
+
+Stock bulk scripts still encounter opcode06 before descriptor opcode03;
+read/status scripts encounter opcode03. These and real physical erase are
+unqualified. The source pin advances to the verified parameter correction;
+the earlier universal package does not include it.
