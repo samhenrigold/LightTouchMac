@@ -120,6 +120,7 @@ import Cocoa
     @discardableResult
     func start(_ entry: FirmwareCatalog.Entry) -> DeviceSession? {
         if let session = session(for: entry) { return session }
+        library.reload() // offline publication may have selected another generation
         guard let instance = instance(for: entry), let profile = entry.profile else { return nil }
         let network = NetworkAccessPreference.resolve(profile: profile)
         let session = DeviceSession(instance: instance,
@@ -158,6 +159,18 @@ import Cocoa
             NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
         }
     }
+    /// Drop a stopped controller before offline editing; the next launch loads
+    /// the newly published record rather than its cached generation.
+    func releaseStopped(for entry: FirmwareCatalog.Entry) async -> Bool {
+        guard let session = session(for: entry) else { return true }
+        guard session.emulator.isPoweredOff || session.emulator.isDead else { return false }
+        guard await session.emulator.release() else { return false }
+        sessions.removeAll { $0 === session }
+        library.reload()
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+        return true
+    }
+
     private var restarting: Set<UUID> = []
 
     /// A controller for a device that isn't running, which never starts: the

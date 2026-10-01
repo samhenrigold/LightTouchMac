@@ -1,0 +1,288 @@
+import CryptoKit
+import Darwin
+import Foundation
+
+/// A stopped-device transaction. The record is the atomic generation pointer;
+/// old flash/NOR and saved states remain intact until a validated candidate is
+/// published. Persistent intent blocks helper boot even after this owner dies.
+public final class StorageGeneration {
+    public enum Phase: String, Codable, Sendable { case editing, ready, published }
+    public struct Intent: Codable, Sendable {
+        public let id: UUID
+        public let originalRecord: String
+        public var phase: Phase
+        public var candidateRecord: String?
+        public var storageManifest: String? = nil
+    }
+    public let device: URL
+    public let id: UUID
+    public let root: URL
+    public var base: URL { root.appendingPathComponent("base") }
+    public var overlay: URL { root.appendingPathComponent("overlay") }
+    public var volumes: URL { root.appendingPathComponent("volumes") }
+    private let lease: StoppedStorageLease
+    private let original: Data
+    private var intent: Intent
+    private var recordURL: URL { device.appendingPathComponent("device.json") }
+    private var intentURL: URL { device.appendingPathComponent("work/edit.json") }
+    private var candidateURL: URL { root.appendingPathComponent("device.json") }
+
+    /// Existing app records only. Format-specific editing is a separate adapter.
+    public static func begin(device: URL) throws -> StorageGeneration {
+        try StorageGeneration(device: device, resume: nil)
+    }
+    public static func resume(device: URL, id: UUID) throws -> StorageGeneration {
+        try StorageGeneration(device: device, resume: id)
+    }
+    private init(device: URL, resume: UUID?) throws {
+        self.device = device.standardizedFileURL.resolvingSymlinksInPath()
+        lease = try StoppedStorageLease(self.device.appendingPathComponent("work/lease"), allowPendingEdit: resume != nil)
+        original = try Data(contentsOf: self.device.appendingPathComponent("device.json"))
+        guard let object = try JSONSerialization.jsonObject(with: original) as? [String: Any],
+              object["id"] is String, object["base"] is [String: Any], object["storage"] is [String: Any] else {
+            throw FirmwareError(.unsupported, "storage transactions require a valid device record")
+        }
+        if let resume {
+            intent = try JSONDecoder().decode(Intent.self, from: Data(contentsOf: self.device.appendingPathComponent("work/edit.json")))
+            guard intent.id == resume else { throw FirmwareError(.internal, "edit session does not match this device") }
+        } else {
+            intent = Intent(id: UUID(), originalRecord: Self.hash(original), phase: .editing)
+        }
+        id = intent.id
+        root = self.device.appendingPathComponent("generations/\(id.uuidString)")
+        guard root.resolvingSymlinksInPath().path.hasPrefix(self.device.path + "/generations/") else {
+            throw FirmwareError(.internal, "invalid storage generation path")
+        }
+        if resume == nil {
+            guard !FileManager.default.fileExists(atPath: root.path) else {
+                throw FirmwareError(.internal, "storage generation already exists")
+            }
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
+                                                  attributes: [.posixPermissions: 0o700])
+            try Self.write(original, to: root.appendingPathComponent("original-device.json"))
+            try saveIntent()
+            try Self.sync(root.deletingLastPathComponent())
+            try Self.sync(self.device)
+        }
+    }
+
+    /// Preserve unknown record fields. All mutable storage and snapshots move as
+    /// one generation. A snapshot of the old flash cannot be selected afterward.
+    public func candidateRecord(provenance: [String: Any]? = nil) throws -> Data {
+        let data = try Data(contentsOf: root.appendingPathComponent("original-device.json"))
+        var record = try Self.object(data)
+        var base = record["base"] as! [String: Any]
+        var storage = record["storage"] as! [String: Any]
+        base["path"] = try recordPath(self.base)
+        storage["overlay"] = try recordPath(overlay)
+        storage["key"] = id.uuidString
+        storage["snapshot"] = try recordPath(root.appendingPathComponent("snapshot"))
+        if storage["writableNOR"] != nil { storage["writableNOR"] = try recordPath(root.appendingPathComponent("nor.bin")) }
+        record["base"] = base; record["storage"] = storage
+        if let provenance { record["provenance"] = provenance }
+        return try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    /// Preserve the record's state-root-relative convention so a device library
+    /// remains movable. Legacy absolute records keep their original convention.
+    public func recordPath(_ url: URL) throws -> String {
+        let record = try Self.object(Data(contentsOf: root.appendingPathComponent("original-device.json")))
+        if ((record["base"] as? [String: Any])?["path"] as? String)?.hasPrefix("/") == true { return url.path }
+        let state = device.deletingLastPathComponent().deletingLastPathComponent().path + "/"
+        guard url.path.hasPrefix(state) else { throw FirmwareError(.internal, "generation is outside device state") }
+        return String(url.path.dropFirst(state.count))
+    }
+    private func resolves(_ path: String?, to url: URL) -> Bool {
+        guard let path else { return false }
+        let candidate = path.hasPrefix("/") ? URL(fileURLWithPath: path)
+            : device.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(path)
+        return candidate.standardizedFileURL.resolvingSymlinksInPath() == url.standardizedFileURL.resolvingSymlinksInPath()
+    }
+
+    public func publish(record: Data) throws { try publish(record: record, checkpoint: { _ in }) }
+    enum Checkpoint: Sendable, Equatable { case ready, recordPublished }
+    func publish(record: Data, checkpoint: (Checkpoint) throws -> Void) throws {
+        guard intent.phase == .editing || intent.phase == .ready else {
+            throw FirmwareError(.internal, "edit generation has already been published")
+        }
+        guard Self.hash(try Data(contentsOf: recordURL)) == intent.originalRecord else {
+            throw FirmwareError(.internal, "device record changed during editing; original generation retained")
+        }
+        try validate(record)
+        try ensureDetached()
+        try Self.syncTree(base)
+        try Self.syncTree(overlay)
+        if FileManager.default.fileExists(atPath: root.appendingPathComponent("nor.bin").path) {
+            try Self.sync(root.appendingPathComponent("nor.bin"))
+        }
+        if intent.phase == .ready {
+            try verifyStorage()
+        } else {
+            let certificate = try storageCertificate()
+            try Self.write(certificate, to: root.appendingPathComponent("storage-manifest.json"))
+            intent.storageManifest = Self.hash(certificate)
+        }
+        try Self.write(record, to: candidateURL)
+        intent.phase = .ready; intent.candidateRecord = Self.hash(record)
+        try saveIntent()
+        try checkpoint(.ready)
+        try Self.write(record, to: recordURL)
+        try checkpoint(.recordPublished)
+        try finishPublished()
+    }
+
+    /// A crash may occur before or after the one record rename. Resume either
+    /// finishes that exact validated publication or retains the old generation.
+    public func recoverPublication() throws {
+        guard let expected = intent.candidateRecord, intent.phase != .editing else {
+            throw FirmwareError(.internal, "edit is not ready to publish; resume editing or discard it")
+        }
+        let current = Self.hash(try Data(contentsOf: recordURL))
+        if current == expected {
+            try validate(Data(contentsOf: recordURL))
+            try verifyStorage()
+            try finishPublished(); return
+        }
+        guard current == intent.originalRecord else {
+            throw FirmwareError(.internal, "device record is neither transaction generation; manual recovery required")
+        }
+        let record = try Data(contentsOf: candidateURL)
+        guard Self.hash(record) == expected else { throw FirmwareError(.internal, "candidate record changed") }
+        try publish(record: record)
+    }
+
+    public func discard() throws {
+        guard Self.hash(try Data(contentsOf: recordURL)) == intent.originalRecord else {
+            throw FirmwareError(.internal, "published edits cannot be discarded; finish recovery instead")
+        }
+        try ensureDetached()
+        // Clear intent first, keeping the lease until return. Crash afterward
+        // leaves an orphan candidate, never a half-applied current generation.
+        try Self.writableDirectories(root)
+        try FileManager.default.removeItem(at: intentURL)
+        try Self.sync(intentURL.deletingLastPathComponent())
+        try FileManager.default.removeItem(at: root)
+    }
+
+    private func validate(_ data: Data) throws {
+        let record = try Self.object(data)
+        let previous = try Self.object(Data(contentsOf: root.appendingPathComponent("original-device.json")))
+        guard ["id", "board", "firmware", "identity", "created"].allSatisfy({ key in
+                  NSDictionary(dictionary: ["value": record[key] ?? NSNull()]).isEqual(to: ["value": previous[key] ?? NSNull()])
+              }),
+              let storage = record["storage"] as? [String: Any], storage["key"] as? String == id.uuidString,
+              resolves((record["base"] as? [String: Any])?["path"] as? String, to: base),
+              resolves(storage["overlay"] as? String, to: overlay),
+              resolves(storage["snapshot"] as? String, to: root.appendingPathComponent("snapshot")) else {
+            throw FirmwareError(.internal, "candidate must preserve device identity and select its complete generation")
+        }
+        let previousNOR = (previous["storage"] as? [String: Any])?["writableNOR"] is String
+        guard (storage["writableNOR"] is String) == previousNOR else {
+            throw FirmwareError(.internal, "candidate must retain its NOR storage contract")
+        }
+        for directory in [base, overlay] {
+            let values = try directory.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true else {
+                throw FirmwareError(.internal, "candidate storage must be owned directories")
+            }
+        }
+        if let nor = storage["writableNOR"] as? String {
+            guard resolves(nor, to: root.appendingPathComponent("nor.bin")),
+                  FileManager.default.fileExists(atPath: root.appendingPathComponent("nor.bin").path) else {
+                throw FirmwareError(.internal, "candidate NOR must belong to its generation")
+            }
+        }
+        guard FileManager.default.fileExists(atPath: base.path), FileManager.default.fileExists(atPath: overlay.path) else {
+            throw FirmwareError(.internal, "candidate storage is incomplete")
+        }
+    }
+    /// The ready record certifies actual flash/NOR bytes, not only filenames.
+    /// Recovery refuses damaged/replaced candidates on either side of rename.
+    private func storageCertificate() throws -> Data {
+        var hashes: [String: String] = [:]
+        func walk(_ directory: URL) throws {
+            for child in try FileManager.default.contentsOfDirectory(at: directory,
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
+                let values = try child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isSymbolicLink != true else { throw FirmwareError(.internal, "candidate contains a symlink") }
+                if values.isDirectory == true { try walk(child) }
+                else { hashes[String(child.path.dropFirst(root.path.count + 1))] = try Preparer.digest(child, SHA256()) }
+            }
+        }
+        try walk(base); try walk(overlay)
+        let nor = root.appendingPathComponent("nor.bin")
+        if FileManager.default.fileExists(atPath: nor.path) { hashes["nor.bin"] = try Preparer.digest(nor, SHA256()) }
+        return try JSONSerialization.data(withJSONObject: hashes, options: [.sortedKeys])
+    }
+    private func verifyStorage() throws {
+        guard let expected = intent.storageManifest,
+              Self.hash(try Data(contentsOf: root.appendingPathComponent("storage-manifest.json"))) == expected,
+              Self.hash(try storageCertificate()) == expected else {
+            throw FirmwareError(.internal, "candidate storage changed or is damaged; original generation retained")
+        }
+    }
+    private func ensureDetached() throws {
+        guard try DiskImage.checkedAttachedImages().allSatisfy({
+            !URL(fileURLWithPath: $0.image).resolvingSymlinksInPath().path.hasPrefix(root.path + "/")
+        }) else { throw FirmwareError(.internal, "eject edit volumes before committing or discarding") }
+    }
+    private func finishPublished() throws {
+        try ensureDetached()
+        try Self.sync(recordURL); try Self.sync(device)
+        intent.phase = .published; try saveIntent()
+        try FileManager.default.removeItem(at: intentURL)
+        try Self.sync(intentURL.deletingLastPathComponent())
+    }
+    private func saveIntent() throws { try Self.write(JSONEncoder().encode(intent), to: intentURL) }
+    private static func object(_ data: Data) throws -> [String: Any] {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw FirmwareError(.internal, "invalid device record")
+        }
+        return object
+    }
+    static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+    static func sync(_ url: URL) throws {
+        let fd = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(fd) }
+        guard fsync(fd) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+    }
+    private static func writableDirectories(_ directory: URL) throws {
+        let fm = FileManager.default
+        let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard values.isDirectory == true, values.isSymbolicLink != true else { return }
+        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        for child in try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
+            try writableDirectories(child)
+        }
+    }
+    private static func syncTree(_ directory: URL) throws {
+        let fm = FileManager.default
+        let entries = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        for item in entries {
+            let values = try item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isSymbolicLink != true else { throw FirmwareError(.internal, "storage candidate contains a symlink") }
+            if values.isDirectory == true { try syncTree(item) } else { try sync(item) }
+        }
+        try sync(directory)
+    }
+    static func write(_ data: Data, to destination: URL) throws {
+        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).tmp")
+        let fd = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(fd); unlink(temporary.path) }
+        try data.withUnsafeBytes { bytes in
+            var offset = 0
+            while offset < bytes.count {
+                let count = Darwin.write(fd, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                offset += count
+            }
+        }
+        guard fsync(fd) == 0, rename(temporary.path, destination.path) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        try sync(destination.deletingLastPathComponent())
+    }
+}

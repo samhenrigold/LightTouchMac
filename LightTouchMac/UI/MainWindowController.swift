@@ -320,6 +320,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func canPerform(_ action: DeviceAction, for entry: FirmwareCatalog.Entry) -> Bool {
         guard host.row(for: entry).allows(action, canDownload: FirmwareJobs.shared.canDownload) else { return false }
         let emulator = host.session(for: entry)?.emulator
+        if let instance = host.instance(for: entry) {
+            switch action {
+            case .start, .erase, .delete:
+                if DeviceFilesystemEdits.shared.blocked(instance) { return false }
+            case .openFilesystem, .commitFilesystem, .discardFilesystem, .recoverFilesystem:
+                return DeviceFilesystemEdits.shared.canPerform(action, instance: instance)
+            default: break
+            }
+        }
         switch action {
         case .start: return emulator.map { $0.isDead || ($0.isPoweredOff && !$0.shuttingDown) } ?? true
         case .stop: return emulator?.canStop == true
@@ -331,6 +340,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func perform(_ action: DeviceAction, for entry: FirmwareCatalog.Entry) {
         guard canPerform(action, for: entry) else { return }
         switch action {
+        case .openFilesystem, .commitFilesystem, .discardFilesystem, .recoverFilesystem:
+            DeviceFilesystemEdits.shared.perform(action, entry: entry, host: host)
         case .start: start(entry)
         case .stop: if let emulator = host.session(for: entry)?.emulator { powerOff(emulator) }
         case .downloadAndPrepare: FirmwareJobs.shared.downloadAndPrepare(entry)

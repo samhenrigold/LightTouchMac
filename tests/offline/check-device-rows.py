@@ -43,7 +43,7 @@ import Foundation
         precondition(allowed(r, canDownload: true) == ["importIPSW"], "\(allowed(r, canDownload: true))")
         r = row(iPod, instance: id)
         precondition(r.state == .ready && r.isStartable && r.primaryTitle == "Start")
-        precondition(allowed(r) == ["start", "erase", "showInFinder", "delete"], "\(allowed(r))")
+        precondition(allowed(r) == ["start", "erase", "showInFinder", "delete", "openFilesystem", "commitFilesystem", "discardFilesystem", "recoverFilesystem"], "\(allowed(r))")
         precondition(r.title == "iOS 3.1.3" && !r.isExperimental && r.stateDescription == "Ready")
 
         // An IPSW entry without a device is not downloaded, with its size.
@@ -61,7 +61,7 @@ import Foundation
 
         // Adopted or prepared: ready, with the record's commands.
         r = row(iPad, instance: id)
-        precondition(r.state == .ready && allowed(r) == ["start", "erase", "showInFinder", "delete"], "\(allowed(r))")
+        precondition(r.state == .ready && allowed(r) == ["start", "erase", "showInFinder", "delete", "openFilesystem", "commitFilesystem", "discardFilesystem", "recoverFilesystem"], "\(allowed(r))")
 
         // Sessions outrank everything else.
         r = row(iPad, instance: id, session: .running, job: .failed("x"), failure: "y")
@@ -70,7 +70,7 @@ import Foundation
         r = row(iPad, instance: id, session: .stopping)
         precondition(r.state == .stopping && allowed(r) == ["showInFinder"], "\(allowed(r))")
         r = row(iPad, instance: id, session: .stopped)
-        precondition(r.state == .ready && allowed(r) == ["start", "erase", "showInFinder"], "powered off starts again: \(allowed(r))")
+        precondition(r.state == .ready && allowed(r) == ["start", "erase", "showInFinder", "openFilesystem", "commitFilesystem", "discardFilesystem", "recoverFilesystem"], "powered off starts again: \(allowed(r))")
         r = row(iPod, instance: id, session: .dead("The iPod stopped."))
         precondition(r.state == .error("The iPod stopped.") && r.stateDescription == "Error")
         precondition(r.allows(.start, canDownload: false), "a dead session's Start restarts it")

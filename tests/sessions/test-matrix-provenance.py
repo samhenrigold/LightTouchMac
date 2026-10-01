@@ -97,6 +97,8 @@ class RunnerTests(unittest.TestCase):
                 binaries[name].write_bytes(name.encode())
             entry = {'id': 'k48ap-test', 'board': 'k48ap', 'version': '3.2.2', 'status': 'experimental',
                      'product_type': 'iPad1,1', 'source': {'sha1': 'abc'}, 'recipe': {'boot': 'iboot'}}
+            binaries['firmwarekit'].write_text('#!/bin/sh\n[ "$1" = cache-prune ] || exit 64\nexit 0\n')
+            binaries['firmwarekit'].chmod(0o700)
             catalog = root / 'catalog.json'
             catalog.write_text(json.dumps({'entries': [entry]}))
             result = root / 'results.json'

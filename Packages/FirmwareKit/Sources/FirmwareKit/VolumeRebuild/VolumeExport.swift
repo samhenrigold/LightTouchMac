@@ -63,7 +63,7 @@ public enum VolumeExport {
 
     /// Steps 1-4: images in a fresh `out` directory, ready to attach or keep.
     public static func export(_ src: Source, volumes: Set<String>? = nil, out: URL, log: (String) -> Void = { _ in }) throws -> [Exported] {
-        let lease = try src.lease.map(StoppedStorageLease.init)
+        let lease = try src.lease.map { try StoppedStorageLease($0) }
         defer { withExtendedLifetime(lease) {} }
         let fm = FileManager.default
         let dest = out.resolvingSymlinksInPath().standardizedFileURL.path

@@ -748,8 +748,8 @@ def main():
                 results = provenance.publish_result(RESULTS_JSON, a.results_dir, eid, rec,
                                                     lambda current: write_md(current, catalog))
                 rmtree(work)
-                rmtree(a.scratch / "cache" / entry["source"]["sha1"])
-                rmtree(a.scratch / "cache" / (entry["source"]["sha1"] + ".tmp"))
+                subprocess.run([str(a.firmwarekit), "cache-prune", "--root", str(a.scratch / "cache"),
+                                "--ipsw", entry["source"]["sha1"]], check=True)
                 free = shutil.disk_usage(a.scratch).free
                 log(f"  recorded; scratch cleaned; {free / 1e9:.0f} GB free")
     rmtree(tools)

@@ -294,7 +294,9 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
     private static let menuActions: [(DeviceAction?, String)] = [
         (.start, "Start"), (.stop, "Stop"), (nil, ""),
         (.downloadAndPrepare, "Download & Prepare"), (.importIPSW, "Import IPSW…"), (.cancel, "Cancel"), (nil, ""),
-        (.showInFinder, "Show in Finder"), (nil, ""),
+        (.showInFinder, "Show in Finder"),
+        (.openFilesystem, "Open Filesystem in Finder"), (.commitFilesystem, "Save Filesystem Edits"),
+        (.discardFilesystem, "Discard Filesystem Edits"), (.recoverFilesystem, "Finish Filesystem Recovery"), (nil, ""),
         (.erase, "Erase All Content and Settings…"),
     ]
 

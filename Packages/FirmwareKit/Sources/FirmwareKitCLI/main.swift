@@ -33,12 +33,16 @@ let command = args.popFirst()
 if command == "mount" || command == "export" || command == "unmount" {
     volumeCommand(command!, Array(args))
 }
+if command == "cache-prune" { cacheCommand(Array(args)) }
+if command == "edit" { stoppedEditCommand(Array(args)) }
 if command == "verify-keys" { verifyKeysCommand(Array(args)) }
 if command == "fit" { fitCommand(Array(args)) }
 guard command == "create" else {
     FileHandle.standardError.write(Data("""
         firmwarekit \(FirmwareKit.version)
-        usage: firmwarekit create --entry ENTRY.json --ipsw IPSW --out DIR [--seed S]
+        usage: firmwarekit edit --device DIR --action begin|mount|commit|discard|recover [--session UUID]
+               firmwarekit cache-prune --root DIR [--ipsw SHA1]
+               firmwarekit create --entry ENTRY.json --ipsw IPSW --out DIR [--seed S]
                                   [--helper PATH] [--cache DIR] [--guest-tools DIR]
                                   [--sibling-entry ENTRY.json --sibling-ipsw IPSW]   (recipe.keybag_ramdisk_from)
                                   [--stop-after volumes]   (fit.json: the fit checks' survey, no device)

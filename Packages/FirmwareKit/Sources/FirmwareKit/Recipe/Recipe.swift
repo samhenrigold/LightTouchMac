@@ -114,6 +114,8 @@ public enum Recipe {
         step()   // decrypt, once per IPSW
         try fm.createDirectory(at: c.work, withIntermediateDirectories: true)
         let cacheRoot = o.cache ?? c.work.appendingPathComponent("cache")
+        let cacheLease = try FirmwareCache.consume(root: cacheRoot)
+        defer { withExtendedLifetime(cacheLease) {} }
         c.dec = try DecryptionCache.resolve(root: cacheRoot, identity: .init(ipsw: sha1, entry: e), produce: { tmp in
             try FirmwareDecryptor.decrypt(ipsw: o.ipsw, entry: e, into: tmp).files
         }, reused: {

@@ -7,12 +7,37 @@ nonisolated enum DeviceStateStorage {
     /// `snapshots`: saved-state files older builds wrote (and their .meta), swept with the overlay.
     /// `owner` is the device being erased; every path must pass checkRemovable.
     static func erase(overlay: URL, snapshots: [URL], state: URL, owner: UUID?) throws {
+        let lease = try stoppedLease(owner, state: state)
+        defer { withExtendedLifetime(lease) {} }
         let fm = FileManager.default
         let paths = snapshots.flatMap { [$0, $0.appendingPathExtension("meta")] } + [overlay]
         for path in paths { try checkRemovable(path, state: state, owner: owner) }
         for path in paths where fm.fileExists(atPath: path.path) {
             try fm.removeItem(at: path)
         }
+    }
+
+    /// The helper/export/edit lock is the authority, including external CLI
+    /// owners. A cached GUI "stopped" state cannot authorize deleting its files.
+    private final class Lease {
+        let descriptor: Int32
+        init(_ descriptor: Int32) { self.descriptor = descriptor }
+        deinit { close(descriptor) }
+    }
+    private static func stoppedLease(_ owner: UUID?, state: URL) throws -> Lease? {
+        guard let owner else { return nil } // legacy profile-only stores
+        let work = state.appendingPathComponent("Devices/\(owner.uuidString)/work")
+        try checkRemovable(work, state: state, owner: owner)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        let descriptor = open(work.appendingPathComponent("lease").path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let lease = Lease(descriptor)
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0,
+              !FileManager.default.fileExists(atPath: work.appendingPathComponent("edit.json").path) else {
+            throw CocoaError(.fileWriteNoPermission, userInfo: [NSLocalizedDescriptionKey:
+                "This device’s storage is in use. Stop the device or finish its filesystem edit first."])
+        }
+        return lease
     }
 
     // MARK: - Removal
@@ -94,6 +119,8 @@ nonisolated enum DeviceStateStorage {
     /// first, so a crash mid-removal never leaves a half device that loads
     /// (DeviceInstance.all skips the name); the launch sweep finishes it.
     static func removeDevice(_ id: UUID, state: URL) throws {
+        let lease = try stoppedLease(id, state: state)
+        defer { withExtendedLifetime(lease) {} }
         let devices = state.appendingPathComponent("Devices", isDirectory: true)
         let directory = devices.appendingPathComponent(id.uuidString, isDirectory: true)
         let doomed = devices.appendingPathComponent(".deleting-\(id.uuidString)", isDirectory: true)

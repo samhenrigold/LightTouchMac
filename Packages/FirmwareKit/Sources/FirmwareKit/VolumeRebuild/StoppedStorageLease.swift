@@ -6,7 +6,7 @@ import Foundation
 final class StoppedStorageLease {
     private let descriptor: Int32
 
-    init(_ path: URL) throws {
+    init(_ path: URL, allowPendingEdit: Bool = false) throws {
         try FileManager.default.createDirectory(at: path.deletingLastPathComponent(),
             withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let fd = open(path.path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
@@ -17,7 +17,7 @@ final class StoppedStorageLease {
             close(fd)
             throw FirmwareError(.internal, "device storage is in use; stop the guest before exporting or editing")
         }
-        if FileManager.default.fileExists(atPath: path.deletingLastPathComponent().appendingPathComponent("edit.json").path) {
+        if !allowPendingEdit && FileManager.default.fileExists(atPath: path.deletingLastPathComponent().appendingPathComponent("edit.json").path) {
             close(fd)
             throw FirmwareError(.internal, "device has an unfinished edit session; resolve it before exporting")
         }

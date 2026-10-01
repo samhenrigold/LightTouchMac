@@ -103,7 +103,7 @@ final class N72Board: Board {
         // the machine boots every n72 device with the AMFI pair (qemu-ios ipod_touch_2g.c; N72Keybag.bootArgs)
         let kernel = try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped)
         try FitCheck.checkBootArgs(c.fit, kernel: kernel, args: FitCheck.amfiArgs.sorted().map { $0 + "=1" }.joined(separator: " "))
-        derived = ["nand_epoch": epoch, "wrap_shsh": major >= 3, "kernelcache_path": kcPath, "kernelcache_member": kcMember,
+        derived = ["storage_layout": "n72-generated-v1", "nand_epoch": epoch, "wrap_shsh": major >= 3, "kernelcache_path": kcPath, "kernelcache_member": kcMember,
                    "kernel": Self.firstMatch(try Data(contentsOf: c.decFile("kernelcache.mach")), /Darwin Kernel Version [^\x00]+/) ?? NSNull(),
                    "iboot": Self.firstMatch(iboot, /iBoot-[0-9.]+/) ?? "?", "direct_iboot": major >= 3]
         prefix = "Firmware/all_flash/all_flash.\(e.board).production/"

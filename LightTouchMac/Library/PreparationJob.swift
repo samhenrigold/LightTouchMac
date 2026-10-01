@@ -196,12 +196,9 @@ nonisolated final class PreparationJob: @unchecked Sendable {
     private func finish(_ event: Event) {
         if case .published = event {} else { try? DeviceStateStorage.removeTree(staging) }
         try? FileManager.default.removeItem(at: entryFile)
-        let sha1 = request.entry.source.sha1 ?? "-"
-        // FirmwareKit's versioned layout is decrypted-v<format>/<sha1>/…; <sha1> and <sha1>.tmp are the format-1 layout.
-        let formats = ((try? FileManager.default.contentsOfDirectory(atPath: request.cache.path)) ?? []).filter { $0.hasPrefix("decrypted-v") }
-        for name in [sha1, "\(sha1).tmp"] + formats.map({ "\($0)/\(sha1)" }) {
-            try? DeviceStateStorage.removeTree(request.cache.appendingPathComponent(name))
-        }
+        // Retain verified results for reuse. Cleanup is coordinated by the
+        // preparer's cache-prune command, which holds the same root lease as
+        // every reader; a completed job cannot delete another job's inputs.
         onEvent(event)
     }
 

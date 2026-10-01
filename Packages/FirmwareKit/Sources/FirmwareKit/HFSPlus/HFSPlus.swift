@@ -373,11 +373,12 @@ public final class HFSPlusVolume {
     /// record, in place. Without `mode` a record already at (uid, gid) is left alone, as build_nand.set_owner
     /// does; returns the number of records changed. Throws before writing anything if a path is missing.
     @discardableResult
-    public func setOwner(_ paths: [String], uid: UInt32, gid: UInt32, mode: UInt16? = nil) throws -> Int {
+    public func setOwner(_ paths: [String], uid: UInt32, gid: UInt32, mode: UInt16? = nil, flags: UInt32? = nil) throws -> Int {
         let idx = try index()
         let targets = try paths.map { p -> CatalogRecord in
             guard !p.split(separator: "/").isEmpty else { throw FirmwareError(.internal, "refusing to touch the volume root") }
-            return try resolve(p, idx)
+            let record = try resolve(p, idx)
+            return try record.isHardLink ? inode(record) : record
         }
         let t = try btree(catalogFork, fileID: Self.catalogID)
         var changed = 0, done = Set<UInt32>()
@@ -393,6 +394,10 @@ public final class HFSPlusVolume {
             } else if (r.uid, r.gid) != (uid, gid) {
                 try write(catalogFork, fileID: Self.catalogID, offset: at, bytes: patch)
                 changed += 1
+            }
+            if let flags {
+                try write(catalogFork, fileID: Self.catalogID, offset: at + 8,
+                    bytes: [UInt8(truncatingIfNeeded: flags >> 16), UInt8(truncatingIfNeeded: flags)])
             }
         }
         catalogCache = nil

@@ -190,10 +190,13 @@ final class StorageSettingsView: NSView {
 
     /// Only between preparations: a running one reads its decrypt cache.
     private func clearCaches() {
-        do {
-            try DeviceStateStorage.removeTree(IPSWStore.cachesDirectory.appendingPathComponent("Decrypted", isDirectory: true))
-            logEvent("storage: cleared the decrypt cache")
-        } catch { NSApp.presentError(error) }
-        reload()
+        guard let executable = FirmwareJobs.preparer else { return }
+        Task {
+            do {
+                _ = try await FirmwareTool.run(["cache-prune", "--root", IPSWStore.cachesDirectory.appendingPathComponent("Decrypted").path], executable: executable)
+                logEvent("storage: cleared unused decrypt cache")
+            } catch { NSApp.presentError(error) }
+            reload()
+        }
     }
 }

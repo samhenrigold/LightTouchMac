@@ -10,6 +10,7 @@ import Foundation
 /// placeholder offer for one catalog entry.
 nonisolated enum DeviceAction: CaseIterable, Sendable {
     case start, stop, downloadAndPrepare, importIPSW, cancel, erase, showInFinder, delete
+    case openFilesystem, commitFilesystem, discardFilesystem, recoverFilesystem
 }
 
 /// A download or preparation in flight for a catalog entry (FirmwareJobs).
@@ -237,6 +238,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
             return !isStartable && entry.status != .comingSoon && !working
         case .cancel: return !hasSession && working
         case .erase: return instanceID != nil && !working
+        case .openFilesystem, .commitFilesystem, .discardFilesystem, .recoverFilesystem:
+            return instanceID != nil && !working && state != .running && state != .stopping
         case .showInFinder: return instanceID != nil
         case .delete: return instanceID != nil && !hasSession && !working
         }
