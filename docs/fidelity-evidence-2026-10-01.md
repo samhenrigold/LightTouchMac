@@ -362,3 +362,22 @@ This proves the leaf correction, not the complete production call-chain
 migration. Async propagation and cancellation-safe storage/CLI ownership
 are still in progress and unqualified. Evidence:
 `/Users/shg/Developer/ltm-evidence/subprocess-starvation-2026-10-01`.
+
+## D7C sequencer result latch qualified
+
+QEMU c60d637ba2 retains the observed opcode02/zero-immediate D7C result
+store and exposes the scalar to sequencer reads and CPU diagnostics. Other
+write forms remain explicitly unsupported. Reset and VMState v11 preserve
+ownership; loading an actual v10 stream clears the absent field while
+preserving older parameters. No auxiliary result, ECC operation, flash
+transfer or completion event was synthesized.
+
+The compiled baseline fails exact readback. Six actual-source sanitizer
+checks, all12 model suites (FMSS20/20), and independent native8/8 pass,
+including guest-confirmed shutdown, identical persisted bytes after reboot,
+and fsck_hfs. Graphics additions and legacy storage execution remain in use.
+Textual evidence and hashes are retained at
+`/Users/shg/Developer/ltm-evidence/fmss-d7c-2026-10-01`.
+
+The subsequent stock blank-flash erase trace is in progress. Full restore,
+restored cold boot, and durable subsequent writes remain unqualified.
