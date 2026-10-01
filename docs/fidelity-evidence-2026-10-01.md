@@ -379,5 +379,9 @@ and fsck_hfs. Graphics additions and legacy storage execution remain in use.
 Textual evidence and hashes are retained at
 `/Users/shg/Developer/ltm-evidence/fmss-d7c-2026-10-01`.
 
-The subsequent stock blank-flash erase trace is in progress. Full restore,
-restored cold boot, and durable subsequent writes remain unqualified.
+The subsequent stock blank-flash erase trace stops at D3C bulk+0x2f0
+(105961 unsupported reads) and six diagnostic op01 D7C/Cafebabe writes
+at+0x60. The measured D7C result read no longer stops this trace. Stock
+restored still waits eight times for NAND; the bounded harness intentionally
+exits1 and reaps its owned processes. Full restore, restored cold boot, and
+durable subsequent writes remain unqualified.
