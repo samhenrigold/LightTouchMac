@@ -793,3 +793,9 @@ graphics additions; it does not qualify physical restore or raw graphics.
 Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d34-d48-2026-10-01`.
 A separate disposable stock erase restore trace is in progress. D54 loop
 state and Dxx writes remain distinct contracts.
+
+Stock restore against cf8c118a8e completed its bounded trace and owned-process
+cleanup. It reached stock restored protocol11 but again waited eight times for
+NAND. The next stops are D38+0x158 (106112) and D54+0x330 (21726), with no
+remaining D34/D48 stop in this capture. This is progress in contract coverage,
+not a successful restore. Text evidence is archived under the D34/D48 receipt.

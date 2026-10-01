@@ -6,8 +6,8 @@ import IOSurface
 /// One running device's LightTouchDevice (docs/multi-device-plan.md, A): spawned
 /// with its own native.log, its hello checked against the board, booted once.
 /// It dies once (`onDeath`, with the reason the row and the dead overlay show);
-/// a restart is a new DeviceProcess. Foundation only: tests/sessions/check-sessions.py
-/// and tests/offline/check-reap-reason.py compile this file as the app does.
+/// a restart is a new DeviceProcess. Session tests currently compile this app
+/// adapter; the boot recipe and storage lease come from the real HostRuntime module.
 @MainActor final class DeviceProcess {
     let link: DeviceLink
     let profile: DeviceProfile
@@ -82,7 +82,8 @@ import IOSurface
         }
     }
 
-    /// SIGTERM: the helper runs its own clean shutdown (bounded) and exits.
+    /// SIGTERM: the helper pauses storage and halts QEMU within a bounded time.
+    /// This does not request a guest filesystem shutdown.
     /// Never after its death (the link also zeroes its pid on reap).
     func terminate() { if !isDead { stopRequested = true; link.terminate() } }
     func kill() { if !isDead { link.kill() } }

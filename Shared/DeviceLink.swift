@@ -109,7 +109,8 @@ nonisolated final class DeviceLink: @unchecked Sendable {
         self.queue = queue
     }
 
-    /// Dropping the link closes the socket: the helper sees EOF and shuts down cleanly.
+    /// Dropping the link closes the socket: EOF asks the helper to halt QEMU.
+    /// The bounded host halt does not imply a guest filesystem shutdown.
     deinit {
         channel?.close()
         exitSource?.cancel()
