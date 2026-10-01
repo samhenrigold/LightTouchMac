@@ -67,7 +67,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-guest-package-') as t:
 
     check = r'''
 import Foundation
-struct GuestPackageReport: Sendable, Equatable { var serial: Int64; var result: Int32 }
+__SHARED_PACKAGE_REPORT__
 enum DeviceToolsError: Error { case failed(String) }
 func files(_ dir: URL) -> [String: Data] {
   var out: [String: Data] = [:]
@@ -203,6 +203,9 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   } catch {}
   precondition(!FileManager.default.fileExists(atPath: dir.path))
   // UI status.''')
+    shared_status = (root / 'Shared/SharedStatus.swift').read_text()
+    report = shared_status[shared_status.index('nonisolated struct GuestPackageReport:'):shared_status.index('nonisolated struct StatusBlock:')]
+    check = check.replace('__SHARED_PACKAGE_REPORT__', report)
     (t / 'check.swift').write_text(check.replace('GuestPackage.Manifest.mbx', '"%s"' % MBX).replace('ENTRY_COUNT', str(len(entries))))
     app = root / 'LightTouchMac'
     subprocess.run(['xcrun', 'swiftc', str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',

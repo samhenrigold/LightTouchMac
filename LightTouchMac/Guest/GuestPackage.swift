@@ -321,3 +321,82 @@ nonisolated enum GuestPackage {
         return .current(serial: report.serial)
     }
 }
+
+
+/// Qualifies one cold boot's automatic additions without owning a window or
+/// emulator. The caller owns the task (BootSessionScope in the GUI), supplies
+/// fresh device observations, and persists emitted record changes.
+@MainActor
+struct GuestPackageSession {
+    struct Observation {
+        var report: GuestPackageReport?
+        var record: DeviceInstance.Guest?
+        var glesProtocol: Int32
+        var healthy: Bool
+    }
+    struct Update {
+        var status: GuestPackage.Status
+        var changedReport: GuestPackageReport?
+        var verdict: GuestPackage.Verdict?
+
+        var changesRecord: Bool {
+            if changedReport != nil { return true }
+            switch verdict { case .good?, .bad?: return true; default: return false }
+        }
+
+        func apply(to record: inout DeviceInstance.Guest) {
+            if let changedReport { record.active = changedReport.serial }
+            switch verdict {
+            case .good(let serial)?:
+                record.lastGood = serial
+                record.bad.removeAll { $0 == serial }
+            case .bad(let serial)?:
+                if !record.bad.contains(serial) { record.bad.append(serial) }
+            default: break
+            }
+        }
+    }
+
+    private let offer: GuestPackage.Offer
+    private var healthySince: Duration?
+    private var seen: GuestPackageReport?
+    private var finished = false
+
+    init(offer: GuestPackage.Offer) { self.offer = offer }
+
+    /// Elapsed time is measured by the owner's monotonic clock, never the RTC
+    /// or wall clock (which can change during timezone synchronization).
+    mutating func observe(_ observation: Observation, elapsed: Duration) -> Update? {
+        guard !finished else { return nil }
+        let report = observation.report
+        let changedReport = report != seen ? report : nil
+        if let changedReport { seen = changedReport }
+        if observation.healthy { healthySince = healthySince ?? elapsed }
+        else { healthySince = nil }
+        let steady = healthySince.map { elapsed - $0 } ?? .zero
+        let verdict = GuestPackage.verdict(report: report, healthyFor: steady, elapsed: elapsed,
+                                          record: observation.record, restored: false)
+        finished = verdict != nil
+        let status = verdict == .legacy ? GuestPackage.Status.legacy
+            : GuestPackage.status(report: report, offer: offer, record: observation.record,
+                                  glesProtocol: observation.glesProtocol)
+        return Update(status: status, changedReport: changedReport, verdict: verdict)
+    }
+
+    /// Nil observation retires this watch. Cancellation is checked after every
+    /// suspension before sampling or publishing, so an old boot cannot write
+    /// a verdict even if the caller still has a valid status block.
+    static func watch(offer: GuestPackage.Offer, interval: Duration = .seconds(1),
+                      sample: () -> Observation?, publish: (Update) -> Void) async {
+        let started = ContinuousClock.now
+        var session = Self(offer: offer)
+        while !Task.isCancelled {
+            do { try await Task.sleep(for: interval) } catch { return }
+            guard !Task.isCancelled, let observation = sample(),
+                  let update = session.observe(observation, elapsed: ContinuousClock.now - started) else { return }
+            guard !Task.isCancelled else { return }
+            publish(update)
+            if update.verdict != nil { return }
+        }
+    }
+}

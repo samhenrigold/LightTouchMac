@@ -1323,44 +1323,31 @@ final class EmulatorController {
         guard let offer = guestOffer else { return }
         let generation = bootGeneration
         guestPackageTask = Task { [weak self] in
-            let started = ContinuousClock.now
-            var healthySince: ContinuousClock.Instant?
-            var seen: GuestPackageReport?
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+            await GuestPackageSession.watch(offer: offer, sample: { [weak self] in
                 guard let self, generation == self.bootGeneration, !self.isDead, !self.shuttingDown,
-                      let status = self.status else { return }
-                let report = status.guestPackage
-                if let report, report != seen {
-                    seen = report
-                    logEvent("guest package: loader reports serial \(report.serial), result \(report.result)")
-                    self.updateGuestRecord { $0.active = report.serial }
-                }
-                self.guestToolsStatus = GuestPackage.status(report: report, offer: offer, record: self.guestRecord,
-                                                            glesProtocol: status.glesProtocol)
-                // The iPod: the agent answers its channel. The iPad has no agent;
-                // lockdown answering stands in for its pasteboard agent (the
-                // dylib exports no pasteboard-agent status).
+                      let status = self.status else { return nil }
+                // iPods report their agent channel; iPads use a real lockdown
+                // round trip because the helper has no pasteboard-agent status.
                 let healthy = self.state == .running && status.uiReady
                     && (self.hasGuestTools ? status.agentStatus == 1 : self.deviceReachable == true)
-                if healthy { healthySince = healthySince ?? .now } else { healthySince = nil }
-                let steady = healthySince.map { ContinuousClock.now - $0 } ?? .zero
-                switch GuestPackage.verdict(report: report, healthyFor: steady, elapsed: ContinuousClock.now - started,
-                                            record: self.guestRecord, restored: false) {
-                case nil: continue
-                case .good(let serial)?:
-                    self.updateGuestRecord { $0.lastGood = serial; $0.bad.removeAll { $0 == serial } }
-                    logEvent("guest package: serial \(serial) judged good")
-                case .bad(let serial)?:
-                    self.updateGuestRecord { if !$0.bad.contains(serial) { $0.bad.append(serial) } }
-                    logEvent("guest package: serial \(serial) judged bad (no healthy session in \(GuestPackage.badAfter))")
-                case .legacy?:
-                    self.guestToolsStatus = .legacy
-                    logEvent("guest package: no report; legacy baked guest tools")
-                case .undecided?: break
+                return .init(report: status.guestPackage, record: self.guestRecord,
+                             glesProtocol: status.glesProtocol, healthy: healthy)
+            }, publish: { [weak self] update in
+                guard let self, generation == self.bootGeneration, !self.isDead, !self.shuttingDown else { return }
+                if let report = update.changedReport {
+                    logEvent("guest package: loader reports serial \(report.serial), result \(report.result)")
                 }
-                return
-            }
+                if update.changesRecord {
+                    self.updateGuestRecord { update.apply(to: &$0) }
+                }
+                self.guestToolsStatus = update.status
+                switch update.verdict {
+                case .good(let serial)?: logEvent("guest package: serial \(serial) judged good")
+                case .bad(let serial)?: logEvent("guest package: serial \(serial) judged bad (no healthy session in \(GuestPackage.badAfter))")
+                case .legacy?: logEvent("guest package: no report; legacy baked guest tools")
+                default: break
+                }
+            })
         }
     }
 
