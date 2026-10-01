@@ -444,3 +444,29 @@ at+0x308 (106118 unsupported reads) and seven diagnostic immediate D7C
 writes. Stock restored waits eight times for NAND; the intentional
 research-stop exit1 reaps owned processes. Physical controller execution,
 full restore and restored durability remain unqualified.
+
+## D24 integration deferred after two native boot failures
+
+A bounded D24 CPU address-latch/read proposal passes six sanitizer gates,
+all12 model suites (FMSS23/23), and real v12 incoming/v13 roundtrip checks.
+It is nevertheless unqualified: both3.1.3 and2.1.1 native boots fail iBoot
+VFL context loading and enter recovery. Root stopped/reaped both owned
+harnesses with interrupt130 after confirmed failure; the remaining guest
+checks did not run. No passing native gate or full firmware capability is
+claimed. An initial migration helper omission is also retained separately.
+
+Two independent actual-interpreter proofs isolate an earlier new mutation:
+D24=0 bypasses optional counters, then shipping iBoot's newly reached
+FMC60/64/68 stores overwrite valid12-byte spare metadata already loaded by
+the legacy CPU D38 shortcut with0/0/ffff0000. D2C read at+0x480 is later.
+The proof uses known synthetic RAM metadata, not a raw native memory capture.
+The latch itself is not disproven; incomplete controller execution and
+duplicate transfer ownership make its integration unsafe.
+
+The exact seven-file candidate and failed receipts are preserved, and only
+that candidate was withdrawn from production. The verified source remains
+280e4584cd; D24 has no production commit or source pin. Required next work
+is one measured NAND transfer owner and command/CE/row/column/read-data
+transport. Mirroring the last CPU-loaded spare, suppressing guest stores,
+or inventing successful ECC results would conceal the boundary problem.
+Evidence: `/Users/shg/Developer/ltm-evidence/fmss-d24-deferred-2026-10-01`.
