@@ -343,3 +343,22 @@ after guest shutdown/reboot and fsck. This qualifies the register form that
 earlier D48 tests deliberately avoided; it does not qualify auxiliary
 controller operations. Evidence:
 `/Users/shg/Developer/ltm-evidence/fmss-register-or-2026-10-01`.
+
+The bounded stock erase trace after register OR again records106112 D7C
+reads at+0x218, then eight Waiting for NAND messages. No restore success
+was inferred from corrected control bits; own processes were reaped.
+
+## Async subprocess leaf proven in isolation
+
+An isolated whole-source build reproduces the real DiskImage.exec deadlock
+with64 harmless printf requests under ordinary executor settings. An external
+15-second supervisor terminates/reaps the blocked test. A private direct
+async Subprocess leaf completes64 equivalent exact-output requests; nonzero
+exit/stdout+stderr, signal, closed stdin, spawn failure and cancellation also
+pass. The canceled owned child is absent and already reaped after await.
+No disk tools, mounts, guests or shared cache were used by this comparison.
+
+This proves the leaf correction, not the complete production call-chain
+migration. Async propagation and cancellation-safe storage/CLI ownership
+are still in progress and unqualified. Evidence:
+`/Users/shg/Developer/ltm-evidence/subprocess-starvation-2026-10-01`.
