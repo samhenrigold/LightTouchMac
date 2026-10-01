@@ -749,4 +749,6 @@ Diagnostic-only traces now reach D34 reads in the iBoot/kernel bulk paths and
 D48 in a separate kernel script. The exact live descriptor word was not captured;
 this progress does not establish a complete ISA, flash execution or completion.
 Evidence: `/Users/shg/Developer/ltm-evidence/fmss-opcode14-2026-10-01`.
-A fresh stock erase trace is in progress; no restore pass is claimed.
+The completed production-bridge stock5F138 erase trace now reaches D34
+at bulk +0xda0, D54 at read +0x330 and D48 at status +0x30. Eight Waiting
+for NAND responses trigger research stop/reap; no restore pass is claimed.
