@@ -32,10 +32,10 @@ refuses physical formats it cannot interpret correctly.
 | Per-device service routing | Demonstrated hazard guarded and regression tested | Immutable per-device endpoint workers replace GUI C calls; stalled A does not block B, cancellation kills/reaps children, and a retired session cannot reopen. Native guest services pass 12/12. |
 | Timezone lifecycle and children | Implemented and cancellation/deadline tested | BootSessionScope now owns readiness, recovery, staging, activation, installation, reset and synchronization tasks plus the observer. Controller orchestration can be reduced further as responsibilities stabilize. |
 | Shared catalog / boot recipe types | Boot-field loss fixed and round-trip tested | Shared Foundation-only FirmwareWire preserves all catalog fields, including source resources. GUI does not import preparation machinery. |
-| Developer SSH/SFTP/GDB | Automatic opt-in guest offer and per-instance keys; modern host SSH/SFTP passes on clean 7E18 and 7B500 under load | Pinned-source shell and full source/license receipt are packaging-qualified. Older firmware requires its own ABI proof. QEMU GDB uses an explicitly enabled stub; automatic GUI launch and application debugserver remain separate capabilities. |
+| Developer SSH/SFTP/GDB | Automatic opt-in guest offer and per-instance keys; modern host SSH/SFTP passes on 5F138, 7A341, 7E18, 8C148 and 7B500 | Pinned-source shell and full source/license receipt are packaging-qualified. The legacy Bash ABI now passes actual SSH/SFTP and cold persistence on all four iPod builds; 1.x and 5.x remain unqualified. QEMU GDB uses an explicitly enabled stub; automatic GUI launch and application debugserver remain separate capabilities. |
 | Native Finder discovery/media sync | Removed from scope at the user’s request | No virtual-controller adapter or entitlement request. Ordinary stopped HFS mounts and guest-mediated services remain. |
 | Matrix evidence identity/publication | Implemented and real concurrent-process tested | Broader corpus execution and acceptance inventory remain ongoing engineering work. |
-| Test prerequisites / real model coverage | Three explicit production qtest suites established | Explicit emulator test registrations replace source-text classification; physical flash and snapshot contracts now have actual model tests. Convert remaining high-risk DMA/IRQ/reset coverage incrementally. Skipped tests are not compatibility proof. |
+| Test prerequisites / real model coverage | Eleven explicit production model suites established | Explicit emulator test registrations replace source-text classification; physical flash, clock, radio, chip-ID and snapshot contracts now have actual model tests. Convert remaining high-risk DMA/IRQ/reset coverage incrementally. Skipped tests are not compatibility proof. |
 | Cache pruning ownership | Shared preparation leases and exclusive prune CLI implemented | GUI and matrix call the same maintenance boundary. Verified cache remains reusable; concurrent external consumers prevent pruning. |
 | Capacity handling | Implemented, shared GUI/preparation leaf, tested | Preserve the small dependency boundary; no need to introduce another storage framework. |
 | ANGLE adoption | Comparative ES1 prototype evaluated; CGL retained | Exact ES1 pixels/readback and native sharegroups pass, but K48 composition fails on ES2 and legacy N72 requires rectangle semantics. Snapshots refuse explicitly. No net code or stability benefit demonstrated; prototype is research-only. |
@@ -463,3 +463,27 @@ logging clock; the corrected full roundtrip passes.
 Upstream refs were refreshed at 11:28 UTC; requested local targets remain
 multidevice `af0c867` and ipad1 `fd5a1d0845`. Their working files remain untouched.
 The rewritten remote ipad1 history remains deliberately unmerged.
+
+### N72 DFU / ECID and final bundle gates
+
+The matched universal ad-hoc bundle from clean app `8ba30bc`, QEMU
+`a5e2c8c529` and usbmuxd `e19fac2` passes source/license hygiene, 32 release
+provenance fixtures, and actual packaged 2.1.1/3.0/3.1.3/4.2.1 lifecycle
+checks: 18/18 each. Logs: `/private/tmp/ltm-final-bundle-gates.log` and
+`/private/tmp/ltm-n72-{211,30,313,421}-final-bundle-session`.
+
+QEMU follow-up `ae75469472` models read-only N72 ECID fuse inputs at the
+registers the stock ROM/iBSS actually read. Both unchanged defaults and
+provisioned fuses survive reset and reject guest writes in production-board
+qtests. All eleven model suites pass without skips and the required full
+iPod default regression remains 8/8. Native stock ROM DFU → unmodified
+5F138 iBSS recovery reports the configured ECID unchanged, and stock
+idevicerestore can now select that emulated target. The next stop is the
+host's old-IPSW suitability check, not completed restore. Automatic per-device
+N72 ECID provisioning is still open; existing generated devices keep zero
+defaults. See QEMU `docs/research/n72-dfu-recovery.md`.
+
+The app source pin advances to that individually tested follow-up. A new
+bundle's build receipt must match the new pin before its native lifecycle
+result can be combined with the preceding qualification. The consolidated
+[overnight notes](overnight-fidelity-2026-10-01.md) preserve what remains.

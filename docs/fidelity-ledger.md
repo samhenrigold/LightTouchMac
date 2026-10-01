@@ -379,7 +379,7 @@ mirror (unchanged).
 | 5 | PMGR clock tree | S | K48 #9; unknown: the PLL/divider encoding | The reconstructed table; 4.3+ reads new pmgr props (`voltage-states0`, performance domains) |
 | 6 | Display pipe: all layers/modes, CLCD-derived VBL | H/S | K48 #24 (all layers and modes) + #25 (refresh from timing); unknown: which modes 4.3+/5.x program | The UI0/UI1-only assumption (4.x already needed the rectangle fix) |
 | 7 | D1815 PMU | H | K48 #15 (power-down/resume through the ROM, all ADC channels, regulators); gate: 4.x and 5.x halts and sleep without shortcuts | Sleep/resume shortcuts |
-| 8 | Delete inert code (`it-hle`, `HOST_GMT_SECONDS`, banner table, `IT_*` env) | P/S | Deletion only | Confusion |
+| 8 | Delete inert code (`it-hle`, `HOST_GMT_SECONDS`, banner table, `IT_*` env) | P/S | Fixed-address TCG libc substitutions retired and default regression passes; audit the remaining items separately | Confusion and guest-address interception |
 | 9 | BCM4329/4325 protocol coverage per driver generation (still H) | H | One protocol pass per driver generation; unknown: the iovars each generation adds | AppleBCMWLAN 2.60 vs AppleBCMWLANCore (5.x: firmware from `/usr/share/firmware/wifi/4329b1/duo.bin`, new iovars) |
 | 10 | Multitouch: answer from the downloaded firmware's own tables rather than `mt_profile_k48` | H | Answer from the downloaded firmware's own tables | Per-board profile tables; still not R |
 | 11 | SGX535 GPU (docs/research/sgx535-feasibility.md §3; first milestone the MMU walk, K48 #54) | absent | Six phases: registers + MMU, driver init, USSE1 interpreter, TA/ISP, fragment/texture, host shader translation; go/no-go: decoding the undocumented USSE1 encoding | The GL shim, gld plugin, dyld override, SpringBoard env, `amfi_allow_any_signature`/`cs_enforcement_disable` (once no other injected code remains) |
@@ -446,7 +446,8 @@ The test runner exposes `--single ... --launch --reboot` and judges those gates.
 Evidence: `/private/tmp/ltm-n72-{211,30,421}-legacy13-signed-session` and
 `/private/tmp/ltm-n72-313-legacy13-session`. The iPad's armv7 helpers are unchanged.
 This closes the absent 2.x/3.0 core-helper seam; typing, clipboard, download
-placeholders, media and developer SSH still require older-firmware API proofs.
+placeholders and media still require older-firmware API proofs. Developer SSH/SFTP
+is now qualified on all four iPod builds through a shared legacy Bash payload.
 
 ### Radio identity and network presence (2026-10-01)
 
@@ -462,3 +463,13 @@ The network-disabled identity/snapshot controls now pass 2.1.1, 3.0, 3.1.3 and
 4.2.1 before and after resume. The default eight-check 7E18 tier also passes.
 QEMU candidate: `cbf1000344`; evidence and residual contracts are recorded in
 [remaining work](remaining-work-2026-09-30.md).
+
+### Real-ROM N72 DFU identity
+
+Stock SecureROM enumerates DFU through the existing emulator-only USB bridge;
+unaltered 5F138 iBSS uploads and re-enumerates in recovery. QEMU `ae75469472`
+adds read-only chip-ID fuse inputs so ROM/iBSS ECID is a hardware read instead
+of hard-coded zero. Stock idevicerestore selects the configured identity; its
+next stop on 2.1.1 is host firmware suitability validation. Eleven model suites
+and the default eight-check iPod tier pass. Automatic N72 ECID provisioning,
+iBEC/ramdisk/physical restore and cold stock GPU remain unqualified.
