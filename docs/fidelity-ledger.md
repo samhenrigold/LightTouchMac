@@ -688,3 +688,14 @@ real helper preparation-failure cleanup and native prepared N72 startup/AFC
 checks pass. Broader service/process reuse, managed boot-path authority and
 malformed lock typing remain. Details and evidence: architecture-followup-2026-10-01.md
 and `/Users/shg/Developer/ltm-evidence/host-runtime-2026-10-01`.
+
+### October 1: stock sequencer mask intersection
+
+QEMU 0fb13887b1 adds the observed opcode0A register/immediate AND forms,
+corroborated by actual stock5F138 script dataflow. The preceding model fails
+the sanitizer overlap test; actual-handler sanitizers, real FMSS qtests7/7
+and independent default7E18 native two-boot8/8 pass. Evidence:
+`/Users/shg/Developer/ltm-evidence/fmss-opcode0a-2026-10-01`.
+Other arithmetic, physical storage, erase and aborted-script completion remain
+separate contracts. The next stock restore trace is still being investigated;
+no full physical restore/coldboot qualification follows from this correction.
