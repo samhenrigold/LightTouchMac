@@ -523,9 +523,9 @@ hashlib; interrupt and snapshot-state tests pass. Its separate default native
 
 An unmodified stock 5F138 restore ramdisk now runs `launchd` and two
 `restored_update` processes after 60 seconds, without watchdog suppression.
-Process presence is not a restore protocol success. The kernel USB trace waits
+Process presence alone was not a restore protocol success. The initial kernel USB trace waited
 with RESET/ENUMDONE interrupts enabled while the retained recovery connection
-receives descriptor NAKs. Actual host bus reset/re-enumeration is being tested;
+receives descriptor NAKs. Actual host bus reset/re-enumeration was subsequently verified (below);
 no fabricated descriptor, forced guest completion, or production delay was
 added. Rapid post-DFU polling separately reproduces a SecureROM abort/reset.
 Physical N72 formatting, full restore, encrypted restored cold boot and removal
@@ -539,3 +539,57 @@ Evidence: `/private/tmp/ltm-aes-restore-default`,
 `/private/tmp/ltm-sha1-restore-default`,
 `/private/tmp/ltm-n72-ramdisk-aes-fixed/ramdisk-comparison.json`, and
 `/private/tmp/ltm-n72-kernel-processes/processes.json`.
+
+### Stock N72 restore transport and legacy client reuse (2026-10-01)
+
+QEMU `5d1e9dfd9c` re-enumerates the actual guest USB address reset and separates
+descriptor discovery from configuration selection. Kernel USB is handed to
+usbmuxd under the request lock before selecting a recovery configuration;
+five registered unit tests pass. A native stock erase ramdisk then reaches
+com.apple.mobile.restored protocol 11 and starts the erase protocol. It
+repeatedly reports "Waiting for NAND (28)" on disposable empty page directories
+with FMSS_PHYSICAL and FMSS_ERASE enabled. The session was stopped and is
+recorded as a failure, not a full restore or physical NAND qualification.
+
+Reuse LukeZGD's idevicerestore compatibility behavior rather than fabricating
+an ECID response in old restored. Its upstream `9e6eacc788d532b887b9b0883477d6b89c5a2841`
+already handles the real pre-iOS 3 HardwareInfo response without UniqueChipID.
+The private client branch adds `26314aa`, an actual legacy ProductType lifetime
+fix reproduced with ASan and verified with ASan/UBSan. With original stock
+firmware metadata, the boot-only probe exits successfully in restore mode;
+the earlier SupportedProductTypes metadata copy is unnecessary. The client
+has not been installed or incorporated into a release dependency receipt.
+
+A diagnostic-only DFU manifest settling interval remains in these probes.
+A subsequent trace still reproduced the reconnect race; unattended DFU,
+physical erased bytes/erase commands, flash formatting, restored cold boot and
+durable subsequent writes remain open. Preserve the generated-store path
+until those deletion gates pass. No new production delay or guest patch.
+
+Durable evidence: `/Users/shg/Developer/ltm-evidence/restore-usb-2026-10-01`.
+The clean universal app cc67737 / QEMU 31036cf8e9 / USB e19fac2 candidate also
+passes actual native 2.1.1 session 18/18, both Mach-O architecture closures at
+minimum macOS 14.4, and ad hoc signature verification. Those are packaging
+and native arm64 results, not Intel-runtime or notarization qualification.
+Its evidence: `/Users/shg/Developer/ltm-evidence/restore-crypto-2026-10-01`.
+
+### FMSS D4C and actual restore arguments (2026-10-01)
+
+QEMU ace95b664b latches the real CPU-supplied D4C sequencer parameter, including
+MMIO readback, reset and FMSS VMState6/older-stream initialization. Real FMSS
+qtests 4/4, sanitized handler/script tests, and a separate default native
+7E18 two-boot 8/8 pass. No restore completion is implied. The subsequent
+native stock trace advances from D4C to the unsupported D18 read at +0x68.
+
+Actual kernel PE_boot_args readout is
+`rd=md0 nand-enable-reformat=1 -progress `. The stock formatting option is
+already present in this probe; the legacy client's build-major argument
+policy is not the measured blocker and was not changed. D18/D28 register and
+descriptor-load execution, actual erase and honest sequencer failure remain.
+Durable D4C evidence: `/Users/shg/Developer/ltm-evidence/fmss-d4c-2026-10-01`.
+BootArgs/next divergence: `/private/tmp/ltm-n72-d4c-stock-bootargs-trace`.
+
+Host b5e9af2 independently extracts package qualification into a boot owner;
+actual app build and owner cancellation/verdict/oracle tests pass. Further
+GUI/CLI runtime module separation remains open. See
+architecture-followup-2026-10-01.md for MBX source/capture/replay scope.

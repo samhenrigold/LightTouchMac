@@ -553,3 +553,43 @@ Evidence: `/private/tmp/ltm-aes-restore-default`,
 `/private/tmp/ltm-sha1-restore-default`,
 `/private/tmp/ltm-n72-ramdisk-aes-fixed/ramdisk-comparison.json`, and
 `/private/tmp/ltm-n72-kernel-processes/processes.json`.
+
+### Stock restore transport progress (2026-10-01)
+
+The N72 stock restore daemon now replies on actual emulated kernel USB;
+QEMU 5d1e9dfd9c fixes reset/re-enumeration and exclusive mux handoff. Reusing
+LukeZGD idevicerestore's existing pre-iOS 3 support lets the original 5F138
+firmware metadata reach restore mode without our earlier plist workaround.
+A small private client lifetime fix is ASan/UBSan verified. Nothing installed.
+
+The stock erase protocol starts but repeatedly reports Waiting for NAND (28)
+on disposable empty storage in physical relocation mode. This is the next
+measured blocker, not a successful blank-flash restore. N72 still synthesizes
+absent-page bytes and infers erase from writes; trace the actual driver before
+changing those contracts. Rapid DFU reconnect remains an independent failure;
+the private probes explicitly retain diagnostic settling, absent from the
+production bridge. Preserve generated FTL compatibility until full restore,
+cold boot and durable later writes pass.
+
+Detailed results and source pins are in fidelity-ledger.md and durable evidence
+`/Users/shg/Developer/ltm-evidence/restore-usb-2026-10-01`. The separate clean
+cc67737/31036cf8e9 universal candidate passes native 2.1.1 session 18/18 and
+closure/signature checks; those results do not qualify later Swift edits.
+
+### Host qualification owner and measured hardware follow-up
+
+App b5e9af2 extracts cold-boot package qualification into GuestPackageSession;
+actual owner/cancellation/oracle checks and actual app build pass. It reduces
+controller responsibility, not a complete GUI/CLI shared-runtime module.
+
+QEMU ace95b664b fixes the measured stock D4C parameter latch; real snapshot
+qtests 4/4 and default native 7E18 8/8 pass. Further script operations remain
+unsupported, so no restore completion follows. Independent N72 MBX fill
+capture now agrees with pinned S5LBox code in sanitizer replay; post-stall
+GART capture does not establish live graphics completion or full composition.
+The consolidated new review is architecture-followup-2026-10-01.md.
+
+The post-D4C stock capture confirms nand-enable-reformat=1 is already in
+actual kernel BootArgs; the host argument-policy lead is not this blocker.
+Dynamic tracing advances to unsupported D18. The app pins verified ace95b664b;
+that does not qualify any subsequent hardware prototype.
