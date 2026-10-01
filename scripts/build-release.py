@@ -183,9 +183,26 @@ def prepare_developer_tools(args, env, log):
     return payload
 
 
+def guest_inputs_now(args, manifest):
+    """Use the exporter's own inventory, including SDK/toolchain inputs."""
+    try:
+        env = dict(os.environ)
+        env.setdefault('ARMV6_SDK', manifest['build_context']['sdk']['armv6']['path'])
+        env.setdefault('IPAD_SDK', manifest['build_context']['sdk']['ipad']['path'])
+        if args.sdk:
+            env['ARMV6_SDK'] = str(args.sdk)
+        command = [sys.executable, args.qemu_source / 'contrib/guest-package/build_inputs.py']
+        current = json.loads(subprocess.check_output(command, env=env, text=True, stderr=subprocess.PIPE))
+        if not isinstance(current, dict):
+            raise ValueError('guest input snapshot must be an object')
+        return current
+    except (subprocess.CalledProcessError, ValueError, KeyError, TypeError, OSError) as error:
+        raise ValueError(f'Cannot verify guest build inputs; rebuild guest tools: {error}') from error
+
+
 def validate_guest(args, guest):
     """The export's manifest is the record: every staged file at its hash, the required names present, and the
-    sources it read (commit and input hashes) unchanged in the checkout."""
+    sources, SDKs and tools it read unchanged; legacy manifests require the same commit."""
     manifest = read_record(guest.parent / 'manifest.json', 'schema')
     source = manifest.get('source', {})
     if Path(source.get('path', '')).resolve() != args.qemu_source:
@@ -205,12 +222,21 @@ def validate_guest(args, guest):
         if {path.name for path in directory.iterdir()} != set(staged):
             raise ValueError(f'{description} directory differs from the export manifest: {directory}')
         verify_hashes(directory, staged, description)
-    if source.get('commit') != pins.head(args.qemu_source)[0]:
-        raise ValueError(f'Guest tools were built from qemu-ios {source.get("commit")}, not the checkout\'s HEAD; rebuild guest tools')
-    for name, checksum in manifest_hashes(manifest.get('inputs'), 'guest source').items():
+    inputs = manifest_hashes(manifest.get('inputs'), 'guest source')
+    for name, checksum in inputs.items():
         path = args.qemu_source / name
         if not path.is_file() or digest(path) != checksum:
             raise ValueError(f'Guest source inputs have changed ({name}); rebuild guest tools')
+    if manifest.get('build_context'):
+        current = guest_inputs_now(args, manifest)
+        if current.get('inputs') != inputs:
+            raise ValueError('Guest source input inventory has changed; rebuild guest tools')
+        if current.get('build_context') != manifest['build_context']:
+            raise ValueError('Guest SDK or toolchain inputs have changed; rebuild guest tools')
+        # Preserve the original build commit in the manifest. A hardware/docs
+        # commit with identical guest inputs requires no compilation.
+    elif source.get('commit') != pins.head(args.qemu_source)[0]:
+        raise ValueError(f'Guest tools were built from qemu-ios {source.get("commit")}, not the checkout\'s HEAD; rebuild guest tools')
     return manifest
 
 
@@ -861,21 +887,22 @@ def staged(args, env, log):
         validate_guest(args, guest)
         developer = prepare_developer_tools(args, env, log)
         run([firmwarekit, 'developer-audit', '--payload', developer], env, log)
+        sources = sources_now(args)
+        record = write_build_record(args, sources, native_root, build, guest)
         inputs = tree_stamp(product, build / 'libqemu-arm.dylib', guest, guest.parent / 'ipad-guest-tools', developer, firmwarekit, SCRIPTS / 'package.sh',
-                            *(args.assets / name for name in BOOTROMS)) + args.sign_id
+                            *(args.assets / name for name in BOOTROMS)) + args.sign_id + digest(record)
         if app.is_dir() and state.get('package', {}).get('inputs') == inputs:
             print('package: current')
         else:
             state.pop('package', None)
             shutil.rmtree(app, ignore_errors=True)
             run(['ditto', product, app], env, log)
-            sources = sources_now(args)
-            env['LTM_BUILD_RECORD'] = str(write_build_record(args, sources, native_root, build, guest))
+            env['LTM_BUILD_RECORD'] = str(record)
             env['LTM_FIRMWAREKIT'] = str(firmwarekit)
             env.update(package_env(args))
             run(['bash', SCRIPTS / 'package.sh', app], env, log)
             state['package'] = {'app': str(app), 'inputs': inputs, 'firmwarekit': firmwarekit.is_file(),
-                                'sources': {name: value['source_sha256'] for name, value in sources.items()}}
+                                'source_identity': sources}
             save_state(args, state)
     if 'package' not in state and selected & {'notarize', 'staple', 'verify'}:
         raise ValueError('Run --stage package first')
@@ -892,9 +919,8 @@ def staged(args, env, log):
         else:
             run(['xcrun', 'stapler', 'staple', app], env, log)
     if need('verify'):
-        now = {name: value['source_sha256'] for name, value in sources_now(args).items()}
-        if now != state['package']['sources']:
-            raise RuntimeError('Source files changed since --stage package; rerun from package')
+        if sources_now(args) != state['package'].get('source_identity'):
+            raise RuntimeError('Source identity changed since --stage package; rerun from package')
         require(app / 'Contents/Resources/firmware-catalog.json', 'bundled firmware catalog')
         require(app / 'Contents/MacOS/firmwarekit', 'bundled firmwarekit')
         run([sys.executable, ROOT / 'tests/release/test-package.py', app], env, log)

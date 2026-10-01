@@ -4,8 +4,8 @@
 # Usage: ARMV6_SDK=/path/to/iPhoneOS3.1.3.sdk build-guest-tools.sh NEW-WORK-DIRECTORY
 # QEMU_IOS_DIR selects the source checkout (default: the pin, scripts/sources.py); IPAD_SDK the iPhoneOS3.2.sdk;
 # LDID the existing signer. The export writes NEW-WORK-DIRECTORY/guest-tools (the flat iPod set the app uploads),
-# NEW-WORK-DIRECTORY/ipad-guest-tools (the flat directory firmwarekit reads: helpers, the two GL engines
-# the GL front end OpenGLES with gles-names.h, armv6.itpack and armv7.itpack) and manifest.json (source commit, dirty flag, sha256 per input and output),
+# NEW-WORK-DIRECTORY/ipad-guest-tools (the flat directory firmwarekit reads: helpers, the public OpenGLES front end and the 1.x front end
+# OpenGLES-1x with gles-names.h, armv6.itpack and armv7.itpack) and manifest.json (source commit, dirty flag, sha256 per input and output),
 # which build-release.py validates. Nothing is written into the checkout.
 set -euo pipefail
 

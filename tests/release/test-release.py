@@ -230,6 +230,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn(str(self.root), text)
         self.assertEqual(json.loads(text)['native_artifacts']['iboot32patcher'], {'commit': 'c' * 40, 'sha256': 'd' * 64})
         self.assertEqual(set(json.loads(text)['pin']['qemu-ios']), {'pinned', 'actual', 'dirty', 'matches'})
+        # A source-only revision change must refresh the shipped receipt even
+        # when the compiled payload and source bytes have not changed.
+        sources['qemu']['revision'] = 'e' * 40
+        changed = release.write_build_record(self.args, sources, self.native, self.native / 'qemu-build', self.guest).read_text()
+        self.assertNotEqual(text, changed)
+        self.assertEqual(json.loads(changed)['sources']['qemu']['revision'], 'e' * 40)
         self.put(self.native / 'build/iBoot32Patcher/build.json', json.dumps({'commit': 'c' * 40, 'source': str(Path.home() / 'src')}))
         with self.assertRaisesRegex(ValueError, 'local path'):
             release.write_build_record(self.args, sources, self.native, self.native / 'qemu-build', self.guest)
@@ -307,6 +313,29 @@ class ReleaseTests(unittest.TestCase):
         self.put(self.guest.parent / 'manifest.json', json.dumps(dict(manifest, source=dict(manifest['source'], commit='0' * 40))))
         with self.assertRaisesRegex(ValueError, 'not the checkout'):
             release.validate_guest(self.args, self.guest)
+
+    def test_guest_cache_reuses_identical_inputs_across_unrelated_commits(self):
+        manifest = self.guest_fixture()
+        manifest['source']['commit'] = 'old-commit'
+        manifest['build_context'] = {'sdk': 'fixture', 'tools': 'fixture'}
+        self.put(self.guest.parent / 'manifest.json', json.dumps(manifest))
+        snapshot = {key: manifest[key] for key in ('inputs', 'build_context')}
+        with mock.patch.object(release, 'guest_inputs_now', return_value=snapshot):
+            self.assertEqual(release.validate_guest(self.args, self.guest)['source']['commit'], 'old-commit')
+        for key, message in (('inputs', 'inventory'), ('build_context', 'SDK or toolchain')):
+            with self.subTest(key=key):
+                changed = dict(snapshot, **{key: dict(snapshot[key], new='changed')})
+                with mock.patch.object(release, 'guest_inputs_now', return_value=changed):
+                    with self.assertRaisesRegex(ValueError, message):
+                        release.validate_guest(self.args, self.guest)
+
+    def test_guest_snapshot_failures_require_a_rebuild(self):
+        for manifest in ({'build_context': {}}, {'build_context': {'sdk': {
+                'armv6': {'path': str(self.sdk)}, 'ipad': {'path': str(self.sdk)}}}}):
+            with self.subTest(manifest=manifest):
+                # The second case reaches the missing inventory helper in the fixture checkout.
+                with self.assertRaisesRegex(ValueError, 'Cannot verify guest build inputs'):
+                    release.guest_inputs_now(self.args, manifest)
 
     def test_signed_build_must_come_from_the_pin(self):
         """Ad-hoc builds record the difference; a Developer ID build from another commit needs --allow-unpinned."""
