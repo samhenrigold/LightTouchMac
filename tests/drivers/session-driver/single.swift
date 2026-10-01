@@ -18,6 +18,10 @@ struct SingleConfig: Decodable {
     var itpack: String?
     /// A second boot on the same overlay after the clean shutdown, with the persist check.
     var reboot: Bool?
+    /// With reboot: boot 1 ends at its home check with the app's Stop (a hard halt, no guest shutdown) instead of
+    /// AFC, the install and the clean shutdown; boot 2 must light, answer lockdown and reach home (smoke #70: the
+    /// 1.x FTL comes back from that Stop through _FTLRestore). No persist marker: a hard halt may lose it.
+    var hardStop: Bool?
     /// smoke.md #5: this many boots, each starting AFC at lockdown's first answer, then the app's Stop.
     var raceBoots: Int?
     var raceDirty: Bool?
@@ -196,6 +200,19 @@ struct SingleConfig: Decodable {
     }
 
     await boot(1)
+
+    if s.reboot == true, s.hardStop == true {
+        d.process.terminate()   // the app's Stop: pause, flush the overlay, quit QEMU at once
+        let exited = await d.process.waitForExit(timeout: 30)
+        emit("quit", ["device": d.name, "generation": 1, "hard": true, "exited": exited, "reason": d.process.deathReason ?? ""])
+        d.mux.stop()
+        d.serial?.removeEndpoints()
+        await boot(2)
+        await shutdown(2)
+        d.serial?.finish()
+        emit("done")
+        exit(0)
+    }
 
     for size in s.afcBytes ?? [16384, 16385, 65536, 1_048_583] {
         let name = "ltm-verify-\(size).bin"
