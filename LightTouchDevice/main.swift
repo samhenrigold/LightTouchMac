@@ -71,7 +71,7 @@ func takeLease(_ path: String?) -> Bool {
     guard let path else { return true }
     try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent,
                                              withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-    let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+    let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
     guard fd >= 0 else { helperLog("lease \(path): \(String(cString: strerror(errno)))"); return false }
     guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { helperLog("lease \(path) is held"); close(fd); return false }
     // Check after taking the same lock as offline editing: an app relaunch must

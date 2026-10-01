@@ -104,3 +104,15 @@ Actual package tests pass (13 tests, including 33 invalid-input board cases and
 staging or publishing records. Existing strategy, sibling preparation/import,
 legacy erase and session compile checks pass; the actual GUI and helpers build.
 Evidence: `/Users/shg/Developer/ltm-evidence/host-lock-2026-10-01`.
+
+## Helper lease admission matches maintenance
+
+The live helper now opens the lease leaf with O_NOFOLLOW, matching stopped
+maintenance. Actual hello-only tests admit ordinary and explicit external
+leases, refuse a lease-file symlink before hello, preserve its target, and
+verify process reaping and released locks. The actual app/helpers and test
+driver compile. No guest was started by this admission test.
+
+Parent-directory containment and managed-record path authority remain
+separate; this single flag does not establish either. Evidence:
+`/Users/shg/Developer/ltm-evidence/host-lease-2026-10-01`.

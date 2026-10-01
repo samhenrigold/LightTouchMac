@@ -34,6 +34,8 @@ struct Config: Decodable {
     var timeout: Double?
     /// Hello/lease followed by a preparation error; never sends a boot request.
     var preparationFailure: Bool?
+    /// Actual helper lease admission/refusal at hello; never sends a boot request.
+    var leaseAdmission: Bool?
 }
 
 let t0 = Date()
@@ -602,8 +604,62 @@ func checkPreparedFiles() throws {
     exit(0)
 }
 
+/// Explicit lease directories remain caller policy; only a symlink at the file is refused.
+@MainActor func runLeaseAdmission() async {
+    let fm = FileManager.default
+    let external = work.deletingLastPathComponent().appendingPathComponent("external-lease")
+    let target = external.appendingPathComponent("target")
+    try! fm.createDirectory(at: external, withIntermediateDirectories: true)
+    let sentinel = Data("lease-target-must-stay-unchanged".utf8)
+    try! sentinel.write(to: target)
+    let alias = work.appendingPathComponent("alias/lease")
+    try! fm.createDirectory(at: alias.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try! fm.createSymbolicLink(at: alias, withDestinationURL: target)
+    let cases: [(String, URL, Bool)] = [
+        ("ordinary", work.appendingPathComponent("Devices/\(UUID().uuidString)/work/lease"), true),
+        ("external", external.appendingPathComponent("lease"), true),
+        ("symlink", alias, false),
+    ]
+    for (name, lease, admitted) in cases {
+        let process = DeviceProcess(instance: UUID(), profile: .iPodTouch2G,
+            log: work.appendingPathComponent("\(name).log"), lease: lease,
+            helper: URL(fileURLWithPath: config.helper), requirement: config.requirement)
+        var hello = false
+        var completionError: DeviceLinkError?
+        var deaths = 0
+        process.onDeath = { _ in deaths += 1 }
+        process.start({ _ in hello = true; return nil }) { result in
+            if case let .failure(error) = result { completionError = error }
+            else { fail("lease test unexpectedly booted") }
+        }
+        let pid = process.link.pid
+        let exited = await process.waitForExit(timeout: 20)
+        if !exited { process.kill(); _ = await process.waitForExit(timeout: 5) }
+        var status: Int32 = 0
+        errno = 0
+        let reaped = pid > 0 && waitpid(pid, &status, WNOHANG) == -1 && errno == ECHILD
+        let expected: DeviceLinkError = .helperFailure(admitted ? "not booted" : DeviceLinkWire.leaseRefusal)
+        guard exited, reaped, deaths == 1, process.link.pid == 0,
+              hello == admitted, completionError == expected else {
+            fail("\(name) lease: expected admission \(admitted), hello \(hello), error \(String(describing: completionError)), reaped \(reaped)")
+        }
+        if admitted {
+            let fd = open(lease.path, O_RDWR | O_NOFOLLOW)
+            guard fd >= 0 else { fail("admitted lease missing") }
+            let released = flock(fd, LOCK_EX | LOCK_NB) == 0
+            close(fd)
+            guard released else { fail("admitted lease still locked") }
+        }
+        guard (try? Data(contentsOf: target)) == sentinel else { fail("lease symlink target mutated") }
+        emit("leaseAdmissionVerified", ["case": name, "admitted": admitted, "hello": hello,
+            "reaped": reaped, "targetUnchanged": true, "guestStarted": false])
+    }
+    exit(0)
+}
+
 Task { @MainActor in
-    if config.preparationFailure == true { await runPreparationFailure() }
+    if config.leaseAdmission == true { await runLeaseAdmission() }
+    else if config.preparationFailure == true { await runPreparationFailure() }
     else if let guest = config.guest { await runGuest(guest) } else if let single = config.single { await runSingle(single) }
     else if let activation = config.activation { await runActivation(activation) }
     else if let deadline = config.deadline { await runDeadline(deadline) }
