@@ -167,14 +167,15 @@ struct SingleConfig: Decodable {
         // or wrong-app home instead of passing it on the single `lit` threshold (audit gap #2).
         // The iPad's agent comes from the seed package (offered). `screen` is the agent's name for what is up
         // (`Home Screen`, `Lock Screen`, an app's name): the lock screen is SpringBoard too, so the bundle id
-        // alone cannot tell it from home. No agent (2.x, 3.0): `agent` false, and the matrix says unknown.
+        // alone cannot tell it from home. Without a fitted/offered agent, the matrix reports unknown.
         var front = "", screen = ""
         if asks, let f = try? await guestAgent.frontmost() { (front, screen) = f }
         emit("home", ["device": d.name, "generation": generation, "brightness": d.brightness() ?? -1,
                       "agent": asks, "frontmost": front, "screen": screen, "path": hp ?? ""])
     }
 
-    /// Clean shutdown, as the app's quit path starts it: iPad powerdown, iPod agent halt.
+    /// Test-only clean shutdown: stock gesture or qualified agent halt, confirmed by PMU.
+    /// GUI Stop is a separate hard halt and does not establish guest unmount.
     func shutdown(_ generation: Int) async {
         let quit = Date()
         if ipad { d.process.link.send(.machine(.powerdown)) }

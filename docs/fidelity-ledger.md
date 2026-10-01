@@ -88,7 +88,12 @@ A row with more than one class (R/S, R (+P gate), S + P, R (SDIO) / H (firmware)
 in the summary, in the order R > H > P > S; qualifiers such as "(unverified)", "(partial)", "(inert)" or
 "(absent)" do not change the class.
 
-## Summary
+## Historical census with later amendments
+
+These counts originate from the September 28 source census above, with the
+explicit amendments described below. They are not a fresh census of the current
+worktree or a compatibility matrix. Current acceptance limits live in the
+remaining-work table and linked qualification journal.
 
 | Board | R | H | P | S | rows |
 |---|---|---|---|---|---|
@@ -104,7 +109,7 @@ retired).
 The distance to "boots any iOS unchanged" is the H and P rows. The two that decided it were the IOP
 (every NAND and SDIO byte went through a C reimplementation of one specific firmware's mailbox ABI;
 since 2026-09-29 Apple's firmware runs on a modelled second core, the default) and the GPU (there is
-none; GL exists only because the guest's GLEngine is replaced by a shim), which was the next stop
+no complete GPU model; GL currently uses a replacement public OpenGLES front end), which was the next stop
 of iOS 5 (5.1.1 reached SpringBoard on the IOP core and never drew until `ios5-gl` taught the shim 5.x's GL
 stack; GL is still a guest shim, P). The
 iOS 5 spike hit exactly those, in that order (`docs/ipad1/ios5.md`).
@@ -236,7 +241,7 @@ images staged in RAM, P). 35 `getenv()` calls (32 `IT_*` names) in the machine f
 | 47 | AES | `hw/arm/ipod_touch_aes.c:52-383, 385-431, 593-709` | R (custom) / S (GID, UID) / P (preserve) | GID = a built-in KBAG→key table for 5F138/7E18 plus `gid-blobs`; UID constant; an address-specific "preserve" hack for three in-place ops. | Fused keys impossible; the table is the substitute |
 | 48 | PKE | `hw/arm/ipod_touch_pke.c` | R | Real RSA; `forge-sigcheck` off by default. | – |
 | 49 | MBX register block (PowerVR MBX Lite) | `hw/arm/ipod_touch_mbx.c` | S | **The GPU is absent.** Fixed ID words, idle status; the interrupt block (mask read-back, status set by the driver's software interrupt, write-1-to-clear, the line) is register-level since `gles-1x`; `IT_MBX_COMPLETE` fakes completions. The 1G uses the same model (it was an id stub). | MBX TA/ISP/TSP with an undocumented command format; go/no-go: decoding the TA/3D state MBXGLEngine writes to the slave ports |
-| 50 | OpenGL ES path | `contrib/gles-public/opengles.c` over `contrib/it-gles/mbxshim.c`, `hw/arm/gles-host.c` | P | 2.x-4.x: `OpenGLES.framework/OpenGLES` replaced whole by the one front end the iPad uses (qemu-ios `gles-public`; fat armv6+armv7, legacy-linked for 2.x/3.0's dyld), MBXGLEngine left stock and never loaded. Before gles-public: 3.x/4.x replaced MBXGLEngine.bundle with a dispatch shim and 1.x/2.x used `gles2x.c` under the firmware's own export names; SpringBoard composites through it with CA_ENABLE_OGL=1 (2.1.1: software-CA frame rates, about a quarter less host CPU on the launch zoom). 1.x (the 1G, 3A101a): the same file built without EAGL under 1.x's 186 names (`OpenGLES-1x`, guest package `n45-ios1`), LayerKit with LK_ENABLE_OGL=1 (software frame rates, a quarter less host CPU on the launch zoom). | Row 49 |
+| 50 | OpenGL ES path | `contrib/gles-public/opengles.c` over `contrib/it-gles/mbxshim.c`, `hw/arm/gles-host.c` | P | 2.x-4.x: `OpenGLES.framework/OpenGLES` replaced whole by the one front end the iPad uses (qemu-ios `gles-public`; fat armv6+armv7, legacy-linked for 2.x/3.0's dyld), MBXGLEngine left stock and never loaded. Before gles-public: 3.x/4.x replaced MBXGLEngine.bundle with a dispatch shim and 1.x/2.x used `gles2x.c` under the firmware's own export names; SpringBoard composites through it with CA_ENABLE_OGL=1 (2.1.1: software-CA frame rates, about a quarter less host CPU on the launch zoom). 1.x (the 1G, 3A101a): the separate legacy front end `contrib/it-gles/gles1x.c` built without EAGL under 1.x's 186 names (`OpenGLES-1x`, guest package `n45-ios1`), LayerKit with LK_ENABLE_OGL=1 (software frame rates, a quarter less host CPU on the launch zoom). | Row 49 |
 | 51 | SWI | `hw/arm/ipod_touch_swi.c` | S | RAM; busy bit self-clears. | SWI register semantics |
 | 52 | SDIO host controller | `hw/arm/ipod_touch_sdio.c:45-121, 983-1080` | R | CMD5/52/53, CCCR/FBR/CIS. N45: the same controller at IRQ 0x2A with the 88W8686 as its card (row 59): function 1's CMD52/CMD53 and the card's DAT1 interrupt are the card's; the FBR interface code (7, WLAN) and one function come from its identity. | – |
 | 53 | BCM4325 Wi-Fi dongle | `ipod_touch_sdio.c:127-178, 296-440, 540-680` | H | Firmware stored, never run; CDC/BDC in C; fake BSS; off by default. | Dongle SoC running its firmware (as K48 #32), infeasible |
@@ -285,7 +290,7 @@ Everything here is class P. "Replaces" says what a real device has instead.
 | USB Ethernet DHCP service, AirPort service + PAC | K48 | `ipad1_rootfs.py:37-41, 320-351` | Network preferences a first boot would create itself. | Let the guest configure |
 | `/var` owners patched offline, data volume seeded | K48 | `ipad1_rootfs.py:42-45, 499, 732` | What `mobile_obliterator` / restore does on-device. | Stock restore |
 | Kernelcache img3 installed on the system volume | K48 | `ipad1_rootfs.py build --kernelcache` | What restore writes. | Stock restore |
-| iPod image edits (`ipod2g_device.py`, `nand-current`) | N72 | `imgtools/ipod2g_device.py` | Guest tools baked; major≥3 derivations from Restore.plist. | Stock restore (no USB restore path exists for N72 yet) |
+| iPod image edits (`ipod2g_device.py`, `nand-current`) | N72 | `imgtools/ipod2g_device.py` | Guest tools baked; major≥3 derivations from Restore.plist. | Stock restore (N72 stock USB transport reaches restored protocol11; full physical flash restore, cold boot and durable writes remain blocked) |
 | App catalog per-build fields | both | `LightTouchMac/Resources/firmware-catalog.json` (`recipe.options`, `gli_dispatch`) | – | `gli_dispatch` goes with the runtime @encode parse |
 
 ### Synthesised device state

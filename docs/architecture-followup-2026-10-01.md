@@ -8,7 +8,7 @@ test receipts with current compatibility claims.
 | Area | Verified progress | Remaining acceptance boundary |
 |---|---|---|
 | Stock restore transport | Real SecureROM/iBSS/ramdisk reaches stock restored protocol 11; legacy client boot-only run passes with original firmware metadata. Production bridge reset/enumeration and exclusive mux handoff tested; measured PHY-reset gating now passes rapid DFU trials and complete stock ramdisk handoff without diagnostic settling. | Stock erase reports Waiting for NAND. Full restore, cold boot and durable later writes required before deleting offline FTL preparation. |
-| FMSS | CPU/sequence scalar state through D7C/D3C, zero-immediate mask/shift forms and erased physical reads have model/native gates; latest340978ff58 checks sequencer DMA and passes FMSS23 and native3.1.3 eight checks. | Stock erase stops at D24. Its isolated latch candidate failed both native boots because newly reached FMC reads overwrite preloaded spare data; it was withdrawn. Physical commands, CPU DMA, timing and honest completion remain separate contracts; restore/cold boot is unqualified. |
+| FMSS | CPU/sequence scalar state through D7C/D3C, zero-immediate mask/shift forms and erased physical reads have model/native gates; 340978ff58 checks sequencer DMA;32f131195e checks CPU-side transaction results, with FMSS25/25, thirteen model suites, native3.1.3 eight and2.1.1 seven selected checks. f2ea5bde6d then qualifies measured D10 sequencer pointer writes with FMSS27/27 and matched full2.1.1/3.1.3 eight-check runs. | Stock erase stops at D24. Its isolated latch candidate failed both native boots because newly reached FMC reads overwrite preloaded spare data; it was withdrawn. Physical commands, decoded spare ownership, timing and honest completion remain separate contracts; restore/cold boot is unqualified. |
 | Silent audio migration | 0ceac9c55e fixes legacy silent stream host rate bookkeeping; model 4/4 including N45 snapshot, audio sanitizers and native two-boot 8/8. | Native N45 guest suspend/wake and in-flight host USB snapshots remain unqualified. |
 | Host runtime | GuestPackageSession owns boot package qualification. GUI and session driver now import HostRuntime for prepared-device validation/assembly and actual wire values; package tests, real builds, failure cleanup and native N72 startup pass. | Broader process/service ownership and session source/stub coupling remain; async record/storage lifecycle and CLI cleanup are now qualified. Managed GUI boot-path authority and strict present-lock parsing are now verified; CLI record authority remains separate. |
 | MBX reuse | Independently captured real N72 stock-driver fill packet/GART agrees with pinned MIT S5LBox decoder in sanitizer replay. | Snapshot was after stall, not pre-submit. No live pixel/completion/IRQ or full compositor qualification yet. Unapplied narrow prototype rejects startup/context requests without success. Startup EVM metadata effects and trigger/tag semantics remain unknown; existing GLES transport remains needed. |
@@ -83,10 +83,10 @@ a freshly relinked dylib from verified QEMU 089b055d73; this is not a new
 packaged release or clean guest FTL shutdown claim. Evidence:
 `/Users/shg/Developer/ltm-evidence/host-runtime-2026-10-01`.
 
-The runtime accepts caller-authorized URLs. Maintenance path containment is
-stronger than current managed-record boot authorization; extraction does not
-fix that seam. Malformed/non-string lock strategies can still fall into legacy
-nil handling. These need explicit managed-record and parsing contracts.
+The initial extraction accepted caller-authorized URLs and left managed-record
+boot authority and malformed lock parsing unresolved. The subsequent strict
+lock parser and managed storage admission sections below close those measured
+seams; standalone caller-authorized inputs remain a distinct supported mode.
 DeviceProcess/services, record persistence and current session test replacement
 types remain outside the extracted module.
 
@@ -179,8 +179,9 @@ reference layer passed unchanged tests without waits or instrumentation; the
 Swift runtime/compiler cause is not established. No guest ran in these tests.
 Evidence: `/Users/shg/Developer/ltm-evidence/host-shared-lease-2026-10-01`.
 
-The next host boundary is lock-before-record-read and retention of the exact
-record generation throughout export/edit. That work remains unqualified.
+Lock-before-record-read and retention of the exact record generation were the
+next boundary at this point. They are subsequently qualified in the stopped
+record ownership section below.
 
 ## Controller execution must have one owner
 
@@ -254,16 +255,16 @@ receipts and limits are maintained in the shared evidence journal.
 
 The genuine2.x private regression fixtures now pass installation, foreground
 launch and measured stereo audio. That initial2.1.1 gate was6/8. Subsequent work qualifies the CoreSurface
-callback mapping, while strict scene geometry still fails at LCD scanout.
+callback mapping; that historical normal run still failed strict scene geometry at LCD scanout. Later ownership runs are recorded below.
 The GPT extent correction independently passes boot/persistence/fsck3/3
-on2.1.1 and3.1.3; a combined full gate remains pending. Latest
+on2.1.1 and3.1.3; combined full gates and their limits are recorded below. Latest
 stock erase still stops at D24; the literal initializer no longer stops it.
 Exact receipts and remaining limits are recorded in the shared journal.
 
 App bf72e7416c now carries async disk tools through the maintained firmware
 CLI, with actor-owned publication and native pipe cancellation/cleanup gates.
 QEMU340978ff58 checks sequencer fetch/store transaction results and passes
-all eight native3.1.3 checks. The app source pin is aligned; the current arm64 dylib passes hello-only helper admission. Universal packaging,
+all eight native3.1.3 checks. The arm64 dylib built from that revision passes hello-only helper admission; later source pins do not qualify that older artifact. Universal packaging,
 native dylib guest qualification and full stock restore remain separate gates. Full receipts and
 retained failures are recorded in the shared evidence journal.
 
@@ -275,7 +276,35 @@ incorrectly packed graphics even when aggregate color areas match. A measured
 stock2.x control-register RMW exposes missing LCD plane1 readback. QEMU8e9fac00f6 qualifies the narrow
 readback through13 models/five LCD QTests and native3.1.3 eight checks. The
 combined2.1.1 run is6/8: graphics and clean-shutdown persistence still fail;
-that run does not exercise the plane1 correction. No full2.x graphics pass is
-claimed. App648a471 also repairs actual shared-module linkage in23 existing
+that run does not exercise the plane1 correction. A later diagnostic full2.x
+run passes8/8 and exercises that correction, but does not reproduce the ordinary
+run's failure; diagnostic timing cannot qualify a production graphics fix.
+App648a471 also repairs actual shared-module linkage in23 existing
 offline probes, all compiling and executing. Current receipts and remaining
-first-divergence research are recorded once in the evidence journal.
+first-divergence research are recorded once in the evidence journal. QEMUeeccc6abe5
+now selects version-eligible maintained fixtures, records exact requested input
+identities and fixes ledger argument forwarding. Graphics surface cleanup after
+context destruction is corrected in QEMU f00997c13c. Actual-source sanitizer tests reproduce the baseline use-after-free and pass both fixed frontends; normal standalone full gates pass8/8 on2.1.1 and3.1.3. Native1.x remains partial: the repeated unchanged baseline also exhibits the Wi-Fi dialog/reference failure, and1.1.5 has the same grid/reference mismatch on the unchanged same-version control. Deferred destruction/concurrency and release artifacts remain separate boundaries.
+
+
+## Next ownership reduction: semantic input automation
+
+Source inspection still finds power-sheet/slider and portrait-keyboard behavior
+inside the N72 board, with a separate N45 first-sheet hold sequence. Host callers
+reach it through the dylib; this is a layering seam, not a newly measured hardware
+failure. Move semantic orchestration into a narrow shared host adapter while
+QEMU continues to own actual button/touch signals and PMU shutdown confirmation.
+Reuse `ui/input.c` virtual-clock key delay machinery where suitable; keep ordered
+modifier/button transitions, which a single send-key chord does not preserve.
+Any missing extension should schedule generic input events in virtual time,
+without stock UI knowledge.
+
+Preserve two constraints: GUI Stop is deliberately a hard halt, and current
+board gestures run on virtual time. Wall-clock sleeps would change paused/loaded
+guest behavior. N45 lacks the newer agent/keyboard/pasteboard services, and the
+2.x agent halt alone does not prove PMU standby. Delete board UI automation only
+after matched native controls cover Home and foreground apps, stock sheet
+cancellation, cable transitions, timeout/cancellation, paused execution and clean
+unmount/reboot persistence. No implementation or compatibility expansion follows
+from this source review. The process-owner extraction should then make GUI and
+session CLI import the same owner; keep presentation and user notices in the GUI.

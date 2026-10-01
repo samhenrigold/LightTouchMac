@@ -726,6 +726,165 @@ skips: boot,fsck,persistence,installation,foreground,agent and6.46s stereo
 the written bytes. GLES was deliberately a separate contract: this backend
 qualification does not replace the full2.x run's black scene/shutdown failure.
 GLTest's rebuilt executable is byte-identical to the prior genuineSDK2
-fixture; a complete graphics pass, all2.x/3.0 firmware runtime and automatic
-artifact selection remain unqualified. Evidence:
+fixture. Ordinary full-workflow graphics remains unresolved; all2.x/3.0 firmware
+runtime is unqualified. Evidence:
 `/Users/shg/Developer/ltm-evidence/maintained-ios2-fixtures-2026-10-01`.
+
+## Fixture selection and graphics lifetime investigation
+
+QEMUeeccc6abe5 selects the isolated ios2 fixtures for declared2.x devices,
+preserves independent explicit overrides and the default SpringBoard graphics
+leg, and refuses missing requested legacy artifacts before launching a guest.
+It also fixes internal parser flags leaking into ledger child arguments.
+Six selection/receipt/actual-ledger tests and the seven existing deployment
+preflight tests pass. Each run writes a separate requested-input hash receipt;
+selection and deployment declarations do not expand native qualification.
+Evidence: the maintained fixture archive's `selector` directory.
+
+The corrected temporary graphics observer passes the full2.1.1 workflow8/8,
+including strict scene geometry, two clean exit0 shutdowns, reboot persistence
+and fsck0. App and CoreAnimation captures match host/guest pixels exactly, and
+the stock plane1 control read-modify-write preserves00310700. This diagnostic
+does not reproduce the prior normal executable's sustained black inset and
+shutdown failure; extra diagnostic I/O may alter a race. Graphics is therefore
+not declared fixed. Earlier observer-v1 app guest comparisons had a doubled
+address offset and are excluded; the corrected extracted observer passes
+ASan/UBSan tests against the actual ARM translation API contract.
+
+The diagnostic separately identifies stale cached graphics-context pointers:
+surface cleanup sends framebuffer/texture deletes after the context is freed.
+That is a concrete guest-addition lifetime lead, not evidence that it caused
+the earlier scene failure. Instrumentation was removed, and original source,
+objects and the qualified88ba executable were restored and hash-verified.
+The full diagnostic, corrected pixel analysis and retained failure boundaries
+are archived at
+`/Users/shg/Developer/ltm-evidence/gles-contract-diagnostic-2026-10-01`.
+
+## CPU NAND transaction results qualified
+
+QEMU32f131195e checks actual AddressSpace transaction results in the remaining
+CPU-side NAND compatibility transfers. Failed descriptor reads are not decoded
+or consumed; failed data/metadata writes stop later transfers. Earlier writes
+and partial effects of the failed transaction remain. Target descriptors decode
+LE32 only after successful reads. Original address arithmetic, RAM-only write
+source admission, fatal write-source policy and controller completion behavior
+are preserved; this does not make the compatibility path physical NAND.
+
+All eight FMSS source/sanitizer suites pass, including twelve adversarial CPU
+DMA cases. Baseline compiles but fails nine of those cases. Actual FMSS QTests
+pass25/25 and all thirteen registered model suites pass. Real tests cover
+unmapped descriptors/destinations, prior complete-page preservation and a
+partial write crossing the actual mapped RAM end. A mapped transaction returning
+an error is covered by actual-handler doubles, not a real error-returning device.
+
+The frozen7eb0664b executable passes all eight native3.1.3 checks and seven
+selected2.1.1 checks, both with two clean exit0 shutdowns, persistence and fsck0.
+The2.x run also exercises automatic default fixture selection; the rebuilt
+Harness and GLTest executables match the qualified maintained artifacts exactly.
+That seven-check run supplies no GLES qualification; the later full EGL ownership
+workflow below supplies its separate eight-check evidence.
+Evidence: the NAND archive's `cpu-dma-checked-candidate` directory, including
+native logs and input receipts. No new physical restore, ECC, IRQ or dylib
+qualification is claimed.
+
+## Dead host failure channel removed
+
+App2446f86 removes an unused private failure map/method from DeviceSessionHost
+and the corresponding DeviceRow argument/branch. Actual session `.dead` and
+preparation `.failed` remain the error authorities. Five constructor/UI probes
+retain their retry and failed-import assertions and pass; the actual GUI and
+device/service helper Debug build also passes. An initial SwiftUI macro sandbox
+denial is retained beside the authorized native retry. Evidence:
+`/Users/shg/Developer/ltm-evidence/session-failure-cleanup-2026-10-01`.
+
+## EGL surface ownership corrected
+
+QEMU f00997c13c makes each EGL context track surfaces whose cached texture and
+framebuffer names reference its graphics context. Context destruction releases
+those names while the context is live and detaches surviving surfaces, which
+can then be rebound safely. Both unchanged frontend sources compile and
+reproduce a heap-use-after-free under ASan; the corrected actual callbacks pass
+context-first, surface-first, multiple-buffer, rebind and window teardown tests.
+Existing frontend/export/CoreSurface tests and the native CGL context test pass.
+
+The normal standalone executable with privately staged additions passes all
+eight native checks on both 2.1.1 and 3.1.3, including strict scene geometry,
+two clean shutdowns, persistence and fsck0. This does not establish the cause of
+the earlier intermittent black inset. Native 1.x qualification remains partial:
+1.1 repeat candidate and unchanged baseline both show a stock Wi-Fi dialog and
+fail the strict Safari reference, while an earlier baseline passed. The 1.1.5
+candidate passes boot but fails the swipe reference with a different rendered
+icon layout; the unchanged same-version baseline reproduces the same mismatch. No prompts, thresholds,
+or counters were altered to pass these checks. Stock 1.x does not import
+`eglDestroyContext`, so its native runs do not exercise the repaired ordering.
+
+Evidence: the CoreSurface archive's `egl-owner`, `egl-owner-n45-repeat-controls`
+and private-fixture receipt directories. Concurrent EGL use, deferred context
+destruction, current dylib builds and release packaging remain unqualified.
+
+## Cancellation-resistant helper exit wait
+
+App2b56949: the actual DeviceProcess waiter now uses a monotonic deadline in an awaited,
+independent MainActor task so an already-cancelled caller does not turn each
+sleep into immediate error polling. The wait remains bounded, returns false
+while the helper is still live, and leaves DeviceLink as the exclusive reaper.
+No detached task, extra process owner or replacement reaper is introduced.
+
+The unchanged actual adapter used about425ms of CPU during a one-second
+cancelled wait; the corrected maintained gate observed about3ms on this host.
+This is a measured polling correction, not evidence of a blocked main actor:
+heartbeat callbacks remained responsive in both cases. Eight hello-only cases
+cover normal/pre-cancelled/mid-cancelled waits, actual exit, zero/negative bounds,
+live lease exclusion, exclusive reaping and injected failure cleanup. Existing
+helper admission and preparation-failure gates and the GUI/helper build pass.
+Explicit artifact/source hashes separate the old340978 dylib's hello-only
+admission from native standalone guest qualification. No guest is booted by
+this gate, and missing explicit helper/dylib inputs do not claim success.
+
+Evidence: `/Users/shg/Developer/ltm-evidence/host-exit-wait-2026-10-01`.
+
+## Measured NAND descriptor-pointer writes
+
+QEMU f2ea5bde6d accepts the stock opcode02/immediate-zero sequencer write to
+its existing D10 descriptor-pointer latch. Captured stock scripts advance the
+pointer by four after a descriptor load and rewind it on their retry path;
+previously the model silently discarded the write and reused the first word.
+Unmeasured opcode01/nonzero forms stop before later DMA or stores. This changes
+no physical command, decoded-spare producer, CPU storage interception, interrupt,
+completion, reset or migration layout.
+
+The compiled actual-handler baseline fails the second-descriptor assertion;
+the corrected ASan/UBSan suite sees distinct words and addresses forward/backward.
+All eight FMSS source suites,27 real controller QTests and13 registered model
+suites pass, including existing-latch snapshot/reset and unsupported-form refusal.
+The frozen0f9f1bf7 standalone executable then passes all eight native checks on
+both2.1.1 and3.1.3, with strict GLTest scene, stereo audio, two clean exit0
+shutdowns, a durable guest marker and fsck0. Static driver analysis finds fresh
+CPU D10 setup before D38 starts; every dynamic callback ordering is not measured.
+The latest retained stock physical-restore trace stops at D24; the withdrawn
+latch candidate exposed the unresolved decoded-spare ownership seam.
+No full restore or stock FTL replacement follows from this scalar correction.
+
+D10 evidence: NAND archive directories `d10-model-qualified-candidate` and
+`d10-native-qualified`. The separate unchanged 1.1.5 control also fails its
+shared 1.x swipe reference with the same stock icon grid; candidate/control
+pixels below the status bar match exactly. Its strict failure remains unwaived,
+with receipts under the CoreSurface archive's
+`egl-owner-n45-4B1-baseline-control` directory.
+
+## Source pin and current development artifact
+
+The app pin advances to QEMU f2ea5bde6d7cc9e2899def437f5cb32cbfd86dd1;
+the unchanged compatible usbmuxd pin remains e19fac2d4b. The resolver verifies
+both isolated worktree HEADs. Relinking the development arm64 dylib succeeds;
+its SHA is f78258570b00051b4434a67dc13980278753e7063b22e91610bee230da68034c,
+UUID4FED5CBE-61E5-3DA9-863C-A2309D578E91. Eight actual helper hello-only
+lifecycle cases pass with that artifact, including failure cleanup; no boot is
+sent. Evidence: the host-exit-wait archive's `current-dylib-admission` directory.
+
+The rebuild regenerates the committed source version and changes the standalone
+hash to575ffb13. Native D10 qualification belongs to frozen0f9f1bf7, with the
+same committed hardware source hashes, rather than automatically transferring
+it to the rebuilt artifact or app-facing main loop. Current dylib native guest,
+Intel/universal, signing/notarization and release gates remain separate. No
+target merge, publication or installation occurred.
