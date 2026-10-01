@@ -13,7 +13,8 @@ catalog and a small base in the shape `firmwarekit create` makes, in a temp stat
             IPAs in the library and removes the rest (the old root with its pairing); a device
             published afterwards is the only one.
             With a 160 MB retained IPA and 24,000 old pages (about 260 MB), run twice: legacy-quit
-            exits midway (200 ms in, State/IPAs adopted); the next run
+            checks what find() sees in the full layout, then exits midway (200 ms in, State/IPAs adopted; the
+            record may be gone by then on a fast host); the next run
             resumes without asking (the .legacy-erase marker) and finishes. Both assert a main-
             actor heartbeat (10 ms ticks, no gap over 250 ms) while erase() runs; a lone marker
             left by a quit after the last removal resumes and clears
@@ -135,6 +136,12 @@ case "legacy-quit":
     // (the big retained IPA is hashing, or the old trees are going). The main actor must have kept beating until then.
     let legacy = LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4]))!
     expect(!legacy.resuming, "a first run asks")
+    // The full old layout, before anything is erased: what find() sees here must not depend on timing.
+    expect(legacy.records.count == 1 && legacy.oldRoot != nil, "the legacy record and the old root are found: \(legacy.records) \(String(describing: legacy.oldRoot))")
+    let names = Set(legacy.items.map(\.lastPathComponent))
+    expect(names.isSuperset(of: ["device", "nandrw-nand-ultimate", "snapshot-nand-ultimate", "IPAs", "app.log", "usbmuxd.pid", "session.env", "AppCache"]), "\(names)")
+    expect(!names.contains("Library") && !names.contains("Devices") && !names.contains("work") && !names.contains(".app-lock"), "the library and the devices stay: \(names)")
+    expect(DeviceInstance.all(state: state).isEmpty, "the legacy record does not decode as a device")
     let heart = Heartbeat()
     heart.onBeat = {
         guard heart.beats >= 20, IPALibrary.index.values.contains(where: { $0.bundleID == "com.example.shared" }) else { return }
@@ -151,11 +158,9 @@ case "legacy-quit":
 case "legacy":
     let legacy = LegacyState.find(state: state, applicationSupport: URL(fileURLWithPath: args[4]))!
     expect(legacy.resuming, "the launch after the quit resumes without asking")
-    expect(legacy.records.count == 1 && legacy.oldRoot != nil, "the legacy record and the old root are found: \(legacy.records) \(String(describing: legacy.oldRoot))")
-    let names = Set(legacy.items.map(\.lastPathComponent))
-    expect(names.isSuperset(of: ["device", "nandrw-nand-ultimate", "snapshot-nand-ultimate", "IPAs", "app.log", "usbmuxd.pid", "session.env", "AppCache"]), "\(names)")
-    expect(!names.contains("Library") && !names.contains("Devices") && !names.contains("work") && !names.contains(".app-lock"), "the library and the devices stay: \(names)")
-    expect(DeviceInstance.all(state: state).isEmpty, "the legacy record does not decode as a device")
+    // How far the quit got depends on how fast the host hashed the retained IPA (the record may be gone
+    // already); the old trees are still here (legacy-quit checked "device"), and the rest is the erase's to finish.
+    expect(legacy.oldRoot != nil && legacy.items.contains { $0.lastPathComponent == "device" }, "what the quit left is found: \(legacy.items) \(String(describing: legacy.oldRoot))")
     // A few hundred MB of old pages go without blocking the main actor.
     let heart = Heartbeat()
     heart.start()
