@@ -102,6 +102,44 @@ def make_ref(src_path, out_png, gw=GW):
     im.save(out_png)
 
 
+def home_verdict(lock, events, entry_id, references):
+    """Judge home independently of panel liveness. An unobserved screen is unknown.
+
+    Stock 2.x has no guest agent, so a known-good picture is its evidence. A lit
+    Connect-to-iTunes screen alone must never qualify as home.
+    """
+    from pathlib import Path
+    gp = lock.get("guest_package") or {}
+    has_agent = ("com.qemu.it-agent.plist" in (gp.get("jobs") or []) or
+                 str((lock.get("derived") or {}).get("guest_tools", "")).startswith("installed"))
+    shots = {Path(e["path"]).stem: e for e in events if e.get("event") == "screenshot"}
+    homes = [e for e in events if e.get("event") == "home"]
+    names = [n for n in ("home", "home2", "installed") if n in shots]
+    dark = [n for n in names if float(shots[n].get("brightness", 0)) < 0.05]
+    wrong = [h["frontmost"] for h in homes if h.get("frontmost") and h["frontmost"] != "com.apple.springboard"]
+    locked = [h.get("generation") for h in homes if h.get("frontmost") == "com.apple.springboard" and h.get("screen") != "Home Screen"]
+    unanswered = [h.get("generation") for h in homes if has_agent and not h.get("frontmost")]
+    frames = {}
+    for name in names:
+        ref = Path(references) / f"{entry_id}-{name}.png"
+        if ref.is_file():
+            frames[name] = verdict(shots[name]["path"], str(ref))
+    bad_frame = [n for n, result in frames.items() if not result["ok"]]
+    observed = {"home" if h.get("generation", 1) == 1 else "home" + str(h["generation"])
+                for h in homes if h.get("frontmost")}
+    unknown = [n for n in names if n.startswith("home") and not has_agent and n not in observed and n not in frames]
+    if not names:
+        return {"ok": None, "note": "no home screenshot taken"}
+    ok = False if dark or wrong or locked or unanswered or bad_frame else None if unknown else True
+    return {"ok": ok, "brightness": {n: round(float(shots[n].get("brightness", -1)), 3) for n in names},
+            "frontmost": ([" / ".join(x for x in (h.get("frontmost"), h.get("screen")) if x) or "no answer" for h in homes]
+                          if has_agent else "unknown (no guest agent on this build)") if homes else None,
+            "dark": dark or None, "wrongApp": wrong or None, "locked": locked or None,
+            "unanswered": unanswered or None, "unknown": unknown or None,
+            "frame": {n: frames[n]["frac"] for n in frames} or None,
+            "exposure": {n: frames[n].get("exposure") for n in frames} or None}
+
+
 def brightness(path):
     """Mean luma 0..1. A slept/black panel is ~0; the audit's black home is exactly this."""
     from PIL import Image

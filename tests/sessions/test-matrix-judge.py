@@ -167,7 +167,10 @@ TWO_X = {"guest_package": {"family": "n72-ios2", "seed": 8, "jobs": [], "hooks":
 r, _, _ = run(boot_events(home_lum=200, frontmost="", boot2_confirmed=True),
               lock=TWO_X, entry=dict(N72, id="n72ap-5F138", version="2.1.1"))
 check("frontmost: no agent (2.x) says unknown, not a silent pass",
-      r["home"]["ok"] is True and str(r["home"]["frontmost"]).startswith("unknown") and not r["home"].get("unanswered"))
+      r["home"]["ok"] is None and str(r["home"]["frontmost"]).startswith("unknown") and not r["home"].get("unanswered"))
+
+# Panel liveness without an agent or a reference cannot certify Home.
+check("unobserved home stays unknown", r["home"]["ok"] is None and r["home"]["unknown"] == ["home", "home2"])
 
 # 9. exposure (matrix-holes 3/4): a 2.x capture is the right picture under the guest's ~0.76 backlight; framecheck
 #    undoes that uniform gain, so the committed full-exposure ref passes it, and a flipped dim frame still fails.
@@ -175,6 +178,7 @@ refs = TMP / "refs"; refs.mkdir()
 grad = Image.new("RGB", (64, 96))
 grad.putdata([((x * 4) % 256, (y * 2) % 256, ((x + y) * 3) % 256) for y in range(96) for x in range(64)])
 grad.save(refs / "n72ap-5F138-home.png")
+grad.save(refs / "n72ap-5F138-home2.png")
 def dim_shot(stem, im):
     p = TMP / (stem + ".png")
     im.point(lambda v: round(v * 0.76)).resize((320, 480), Image.NEAREST).save(p)

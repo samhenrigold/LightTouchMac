@@ -26,7 +26,8 @@ struct SingleConfig: Decodable {
     var raceBoots: Int?
     var raceDirty: Bool?
     /// The bundled lockdown-tz: set the zone and the Mac's clock once lockdown answers, as the app does on every
-    /// connect (EmulatorController.syncTimeZoneWhenReady). The clock is what clears a 2.x iPod's BrickState.
+    /// connect (EmulatorController.syncTimeZoneWhenReady). Also completes the first-host handshake,
+    /// independently of the clock, as EmulatorController.checkActivationIfNeeded does.
     var lockdownTZ: String?
     /// false: skip the IPA install (the entry has no AppSync, so the stock installd refuses it).
     var install: Bool?
@@ -66,6 +67,16 @@ struct SingleConfig: Decodable {
         await waitLit(d, ipad ? 0.2 : 0.03, d.profile.bootBudget)   // the app's own boot budget (iPad 300 s)
         await waitUSB(d, expecting: d.profile.productType, 300)
         if let tool = s.lockdownTZ {
+            var completed = false, lastError = ""
+            for attempt in 0..<3 where !completed {
+                if attempt > 0 { try? await Task.sleep(for: .seconds(10)) }
+                do {
+                    try await DeviceServices.finishActivation(tool: tool, socket: d.mux.clientSocket)
+                    completed = true
+                } catch { lastError = error.localizedDescription }
+            }
+            emit("activationCompleted", ["device": d.name, "generation": generation, "ok": completed,
+                                         "error": completed ? "" : lastError])
             var zone: String?
             // with the agent where the boot has one, as the app's (EmulatorController.guest): a zone 4.x kept is retried after it
             let guest = agent || (ipad && offered)

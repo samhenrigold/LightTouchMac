@@ -171,7 +171,7 @@ def live(args):
     helper = sessions.build(args, work)
     shipping = str(args.device) == "shipping"
     nand_current = args.files / "nand-current"
-    cfg = {"helper": str(helper), "requirement": sessions.TEAM_REQ, "usbmuxd": args.usbmuxd, "ipa": "", "bundleID": "",
+    cfg = {"helper": str(helper), "requirement": None, "usbmuxd": args.usbmuxd, "ipa": "", "bundleID": "",
            "work": str(work), "files": str(args.files),
            "ipodNAND": str(args.files / os.readlink(nand_current)) if shipping and nand_current.is_symlink() else "",
            "ipadBase": str(args.device if args.board == "ipad" else ""),

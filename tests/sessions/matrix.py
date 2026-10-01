@@ -247,7 +247,7 @@ def boot(entry, base, a, helper, work, env, app):
     """tests/drivers/session-driver --single with reboot; returns the parsed events, the driver's exit and the serial log."""
     board = {"k48ap": "ipad", "n45ap": "ipod1g"}.get(entry["board"], "ipod")
     nand_current = a.files / "nand-current"
-    cfg = {"helper": str(helper), "requirement": check_sessions.TEAM_REQ, "usbmuxd": str(a.usbmuxd), "ipa": app["ipa"],
+    cfg = {"helper": str(helper), "requirement": None, "usbmuxd": str(a.usbmuxd), "ipa": app["ipa"],
            "bundleID": app["bundle_id"], "work": str(work), "files": str(a.files),
            "ipodNAND": str(a.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(base) if board == "ipad" else "", "timeout": a.boot_timeout - 20,
@@ -316,28 +316,7 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base, ti
                  or str((lock.get("derived") or {}).get("guest_tools", "")).startswith("installed"))
     shots_ev = {Path(e["path"]).stem: e for e in find("screenshot")}
     homes = find("home")
-    home_names = [n for n in ("home", "home2", "installed") if n in shots_ev]
-    dark = [n for n in home_names if float(shots_ev[n].get("brightness", 0)) < HOME_FLOOR]
-    wrong_app = [h.get("frontmost") for h in homes if h.get("frontmost") and h["frontmost"] != SPRINGBOARD]
-    locked = [h.get("generation") for h in homes if h.get("frontmost") == SPRINGBOARD and h.get("screen") == "Lock Screen"]
-    unanswered = [h.get("generation") for h in homes if has_agent and not h.get("frontmost")]
-    frame = {}
-    for n in home_names:
-        ref = MATRIX_REFS / f"{entry['id']}-{n}.png"
-        if ref.exists():
-            frame[n] = framecheck.verdict(shots_ev[n]["path"], str(ref))
-    bad_frame = [n for n, v in frame.items() if not v["ok"]]
-    if not home_names:
-        r["home"] = {"ok": None, "note": "no home screenshot taken"}
-    else:
-        r["home"] = {"ok": not dark and not wrong_app and not locked and not unanswered and not bad_frame,
-                     "brightness": {n: round(float(shots_ev[n].get("brightness", -1)), 3) for n in home_names},
-                     "frontmost": ([" / ".join(x for x in (h.get("frontmost"), h.get("screen")) if x) or "no answer" for h in homes]
-                                   if has_agent else "unknown (no guest agent on this build)") if homes else None,
-                     "dark": dark or None, "wrongApp": wrong_app or None, "locked": locked or None,
-                     "unanswered": unanswered or None,
-                     "frame": {n: frame[n]["frac"] for n in frame} or None,
-                     "exposure": {n: frame[n].get("exposure") for n in frame} or None}
+    r["home"] = framecheck.home_verdict(lock, events, entry["id"], MATRIX_REFS)
     usb = find("usb")
     want = entry["product_type"]
     r["lockdown"] = {"ok": bool(usb) and usb[0].get("productType") == want, "seconds": round(usb[0]["seconds"], 1) if usb else None,
@@ -413,7 +392,7 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base, ti
     r["gl"] = {"ok": False if shim and not gl_path else (bool(home_ok) and gl_rejects == 0) if home_ok is not None else None,
                "path": gl_path.group(0) if gl_path else "software CA (no GL path in the log)",
                "shim": shim, "rejects": gl_rejects,
-               "picture": {n: frame[n]["frac"] for n in frame} or None,
+               "picture": r["home"].get("frame"),
                "note": (("the GL front end is installed but CoreAnimation never took the GL path" if shim else
                          "software-composited: the pipeline installed no GL front end") if not gl_path else
                         (None if home_ok is not None else "no home screenshot to judge"))}

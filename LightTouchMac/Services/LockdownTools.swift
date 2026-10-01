@@ -14,7 +14,12 @@ extension DeviceServices {
         guard let tool = Bundled.tool("lockdown-tz") ?? Self.developmentHelper("lockdown-tz") else {
             throw DeviceToolsError.toolMissing("lockdown-tz")
         }
-        let result = try await Self.lockdownChild(tool, ["--finish-activation"], socket: clientSocket)
+        try await Self.finishActivation(tool: tool, socket: clientSocket)
+    }
+
+    /// The same child protocol with an explicit executable, for native session tests.
+    static func finishActivation(tool: String, socket: String) async throws {
+        let result = try await lockdownChild(tool, ["--finish-activation"], socket: socket)
         guard result.status == 0 else {
             throw DeviceToolsError.failed("Couldn’t complete device activation. \(result.error)")
         }

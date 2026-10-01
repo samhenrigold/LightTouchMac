@@ -56,7 +56,7 @@ each through the app's GuestServices/GuestAgent, DeviceServices, lockdown-tz and
 Run in the foreground; every process it starts is gone when it returns. Screenshots land in
 --work/<device>/*.png.
 """
-import argparse, json, os, signal, subprocess, sys, tempfile, time
+import argparse, importlib.util, json, os, shlex, signal, subprocess, sys, tempfile, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -65,7 +65,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import sources  # the pinned checkouts (build-support/sources.json)
 import swift_subprocess
 import host_service
-TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
 APP_SOURCES = ["Services/DeviceServices", "Device/DeviceProcess", "Transport/DeviceExecution", "Device/BootRecipe", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
                "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestAgent", "Guest/GuestPackage",
                "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
@@ -149,10 +148,17 @@ def build_lockdown_tz(out, frameworks=None):
     """out/lockdown-tz; the app's Debug build compiles the same source (LockdownTools: DeviceServices.developmentHelper).
     With `frameworks` (a prefix's lib/), linked against that libimobiledevice as package.sh links the bundled one."""
     tz = out / "lockdown-tz"
-    flags = (f'-I{Path(frameworks).parent}/include -L{frameworks} -Wl,-rpath,{frameworks} -limobiledevice-1.0 -lplist-2.0'
-             if frameworks else '$(pkg-config --cflags --libs libimobiledevice-1.0 libplist-2.0)')
-    r = subprocess.run(["/bin/sh", "-c", 'PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; cc -O2 -o "$1" "$2" ' + flags,
-                        "sh", str(tz), str(ROOT / "scripts/lockdown-tz.c")])
+    packages = ["libimobiledevice-1.0", "libplist-2.0"]
+    env = dict(os.environ, PATH="/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", ""))
+    if frameworks:
+        headers = Path(frameworks).parent / "include"
+        cflags = (["-I" + str(headers)] if headers.is_dir() else
+                  shlex.split(subprocess.check_output(["pkg-config", "--cflags", *packages], env=env, text=True)))
+        flags = [*cflags, "-L" + str(frameworks), "-Wl,-rpath," + str(frameworks),
+                 "-limobiledevice-1.0", "-lplist-2.0"]
+    else:
+        flags = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", *packages], env=env, text=True))
+    r = subprocess.run(["cc", "-O2", "-o", str(tz), str(ROOT / "scripts/lockdown-tz.c"), *flags], env=env)
     if r.returncode:
         sys.exit("FAIL: building lockdown-tz")
     return tz
@@ -197,7 +203,7 @@ def main():
     ap.add_argument("--contrib", type=Path, default=sources.path("qemu-ios") / "contrib")
     ap.add_argument("--time-zone", default="Asia/Tokyo")
     ap.add_argument("--helper")
-    ap.add_argument("--helper-requirement", default=TEAM_REQ, help="explicit signing requirement for a supplied test helper (default: project team)")
+    ap.add_argument("--helper-requirement", default=None, help="optional signing requirement for a supplied test helper (default: the app’s identity check)")
     ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(sources.qemu_build() / "libqemu-arm.dylib")))
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
     ap.add_argument("--usbmuxd", default=str(sources.path("usbmuxd") / "src/usbmuxd"))
@@ -213,7 +219,7 @@ def main():
     ap.add_argument("--ipad-itpack", type=Path, help="boot the iPad with the app's offer from this armv7.itpack and check "
                     "the loader's report and the agent (foreground app, lock state, launch)")
     args = ap.parse_args()
-    if args.helper_requirement != TEAM_REQ and not args.helper:
+    if args.helper_requirement and not args.helper:
         ap.error("--helper-requirement needs an explicitly supplied --helper")
     if args.helper and not os.access(args.helper, os.X_OK):
         ap.error("test helper is not executable: " + args.helper)
@@ -241,7 +247,9 @@ def main():
     if args.frameworks:
         cfg["frameworks"] = args.frameworks
     if args.single:
-        cfg["single"] = {"board": args.board, "base": str(args.single)}
+        bundled_tz = helper.parent / "lockdown-tz"
+        tz = bundled_tz if os.access(bundled_tz, os.X_OK) else build_lockdown_tz(work, args.frameworks)
+        cfg["single"] = {"board": args.board, "base": str(args.single), "lockdownTZ": str(tz)}
         if args.afc_race:
             cfg["single"] |= {"raceBoots": args.afc_race, "raceDirty": args.afc_race_dirty}
             cfg["timeout"] = 200 * args.afc_race
@@ -312,6 +320,18 @@ def main():
         check(lit, f"{d}: lit in {lit.get('seconds', -1):.1f} s")
         usb = (find("usb", device=d) or [{}])[0]
         check(usb.get("productType") == ("iPad1,1" if d == "ipad" else "iPod2,1"), f"{d}: lockdown over its usbmuxd: {usb.get('productType')}")
+        spec = importlib.util.spec_from_file_location("session_framecheck", ROOT / "tests/sessions/framecheck.py")
+        frames = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(frames)
+        lock = json.loads((base_dir / "device.lock.json").read_text())
+        home = frames.home_verdict(lock, find("home", device=d) + find("screenshot", device=d),
+                                  (lock.get("entry") or {}).get("id") or f"{lock.get('board')}-{lock.get('build')}",
+                                  ROOT / "tests/sessions/matrix-refs")
+        check(home.get("ok") is True, f"{d}: usable Home screen: {home}")
+        activation = find("activationCompleted", device=d)
+        check(activation and all(e.get("ok") for e in activation),
+              f"{d}: automatic activation handshake completed" +
+              ("" if activation and all(e.get("ok") for e in activation) else f": {activation}"))
         if d == "ipod":
             ids = find("identity", device=d)
             check(ids and all(e["bt"] == e["want"] for e in ids),

@@ -15,7 +15,8 @@ import Foundation
 import IOSurface
 
 struct Config: Decodable {
-    var helper: String, requirement: String, usbmuxd: String, ipa: String, bundleID: String
+    var helper: String, usbmuxd: String, ipa: String, bundleID: String
+    var requirement: String?
     var work: String, files: String, ipodNAND: String, ipadBase: String
     /// The app's armv7.itpack: the iPad boots with the offer EmulatorController composes from it.
     var ipadItpack: String?
@@ -230,7 +231,7 @@ extension String {
     }
 
     static var helper: String { config.helper }
-    static var requirement: String { config.requirement }
+    static var requirement: String? { config.requirement }
     static var files: String { config.files }
     static var ipodNAND: String { config.ipodNAND }
     static var ipadBase: String { config.ipadBase }

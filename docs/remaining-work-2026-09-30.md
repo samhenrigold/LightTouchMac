@@ -304,3 +304,20 @@ use the actual nonisolated contract. Qualification uses bundled service librarie
 the Homebrew library set returned AFC code 8 and is not counted as a passing
 pipeline check. The candidate host gate passes 109 checks with 28 declared manual
 input skips. All eight model suites passed for the clock/identity/BT code.
+
+
+Fresh 5F138 follow-up: the production preparation and boot chain now work, and
+the app's first-host activation handshake reaches a usable Home screen. The
+headless session omitted that operation; it now uses the same child protocol.
+Four AFC round trips, compatible cached IPA installation and guest-confirmed
+shutdown pass in `/private/tmp/ltm-n72-211-handshake-pacman`. Bluetooth identity
+still fails; do not promote 2.1.1 to qualified from these partial checks. The
+3.1-only Harness IPA's BundleVerificationFailed result was a test input mismatch.
+The shared Home judge rejects Connect to iTunes and preserves unknown when no
+agent/reference evidence exists. Test helpers now use the app's signing identity
+check by default, including ad hoc bundles, rather than requiring a maintainer
+Team ID. Explicit test signing requirements remain available.
+
+Upstream fetch on October 1 found no new app commits beyond the already
+integrated main/multidevice refs. The rewritten remote emulator history remains
+separate from the coherent local ipad1 base; no unrelated history was merged.

@@ -27,3 +27,27 @@ Real guest checks use private overlays under `/private/tmp/activation-research/`
 - Native 9B206 preparation applies built-in activation successfully, but full preparation is still blocked by unrelated integration gaps: the default AppSync signature matcher rejects the 9B206 function entry; with AppSync disabled in a disposable test entry, preparation reaches activation and then rejects the bundled armv7.itpack because it has no package for 9B206. The shipped catalog has not been weakened to hide either failure. The merged graphics sources also needed rebuilding; old helper artifacts cannot render 5.x correctly.
 
 No additional firmware release is declared supported solely because its daemon matches. A release needs fresh offline preparation, usable UI, paired services and reboot persistence checks. A pre-existing image passing the host protocol test is not a fresh native preparation pass.
+
+## October 1 fresh 2.1.1 native session
+
+A fresh production Swift preparation from the verified Apple 5F138 IPSW boots
+through SecureROM and its generated NOR. The headless session harness previously
+skipped the app's automatic `finishActivation` operation: it therefore left
+`iTunesHasConnected` unset and captured Connect to iTunes despite an Activated
+state. The harness now calls the same isolated child operation, with readback
+and startup retries, before its unlock/install checks. No daemon matcher or
+activation patch was changed for this finding.
+
+The corrected private-overlay run reaches a reference-matching Home screen,
+passes four exact AFC round trips (through 1,048,583 bytes), installs the cached
+compatible PAC-MAN Lite IPA on the first attempt, and confirms guest shutdown
+in 15.2 seconds. The original Harness IPA declares a 3.1 minimum OS and correctly
+fails bundle verification on 2.1.1; this is not an AppSync failure. The whole
+session still fails its separate Bluetooth identity gate (guest
+01:23:32:6e:aa:10 versus prepared 02:9f:ef:8e:4a:f9).
+
+Evidence: `/private/tmp/ltm-n72-211-handshake-pacman/` and its log. The same Home
+checker rejects the prior Connect-to-iTunes capture (block difference 0.6273)
+and accepts the corrected Home capture (0.0098). A screen with neither an agent
+answer nor a reference remains unknown, rather than becoming a home pass from
+brightness alone. This does not certify the full 2.x matrix or reboot identity.
