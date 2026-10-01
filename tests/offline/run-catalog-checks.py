@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run catalog, ready-queue, boundary and optional native AppKit checks. No QEMU."""
 from pathlib import Path
+from firmwarekit_leaf import schema_sources
 import os, subprocess, sys, tempfile, time
 root = Path(__file__).resolve().parents[2]
 def run(args, **kwargs):
@@ -19,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
         port = portfile.read_text()
         def swift(name, sources, arguments=()):
             exe=work/name
-            run(['swiftc','-parse-as-library','-module-cache-path',str(work/'modules'), *sources,'-o',str(exe)])
+            run(['swiftc', *schema_sources(),'-parse-as-library','-module-cache-path',str(work/'modules'), *sources,'-o',str(exe)])
             run([str(exe),*arguments], env=env, timeout=30)
         # CatalogClient consults the IPA library, whose device paths DeviceLibrary.swift resolves in the app.
         (work/'paths.swift').write_text('extension DeviceInstance { var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) } }\n')

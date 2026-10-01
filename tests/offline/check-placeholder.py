@@ -11,6 +11,7 @@ popover (ⓘ) has a real size (RC1's was 0×0 and showed nothing) and shows the 
 explanation, the source note and the release date for experimental, untested, beta and paid-update builds.
 """
 from pathlib import Path
+from firmwarekit_leaf import schema_sources
 import argparse, subprocess, tempfile
 
 root = Path(__file__).resolve().parents[2]
@@ -131,7 +132,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-placeholder-') as tmp:
     (tmp / 'placeholder.swift').write_text(source.replace(art, f'NSImage(contentsOfFile: "{assets}/" + $0.shellImageName + ".imageset/" + ($0.shellImageName == "shell" ? "shell_opaque.png" : "ipad-frame.png"))'))
     (tmp / 'stubs.swift').write_text(stubs)
     (tmp / 'main.swift').write_text(check)
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
+    subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
                     str(app / 'Library/FirmwareCatalog.swift'), str(app / 'Device/DeviceProfile.swift'),
                     str(app / 'Device/DeviceProfile+Display.swift'), str(app / 'Device/DeviceRow.swift'),
                     str(tmp / 'placeholder.swift'), str(tmp / 'stubs.swift'), str(tmp / 'main.swift'), '-o', str(tmp / 'check')], check=True)

@@ -22,9 +22,10 @@ let package = Package(
         .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "1.0.0"),
     ],
     targets: [
+        .target(name: "FirmwareSchema"),
         .target(name: "CActivation", cSettings: [.define("LT_ACTIVATION_LIBRARY")]),
         .target(name: "FirmwareKit", dependencies: [
-            "CActivation",
+            "CActivation", "FirmwareSchema",
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             .product(name: "MachOKit", package: "MachOKit"),
             .product(name: "Subprocess", package: "swift-subprocess"),

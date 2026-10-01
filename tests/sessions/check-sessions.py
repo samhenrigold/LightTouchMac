@@ -161,7 +161,7 @@ def build_lockdown_tz(out, frameworks=None):
 def build(args, out):
     subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)
     subprocess.run(["xcrun", "swiftc", "-swift-version", "5", "-default-isolation", "MainActor", "-module-cache-path", out / "modules",
-                    *swift_subprocess.swift_flags(ROOT),
+                    *swift_subprocess.swift_flags(ROOT), ROOT / "Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift",
                     "-I", ROOT / "Shared/CLink", out / "ltm_link.o", *sorted((ROOT / "Shared").glob("*.swift")),
                     ROOT / "LightTouchDevice/FrameTools.swift", *[ROOT / f"LightTouchMac/{n}.swift" for n in APP_SOURCES],
                     ROOT / "tests/drivers/session-driver/main.swift", ROOT / "tests/drivers/session-driver/guest.swift",

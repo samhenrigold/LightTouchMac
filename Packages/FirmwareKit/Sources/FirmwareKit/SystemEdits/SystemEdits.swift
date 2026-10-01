@@ -23,6 +23,7 @@
 // `helpers` is a flat directory of prebuilt, signed files (the app bundles it; see `Helpers`).
 
 import Foundation
+public import FirmwareSchema
 
 public enum SystemEdits {
     /// The recipe options SystemEdits reads (FirmwareEntry.Recipe.options), plus bake's switches.

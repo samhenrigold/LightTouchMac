@@ -13,6 +13,7 @@ UserDefaults suite. Checks:
   running or in flight can leave.
 """
 from pathlib import Path
+from firmwarekit_leaf import schema_sources
 import subprocess, tempfile
 
 app = Path(__file__).resolve().parents[2] / 'LightTouchMac'
@@ -105,7 +106,7 @@ import Foundation
 with tempfile.TemporaryDirectory(prefix='ltm-sidebar-list-') as tmp:
     tmp = Path(tmp)
     (tmp / 'main.swift').write_text(check)
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
+    subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
                     str(app / 'Library/FirmwareCatalog.swift'), str(app / 'Device/DeviceProfile.swift'),
                     str(app / 'Device/DeviceRow.swift'), str(app / 'Library/SidebarList.swift'),
                     str(tmp / 'main.swift'), '-o', str(tmp / 'check')], check=True)

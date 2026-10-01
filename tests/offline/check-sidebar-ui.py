@@ -14,6 +14,7 @@ it (saved), on a prepared one it asks the delegate to delete instead; an empty s
 download starting for an entry not in the list adds it. The sheet lists every catalog entry once.
 """
 from pathlib import Path
+from firmwarekit_leaf import schema_sources
 import argparse, subprocess, tempfile
 
 app = Path(__file__).resolve().parents[2] / 'LightTouchMac'
@@ -231,7 +232,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-sidebar-ui-') as tmp:
     out.mkdir(parents=True, exist_ok=True)
     (tmp / 'stubs.swift').write_text(stubs)
     (tmp / 'main.swift').write_text(check)
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', '-default-isolation', 'MainActor',
+    subprocess.run(['xcrun', 'swiftc', *schema_sources(), '-parse-as-library', '-swift-version', '5', '-default-isolation', 'MainActor',
                     '-module-cache-path', str(tmp / 'modules'),
                     str(app / 'Library/FirmwareCatalog.swift'), str(app / 'Device/DeviceProfile.swift'),
                     str(app / 'Device/DeviceRow.swift'), str(app / 'Library/SidebarList.swift'),

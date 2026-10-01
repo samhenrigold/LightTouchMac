@@ -70,6 +70,9 @@ if CommandLine.arguments.count > 1, CommandLine.arguments[1] == "--selftest-walk
     CFRunLoopRun()
 }
 nonisolated(unsafe) let config = try! JSONDecoder().decode(Config.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1])))
+// Standalone matrix callers pass resource paths in config, while the app gets
+// them from its bundle. Forward the fixed library directory to owned children.
+setenv("LTM_SERVICE_FRAMEWORKS", config.frameworks ?? "/opt/homebrew/lib", 1)
 let work = URL(fileURLWithPath: config.work)
 
 // MARK: - usbmuxd, as USBMux starts it

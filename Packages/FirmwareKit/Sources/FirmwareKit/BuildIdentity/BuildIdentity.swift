@@ -12,81 +12,12 @@
 // all_flash/dfu naming) and device.py's verify step.
 
 import Foundation
+public import FirmwareSchema
 
 /// One entry of the app's Resources/firmware-catalog.json (the app's FirmwareCatalog.Entry schema).
-public struct FirmwareEntry: Codable, Sendable, Equatable {
-    public struct Source: Codable, Sendable, Equatable {
-        public var kind: String
-        public var url: URL?
-        public var sha1: String?
-        public var bytes: Int64?
-        public var resource: String?
-    }
+public typealias FirmwareEntry = FirmwareWire.Entry
 
-    /// An img3's IV/key, or a root filesystem's VFDecrypt key (no IV). `file` is the name inside the IPSW.
-    public struct Key: Codable, Sendable, Equatable {
-        public var file: String
-        public var iv: String?
-        public var key: String
-        public init(file: String, iv: String?, key: String) { self.file = file; self.iv = iv; self.key = key }
-    }
-
-    public struct Recipe: Codable, Sendable, Equatable {
-        public struct Guest: Codable, Sendable, Equatable {
-            public var arch: String
-            public var glEngine: String?
-            enum CodingKeys: String, CodingKey { case arch, glEngine = "gl_engine" }
-        }
-        public var name: String
-        public var version: Int
-        public var storage: String
-        public var systemMiB: Int
-        public var dataSize: String
-        public var options: [String: Bool]
-        public var guest: Guest?
-        /// The k48 boot chain: "iboot" (iBoot -> kernel; default when absent) or "kboot"
-        /// (direct-kernel, for debugging). Ignored by n72ap.
-        public var boot: String?
-        /// A sibling entry (same iOS major, ramdisk keys known) whose restore ramdisk boots the data-protection
-        /// keybag one-shot when this build has no public ramdisk keys (iPad 4.3.1-4.3.5 -> k48ap-8F190). The caller
-        /// supplies that entry and its IPSW (firmwarekit create --sibling-entry/--sibling-ipsw).
-        public var keybagRamdiskFrom: String?
-        enum CodingKeys: String, CodingKey {
-            case name, version, storage, options, guest, boot
-            case systemMiB = "system_mib", dataSize = "data_size", keybagRamdiskFrom = "keybag_ramdisk_from"
-        }
-    }
-
-    public struct Emulator: Codable, Sendable, Equatable {
-        public var minProtocol: Int
-        enum CodingKeys: String, CodingKey { case minProtocol = "min_protocol" }
-    }
-
-    public struct Estimates: Codable, Sendable, Equatable {
-        public var preparedBytes: Int64
-        public var peakBytes: Int64
-        public var seconds: Int
-        enum CodingKeys: String, CodingKey { case seconds, preparedBytes = "prepared_bytes", peakBytes = "peak_bytes" }
-    }
-
-    public var id: String
-    public var board: String
-    public var productType: String
-    public var version: String
-    public var build: String
-    public var status: String
-    public var statusNote: String?
-    public var source: Source
-    public var keys: [String: Key]
-    public var recipe: Recipe?
-    public var emulator: Emulator
-    public var estimates: Estimates
-
-    enum CodingKeys: String, CodingKey {
-        case id, board, version, build, status, source, keys, recipe, emulator, estimates
-        case productType = "product_type", statusNote = "status_note"
-    }
-
+extension FirmwareEntry {
     public static func load(from url: URL) throws -> FirmwareEntry {
         try JSONDecoder().decode(FirmwareEntry.self, from: Data(contentsOf: url))
     }

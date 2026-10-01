@@ -15,82 +15,83 @@ nonisolated struct FirmwareCatalog: Codable, Sendable {
         /// `untested`: enumerated from Apple's list with public keys, never run through the pipeline (docs/matrix.md).
         enum Status: String, Codable, Sendable { case available, experimental, comingSoon = "coming_soon", userIPSW = "user_ipsw", untested }
 
-        struct Source: Codable, Sendable, Equatable {
-            enum Kind: String, Codable, Sendable { case ipsw }
-            var kind: Kind
-            /// A user_ipsw entry pins sha1 without a URL.
-            var url: URL?
-            var sha1: String?
-            var bytes: Int64?
-        }
-
-        /// An img3's IV/key, or a root filesystem's VFDecrypt key (no IV).
-        /// `file` is the name inside the IPSW, which is how qemu-ios' key
-        /// text is looked up.
-        struct Key: Codable, Sendable, Equatable {
-            var file: String
-            var iv: String?
-            var key: String
-        }
-
-        struct Recipe: Codable, Sendable, Equatable {
-            struct Guest: Codable, Sendable, Equatable {
-                var arch: String
-                var glEngine: String?
-                enum CodingKeys: String, CodingKey { case arch, glEngine = "gl_engine" }
-            }
-            var name: String
-            var version: Int
-            var storage: String
-            var systemMiB: Int
-            var dataSize: String
-            var options: [String: Bool]
-            var guest: Guest?
-            /// The entry whose restore ramdisk boots the keybag one-shot (no public ramdisk keys for this build).
-            var keybagRamdiskFrom: String?
-            /// Preserve explicit boot policy when forwarding the entry to FirmwareKit.
-            var boot: String?
-            enum CodingKeys: String, CodingKey {
-                case name, version, storage, options, guest, boot
-                case systemMiB = "system_mib", dataSize = "data_size", keybagRamdiskFrom = "keybag_ramdisk_from"
-            }
-        }
-
-        struct Emulator: Codable, Sendable, Equatable { var minProtocol: Int
-            enum CodingKeys: String, CodingKey { case minProtocol = "min_protocol" } }
-
-        struct Estimates: Codable, Sendable, Equatable {
-            var preparedBytes: Int64
-            var peakBytes: Int64
-            var seconds: Int
-            enum CodingKeys: String, CodingKey { case seconds, preparedBytes = "prepared_bytes", peakBytes = "peak_bytes" }
-        }
-
-        /// A developer build: a beta or a golden master (docs/matrix.md, Betas).
+        typealias Source = FirmwareWire.Entry.Source
+        typealias Key = FirmwareWire.Entry.Key
+        typealias Recipe = FirmwareWire.Entry.Recipe
+        typealias Emulator = FirmwareWire.Entry.Emulator
+        typealias Estimates = FirmwareWire.Entry.Estimates
         enum Prerelease: String, Codable, Sendable { case beta, gm }
 
-        var id: String
-        var board: String
-        var productType: String
-        var version: String
-        var build: String
-        /// Apple's release date ("2010-09-08"), or a developer build's; the order within a version.
-        var released: String?
-        var status: Status
-        var statusNote: String?
-        var prerelease: Prerelease?
-        /// Which beta/GM of its version (absent: the first).
-        var prereleaseNumber: Int?
-        var source: Source
-        var keys: [String: Key]
-        var recipe: Recipe?
-        /// "none" or "optional": whether a user-configured hook may run.
-        var emulator: Emulator
-        var estimates: Estimates
+        private var wire: FirmwareWire.Entry
+        init(from decoder: Decoder) throws {
+            wire = try FirmwareWire.Entry(from: decoder)
+            guard Status(rawValue: wire.status) != nil, wire.source.kind == "ipsw",
+                  wire.prerelease == nil || Prerelease(rawValue: wire.prerelease!) != nil else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                    debugDescription: "Unknown firmware presentation status, prerelease or source kind"))
+            }
+        }
+        func encode(to encoder: Encoder) throws { try wire.encode(to: encoder) }
 
-        enum CodingKeys: String, CodingKey {
-            case id, board, version, build, released, status, source, keys, recipe, emulator, estimates, prerelease
-            case productType = "product_type", statusNote = "status_note", prereleaseNumber = "prerelease_number"
+        var status: Status {
+            get { Status(rawValue: wire.status)! }
+            set { wire.status = newValue.rawValue }
+        }
+        var prerelease: Prerelease? {
+            get { wire.prerelease.flatMap(Prerelease.init(rawValue:)) }
+            set { wire.prerelease = newValue?.rawValue }
+        }
+        var id: String {
+            get { wire.id }
+            set { wire.id = newValue }
+        }
+        var board: String {
+            get { wire.board }
+            set { wire.board = newValue }
+        }
+        var productType: String {
+            get { wire.productType }
+            set { wire.productType = newValue }
+        }
+        var version: String {
+            get { wire.version }
+            set { wire.version = newValue }
+        }
+        var build: String {
+            get { wire.build }
+            set { wire.build = newValue }
+        }
+        var released: String? {
+            get { wire.released }
+            set { wire.released = newValue }
+        }
+        var statusNote: String? {
+            get { wire.statusNote }
+            set { wire.statusNote = newValue }
+        }
+        var prereleaseNumber: Int? {
+            get { wire.prereleaseNumber }
+            set { wire.prereleaseNumber = newValue }
+        }
+        var source: Source {
+            get { wire.source }
+            set { wire.source = newValue }
+        }
+        var keys: [String: Key] {
+            get { wire.keys }
+            set { wire.keys = newValue }
+        }
+        var recipe: Recipe? {
+            get { wire.recipe }
+            set { wire.recipe = newValue }
+        }
+        var emulator: Emulator {
+            get { wire.emulator }
+            set { wire.emulator = newValue }
+        }
+        var estimates: Estimates {
+            get { wire.estimates }
+            set { wire.estimates = newValue }
         }
 
         var profile: DeviceProfile? { DeviceProfile(boardID: board) }

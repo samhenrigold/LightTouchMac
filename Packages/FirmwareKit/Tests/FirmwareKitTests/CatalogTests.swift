@@ -20,4 +20,30 @@ struct CatalogTests {
             }
         }
     }
+
+    @Test func sharedWireKeepsMetadataAndFutureTags() throws {
+        let original = try Oracle.entry("k48ap-7B500")
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as! [String: Any]
+        object["released"] = "2011-06-07"
+        object["prerelease"] = "future-preview"
+        object["prerelease_number"] = 4
+        object["status"] = "future-status"
+        var source = object["source"] as! [String: Any]
+        source["resource"] = "embedded.ipsw"
+        object["source"] = source
+        var recipe = object["recipe"] as! [String: Any]
+        recipe["boot"] = "kboot"
+        recipe["keybag_ramdisk_from"] = "k48ap-sibling"
+        object["recipe"] = recipe
+        try Oracle.withTemp { dir in
+            let url = dir.appendingPathComponent("entry.json")
+            try JSONSerialization.data(withJSONObject: object).write(to: url)
+            let entry = try FirmwareEntry.load(from: url)
+            #expect(entry.status == "future-status" && entry.prerelease == "future-preview")
+            #expect(entry.source.resource == "embedded.ipsw" && entry.recipe?.boot == "kboot")
+            let again = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entry)) as! NSDictionary
+            #expect(again == object as NSDictionary)
+        }
+    }
+
 }

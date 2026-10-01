@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1D0C0DE33000000000000002 /* FirmwareWire in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE33000000000000001; };
 		A1D0C0DE32000000000000063 /* HostServiceResources in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE32000000000000062; };
 		A1D0C0DE32000000000000061 /* HostServiceTypes in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE32000000000000060; };
 		A1D0C0DE32000000000000040 /* Services/DeviceServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE32000000000000020; };
@@ -52,6 +53,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A1D0C0DE33000000000000001 /* FirmwareWire */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift; sourceTree = SOURCE_ROOT; };
 		A1D0C0DE32000000000000062 /* HostServiceResources */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightTouchMac/Services/HostServiceResources.swift; sourceTree = SOURCE_ROOT; };
 		A1D0C0DE32000000000000060 /* HostServiceTypes */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightTouchMac/Services/HostServiceTypes.swift; sourceTree = SOURCE_ROOT; };
 		A1D0C0DE32000000000000020 /* Services/DeviceServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightTouchMac/Services/DeviceServices.swift; sourceTree = SOURCE_ROOT; };
@@ -112,6 +114,7 @@
 			children = (
 				EA17D83430239D9B00BDF83E /* LightTouchMac */,
 				A1D0C0DE3100000000000020 /* StorageCapacity.swift */,
+				A1D0C0DE33000000000000001 /* FirmwareWire */,
 				A1D0C0DE3100000000000012 /* LightTouchDevice */,
 				A1D0C0DE3200000000000000B /* LightTouchServices */,
 				A1D0C0DE3100000000000013 /* Shared */,
@@ -260,6 +263,7 @@
 			isa = PBXSourcesBuildPhase;
 			files = (
 				A1D0C0DE3100000000000021 /* StorageCapacity.swift in Sources */,
+				A1D0C0DE33000000000000002 /* FirmwareWire in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */
