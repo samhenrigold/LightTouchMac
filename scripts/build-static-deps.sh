@@ -76,7 +76,8 @@ echo 'Building OpenSSL 3.6.3'
 license() {   # LICENSE-NAME DIRECTORY FILES...: license texts into prefix/share/licenses/NAME
     local name="$1" dir="$2"; shift 2
     mkdir -p "$PREFIX/share/licenses/$name"
-    (cd "$ROOT/build/$dir" && cp "$@" "$PREFIX/share/licenses/$name/")
+    case "$dir" in /*) ;; *) dir="$ROOT/build/$dir" ;; esac
+    (cd "$dir" && cp "$@" "$PREFIX/share/licenses/$name/")
 }
 license openssl openssl-3.6.3 LICENSE.txt
 
