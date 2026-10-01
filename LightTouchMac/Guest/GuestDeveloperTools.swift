@@ -8,12 +8,14 @@ nonisolated enum GuestDeveloperTools {
             .appendingPathComponent("Library/Application Support/Light Touch/DeveloperSSH", isDirectory: true)
     }
 
+    static func supports(build: String) -> Bool { ["7E18", "7B500"].contains(build) }
+
     static func augmentation(instance: DeviceInstance, build: String) -> ((URL, Int64) throws -> (serial: Int64, version: String))? {
         let id = instance.id
         let enabled = state.appendingPathComponent(id.uuidString.lowercased()).appendingPathComponent("enabled")
-        guard FileManager.default.fileExists(atPath: enabled.path) else { return nil }
+        guard supports(build: build), FileManager.default.fileExists(atPath: enabled.path) else { return nil }
         return { offer, bundled in
-            guard ["7E18", "7B500"].contains(build), bundled > 0, bundled <= (Int64(Int32.max) - 1_000_001) / 100 else {
+            guard bundled > 0, bundled <= (Int64(Int32.max) - 1_000_001) / 100 else {
                 throw DeviceToolsError.failed("Developer SSH is currently supported for 7E18 and 7B500 packages")
             }
             let payload = Bundle.main.resourceURL?.appendingPathComponent("developer-tools")

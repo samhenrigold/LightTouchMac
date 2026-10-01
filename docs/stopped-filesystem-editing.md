@@ -3,7 +3,7 @@
 Light Touch provides **Open Filesystem in Finder** for a stopped iPod touch 2G
 whose storage is the supported N72 generated format. Stop the device normally
 first; pausing it does not grant filesystem ownership. After editing, use **Save
-Filesystem Changes** or **Discard Filesystem Changes**. A pending edit prevents
+Filesystem Edits** or **Discard Filesystem Edits**. A pending edit prevents
 boot, erase and deletion, including commands from another process.
 
 The equivalent preparation-tool API is:

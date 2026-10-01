@@ -733,6 +733,7 @@ final class EmulatorController {
     /// SIGTERM: a guest that already powered off quits at once; one that
     /// didn't gets the helper's own bounded clean shutdown after we are gone.
     private func publishDeveloperConnection() {
+        guard GuestDeveloperTools.supports(build: instance.firmware.split(separator: "-").last.map(String.init) ?? "") else { return }
         guard let socket = usbmux.session?.clientSocket else { return }
         do {
             try DeveloperConnectionProfile.publish(instance: instance.id, session: bootScope.id,
@@ -1295,9 +1296,17 @@ final class EmulatorController {
         let build = instance.firmware.split(separator: "-").last.map(String.init) ?? ""
         do {
             try FileManager.default.createDirectory(at: instance.paths.work, withIntermediateDirectories: true)
-            guestOffer = try GuestPackage.compose(itpack: pack, board: instance.board, build: build,
-                                                  lock: lockRecord, guest: guestRecord, into: guestOfferDirectory,
-                                                  augment: GuestDeveloperTools.augmentation(instance: instance, build: build))
+            let augmentation = GuestDeveloperTools.augmentation(instance: instance, build: build)
+            do {
+                guestOffer = try GuestPackage.compose(itpack: pack, board: instance.board, build: build,
+                                                      lock: lockRecord, guest: guestRecord, into: guestOfferDirectory,
+                                                      augment: augmentation)
+            } catch where augmentation != nil {
+                logEvent("developer tools: not offered: \(error.localizedDescription)")
+                // Optional developer access must not suppress required additions.
+                guestOffer = try GuestPackage.compose(itpack: pack, board: instance.board, build: build,
+                                                      lock: lockRecord, guest: guestRecord, into: guestOfferDirectory)
+            }
         } catch {
             logEvent("guest package: no offer: \(error.localizedDescription)")
         }
