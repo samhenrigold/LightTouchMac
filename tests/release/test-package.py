@@ -11,6 +11,7 @@ the dlopened Frameworks/libqemu-arm.dylib resolved inside the bundle, and a
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -111,10 +112,8 @@ def check_helper(app):
     for key in ('com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory',
                 'com.apple.security.cs.disable-library-validation'):
         assert key in details.stdout, f'helper lacks entitlement {key}'
-    if 'Signature=adhoc' in details.stderr:
-        assert 'runtime' not in details.stderr, 'ad hoc helper must use the launchable local signing policy'
-    else:
-        assert 'flags=0x10000(runtime)' in details.stderr, 'Developer ID helper lacks hardened runtime'
+    flags = re.search(r'flags=0x([0-9a-fA-F]+)', details.stderr)
+    assert flags and int(flags[1], 16) & 0x10000, 'helper lacks hardened runtime'
     assert 'Identifier=gold.samhenri.LightTouchMac.LightTouchDevice' in details.stderr, details.stderr
     subprocess.run(['codesign', '--verify', '--strict', helper], check=True)
     info = subprocess.run(['/usr/libexec/PlistBuddy', '-c', 'Print :LSMinimumSystemVersion', app / 'Contents/Info.plist'],

@@ -7,7 +7,7 @@ and [reuse survey](reuse-survey-2026-09-30.md). Those documents describe the
 inspection states at the time of the review; their checkout table is historical.
 The implementation starts from multidevice `eac0793` and emulator `2ece77c080`,
 including the consolidation and guest package 9 that landed before this work.
-The candidates also include the later multidevice UI tip `e9fcfc3` and emulator
+The candidates also include the later multidevice HIG/copy and N45 smoke tip `cc8ee59` and emulator
 CoreAudio tip `66bbf69862`; those changes are integrated only in these candidates.
 The app and emulator candidates are isolated on `codex/reuse-implementation`
 worktrees. A matching usbmuxd candidate is on `codex/stock-control-transfer`.
@@ -87,16 +87,25 @@ library. The incoming CoreAudio fake-HAL check passes all six device-rate and
 device-switch cases after integration. These results do not imply that every catalog firmware or the full
 native corpus has been rerun.
 
-The second implementation pass records 96 offline checks passing, with two
-opt-in display checks skipped (`ltm-offline-confirmed`). FirmwareKit completes
-144 tests in 34 suites, including 65 explicitly skipped corpus checks
-(`ltm-firmwarekit-final.log`). These counts precede the additional control-reply
-regression and final SSH/graphics integration. The certified N72 edited-generation
-acceptance passes both boot and persistence; the native service-worker gate
-passes 12/12. The pinned native arm64 dependency build passes macOS 14.0 Mach-O
-closure without Homebrew imports, but final candidate pairing, universal builds,
-Developer ID signing and actual supported-host runtime verification remain
-separate gates. No distribution release is implied.
+The final integrated app offline run passes 99 checks, with two opt-in display
+checks skipped (`ltm-offline-hig-final`). FirmwareKit reports 145 tests in 34
+suites, including corpus checks explicitly skipped without their inputs
+(`ltm-firmwarekit-audit-final.log`). The release fixture tier passes eight checks,
+with its dependency-fetch check skipped. Skips are not firmware coverage.
+
+The certified N72 edited-generation acceptance passes both boot and persistence;
+the native service-worker gate passes 12/12. Clean 7E18 and 7B500 guests pass
+modern host SSH and binary SFTP under concurrent shell-build load. The final
+universal build contains both arm64 and x86_64 slices from the matching pinned
+QEMU and USB candidates, with no Homebrew runtime imports. It is signed ad hoc
+for local verification. Developer ID signing, notarization and actual Intel and
+minimum-supported-host runtime verification remain separate release gates.
+The actual packaged helper probe loads its bundled QEMU, the packaged worker
+launches without QEMU, and the Mach-O closure/universal-slice check passes.
+Bundle hygiene and the bundled CLI's source/license/payload audit pass; damaged
+binaries, sources, notices, unexpected files and symlinks are rejected. Runtime
+probes require the normal host process environment rather than the restricted
+filesystem sandbox. No distribution release is implied.
 
 Logs, full independent renderer captures, preparation metadata, restore input
 hashes and acceptance output are preserved under
@@ -151,8 +160,9 @@ this implementation.
 The app source manifest pins the emulator and USB host together. Before these
 branches are integrated, development builds must resolve the candidate paths
 with `QEMU_IOS_DIR`, `QEMU_BUILD_DIR` and `USBMUXD_SOURCE_DIR`; the canonical
-checkout paths intentionally remain the integration targets. The recorded native
-build uses `build-reuse` and `/private/tmp/ltm-reuse-xcode`, not a universal signed
-release. The prepared K48 boot/graphics/persistence checks, N72 certified stopped-edit publication,
+checkout paths intentionally remain the integration targets. The final universal local package is
+`/private/tmp/ltm-universal-candidate/Light Touch.app`; it includes the audited
+developer payload and sources automatically. It is an ad hoc candidate, not a
+published distribution release. The prepared K48 boot/graphics/persistence checks, N72 certified stopped-edit publication,
 and stock blank restore are distinct results; none substitutes for the failed
 stock cold-boot identity gate.
