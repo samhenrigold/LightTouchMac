@@ -9,6 +9,16 @@ extension K48NAND {
         let geo: Geometry, stride: Int
         let files: [Data], overlay: [Data], dirty: [Data]
         init(_ dir: URL, geo: Geometry, overlay: URL? = nil) throws {
+            guard try K48NAND.geometry(store: dir).json == geo.json else {
+                throw FirmwareError(.unsupported, "\(dir.path): reader geometry does not match geometry.json")
+            }
+            if let overlay {
+                let marker = overlay.appendingPathComponent("storage-format")
+                if FileManager.default.fileExists(atPath: marker.path) {
+                    let format = try String(contentsOf: marker, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+                    try K48NAND.requireLegacyFormat(format, at: overlay)
+                }
+            }
             self.geo = geo
             stride = geo.pageSize + geo.spareBytes
             func each(_ d: URL, _ ext: String) throws -> [Data] {
@@ -16,10 +26,28 @@ extension K48NAND {
                     try (0..<geo.cePerBus).map { c in try Data(contentsOf: d.appendingPathComponent("bus\(b)-ce\(c).\(ext)"), options: .alwaysMapped) }
                 }
             }
+            let pageFileBytes = geo.blocksPerCE * geo.pagesPerBlock * stride
+            func validate(_ data: [Data], bytes: Int, at directory: URL, kind: String) throws {
+                guard data.allSatisfy({ $0.count == bytes }) else {
+                    throw FirmwareError(.unsupported, "\(directory.path): invalid \(kind) file size for NAND geometry")
+                }
+            }
             files = try each(dir, "pages")
+            try validate(files, bytes: pageFileBytes, at: dir, kind: "pages")
+            if let overlay {
+                let entries = try FileManager.default.contentsOfDirectory(atPath: overlay.path)
+                if entries.contains(where: { $0.hasSuffix(".pages") || $0.hasSuffix(".dirty") }),
+                   !entries.contains("bus0-ce0.dirty") {
+                    throw FirmwareError(.unsupported, "\(overlay.path): NAND overlay has page data without its dirty bitmap")
+                }
+            }
             let o = overlay.flatMap { FileManager.default.fileExists(atPath: $0.appendingPathComponent("bus0-ce0.dirty").path) ? $0 : nil }
             self.overlay = try o.map { try each($0, "pages") } ?? []
             dirty = try o.map { try each($0, "dirty") } ?? []
+            if let o {
+                try validate(self.overlay, bytes: pageFileBytes, at: o, kind: "overlay pages")
+                try validate(dirty, bytes: (geo.blocksPerCE * geo.pagesPerBlock + 7) / 8, at: o, kind: "dirty bitmap")
+            }
         }
 
         /// The file serving (cs, ppage).
@@ -52,12 +80,26 @@ extension K48NAND {
         func readVPN(_ vpn: Int) -> (data: [UInt8], meta: [UInt8])? { let (cs, p) = geo.vpnToPhys(vpn); return read(cs, p) }
     }
 
+    /// This reader follows the generated plaintext VFL layout. Physical restored NAND needs
+    /// native VFL/crypto mapping as well as XOR decoding; treating it as this layout loses data.
+    private static func requireLegacyFormat(_ value: Any?, at dir: URL) throws {
+        guard let value else { return }
+        guard value as? String == "legacy-zero-blank-v1" else {
+            throw FirmwareError(.unsupported, "\(dir.path): unsupported NAND storage_format \(String(describing: value)); physical NAND export requires native VFL/crypto mapping; use guest filesystem services")
+        }
+    }
+
     /// The known geometry a store's geometry.json describes.
     static func geometry(store dir: URL) throws -> Geometry {
-        guard let g = try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent("geometry.json"))) as? [String: Any],
-              let geo = Geometry.known.first(where: {
+        guard let g = try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent("geometry.json"))) as? [String: Any] else {
+            throw FirmwareError(.unsupported, "\(dir.path): geometry.json must contain an object")
+        }
+        try requireLegacyFormat(g["storage_format"], at: dir)
+        guard let geo = Geometry.known.first(where: {
                   ($0.buses, $0.cePerBus, $0.blocksPerCE, $0.pagesPerBlock, $0.pageSize)
                       == (g["buses"] as? Int, g["ce_per_bus"] as? Int, g["blocks_per_ce"] as? Int, g["pages_per_block"] as? Int, g["page_bytes"] as? Int)
+                      && g["spare_bytes"] as? Int == $0.spareBytes
+                      && (g["chip_id"] as? String).flatMap { UInt32($0.hasPrefix("0x") ? String($0.dropFirst(2)) : $0, radix: 16) } == $0.chipID
               }) else { throw FirmwareError(.unsupported, "\(dir.path): no known geometry matches geometry.json") }
         return geo
     }

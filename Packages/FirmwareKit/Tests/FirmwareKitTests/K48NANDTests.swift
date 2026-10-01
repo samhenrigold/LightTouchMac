@@ -5,6 +5,57 @@ import Testing
 struct K48NANDTests {
     static let storeFiles = ["geometry.json"] + (0..<2).flatMap { b in (0..<4).map { "bus\(b)-ce\($0).pages" } }
 
+    @Test(arguments: ["nand-xor-ff-v2", "future-format", ""])
+    func physicalAndUnknownFormatsRefusedBeforePageMapping(_ format: String) throws {
+        try Oracle.withTemp { dir in
+            var geometry = try #require(JSONSerialization.jsonObject(with: Data(K48NAND.Geometry.selfcheck.json.utf8)) as? [String: Any])
+            geometry["storage_format"] = format
+            try JSONSerialization.data(withJSONObject: geometry).write(to: dir.appendingPathComponent("geometry.json"))
+            // No page files: refusal must occur before mmap or any filesystem interpretation.
+            #expect(throws: FirmwareError.self) { try K48NAND.geometry(store: dir) }
+            #expect(throws: FirmwareError.self) { try K48NAND.StoreReader(dir, geo: .selfcheck) }
+            #expect(throws: FirmwareError.self) { try K48NAND.check(store: dir) }
+        }
+    }
+
+    @Test(arguments: ["spare_bytes", "chip_id"])
+    func geometryRejectsDifferentPhysicalContract(_ field: String) throws {
+        try Oracle.withTemp { dir in
+            var geometry = try #require(JSONSerialization.jsonObject(with: Data(K48NAND.Geometry.selfcheck.json.utf8)) as? [String: Any])
+            if field == "chip_id" { geometry[field] = "0xFFFFFFFF" } else { geometry[field] = 64 }
+            try JSONSerialization.data(withJSONObject: geometry).write(to: dir.appendingPathComponent("geometry.json"))
+            #expect(throws: FirmwareError.self) { try K48NAND.geometry(store: dir) }
+        }
+    }
+
+    @Test func legacyFormatAndOverlayCompatibility() throws {
+        try Oracle.withTemp { dir in
+            var geometry = try #require(JSONSerialization.jsonObject(with: Data(K48NAND.Geometry.selfcheck.json.utf8)) as? [String: Any])
+            try JSONSerialization.data(withJSONObject: geometry).write(to: dir.appendingPathComponent("geometry.json"))
+            #expect(try K48NAND.geometry(store: dir).name == "selfcheck")
+            geometry["storage_format"] = "legacy-zero-blank-v1"
+            try JSONSerialization.data(withJSONObject: geometry).write(to: dir.appendingPathComponent("geometry.json"))
+            #expect(try K48NAND.geometry(store: dir).name == "selfcheck")
+            let overlay = dir.appendingPathComponent("overlay")
+            try FileManager.default.createDirectory(at: overlay, withIntermediateDirectories: false)
+            try Data("nand-xor-ff-v2\n".utf8).write(to: overlay.appendingPathComponent("storage-format"))
+            #expect(throws: FirmwareError.self) { try K48NAND.StoreReader(dir, geo: .selfcheck, overlay: overlay) }
+            #expect(throws: FirmwareError.self) { try K48NAND.StoreReader(dir, geo: .k48_16g) }
+        }
+    }
+
+    @Test func physicalExportRefusalPublishesNoFilesystem() throws {
+        try Oracle.withTemp { dir in
+            let base = dir.appendingPathComponent("nand"), out = dir.appendingPathComponent("export")
+            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: false)
+            var geometry = try #require(JSONSerialization.jsonObject(with: Data(K48NAND.Geometry.k48_16g.json.utf8)) as? [String: Any])
+            geometry["storage_format"] = "nand-xor-ff-v2"
+            try JSONSerialization.data(withJSONObject: geometry).write(to: base.appendingPathComponent("geometry.json"))
+            #expect(throws: FirmwareError.self) { try VolumeExport.export(.init(base: base, overlay: nil), out: out) }
+            #expect(!FileManager.default.fileExists(atPath: out.path))
+        }
+    }
+
     @Test func geometryMatchesKernel() {
         let g = K48NAND.Geometry.k48_16g
         #expect(g.usable == 1952 && g.toc == 2 && g.dataPages == 2046)
