@@ -401,3 +401,21 @@ the broader asynchronous storage transaction migration remains unqualified,
 including newly exposed lease-release lifetime failures. Earlier receipts
 are retained, with the new failing baseline and passing fixtures at
 `/Users/shg/Developer/ltm-evidence/host-generation-policy-2026-10-01`.
+
+## D3C status accumulator qualified
+
+QEMU04ae5b5820 retains the measured D3C zero initializer and register-write
+forms, sequencer readback and CPU diagnostic reads. Unsupported encodings
+still stop before downstream stores. It accumulates guest-computed bits;
+no auxiliary status, ECC result or completion is fabricated. Reset and
+VMState v12 retain the scalar independently of D7C and older parameters.
+
+The actual-source baseline fails readback. Six sanitizer checks, all12 model
+suites (FMSS21/21), real v11 incoming migration, and independent native8/8
+pass. Both native boots end in guest-confirmed shutdown; persisted bytes
+match after reboot and fsck_hfs reports a valid volume. Existing graphics
+additions and legacy CPU storage execution remain in use. Evidence:
+`/Users/shg/Developer/ltm-evidence/fmss-d3c-2026-10-01`.
+
+The next stock blank-flash erase trace is running; restored cold boot and
+durable physical writes remain unqualified.
