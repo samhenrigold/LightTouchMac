@@ -28,13 +28,12 @@ import Cocoa
     /// Posted on the main actor for every emulator status change. The object is the session.
     static let didChangeNotification = Notification.Name("DeviceSessionDidChange")
 
-    let instance: DeviceInstance
+    var instance: DeviceInstance { emulator.instance }
     let emulator: EmulatorController
     var profile: DeviceProfile { emulator.profile }
     private(set) lazy var workspace = DeviceWorkspace(emulator: emulator)
 
-    init(instance: DeviceInstance, emulator: EmulatorController) {
-        self.instance = instance
+    init(emulator: EmulatorController) {
         self.emulator = emulator
         emulator.onStatusChange = { [weak self] in
             guard let self else { return }
@@ -131,9 +130,12 @@ import Cocoa
         library.reload() // offline publication may have selected another generation
         guard let instance = instance(for: entry), let profile = entry.profile else { return nil }
         let network = NetworkAccessPreference.resolve(profile: profile)
-        let session = DeviceSession(instance: instance,
-                                    emulator: EmulatorController(instance: instance, profile: profile, network: network))
+        let session = DeviceSession(emulator: EmulatorController(instance: instance, profile: profile, network: network))
         sessions.append(session)
+        session.emulator.onStorageGenerationChanged = { [weak self] in
+            self?.baseRecipes.removeAll()
+            self?.library.reload()
+        }
         session.emulator.onRestartRequested = { [weak self, weak session] in
             if let self, let session { restart(session) }
         }

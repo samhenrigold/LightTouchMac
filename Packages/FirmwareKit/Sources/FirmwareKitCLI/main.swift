@@ -34,6 +34,11 @@ if command == "mount" || command == "export" || command == "unmount" {
     let lifetime = CommandLifetime(output: commandOutput) { await volumeCommand(selected, arguments) }
     exit(await lifetime.wait())
 }
+if command == "boot-admit" {
+    let arguments = Array(args)
+    let lifetime = CommandLifetime(output: commandOutput) { await bootAdmissionCommand(arguments) }
+    exit(await lifetime.wait())
+}
 if command == "developer-audit" { developerAuditCommand(Array(args)) }
 if command == "developer-offer" { developerOfferCommand(Array(args)) }
 if command == "cache-prune" { cacheCommand(Array(args)) }
@@ -47,7 +52,8 @@ if command == "fit" { fitCommand(Array(args)) }
 guard command == "create" else {
     FirmwareDiagnostics.write(Data("""
         firmwarekit \(FirmwareKit.version)
-        usage: firmwarekit edit --device DIR --action begin|mount|commit|discard|recover [--session UUID]
+        usage: firmwarekit boot-admit --device DIR [--record-policy standalone|managed] [--allow-raw]
+               firmwarekit edit --device DIR --action begin|mount|commit|discard|recover [--session UUID]
                firmwarekit cache-prune --root DIR [--ipsw SHA1]
                firmwarekit create --entry ENTRY.json --ipsw IPSW --out DIR [--seed S]
                                   [--helper PATH] [--cache DIR] [--guest-tools DIR]

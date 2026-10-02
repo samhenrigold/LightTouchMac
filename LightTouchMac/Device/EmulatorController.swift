@@ -225,7 +225,7 @@ final class EmulatorController {
     private var didSweepStaging = false
 
     /// The device record whose state this controller runs.
-    let instance: DeviceInstance
+    private(set) var instance: DeviceInstance
 
     init(instance: DeviceInstance, profile: DeviceProfile, network: Bool = true) {
         self.instance = instance
@@ -249,11 +249,13 @@ final class EmulatorController {
     private(set) var deathReason: String?
     /// The session replaces this controller with a fresh helper (DeviceSessionHost.restart).
     var onRestartRequested: (() -> Void)?
+    var onStorageGenerationChanged: (() -> Void)?
     /// The active recording's audio (GuestAudioCapture).
     var audioSink: ((LinkEvent) -> Void)?
     private var statusTimer: Timer?
     private var lastFrameSerial: UInt64 = 0
     private var releasing = false
+    private var admittedStorage: StorageBootProof?
 
     // MARK: - Boot
 
@@ -288,10 +290,27 @@ final class EmulatorController {
         // Low space doesn't stop a boot; it's said before writes start failing.
         warnIfLowOnSpace()
         // The boot is built after the hello: usbmuxd must listen before the guest's USB.
-        process.start({ [weak self] _ in self?.bootConfiguration() }) { [weak self] result in
+        preparationStatus = "Preparing device…"
+        process.start({ [weak self] _ in self?.bootConfiguration() }, preparation: { [weak self] in
+            guard let self, !self.releasing, !self.stopped else { throw CancellationError() }
+            guard let executable = FirmwareJobs.preparer else {
+                throw DeviceToolsError.failed("The firmware worker is unavailable.")
+            }
+            _ = try await FirmwareTool.admitBoot(device: self.instance.paths.directory,
+                                                 managed: true, executable: executable)
+            try Task.checkCancellation()
+            let recordBytes = try Data(contentsOf: self.instance.paths.directory.appendingPathComponent(DeviceInstance.recordName))
+            let refreshed = try DeviceInstance.decoder.decode(DeviceInstance.self, from: recordBytes)
+            guard refreshed.id == self.instance.id, refreshed.board == self.instance.board else {
+                throw DeviceToolsError.failed("The device identity changed while preparing to start.")
+            }
+            self.instance = refreshed
+            self.admittedStorage = try StorageBootProof.capture(recordBytes: recordBytes)
+            self.onStorageGenerationChanged?()
+            self.onStatusChange?()
+        }) { [weak self] result in
             if case let .failure(error) = result, let self { logEvent("boot: \(instance.name): \(error)") }
         }
-        startReadinessWatch()
         if hasGuestTools {
             startOrientationWatch()   // idle until the guest is up and reachable
         } else {
@@ -308,7 +327,10 @@ final class EmulatorController {
         proxyEndpoint = nil
         var config = preparedBootConfiguration()
         config?.webProxy = proxyEndpoint
+        config?.storageProof = admittedStorage
         if config != nil {
+            // Stopped migration time is separate from the guest boot budget.
+            startReadinessWatch()
             publishDeveloperConnection()
             logEmulatorBuild()
             startGuestPackageWatch()  // after composeGuestOffer(): a watch with no offer judges nothing

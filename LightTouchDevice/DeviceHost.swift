@@ -17,6 +17,7 @@ final class DeviceHost: @unchecked Sendable {
     var onEvent: ((LinkEvent) -> Void)?
     /// QEMU returned (or the shutdown gave up). Default: exit with the code.
     var onExit: ((Int32) -> Void)?
+    var bootStorageAuthority: ((StorageBootProof) throws -> Void)?
 
     private let pumpQueue = DispatchQueue(label: "LightTouch.frames", qos: .userInteractive)
     private var pump: DispatchSourceTimer?
@@ -45,7 +46,7 @@ final class DeviceHost: @unchecked Sendable {
     func info(machine: String?) -> HelperInfo {
         HelperInfo(protocolVersion: DeviceLinkWire.protocolVersion, pid: getpid(), dylibPath: qemu.path,
                    dylibModified: qemu.modified, buildID: qemu.buildID?().map { String(cString: $0) },
-                   deviceInfo: machine.flatMap { qemu.info(machine: $0) })
+                   deviceInfo: machine.flatMap { qemu.info(machine: $0) }, storageProofValidation: true)
     }
 
     // MARK: Pump
@@ -101,7 +102,12 @@ final class DeviceHost: @unchecked Sendable {
     // MARK: Boot
 
     /// Start qemu_ios_main on a 16 MB-stack thread. Once per process.
-    func boot(_ config: BootConfig) -> Bool {
+    func boot(_ config: BootConfig) throws -> Bool {
+        guard !booted else { return false }
+        if let proof = config.storageProof {
+            guard let bootStorageAuthority else { throw StorageBootProof.Failure.missingLease }
+            try bootStorageAuthority(proof)
+        }
         let first: Bool = stateLock.withLock {
             guard bootConfig == nil else { return false }
             bootConfig = config
@@ -182,7 +188,9 @@ final class DeviceHost: @unchecked Sendable {
     func handle(_ request: LinkRequest, reply: @escaping (LinkReply) -> Void) {
         switch request {
         case .hello: reply(.failure("hello twice"))
-        case let .boot(config): reply(boot(config) ? .ok(true) : .failure("already booted"))
+        case let .boot(config):
+            do { reply(try boot(config) ? .ok(true) : .failure("already booted")) }
+            catch { reply(.failure("Device storage admission refused: \(error)")) }
         case .snapshotStatus:
             var buffer = [CChar](repeating: 0, count: 512)
             let code = qemu.snapshotStatus(&buffer, UInt(buffer.count))
@@ -194,6 +202,30 @@ final class DeviceHost: @unchecked Sendable {
         case let .compass(heading): reply(.ok(qemu.compass(Int32(heading))))
         case let .usbCharger(high): reply(.ok(qemu.usbCharger(high)))
         case let .orientation(value): reply(.ok(qemu.orientation(Int32(value))))
+        case let .inputSequence(id, events):
+            guard let submit = qemu.inputSequence,
+                  VirtualInputEvent.valid(events) else {
+                reply(.failure("Virtual input unavailable or invalid sequence")); return
+            }
+            let at = events.map(\.atMilliseconds), kind = events.map(\.kind)
+            let value = events.map(\.value), phase = events.map(\.phase)
+            let x = events.map(\.x), y = events.map(\.y)
+            let queued = at.withUnsafeBufferPointer { a in kind.withUnsafeBufferPointer { k in
+                value.withUnsafeBufferPointer { v in phase.withUnsafeBufferPointer { p in
+                    x.withUnsafeBufferPointer { xx in y.withUnsafeBufferPointer { yy in
+                        submit(id, UInt(events.count), a.baseAddress!, k.baseAddress!,
+                               v.baseAddress!, p.baseAddress!, xx.baseAddress!, yy.baseAddress!)
+                    }}
+                }}
+            }}
+            reply(.ok(queued))
+        case let .inputSequenceStatus(id):
+            if let status = qemu.inputSequenceStatus { reply(.inputSequenceStatus(Int(status(id)))) }
+            else { reply(.failure("Virtual input unavailable")) }
+        case let .inputSequenceCancel(id):
+            if let cancel = qemu.inputSequenceCancel { cancel(id); reply(.ok(true)) }
+            else { reply(.failure("Virtual input unavailable")) }
+
         }
     }
 

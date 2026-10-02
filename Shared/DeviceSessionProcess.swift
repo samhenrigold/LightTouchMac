@@ -33,6 +33,10 @@ public enum DeviceProcessDeath: Equatable {
     private var startFailure: DeviceLinkError?
     private var stopRequested = false
     private var helperPID: pid_t = 0
+    private var startRequested = false
+    private var preparationTask: Task<Void, Never>?
+    private var bootRequested = false
+    private var cancelledBeforeBoot = false
 
     public init(configuration: DeviceLink.Configuration) {
         link = DeviceLink(configuration: configuration)
@@ -40,9 +44,43 @@ public enum DeviceProcessDeath: Equatable {
         link.onTerminated = { [weak self] termination in MainActor.assumeIsolated { self?.terminated(termination) } }
     }
 
-    /// Spawn and hello; nil preparation deliberately fails before a boot request.
+    /// Optional stopped-storage preparation precedes spawn/hello. A nil boot
+    /// configuration deliberately fails before a boot request.
     public func start(_ configure: @escaping (HelperInfo) -> BootConfig?,
+                      preparation: (@MainActor () async throws -> Void)? = nil,
                       completion: @escaping (Result<HelperInfo, DeviceLinkError>) -> Void) {
+        guard !startRequested, !isDead, !stopRequested else {
+            completion(.failure(.closed("this device session has already started")))
+            return
+        }
+        startRequested = true
+        guard let preparation else { return spawn(configure, completion: completion) }
+        // Stopped-storage maintenance finishes and refreshes the caller's paths
+        // before the helper can acquire its lease. DeviceRuntime owns ordering;
+        // firmware conversion remains in the maintenance worker.
+        preparationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try Task.checkCancellation()
+                try await preparation()
+                try Task.checkCancellation()
+                self.preparationTask = nil
+                guard !self.stopRequested, !self.isDead else { throw CancellationError() }
+                self.spawn(configure, completion: completion)
+            } catch {
+                self.preparationTask = nil
+                if self.stopRequested {
+                    completion(.failure(.closed("device start cancelled before helper launch")))
+                    self.died(.stopped)
+                } else {
+                    self.failStart(.helperFailure("device preparation failed: \(error)"), completion)
+                }
+            }
+        }
+    }
+
+    private func spawn(_ configure: @escaping (HelperInfo) -> BootConfig?,
+                       completion: @escaping (Result<HelperInfo, DeviceLinkError>) -> Void) {
         link.start { [weak self] result in
             MainActor.assumeIsolated { self?.started(result, configure, completion) }
         }
@@ -51,10 +89,20 @@ public enum DeviceProcessDeath: Equatable {
 
     private func started(_ result: Result<HelperInfo, DeviceLinkError>, _ configure: (HelperInfo) -> BootConfig?,
                          _ completion: @escaping (Result<HelperInfo, DeviceLinkError>) -> Void) {
+        guard !stopRequested, !isDead else {
+            cancelledBeforeBoot = true
+            completion(.failure(.closed("device start cancelled before boot")))
+            if link.pid > 0 { link.terminate() } else { died(.stopped) }
+            return
+        }
         switch result {
         case let .failure(error): failStart(error, completion)
         case let .success(info):
             guard let config = configure(info) else { return failStart(.helperFailure("not booted"), completion) }
+            guard config.storageProof == nil || info.storageProofValidation == true else {
+                return failStart(.helperFailure("The device helper cannot validate admitted storage."), completion)
+            }
+            bootRequested = true
             link.request(.boot(config), timeout: 30) { [weak self] reply in
                 MainActor.assumeIsolated { self?.booted(reply, info, completion) }
             }
@@ -72,8 +120,24 @@ public enum DeviceProcessDeath: Equatable {
     }
 
     /// Bounded host halt; no claim of a guest filesystem shutdown.
-    public func terminate() { if !isDead { stopRequested = true; link.terminate() } }
-    public func kill() { if !isDead { link.kill() } }
+    public func terminate() {
+        if !isDead {
+            stopRequested = true
+            if startRequested && !bootRequested { cancelledBeforeBoot = true }
+            if let preparationTask { preparationTask.cancel() }
+            else { link.terminate() }
+        }
+    }
+    public func kill() {
+        if !isDead {
+            if startRequested && !bootRequested {
+                stopRequested = true
+                cancelledBeforeBoot = true
+            }
+            if let preparationTask { stopRequested = true; preparationTask.cancel() }
+            else { link.kill() }
+        }
+    }
 
     /// Cancellation cannot abandon bounded cleanup. The link retains exclusive
     /// reaping ownership even after this finite wait times out.
@@ -104,7 +168,7 @@ public enum DeviceProcessDeath: Equatable {
 
     private func terminated(_ termination: DeviceTermination) {
         onTermination?(helperPID, termination, qemuExitCode)
-        died(.classify(startFailure: startFailure, qemuExitCode: qemuExitCode,
+        died(cancelledBeforeBoot ? .stopped : .classify(startFailure: startFailure, qemuExitCode: qemuExitCode,
                        stopRequested: stopRequested, termination: termination))
     }
 

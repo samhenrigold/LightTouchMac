@@ -10,7 +10,6 @@ import HostRuntime
 // lockdown and still hold a file uploaded before the clean shutdown (tests/matrix.py's persist check).
 
 import Foundation
-
 struct SingleConfig: Decodable {
     var board: String   // "ipod" | "ipad" | "ipod1g"
     var base: String
@@ -33,6 +32,8 @@ struct SingleConfig: Decodable {
     var lockdownTZ: String?
     /// false: skip the IPA install (the entry has no AppSync, so the stock installd refuses it).
     var install: Bool?
+    /// Qualify the shared host gesture using generic virtual-time input; never GUI Stop.
+    var hostPowerGesture: Bool?
     /// After installation, launch through the app's guest agent where available. An unfitted helper set falls
     /// back to Home-screen reorder and a tap; screenshots alone do not prove the requested foreground identity.
     var launch: Bool?
@@ -179,7 +180,15 @@ struct SingleConfig: Decodable {
     /// GUI Stop is a separate hard halt and does not establish guest unmount.
     func shutdown(_ generation: Int) async {
         let quit = Date()
-        if ipad { d.process.link.send(.machine(.powerdown)) }
+        if s.hostPowerGesture == true && !ipad {
+            do {
+                try await HostInputAutomation.shutdown(d.process, firstGeneration: s.board == "ipod1g")
+                emit("hostPowerGesture", ["device": d.name, "generation": generation, "confirmed": d.process.status?.shutdownConfirmed == true])
+            } catch {
+                emit("hostPowerGesture", ["device": d.name, "generation": generation, "error": "\(error)"])
+            }
+        }
+        else if ipad { d.process.link.send(.machine(.powerdown)) }
         else if agentCanPowerOff { _ = try? await d.process.link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5) }
         else {   // the machine's own hold-power-and-slide sequence
             d.process.link.send(.machine(.powerdown))
@@ -240,7 +249,8 @@ struct SingleConfig: Decodable {
         exit(0)
     }
 
-    await boot(1)
+
+
 
     if s.reboot == true, s.hardStop == true {
         d.process.terminate()   // the app's Stop: pause, flush the overlay, quit QEMU at once

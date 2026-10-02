@@ -3,6 +3,17 @@
 import Foundation
 
 nonisolated public enum FirmwareWire {
+    /// Stopped launch admission reply shared by all host clients. Generation
+    /// paths remain durable record data, rather than a second GUI device schema.
+    public struct BootAdmission: Codable, Sendable, Equatable {
+        public let event: String
+        public let changed: Bool
+        public init(event: String = "admitted", changed: Bool) {
+            self.event = event
+            self.changed = changed
+        }
+    }
+
     public struct Entry: Codable, Sendable, Equatable {
         public struct Source: Codable, Sendable, Equatable {
             public var kind: String

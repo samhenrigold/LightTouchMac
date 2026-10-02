@@ -7,5 +7,5 @@ let package = Package(name: "DeviceRuntime", platforms: [.macOS(.v13)],
         .target(name: "LTMLinkC", path: "CLink", publicHeadersPath: "."),
         .target(name: "DeviceRuntime", dependencies: ["HostRuntime", "LTMLinkC"], path: ".",
             exclude: ["CLink", "WebProxyCA.swift"],
-            sources: ["DeviceLink.swift", "DeviceLinkProtocol.swift", "DeviceRendezvous.swift", "SharedStatus.swift", "DeviceSessionProcess.swift"])
+            sources: ["DeviceLink.swift", "DeviceLinkProtocol.swift", "DeviceRendezvous.swift", "SharedStatus.swift", "DeviceSessionProcess.swift", "HostInputAutomation.swift"])
     ], swiftLanguageModes: [.v5])

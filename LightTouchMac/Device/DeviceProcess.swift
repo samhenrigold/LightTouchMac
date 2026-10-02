@@ -49,11 +49,12 @@ import CoreGraphics
     }
 
     func start(_ configure: @escaping (HelperInfo) -> BootConfig?,
+               preparation: (@MainActor () async throws -> Void)? = nil,
                completion: @escaping (Result<HelperInfo, DeviceLinkError>) -> Void) {
         process.start({ [weak self] info in
             self?.checkBoard(info)
             return configure(info)
-        }) { result in
+        }, preparation: preparation) { result in
             if case let .failure(error) = result { logEvent("device helper: didn’t start: \(error)") }
             completion(result)
         }

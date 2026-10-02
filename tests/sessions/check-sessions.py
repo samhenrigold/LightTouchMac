@@ -72,7 +72,7 @@ import device_runtime
 APP_SOURCES = ["Services/DeviceServices", "Transport/DeviceExecution", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
                "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestAgent", "Guest/GuestPackage",
                "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
-               "Device/WebProxyConfiguration", "Services/SpringBoardServices", "Services/LockdownState", "Services/HostServiceTypes", "Services/HostServiceProtocol", "Services/HostServiceResources", "Services/HostServiceWorkers", "Services/MediaStaging", "Services/HomeScreenOrdering"]
+               "Device/WebProxyConfiguration", "Services/SpringBoardServices", "Services/LockdownState", "Services/HostServiceTypes", "Services/HostServiceProtocol", "Services/HostServiceResources", "Services/HostServiceWorkers", "Services/MediaStaging", "Services/HomeScreenOrdering", "Library/FirmwareTool"]
 
 
 def tree(root):
@@ -206,6 +206,8 @@ def main():
     ap.add_argument("--contrib", type=Path, default=sources.path("qemu-ios") / "contrib")
     ap.add_argument("--time-zone", default="Asia/Tokyo")
     ap.add_argument("--helper")
+    ap.add_argument("--firmwarekit", default=os.environ.get("LTM_FIRMWAREKIT"),
+                    help="stopped-storage admission worker (default: firmwarekit beside the helper)")
     ap.add_argument("--helper-requirement", default=None, help="optional signing requirement for a supplied test helper (default: the app’s identity check)")
     ap.add_argument("--dylib", default=os.environ.get("LTM_QEMU_DYLIB", str(sources.qemu_build() / "libqemu-arm.dylib")))
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
@@ -214,7 +216,8 @@ def main():
     ap.add_argument("--bundle-id", default="com.qemuios.harness")
     ap.add_argument("--work", type=Path)
     ap.add_argument("--single", type=Path, help="one prepared base (firmwarekit create output)")
-    ap.add_argument("--board", choices=("ipod", "ipad"), help="--single: the base's board")
+    ap.add_argument("--board", choices=("ipod", "ipad", "ipod1g"), help="--single: the base's board")
+    ap.add_argument("--host-power-gesture", action="store_true", help="--single iPod: qualify shared host gesture through virtual-time input, with actual PMU shutdown")
     ap.add_argument("--launch", action="store_true", help="--single: launch the installed IPA through the app’s guest agent and verify its foreground identity")
     ap.add_argument("--reboot", action="store_true", help="--single: cold boot the same overlay and verify file/app persistence, identity and shutdown again")
     ap.add_argument("--afc-race", type=int, metavar="N", help="--single: N boots, AFC at lockdown's first answer, then Stop (smoke.md #5)")
@@ -228,12 +231,16 @@ def main():
         ap.error("--helper-requirement needs an explicitly supplied --helper")
     if args.helper and not os.access(args.helper, os.X_OK):
         ap.error("test helper is not executable: " + args.helper)
+    if args.firmwarekit and not os.access(args.firmwarekit, os.X_OK):
+        ap.error("firmware admission worker is not executable: " + args.firmwarekit)
     if not Path(args.dylib).is_file():
         ap.error("emulator dylib is missing: " + args.dylib)
     if not args.ipa.is_file():
         ap.error("test IPA is missing: " + str(args.ipa))
     if (args.launch or args.reboot) and (not args.single or args.afc_race):
         ap.error("--launch/--reboot need --single without --afc-race")
+    if args.host_power_gesture and (not args.single or args.board not in ("ipod", "ipod1g") or args.afc_race):
+        ap.error("--host-power-gesture needs --single --board ipod/ipod1g without --afc-race")
     if args.single and not args.board:
         ap.error("--single needs --board")
     if not args.guest and not args.ipad_device and not args.single:
@@ -247,7 +254,8 @@ def main():
     base_dir = args.single or (args.ipod_device if args.guest else args.ipad_device)
     base_before = tree(base_dir)
     nand_current = args.files / "nand-current"
-    cfg = {"helper": str(helper), "requirement": args.helper_requirement, "usbmuxd": args.usbmuxd, "ipa": str(args.ipa),
+    cfg = {"helper": str(helper), "requirement": args.helper_requirement, "firmwarekit": args.firmwarekit,
+           "usbmuxd": args.usbmuxd, "ipa": str(args.ipa),
            "bundleID": args.bundle_id, "work": str(work), "files": str(args.files),
            "ipodNAND": str(args.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(args.single if args.board == "ipad" else args.ipad_device or "")}
@@ -257,7 +265,7 @@ def main():
         bundled_tz = helper.parent / "lockdown-tz"
         tz = bundled_tz if os.access(bundled_tz, os.X_OK) else build_lockdown_tz(work, args.frameworks)
         cfg["single"] = {"board": args.board, "base": str(args.single), "lockdownTZ": str(tz),
-                         "launch": args.launch, "reboot": args.reboot}
+                         "launch": args.launch, "reboot": args.reboot, "hostPowerGesture": args.host_power_gesture}
         if args.afc_race:
             cfg["single"] |= {"raceBoots": args.afc_race, "raceDirty": args.afc_race_dirty}
             cfg["timeout"] = 200 * args.afc_race
@@ -360,6 +368,10 @@ def main():
         check(len(quits) == boots and all(q.get("confirmed", -1) >= 0 and q.get("exited") and
                                           str(q.get("reason")).endswith(" stopped.") for q in quits),
               f"{d}: {len(quits)}/{boots} clean shutdowns with guest power-off and helper exit")
+        if args.host_power_gesture:
+            gestures = find("hostPowerGesture", device=d)
+            check(len(gestures) == boots and all(g.get("confirmed") and not g.get("error") for g in gestures),
+                  f"{d}: {len(gestures)}/{boots} shared host gestures confirmed by guest PMU")
         if args.reboot:
             persisted = find("persist", device=d)
             restarted = find("restartedApps", device=d)

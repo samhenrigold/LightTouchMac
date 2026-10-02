@@ -84,6 +84,10 @@ nonisolated public enum LinkRequest: Codable, Sendable, Equatable {
     case compass(Int)
     case usbCharger(Bool)
     case orientation(Int)
+    /// Generic automation in guest virtual milliseconds; optional dylib ABI.
+    case inputSequence(id: UInt64, events: [VirtualInputEvent])
+    case inputSequenceStatus(id: UInt64)
+    case inputSequenceCancel(id: UInt64)
 }
 
 nonisolated public enum LinkReply: Codable, Sendable, Equatable {
@@ -93,6 +97,7 @@ nonisolated public enum LinkReply: Codable, Sendable, Equatable {
     case agent(String?)
     case audio(generation: UInt64)
     case failure(String)
+    case inputSequenceStatus(Int)
 }
 
 nonisolated public enum LinkEvent: Codable, Sendable, Equatable {
@@ -132,13 +137,16 @@ nonisolated public struct HelperInfo: Codable, Sendable, Equatable {
     public var buildID: String?
     /// qemu_ios_device_info(hello.machine).
     public var deviceInfo: DeviceInfo?
-    public init(protocolVersion: Int, pid: Int32, dylibPath: String, dylibModified: Double, buildID: String? = nil, deviceInfo: DeviceInfo? = nil) {
+    /// The helper rechecks admitted storage under its lease before boot.
+    public var storageProofValidation: Bool?
+    public init(protocolVersion: Int, pid: Int32, dylibPath: String, dylibModified: Double, buildID: String? = nil, deviceInfo: DeviceInfo? = nil, storageProofValidation: Bool? = nil) {
         self.protocolVersion = protocolVersion
         self.pid = pid
         self.dylibPath = dylibPath
         self.dylibModified = dylibModified
         self.buildID = buildID
         self.deviceInfo = deviceInfo
+        self.storageProofValidation = storageProofValidation
     }
 }
 

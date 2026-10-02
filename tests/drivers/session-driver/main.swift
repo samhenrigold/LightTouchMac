@@ -19,6 +19,8 @@ import IOSurface
 struct Config: Decodable {
     var helper: String, usbmuxd: String, ipa: String, bundleID: String
     var requirement: String?
+    /// Same stopped-storage worker used by the GUI before helper lease acquisition.
+    var firmwarekit: String?
     var work: String, files: String, ipodNAND: String, ipadBase: String
     /// The app's armv7.itpack: the iPad boots with the offer EmulatorController composes from it.
     var ipadItpack: String?
@@ -37,6 +39,8 @@ struct Config: Decodable {
     var preparationFailure: Bool?
     /// Actual helper lease admission/refusal at hello; never sends a boot request.
     var leaseAdmission: Bool?
+    /// Actual spawned helper killed before hello/configure; never boots a guest.
+    var killBeforeBoot: Bool?
 }
 
 let t0 = Date()
@@ -215,6 +219,17 @@ extension String {
                 emit("configurationFailed", ["device": self.name, "error": self.preparationError!])
                 return nil
             }
+        }, preparation: {
+            // This explicit fixture tests a missing boot configuration after
+            // real hello/lease, independently of stopped-format admission.
+            if config.preparationFailure == true { return }
+            let executable = URL(fileURLWithPath: config.firmwarekit ?? Self.helper)
+            let worker = config.firmwarekit == nil ? executable.deletingLastPathComponent().appendingPathComponent("firmwarekit") : executable
+            guard FileManager.default.isExecutableFile(atPath: worker.path) else {
+                throw DeviceError.preflight("firmwarekit boot admission worker missing: \(worker.path)")
+            }
+            let changed = try await FirmwareTool.admitBoot(device: self.dir, managed: false, executable: worker)
+            emit("bootAdmission", ["device": self.name, "changed": changed, "generation": generation])
         }) { result in
             switch result {
             case .success: emit("booted", ["device": self.name, "pid": process.link.pid, "seconds": Date().timeIntervalSince(started), "generation": generation])
@@ -677,8 +692,40 @@ func checkPreparedFiles() throws {
     exit(0)
 }
 
+@MainActor func runKillBeforeBoot() async {
+    let capture = try! ProcessLogCapture(url: work.appendingPathComponent("kill-before-boot.log"))
+    let lease = work.appendingPathComponent("device/work/lease")
+    let process = makeProcess(profile: .iPodTouch2G, log: capture, lease: lease,
+        helper: URL(fileURLWithPath: config.helper), requirement: config.requirement)
+    var configured = false, completions = 0, deaths = 0
+    process.onDeath = { death in
+        guard death == .stopped else { fail("kill before boot classified as \(death)") }
+        deaths += 1
+    }
+    process.start({ _ in configured = true; return nil }) { result in
+        completions += 1
+        guard case .failure(.closed) = result else { fail("kill before boot completion: \(result)") }
+    }
+    let pid = process.link.pid
+    guard pid > 0 else { fail("kill-before-boot did not spawn the actual helper") }
+    // Same actor turn: the hello callback has not run, although spawn has.
+    process.kill()
+    let exited = await process.waitForExit(timeout: 20)
+    var status: Int32 = 0
+    errno = 0
+    let reaped = waitpid(pid, &status, WNOHANG) == -1 && errno == ECHILD
+    guard exited, reaped, completions == 1, deaths == 1, !configured, process.link.pid == 0 else {
+        fail("kill-before-boot: exit \(exited), reap \(reaped), completions \(completions), deaths \(deaths), configure \(configured)")
+    }
+    let next = try! StorageLease(lease); next.close()
+    emit("killBeforeBootVerified", ["pid": pid, "configured": configured, "completions": completions,
+                                   "deaths": deaths, "reaped": reaped, "guestStarted": false])
+    exit(0)
+}
+
 Task { @MainActor in
-    if config.leaseAdmission == true { await runLeaseAdmission() }
+    if config.killBeforeBoot == true { await runKillBeforeBoot() }
+    else if config.leaseAdmission == true { await runLeaseAdmission() }
     else if config.preparationFailure == true { await runPreparationFailure() }
     else if let guest = config.guest { await runGuest(guest) } else if let single = config.single { await runSingle(single) }
     else if let activation = config.activation { await runActivation(activation) }

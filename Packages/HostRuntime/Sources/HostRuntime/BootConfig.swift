@@ -9,6 +9,8 @@ public nonisolated struct BootConfig: Codable, Sendable, Equatable {
     public var machine: String
     /// The web proxy the helper serves before QEMU starts (argv's guestfwd connects to its socket).
     public var webProxy: WebProxyEndpoint?
+    /// Managed boot: helper rechecks this storage generation under its lease.
+    public var storageProof: StorageBootProof?
 
     public init(argv: [String], environment: [String: String] = [:], machine: String) {
         self.argv = argv
@@ -22,6 +24,7 @@ public nonisolated struct BootConfig: Codable, Sendable, Equatable {
         environment = try c.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
         machine = try c.decode(String.self, forKey: .machine)
         webProxy = try c.decodeIfPresent(WebProxyEndpoint.self, forKey: .webProxy)
+        storageProof = try c.decodeIfPresent(StorageBootProof.self, forKey: .storageProof)
     }
 
     /// argv's wifi0 user netdev boots restricted (BootRecipe.wifiNetdev): 5.x Setup runs offline. The
@@ -38,4 +41,3 @@ public nonisolated struct WebProxyEndpoint: Codable, Sendable, Equatable {
     public var socket: String
     public init(config: String, socket: String) { self.config = config; self.socket = socket }
 }
-

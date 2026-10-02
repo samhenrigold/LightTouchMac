@@ -97,6 +97,29 @@ public actor StorageGeneration {
         }
     }
 
+    /// Finish a transaction borrowed by common boot admission without releasing
+    /// its shared stopped authority before the published record is reread.
+    private func returnAuthority(to owner: StoppedRecordOwner) throws {
+        guard !operationActive, let lease, lease === owner.lease, !lease.isClosed,
+              device == owner.device else {
+            throw FirmwareError(.internal, "storage admission does not own this transaction")
+        }
+        self.lease = nil
+    }
+
+    nonisolated(nonsending) static func withOwner<T>(_ transaction: StorageGeneration,
+        retaining owner: StoppedRecordOwner, body: (StorageGeneration) async throws -> T) async throws -> T {
+        do {
+            let value = try await body(transaction)
+            try await transaction.returnAuthority(to: owner)
+            return value
+        } catch {
+            do { try await transaction.returnAuthority(to: owner) }
+            catch { FirmwareDiagnostics.write(Data("storage transaction authority return failed: \(error)\n".utf8)) }
+            throw error
+        }
+    }
+
     private func requireOwner() throws {
         guard let lease, !lease.isClosed else { throw FirmwareError(.internal, "storage transaction is closed") }
     }

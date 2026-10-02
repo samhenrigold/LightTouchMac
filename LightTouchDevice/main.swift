@@ -82,6 +82,18 @@ func takeLease(_ path: String?) -> Bool {
     return false
 }
 
+/// Every helper mode verifies managed boot records under the same held lease.
+func installBootStorageAuthority(_ host: DeviceHost) {
+    host.bootStorageAuthority = { proof in
+        guard let lease = storageLease, let path = arguments["--lease"] else {
+            throw StorageBootProof.Failure.missingLease
+        }
+        let record = URL(fileURLWithPath: path).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("device.json")
+        try proof.verify(record: record, lease: lease)
+    }
+}
+
 if let service = arguments["--connect"] {
     runLinked(service: service, token: arguments["--token"] ?? "")
 } else if let path = arguments["--headless"] {
@@ -106,6 +118,7 @@ func runLinked(service: String, token: String) -> Never {
     let qemu = loadQemu()
     let status = StatusBlock.create()
     let host = qemu.map { DeviceHost(qemu: $0, status: status) }
+    if let host { installBootStorageAuthority(host) }
 
     let kr = DeviceRendezvous.sendHello(service: service, token: token, generation: 0, surfaces: [status.surface])
     guard kr == 0 else { helperLog("rendezvous with \(service) failed: \(kr)"); exit(72) }
@@ -193,6 +206,8 @@ func runHeadless(configPath: String) -> Never {
     guard let qemu = loadQemu() else { exit(70) }
     let status = StatusBlock.create()
     let host = DeviceHost(qemu: qemu, status: status)
+    guard takeLease(arguments["--lease"]) else { exit(75) }
+    installBootStorageAuthority(host)
     let readerLock = NSLock()
     var reader: FrameRingReader?
     host.onRingChanged = { ring in
@@ -205,7 +220,8 @@ func runHeadless(configPath: String) -> Never {
     }
     host.startPump()
     onTerminationSignals { host.halt(reason: $0) }
-    _ = host.boot(config.boot)
+    do { _ = try host.boot(config.boot) }
+    catch { helperLog("boot storage admission: \(error)"); exit(75) }
 
     func front() -> IOSurface? { readerLock.withLock { reader?.front()?.surface } }
     let start = Date()
@@ -309,6 +325,8 @@ func runOneShot(configPath: String) -> Never {
     if let dylib = config.dylib { setenv("LTM_QEMU_DYLIB", dylib, 1) }
     guard let qemu = loadQemu() else { exit(70) }
     let host = DeviceHost(qemu: qemu, status: StatusBlock.create())
+    guard takeLease(arguments["--lease"]) else { exit(75) }
+    installBootStorageAuthority(host)
     let start = Date()
     var marker = false
     var stopping = false
@@ -325,7 +343,8 @@ func runOneShot(configPath: String) -> Never {
     let parentWatch = DispatchSource.makeProcessSource(identifier: parent, eventMask: .exit, queue: .main)
     parentWatch.setEventHandler { helperLog("parent \(parent) exited"); stopping = true; qemu.quit() }
     parentWatch.resume()
-    _ = host.boot(config.boot)
+    do { _ = try host.boot(config.boot) }
+    catch { helperLog("boot storage admission: \(error)"); exit(75) }
     if getppid() != parent || parent == 1 { stopping = true; qemu.quit() }
     Thread.detachNewThread {
         while !host.hasExited {
