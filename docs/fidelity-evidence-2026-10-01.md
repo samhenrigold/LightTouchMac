@@ -888,3 +888,156 @@ same committed hardware source hashes, rather than automatically transferring
 it to the rebuilt artifact or app-facing main loop. Current dylib native guest,
 Intel/universal, signing/notarization and release gates remain separate. No
 target merge, publication or installation occurred.
+
+
+## Observational MBX interrupt status
+
+QEMU20d98f5898 removes the STATUS read side effect which cleared pending events
+before the stock7E18 ISR's explicit enabled-mask W1C acknowledgement. No new
+completion, startup, EVM, GPU execution or timer behavior is supplied. Actual
+handler negative controls reproduce event loss; four real production-board
+qtests cover pending/masked events, VIC IRQ, reset and migration. ASan/UBSan and
+all fourteen registered model suites pass. Normal frozen71f6258b standalone
+runs pass8/8 on both2.1.1 and3.1.3, each with strict GLTest, stereo audio,
+two guest-confirmed exit0 shutdowns, identical durable markers and fsck0.
+Owned processes are reaped. The executable is separately identified from the
+older f7825857 development dylib. Evidence:
+`/Users/shg/Developer/ltm-evidence/mbx-status-readback-2026-10-01`.
+
+## One imported process owner
+
+App fecd7a7 packages the existing canonical transport and new profile-neutral
+DeviceSessionProcess in DeviceRuntime at Shared/Package.swift. GUI DeviceProcess
+now owns presentation, log capture and geometry notices. Production helper,
+GUI, session CLI and hello-only lifecycle probes import the same owner;
+Xcode source exclusions prevent a second transport/CLink compilation.
+Transport behavior is byte-identical after the public ABI declarations and DTO
+initializers are accounted for. No parallel spawn/reap implementation is added.
+Actual arm64 GUI/helper/client builds, lease5/5, cancellation8 cases, preparation
+failure, real-module death classification, GUI labels and affected offline
+package/service/audio/boot/model checks pass. Initial sandbox/build exclusion
+and missing-import failures are retained separately. All processes are reaped;
+no guest, universal/Intel, signing or release qualification is claimed.
+Evidence: `/Users/shg/Developer/ltm-evidence/shared-process-owner-2026-10-01`.
+
+## Exact-build visual coverage admission
+
+QEMU91487b886d shares iPad/iPod visual-reference validation and requires the
+exact board, build, full product version, independent software/physical
+provenance and PNG hash. The old major-version icon layout is no longer borrowed,
+and missing visual coverage fails before output creation or guest launch.
+Actual-gate tests reject all-liveness-green but unqualified scenes; both board
+reference suites, six selector cases, seven fixture-preflight cases and the
+unchanged flipped/stale/red-blue frame mutations pass. Existing1.x Wi-Fi and
+1.1.5 grid failures remain historical evidence, not waived rendering verdicts.
+Independent exact1.x software reference captures remain pending qualification;
+no candidate GL frame is promoted to its own oracle.
+
+
+## D0C address-word producer
+
+QEMU af4c040cb8 accepts only the captured opcode02/immediate-zero write to the
+existing D0C scalar latch. Stock5F138 and7E18 bulk scripts load a descriptor,
+advance its pointer and feed FMC address-register words; discarded writes
+previously repeated the first descriptor. READ-ID still uses the same scalar
+for chip selection, so no universal row-address meaning is assigned.
+Actual-interpreter negative baseline, eight ASan/UBSan suites,29 controller
+qtests and all14 registered model suites pass. Frozen2b4ae15b standalone then
+passes full8/8 native checks on both2.1.1 and3.1.3, with two guest-confirmed
+exit0 shutdowns, strict GLTest/stereo audio, byte-identical durable marker and
+fsck0. All owned processes are reaped and source/executable hashes preserved.
+D24, raw/decoded spare ownership, flash commands and completion are unchanged;
+physical restore remains unsupported. Evidence: NAND archive's
+`d0c-scalar-producer` directory (68 bounded hash-inventoried files).
+
+## Probe build responsibility
+
+App7a3f23b restores independent HostRuntime builds for38 pure-host consumers;
+13 device consumers import DeviceRuntime explicitly. One small SwiftPM product
+routine supplies build/link paths. Six affected probes no longer compile a
+second canonical DeviceLinkProtocol source beside the imported ABI. Eleven
+headless logic groups pass and a cold package copy builds/imports HostRuntime
+without Shared or DeviceRuntime artifacts. Four recording/model probes, actual
+media driver/recorder, exit-wait and both host target slices compile/link;
+those compile-only executables were not launched and prove no new guest/media
+runtime capability. The initial sandbox Subprocess manifest failure and failed
+private cold fixture are retained separately. Owner/transport ABI is unchanged.
+
+The first private1.1 software-control attempt changed only LK_ENABLE_OGL1→0,
+but native evidence still contains two GL contexts and one front-end hello.
+Its frames are rejected as independent goldens. The explicit provenance guard
+failed before any committed reference was supplied; stock configuration and
+possible file/runtime override are being investigated. No rendering threshold,
+Wi-Fi modal or missing coverage is waived.
+
+## D20 main-address producer qualified (October 2)
+
+QEMUe2ce2d7b1d accepts the captured opcode02/immediate-zero write to D20.
+Stock bulk scripts fetch the descriptor's main-address word for FMC34 and
+advance the pointer. Actual-interpreter negative baseline, eight sanitizer
+suites,31 FMSS qtests and all fourteen registered models pass. Frozen
+383dc2781a7288d590ac264225bcc45f1eadf3d10cd9001dd9df10971c77d5dd
+standalone passes separate full2.1.1/3.1.3 native8/8, with strict graphics/audio,
+two guest-confirmed shutdowns, durable marker and fsck0. Source/artifact hashes
+and65 bounded files are retained in the NAND archive's d20-scalar-producer.
+
+The stock physical restore remains Waiting for NAND at D24. Stock FMC40
+sequences poll then consume FMC60/64/68 into spare buffers; neither the
+physical OOB-to-decoded representation nor its producer is established.
+D24's withdrawn candidate is not restored, and fixed READ-ID words are not
+reused as fabricated bulk data or completion.
+
+## Seed ownership and exact1.x independent controls (October 2)
+
+QEMU1837635068 and app4f16464 record each seeded hook only after successful
+installation, saving ownership after each success. Filtered, omitted and failed
+copies remain unclaimed; earlier successful hooks survive a later copy failure.
+The actual guest it_boot ASan/UBSan baseline fails restoration, while fixed
+restoration, filtering, failure and rollback tests pass. Native Swift Testing
+N72Tests.frontEndMatchesPython passes with the real armv6 offer/5F138 corpus.
+Thirty-seven recipe revisions (24K48,6N45,7N72) trigger Prepare Again; fifteen
+N72 4.x stub/no-hook recipes stay unchanged. Payload/loader serials are unchanged.
+Durable source/text evidence: seed-hook-bookkeeping-2026-10-02 (20 content files).
+
+The first1.1 LK-only control remains rejected. Corrected private controls
+disable the stock CA/LK flags and let the guest loader restore the original
+OpenGLES.baked through its documented ownership state, preserving other hooks.
+Both stock1.1/3A101a and1.1.5/4B1 captures show zero GL contexts/hellos and
+logged stock restoration. Framework backups are traced to prepared original
+inputs, not fresh independent IPSW extraction. Identity, modes, spares and
+unchanged source hashes are recorded; these boot-only captures make no clean
+unmount or durability claim. The1.1 Safari Wi-Fi dialog and1.1.5 Bookmarks
+state are retained as captured, with no dismissal or added mask.
+
+QEMU4a15968526 commits exact board/build/full-version references and requires
+a nonempty numeric full version. Reference downsampling uses the unchanged
+64x96 BOX algorithm. Flip, channel swap, stale-scene and borrowed-build
+mutations fail. Normal GL candidates on both builds pass Boot/GLES2/2 and
+all three scene differences are0.000, with no diagnostic observer or LCD
+trace. Both attach the frozen383dc278 artifact, not the later rebuilt dylib.
+Durable n45-independent-controls-2026-10-01 contains50 hash-verified bounded
+content files, including unchanged rejected-control evidence. This supersedes
+the earlier pending exact1.x coverage status, not its historical failures.
+
+## Shared runtime through an actual guest (October 2)
+
+Current development arm64 helper and QEMU3c85a3803e dylib pass the actual
+2.1.1/5F138 session18/18. GUI and session driver import the same DeviceRuntime
+owner. Two boots confirm Home, activation, factory identity, AFC transfers
+(16384,16385,65536,1048583bytes), installation and foreground identity. Two
+PMU-confirmed shutdowns end with helper exit0; the marker is byte-identical
+and the app survives cold boot. Prepared base size/mode/mtime are unchanged.
+The driver exits0 and read-only checks find none of its recorded driver/helper/
+usbmuxd PIDs alive. This guest receipt does not independently assert ECHILD.
+
+Exact artifact SHA256: dylib
+a95cf1b89e485fdb4ec1db015df1c0a0175ff74b426c00596179ef67b2017a06;
+helper49c5d73248539cd5c0ba885fc921680a5970a44702df9db30297c858dfb06bde;
+services3217d6066f13fab219f3bf439b99dc56cf228dcd8ff4f2c85178703276309a87.
+The rebuilt standalone da512148 is not promoted from the earlier frozen
+383dc278 standalone proof. These are development arm64 artifacts, not a signed
+universal release, Intel-native qualification, strict scene/audio gate, stock
+GPU implementation or physical restore. Durable evidence:
+/Users/shg/Developer/ltm-evidence/final-shared-runtime-2026-10-02
+(42 hash-verified source/text/UI files). The old f2ea hello-only artifact receipt
+is historical and superseded for this scoped current guest capability.
