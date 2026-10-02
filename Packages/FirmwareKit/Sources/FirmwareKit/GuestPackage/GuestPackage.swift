@@ -73,6 +73,41 @@ public enum GuestPackage {
         return lines.joined(separator: "\n") + "\n"
     }
 
+    /// Preserve the original file or its absence before any installer changes it.
+    /// Existing provenance is immutable; callers root-own the returned relative path.
+    static func preserveHook(volume: URL, target: String,
+                             write: ((String, Data, mode_t) throws -> Void)? = nil) throws -> String {
+        let fm = FileManager.default
+        let at = { volume.appendingPathComponent($0) }
+        let baked = target + ".baked", absent = target + ".baked-absent"
+        func attributes(_ path: String) throws -> [FileAttributeKey: Any]? {
+            do { return try fm.attributesOfItem(atPath: at(path).path) }
+            catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
+        }
+        let haveBaked = try attributes(baked), haveAbsent = try attributes(absent)
+        guard haveBaked == nil || haveAbsent == nil else {
+            throw FirmwareError(.internal, "conflicting hook provenance for \(target)")
+        }
+        if let marker = haveAbsent {
+            guard marker[.type] as? FileAttributeType == .typeRegular,
+                  (marker[.size] as? NSNumber)?.intValue == 0 else {
+                throw FirmwareError(.internal, "invalid absent hook marker for \(target)")
+            }
+            return absent
+        }
+        if haveBaked != nil { return baked }
+        let put = write ?? { rel, data, mode in
+            try SystemEdits.mkdirs(at(rel).deletingLastPathComponent())
+            try SystemEdits.put(data, at(rel), mode: mode)
+        }
+        if try attributes(target) != nil {
+            try put(baked, Data(contentsOf: at(target)), try SystemEdits.permissions(at(target)))
+            return baked
+        }
+        try put(absent, Data(), 0o644)
+        return absent
+    }
+
     /// Bakes the loader and the seed package into the system volume mounted at `volume` (mkpkg.seed): the
     /// itpack's package for the volume's ProductBuildVersion as it_boot installs one (pkgs/<serial>/ with its
     /// `offer`, `current` -> it, `state` with "seed N" and installed hook lines); the hooks whose target is on the volume (the GL engines' only
@@ -109,6 +144,13 @@ public enum GuestPackage {
         let hooks = allHooks.filter { h in
             let target = h["target"] as? String ?? ""
             return (gles || !glTargets.contains(target)) && fm.fileExists(atPath: at(String(target.dropFirst())).path)
+        }
+        let needsAbsence = hooks.contains { h in
+            let target = String((h["target"] as? String ?? "").dropFirst())
+            return (try? fm.attributesOfItem(atPath: at(target + ".baked-absent").path)) != nil
+        }
+        if needsAbsence && entries["loader/hook-provenance"] != Data("file-or-absence 1\n".utf8) {
+            throw FirmwareError(.unsupported, "guest loader cannot restore absent hook originals; rebuild the guest exports")
         }
         let dropped = Set(allHooks.compactMap { $0["file"] as? String }).subtracting(hooks.compactMap { $0["file"] as? String })
         for h in allHooks where dropped.contains(h["file"] as? String ?? "") {
@@ -167,9 +209,8 @@ public enum GuestPackage {
             let file = h["file"] as! String, target = String((h["target"] as! String).dropFirst())
             // <target>.baked keeps what the volume had (the stock file, or what the preparer put there), so a
             // package without the hook puts it back
-            if !fm.fileExists(atPath: at(target + ".baked").path) {
-                try put(target + ".baked", Data(contentsOf: at(target)), try SystemEdits.permissions(at(target)))
-            }
+            let backup = try preserveHook(volume: m, target: target, write: put)
+            if !written.contains(backup) { written.append(backup) }
             try put(target, payload(family + "/" + file), modes[file] ?? 0o755)
             // A first offer without this hook must restore .baked even before
             // the loader has read the seed offer. Failed copies are not claimed.

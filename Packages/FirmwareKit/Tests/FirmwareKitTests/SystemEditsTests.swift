@@ -227,8 +227,12 @@ enum K48Oracle {
             #expect(tree["usr/local/lighttouch/current"]?.link == "pkgs/\(seed.seed)")
             #expect(tree["usr/local/lighttouch/pkgs/\(seed.seed)/offer"]?.uid == 0)
             #expect(seed.hooks.contains("/" + FitCheck.openGLES))
-            let engine = try sv.listing(under: FitCheck.openGLES).first, baked = try sv.listing(under: FitCheck.openGLES + ".baked").first
-            #expect(engine?.sha256 != nil && engine?.sha256 == baked?.sha256 && baked?.uid == 0)
+            let engine = try sv.listing(under: FitCheck.openGLES).first
+            let baked = (try? sv.listing(under: FitCheck.openGLES + ".baked"))?.first
+            let absent = (try? sv.listing(under: FitCheck.openGLES + ".baked-absent"))?.first
+            #expect((baked != nil) != (absent != nil))
+            if let baked { #expect(engine?.sha256 != baked.sha256 && baked.uid == 0) }
+            if let absent { #expect(absent.uid == 0 && absent.sha256 == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") }
             #expect(try sv.listing(under: SystemEdits.daemons + "/com.qemu.it-pbd.plist").isEmpty)
             #expect(try sv.listing(under: SystemEdits.daemons + "/com.qemu.it-boot.plist").first?.uid == 0)
             // the activation's output is lockdownd as installed (re-signed ad hoc, entitlements kept)

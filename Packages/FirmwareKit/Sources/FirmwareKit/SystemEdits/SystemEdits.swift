@@ -376,10 +376,11 @@ public enum SystemEdits {
                                 + "composite through the GL bridge: \(e.message)")
         }
         let cached = fw.cache?.image("/" + FitCheck.openGLES) != nil
+        let backup = try GuestPackage.preserveHook(volume: m, target: FitCheck.openGLES)
         if cached { try setOverrideSwitch(m, image: FitCheck.openGLES) }
         log("GL front end \(Helpers.openGLES) as OpenGLES.framework/OpenGLES; \(cached ? "cached OpenGLES overridden by the file" : "the stock file replaced")")
         try put(bin, m.appendingPathComponent(FitCheck.openGLES), mode: 0o755)
-        return (Helpers.openGLES, [FitCheck.openGLES] + (cached ? [dyldOverride] : []))
+        return (Helpers.openGLES, [FitCheck.openGLES, backup] + (cached ? [dyldOverride] : []))
     }
 
     /// ipad1_rootfs.gli_dispatch_info: the sanity line about what the shim will find at load (the firmware's
