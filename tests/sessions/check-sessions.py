@@ -217,7 +217,11 @@ def main():
     ap.add_argument("--work", type=Path)
     ap.add_argument("--single", type=Path, help="one prepared base (firmwarekit create output)")
     ap.add_argument("--board", choices=("ipod", "ipad", "ipod1g"), help="--single: the base's board")
-    ap.add_argument("--host-power-gesture", action="store_true", help="--single iPod: qualify shared host gesture through virtual-time input, with actual PMU shutdown")
+    power = ap.add_mutually_exclusive_group()
+    power.add_argument("--host-power-gesture", action="store_true", default=None,
+                       help="--single iPod: select shared host gesture, with actual PMU shutdown")
+    power.add_argument("--no-host-power-gesture", dest="host_power_gesture", action="store_false",
+                       help="--single iPod: explicitly retain the legacy shutdown caller for comparison")
     ap.add_argument("--launch", action="store_true", help="--single: launch the installed IPA through the app’s guest agent and verify its foreground identity")
     ap.add_argument("--reboot", action="store_true", help="--single: cold boot the same overlay and verify file/app persistence, identity and shutdown again")
     ap.add_argument("--afc-race", type=int, metavar="N", help="--single: N boots, AFC at lockdown's first answer, then Stop (smoke.md #5)")

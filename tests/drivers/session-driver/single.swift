@@ -34,6 +34,11 @@ struct SingleConfig: Decodable {
     var install: Bool?
     /// Qualify the shared host gesture using generic virtual-time input; never GUI Stop.
     var hostPowerGesture: Bool?
+    /// Default migration is limited to the measured N72/5F138 shutdown gate.
+    /// Explicit true/false remains available for qualification and comparison.
+    func prefersHostPowerGesture(build: String?) -> Bool {
+        hostPowerGesture ?? (board == "ipod" && build == "5F138")
+    }
     /// After installation, launch through the app's guest agent where available. An unfitted helper set falls
     /// back to Home-screen reorder and a tap; screenshots alone do not prove the requested foreground identity.
     var launch: Bool?
@@ -180,7 +185,7 @@ struct SingleConfig: Decodable {
     /// GUI Stop is a separate hard halt and does not establish guest unmount.
     func shutdown(_ generation: Int) async {
         let quit = Date()
-        if s.hostPowerGesture == true && !ipad {
+        if s.prefersHostPowerGesture(build: lock?["build"] as? String) && !ipad {
             do {
                 try await HostInputAutomation.shutdown(d.process, firstGeneration: s.board == "ipod1g")
                 emit("hostPowerGesture", ["device": d.name, "generation": generation, "confirmed": d.process.status?.shutdownConfirmed == true])
