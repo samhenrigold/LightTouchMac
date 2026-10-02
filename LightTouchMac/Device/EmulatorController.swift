@@ -533,10 +533,11 @@ final class EmulatorController {
     func release() async -> Bool {
         releasing = true
         stop()
-        await workerRetirement?.value
-        guard let process, process.link.pid > 0 else { return true }
+        guard let process, process.link.pid > 0 else { await awaitServiceTeardown(); return true }
         if !process.isDead { process.kill() }
-        return await process.waitForExit(timeout: 10)
+        let exited = await process.waitForExit(timeout: 10)
+        await awaitServiceTeardown()
+        return exited
     }
 
     /// The iPod machine has the guest agent's channel; a stock iPad has none,
@@ -1585,8 +1586,24 @@ final class EmulatorController {
     /// guest's filesystems replay their journals on the next boot. The helper's
     /// exit is Stopped (helperDied). `completion(true)` iff the helper is gone.
     static let haltBudget: TimeInterval = 10
-    /// The quit backstop: the halt, then the kill.
-    static let stopBudget: TimeInterval = haltBudget + 5
+    /// How long Stop waits for the services worker's teardown after the helper is
+    /// gone. Retirement already cancelled the worker (its subprocess is torn down);
+    /// a teardown that never finishes keeps reaping in the background, never holding Stop.
+    static let serviceTeardownBudget: TimeInterval = 2
+    /// The quit backstop: the halt, then the kill, then the services worker.
+    static let stopBudget: TimeInterval = haltBudget + 5 + serviceTeardownBudget
+
+    /// Waits for the retired boot's services worker, at most `serviceTeardownBudget`.
+    private func awaitServiceTeardown() async {
+        guard let retirement = workerRetirement else { return }
+        let (done, signal) = AsyncStream<Bool>.makeStream()
+        Task { await retirement.value; signal.yield(true) }
+        let timer = Task { try? await Task.sleep(for: .seconds(Self.serviceTeardownBudget)); signal.yield(false) }
+        var first = done.makeAsyncIterator()
+        let finished = await first.next() ?? false
+        timer.cancel(); signal.finish()
+        if !finished { logEvent("stop: the services worker did not finish in \(Int(Self.serviceTeardownBudget)) s; it is reaped in the background") }
+    }
 
     /// A live helper whose VM can be stopped, including mid-boot.
     var canStop: Bool { !isDead && !isPoweredOff && !shuttingDown && !isErasing && state != .notStarted }
@@ -1614,7 +1631,6 @@ final class EmulatorController {
             process?.terminate()
         }
         haltTask = Task { [weak self] in
-            await self?.workerRetirement?.value
             var exited = await process?.waitForExit(timeout: Self.haltBudget) ?? true
             if !exited {
                 logEvent("stop: the device helper did not exit in \(Int(Self.haltBudget)) s; killing it")
@@ -1622,6 +1638,7 @@ final class EmulatorController {
                 exited = await process?.waitForExit(timeout: 5) ?? true
             }
             guard let self else { return }
+            await awaitServiceTeardown()
             if exited { logEvent("stop: device halted") }
             haltTask = nil
             shuttingDown = false

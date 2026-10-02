@@ -220,7 +220,7 @@ def live(args):
     work.mkdir(parents=True, exist_ok=True)
     print(f"work: {work}", flush=True)
     helper = sessions.build(args, work)
-    cfg = {"helper": str(helper), "requirement": None, "usbmuxd": args.usbmuxd, "ipa": "", "bundleID": "",
+    cfg = {"helper": str(helper), "requirement": sessions.helper_requirement(args), "usbmuxd": args.usbmuxd, "ipa": "", "bundleID": "",
            "work": str(work), "files": str(args.files), "ipodNAND": "",
            "ipadBase": str(args.recovery_device if args.board == "ipad" else ""),
            "deadline": {"board": args.board, "base": str(args.recovery_device), "budget": args.budget}}
