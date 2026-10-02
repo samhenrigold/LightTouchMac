@@ -1,4 +1,0 @@
-module Subprocess {
-header "Subprocess-Swift.h"
-export *
-}
