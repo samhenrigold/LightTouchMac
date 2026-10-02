@@ -4,6 +4,9 @@ from pathlib import Path
 from firmwarekit_leaf import schema_sources
 import os, subprocess, sys, tempfile, time
 root = Path(__file__).resolve().parents[2]
+import sys
+sys.path.insert(0, str(root / "scripts"))
+import host_runtime
 def run(args, **kwargs):
     subprocess.run(args, cwd=root, check=True, **kwargs)
 with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
@@ -20,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-checks-') as work:
         port = portfile.read_text()
         def swift(name, sources, arguments=()):
             exe=work/name
-            run(['swiftc', *schema_sources(),'-parse-as-library','-module-cache-path',str(work/'modules'), *sources,'-o',str(exe)])
+            run(['swiftc', *host_runtime.swift_flags(root), *schema_sources(),'-parse-as-library','-module-cache-path',str(work/'modules'), *sources,'-o',str(exe)])
             run([str(exe),*arguments], env=env, timeout=30)
         # CatalogClient consults the IPA library, whose device paths DeviceLibrary.swift resolves in the app.
         (work/'paths.swift').write_text('extension DeviceInstance { var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) } }\n')

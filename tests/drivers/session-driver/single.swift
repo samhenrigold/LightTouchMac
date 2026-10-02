@@ -254,8 +254,7 @@ struct SingleConfig: Decodable {
         exit(0)
     }
 
-
-
+    await boot(1)
 
     if s.reboot == true, s.hardStop == true {
         d.process.terminate()   // the app's Stop: pause, flush the overlay, quit QEMU at once

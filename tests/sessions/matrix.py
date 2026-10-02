@@ -247,7 +247,7 @@ def boot(entry, base, a, helper, work, env, app):
     """tests/drivers/session-driver --single with reboot; returns the parsed events, the driver's exit and the serial log."""
     board = {"k48ap": "ipad", "n45ap": "ipod1g"}.get(entry["board"], "ipod")
     nand_current = a.files / "nand-current"
-    cfg = {"helper": str(helper), "requirement": None, "usbmuxd": str(a.usbmuxd), "ipa": app["ipa"],
+    cfg = {"helper": str(helper), "requirement": None, "firmwarekit": str(a.firmwarekit), "usbmuxd": str(a.usbmuxd), "ipa": app["ipa"],
            "bundleID": app["bundle_id"], "work": str(work), "files": str(a.files),
            "ipodNAND": str(a.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(base) if board == "ipad" else "", "timeout": a.boot_timeout - 20,
@@ -694,7 +694,7 @@ def main():
             base_before = check_sessions.tree(base)
             drive = work / "boot"
             drive.mkdir()
-            for n in ("session-driver",):
+            for n in ("session-driver", "LightTouchServices"):
                 os.symlink(tools / n, drive / n)
             log(f"  test app: {rec['test_app']['bundle_id']} (min OS {rec['test_app']['min_os']}, {rec['test_app']['source']})")
             events, rc, serial, shots_from, timing = boot(entry, base, a, helper, drive, env, rec["test_app"])

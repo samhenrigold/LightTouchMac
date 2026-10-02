@@ -13,6 +13,9 @@ from urllib.parse import urlparse, parse_qs
 import json, os, subprocess, tempfile, threading
 
 root = Path(__file__).resolve().parents[2]
+import sys
+sys.path.insert(0, str(root / "scripts"))
+import host_runtime
 fixtures = root / 'tests/fixtures/store-compat'
 load = lambda name: json.loads((fixtures / name).read_text())
 FILES = {'iPod2,1': 'new-ipod2-3.1.3-enigmo', 'iPad1,1': 'new-ipad1-3.2-enigmo', 'iPod1,1': 'new-ipod1-1.1.5-enigmo'}
@@ -155,7 +158,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-store-compat-') as directory:
     (work / 'paths.swift').write_text('extension DeviceInstance { var paths: Paths { paths(state: Bundled.stateDirectory, logs: Bundled.logsDirectory) } }\n')
     sources = ['Features/CatalogClient', 'Features/CatalogCopy', 'Library/Bundled', 'Transport/AppEventLog', 'Library/StorageLocations',
                'Transport/NativeLogging', 'Library/IPALibrary', 'Library/DeviceInstance', 'Device/DeviceProfile', 'Library/FirmwareCatalog']
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-module-cache-path', str(work / 'modules'),
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(root), '-parse-as-library', '-module-cache-path', str(work / 'modules'),
                     str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), *[str(root / f'LightTouchMac/{s}.swift') for s in sources], str(work / 'paths.swift'), str(work / 'check.swift'),
                     '-o', str(work / 'check')], check=True)
     for shape in ('old', 'new'):

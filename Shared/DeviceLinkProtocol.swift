@@ -292,3 +292,41 @@ nonisolated public final class LinkChannel<Incoming: Decodable, Outgoing: Encoda
         }
     }
 }
+
+/// Host-authored physical input only. QEMU owns execution deadlines and pins.
+nonisolated public struct VirtualInputEvent: Codable, Sendable, Equatable {
+    public var atMilliseconds: Int64
+    public var kind: Int32
+    public var value: Int32
+    public var phase: Int32
+    public var x: Double
+    public var y: Double
+
+    public static func button(_ button: Int32, down: Bool, at: Int64) -> Self {
+        .init(atMilliseconds: at, kind: 0, value: button, phase: down ? 1 : 0, x: 0, y: 0)
+    }
+    public static func touch(phase: Int32, x: Double, y: Double, at: Int64) -> Self {
+        .init(atMilliseconds: at, kind: 1, value: 0, phase: phase, x: x, y: y)
+    }
+    public static func valid(_ events: [Self]) -> Bool {
+        guard !events.isEmpty, events.count <= 256 else { return false }
+        var buttons = [Bool](repeating: false, count: 4), touch = false
+        var previous: Int64 = 0
+        for event in events {
+            guard event.atMilliseconds >= previous, event.atMilliseconds <= 600_000 else { return false }
+            previous = event.atMilliseconds
+            if event.kind == 0 {
+                guard (0...3).contains(event.value), (0...1).contains(event.phase),
+                      buttons[Int(event.value)] != (event.phase == 1) else { return false }
+                buttons[Int(event.value)] = event.phase == 1
+            } else if event.kind == 1 {
+                guard event.value == 0, (0...2).contains(event.phase),
+                      event.x.isFinite, event.y.isFinite,
+                      (0...1).contains(event.x), (0...1).contains(event.y),
+                      event.phase == 0 ? !touch : touch else { return false }
+                touch = event.phase != 2
+            } else { return false }
+        }
+        return !touch && !buttons.contains(true)
+    }
+}

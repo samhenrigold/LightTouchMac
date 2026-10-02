@@ -20,6 +20,9 @@ from urllib.parse import urlparse, parse_qs
 import argparse, os, subprocess, tempfile, threading
 
 root = Path(__file__).resolve().parents[2]
+import sys
+sys.path.insert(0, str(root / "scripts"))
+import host_runtime
 fixtures = root / 'tests/fixtures/store-filter'
 ap = argparse.ArgumentParser()
 ap.add_argument('--out')
@@ -176,7 +179,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-store-ui-') as directory:
     sources = ['Features/CatalogClient', 'Features/CatalogCopy', 'Features/CatalogFilter', 'UI/CatalogFilterButton',
                'UI/CatalogDetailsViewController', 'Library/Bundled', 'Transport/AppEventLog', 'Library/StorageLocations',
                'Transport/NativeLogging', 'Library/IPALibrary', 'Library/DeviceInstance', 'Device/DeviceProfile', 'Library/FirmwareCatalog']
-    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-module-cache-path', str(work / 'modules'),
+    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(root), '-parse-as-library', '-module-cache-path', str(work / 'modules'),
                     str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), *[str(root / f'LightTouchMac/{s}.swift') for s in sources], str(work / 'paths.swift'), str(work / 'check.swift'),
                     '-o', str(work / 'check')], check=True)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)

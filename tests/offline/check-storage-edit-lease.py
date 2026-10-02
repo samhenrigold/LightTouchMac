@@ -10,7 +10,7 @@ import host_runtime
 root = Path(__file__).resolve().parents[2]
 source = (root / "LightTouchDevice/main.swift").read_text()
 start = source.index("var storageLease: StorageLease?")
-end = source.index('\nif let service = arguments["--connect"]', start)
+end = source.index('\nfunc installBootStorageAuthority', start)
 with tempfile.TemporaryDirectory(prefix="ltm-edit-lease-") as tmp:
     work = Path(tmp)
     main = work / "main.swift"

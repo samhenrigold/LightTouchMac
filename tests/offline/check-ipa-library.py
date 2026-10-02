@@ -10,6 +10,9 @@ from pathlib import Path
 import importlib.util, os, subprocess, tempfile, threading
 
 root = Path(__file__).resolve().parents[2]
+import sys
+sys.path.insert(0, str(root / "scripts"))
+import host_runtime
 spec = importlib.util.spec_from_file_location('catalog_server', root / 'tests/fixtures/catalog-server.py')
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
@@ -178,7 +181,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-ipa-library-') as directory:
         sources = ['Library/IPALibrary', 'Features/CatalogClient', 'Features/CatalogCopy', 'Library/Bundled', 'Transport/AppEventLog', 'Library/StorageLocations', 'Transport/NativeLogging',
                    'Library/DeviceInstance', 'Device/DeviceProfile', 'Library/FirmwareCatalog', 'Features/InstallationQueue',
                    'Features/AppInstaller', 'Transport/DeviceExecution']
-        subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
+        subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(root), '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
                         '-module-cache-path', str(work / 'modules'), str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), *[str(root / f'LightTouchMac/{s}.swift') for s in sources],
                         str(root / 'tests/fixtures/app-installer.swift'), str(work / 'check.swift'), '-o', str(work / 'check')], check=True)
         subprocess.run([str(work / 'check'), str(server.server_port)], check=True, timeout=60, env=env)
