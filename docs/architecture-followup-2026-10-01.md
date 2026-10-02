@@ -350,3 +350,41 @@ and borrowed-build mutations fail. These qualify frontend pixels, not physical
 MBX execution, clean filesystem durability or every firmware's visual coverage.
 Current shared-runtime18/18 qualification and separate frozen standalone
 artifacts are identified in the evidence journal.
+
+## Preparation and test boundary closeout
+
+App126ba26/QEMUc23c72542e preserve the actual stock OpenGLES file before the
+preparer installs its frontend. Original cache-only absence has an explicit
+rollback marker and loader capability; stale exports refuse absence-dependent
+seeding. Actual production-order tests cover five firmware inputs, and rebuilt
+loader14 restores the stock file on3.0 through two clean native boots. All52
+recipe revisions request reprepare while preserving existing devices. N72 4.x
+hookless-package and native cache-only rollback coverage remain explicit limits.
+
+QEMU a4445faf32 also prevents a required final shutdown failure or late harness
+exception from producing a successful run/deleting its evidence. The software
+2.1.1 control exposed that hole; its pixels are independently valid, while
+its final software-rendered shutdown remains failed. Stock3.0 userspace UART
+is unavailable, so its restoration proof uses verified filesystem state and
+framework bytes instead of pretending to observe a UART line. Native ABI,
+scene rendering, clean shutdown and physical hardware remain distinct gates.
+
+## Final frontend disposition
+
+QEMU038490937b adds exact independent stock-software2.1.1 and3.0 reference
+coverage. Normal frontend Boot/GLES gates pass2/2 per build; all six scene
+comparisons are0.000. The opened-app label reflects actual Safari or Mail
+instead of assuming firmware layouts match. Explicit frontend selection is
+independent of installed helpers, GLTest availability and USB usability; default
+app-based testing retains its existing fixture/ABI checks. Exact source/native
+and later USB-admission unit evidence are kept separate in the journal.
+
+The remaining list is hardware-contract work: physical FMSS command/decoded
+spare ownership and restore durability; live MBX EVM/SGX execution; watchdog
+expiry and timer dispatch; N45 retained-RAM wake; generic virtual-time input
+sequencing before moving board UI automation. Native cache-only hook rollback
+and current universal/Intel release packaging also remain unqualified. The
+2.1.1 software-rendered final shutdown failure and3.0 userspace UART absence
+are retained investigation leads, not fabricated completions. Source/test
+refactors, preparation provenance and scoped graphics coverage are committed
+worktree candidates; no target merge follows.

@@ -1041,3 +1041,94 @@ GPU implementation or physical restore. Durable evidence:
 /Users/shg/Developer/ltm-evidence/final-shared-runtime-2026-10-02
 (42 hash-verified source/text/UI files). The old f2ea hello-only artifact receipt
 is historical and superseded for this scoped current guest capability.
+
+## Production original-file provenance and loader14
+
+QEMU c23c72542e and app126ba26 fix the real installer→seed ordering: the
+OpenGLES installer preserves firmware-original bytes/mode before replacement.
+A cache-only original uses an empty .baked-absent marker. Existing provenance
+is immutable; conflicting or malformed markers fail closed. Dynamic hooks
+record original absence, restore it on removal and preserve it through
+reinstall/rollback. A dangling original is not misclassified as absent. Custom
+addition backups remain prepared baselines, not claimed Apple originals.
+
+The pack declares loader/hook-provenance `file-or-absence 1`. Both seeders reject
+missing/unknown capability before publishing an absence-dependent seed; no
+serial guess or cache-to-executable reconstruction is used. Maintained serial14/
+version1.1.12 exports rebuild successfully. Actual loader sanitizer tests
+reproduce the old absence failure and pass restoration, dynamic install/removal,
+reinstall, rollback, malformed markers, dangling original and stale capability
+controls. Native Swift Testing passes four tests/three suites with five actual
+production installer→seed cases:5F138/7A341 stock files and7E18/8C148/K48-7B500
+cache-only absence. N72 and three K48 seed-parity cases also pass.
+
+All52 catalog recipe revisions advance for the changed loader/preparer outputs;
+old bases remain usable and request explicit Prepare Again. Twelve admission
+locks and catalog-order/forwarding checks pass. N72 4.x remains a hookless seed
+stub: preserving original provenance does not make its compatibility frontend
+owned by the package loader. Cached-absence native rollback remains a separate
+capability. Durable source/text inventory: hook-original-provenance-2026-10-02,
+30 hash-verified receipts. Exports preserve their exact dirty3c85 build identity;
+no clean release artifact is claimed.
+
+## Required cleanup cannot leave an all-green run
+
+QEMU a4445faf32 makes required first/final guest shutdown failures, execution
+exceptions after completed verdicts and cleanup exceptions fail the native run.
+Failure-only `_harness` result metadata and harness.json preserve stages/reasons
+and artifacts; `--clean` cannot delete a failed run. Successful eight-check
+counts remain unchanged, and Boot/GLES-only intentional hard stop remains
+separate. Seven actual-main controls pass; unchanged-source negatives reproduced
+exit0 and deleted artifacts for the final-timeout and late-exception cases.
+Durable evidence: harness-final-shutdown-2026-10-02 (11 bounded files).
+
+The observed stock-software2.1.1 control is preserved as a visual-only baseline:
+verified genuine framework, zero GL contexts/hellos and first clean reopen,
+but final gesture shutdown FAILED. Its old runner incorrectly returned0; this
+is not a complete clean-stop qualification. Stock3.0 initially failed because
+userspace UART was unavailable. The retry records that absence separately and
+proves installed custom→genuine stock bytes, staged offer/state/software flags
+and exact loader hash through actual guest VFS. The new armv6 loader
+13c52c1218f448f0eb1e9529c9bc047b249d39d58a95ac43c8e1210e72e58861
+runs with unchanged legacy seed13; both guest-confirmed shutdowns and persistence
+pass2/2. This proves ABI/present-file restoration, not a fresh seed14 native
+cache-only rollback. Durable control evidence: n72-independent-controls-2026-10-02;
+all earlier failures and interrupted selector attempt remain distinct.
+
+## Exact N72 frontend coverage and final source pin
+
+QEMU038490937b qualifies exact5F138/2.1.1 and7A341/3.0 independent stock-software
+references. The generic opened-app scene identifies actual Safari on2.1.1 and
+Mail on3.0, preserving the unchanged first-icon tap and all captured bytes.
+Existing1.x scene keys are renamed without changing either PNG. All four
+build oracles reject flipped frames, channel swaps, stale scenes and borrowed
+builds; existing frame thresholds/status mask are unchanged.
+
+An explicit --gles-front-end selector is mutually exclusive with --gles-app
+and preserves installed-helper provenance/default GLTest selection. Actual
+selector/config/preflight tests cover9cases and7prerequisite cases, including
+missing exact references before output/guest launch. A mistaken default-app
+attempt was interrupted before rendering verdicts, exit130; no lock was
+falsified. The frontend no longer requires usable USB merely because usbmuxd
+is installed: actual-main baseline failed this negative control, fixed source
+passes, and successful eight-check counts remain unchanged.
+
+Normal candidates pass Boot/GLES2/2 on each build, with one frontend hello,
+2contexts on2.1.1/3contexts on3.0, no refusals and all six scene differences0.000.
+Both owned process sets are reaped. These are intentional hard-stop visual
+gates, not new clean shutdown/persistence or physical GPU qualification. Native
+proof attaches to Rsource ba064b0940c51d1d54d8a8ca4ac0b32bcc2619a445f91aded7a1bb00fbfad529
+and frozen standalone da512148. The subsequent USB admission-only change has
+separate actual-main proof; it is not retagged as a native rerun. Exact archived
+native source was reconstructed privately by reversing only that condition and
+matching the recorded full hash; both rejected archive attempts are retained.
+
+Durable frontend-coverage-2026-10-02 contains29verified bounded files and
+independently verifies all90entries in the linked N72 controls/native archive.
+No framework binaries, keys, raw RAM or NAND were archived.
+
+Final app source pin is QEMU038490937bdb278b0a964b819ee4abb18aa6a52a; compatible
+usbmuxd remains e19fac2d4bf344f67fc05e693f8239d2b7101190. Source-checkout identity
+is separate from the earlier3c85 compiled dylib/helper and frozen standalone
+receipts. No latest universal/Intel/release artifact promotion, target merge,
+publication or installation occurred.

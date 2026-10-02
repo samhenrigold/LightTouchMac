@@ -17,7 +17,7 @@ refuses physical formats it cannot interpret correctly.
 | Recommendation | Current disposition | Remaining work / proof |
 |---|---|---|
 | Swift preparation / Python retirement | Included in the starting consolidation | Keep production orchestration in Swift; Python remains useful for test/research harnesses. No blanket migration of tests. |
-| Guest GL surface ownership | CoreSurface mapping and cached EGL-name lifetimes corrected; actual-source negative sanitizer tests and normal full2.1.1/3.1.3 gates pass8/8 | Exact-build independent stock-software controls and strict Boot/GLES gates pass on1.1 and1.1.5; deferred destruction/concurrency, raw GPU execution and release artifacts remain separate. |
+| Guest GL surface ownership | CoreSurface mapping and cached EGL-name lifetimes corrected; actual-source negative sanitizer tests and normal full2.1.1/3.1.3 gates pass8/8 | Exact-build independent stock-software controls and strict Boot/GLES gates pass on1.1,1.1.5,2.1.1 and3.0; deferred destruction/concurrency, raw GPU execution and release artifacts remain separate. |
 | PVRTC reference decoder | Implemented and sanitizer/native-upload tested | Cross-platform EAGL integration and older/newer live snapshot round trips are not established by these tests. |
 | iPad flush failure propagation | Implemented and failure-injected | Storage-generation publication is implemented and interruption-tested. Data-before-ownership publication is now ordered and SIGKILL/reopen tested; atomic guest operations and durability of every acknowledged program across host power loss remain open. |
 | Exclusive offline export ownership | Implemented at reusable device API/CLI boundary | Production edit, deletion and cache maintenance now use ownership checks. Continue auditing restore entry points; isolated fixture APIs intentionally bypass ownership. |
@@ -623,3 +623,21 @@ two-boot session18/18, including persistent writes, unchanged prepared base
 and guest-confirmed shutdowns. This does not promote older universal packages
 or qualify stock GPU execution. Exact artifacts and limitations are recorded
 in the shared qualification journal.
+
+The final production-order audit found that N72/K48 installed the frontend
+before saving .baked; older N72 backups were custom code and are not stock
+oracles. App126ba26/QEMUc23c72542e preserve the true original file or cache-only
+absence first. Loader14 and explicit capability admission are tested against
+five firmware inputs, with actual3.0 present-file restoration/two clean boots.
+All52 recipe revisions now require explicit reprepare for the new output.
+Stock-software2.1.1 final shutdown remains failed; its earlier incorrect run
+success is retained and the runner now fails required cleanup. These are
+measured corrections, not full physical GPU/restore completion.
+
+QEMU038490937b closes exact2.1.1/3.0 frontend coverage: ordinary explicit
+frontend runs pass Boot/GLES2/2 each and all six pixel comparisons are0.000.
+The independent3.0 capture also qualifies new loader14 with legacyseed13,
+including two clean stops/persistence. Exact source/runtime/asset identities and
+remaining failure boundaries are in the journal. Physical NAND restore, raw
+GPUs, measured power/timing/wake and safe semantic-input extraction remain
+open; none is upgraded by the host/frontend passes.

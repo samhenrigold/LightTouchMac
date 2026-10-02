@@ -33,7 +33,7 @@ high-level, patched or stubbed models. Current unmerged implementation and
 exact artifact receipts are maintained in [remaining work](remaining-work-2026-09-30.md)
 and the [qualification journal](fidelity-evidence-2026-10-01.md). Latest measured
 corrections include observational MBX status, D0C/D20 descriptor producers and
-one imported host process owner. Exact independent1.x visual controls and
+one imported host process owner. Exact independent1.x/2.1.1/3.0 visual controls and
 actual2.1.1 two-boot helper lifecycle pass; stock erase still stops at D24.
 These successes do not reclassify physical NAND/GPU execution or watchdog/wake
 contracts, and no target merge or release follows.
