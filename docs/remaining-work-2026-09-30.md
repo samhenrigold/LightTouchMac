@@ -12,6 +12,10 @@ It does not make a restored K48 store interchangeable with a generated store:
 stock restored cold boot still fails the identity gate, and the host reader now
 refuses physical formats it cannot interpret correctly.
 
+## Latest October 2 frontier
+
+The [current qualification journal](fidelity-evidence-2026-10-02.md) supersedes earlier diagnostic stops below. N72 stock restore reaches completion, and corrected crypto reaches iBoot on its cold clone. The first proven failure is an erased YAFTL context read accepted through a fixed controller status. Physical read/write/ECC completion and durable restored boot remain open. The latest actual helper confirms two host-driven clean shutdowns and cold persistence; its separate Notes keyboard gate fails and is being corrected. NAND no longer inspects SpringBoard plist contents. MBX has an opt-in, model-tested real black-fill operation; live startup remains unsupported. N45 has measured ROM/PLL/SRAM wiring, but the supplied ROM enters missing SRAM code, so cold boot and wake remain unproven.
+
 ## Disposition of the report recommendations
 
 | Recommendation | Current disposition | Remaining work / proof |

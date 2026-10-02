@@ -34,13 +34,13 @@ exact artifact receipts are maintained in [remaining work](remaining-work-2026-0
 and the [qualification journal](fidelity-evidence-2026-10-01.md). Latest measured
 corrections include observational MBX status, D0C/D20 descriptor producers and
 one imported host process owner. Exact independent1.x/2.1.1/3.0 visual controls and
-actual2.1.1 two-boot helper lifecycle pass; stock erase still stops at D24.
+actual2.1.1 two-boot helper lifecycle pass. Later October2 traces reach stock erase completion; the D24 stop is historical, not the current frontier.
 These successes do not reclassify physical NAND/GPU execution or watchdog/wake
 contracts, and no target merge or release follows.
 
 ## October 2 active qualification
 
-See the [current journal](fidelity-evidence-2026-10-02.md). Stock restore now reports completion for one diagnostic artifact, but its cold clone returns to SecureROM DFU. AES register readback and fixed-address output suppression are the measured next divergences; physical NAND/ECC and durable restored boot remain unqualified. Shared host power gesture passes actual two-boot helper 19/19. Narrow MBX execution and opt-in N45 ROM reset pass actual board tests without proving a native compositor or sleep/wake.
+See the [current journal](fidelity-evidence-2026-10-02.md). Stock restore reports completion; corrected AES lets its cold clone reach iBoot, where a constant flash result incorrectly accepts an erased context page. Physical NAND/ECC and durable restored boot remain unqualified. Suppression-free corrected-NOR3.1.3 passes8/8;2.1.1 passes functional checks but one legacy shutdown fails. The latest shared-helper run confirms both host shutdowns and cold persistence, with its separate Notes typing test failing. Narrow opt-in MBX fill/MMU execution passes6/6 board tests. N45 ROM/PLL/SRAM tests pass3/3; native execution then reaches missing code in the supplied ROM path. No native compositor, full N45 cold boot, watchdog expiry or retained-RAM wake is claimed.
 
 ## September 30 candidate findings
 
