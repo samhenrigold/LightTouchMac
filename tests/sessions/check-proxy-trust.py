@@ -61,7 +61,7 @@ def main():
     print(f"work: {work}", flush=True)
     helper = sessions.build(args, work)
     nand_current = args.files / "nand-current"
-    cfg = {"helper": str(helper), "requirement": None, "usbmuxd": args.usbmuxd, "ipa": "", "bundleID": "",
+    cfg = {"helper": str(helper), "requirement": sessions.helper_requirement(args), "usbmuxd": args.usbmuxd, "ipa": "", "bundleID": "",
            "work": str(work), "files": str(args.files),
            "ipodNAND": str(args.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",
            "ipadBase": str(args.base if args.board == "ipad" else ""), "timeout": 900,

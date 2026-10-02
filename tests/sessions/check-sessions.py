@@ -69,6 +69,17 @@ import sources  # the pinned checkouts (build-support/sources.json)
 import swift_subprocess
 import host_service
 import device_runtime
+# The helper these checks build (xcodebuild Debug) is signed by the project's team: pin it, as the app's
+# DeviceRendezvous.defaultRequirement does when the app is Team-signed. Left nil, the ad-hoc test driver falls
+# back to the helper's own designated requirement, which any helper satisfies.
+TEAM_REQ = 'anchor apple generic and certificate leaf[subject.OU] = "SM75355Y6R"'
+
+
+def helper_requirement(args):
+    """The requirement the driver enforces: an explicit one, else the team pin for a helper this check built."""
+    return getattr(args, "helper_requirement", None) or (None if getattr(args, "helper", None) else TEAM_REQ)
+
+
 APP_SOURCES = ["Services/DeviceServices", "Transport/DeviceExecution", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
                "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestAgent", "Guest/GuestPackage",
                "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
@@ -258,7 +269,7 @@ def main():
     base_dir = args.single or (args.ipod_device if args.guest else args.ipad_device)
     base_before = tree(base_dir)
     nand_current = args.files / "nand-current"
-    cfg = {"helper": str(helper), "requirement": args.helper_requirement, "firmwarekit": args.firmwarekit,
+    cfg = {"helper": str(helper), "requirement": helper_requirement(args), "firmwarekit": args.firmwarekit,
            "usbmuxd": args.usbmuxd, "ipa": str(args.ipa),
            "bundleID": args.bundle_id, "work": str(work), "files": str(args.files),
            "ipodNAND": str(args.files / os.readlink(nand_current)) if nand_current.is_symlink() else "",

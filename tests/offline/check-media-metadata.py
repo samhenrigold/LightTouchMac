@@ -12,6 +12,7 @@ is the booted check (tests/sessions/check-media-metadata-guest.py).
 from pathlib import Path
 import math
 import plistlib
+import sqlite3
 import shutil
 import struct
 import subprocess
@@ -111,6 +112,8 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-metadata-') as work:
             failures.append(f'{name}: purchase duration is not whole milliseconds: {properties.get("duration")!r}')
         if not 2900 < properties.get('duration', 0) < 3200:
             failures.append(f'{name}: MusicLibrary duration = {properties.get("duration")!r}')
+        if 'itemId' in properties:   # the artwork key: allocated at import from the library (below), not by the mapping
+            failures.append(f'{name}: the mapping chose itemId {properties["itemId"]!r} before the library allocated it')
         if guest.get('year') != COMMON['year']:
             failures.append(f'{name}: item year = {guest.get("year")!r}, expected {COMMON["year"]}')
         art = out/guest.get('artwork', 'artwork.jpg')
@@ -138,6 +141,29 @@ with tempfile.TemporaryDirectory(prefix='ltm-media-metadata-') as work:
         result = subprocess.run([str(mapping), str(bad), staging, str(work/'bad-out.plist')], capture_output=True)
         if result.returncode != 1:
             failures.append(f'invalid {key} was accepted: {result.returncode}')
+    # The ArtworkCache key (= the purchase itemId) is the library's MAX(artwork_cache_id)+1 for each song with
+    # art: itmedia's own read_query/next_artwork_id, compiled for the Mac against a scratch Library.itdb.
+    c = itmedia.read_text()
+    a, b = c.index('static __typeof__(sqlite3_open_v2) *sql_open;'), c.index('static void import_artwork(')
+    library = work/'library'; library.mkdir()
+    (work/'alloc.c').write_text('#include <stdio.h>\n#include <unistd.h>\n#include <sqlite3.h>\n'
+        f'#define LIBRARY "{library}/"\n'
+        'static void fail(const char *r) { fprintf(stderr, "%s\\n", r); _exit(1); }\n' + c[a:b] +
+        'int main(void) { sql_open = sqlite3_open_v2; sql_timeout = sqlite3_busy_timeout; sql_exec = sqlite3_exec;'
+        ' sql_prepare = sqlite3_prepare_v2; sql_bind = sqlite3_bind_text; sql_column = sqlite3_column_int64;'
+        ' sql_step = sqlite3_step; sql_finalize = sqlite3_finalize; sql_close = sqlite3_close; sql_error = sqlite3_errmsg;'
+        ' printf("%u\\n", next_artwork_id()); return 0; }\n')
+    subprocess.run(['xcrun', 'clang', '-w', '-o', str(work/'alloc'), str(work/'alloc.c'), '-lsqlite3'], check=True)
+    with sqlite3.connect(library/'Library.itdb') as db:
+        db.execute('CREATE TABLE item (pid INTEGER PRIMARY KEY, artwork_cache_id INTEGER)')
+    def allocate():
+        r = subprocess.run([str(work/'alloc')], capture_output=True, text=True)
+        return int(r.stdout) if r.returncode == 0 else None
+    for songs, want in (([], 1), ([1], 2), ([0], 2), ([2], 3), ([41], 42), ([0xfffffffe], 0xffffffff), ([0xffffffff], None)):
+        with sqlite3.connect(library/'Library.itdb') as db:   # songs imported since: with art (an id) or without (0)
+            db.executemany('INSERT INTO item (artwork_cache_id) VALUES (?)', [(v,) for v in songs])
+        if (got := allocate()) != want:
+            failures.append(f'artwork key after importing {songs}: {got!r}, expected {want!r} (MAX(artwork_cache_id)+1)')
     if failures:
         print('FAIL:\n  ' + '\n  '.join(failures)); sys.exit(1)
-    print('PASS: M4A, MP3 and converted ADTS AAC title/artist/album/album artist/composer/genre/track/disc/year/compilation/duration and cover art reach MusicLibrary and ArtworkCache')
+    print('PASS: M4A, MP3 and converted ADTS AAC title/artist/album/album artist/composer/genre/track/disc/year/compilation/duration and cover art reach MusicLibrary and ArtworkCache; artwork keys are MAX+1 per song')
