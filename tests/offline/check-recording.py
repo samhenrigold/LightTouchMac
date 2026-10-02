@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-import host_runtime
+import device_runtime
 from pathlib import Path
 import subprocess,tempfile,wave
 root=Path(__file__).resolve().parents[2]
@@ -72,8 +72,8 @@ func fixtureAudio() throws -> GuestAudioCapture {
 }
 ''')
     subprocess.run(['clang','-c',str(tmp/'capture.c'),'-o',str(tmp/'capture.o')],check=True)
-    subprocess.run(['xcrun','swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]),'-swift-version','5','-default-isolation','MainActor',
-        str(root/'LightTouchMac/Features/ScreenMovieWriter.swift'),str(root/'Shared/DeviceLinkProtocol.swift'),str(root/'tests/fixtures/guest-audio-pump.swift'),str(tmp/'check.swift'),str(tmp/'capture.o'),
+    subprocess.run(['xcrun','swiftc', *device_runtime.swift_flags(Path(__file__).resolve().parents[2]),'-swift-version','5','-default-isolation','MainActor',
+        str(root/'LightTouchMac/Features/ScreenMovieWriter.swift'),str(root/'tests/fixtures/guest-audio-pump.swift'),str(tmp/'check.swift'),str(tmp/'capture.o'),
         '-Xlinker','-export_dynamic','-o',str(tmp/'check')],check=True)
     centers = {}
     for mode in ('portrait','landscape','rotated','canvas'):

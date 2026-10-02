@@ -3,7 +3,7 @@
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-import host_runtime
+import device_runtime
 import subprocess
 import tempfile
 
@@ -127,7 +127,7 @@ with tempfile.TemporaryDirectory(prefix='ltm-package-session-') as temporary:
         'LightTouchMac/Library/StorageLocations.swift',
         'LightTouchMac/Library/FirmwareCatalog.swift',
     ]
-    subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-swift-version', '5', '-default-isolation', 'MainActor',
+    subprocess.run(['xcrun', 'swiftc', *device_runtime.swift_flags(Path(__file__).resolve().parents[2]), '-swift-version', '5', '-default-isolation', 'MainActor',
                     '-parse-as-library', '-module-cache-path', str(folder / 'modules'),
                     *[str(ROOT / source) for source in sources], str(main), '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=10)

@@ -89,7 +89,8 @@ def build(out):
                ROOT / 'Shared/CLink/module.modulemap', ROOT / 'Shared/Package.swift',
                *sorted((ROOT / 'Shared').glob('Device*.swift')), ROOT / 'Shared/SharedStatus.swift',
                *sorted((ROOT / 'Packages/HostRuntime/Sources/HostRuntime').rglob('*.swift')),
-               ROOT / 'Packages/HostRuntime/Package.swift', ROOT / 'scripts/device_runtime.py', Path(__file__).resolve()]
+               ROOT / 'Packages/HostRuntime/Package.swift', ROOT / 'scripts/device_runtime.py',
+               ROOT / 'scripts/swift_package.py', Path(__file__).resolve()]
     library = Path(command[command.index('-L') + 1]) / 'libDeviceRuntime.a'
     (out / 'runtime-library.json').write_text(json.dumps(dict(path=str(library),
         sha256=hashlib.sha256(library.read_bytes()).hexdigest()), indent=2) + '\n')

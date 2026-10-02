@@ -59,7 +59,6 @@ Run in the foreground; every process it starts is gone when it returns. Screensh
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-import host_runtime
 import argparse, importlib.util, json, os, shlex, signal, subprocess, sys, tempfile, time
 from pathlib import Path
 

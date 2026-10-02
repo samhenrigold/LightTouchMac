@@ -10,7 +10,7 @@ app is launched.
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-import host_runtime
+import device_runtime
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -211,12 +211,12 @@ final class Progress: @unchecked Sendable {
 driver = out/'driver.swift'
 driver.write_text(swift)
 executable = out/'driver'
-subprocess.run(['xcrun','swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), *swift_subprocess.swift_flags(APP), *[APP / f'LightTouchMac/Services/{name}.swift' for name in ['HostServiceTypes','HostServiceProtocol','HostServiceResources','HostServiceWorkers','MediaStaging']], DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
+subprocess.run(['xcrun','swiftc', *device_runtime.swift_flags(Path(__file__).resolve().parents[2]), *swift_subprocess.swift_flags(APP), *[APP / f'LightTouchMac/Services/{name}.swift' for name in ['HostServiceTypes','HostServiceProtocol','HostServiceResources','HostServiceWorkers','MediaStaging']], DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
     '-module-cache-path',str(out/'modules'),
     str(APP/'LightTouchMac/Features/MediaIdentity.swift'),str(APP/'LightTouchMac/Features/MediaSong.swift'),str(APP/'LightTouchMac/Services/DeviceServices.swift'),str(APP/'LightTouchMac/Services/AFC.swift'),str(APP/'LightTouchMac/Transport/DeviceExecution.swift'),
     str(APP/'LightTouchMac/Transport/IMobileDevice.swift'),str(APP/'LightTouchMac/Features/MediaPhoto.swift'),
     str(APP/'LightTouchMac/Features/MediaVideo.swift'),str(APP/'LightTouchMac/Features/PreparedMedia.swift'),
-    str(APP/'LightTouchMac/Guest/GuestServices.swift'),str(APP/'LightTouchMac/Features/MediaImport.swift'),str(APP/'LightTouchMac/Guest/GuestAgent.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(driver),'-o',str(executable)],check=True)
+    str(APP/'LightTouchMac/Guest/GuestServices.swift'),str(APP/'LightTouchMac/Features/MediaImport.swift'),str(APP/'LightTouchMac/Guest/GuestAgent.swift'),str(driver),'-o',str(executable)],check=True)
 host_service.build_worker(APP, out / "LightTouchServices", swift_subprocess.swift_flags(APP))
 if args.photo:
     from PIL import Image,ImageDraw
@@ -273,8 +273,8 @@ else:
     shutil.copyfile(ROOT/'contrib/it-harness/build/Payload/Harness.app/aac.m4a',source)
 if args.recording:
     recorder = out/'recorder'
-    subprocess.run(['xcrun','swiftc', *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
-        str(APP/'LightTouchMac/Features/ScreenMovieWriter.swift'),str(APP/'Shared/DeviceLinkProtocol.swift'),str(APP/'tests/fixtures/guest-audio-pump.swift'),str(APP/'tests/fixtures/recording-native.swift'),
+    subprocess.run(['xcrun','swiftc', *device_runtime.swift_flags(Path(__file__).resolve().parents[2]), DEVICE_PROFILE,'-swift-version','5','-default-isolation','MainActor',
+        str(APP/'LightTouchMac/Features/ScreenMovieWriter.swift'),str(APP/'tests/fixtures/guest-audio-pump.swift'),str(APP/'tests/fixtures/recording-native.swift'),
         '-o',str(recorder)],check=True)
     class Embedded(r.Procs):
         def spawn(self,argv,logpath,env=None):
