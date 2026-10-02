@@ -148,6 +148,41 @@ import Testing
             #expect(written == pyOut["written"] as? [String])
             #expect(NSDictionary(dictionary: record.object) == pyOut["record"] as? NSDictionary)
             #expect(record.family == "n72-ios2" && record.hooks == ["/" + N72Board.openGLES])
+            // The seed's state must let a different first offer restore the stock
+            // front end, before the loader ever reads this seed's own offer.
+            let statePath = GuestPackage.root + "/state"
+            let state = try String(contentsOf: a.appendingPathComponent(statePath), encoding: .utf8)
+            let pyState = try String(contentsOf: b.appendingPathComponent(statePath), encoding: .utf8)
+            #expect(state == pyState)
+            #expect(state == "seed \(record.seed)\nhook 1 /\(N72Board.openGLES)\n")
+
+            // Dropping the GL hook keeps stock bytes and does not claim ownership.
+            let noGL = try volume("no-gl")
+            let (_, noGLRecord) = try GuestPackage.seed(volume: noGL, itpack: itpack, gles: false)
+            #expect(noGLRecord.hooks.isEmpty)
+            #expect(try String(contentsOf: noGL.appendingPathComponent(statePath), encoding: .utf8) == "seed \(record.seed)\n")
+            #expect(try Data(contentsOf: noGL.appendingPathComponent(N72Board.openGLES)) == Data(contentsOf: stock))
+
+            // A deliberately omitted target is neither recreated nor claimed.
+            let omitted = try volume("omitted"), omittedTarget = omitted.appendingPathComponent(N72Board.openGLES)
+            try FileManager.default.removeItem(at: omittedTarget)
+            let (_, omittedRecord) = try GuestPackage.seed(volume: omitted, itpack: itpack, gles: true,
+                omitted: ["/" + N72Board.openGLES])
+            #expect(omittedRecord.hooks.isEmpty)
+            #expect(FileManager.default.fileExists(atPath: omittedTarget.path) == false)
+            #expect(try String(contentsOf: omitted.appendingPathComponent(statePath), encoding: .utf8) == "seed \(record.seed)\n")
+
+            // A target that cannot be copied must not be recorded as installed.
+            // The GL hook's own fit proof is external, so the directory reaches
+            // the real seed copy path rather than failing a synthetic loader check.
+            let failed = try volume("failed-copy"), target = failed.appendingPathComponent(N72Board.openGLES)
+            try FileManager.default.removeItem(at: target)
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+            try SystemEdits.put(Data(contentsOf: stock), failed.appendingPathComponent(N72Board.openGLES + ".baked"), mode: 0o755)
+            #expect(throws: (any Error).self) {
+                try GuestPackage.seed(volume: failed, itpack: itpack, gles: true)
+            }
+            #expect(try String(contentsOf: failed.appendingPathComponent(statePath), encoding: .utf8) == "seed \(record.seed)\n")
             let file = { (m: URL, s: String) in try Data(contentsOf: m.appendingPathComponent(N72Board.openGLES + s)) }
             let hooked = try file(a, ""), pyHooked = try file(b, ""), baked = try file(a, ".baked"), stockBytes = try Data(contentsOf: stock)
             #expect(hooked == pyHooked && hooked != stockBytes && baked == stockBytes)

@@ -75,7 +75,7 @@ public enum GuestPackage {
 
     /// Bakes the loader and the seed package into the system volume mounted at `volume` (mkpkg.seed): the
     /// itpack's package for the volume's ProductBuildVersion as it_boot installs one (pkgs/<serial>/ with its
-    /// `offer`, `current` -> it, `state` "seed N"); the hooks whose target is on the volume (the GL engines' only
+    /// `offer`, `current` -> it, `state` with "seed N" and installed hook lines); the hooks whose target is on the volume (the GL engines' only
     /// when the preparer installed the shim: `gles`), target with the package's bytes and <target>.baked with what the volume had; the baked jobs the package provides
     /// removed. Returns (volume-relative paths written, all root-owned; the lock's guest_package record).
     /// mkpkg's requires.builds: an exact build id, or "<major>*" for every build of that iOS major (2.x = 5*,
@@ -159,7 +159,8 @@ public enum GuestPackage {
         for f in files { try put(pkg + "/" + (f["name"] as! String), payload(family + "/" + (f["name"] as! String)), mode(f["mode"])) }
         try put(pkg + "/offer", Data(offerText(man, build: build).utf8), 0o644)
         try fm.createSymbolicLink(atPath: at(root + "/current").path, withDestinationPath: "pkgs/\(serial)")
-        try put(root + "/state", Data("seed \(serial)\n".utf8), 0o644)
+        var state = "seed \(serial)\n"
+        try put(root + "/state", Data(state.utf8), 0o644)
         written.append(root + "/current")
         let modes = Dictionary(files.map { ($0["name"] as! String, mode($0["mode"])) }, uniquingKeysWith: { a, _ in a })
         for h in hooks {
@@ -170,6 +171,10 @@ public enum GuestPackage {
                 try put(target + ".baked", Data(contentsOf: at(target)), try SystemEdits.permissions(at(target)))
             }
             try put(target, payload(family + "/" + file), modes[file] ?? 0o755)
+            // A first offer without this hook must restore .baked even before
+            // the loader has read the seed offer. Failed copies are not claimed.
+            state += "hook \(h["respring"] as? Bool == true ? 1 : 0) \(h["target"] as! String)\n"
+            try put(root + "/state", Data(state.utf8), 0o644)
         }
         let jobs = (man["jobs"] as? [String] ?? []).map { ($0 as NSString).lastPathComponent }
         for j in jobs {
