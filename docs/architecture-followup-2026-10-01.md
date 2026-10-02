@@ -14,6 +14,10 @@ test receipts with current compatibility claims.
 | MBX reuse | Independently captured real N72 stock-driver fill packet/GART agrees with pinned MIT S5LBox decoder in sanitizer replay. QEMU20d98f5898 corrects observational STATUS reads and preserves pending events until explicit W1C; four real qtests, fourteen model suites and full native2.1.1/3.1.3 eight-check runs pass. | Snapshot was after stall, not pre-submit. No live pixel/completion/IRQ or full compositor qualification yet. Unapplied narrow prototype rejects startup/context requests without success. Startup EVM metadata effects and trigger/tag semantics remain unknown; existing GLES transport remains needed. |
 | Packaging | Clean cc67737/31036cf8e9/e19fac2 universal candidate: actual 2.1.1 session 18/18, both Mach-O closures at macOS14.4 and ad hoc signature verification. | Later host/FMSS/PHY changes are not covered by that packaged candidate; Intel runtime and notarization unqualified. |
 
+## October 2 continuation
+
+The current [qualification journal](fidelity-evidence-2026-10-02.md) supersedes stale waiting-for-NAND and unapplied-fill observations only for its exact artifacts. Stock restore reports completion but its cold clone returns to DFU; AES direction-register readback and address-bound output suppression are the next measured defects. The experimental fill now passes six actual board tests, while live EVM initialization remains unresolved. The shared host input adapter passes 19 actual helper lifecycle checks; production legacy input paths remain until matching controls qualify their removal. No physical NAND, stock compositor or retained-RAM wake completion is claimed.
+
 ## Reuse versus writing new compatibility logic
 
 [LukeZGD idevicerestore](https://github.com/LukeZGD/idevicerestore) upstream

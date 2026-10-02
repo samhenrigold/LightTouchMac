@@ -38,6 +38,10 @@ actual2.1.1 two-boot helper lifecycle pass; stock erase still stops at D24.
 These successes do not reclassify physical NAND/GPU execution or watchdog/wake
 contracts, and no target merge or release follows.
 
+## October 2 active qualification
+
+See the [current journal](fidelity-evidence-2026-10-02.md). Stock restore now reports completion for one diagnostic artifact, but its cold clone returns to SecureROM DFU. AES register readback and fixed-address output suppression are the measured next divergences; physical NAND/ECC and durable restored boot remain unqualified. Shared host power gesture passes actual two-boot helper 19/19. Narrow MBX execution and opt-in N45 ROM reset pass actual board tests without proving a native compositor or sleep/wake.
+
 ## September 30 candidate findings
 
 The unmerged `codex/reuse-implementation` candidates add explicit physical
