@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HOME = Path.home()
 sys.path.insert(0, str(ROOT / "scripts"))
 import sources  # the pinned checkouts (build-support/sources.json)
+import host_runtime
 DEFAULT_DEVICE = HOME / "Developer/qemu-ios-files/ipod-ipsw/devices/7E18-a"
 TEXT = "This iPod isn’t activated. Choose Erase All Content and Settings, then prepare it again."
 
@@ -156,7 +157,7 @@ enum Lock {
     with tempfile.TemporaryDirectory(prefix="ltm-activation-") as d:
         p = Path(d) / "check.swift"
         p.write_text(source)
-        subprocess.run(["swiftc", "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/DeviceProfile.swift"), str(ROOT / "LightTouchMac/Device/BootSessionScope.swift"),
+        subprocess.run(["swiftc", *host_runtime.swift_flags(ROOT), "-parse-as-library", "-module-cache-path", d + "/modules", str(ROOT / "LightTouchMac/Device/DeviceProfile.swift"), str(ROOT / "LightTouchMac/Device/BootSessionScope.swift"),
                         str(ROOT / "LightTouchMac/Device/DeviceConnectionIssue.swift"), str(ROOT / "LightTouchMac/Transport/DeviceExecution.swift"), str(p), "-o", d + "/check"], check=True)
         subprocess.run([d + "/check"], check=True, timeout=60)
 
