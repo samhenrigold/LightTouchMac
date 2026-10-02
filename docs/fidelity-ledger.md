@@ -44,7 +44,7 @@ See the [current journal](fidelity-evidence-2026-10-02.md). Stock restore report
 
 ## September 30 candidate findings
 
-The unmerged `codex/reuse-implementation` candidates add explicit physical
+The unmerged `reuse-implementation` candidates add explicit physical
 `nand-xor-ff-v2` erase/program semantics and upstream QEMU BlockBackend ownership,
 with stock blank erase restore and prepared-device persistence gates. This does
 not upgrade generated FTL mappings or missing NAND crypto to register fidelity.

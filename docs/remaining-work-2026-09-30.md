@@ -1,6 +1,6 @@
 # Remaining architecture work and report disposition
 
-Reviewed 2026-09-30; implementation status updated 2026-10-02 against the `codex/reuse-implementation` app and emulator
+Reviewed 2026-09-30; implementation status updated 2026-10-02 against the `reuse-implementation` app and emulator
 worktrees and USB host candidate `e19fac2`. These remain unmerged candidates.
 This document supersedes the earlier review reports for implementation status,
 not their reasoning. Commit and test evidence is recorded below as it stabilizes.
