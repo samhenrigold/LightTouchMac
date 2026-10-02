@@ -1,7 +1,7 @@
 # Fidelity and consolidation, 2026-09-30
 
 Worktrees: `/private/tmp/LightTouchMac-fidelity-consolidation` and
-`/private/tmp/qemu-ios-fidelity-consolidation`, both on `codex/fidelity-consolidation`.
+`/private/tmp/qemu-ios-fidelity-consolidation`, both on `fidelity-consolidation`.
 Bases: app `f924819`; emulator `0be1499f24`. The worktrees subsequently integrated
 app `8d2e98dfc41a26c9b18b4efb1eedf07a58505dbc` and emulator `7b92325bde`,
 including the incoming board-specific identity selection and GL export fixes.

@@ -255,7 +255,7 @@ enum FitFixture {
             #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet (MobileStorageMounter") && !$0.fits })
             #expect(log.fits.contains { $0.piece.hasPrefix("it_msmquiet (USBDeviceArbitrator") && $0.fits })
             #expect(!log.fits.contains { $0.piece.hasSuffix("(hook)") && !$0.fits }, "\(log.fits.filter { $0.piece.hasSuffix("(hook)") })")
-            // 9B206 has AppSync on: libappsync fits installd, and the stock shared cache is left alone (codex/appsync-upstream).
+            // 9B206 has AppSync on: libappsync fits installd, and the stock shared cache is left alone (appsync-upstream).
             #expect(!log.fits.contains { $0.piece.hasPrefix("AppSync shared-cache patch") }, "\(log.fits.map(\.piece))")
             #expect(log.fits.contains { $0.piece.hasPrefix(SystemEdits.Helpers.appsync) && $0.fits })
         }

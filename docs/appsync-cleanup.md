@@ -1,7 +1,7 @@
 # AppSync cleanup (2026-09-30)
 
 QEMU helper source: `0be1499f24bc0e34d83eb35292130893020a5f83`, pinned in
-`build-support/sources.json`. Both repositories use `codex/appsync-upstream`.
+`build-support/sources.json`. Both repositories use `appsync-upstream`.
 
 This change keeps automatic installation-service injection and removes the
 shared-cache MIS patch and unused SpringBoard swizzle. Stock installd,

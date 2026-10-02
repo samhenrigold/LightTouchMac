@@ -9,8 +9,8 @@ The implementation starts from multidevice `eac0793` and emulator `2ece77c080`,
 including the consolidation and guest package 9 that landed before this work.
 The candidates also include the later multidevice HIG/copy and N45 smoke tip `cc8ee59` and emulator
 CoreAudio tip `66bbf69862`; those changes are integrated only in these candidates.
-The app and emulator candidates are isolated on `codex/reuse-implementation`
-worktrees. A matching usbmuxd candidate is on `codex/stock-control-transfer`.
+The app and emulator candidates are isolated on `reuse-implementation`
+worktrees. A matching usbmuxd candidate is on `stock-control-transfer`.
 None has been merged into the target branches.
 
 ## Implemented boundaries
@@ -153,9 +153,9 @@ this implementation.
 
 | Repository | Candidate worktree | Branch |
 |---|---|---|
-| Light Touch | `/private/tmp/ltm-reuse-app` | `codex/reuse-implementation` |
-| Emulator | `/private/tmp/ltm-reuse-qemu` | `codex/reuse-implementation` |
-| USB host | `/private/tmp/ltm-reuse-usbmuxd` | `codex/stock-control-transfer` |
+| Light Touch | `/private/tmp/ltm-reuse-app` | `reuse-implementation` |
+| Emulator | `/private/tmp/ltm-reuse-qemu` | `reuse-implementation` |
+| USB host | `/private/tmp/ltm-reuse-usbmuxd` | `stock-control-transfer` |
 
 The app source manifest pins the emulator and USB host together. Before these
 branches are integrated, development builds must resolve the candidate paths

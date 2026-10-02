@@ -1,6 +1,6 @@
 # October 1 fidelity continuation
 
-The work remains on `codex/reuse-implementation` in the isolated Light Touch,
+The work remains on `reuse-implementation` in the isolated Light Touch,
 QEMU and usbmuxd worktrees. No merge, publish, installed-app replacement or
 Finder virtual-USB entitlement work occurred. Requested local targets and main
 changes are incorporated; the final upstream refresh was at 11:28 UTC. The
