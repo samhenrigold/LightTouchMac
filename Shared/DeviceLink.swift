@@ -20,7 +20,7 @@ import Foundation
 import IOSurface
 import LTMLinkC
 
-nonisolated enum DeviceLinkError: Error, Equatable, CustomStringConvertible {
+nonisolated public enum DeviceLinkError: Error, Equatable, CustomStringConvertible {
     case spawnFailed(Int32)
     case rendezvous(String)
     case rejected(String)
@@ -29,7 +29,7 @@ nonisolated enum DeviceLinkError: Error, Equatable, CustomStringConvertible {
     case helperFailure(String)
     case closed(String)
 
-    var description: String {
+    public var description: String {
         switch self {
         case .spawnFailed(let e): "could not start the device helper (\(String(cString: strerror(e))))"
         case .rendezvous(let s): "device helper rendezvous failed: \(s)"
@@ -42,50 +42,50 @@ nonisolated enum DeviceLinkError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-nonisolated enum DeviceTermination: Sendable, Equatable {
+nonisolated public enum DeviceTermination: Sendable, Equatable {
     case exited(Int32)
     case signaled(Int32)
     /// Someone else reaped it; the status is lost.
     case unknown
 }
 
-nonisolated final class DeviceLink: @unchecked Sendable {
-    struct Configuration: Sendable {
+nonisolated public final class DeviceLink: @unchecked Sendable {
+    public struct Configuration: Sendable {
         /// Contents/MacOS/LightTouchDevice beside the running executable.
-        var helper: URL = Bundle.main.executableURL!.deletingLastPathComponent()
+        public var helper: URL = Bundle.main.executableURL!.deletingLastPathComponent()
             .appendingPathComponent("LightTouchDevice")
-        var instance: UUID
+        public var instance: UUID
         /// The helper's stdout + stderr, e.g. ProcessLogCapture.writeDescriptor
         /// for Devices/<uuid>/native.log. -1: /dev/null.
-        var outputDescriptor: Int32 = -1
+        public var outputDescriptor: Int32 = -1
         /// Development: the libqemu-arm.dylib to load (LTM_QEMU_DYLIB). nil: the
         /// helper's own @executable_path/../Frameworks, then its build rpath.
-        var dylib: String? = nil
+        public var dylib: String? = nil
         /// Extra environment for the helper process (QEMU's boot env goes in BootConfig).
-        var environment: [String: String] = [:]
+        public var environment: [String: String] = [:]
         /// Machine for hello's deviceInfo.
-        var machine: String? = nil
+        public var machine: String? = nil
         /// Code requirement for the helper; nil = DeviceRendezvous.defaultRequirement.
-        var requirement: String? = nil
+        public var requirement: String? = nil
         /// Spawn -> valid Mach hello + hello reply.
-        var connectTimeout: TimeInterval = 15
+        public var connectTimeout: TimeInterval = 15
         /// Extra helper arguments (tests).
-        var arguments: [String] = []
+        public var arguments: [String] = []
 
-        init(instance: UUID, outputDescriptor: Int32 = -1) {
+        public init(instance: UUID, outputDescriptor: Int32 = -1) {
             self.instance = instance
             self.outputDescriptor = outputDescriptor
         }
     }
 
-    let configuration: Configuration
-    let queue: DispatchQueue
+    public let configuration: Configuration
+    public let queue: DispatchQueue
 
-    var onEvent: ((LinkEvent) -> Void)?
+    public var onEvent: ((LinkEvent) -> Void)?
     /// The link is unusable (fires once). The process may still be exiting.
-    var onInvalidated: ((DeviceLinkError) -> Void)?
+    public var onInvalidated: ((DeviceLinkError) -> Void)?
     /// The helper process is gone (fires once, after onInvalidated if the link was up).
-    var onTerminated: ((DeviceTermination) -> Void)?
+    public var onTerminated: ((DeviceTermination) -> Void)?
 
     private let lock = NSLock()
     private var _pid: pid_t = 0
@@ -94,7 +94,7 @@ nonisolated final class DeviceLink: @unchecked Sendable {
     private var ring: FrameRingReader?
     private var _info: HelperInfo?
     private var nextID: UInt64 = 1
-    typealias Reply = (Result<LinkReply, DeviceLinkError>) -> Void
+    public typealias Reply = (Result<LinkReply, DeviceLinkError>) -> Void
     private struct Pending: @unchecked Sendable {
         let timer: DispatchWorkItem
         let reply: Reply
@@ -104,7 +104,7 @@ nonisolated final class DeviceLink: @unchecked Sendable {
     private var startCompletion: ((Result<HelperInfo, DeviceLinkError>) -> Void)?
     private var exitSource: DispatchSourceProcess?
 
-    init(configuration: Configuration, queue: DispatchQueue = .main) {
+    public init(configuration: Configuration, queue: DispatchQueue = .main) {
         self.configuration = configuration
         self.queue = queue
     }
@@ -117,22 +117,22 @@ nonisolated final class DeviceLink: @unchecked Sendable {
         if _pid > 0 { DeviceRendezvousServer.shared.unregister(_pid) }
     }
 
-    var pid: pid_t { lock.withLock { _pid } }
+    public var pid: pid_t { lock.withLock { _pid } }
     /// The hello reply: protocol, dylib path + mtime, build id, device info.
-    var info: HelperInfo? { lock.withLock { _info } }
+    public var info: HelperInfo? { lock.withLock { _info } }
     /// The status block, read now. nil until the helper's first hello.
-    var status: SharedStatus? { lock.withLock { statusBlock }?.snapshot() }
+    public var status: SharedStatus? { lock.withLock { statusBlock }?.snapshot() }
 
     /// The front frame surface. `isNew` when it changed since the last call.
     /// Call from one thread only (the display link); hold the surface, not the tuple.
-    func frontSurface() -> (surface: IOSurface, serial: UInt64, isNew: Bool)? {
+    public func frontSurface() -> (surface: IOSurface, serial: UInt64, isNew: Bool)? {
         lock.withLock { ring }?.front()
     }
 
     // MARK: Start
 
     /// Spawn the helper and connect. Completes once, on `queue`.
-    func start(completion: @escaping (Result<HelperInfo, DeviceLinkError>) -> Void) {
+    public func start(completion: @escaping (Result<HelperInfo, DeviceLinkError>) -> Void) {
         let server = DeviceRendezvousServer.shared
         let kr = server.start()
         guard kr == 0 else { return queue.async { completion(.failure(.rendezvous("bootstrap_check_in: \(kr)"))) } }
@@ -231,12 +231,12 @@ nonisolated final class DeviceLink: @unchecked Sendable {
     // MARK: Messages
 
     /// Fire-and-forget, ordered. Dropped once the link is invalid.
-    func send(_ command: LinkCommand) {
+    public func send(_ command: LinkCommand) {
         lock.withLock { channel }?.send(.command(command))
     }
 
     /// One request; `reply` runs once on `queue` (a reply, or .timedOut / .closed).
-    func request(_ request: LinkRequest, timeout: TimeInterval = 10, reply: @escaping Reply) {
+    public func request(_ request: LinkRequest, timeout: TimeInterval = 10, reply: @escaping Reply) {
         let (id, channel, dead): (UInt64, LinkChannel<HelperMessage, AppMessage>?, Bool) = lock.withLock {
             let id = nextID
             nextID += 1
@@ -257,7 +257,7 @@ nonisolated final class DeviceLink: @unchecked Sendable {
         }
     }
 
-    func request(_ request: LinkRequest, timeout: TimeInterval = 10) async throws -> LinkReply {
+    public func request(_ request: LinkRequest, timeout: TimeInterval = 10) async throws -> LinkReply {
         try await withCheckedThrowingContinuation { continuation in
             self.request(request, timeout: timeout) { continuation.resume(with: $0) }
         }
@@ -277,9 +277,9 @@ nonisolated final class DeviceLink: @unchecked Sendable {
     // MARK: Teardown
 
     /// SIGTERM: the helper runs its clean shutdown (bounded) and exits.
-    func terminate() { let p = pid; if p > 0 { _ = Darwin.kill(p, SIGTERM) } }
+    public func terminate() { let p = pid; if p > 0 { _ = Darwin.kill(p, SIGTERM) } }
     /// SIGKILL.
-    func kill() { let p = pid; if p > 0 { _ = Darwin.kill(p, SIGKILL) } }
+    public func kill() { let p = pid; if p > 0 { _ = Darwin.kill(p, SIGKILL) } }
 
     private func invalidate(_ error: DeviceLinkError, kill shouldKill: Bool) {
         let (fire, channel, waiting, completion): (Bool, LinkChannel<HelperMessage, AppMessage>?, [Pending], ((Result<HelperInfo, DeviceLinkError>) -> Void)?) = lock.withLock {

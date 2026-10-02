@@ -1,3 +1,4 @@
+import DeviceRuntime
 // Guest packages (docs/guest-package-bootstrap.md, P5): the app's side.
 //
 // Each boot, the app composes Devices/<uuid>/work/guest-offer/ from the

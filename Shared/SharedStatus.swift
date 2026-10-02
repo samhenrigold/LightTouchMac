@@ -13,7 +13,7 @@ import Foundation
 import IOSurface
 import LTMLinkC
 
-nonisolated enum StatusSlot: Int, CaseIterable {
+nonisolated public enum StatusSlot: Int, CaseIterable {
     case magic = 0, layoutVersion, heartbeat, frameSerial, front, width, height,
          ringGeneration, held,              // held: 1 + the ring index the app is reading, 0 none
          uiReady, storageFailed, shutdownConfirmed, displaySleeping, agentStatus,
@@ -26,59 +26,84 @@ nonisolated enum StatusSlot: Int, CaseIterable {
          guestPackageSupported              // the dylib has the guest-package= property (set before boot)
 }
 
-nonisolated enum QemuState: UInt64, Sendable {
+nonisolated public enum QemuState: UInt64, Sendable {
     case notStarted = 0, running = 1, exited = 2
 }
 
 /// One synchronous read of the status block.
-nonisolated struct SharedStatus: Sendable, Equatable {
-    var heartbeat: UInt64
-    var frameSerial: UInt64
-    var width: Int
-    var height: Int
-    var ringGeneration: UInt64
-    var uiReady: Bool
-    var storageFailed: Bool
-    var shutdownConfirmed: Bool
-    var displaySleeping: Bool
+nonisolated public struct SharedStatus: Sendable, Equatable {
+    public var heartbeat: UInt64
+    public var frameSerial: UInt64
+    public var width: Int
+    public var height: Int
+    public var ringGeneration: UInt64
+    public var uiReady: Bool
+    public var storageFailed: Bool
+    public var shutdownConfirmed: Bool
+    public var displaySleeping: Bool
     /// qemu_ios_agent_status: 0 absent/not running, 1 alive, 2 stale.
-    var agentStatus: Int
-    var glesContexts: Int
-    var iconGeneration: UInt64
-    var qemuState: QemuState
-    var exitCode: Int32
-    var helperPID: Int32
+    public var agentStatus: Int
+    public var glesContexts: Int
+    public var iconGeneration: UInt64
+    public var qemuState: QemuState
+    public var exitCode: Int32
+    public var helperPID: Int32
     /// it_boot's last report since the guest reset: the serial now current and
     /// its result (R_*: 0 unchanged, 1 installed, 2 switched, 3/4 reverted,
     /// 5 refused; negative: an install failed). Nil: no loader, or no offer yet.
-    var guestPackage: GuestPackageReport?
+    public var guestPackage: GuestPackageReport?
     /// QC_GLES_HELLO's wire protocol and package serial; 0 when no hello came.
-    var glesProtocol: Int32 = 0
-    var glesSerial: Int64 = 0
+    public var glesProtocol: Int32 = 0
+    public var glesSerial: Int64 = 0
     /// The loaded dylib serves guest-package offers (older ones reject the property).
-    var guestPackageSupported = false
+    public var guestPackageSupported = false
+    public init(heartbeat: UInt64, frameSerial: UInt64, width: Int, height: Int, ringGeneration: UInt64, uiReady: Bool, storageFailed: Bool, shutdownConfirmed: Bool, displaySleeping: Bool, agentStatus: Int, glesContexts: Int, iconGeneration: UInt64, qemuState: QemuState, exitCode: Int32, helperPID: Int32, guestPackage: GuestPackageReport? = nil, glesProtocol: Int32 = 0, glesSerial: Int64 = 0, guestPackageSupported: Bool = false) {
+        self.heartbeat = heartbeat
+        self.frameSerial = frameSerial
+        self.width = width
+        self.height = height
+        self.ringGeneration = ringGeneration
+        self.uiReady = uiReady
+        self.storageFailed = storageFailed
+        self.shutdownConfirmed = shutdownConfirmed
+        self.displaySleeping = displaySleeping
+        self.agentStatus = agentStatus
+        self.glesContexts = glesContexts
+        self.iconGeneration = iconGeneration
+        self.qemuState = qemuState
+        self.exitCode = exitCode
+        self.helperPID = helperPID
+        self.guestPackage = guestPackage
+        self.glesProtocol = glesProtocol
+        self.glesSerial = glesSerial
+        self.guestPackageSupported = guestPackageSupported
+    }
 }
 
-nonisolated struct GuestPackageReport: Sendable, Equatable {
-    var serial: Int64
-    var result: Int32
+nonisolated public struct GuestPackageReport: Sendable, Equatable {
+    public var serial: Int64
+    public var result: Int32
+    public init(serial: Int64, result: Int32) {
+        self.serial = serial
+        self.result = result
+    }
 }
 
-nonisolated struct StatusBlock: @unchecked Sendable {
-    static let magic: UInt64 = 0x4C544D5354415432   // "LTMSTAT2"
-    static let layoutVersion: UInt64 = 2
-    static let bytes = 4096
+nonisolated public struct StatusBlock: @unchecked Sendable {
+    public static let magic: UInt64 = 0x4C544D5354415432   // "LTMSTAT2"
+    public static let layoutVersion: UInt64 = 2
+    public static let bytes = 4096
 
-    let surface: IOSurface
+    public let surface: IOSurface
     private let base: UnsafeMutablePointer<UInt64>
 
-    init(_ surface: IOSurface) {
+    public init(_ surface: IOSurface) {
         self.surface = surface
         base = surface.baseAddress.assumingMemoryBound(to: UInt64.self)
     }
 
     /// The helper's block, zeroed and stamped.
-    static func create() -> StatusBlock {
+    public static func create() -> StatusBlock {
         let block = StatusBlock(makeSurface(width: bytes / 8, height: 1, bytesPerElement: 8))
         memset(block.base, 0, bytes)
         block[.layoutVersion] = layoutVersion
@@ -87,19 +112,19 @@ nonisolated struct StatusBlock: @unchecked Sendable {
         return block
     }
 
-    var isValid: Bool {
+    public var isValid: Bool {
         surface.allocationSize >= Self.bytes && self[.magic] == Self.magic && self[.layoutVersion] == Self.layoutVersion
     }
 
-    subscript(_ slot: StatusSlot) -> UInt64 {
+    public subscript(_ slot: StatusSlot) -> UInt64 {
         get { ltm_load(base + slot.rawValue) }
         nonmutating set { ltm_store(base + slot.rawValue, newValue) }
     }
-    func loadSeq(_ slot: StatusSlot) -> UInt64 { ltm_load_seq(base + slot.rawValue) }
-    func storeSeq(_ slot: StatusSlot, _ value: UInt64) { ltm_store_seq(base + slot.rawValue, value) }
-    func bumpHeartbeat() { _ = ltm_add(base + StatusSlot.heartbeat.rawValue, 1) }
+    public func loadSeq(_ slot: StatusSlot) -> UInt64 { ltm_load_seq(base + slot.rawValue) }
+    public func storeSeq(_ slot: StatusSlot, _ value: UInt64) { ltm_store_seq(base + slot.rawValue, value) }
+    public func bumpHeartbeat() { _ = ltm_add(base + StatusSlot.heartbeat.rawValue, 1) }
 
-    func snapshot() -> SharedStatus {
+    public func snapshot() -> SharedStatus {
         SharedStatus(heartbeat: self[.heartbeat], frameSerial: self[.frameSerial],
                      width: Int(self[.width]), height: Int(self[.height]),
                      ringGeneration: self[.ringGeneration],
@@ -119,33 +144,33 @@ nonisolated struct StatusBlock: @unchecked Sendable {
     }
 }
 
-nonisolated func makeSurface(width: Int, height: Int, bytesPerElement: Int = 4) -> IOSurface {
+nonisolated public func makeSurface(width: Int, height: Int, bytesPerElement: Int = 4) -> IOSurface {
     IOSurface(properties: [.width: width, .height: height, .bytesPerElement: bytesPerElement,
                            .pixelFormat: 0x42475241 /* 'BGRA' */])!
 }
 
 /// The helper's side of the ring: three surfaces, and a publish that never
 /// touches the surface the reader holds or Core Animation is showing.
-nonisolated final class FrameRingWriter: @unchecked Sendable {
-    let status: StatusBlock
-    private(set) var surfaces: [IOSurface] = []
-    private(set) var generation: UInt64 = 0
+nonisolated public final class FrameRingWriter: @unchecked Sendable {
+    public let status: StatusBlock
+    public private(set) var surfaces: [IOSurface] = []
+    public private(set) var generation: UInt64 = 0
     private var serial: UInt64 = 0
-    private(set) var dropped = 0
+    public private(set) var dropped = 0
 
-    init(status: StatusBlock) { self.status = status }
+    public init(status: StatusBlock) { self.status = status }
 
-    var width: Int { surfaces.first?.width ?? 0 }
-    var height: Int { surfaces.first?.height ?? 0 }
+    public var width: Int { surfaces.first?.width ?? 0 }
+    public var height: Int { surfaces.first?.height ?? 0 }
 
     /// A new ring of `width` x `height`. The caller sends the Mach hello for
     /// it, then calls `activate()` before publishing into it.
-    func resize(width: Int, height: Int) {
+    public func resize(width: Int, height: Int) {
         surfaces = (0..<3).map { _ in makeSurface(width: width, height: height) }
         generation += 1
     }
 
-    func activate() {
+    public func activate() {
         status[.width] = UInt64(width)
         status[.height] = UInt64(height)
         status[.front] = 0
@@ -154,7 +179,7 @@ nonisolated final class FrameRingWriter: @unchecked Sendable {
 
     /// Fill a free surface and publish it. False if all three were busy (a dropped frame).
     @discardableResult
-    func publish(_ fill: (IOSurface) -> Void) -> Bool {
+    public func publish(_ fill: (IOSurface) -> Void) -> Bool {
         let front = Int(status[.front])
         let held = Int(status.loadSeq(.held)) - 1
         guard let i = surfaces.indices.first(where: { $0 != front && $0 != held && !surfaces[$0].isInUse }) else {
@@ -174,7 +199,7 @@ nonisolated final class FrameRingWriter: @unchecked Sendable {
     /// Copy tightly packed BGRA rows into the surface's (padded) rows, with the
     /// alpha byte forced opaque: iBoot and the iPod's framebuffer leave it 0,
     /// and the app's layer shows the surface as is (a copy ignored it).
-    static func copy(_ pixels: UnsafeRawPointer, width: Int, height: Int, into surface: IOSurface) {
+    public static func copy(_ pixels: UnsafeRawPointer, width: Int, height: Int, into surface: IOSurface) {
         let rowBytes = width * 4
         let dst = surface.baseAddress
         if surface.bytesPerRow == rowBytes {
@@ -189,15 +214,15 @@ nonisolated final class FrameRingWriter: @unchecked Sendable {
 }
 
 /// The app's side: which surface to show. One reader per ring.
-nonisolated final class FrameRingReader: @unchecked Sendable {
-    let status: StatusBlock
-    let generation: UInt64
-    let surfaces: [IOSurface]
+nonisolated public final class FrameRingReader: @unchecked Sendable {
+    public let status: StatusBlock
+    public let generation: UInt64
+    public let surfaces: [IOSurface]
     private var lastSerial: UInt64 = 0
     private var current: IOSurface?
     private var currentIndex = -1
 
-    init(status: StatusBlock, generation: UInt64, surfaces: [IOSurface]) {
+    public init(status: StatusBlock, generation: UInt64, surfaces: [IOSurface]) {
         self.status = status
         self.generation = generation
         self.surfaces = surfaces
@@ -206,7 +231,7 @@ nonisolated final class FrameRingReader: @unchecked Sendable {
     /// The newest published surface, and whether it is new since the last call.
     /// While the helper is between rings (a resize in flight) this keeps
     /// returning the last surface. Call from one thread (the display link).
-    func front() -> (surface: IOSurface, serial: UInt64, isNew: Bool)? {
+    public func front() -> (surface: IOSurface, serial: UInt64, isNew: Bool)? {
         guard surfaces.count == 3 else { return nil }
         let s1 = status.loadSeq(.frameSerial)
         if s1 == lastSerial || status[.ringGeneration] != generation {
@@ -228,5 +253,5 @@ nonisolated final class FrameRingReader: @unchecked Sendable {
     }
 
     /// Stop holding any surface (the display is hidden or the ring is replaced).
-    func release() { status.storeSeq(.held, 0) }
+    public func release() { status.storeSeq(.held, 0) }
 }

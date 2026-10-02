@@ -1,3 +1,4 @@
+import DeviceRuntime
 // Created by Sam on 2026-08-05.
 //
 // The right-hand inspector: a plain AppKit table of the apps installed on the

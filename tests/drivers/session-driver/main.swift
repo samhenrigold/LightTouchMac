@@ -1,6 +1,7 @@
+import DeviceRuntime
 import HostRuntime
 // Stands in for the app in tests/sessions/check-sessions.py: two devices at once, each in
-// its own LightTouchDevice helper through the app's own DeviceProcess and
+// its own LightTouchDevice helper through the app's own DeviceSessionProcess and
 // BootRecipe (DeviceSession.swift), each with its own usbmuxd (USBMux's flags),
 // and every libimobiledevice call through the app's DeviceServices and its one
 // DeviceGate. JSON lines on stdout.
@@ -130,7 +131,8 @@ extension String {
 @MainActor final class Device {
     let name: String
     let profile: DeviceProfile
-    var process: DeviceProcess!
+    var process: DeviceSessionProcess!
+    private var processLog: ProcessLogCapture?
     var mux: Mux!
     private var serviceSession = UUID()
     var serial: SerialLogCapture?
@@ -191,12 +193,15 @@ extension String {
                 usbAddress: mux.guestAddress, wifi: true, guestPackage: offer, serial: serial!.argument,
                 audio: ["-audio", "driver=none"], netdev: netdev, webProxy: webProxy)
         }
-        let process = DeviceProcess(instance: UUID(), profile: profile, log: dir.appendingPathComponent("native.log"),
-                                    lease: dir.appendingPathComponent("work/lease"), helper: URL(fileURLWithPath: Self.helper), requirement: Self.requirement)
+        processLog = try ProcessLogCapture(url: dir.appendingPathComponent("native.log"))
+        let process = makeProcess(profile: profile, log: processLog!, lease: dir.appendingPathComponent("work/lease"),
+                                  helper: URL(fileURLWithPath: Self.helper), requirement: Self.requirement)
         self.process = process
         process.onDeath = { [weak self] reason in
-            self?.deaths.append(reason)
-            emit("death", ["device": self?.name ?? "?", "reason": reason, "generation": generation])
+            let text = self?.process.deathReason ?? "unknown"
+            self?.processLog?.flush()
+            self?.deaths.append(text)
+            emit("death", ["device": self?.name ?? "?", "reason": text, "generation": generation])
         }
         if !liveDevices.contains(where: { $0 === self }) { liveDevices.append(self) }
         let started = Date()
@@ -626,8 +631,8 @@ func checkPreparedFiles() throws {
         let held = name == "busy" ? try! StorageLease(lease) : nil
         let intent = lease.deletingLastPathComponent().appendingPathComponent("edit.json")
         if name == "pending" { try! Data("unfinished-edit".utf8).write(to: intent) }
-        let process = DeviceProcess(instance: UUID(), profile: .iPodTouch2G,
-            log: work.appendingPathComponent("\(name).log"), lease: lease,
+        let capture = try! ProcessLogCapture(url: work.appendingPathComponent("\(name).log"))
+        let process = makeProcess(profile: .iPodTouch2G, log: capture, lease: lease,
             helper: URL(fileURLWithPath: config.helper), requirement: config.requirement)
         var hello = false
         var completionError: DeviceLinkError?
@@ -665,7 +670,7 @@ func checkPreparedFiles() throws {
             guard (try? Data(contentsOf: intent)) == Data("unfinished-edit".utf8) else { fail("helper mutated pending intent") }
             try! fm.removeItem(at: intent)
         }
-        withExtendedLifetime(held) {}
+        withExtendedLifetime((held, capture)) {}
         emit("leaseAdmissionVerified", ["case": name, "admitted": admitted, "hello": hello,
             "reaped": reaped, "targetUnchanged": true, "guestStarted": false])
     }
@@ -682,3 +687,30 @@ Task { @MainActor in
 }
 DispatchQueue.main.asyncAfter(deadline: .now() + (config.timeout ?? 560)) { fail("driver timed out") }
 CFRunLoopRun()
+
+@MainActor private func makeProcess(profile: DeviceProfile, log: ProcessLogCapture, lease: URL,
+                                    helper: URL, requirement: String?) -> DeviceSessionProcess {
+    var configuration = DeviceLink.Configuration(instance: UUID(), outputDescriptor: log.writeDescriptor)
+    configuration.machine = profile.machineName
+    configuration.helper = helper
+    configuration.requirement = requirement
+    configuration.arguments = ["--lease", lease.path]
+    let process = DeviceSessionProcess(configuration: configuration)
+    process.onTermination = { pid, termination, code in
+        logEvent("device helper \(pid): \(termination), QEMU exit \(code.map(String.init) ?? "none")")
+    }
+    return process
+}
+
+@MainActor extension DeviceSessionProcess {
+    var deathReason: String? {
+        guard let death else { return nil }
+        let name = link.configuration.machine == DeviceProfile.iPad1.machineName ? "iPad" : "iPod"
+        switch death {
+        case .startFailed(.helperFailure(DeviceLinkWire.leaseRefusal)): return DeviceLinkWire.leaseRefusal
+        case .startFailed: return "The \(name) didn’t start."
+        case .stopped: return "The \(name) stopped."
+        case .unexpected: return "The \(name) stopped unexpectedly."
+        }
+    }
+}

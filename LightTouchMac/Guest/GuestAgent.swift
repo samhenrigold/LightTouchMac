@@ -1,3 +1,4 @@
+import DeviceRuntime
 // The guest agent's wire (qemu-ios contrib/it-agent/README.md): one request per
 // op through the device's helper (LinkRequest.agent), the ping's capabilities
 // cached per device, and the typed v2 ops with their v1 `exec` fallbacks. The

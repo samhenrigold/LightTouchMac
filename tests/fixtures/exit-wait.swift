@@ -2,6 +2,7 @@ import Foundation
 import CoreFoundation
 import Darwin
 import HostRuntime
+import DeviceRuntime
 
 nonisolated enum Bundled {
     static var logsDirectory: URL { URL(fileURLWithPath: CommandLine.arguments[2]) }
@@ -24,10 +25,14 @@ nonisolated func logEvent(_ message: String, _ arguments: CVarArg...) {
         let helper = URL(fileURLWithPath: CommandLine.arguments[1])
         let dir = URL(fileURLWithPath: CommandLine.arguments[2])
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let process = DeviceProcess(instance: UUID(), profile: .iPodTouch2G,
-                                    log: dir.appendingPathComponent("native.log"),
-                                    lease: dir.appendingPathComponent("lease"), helper: helper,
-                                    requirement: CommandLine.arguments.count > 6 ? CommandLine.arguments[6] : nil)
+        let capture = try ProcessLogCapture(url: dir.appendingPathComponent("native.log"))
+        var configuration = DeviceLink.Configuration(instance: UUID(), outputDescriptor: capture.writeDescriptor)
+        configuration.machine = "ipod-touch-2g"
+        configuration.helper = helper
+        configuration.arguments = ["--lease", dir.appendingPathComponent("lease").path]
+        configuration.requirement = CommandLine.arguments.count > 6 ? CommandLine.arguments[6] : nil
+        let process = DeviceSessionProcess(configuration: configuration)
+        defer { withExtendedLifetime(capture) {} }
         var deathCount = 0
         process.onDeath = { _ in deathCount += 1 }
         var ownedPID: pid_t = 0

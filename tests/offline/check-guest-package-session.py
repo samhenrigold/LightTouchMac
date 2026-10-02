@@ -8,10 +8,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-# This ABI leaf comes from the real shared status source, not a replacement
-# SharedStatus/C-link implementation in the qualification test.
-status = (ROOT / 'Shared/SharedStatus.swift').read_text()
-report = status[status.index('nonisolated struct GuestPackageReport:'):status.index('nonisolated struct StatusBlock:')]
+# Package reports come from the imported runtime ABI.
 DRIVER = r'''
 import Foundation
 enum DeviceToolsError: Error { case failed(String) }
@@ -119,7 +116,7 @@ enum DeviceToolsError: Error { case failed(String) }
 with tempfile.TemporaryDirectory(prefix='ltm-package-session-') as temporary:
     folder = Path(temporary)
     main = folder / 'probe.swift'
-    main.write_text(report + DRIVER)
+    main.write_text(DRIVER)
     executable = folder / 'probe'
     sources = [
         'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift',

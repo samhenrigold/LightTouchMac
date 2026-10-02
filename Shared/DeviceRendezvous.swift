@@ -20,9 +20,9 @@ import IOSurface
 import LTMLinkC
 import Security
 
-nonisolated enum DeviceRendezvous {
+nonisolated public enum DeviceRendezvous {
     /// Helper side: send the status block (and the ring, once there is one).
-    static func sendHello(service: String, token: String, generation: UInt64,
+    public static func sendHello(service: String, token: String, generation: UInt64,
                           surfaces: [IOSurface]) -> kern_return_t {
         let ports = surfaces.map { IOSurfaceCreateMachPort($0) }
         return ports.withUnsafeBufferPointer {
@@ -33,7 +33,7 @@ nonisolated enum DeviceRendezvous {
 
     /// The requirement a helper must satisfy: same Team ID as this process, or
     /// (ad-hoc builds, no Team) the helper executable's designated requirement.
-    static func defaultRequirement(helper: URL) -> String? {
+    public static func defaultRequirement(helper: URL) -> String? {
         if let team = teamIdentifier() {
             return "anchor apple generic and certificate leaf[subject.OU] = \"\(team)\""
         }
@@ -46,7 +46,7 @@ nonisolated enum DeviceRendezvous {
         return text as String
     }
 
-    static func teamIdentifier() -> String? {
+    public static func teamIdentifier() -> String? {
         var code: SecCode?
         var staticCode: SecStaticCode?
         var info: CFDictionary?
@@ -58,7 +58,7 @@ nonisolated enum DeviceRendezvous {
     }
 
     /// Whether the process behind `audit` satisfies `requirement`.
-    static func check(audit: audit_token_t, requirement: String) -> OSStatus {
+    public static func check(audit: audit_token_t, requirement: String) -> OSStatus {
         var audit = audit
         let tokenData = withUnsafeBytes(of: &audit) { Data($0) }
         var code: SecCode?

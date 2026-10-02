@@ -1,3 +1,4 @@
+import DeviceRuntime
 import HostRuntime
 // One prepared base, booted as the app boots it, asked the question the app asks on the first
 // lockdown answer (tests/sessions/check-activation-gate.py): lockdown's ActivationState, mapped through

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Actual DeviceProcess cancellation-resistant exit wait; helper hello only.
+"""Actual shared session owner cancellation-resistant exit wait; helper hello only.
 
 Requires explicit built --helper and --dylib. No .boot request, guest, USB
-service, or QEMU build occurs. Compile the actual app adapter and actual link /
+service, or QEMU build occurs. Import DeviceRuntime and its actual link /
 reaper with HostRuntime, then verify cancellation, deadline boundaries, live
 lease exclusion, and exactly-once owned helper reaping. CPU observations use a
 wide host budget; they do not establish a portable performance percentage.
@@ -20,7 +20,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-import host_runtime
+import device_runtime
 
 
 class BSDInfo(ctypes.Structure):
@@ -78,22 +78,21 @@ def cleanup_owned_helper(log, driver_pid):
 
 
 def build(out):
-    c_object = out / 'ltm_link.o'
-    subprocess.run(['clang', '-O', '-c', str(ROOT / 'Shared/CLink/ltm_link.c'),
-                    '-o', str(c_object)], check=True, timeout=60)
-    command = ['xcrun', 'swiftc', *host_runtime.swift_flags(ROOT),
+    command = ['xcrun', 'swiftc', *device_runtime.swift_flags(ROOT),
                '-parse-as-library', '-swift-version', '5',
-               '-default-isolation', 'MainActor', '-module-cache-path', str(out / 'modules'),
-               '-I', str(ROOT / 'Shared/CLink'), str(c_object)]
-    command += [str(ROOT / 'Shared' / name) for name in (
-        'DeviceLink.swift', 'DeviceLinkProtocol.swift', 'DeviceRendezvous.swift', 'SharedStatus.swift')]
+               '-default-isolation', 'MainActor', '-module-cache-path', str(out / 'modules')]
     command += [str(ROOT / 'LightTouchMac' / name) for name in (
-        'Device/DeviceProcess.swift', 'Device/DeviceProfile.swift', 'Device/DeviceProfile+Display.swift',
         'Library/StorageLocations.swift', 'Transport/NativeLogging.swift')]
     command += [str(ROOT / 'tests/fixtures/exit-wait.swift'), '-o', str(out / 'exit-wait')]
     inputs = [Path(arg) for arg in command if str(arg).endswith(('.swift', '.c'))]
     inputs += [ROOT / 'Shared/CLink/ltm_link.c', ROOT / 'Shared/CLink/ltm_link.h',
-               ROOT / 'Shared/CLink/module.modulemap', Path(__file__).resolve()]
+               ROOT / 'Shared/CLink/module.modulemap', ROOT / 'Shared/Package.swift',
+               *sorted((ROOT / 'Shared').glob('Device*.swift')), ROOT / 'Shared/SharedStatus.swift',
+               *sorted((ROOT / 'Packages/HostRuntime/Sources/HostRuntime').rglob('*.swift')),
+               ROOT / 'Packages/HostRuntime/Package.swift', ROOT / 'scripts/device_runtime.py', Path(__file__).resolve()]
+    library = Path(command[command.index('-L') + 1]) / 'libDeviceRuntime.a'
+    (out / 'runtime-library.json').write_text(json.dumps(dict(path=str(library),
+        sha256=hashlib.sha256(library.read_bytes()).hexdigest()), indent=2) + '\n')
     source_hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs}
     (out / 'compiled-source-hashes.json').write_text(json.dumps(source_hashes, indent=2) + '\n')
     (out / 'compile-command.json').write_text(json.dumps(command, indent=2) + '\n')
@@ -168,6 +167,8 @@ def qualify(args, out):
         assert result['cpu'] < 0.15, result
     for name, receipt in artifacts.items():
         assert hashlib.sha256(getattr(args, name).read_bytes()).hexdigest() == receipt['sha256'], f'{name} changed during qualification'
+    library = json.loads((out / 'runtime-library.json').read_text())
+    assert hashlib.sha256(Path(library['path']).read_bytes()).hexdigest() == library['sha256'], 'runtime library changed during qualification'
     source_hashes = json.loads((out / 'compiled-source-hashes.json').read_text())
     assert all(hashlib.sha256(Path(path).read_bytes()).hexdigest() == digest for path, digest in source_hashes.items()), 'compiled source changed during qualification'
     (out / 'results.json').write_text(json.dumps(results, indent=2) + '\n')

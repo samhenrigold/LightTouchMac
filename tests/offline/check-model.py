@@ -4,6 +4,7 @@ from pathlib import Path
 import os, subprocess, sys, tempfile
 root=Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root/"scripts"))
+import device_runtime
 import sources as pins  # the pinned checkouts (build-support/sources.json)
 model_source = r'''import AppKit
 import RealityKit
@@ -508,13 +509,13 @@ with tempfile.TemporaryDirectory(prefix="ltm-model-") as tmp:
     profile=["Device/DeviceProfile", "Device/DeviceProfile+Display"]
     for name,source,extra in [
         ("model",model_source,profile),
-        ("layer",layer_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "UI/DropHighlight", "../Shared/DeviceLinkProtocol"]),
-        *([("display",display_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "UI/DropHighlight", "../Shared/DeviceLinkProtocol"])] if windowed else [])
+        ("layer",layer_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "UI/DropHighlight"]),
+        *([("display",display_source,["UI/DisplayView", *profile, "UI/DisplayMeasurements", "UI/AttitudeIndicatorButton", "UI/InlineLiveTextView", "UI/DroppedFiles", "UI/DropHighlight"])] if windowed else [])
     ]:
         swift=work/(name+".swift");swift.write_text(source)
         exe=app/"MacOS"/name
         bridge=["-import-objc-header",str(attitude_header)] if name == "model" else []
-        subprocess.run(["swiftc","-module-cache-path",str(work/"modules"),"-default-isolation","MainActor",*bridge,str(sources/"UI/DeviceModelView.swift"),*[str(sources/(x+".swift")) for x in extra],str(swift),"-o",str(exe)],check=True)
+        subprocess.run(["swiftc", *device_runtime.swift_flags(root), "-module-cache-path",str(work/"modules"),"-default-isolation","MainActor",*bridge,str(sources/"UI/DeviceModelView.swift"),*[str(sources/(x+".swift")) for x in extra],str(swift),"-o",str(exe)],check=True)
         for model in MODELS:
             subprocess.run([str(exe),str(root/f"LightTouchMac/{model}.usdz"),str(renders),model],check=True,timeout=90)
     if not windowed:

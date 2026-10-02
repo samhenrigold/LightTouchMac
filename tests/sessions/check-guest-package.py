@@ -15,6 +15,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'scripts'))
+import device_runtime
 import sources  # the pinned checkouts (build-support/sources.json)
 ap = argparse.ArgumentParser()
 ap.add_argument('--qemu-ios', type=Path, default=sources.path('qemu-ios'))
@@ -203,12 +204,10 @@ func check(_ ok: Bool, _ message: String = "", line: Int = #line) { precondition
   } catch {}
   precondition(!FileManager.default.fileExists(atPath: dir.path))
   // UI status.''')
-    shared_status = (root / 'Shared/SharedStatus.swift').read_text()
-    report = shared_status[shared_status.index('nonisolated struct GuestPackageReport:'):shared_status.index('nonisolated struct StatusBlock:')]
-    check = check.replace('__SHARED_PACKAGE_REPORT__', report)
+    check = check.replace('__SHARED_PACKAGE_REPORT__', '')
     (t / 'check.swift').write_text(check.replace('GuestPackage.Manifest.mbx', '"%s"' % MBX).replace('ENTRY_COUNT', str(len(entries))))
     app = root / 'LightTouchMac'
-    subprocess.run(['xcrun', 'swiftc', str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
+    subprocess.run(['xcrun', 'swiftc', *device_runtime.swift_flags(root), str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), '-swift-version', '5', '-default-isolation', 'MainActor', '-parse-as-library',
                     '-module-cache-path', str(t / 'modules'), str(app / 'Guest/GuestPackage.swift'), str(app / 'Library/DeviceInstance.swift'),
                     str(app / 'Device/DeviceProfile.swift'), str(app / 'Library/StorageLocations.swift'), str(app / 'Library/FirmwareCatalog.swift'), str(t / 'check.swift'), '-o', str(t / 'check')],
                    check=True)

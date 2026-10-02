@@ -1,24 +1,12 @@
-"""Link the real HostRuntime package into standalone host/session probes."""
-import os
-from pathlib import Path
-import subprocess
+"""Link the real host/session runtime packages into standalone Swift probes."""
+import device_runtime
 
 
 def swift_flags(root, *, target=None):
-    """Link HostRuntime for the probe's target; foreign slices use isolated builds."""
-    package = root / 'Packages/HostRuntime'
-    environment = dict(os.environ)
-    suffix = '-' + target if target else ''
-    environment.setdefault('CLANG_MODULE_CACHE_PATH', str(root / ('.build/host-runtime-modules' + suffix)))
-    scratch = root / ('.build/host-runtime' + suffix)
-    target_flags = ['--triple', target] if target else []
-    subprocess.run(['swift', 'build', '--build-system', 'native', '--disable-sandbox',
-                    '--package-path', str(package), '--scratch-path', str(scratch), *target_flags,
-                    '--product', 'HostRuntime'], env=environment, check=True,
-                   stdout=subprocess.DEVNULL)
-    output = subprocess.check_output(['swift', 'build', '--build-system', 'native', '--disable-sandbox',
-                    '--package-path', str(package), '--scratch-path', str(scratch), *target_flags,
-                    '--show-bin-path'], env=environment, text=True).strip()
-    return ['-module-cache-path', environment['CLANG_MODULE_CACHE_PATH'],
-            '-I', str(Path(output) / 'Modules'), '-L', output, '-lHostRuntime',
-            '-Xfrontend', '-import-module', '-Xfrontend', 'HostRuntime']
+    """DeviceRuntime's product includes its real HostRuntime dependency.
+
+    GUI files can expose typed session values even in an offline probe; make
+    both defining modules available for the requested target without compiling
+    another copy of the helper owner, link, or reaper into each driver.
+    """
+    return device_runtime.swift_flags(root, target=target)

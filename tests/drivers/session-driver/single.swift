@@ -1,3 +1,4 @@
+import DeviceRuntime
 import HostRuntime
 // One prepared device (tests/sessions/check-sessions.py --single, build-release.py's verify, tests/matrix.py): a firmwarekit
 // base booted as the app boots it, through the bundled helper, dylib and usbmuxd. It must light, answer lockdown

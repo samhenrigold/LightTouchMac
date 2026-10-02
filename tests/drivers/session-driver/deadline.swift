@@ -1,3 +1,4 @@
+import DeviceRuntime
 import HostRuntime
 // A base that never starts iOS (tests/sessions/check-boot-deadline.py): booted as the app boots it, with the
 // app's serial watch for iBoot's "Entering recovery mode" and the board's boot budget. Emits what the

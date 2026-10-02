@@ -1,3 +1,4 @@
+import DeviceRuntime
 import HostRuntime
 // One VM in this process: QEMU's thread, the frame/status pump, commands,
 // requests, agent RPC, audio capture and the bounded host halt. Mode-agnostic:

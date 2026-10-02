@@ -1,3 +1,4 @@
+import DeviceRuntime
 // libqemu-arm.dylib, dlopen'ed. The helper never links it: which build runs is
 // chosen at launch (LTM_QEMU_DYLIB for development, else the bundle's
 // Frameworks, else the build rpath) and reported in the hello.

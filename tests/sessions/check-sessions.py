@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Two devices at once, each in its own LightTouchDevice, through the app's session code.
 
-tests/drivers/session-driver stands in for the app. It compiles the app's own DeviceProcess and
-BootRecipe, DeviceServices,
+tests/drivers/session-driver stands in for the app. It imports DeviceRuntime's real helper/session owner and HostRuntime boot recipes,
+then compiles the app's service adapters, DeviceServices,
 IMobileDevice and the one app-wide DeviceGate, NativeLogging's log and serial captures,
-DeviceStateStorage.writableNOR, and W1's DeviceLink, and runs:
+DeviceStateStorage.writableNOR, and the shared runtime DeviceLink, and runs:
 
   prepared   a prepared base's first-boot files: kboot/nand from base, overlay created,
              writable NOR cloned (cp -c) and made u+w, kept on the next boot, base untouched
@@ -69,7 +69,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import sources  # the pinned checkouts (build-support/sources.json)
 import swift_subprocess
 import host_service
-APP_SOURCES = ["Services/DeviceServices", "Device/DeviceProcess", "Transport/DeviceExecution", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
+import device_runtime
+APP_SOURCES = ["Services/DeviceServices", "Transport/DeviceExecution", "Services/AFC", "Services/InstallationProxy", "Services/LockdownTools", "Transport/IMobileDevice", "Device/DeviceProfile", "Device/DeviceProfile+Display",
                "Transport/NativeLogging", "Library/StorageLocations", "Library/DeviceStateStorage", "Guest/GuestServices", "Guest/GuestAgent", "Guest/GuestPackage",
                "Library/DeviceInstance", "Library/FirmwareCatalog", "Features/MediaPhoto", "Features/MediaIdentity", "Device/DeviceConnectionIssue",
                "Device/WebProxyConfiguration", "Services/SpringBoardServices", "Services/LockdownState", "Services/HostServiceTypes", "Services/HostServiceProtocol", "Services/HostServiceResources", "Services/HostServiceWorkers", "Services/MediaStaging", "Services/HomeScreenOrdering"]
@@ -169,10 +170,9 @@ def build_lockdown_tz(out, frameworks=None):
 
 
 def build(args, out):
-    subprocess.run(["clang", "-O", "-c", ROOT / "Shared/CLink/ltm_link.c", "-o", out / "ltm_link.o"], check=True)
-    subprocess.run(["xcrun", "swiftc", *host_runtime.swift_flags(Path(__file__).resolve().parents[2]), "-swift-version", "5", "-default-isolation", "MainActor", "-module-cache-path", out / "modules",
+    subprocess.run(["xcrun", "swiftc", *device_runtime.swift_flags(ROOT), "-swift-version", "5", "-default-isolation", "MainActor", "-module-cache-path", out / "modules",
                     *swift_subprocess.swift_flags(ROOT), ROOT / "Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift",
-                    "-I", ROOT / "Shared/CLink", out / "ltm_link.o", *sorted((ROOT / "Shared").glob("*.swift")),
+                    ROOT / "Shared/WebProxyCA.swift",
                     ROOT / "LightTouchDevice/FrameTools.swift", *[ROOT / f"LightTouchMac/{n}.swift" for n in APP_SOURCES],
                     ROOT / "tests/drivers/session-driver/main.swift", ROOT / "tests/drivers/session-driver/guest.swift",
                     ROOT / "tests/drivers/session-driver/single.swift", ROOT / "tests/drivers/session-driver/activation.swift",

@@ -6,26 +6,26 @@ import HostRuntime
 // Frames and status never cross it: they live in IOSurfaces (SharedStatus.swift)
 // whose Mach ports arrive in the rendezvous hello (DeviceRendezvous.swift).
 //
-// Compiled into both targets and into tests/drivers/helper-driver.
+// Imported by the GUI, helper and standalone clients through DeviceRuntime.
 
 import Foundation
 
-nonisolated enum DeviceLinkWire {
+nonisolated public enum DeviceLinkWire {
     /// Bumped on any incompatible change to the messages below, the status block
     /// layout or the Mach hello. The helper refuses a hello with another version.
-    static let protocolVersion = 1
+    public static let protocolVersion = 1
     /// The helper's hello refusal when another helper holds the device's lease; the app shows it as is.
-    static let leaseRefusal = "This device is in use by another copy of Light Touch."
+    public static let leaseRefusal = "This device is in use by another copy of Light Touch."
     /// Upper bound on one framed message, either direction. An agent request is
     /// at most ~350 KB of base64 and an audio event ~22 KB; anything bigger is
     /// a bug or an attack, and closes the link.
-    static let maxMessageBytes = 4 << 20
+    public static let maxMessageBytes = 4 << 20
 }
 
 // MARK: - Messages
 
 /// App -> helper.
-nonisolated enum AppMessage: Codable, Sendable {
+nonisolated public enum AppMessage: Codable, Sendable {
     /// Fire-and-forget, applied in order.
     case command(LinkCommand)
     /// Answered by exactly one `HelperMessage.reply` with the same id.
@@ -33,16 +33,16 @@ nonisolated enum AppMessage: Codable, Sendable {
 }
 
 /// Helper -> app.
-nonisolated enum HelperMessage: Codable, Sendable {
+nonisolated public enum HelperMessage: Codable, Sendable {
     case reply(id: UInt64, LinkReply)
     case event(LinkEvent)
 }
 
-nonisolated enum MachineOp: String, Codable, Sendable {
+nonisolated public enum MachineOp: String, Codable, Sendable {
     case pause, resume, reset, powerdown, quit
 }
 
-nonisolated enum LinkCommand: Codable, Sendable, Equatable {
+nonisolated public enum LinkCommand: Codable, Sendable, Equatable {
     /// qemu_ios_ui_touch; phase is QEMU_IOS_TOUCH_*; x, y normalised, y down.
     case touch(slot: Int, phase: Int, x: Double, y: Double)
     case touch2(phase: Int, x: Double, y: Double)
@@ -64,7 +64,7 @@ nonisolated enum LinkCommand: Codable, Sendable, Equatable {
     case netRestrict(Bool)
 }
 
-nonisolated enum LinkRequest: Codable, Sendable, Equatable {
+nonisolated public enum LinkRequest: Codable, Sendable, Equatable {
     /// Always first. `machine` selects the reply's `deviceInfo`.
     case hello(protocolVersion: Int, machine: String?)
     /// Starts qemu_ios_main once; `.ok(true)` when the QEMU thread is running.
@@ -86,7 +86,7 @@ nonisolated enum LinkRequest: Codable, Sendable, Equatable {
     case orientation(Int)
 }
 
-nonisolated enum LinkReply: Codable, Sendable, Equatable {
+nonisolated public enum LinkReply: Codable, Sendable, Equatable {
     case hello(HelperInfo)
     case ok(Bool)
     case snapshot(status: Int, error: String?)
@@ -95,7 +95,7 @@ nonisolated enum LinkReply: Codable, Sendable, Equatable {
     case failure(String)
 }
 
-nonisolated enum LinkEvent: Codable, Sendable, Equatable {
+nonisolated public enum LinkEvent: Codable, Sendable, Equatable {
     /// qemu_ios_main returned; the helper exits with this code right after.
     case qemuExited(Int32)
     /// 44100 Hz stereo S16LE. Empty `pcm` with `seconds >= 0` marks silence through `seconds`.
@@ -105,30 +105,46 @@ nonisolated enum LinkEvent: Codable, Sendable, Equatable {
     case audioEnded(generation: UInt64, failed: Bool)
 }
 
-nonisolated struct DeviceInfo: Codable, Sendable, Equatable {
-    var machine: String
-    var screenWidth: Int
-    var screenHeight: Int
-    var screenScale: Int
-    var defaultOrientation: Int
-    var hasCellular: Bool
+nonisolated public struct DeviceInfo: Codable, Sendable, Equatable {
+    public var machine: String
+    public var screenWidth: Int
+    public var screenHeight: Int
+    public var screenScale: Int
+    public var defaultOrientation: Int
+    public var hasCellular: Bool
+    public init(machine: String, screenWidth: Int, screenHeight: Int, screenScale: Int, defaultOrientation: Int, hasCellular: Bool) {
+        self.machine = machine
+        self.screenWidth = screenWidth
+        self.screenHeight = screenHeight
+        self.screenScale = screenScale
+        self.defaultOrientation = defaultOrientation
+        self.hasCellular = hasCellular
+    }
 }
 
-nonisolated struct HelperInfo: Codable, Sendable, Equatable {
-    var protocolVersion: Int
-    var pid: Int32
+nonisolated public struct HelperInfo: Codable, Sendable, Equatable {
+    public var protocolVersion: Int
+    public var pid: Int32
     /// The libqemu-arm.dylib the helper loaded, and its mtime (seconds since 1970).
-    var dylibPath: String
-    var dylibModified: Double
+    public var dylibPath: String
+    public var dylibModified: Double
     /// qemu_ios_build_id(): the loaded Mach-O's UUID.
-    var buildID: String?
+    public var buildID: String?
     /// qemu_ios_device_info(hello.machine).
-    var deviceInfo: DeviceInfo?
+    public var deviceInfo: DeviceInfo?
+    public init(protocolVersion: Int, pid: Int32, dylibPath: String, dylibModified: Double, buildID: String? = nil, deviceInfo: DeviceInfo? = nil) {
+        self.protocolVersion = protocolVersion
+        self.pid = pid
+        self.dylibPath = dylibPath
+        self.dylibModified = dylibModified
+        self.buildID = buildID
+        self.deviceInfo = deviceInfo
+    }
 }
 
 // MARK: - Framing
 
-nonisolated enum DeviceLinkWireError: Error, Equatable {
+nonisolated public enum DeviceLinkWireError: Error, Equatable {
     case oversized(Int)
     case malformed(String)
 }
@@ -138,8 +154,8 @@ nonisolated enum DeviceLinkWireError: Error, Equatable {
 /// Reads run on a dispatch read source; writes go through a private serial
 /// queue, so a wedged peer can never block the caller (the app's main thread).
 /// `onClose` fires once: EOF, a read error, or a protocol violation.
-nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @unchecked Sendable {
-    let fd: Int32
+nonisolated public final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @unchecked Sendable {
+    public let fd: Int32
     private let source: DispatchSourceRead
     private let writeQueue: DispatchQueue
     private let queue: DispatchQueue
@@ -148,7 +164,7 @@ nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @
     private let lock = NSLock()
     private var writeFailed = false     // under lock
 
-    init(fd: Int32, queue: DispatchQueue, onMessage: @escaping (Incoming) -> Void,
+    public init(fd: Int32, queue: DispatchQueue, onMessage: @escaping (Incoming) -> Void,
          onClose: @escaping (Error?) -> Void) {
         self.fd = fd
         self.queue = queue
@@ -191,7 +207,7 @@ nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @
     /// The peer is gone: deliver what it wrote before exiting (its last messages may
     /// still sit in the socket, the read source not yet run) so they land before the
     /// channel closes. On `queue`; never blocks (reads only what poll reports ready).
-    func drainIncoming() {
+    public func drainIncoming() {
         var chunk = [UInt8](repeating: 0, count: 65536)
         while !closed {
             var ready = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
@@ -213,11 +229,11 @@ nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @
     }
 
     /// Close from any thread; `onClose` still fires once, on the channel's queue.
-    func close() { queue.async { self.finish(nil) } }
+    public func close() { queue.async { self.finish(nil) } }
 
     /// Encode and enqueue. False if the message is over the bound (not sent).
     @discardableResult
-    func send(_ message: Outgoing) -> Bool {
+    public func send(_ message: Outgoing) -> Bool {
         guard let frame = try? Self.frame(message) else { return false }
         writeQueue.async { [self] in
             lock.lock(); let failed = writeFailed; lock.unlock()
@@ -228,13 +244,13 @@ nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @
     }
 
     /// Blocks until everything queued so far has been written (the helper's exit path).
-    func drain(timeout: TimeInterval = 2) {
+    public func drain(timeout: TimeInterval = 2) {
         let done = DispatchSemaphore(value: 0)
         writeQueue.async { done.signal() }
         _ = done.wait(timeout: .now() + timeout)
     }
 
-    static func frame(_ message: Outgoing) throws -> Data {
+    public static func frame(_ message: Outgoing) throws -> Data {
         let body = try JSONEncoder().encode(message)
         guard body.count <= DeviceLinkWire.maxMessageBytes else { throw DeviceLinkWireError.oversized(body.count) }
         var length = UInt32(body.count).bigEndian
@@ -244,7 +260,7 @@ nonisolated final class LinkChannel<Incoming: Decodable, Outgoing: Encodable>: @
     }
 
     /// The next whole frame's body, or nil if more bytes are needed.
-    static func takeFrame(_ buffer: inout Data) throws -> Data? {
+    public static func takeFrame(_ buffer: inout Data) throws -> Data? {
         guard buffer.count >= 4 else { return nil }
         let start = buffer.startIndex
         let length = buffer[start..<start + 4].reduce(0) { $0 << 8 | Int($1) }

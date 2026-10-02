@@ -1,3 +1,4 @@
+import DeviceRuntime
 import HostRuntime
 // LightTouchDevice: one emulated device per process (docs/multi-device-plan.md, section A).
 //
