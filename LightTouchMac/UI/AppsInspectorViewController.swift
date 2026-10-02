@@ -595,7 +595,7 @@ final class AppsInspectorViewController: NSViewController {
         guard notificationEndpoint != endpoint else { return }
         notifications?.stop()
         notificationEndpoint = endpoint
-        let watcher = NotificationProxy(clientSocket: endpoint.socket, udid: endpoint.udid, session: endpoint.session) { [weak emulator] in emulator?.status?.iconGeneration }
+        let watcher = NotificationProxy(clientSocket: endpoint.socket, udid: endpoint.udid, session: endpoint.session)
         notifications = watcher
         let emulator = self.emulator
         watcher.start(attachAllowed: {

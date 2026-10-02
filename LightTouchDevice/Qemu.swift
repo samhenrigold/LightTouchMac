@@ -72,7 +72,6 @@ final class Qemu: @unchecked Sendable {
     lazy var storageFailed = sym("qemu_ios_ui_storage_failed", BoolFn.self)
     lazy var shutdownConfirmed = sym("qemu_ios_ui_guest_shutdown_confirmed", BoolFn.self)
     lazy var displaySleeping = sym("qemu_ios_ui_display_sleeping", BoolFn.self)
-    lazy var iconGeneration = sym("qemu_ios_ui_icon_state_generation", (@convention(c) () -> UInt64).self)
     lazy var touch = sym("qemu_ios_ui_touch", (@convention(c) (Int32, Int32, Double, Double) -> Void).self)
     lazy var touch2 = sym("qemu_ios_ui_touch2", (@convention(c) (Int32, Double, Double) -> Void).self)
     lazy var button = sym("qemu_ios_ui_button", (@convention(c) (Int32, Bool) -> Void).self)

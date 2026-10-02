@@ -84,7 +84,7 @@ final class DeviceHost: @unchecked Sendable {
         status[.displaySleeping] = qemu.displaySleeping() ? 1 : 0
         status[.agentStatus] = UInt64(max(0, qemu.agentStatus()))
         status[.glesContexts] = UInt64(max(0, qemu.glesContexts()))
-        status[.iconGeneration] = qemu.iconGeneration()
+        status[.iconGeneration] = 0 // Retired content-sniffing field; retain shared-status ABI.
         var serial: Int64 = 0, result: Int32 = 0
         if let report = qemu.guestPackageReport, report(&serial, &result) {
             status[.guestPackage] = UInt64(bitPattern: serial)

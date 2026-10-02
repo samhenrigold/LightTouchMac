@@ -17,7 +17,7 @@ nonisolated public enum StatusSlot: Int, CaseIterable {
     case magic = 0, layoutVersion, heartbeat, frameSerial, front, width, height,
          ringGeneration, held,              // held: 1 + the ring index the app is reading, 0 none
          uiReady, storageFailed, shutdownConfirmed, displaySleeping, agentStatus,
-         glesContexts, iconGeneration,
+         glesContexts, iconGeneration,      // retired icon counter slot: zero; preserve ABI offsets
          qemuState,                         // QemuState
          exitCode, publishTicks, helperPID,
          // layout 2: it_boot's QC_PKG_REPORT and the GL shim's QC_GLES_HELLO
@@ -44,6 +44,7 @@ nonisolated public struct SharedStatus: Sendable, Equatable {
     /// qemu_ios_agent_status: 0 absent/not running, 1 alive, 2 stale.
     public var agentStatus: Int
     public var glesContexts: Int
+    /// Retired NAND content-sniffing counter; zero in current helpers. ABI only.
     public var iconGeneration: UInt64
     public var qemuState: QemuState
     public var exitCode: Int32

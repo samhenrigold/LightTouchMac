@@ -8,7 +8,7 @@ import tempfile
 root = Path(__file__).resolve().parents[2]
 execution = (root / "LightTouchMac/Transport/DeviceExecution.swift").read_text()
 watcher = (root / "LightTouchMac/Services/NotificationProxy.swift").read_text()
-# Only accelerate periodic retry/icon ticks. The actual stream/cancellation,
+# Only accelerate periodic retries. The actual stream/cancellation,
 # client ownership, gate and deadline code is compiled unchanged.
 watcher = watcher.replace(".seconds(1)", ".milliseconds(5)")
 watcher = watcher.replace(".seconds(ok ? 2 : 10)", ".milliseconds(ok ? 5 : 10)")
@@ -116,7 +116,7 @@ nonisolated enum IMobileDevice {
         let activity = Activity()
         let watcher = NotificationProxy(clientSocket: "127.0.0.1:1", observe: { endpoint, allowed, change in
             await NotificationProxy.localObserveOnce(socket: endpoint.socket, attachAllowed: allowed, onChange: change)
-        }) { 0 }
+        })
         func start() {
             watcher.start(attachAllowed: { await activity.canAttach() }) {
                 Task { @MainActor in activity.changed() }

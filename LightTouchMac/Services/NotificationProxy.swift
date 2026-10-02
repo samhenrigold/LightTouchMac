@@ -6,15 +6,9 @@
 // every few seconds. The np symbols were loaded for exactly this and had gone
 // unused; this is the consumer.
 //
-// Icon rearranges are the gap: SpringBoard publishes no notification for the
-// layout, only install/uninstall. Those come from the emulator instead — the
-// layout cannot reach flash without crossing the emulated NAND, which counts
-// the writes and lets us watch a counter: the helper's status block carries
-// it (SharedStatus.iconGeneration).
-//
-// None of it replaces the poll outright: a dropped USB session would leave the
-// list silently frozen either way. So the poll stays as a slow backstop and
-// these two make the common cases instant.
+// Stock install/uninstall notifications refresh promptly. The inspector's
+// existing service poll also reads the Home screen layout, for which these
+// older SpringBoard versions publish no notification.
 
 import Foundation
 
@@ -35,15 +29,12 @@ final class NotificationProxy {
 
     private var running = false
     private let endpoint: HostServiceEndpoint
-    /// The device's NAND icon-state write counter, read from its helper.
-    private let iconGeneration: () -> UInt64?
-    /// Held so the watcher can actually be stopped. Both of these used to be
+    /// Held so the watcher can actually be stopped. This used to be
     /// bare `Task.detached`s with nothing retaining them, so `Task.isCancelled`
     /// was never true and the loops ran for the life of the process — the
     /// blocking one parked on a cooperative-pool thread, which is core-count
     /// sized and shared with every other async task in the app.
     private var watcher: Task<Void, Never>?
-    private var iconTick: Task<Void, Never>?
     /// Handed to the C callback; retained for the session's whole life and
     /// released only after np_client_free has joined the callback thread.
     nonisolated private final class Sink: @unchecked Sendable {
@@ -77,9 +68,8 @@ final class NotificationProxy {
          observe: @escaping Observer = { endpoint, allowed, change in
              guard await allowed() else { return false }
              return await HostServiceWorkers.shared.observe(endpoint: endpoint, onChange: change)
-         }, iconGeneration: @escaping () -> UInt64?) {
+         }) {
         self.endpoint = HostServiceEndpoint(socket: clientSocket, udid: udid, session: session)
-        self.iconGeneration = iconGeneration
         self.observe = observe
     }
 
@@ -99,29 +89,6 @@ final class NotificationProxy {
         running = true
         let endpoint = self.endpoint
         let observe = self.observe
-
-        // The home screen is the one change the guest will never announce, so
-        // take it from underneath instead: the icon layout can only reach flash
-        // through the emulated NAND, which now counts those writes for us (the
-        // status block's iconGeneration). Reading it is an atomic load, so
-        // a one-second tick costs less than the notification_proxy session
-        // below does sitting idle, and still reads as instant next to the
-        // 15-second poll it replaces.
-        let iconGeneration = iconGeneration
-        iconTick = Task {
-            var seen = iconGeneration()
-            while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(1)) } catch { break }
-                // One rearrange is several NAND pages, and the plist goes
-                // through the journal as well. Comparing once per tick collapses
-                // the whole burst into a single refresh.
-                let now = iconGeneration()
-                if now != seen {
-                    seen = now
-                    onChange()
-                }
-            }
-        }
 
         watcher = Task {
             // Re-establish on loss: the guest drops its services on reboot and
@@ -144,10 +111,9 @@ final class NotificationProxy {
     func stop() {
         running = false
         watcher?.cancel();  watcher = nil
-        iconTick?.cancel(); iconTick = nil
     }
 
-    deinit { watcher?.cancel(); iconTick?.cancel() }
+    deinit { watcher?.cancel() }
 
     /// Opens one session and blocks until it dies. Returns whether it ever got
     /// as far as observing, so the caller can back off sensibly.
