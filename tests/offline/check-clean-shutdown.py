@@ -11,6 +11,8 @@ s = (root / 'LightTouchMac/Device/EmulatorController.swift').read_text()
 a = s.index('    static let haltBudget:'); b = s.index('    /// Stop the guest and its helper, erase this device', a)
 retire = s[s.index("    private func retireBoot()"):s.index("    func stop()", s.index("    private func retireBoot()"))]
 halt = s[a:b].replace('haltBudget: TimeInterval = 10', 'haltBudget: TimeInterval = 0.3')
+assert 'serviceTeardownBudget: TimeInterval = 2' in halt, 'Stop bounds the services worker teardown'
+halt = halt.replace('serviceTeardownBudget: TimeInterval = 2', 'serviceTeardownBudget: TimeInterval = 0.3')
 source = r'''import Foundation
 nonisolated func logEvent(_ s: String) {}
 /// DeviceProcess's surface: SIGTERM exits it (or not, when hung); SIGKILL always does.
@@ -32,8 +34,10 @@ nonisolated func logEvent(_ s: String) {}
  let bootScope = BootSessionScope()
  var workerRetirement: Task<Void, Never>?
  func retireDeveloperConnection() {}
- struct Service { func stopWorker() async {} }
- var services: Service { get throws { Service() } }
+ /// The services worker's teardown; `hang`: one that never finishes.
+ struct Service { let hang: Bool; func stopWorker() async { if hang { try? await Task.sleep(for: .seconds(3600)) } } }
+ var hangWorker = false
+ var services: Service { get throws { Service(hang: hangWorker) } }
  func stopTimeZoneSync() {}
  var haltCompletions: [(Bool) -> Void] = []
  var process: FakeProcess? = FakeProcess()
@@ -67,7 +71,16 @@ nonisolated func logEvent(_ s: String) {}
   let meddled = Controller(); meddled.filesMeddled = true
   let quitResult = await withCheckedContinuation { done in meddled.halt { done.resume(returning: $0) } }
   precondition(quitResult && meddled.process!.quits == 1 && meddled.process!.terms == 1 && meddled.process!.kills == 0)
-  print("PASS: Stop mid-boot halts at once, joined requests, a hung helper is killed, meddled files skip the flush")
+  // A services worker whose teardown never finishes: Stop still completes after its short bound,
+  // and a hung helper is still killed (the escalation doesn't wait on the worker).
+  let stuck = Controller(); stuck.hangWorker = true
+  let stuckStart = Date()
+  let stuckResult = await withCheckedContinuation { done in stuck.halt { done.resume(returning: $0) } }
+  precondition(stuckResult && stuck.process!.terms == 1 && !stuck.shuttingDown && Date().timeIntervalSince(stuckStart) < 2)
+  let stuckHung = Controller(); stuckHung.hangWorker = true; stuckHung.process!.hung = true
+  let stuckKilled = await withCheckedContinuation { done in stuckHung.halt { done.resume(returning: $0) } }
+  precondition(stuckKilled && stuckHung.process!.kills == 1)
+  print("PASS: Stop mid-boot halts at once, joined requests, a hung helper is killed, meddled files skip the flush, a stuck services worker can't hold Stop")
  }
 }
 '''
