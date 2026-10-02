@@ -38,6 +38,79 @@ nonisolated public struct VirtualInputEvent: Codable, Sendable, Equatable {
     }
 }
 
+/// Caller-observed state for the measured 320x480 portrait QWERTY layout.
+/// This is host automation for a visible keyboard, not an emulated device.
+nonisolated public struct PortraitKeyboardState: Sendable, Equatable {
+    public var numeric: Bool
+    public var shifted: Bool
+    public var automaticCapitalizationDisabled: Bool
+    public init(numeric: Bool, shifted: Bool, automaticCapitalizationDisabled: Bool) {
+        self.numeric = numeric
+        self.shifted = shifted
+        self.automaticCapitalizationDisabled = automaticCapitalizationDisabled
+    }
+}
+
+nonisolated public struct PortraitKeyboardPlan: Sendable, Equatable {
+    public var events: [VirtualInputEvent]
+    public var finalState: PortraitKeyboardState
+
+    public enum Failure: Error { case unknownState, unsupportedCharacter, tooLong }
+
+    /// Measured on 2.1.1 Notes: row centres and 60ms down/140ms gaps.
+    /// Unsupported characters fail before any input is emitted. The symbols
+    /// page is deliberately absent until its distinct geometry is measured.
+    public static func make(_ text: String, initialState: PortraitKeyboardState) throws -> Self {
+        guard initialState.automaticCapitalizationDisabled,
+              !initialState.numeric || !initialState.shifted else { throw Failure.unknownState }
+        var state = initialState, events: [VirtualInputEvent] = []
+        var at: Int64 = 0
+        func tap(_ x: Int, _ y: Int) throws {
+            guard events.count <= 254 else { throw Failure.tooLong }
+            events.append(.touch(phase: 0, x: Double(x) / 320, y: Double(y) / 480, at: at))
+            events.append(.touch(phase: 2, x: Double(x) / 320, y: Double(y) / 480, at: at + 60))
+            at += 200
+        }
+        for character in text.utf16 {
+            guard character > 0, character < 128 else { throw Failure.unsupportedCharacter }
+            var numeric = false, shifted = false
+            var position: (Int, Int)?
+            switch character {
+            case 32: position = (160, 458)
+            case 10: position = (285, 458)
+            case 8: position = (298, 404)
+            default:
+                let upper = (65...90).contains(character)
+                let lower = UInt8(upper ? character + 32 : character)
+                shifted = upper
+                for (row, origin, y) in [("qwertyuiop", 15, 296), ("asdfghjkl", 31, 350), ("zxcvbnm", 63, 404)] {
+                    if let index = Array(row.utf8).firstIndex(of: lower) { position = (origin + index * 32, y); break }
+                }
+                if position == nil {
+                    numeric = true
+                    for (row, origin, y) in [("1234567890", 15, 296), ("-/:;()$&@\"", 31, 350)] {
+                        if let index = Array(row.utf8).firstIndex(of: UInt8(character)) { position = (origin + index * 32, y); break }
+                    }
+                }
+            }
+            guard let (x, y) = position else { throw Failure.unsupportedCharacter }
+            if numeric != state.numeric {
+                try tap(30, 458)
+                state.numeric = numeric
+                state.shifted = false
+            }
+            if !numeric && shifted != state.shifted {
+                try tap(24, 404)
+                state.shifted = shifted
+            }
+            try tap(x, y)
+            // Measured single-use Shift, not Caps Lock or an inferred OS state.
+            if state.shifted { state.shifted = false }
+        }
+        return .init(events: events, finalState: state)
+    }
+}
+
 /// A caller-requested clean shutdown, separate from GUI Stop/hard halt.
 /// Only the iPod panel geometry/gesture has been measured here; iPad callers
 /// continue to use their current path until a matching host gesture is qualified.
@@ -60,6 +133,38 @@ nonisolated public struct VirtualInputEvent: Codable, Sendable, Equatable {
                                  at: touchStart + Int64(step * 80)))
         }
         return events
+    }
+
+    /// Explicit compatibility automation for a visible, measured portrait
+    /// keyboard. Normal GUI typing retains the existing board compatibility
+    /// path until this adapter has matching native evidence. The returned state is usable only after complete delivery;
+    /// cancellation/manual interference invalidates the caller's prior state.
+    public static func typePortraitText(_ text: String, on process: DeviceSessionProcess,
+        initialState: PortraitKeyboardState, timeout: TimeInterval = 60) async throws -> PortraitKeyboardState {
+        guard timeout.isFinite, timeout > 0, timeout <= 3600 else { throw Failure.invalidGesture }
+        let plan = try PortraitKeyboardPlan.make(text, initialState: initialState)
+        if plan.events.isEmpty { return initialState }
+        let id = UInt64.random(in: 1...UInt64.max)
+        guard case .ok(true) = try await process.link.request(.inputSequence(id: id, events: plan.events), timeout: 5) else {
+            throw Failure.refused
+        }
+        let deadline = ContinuousClock.now + .seconds(timeout)
+        do {
+            while ContinuousClock.now < deadline {
+                try Task.checkCancellation()
+                if process.isDead { throw Failure.helperExited }
+                guard case let .inputSequenceStatus(status) = try await process.link.request(.inputSequenceStatus(id: id), timeout: 5) else {
+                    throw Failure.refused
+                }
+                if status == 2 { return plan.finalState }
+                if status == 3 || status == 4 { throw Failure.interrupted }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            throw Failure.timedOut
+        } catch {
+            _ = try? await process.link.request(.inputSequenceCancel(id: id), timeout: 5)
+            throw error
+        }
     }
 
     /// Polling is a host observation, never a gesture clock. Pausing the guest

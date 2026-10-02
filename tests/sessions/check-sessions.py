@@ -59,6 +59,7 @@ Run in the foreground; every process it starts is gone when it returns. Screensh
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import sqlite3
 import argparse, importlib.util, json, os, shlex, signal, subprocess, sys, tempfile, time
 from pathlib import Path
 
@@ -217,6 +218,7 @@ def main():
     ap.add_argument("--work", type=Path)
     ap.add_argument("--single", type=Path, help="one prepared base (firmwarekit create output)")
     ap.add_argument("--board", choices=("ipod", "ipad", "ipod1g"), help="--single: the base's board")
+    ap.add_argument("--host-keyboard-probe", action="store_true", help="--single N72: qualify portrait Notes typing by stock SQLite readback (scratch overlay)")
     power = ap.add_mutually_exclusive_group()
     power.add_argument("--host-power-gesture", action="store_true", default=None,
                        help="--single iPod: select shared host gesture, with actual PMU shutdown")
@@ -243,6 +245,8 @@ def main():
         ap.error("test IPA is missing: " + str(args.ipa))
     if (args.launch or args.reboot) and (not args.single or args.afc_race):
         ap.error("--launch/--reboot need --single without --afc-race")
+    if args.host_keyboard_probe and (not args.single or args.board != "ipod" or args.afc_race):
+        ap.error("--host-keyboard-probe needs --single --board ipod without --afc-race")
     if args.host_power_gesture and (not args.single or args.board not in ("ipod", "ipod1g") or args.afc_race):
         ap.error("--host-power-gesture needs --single --board ipod/ipod1g without --afc-race")
     if args.single and not args.board:
@@ -269,7 +273,7 @@ def main():
         bundled_tz = helper.parent / "lockdown-tz"
         tz = bundled_tz if os.access(bundled_tz, os.X_OK) else build_lockdown_tz(work, args.frameworks)
         cfg["single"] = {"board": args.board, "base": str(args.single), "lockdownTZ": str(tz),
-                         "launch": args.launch, "reboot": args.reboot, "hostPowerGesture": args.host_power_gesture}
+                         "launch": args.launch, "reboot": args.reboot, "hostPowerGesture": args.host_power_gesture, "hostKeyboardProbe": args.host_keyboard_probe}
         if args.afc_race:
             cfg["single"] |= {"raceBoots": args.afc_race, "raceDirty": args.afc_race_dirty}
             cfg["timeout"] = 200 * args.afc_race
@@ -372,6 +376,31 @@ def main():
         check(len(quits) == boots and all(q.get("confirmed", -1) >= 0 and q.get("exited") and
                                           str(q.get("reason")).endswith(" stopped.") for q in quits),
               f"{d}: {len(quits)}/{boots} clean shutdowns with guest power-off and helper exit")
+        if args.host_keyboard_probe:
+            probes = find("hostKeyboardProbe")
+            readable = False
+            detail = str(probes)
+            try:
+                if len(probes) == 1 and probes[0].get("ok") and probes[0].get("cancelled"):
+                    def strings(path):
+                        # Host-only snapshot; sqlite may recover its copied journal.
+                        with sqlite3.connect(path) as db:
+                            assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+                            result = []
+                            for (table,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+                                quoted = '"' + table.replace('"', '""') + '"'
+                                for row in db.execute("SELECT * FROM " + quoted):
+                                    result.extend(v.replace("<br>", "\n").replace("<br/>", "\n") for v in row if isinstance(v, str))
+                            return result
+                    text = strings(Path(probes[0]["database"]))
+                    before = strings(Path(probes[0]["baseline"])) if probes[0].get("baseline") else []
+                    expected = probes[0]["expected"]
+                    # An old note matching the probe cannot qualify new typing.
+                    readable = expected not in before and text.count(expected) == 1 and not any("BAD" in v for v in text)
+                    detail = repr(text)
+            except (OSError, sqlite3.Error, KeyError, AssertionError) as error:
+                detail = str(error)
+            check(readable, f"{d}: stock Notes contains exact qwerty/page/case text and no cancelled BAD: {detail}")
         if args.host_power_gesture:
             gestures = find("hostPowerGesture", device=d)
             check(len(gestures) == boots and all(g.get("confirmed") and not g.get("error") for g in gestures),

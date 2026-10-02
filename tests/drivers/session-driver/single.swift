@@ -10,6 +10,99 @@ import HostRuntime
 // lockdown and still hold a file uploaded before the clean shutdown (tests/matrix.py's persist check).
 
 import Foundation
+import CoreGraphics
+import Vision
+import ImageIO
+
+private nonisolated final class NotesOCRRace: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+    func claim() -> Bool { lock.withLock { if finished { return false }; finished = true; return true } }
+}
+
+private nonisolated func notesEditorLabels(_ image: CGImage) async throws -> [String] {
+    try await withCheckedThrowingContinuation { continuation in
+        let race = NotesOCRRace()
+        let recognition = VNRecognizeTextRequest()
+        recognition.recognitionLevel = .fast
+        recognition.usesLanguageCorrection = false
+        DispatchQueue.global().asyncAfter(deadline: .now() + 8) {
+            if race.claim() {
+                recognition.cancel()
+                continuation.resume(throwing: NSError(domain: "NotesProbe", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Notes editor OCR timed out; focus remains unverified"]))
+            }
+        }
+        DispatchQueue.global().async {
+            do {
+                try VNImageRequestHandler(cgImage: image).perform([recognition])
+                let labels = (recognition.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+                if race.claim() { continuation.resume(returning: labels) }
+            } catch {
+                if race.claim() { continuation.resume(throwing: error) }
+            }
+        }
+    }
+}
+
+/// Read-only stock metadata; retained/offscreen views never establish focus.
+private nonisolated enum NotesObservedFocus {
+    private struct Node {
+        var pointer: String, path: String, hidden: Bool, alpha: Double, first: Bool
+        var frame: CGRect, name: String = ""
+    }
+    static func verified(_ text: String) -> Bool {
+        let lines = text.split(separator: "\n").map(String.init)
+        guard let head = lines.first, head.hasPrefix("keyboard active="),
+              head.hasSuffix("delegateFirstResponder=1") else { return false }
+        let pieces = head.split(separator: " ")
+        guard pieces.count == 4 else { return false }
+        let active = String(pieces[1].dropFirst("active=".count))
+        let delegate = String(pieces[2].dropFirst("delegate=".count))
+        guard active != "0x0", delegate != "0x0" else { return false }
+        let pattern = #"^ui view=(0x[0-9a-f]+) depth=([0-9]+) hidden=([01]) alpha=([-0-9.]+) firstResponder=([01]) frameKnown=1 frame=\(([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+)\) path=(0(?:\.[0-9]+)*)$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        var nodes: [String: Node] = [:]
+        for (index, line) in lines.enumerated() {
+            guard let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) else { continue }
+            func part(_ n: Int) -> String { Range(match.range(at: n), in: line).map { String(line[$0]) } ?? "" }
+            guard let depth = Int(part(2)), depth <= 48,
+                  let alpha = Double(part(4)), let x = Double(part(6)), let y = Double(part(7)),
+                  let width = Double(part(8)), let height = Double(part(9)),
+                  [alpha, x, y, width, height].allSatisfy({ $0.isFinite }) else { return false }
+            let path = part(10)
+            guard path.split(separator: ".").count == depth + 1, nodes[path] == nil else { return false }
+            var node = Node(pointer: part(1), path: path, hidden: part(3) == "1", alpha: alpha,
+                            first: part(5) == "1", frame: CGRect(x: x, y: y, width: width, height: height))
+            if index + 1 < lines.count, lines[index + 1].hasPrefix("<"),
+               lines[index + 1].contains(": " + node.pointer + ">") {
+                node.name = String(lines[index + 1].dropFirst().prefix { $0 != ":" })
+            }
+            nodes[path] = node
+        }
+        func visibleFrame(_ target: Node) -> CGRect? {
+            var origin = CGPoint.zero, clip = CGRect(x: 0, y: 0, width: 320, height: 480)
+            let parts = target.path.split(separator: ".")
+            for length in 1...parts.count {
+                let path = parts.prefix(length).joined(separator: ".")
+                guard let node = nodes[path], !node.hidden, node.alpha > 0.01,
+                      node.frame.width > 0, node.frame.height > 0 else { return nil }
+                origin.x += node.frame.origin.x; origin.y += node.frame.origin.y
+                clip = clip.intersection(CGRect(origin: origin, size: node.frame.size))
+                guard !clip.isNull, clip.width >= 1, clip.height >= 1 else { return nil }
+            }
+            return clip
+        }
+        guard let input = nodes.values.first(where: { $0.pointer == delegate }), input.first,
+              ["UIWebDocumentView", "UITextView"].contains(input.name), visibleFrame(input) != nil,
+              let keyboard = nodes.values.first(where: { $0.pointer == active && $0.name == "UIKeyboardImpl" }),
+              let rect = visibleFrame(keyboard), abs(rect.minX) < 0.1, abs(rect.minY - 264) < 0.1,
+              abs(rect.width - 320) < 0.1, abs(rect.height - 216) < 0.1 else { return false }
+        return nodes.values.contains { $0.name == "UIKeyboardLayoutQWERTY" &&
+            $0.path.hasPrefix(keyboard.path + ".") && visibleFrame($0) != nil }
+    }
+}
+
 struct SingleConfig: Decodable {
     var board: String   // "ipod" | "ipad" | "ipod1g"
     var base: String
@@ -39,6 +132,8 @@ struct SingleConfig: Decodable {
     func prefersHostPowerGesture(build: String?) -> Bool {
         hostPowerGesture ?? (board == "ipod" && build == "5F138")
     }
+    /// Measured portrait typing: stock Notes SQLite readback, no GUI-default switch.
+    var hostKeyboardProbe: Bool?
     /// After installation, launch through the app's guest agent where available. An unfitted helper set falls
     /// back to Home-screen reorder and a tap; screenshots alone do not prove the requested foreground identity.
     var launch: Bool?
@@ -255,7 +350,219 @@ struct SingleConfig: Decodable {
     }
 
 
-
+    func keyboardProbe() async {
+        let guest = GuestAgent(link: d.process.link, cache: GuestAgentCache())
+        let preferences = "/var/mobile/Library/Preferences/com.apple.Preferences.plist"
+        func physical(_ events: [VirtualInputEvent], heldCapture: String? = nil) async throws {
+                let id = UInt64.random(in: 1...UInt64.max)
+                guard VirtualInputEvent.valid(events),
+                      case .ok(true) = try await d.process.link.request(.inputSequence(id: id, events: events), timeout: 5) else {
+                    throw DeviceError.preflight("Notes setup input refused")
+                }
+                do {
+                    if let heldCapture {
+                        try await Task.sleep(for: .milliseconds(300))
+                        guard case .inputSequenceStatus(1) = try await d.process.link.request(.inputSequenceStatus(id: id), timeout: 5) else {
+                            throw DeviceError.preflight("held-contact diagnostic completed before capture")
+                        }
+                        d.screenshot(heldCapture)
+                    }
+                    let deadline = ContinuousClock.now + .seconds(30)
+                    while ContinuousClock.now < deadline {
+                        try Task.checkCancellation()
+                        guard case let .inputSequenceStatus(status) = try await d.process.link.request(.inputSequenceStatus(id: id), timeout: 5) else {
+                            throw DeviceError.preflight("Notes setup input status absent")
+                        }
+                        if status == 2 { return }
+                        if status != 1 { throw DeviceError.preflight("Notes setup input interrupted") }
+                        try await Task.sleep(for: .milliseconds(100))
+                    }
+                    throw DeviceError.preflight("Notes setup input timed out")
+                } catch {
+                    _ = try? await d.process.link.request(.inputSequenceCancel(id: id), timeout: 5)
+                    throw error
+                }
+            }
+        do {
+            guard !ipad, s.board == "ipod", await guest.waitAlive(seconds: 30) else {
+                throw DeviceError.preflight("Notes portrait probe requires the N72 guest agent")
+            }
+            // Disposable native fixture only: the existing read-only uidump
+            // addition may be rebuilt with view visibility/responder metadata.
+            if let diagnostic = ProcessInfo.processInfo.environment["LTM_UIDUMP_DYLIB"] {
+                guard s.board == "ipod", lock?["build"] as? String == "5F138" else {
+                    throw DeviceError.preflight("uidump diagnostic artifact is qualified for N72/5F138 only")
+                }
+                let bytes = try Data(contentsOf: URL(fileURLWithPath: diagnostic))
+                try await guest.put("/usr/lib/it_typein.dylib", mode: 0o755, bytes)
+                try await guest.chown(0, 0, "/usr/lib/it_typein.dylib")
+                emit("hostKeyboardUIDumpArtifact", ["source": diagnostic, "bytes": bytes.count])
+                // The existing stock SpringBoard job restart below reloads it
+                // before Notes launches. No in-process code changes are made.
+            }
+            let original = try await guest.get(preferences)
+            var prefs = original.flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] } ?? [:]
+            prefs["KeyboardAutocapitalization"] = false
+            prefs["KeyboardAutocorrection"] = false
+            prefs["KeyboardCapsLock"] = false
+            let bytes = try PropertyListSerialization.data(fromPropertyList: prefs, format: .binary, options: 0)
+            try await guest.put(preferences, mode: 0o644, bytes)
+            try await guest.chown(501, 501, preferences)
+            try await guest.sync()
+            // UIKit caches keyboard preferences. Reload the stock SpringBoard job;
+            // writing a plist without this is not evidence that the keys changed.
+            try await guest.spawn(["/bin/launchctl", "stop", "com.apple.SpringBoard"])
+            try await Task.sleep(for: .seconds(15))
+            guard await guest.waitAlive(seconds: 30) else { throw DeviceError.preflight("agent did not return after preference reload") }
+            await d.slideToUnlock(1, agent: guest)
+            try await guest.launch("com.apple.mobilenotes")
+            try await Task.sleep(for: .seconds(4))
+            guard try await guest.frontmost().bundleID == "com.apple.mobilenotes" else {
+                throw DeviceError.preflight("Notes foreground identity unavailable")
+            }
+            d.screenshot("keyboard-notes-before")
+            var baselinePath = ""
+            if let baseline = try await guest.get("/var/mobile/Library/Notes/notes.db") {
+                let local = d.dir.appendingPathComponent("keyboard-notes-before.db")
+                try baseline.write(to: local)
+                baselinePath = local.path
+                for suffix in ["-journal", "-wal", "-shm"] {
+                    if let sidecar = try await guest.get("/var/mobile/Library/Notes/notes.db" + suffix) {
+                        try sidecar.write(to: URL(fileURLWithPath: local.path + suffix))
+                    }
+                }
+            }
+            if let diagnostic = ProcessInfo.processInfo.environment["LTM_TOUCH_DIAGNOSTIC"] {
+                let remote = "/var/tmp/ltm-mt-registry-" + UUID().uuidString
+                do {
+                    try await guest.put(remote, mode: 0o755, Data(contentsOf: URL(fileURLWithPath: diagnostic)))
+                    let bytes = try await guest.spawn([remote])
+                    try bytes.write(to: d.dir.appendingPathComponent("keyboard-mt-registry.xml"))
+                    try await guest.unlink(remote)
+                } catch {
+                    try? await guest.unlink(remote)
+                    throw error
+                }
+            }
+            // Read the stock view tree independently of framebuffer/OCR.
+            // An unsupported route is diagnostic evidence, never a focus pass.
+            let inspectUI = true // every probe requires actual responder/visibility evidence
+            func observeUI(_ phase: String) async -> String? {
+                guard inspectUI else { return nil }
+                var observed: String?
+                let started = ContinuousClock.now
+                var receipt: [String: Any] = ["phase": phase, "deadline": 5]
+                do {
+                    let response = try await guest.raw("uidump", deadline: 5)
+                    let file = d.dir.appendingPathComponent("keyboard-notes-" + phase + "-ui.txt")
+                    try response.output.write(to: file)
+                    receipt["status"] = response.status
+                    receipt["output"] = file.path
+                    receipt["bytes"] = response.output.count
+                    if response.status == 0 { observed = String(decoding: response.output, as: UTF8.self) }
+                } catch {
+                    receipt["error"] = String(describing: error)
+                }
+                receipt["elapsed"] = String(describing: started.duration(to: .now))
+                let file = d.dir.appendingPathComponent("keyboard-notes-" + phase + "-ui.json")
+                if let bytes = try? JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys]) {
+                    try? bytes.write(to: file)
+                }
+                emit("hostKeyboardUIObservation", receipt)
+                return observed
+            }
+            let beforeUI = await observeUI("before-contact")
+            var focused = beforeUI.map(NotesObservedFocus.verified) ?? false
+            emit("hostKeyboardInitialUI", ["focused": focused])
+            if !focused {
+                // Navigate only when the live stock responder proves we are not
+                // already in the editor. Pixel snapshots cannot choose Add.
+                guard beforeUI?.contains("keyboard active=") == true else {
+                    throw DeviceError.preflight("Notes uidump lacks qualified responder metadata")
+                }
+                let heldDiagnostic = ProcessInfo.processInfo.environment["LTM_TOUCH_HELD_TRACE"] == "1"
+                try await physical([.touch(phase: 0, x: 299.0 / 320, y: 42.0 / 480, at: 0),
+                                    .touch(phase: 2, x: 299.0 / 320, y: 42.0 / 480, at: heldDiagnostic ? 1000 : 200)],
+                                   heldCapture: heldDiagnostic ? "keyboard-notes-contact-held" : nil)
+                focused = (await observeUI("after-contact")).map(NotesObservedFocus.verified) ?? false
+            }
+            guard focused else { throw DeviceError.preflight("Notes live editor/keyboard focus remains unverified") }
+            try await Task.sleep(for: .seconds(2))
+            guard let editorShot = d.screenshot("keyboard-notes-editor"),
+                  let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: editorShot) as CFURL, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                throw DeviceError.preflight("Notes editor screenshot absent")
+            }
+            let labels = try await notesEditorLabels(image)
+            let normalized = labels.joined().lowercased().filter { $0.isLetter }
+            // Assert the actual stock editor and visible keyboard, not delivery.
+            // OCR evidence is retained for diagnosis and never replaces DB text.
+            try labels.joined(separator: "\n").write(to: d.dir.appendingPathComponent("keyboard-notes-editor-ocr.txt"), atomically: true, encoding: .utf8)
+            let pixelsAgree = normalized.contains("done") && !normalized.contains("nonotes") &&
+                (normalized.contains("qwerty") || normalized.contains("asdfgh"))
+            emit("hostKeyboardPixelObservation", ["agreesWithLiveFocus": pixelsAgree, "labels": labels])
+            if let tree = try? await guest.raw("uidump", deadline: 5), tree.status == 0 {
+                try tree.output.write(to: d.dir.appendingPathComponent("keyboard-notes-editor-ui.txt"))
+                let text = String(decoding: tree.output, as: UTF8.self)
+                guard NotesObservedFocus.verified(text) else {
+                    throw DeviceError.preflight("Notes live responder changed before typing")
+                }
+            }
+            emit("hostKeyboardFocused", ["screenshot": editorShot, "labels": labels])
+            var state = PortraitKeyboardState(numeric: false, shifted: false,
+                                              automaticCapitalizationDisabled: true)
+            state = try await HostInputAutomation.typePortraitText("qwerty 42", on: d.process, initialState: state)
+            state = try await HostInputAutomation.typePortraitText("\nZz", on: d.process, initialState: state)
+            // Stop virtual time before submitting: no character may be acquired
+            // by a paused guest. Matching cancellation must invalidate the plan.
+            d.process.link.send(.machine(.pause))
+            let cancelledID: UInt64 = 0x4e6f746573
+            let cancelled = try PortraitKeyboardPlan.make("BAD", initialState: state)
+            guard case .ok(true) = try await d.process.link.request(.inputSequence(id: cancelledID, events: cancelled.events), timeout: 5) else {
+                throw DeviceError.preflight("paused keyboard sequence refused")
+            }
+            try await Task.sleep(for: .milliseconds(200))
+            guard case .inputSequenceStatus(1) = try await d.process.link.request(.inputSequenceStatus(id: cancelledID), timeout: 5) else {
+                throw DeviceError.preflight("paused sequence advanced or was rejected")
+            }
+            _ = try await d.process.link.request(.inputSequenceCancel(id: cancelledID), timeout: 5)
+            guard case .inputSequenceStatus(3) = try await d.process.link.request(.inputSequenceStatus(id: cancelledID), timeout: 5) else {
+                throw DeviceError.preflight("matching keyboard cancellation not observed")
+            }
+            d.process.link.send(.machine(.resume))
+            d.screenshot("keyboard-notes-after")
+            // Background Notes through an ordinary Home press so UIKit commits
+            // its document, then snapshot stock bytes through the guest service.
+            try await physical([.button(0, down: true, at: 0), .button(0, down: false, at: 150)])
+            try await Task.sleep(for: .seconds(3))
+            try await guest.sync()
+            guard let database = try await guest.get("/var/mobile/Library/Notes/notes.db") else {
+                throw DeviceError.preflight("stock Notes database absent")
+            }
+            let local = d.dir.appendingPathComponent("keyboard-notes.db")
+            try database.write(to: local)
+            for suffix in ["-journal", "-wal", "-shm"] {
+                if let sidecar = try await guest.get("/var/mobile/Library/Notes/notes.db" + suffix) {
+                    try sidecar.write(to: URL(fileURLWithPath: local.path + suffix))
+                }
+            }
+            emit("hostKeyboardProbe", ["ok": true, "database": local.path, "baseline": baselinePath,
+                                       "expected": "qwerty 42\nZz", "cancelled": true])
+        } catch {
+            d.process.link.send(.machine(.resume))
+            emit("hostKeyboardProbe", ["ok": false, "error": "\(error)"])
+            // A failed optional probe must not leave the subsequent lifecycle
+            // checks asleep, locked, or parked in Notes.
+            await d.slideToUnlock(1, agent: guest)
+            try? await physical([.button(0, down: true, at: 0), .button(0, down: false, at: 150)])
+            try? await Task.sleep(for: .seconds(2))
+            d.screenshot("keyboard-probe-recovered-home")
+            emit("hostKeyboardProbeRecovery", ["foreground": (try? await guest.frontmost().bundleID) ?? "unavailable",
+                                                "locked": (try? await guest.isLocked()) ?? true])
+        }
+    }
+    await boot(1)
+    if s.hostKeyboardProbe == true { await keyboardProbe() }
 
     if s.reboot == true, s.hardStop == true {
         d.process.terminate()   // the app's Stop: pause, flush the overlay, quit QEMU at once

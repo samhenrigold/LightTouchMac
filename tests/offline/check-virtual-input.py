@@ -21,6 +21,24 @@ import DeviceRuntime
   bad=n72;bad[8].x = .nan;precondition(!VirtualInputEvent.valid(bad))
   bad=n72;bad.removeLast();precondition(!VirtualInputEvent.valid(bad))
   do {_ = try HostInputAutomation.powerOffGesture(firstGeneration:false,knobY:480);fatalError()} catch {}
+  let keyboard = try PortraitKeyboardPlan.make("qwerty 42", initialState:
+      .init(numeric: false, shifted: false, automaticCapitalizationDisabled: true))
+  precondition(VirtualInputEvent.valid(keyboard.events) && keyboard.events.count == 20)
+  precondition(keyboard.events[0].x == 15.0/320 && keyboard.events[0].y == 296.0/480)
+  precondition(keyboard.events[1].atMilliseconds == 60 && keyboard.events[2].atMilliseconds == 200)
+  precondition(keyboard.events[14].x == 30.0/320 && keyboard.events[14].y == 458.0/480)
+  precondition(keyboard.finalState.numeric && !keyboard.finalState.shifted)
+  let cases = try PortraitKeyboardPlan.make("Zz", initialState:
+      .init(numeric: false, shifted: false, automaticCapitalizationDisabled: true))
+  precondition(cases.events.count == 6 && cases.events[0].x == 24.0/320 &&
+      cases.events[2].x == 63.0/320 && cases.events[4].x == 63.0/320)
+  for text in [".", "qé", "💡", String(repeating: "q", count: 129)] {
+      do { _ = try PortraitKeyboardPlan.make(text, initialState:
+          .init(numeric: false, shifted: false, automaticCapitalizationDisabled: true)); fatalError("unsupported keyboard plan accepted") }
+      catch {}
+  }
+  do { _ = try PortraitKeyboardPlan.make("q", initialState:
+      .init(numeric: false, shifted: false, automaticCapitalizationDisabled: false)); fatalError() } catch {}
   // Actual encoded protocol preserves typed generic events, not UI strings.
   let message=AppMessage.request(id:1,.inputSequence(id:99,events:n72))
   let encoded=try JSONEncoder().encode(message)
@@ -75,7 +93,7 @@ import DeviceRuntime
   task.cancel()
   do {try await task.value;fatalError()} catch is CancellationError {}
   precondition(cancelled.last == .inputSequenceCancel(id:103))
-  print("PASS: actual DeviceRuntime N45/N72 gesture deadlines, protocol roundtrip, backlight+completion cable gate, refusal, timeout, interruption/cancellation")
+  print("PASS: actual DeviceRuntime N45/N72 gesture deadlines, protocol roundtrip, backlight+completion cable gate, refusal, timeout, interruption/cancellation and portrait keyboard plans")
  }
 }
 '''
