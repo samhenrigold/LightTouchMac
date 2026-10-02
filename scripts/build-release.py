@@ -39,7 +39,7 @@ IPAD_GUEST_PAYLOADS = frozenset(('it_pbd', 'it_ethlink', 'it_prefs', 'it_msmquie
 # Serial 12 carries the native media tags/artwork contract and whole-millisecond
 # duration adapter. Earlier importers can strip metadata or store zero duration.
 # Serial 13 also carries the signed legacy-linked armv6 helpers and stock 2.x launch API.
-GUEST_PACKAGE_MIN_SERIAL = 13
+GUEST_PACKAGE_MIN_SERIAL = 14
 CATALOG = ROOT / 'LightTouchMac/Resources/firmware-catalog.json'
 SOURCE_EXCLUSIONS = {'.git', '.build', 'dist', '__pycache__', 'xcuserdata', '.DS_Store'}
 NATIVE_RECIPES = frozenset(('scripts/build-package-native.sh', 'scripts/build-static-deps.sh',
