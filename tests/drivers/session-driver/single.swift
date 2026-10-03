@@ -64,13 +64,17 @@ struct SingleConfig: Decodable {
                        iBoot: iBoot, gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,
                        machine: BootRecipe.lockMachine(b.appendingPathComponent("device.lock.json")))
     }
-    // Composed per boot from the device's verdicts, as the app's composeGuestOffer (an iPad's in Device.boot).
+    // Composed per boot from the device's verdicts, as the app's composeGuestOffer (an iPad's in Device.boot);
+    // `offered`: this boot carries one (compose gives none for a stub seed).
+    var offered = ipad && config.ipadItpack != nil
     func offer() -> String? {
         guard !ipad, let itpack = s.itpack else { return nil }
-        do { return try d.offer(base: b, board: s.board == "ipod1g" ? "n45ap" : "n72ap", itpack: itpack) }
-        catch { emit("offerError", ["error": "\(error)"]); return nil }
+        do {
+            let dir = try d.offer(base: b, board: s.board == "ipod1g" ? "n45ap" : "n72ap", itpack: itpack)
+            offered = dir != nil
+            return dir
+        } catch { emit("offerError", ["error": "\(error)"]); offered = false; return nil }
     }
-    let offered = (!ipad && s.itpack != nil) || (ipad && config.ipadItpack != nil)
     // The lock says whether the bake installed it_agent, including a fitted legacy build.
     let lock = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("device.lock.json")))) as? [String: Any]
     let identity = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("identity.json")))) as? [String: Any]
