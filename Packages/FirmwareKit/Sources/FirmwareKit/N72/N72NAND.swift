@@ -8,6 +8,7 @@
 //   try N72NAND.write(volume: img, blocks: n, epoch: e, out: dir)   // (volume pages, metadata pages)
 
 import Foundation
+import HostRuntime
 import zlib
 
 public enum N72NAND {
@@ -82,7 +83,8 @@ public enum N72NAND {
     /// pages supplied by the preparer, not a rounded backing-file length.
     /// Older HFS disables alternate-header writes
     /// when the partition extends more than one allocation block beyond it.
-    static func gptPages(_ blocks: Int) -> [[UInt8]] {
+    /// `slack`: recipe 1 (every base before 0b43f26) ended the partition 11 blocks past the volume.
+    static func gptPages(_ blocks: Int, slack: Int = 0) -> [[UInt8]] {
         var mbr = [UInt8](repeating: 0, count: page)
         mbr[8] = 0xFF; mbr[10] = 0xFF                    // as generated: a spare pattern in the data area
         mbr[0x1BE + 4] = 0xEE
@@ -90,7 +92,7 @@ public enum N72NAND {
         mbr[0x1FE] = 0x55; mbr[0x1FF] = 0xAA
         var ent = [UInt8](repeating: 0, count: page)
         ent.replaceSubrange(0..<16, with: hfsType)
-        put(&ent, 0x20, 3, 8); put(&ent, 0x28, UInt64(3 + blocks - 1), 8)
+        put(&ent, 0x20, 3, 8); put(&ent, 0x28, UInt64(3 + blocks - 1 + slack), 8)
         var hdr = [UInt8](repeating: 0, count: page)
         hdr.replaceSubrange(0..<8, with: Array("EFI PART".utf8))
         put(&hdr, 8, 0x00010000, 4); put(&hdr, 12, 0x5C, 4)
@@ -157,5 +159,93 @@ public enum N72NAND {
             n += chunk
         }
         return (written, meta.count)
+    }
+
+    // MARK: - Recipe 1 -> 2 in place
+
+    /// The recipe whose GPT ends at the HFS extent (0b43f26).
+    public static let exactGPTRecipe = 2
+    static let legacyGPTSlack = 11
+
+    /// A stopped device whose base still has recipe 1's overlong GPT gets recipe 2's two GPT pages (header, entry;
+    /// this layout has no backup GPT) in its overlay, byte for byte what `metadataPages` writes today, and, if its
+    /// lock names an older recipe, `marker` records exactGPTRecipe. Pages that are neither layout (a guest rewrote
+    /// the GPT, an erased block) are left alone. The base is never written; qemu sizes its FTL from the base's GPT,
+    /// so the emulated flash geometry is unchanged. The caller holds the device's stopped storage lease.
+    ///
+    /// Under the overlong GPT the guest never wrote the alternate volume header, so on a device whose catalog
+    /// grew it still describes the prepared B-trees and fsck_hfs (Open in Finder) refuses the volume. The guest
+    /// rewrites it only when a B-tree grows again, not on a later boot or clean shutdown (measured on 7E18), so
+    /// the alternate becomes a copy of the primary, as the guest's own alternate flush writes it.
+    ///
+    /// Order for crash safety: alternate, GPT, marker. Until the GPT pages land the device still reads as recipe 1
+    /// and the next run redoes the (idempotent) alternate; exact pages without a marker are only marked.
+    /// Returns whether anything was written.
+    public static func migrateLegacyGPT(base: URL, overlay: URL, storageKey: String?, marker: URL) throws -> Bool {
+        let fm = FileManager.default
+        func path(_ p: Page) -> String { "cs\(p.cs)/\(p.page).page" }
+        func current(_ p: Page) -> [UInt8]? {
+            if let d = try? Data(contentsOf: overlay.appendingPathComponent(path(p))) { return [UInt8](d.prefix(page)) }
+            if fm.fileExists(atPath: overlay.appendingPathComponent("cs\(p.cs)/blk\(p.page / pagesPerBlock).erased").path) { return nil }
+            return (try? Data(contentsOf: base.appendingPathComponent("nand/\(path(p))"))).map { [UInt8]($0.prefix(page)) }
+        }
+        func write(_ data: [UInt8], _ p: Page) throws {
+            try writeDurably(Data(data + blankSpare), to: overlay.appendingPathComponent(path(p)))
+        }
+        // Header and entry only say where the partition ends (recipe 1's B blocks end where recipe 2's B + 11
+        // do); the protective MBR, which neither recipe changed, says the volume's B.
+        let gpt = (0..<3).map { Page(cs: $0, page: 2 * pagesPerBlock) }
+        guard let mbr = current(gpt[0]), let header = current(gpt[1]), let entry = current(gpt[2]), mbr.count == page else { return false }
+        let blocks = (0..<4).reduce(0) { $0 | Int(mbr[0x1BE + 12 + $1]) << (8 * $1) } - 10
+        guard blocks > 0 else { return false }
+        var changed = false
+        if gptPages(blocks, slack: legacyGPTSlack) == [mbr, header, entry] {
+            // The volume the GPT was made for: HFS+/HFSX at block 0, `blocks` 4 KiB long.
+            guard let first = current(predict(0)), first.count == page, first[1024] == 0x48, first[1025] == 0x2B || first[1025] == 0x58
+            else { return false }
+            let be32 = { (o: Int) in (0..<4).reduce(0) { $0 << 8 | Int(first[1024 + o + $1]) } }
+            let bytes = be32(40) * be32(44)
+            guard bytes == blocks * page else { return false }
+            if let storageKey, try !PreparedDeviceBoot.pinOverlay(overlay, toBase: storageKey) { return false }
+            let primary = first[1024..<1536], end = predict(blocks - 1), offset = page - 1024
+            var last = current(end) ?? []
+            last += [UInt8](repeating: 0, count: page - last.count)
+            if last[offset..<offset + 512] != primary {
+                last.replaceSubrange(offset..<offset + 512, with: primary)
+                try write(last, end)
+            }
+            for (cs, data) in gptPages(blocks).enumerated() where cs > 0 { try write(data, gpt[cs]) }
+            changed = true
+        } else if gptPages(blocks) != [mbr, header, entry] {
+            return false
+        }
+        let lock = (try? Data(contentsOf: base.appendingPathComponent("device.lock.json")))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let recipe = ((lock?["entry"] as? [String: Any])?["content"] as? [String: Any])?["recipe"] as? [String: Any]
+        let marked = (try? Data(contentsOf: marker)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        if let version = recipe?["version"] as? Int, version < exactGPTRecipe,
+           (marked?["recipe"] as? Int ?? 0) < exactGPTRecipe {
+            try writeDurably(JSONSerialization.data(withJSONObject: ["recipe": exactGPTRecipe, "step": "n72-exact-gpt"],
+                                                    options: [.sortedKeys]), to: marker)
+            changed = true
+        }
+        return changed
+    }
+
+    /// As qemu's fmss_store_page: a synced temporary renamed over the target, then the directory synced.
+    static func writeDurably(_ data: Data, to url: URL) throws {
+        let dir = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let tmp = dir.appendingPathComponent(".\(url.lastPathComponent).tmp")
+        try data.write(to: tmp)
+        let fd = open(tmp.path, O_RDONLY)
+        defer { if fd >= 0 { close(fd) } }
+        guard fd >= 0, fsync(fd) == 0, rename(tmp.path, url.path) == 0 else {
+            let error = POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            try? FileManager.default.removeItem(at: tmp)
+            throw error
+        }
+        let dfd = open(dir.path, O_RDONLY)
+        if dfd >= 0 { fsync(dfd); close(dfd) }
     }
 }

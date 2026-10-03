@@ -3,8 +3,8 @@ import HostRuntime
 import FirmwareSchema
 
 /// Common stopped storage admission used before any host launches a helper.
-/// Format-specific preparation can borrow the existing stopped authority;
-/// admission itself only validates storage ownership and current paths.
+/// Format-specific preparation borrows the existing stopped authority: today
+/// only the N72 recipe 1 -> 2 GPT migration (N72NAND.migrateLegacyGPT).
 public nonisolated enum FirmwareBootAdmission {
     public struct Result: Sendable {
         public let changed: Bool
@@ -31,7 +31,16 @@ public nonisolated enum FirmwareBootAdmission {
 
     nonisolated(nonsending) public static func admit(device: URL, policy: StorageRecordPolicy = .standalone,
                                                     allowRaw: Bool = false) async throws -> Result {
-        try await admit(device: device, policy: policy, allowRaw: allowRaw, prepare: { _ in false })
+        try await admit(device: device, policy: policy, allowRaw: allowRaw, prepare: migrate)
+    }
+
+    @Sendable static func migrate(_ owner: StoppedRecordOwner) throws -> Bool {
+        guard let bytes = owner.bytes, let paths = owner.paths,
+              let record = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              record["board"] as? String == "n72ap" else { return false }
+        return try N72NAND.migrateLegacyGPT(base: paths.base, overlay: paths.overlay,
+            storageKey: (record["storage"] as? [String: Any])?["key"] as? String,
+            marker: owner.device.appendingPathComponent(FirmwareWire.migratedRecipeFile))
     }
 
     nonisolated(nonsending) static func admit(device: URL, policy: StorageRecordPolicy = .standalone,

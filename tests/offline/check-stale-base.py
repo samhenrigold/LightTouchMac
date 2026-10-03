@@ -11,6 +11,8 @@ entry the base was prepared from, every lock since the first firmwarekit):
   n72 current   recipe 2, even an older tool-version field: not flagged
   k48           recipe 1 entries (RC4 to RC7 bases): not flagged
 The RC7 cases pin the shipped recipes: a later bump flags every existing device, so it must change them knowingly.
+  n72 migrated  recipe 1 with boot admission's migrated-recipe.json (recipe 2) in the device directory: not
+                flagged; a marker naming an older recipe doesn't lift it
   device.py     a lock with no entry (the Python preparer): not flagged; nor an unreadable lock
 Also: Prepare Again needs the preparer and a stopped device; Start stays the placeholder's button.
 """
@@ -35,7 +37,7 @@ def lock(entry_id, recipe=None, tool='0.2.0'):
             'tool': {'name': 'firmwarekit', 'version': tool}, 'entry': {'id': entry_id, 'sha256': '0' * 64, 'content': content}}
 
 
-cases = [  # name, entry, lock (dict, or raw text), flagged
+cases = [  # name, entry, lock (dict, or raw text), flagged[, the device directory's migrated-recipe.json]
     ('n45-old', 'n45ap-4B1', lock('n45ap-4B1', recipe=1), True),
     ('n45-old-3A101a', 'n45ap-3A101a', lock('n45ap-3A101a', recipe=1), True),
     ('n45-current', 'n45ap-4B1', lock('n45ap-4B1'), False),
@@ -46,6 +48,10 @@ cases = [  # name, entry, lock (dict, or raw text), flagged
     ('n72-current', 'n72ap-7E18', lock('n72ap-7E18'), False),
     ('n72-exact-gpt', 'n72ap-8C148', lock('n72ap-8C148', recipe=2), False),
     ('n72-current-old-tool-field', 'n72ap-7E18', lock('n72ap-7E18', tool='0.1.0'), False),
+    ('n72-rc7-migrated-2x', 'n72ap-5F138', lock('n72ap-5F138', recipe=1), False, {'recipe': 2, 'step': 'n72-exact-gpt'}),
+    ('n72-rc7-migrated-3x', 'n72ap-7E18', lock('n72ap-7E18', recipe=1), False, {'recipe': 2, 'step': 'n72-exact-gpt'}),
+    ('n72-rc7-migrated-4x', 'n72ap-8C148', lock('n72ap-8C148', recipe=1), False, {'recipe': 2, 'step': 'n72-exact-gpt'}),
+    ('n72-rc7-marker-too-old', 'n72ap-7E18', lock('n72ap-7E18', recipe=1), True, {'recipe': 1}),
     ('k48-rc4', 'k48ap-7B500', lock('k48ap-7B500', tool='0.1.0'), False),
     ('k48-rc5', 'k48ap-8C148', lock('k48ap-8C148'), False),
     ('k48-rc7', 'k48ap-7B500', lock('k48ap-7B500', recipe=1), False),
@@ -61,10 +67,10 @@ import Foundation
         let catalog = try FirmwareCatalog.load(from: URL(fileURLWithPath: args[1]))
         var failures: [String] = []
         for spec in args.dropFirst(2) {
-            let f = spec.split(separator: ":").map(String.init)   // name:entry:lock path:flagged
+            let f = spec.split(separator: ":").map(String.init)   // name:entry:lock path:flagged:device directory
             let entry = catalog.entry(id: f[1])!, want = f[3] == "1"
             let row = DeviceRow(entry: entry, instanceID: UUID(), session: nil, job: nil,
-                                baseRecipe: DeviceRow.baseRecipeVersion(URL(fileURLWithPath: f[2])))
+                                baseRecipe: DeviceRow.baseRecipeVersion(URL(fileURLWithPath: f[2]), device: URL(fileURLWithPath: f[4])))
             if row.preparedByOlderRecipe != want { failures.append("\(f[0]): flagged \(row.preparedByOlderRecipe), want \(want)") }
             if row.allows(.prepareAgain, canDownload: true) != want { failures.append("\(f[0]): Prepare Again allowed \(!want)") }
             if (row.olderRecipeNote != nil) != want { failures.append("\(f[0]): note \(row.olderRecipeNote ?? "nil")") }
@@ -87,10 +93,14 @@ import Foundation
 with tempfile.TemporaryDirectory(prefix='ltm-stale-base-') as tmp:
     tmp = Path(tmp)
     specs = []
-    for name, entry_id, body, flagged in cases:
+    for name, entry_id, body, flagged, *marker in cases:
         path = tmp / f'{name}.lock.json'
         path.write_text(body if isinstance(body, str) else json.dumps(body))
-        specs.append(f'{name}:{entry_id}:{path}:{int(flagged)}')
+        device = tmp / f'{name}.device'   # every case has one; only the migrated ones hold a marker
+        device.mkdir()
+        if marker:
+            (device / 'migrated-recipe.json').write_text(json.dumps(marker[0]))
+        specs.append(f'{name}:{entry_id}:{path}:{int(flagged)}:{device}')
     (tmp / 'main.swift').write_text(check)
     subprocess.run(['xcrun', 'swiftc', *host_runtime.swift_flags(root), '-parse-as-library', '-swift-version', '5', '-module-cache-path', str(tmp / 'modules'),
                     str(root / 'Packages/FirmwareKit/Sources/FirmwareSchema/FirmwareWire.swift'), str(app / 'Library/FirmwareCatalog.swift'), str(app / 'Device/DeviceProfile.swift'),

@@ -95,7 +95,8 @@ import Cocoa
     private var baseRecipes: [UUID: Int?] = [:]
     private func baseRecipe(_ instance: DeviceInstance) -> Int? {
         if let known = baseRecipes[instance.id] { return known }
-        let version = DeviceRow.baseRecipeVersion(instance.paths.base.appendingPathComponent("device.lock.json"))
+        let version = DeviceRow.baseRecipeVersion(instance.paths.base.appendingPathComponent("device.lock.json"),
+                                                   device: instance.paths.directory)
         baseRecipes[instance.id] = version
         return version
     }
