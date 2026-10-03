@@ -709,6 +709,8 @@ def check_prepare(args, log, state, app):
                 '--helper', app / 'Contents/MacOS/LightTouchDevice', '--dylib', app / 'Contents/Frameworks/libqemu-arm.dylib',
                 '--service-worker', app / 'Contents/MacOS/LightTouchServices', '--usbmuxd', app / 'Contents/MacOS/usbmuxd', '--frameworks', app / 'Contents/Frameworks',
                 '--files', app / 'Contents/Resources/device', '--work', frames]
+        if board == 'ipad':   # the app offers its bundled guest package at every start; the judge then asks its agent
+            boot += ['--ipad-itpack', app / 'Contents/Resources/guest-tools/armv7.itpack']
         print('+ ' + shlex.join(map(str, boot)), flush=True)
         checked = subprocess.run(list(map(str, boot)), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                  env=clean_env, timeout=590)
