@@ -64,11 +64,13 @@ struct SingleConfig: Decodable {
                        iBoot: iBoot, gidBlobs: b.appendingPathComponent("gid-blobs.bin").path,
                        machine: BootRecipe.lockMachine(b.appendingPathComponent("device.lock.json")))
     }
-    var offer: String?
-    if !ipad, let itpack = s.itpack {
-        do { offer = try d.offer(base: b, board: s.board == "ipod1g" ? "n45ap" : "n72ap", itpack: itpack) } catch { emit("offerError", ["error": "\(error)"]) }
+    // Composed per boot from the device's verdicts, as the app's composeGuestOffer (an iPad's in Device.boot).
+    func offer() -> String? {
+        guard !ipad, let itpack = s.itpack else { return nil }
+        do { return try d.offer(base: b, board: s.board == "ipod1g" ? "n45ap" : "n72ap", itpack: itpack) }
+        catch { emit("offerError", ["error": "\(error)"]); return nil }
     }
-    let offered = offer != nil || (ipad && config.ipadItpack != nil)
+    let offered = (!ipad && s.itpack != nil) || (ipad && config.ipadItpack != nil)
     // The lock says whether the bake installed it_agent, including a fitted legacy build.
     let lock = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("device.lock.json")))) as? [String: Any]
     let identity = (try? JSONSerialization.jsonObject(with: Data(contentsOf: b.appendingPathComponent("identity.json")))) as? [String: Any]
@@ -79,7 +81,7 @@ struct SingleConfig: Decodable {
         .compare("3.1", options: .numeric) != .orderedAscending)
 
     func boot(_ generation: Int) async {
-        do { try d.boot(generation: generation, guestPackage: offer) } catch { fail("boot \(generation): \(error)") }
+        do { try d.boot(generation: generation, guestPackage: offer()) } catch { fail("boot \(generation): \(error)") }
         await waitLit(d, ipad ? 0.2 : 0.03, d.profile.bootBudget)   // the app's own boot budget (iPad 300 s)
         await waitUSB(d, expecting: d.profile.productType, 300)
         if let tool = s.lockdownTZ {
@@ -132,6 +134,25 @@ struct SingleConfig: Decodable {
             while d.process.status?.guestPackage == nil, Date().timeIntervalSince(start) < 60 { try? await Task.sleep(for: .seconds(1)) }
             let r = d.process.status?.guestPackage
             emit("guestPackage", ["device": d.name, "generation": generation, "serial": r?.serial ?? -1, "result": r?.result ?? -99])
+            // GuestPackageSession's verdict, recorded as the app records it: the next offer carries `verdict good`.
+            var record = d.guestRecord
+            if let r { record.active = r.serial }
+            let judging = ContinuousClock.now
+            var healthySince: ContinuousClock.Instant?, verdict: GuestPackage.Verdict?
+            while verdict == nil, ContinuousClock.now - judging < .seconds(120), let status = d.process.status, !d.process.isDead {
+                if status.uiReady && (!agent || status.agentStatus == 1) { healthySince = healthySince ?? .now } else { healthySince = nil }
+                verdict = GuestPackage.verdict(report: status.guestPackage, healthyFor: healthySince.map { .now - $0 } ?? .zero,
+                                               elapsed: .now - judging, record: record, restored: false)
+                if verdict == nil { try? await Task.sleep(for: .seconds(1)) }
+            }
+            switch verdict {
+            case .good(let serial)?: record.lastGood = serial; record.bad.removeAll { $0 == serial }
+            case .bad(let serial)?: if !record.bad.contains(serial) { record.bad.append(serial) }
+            default: break
+            }
+            d.guestRecord = record
+            emit("guestVerdict", ["device": d.name, "generation": generation, "verdict": verdict.map { "\($0)" } ?? "none",
+                                  "lastGood": record.lastGood ?? -1])
         }
         func home() async {
             d.process.link.send(.button(0, down: true)); try? await Task.sleep(for: .milliseconds(150))
@@ -219,7 +240,7 @@ struct SingleConfig: Decodable {
     // starts the agent halt, stopping 20-45 s into the shutdown (the sequence that preceded the one code 1).
     if let n = s.raceBoots {
         for g in 1...n {
-            do { try d.boot(generation: g, guestPackage: offer) } catch { fail("boot \(g): \(error)") }
+            do { try d.boot(generation: g, guestPackage: offer()) } catch { fail("boot \(g): \(error)") }
             let start = Date()
             while await d.productType() == nil {
                 if d.process.isDead || Date().timeIntervalSince(start) > 300 { fail("boot \(g): lockdown never answered") }

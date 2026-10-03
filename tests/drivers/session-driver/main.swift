@@ -245,16 +245,27 @@ extension String {
         return try offer(base: base, board: "k48ap", itpack: itpack)
     }
 
-    /// EmulatorController.composeGuestOffer for any prepared base: the itpack, the base's lock record.
+    /// EmulatorController.composeGuestOffer for any prepared base: the itpack, the base's lock record, and the
+    /// device's verdicts (guestRecord), as the app offers device.json `guest`. Without them it_boot reverts a
+    /// package it was never told is good after MAX_TRIES boots.
     func offer(base: URL, board: String, itpack: String) throws -> String? {
         let lockURL = base.appendingPathComponent("device.lock.json")
         let lock = try JSONSerialization.jsonObject(with: Data(contentsOf: lockURL)) as? [String: Any]
         let dir = dir.appendingPathComponent("work/guest-offer")
         try FileManager.default.createDirectory(at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var record = guestRecord
+        if record.seed == nil { record.seed = GuestPackage.lockRecord(lockURL)?.seed }
         let offer = try GuestPackage.compose(itpack: URL(fileURLWithPath: itpack), board: board, build: lock?["build"] as? String ?? "",
-                                             lock: GuestPackage.lockRecord(lockURL), guest: nil, into: dir)
-        emit("offer", ["device": name, "serial": offer?.serial ?? -1, "seed": GuestPackage.lockRecord(lockURL)?.seed ?? -1])
+                                             lock: GuestPackage.lockRecord(lockURL), guest: record, into: dir)
+        emit("offer", ["device": name, "serial": offer?.serial ?? -1, "seed": GuestPackage.lockRecord(lockURL)?.seed ?? -1,
+                       "lastGood": record.lastGood ?? -1])
         return offer == nil ? nil : dir.path
+    }
+
+    /// The driver's device.json `guest`: kept beside the overlay, so a device's later driver runs offer its verdicts.
+    var guestRecord: DeviceInstance.Guest {
+        get { (try? Data(contentsOf: dir.appendingPathComponent("guest-record.json"))).flatMap { try? JSONDecoder().decode(DeviceInstance.Guest.self, from: $0) } ?? .init() }
+        set { try? JSONEncoder().encode(newValue).write(to: dir.appendingPathComponent("guest-record.json")) }
     }
 
     static var helper: String { config.helper }

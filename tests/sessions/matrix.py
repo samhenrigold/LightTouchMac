@@ -343,7 +343,9 @@ def judge(entry, events, rc, serial, shots_from, shots_to, base_before, base, ti
     if find("offer") and not offer:
         r["package"] = {"ok": None, "note": "itpack has no package for this build (GuestPackage.compose: nil)"}
     elif offer:
-        r["package"] = {"ok": bool(pkg) and pkg[0].get("result", -99) >= 0 and pkg[0].get("serial") == offer[0].get("serial"),
+        # every boot runs the offered serial (installed, switched or unchanged): a revert (R_REVERTED_*, R_REFUSED) fails
+        r["package"] = {"ok": bool(pkg) and all(p.get("result", -99) in (0, 1, 2) and p.get("serial") == offer[0].get("serial")
+                                                for p in find("guestPackage")),
                         "offered": offer[0].get("serial"), "reported": pkg[0].get("serial") if pkg else None,
                         "result": pkg[0].get("result") if pkg else None}
     else:
