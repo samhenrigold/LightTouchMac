@@ -35057,7 +35057,7 @@
    "usbmuxd": "e19fac2",
    "evidence": "artifacts copied from shg-mini:~/ltm-runner/rc8/results"
   },
-  "triage": "RC8 10-02 (80029f8 bundle): 2 of 4 runs with the RC8 driver hung (lockdown never answered, serial silent ~250 s; boot 1 once at load 3.5, boot 2 once at load 3.3); this record is the 4th run (pass); the pre-verdict driver passed 1 of 1. The offer text is identical on boot 1, so not the driver change; an intermittent 5.x guest hang, a regression against the 09-30 record."
+  "triage": "RC8 10-02 (80029f8 bundle, shg-mini): 2 of 4 runs hung (lockdown never answered, serial silent ~250 s). Not reproduced on this Mac (ios5-regress 10-03): 5 of 5 runs, 10 of 10 boots pass with the RC8 pieces. The same signature appeared twice on 9A5288d here (RC8 pieces; RC7 emulator + RC8 usbmuxd): the guest STALLs the host's first configuration-descriptor read in a reset race, the host's next enumeration never completes, and the lock screen then sleeps the panel, so the serial goes quiet. usbmuxd logs of passing runs show the control pipe one reply behind after a timed-out device-descriptor probe (the late reply stays armed on EP0 IN across the next bus reset and SETUP: 'Short configuration 0 (-1 of 512)' is device-descriptor bytes read as a configuration header). Not shown to be an RC7->RC8 regression; a hang with usbmuxd.log kept (shg-mini) would confirm the stranding step."
  },
  "k48ap-9A334": {
   "version": "5.0",
@@ -38937,7 +38937,7 @@
    "usbmuxd": "e19fac2",
    "evidence": "artifacts copied from shg-mini:~/ltm-runner/rc8/results"
   },
-  "triage": "RC8 10-02: fails 3 of 3 (2 with the RC8 driver, 1 with the pre-verdict driver): one boot stays on the Lock Screen after the scripted unlock (GL then has no home picture) and boot 1's power-off goes unconfirmed; lockdown, install, package and persist pass. A regression against the 09-30 record; not caused by the driver change."
+  "triage": "RC8 10-02: fails 3 of 3 (one boot stays on the Lock Screen after the scripted unlock; that boot's power-off goes unconfirmed). Not an RC7->RC8 regression (ios5-regress 10-03, this Mac): the all-RC7 stack (app af0c867 tools, emulator fd5a1d0845 + its guest tools, usbmuxd 33728ae) fails the same way (boot 2: locked after 3 slides, power-off sheet up, knob unmoved). RC7 emulator + usbmuxd inside the RC8 stack: 5 of 8 boots pass; RC8 pieces: 3 of 8; any run with MT_TRACE: 0 of 6. In a failing boot touch is dead for the whole boot: the kernel reads every finger frame of the drags (MT_TRACE) and the buttons work, but SpringBoard never moves a slider. A pre-existing intermittent touch fault, not yet located; the 09-30 pass was one sample at load ~100."
  },
  "k48ap-9B176": {
   "version": "5.1",
