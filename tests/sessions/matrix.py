@@ -560,6 +560,7 @@ def main():
     ap.add_argument("--firmwarekit", type=Path, default=FIRMWAREKIT)
     ap.add_argument("--guest-tools", type=Path, default=os.environ.get("LTM_GUEST_TOOLS_DIR"), help="the flat firmwarekit guest-tools dir (with the itpacks)")
     ap.add_argument("--helper", type=Path, help="LightTouchDevice (default: build the Debug target)")
+    ap.add_argument("--service-worker", type=Path, help="LightTouchServices (default: compile the production sources)")
     ap.add_argument("--dylib", type=Path, default=os.environ.get("LTM_QEMU_DYLIB"), help="libqemu-arm.dylib the helper loads")
     ap.add_argument("--usbmuxd", type=Path, default=sources.path("usbmuxd") / "src/usbmuxd")
     ap.add_argument("--files", type=Path, default=HOME / "Developer/qemu-ios-files")
@@ -612,7 +613,7 @@ def main():
     rmtree(tools)
     tools.mkdir()
     log(f"building the session driver and helper in {tools}")
-    helper = check_sessions.build(argparse.Namespace(helper=str(a.helper) if a.helper else None), tools)
+    helper = check_sessions.build(argparse.Namespace(helper=str(a.helper) if a.helper else None, service_worker=a.service_worker), tools)
     a.lockdown_tz = check_sessions.build_lockdown_tz(tools, a.frameworks)
     if a.build_only:
         lock.close()
