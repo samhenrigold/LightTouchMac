@@ -7,12 +7,14 @@ entry the base was prepared from, every lock since the first firmwarekit):
 
   n45 old       an N45 base from before the 4-page map context fix (recipe 1): flagged, Prepare Again allowed
   n45 RC7       recipe 2 (the 4-page map fix; RC7's bases): not flagged
-  n72 old       recipe 1 bases before exact GPT/HFS size (RC7's): flagged across 2.x/3.x/4.x
+  n72 RC7       recipe 1 bases before exact GPT/HFS size (RC7's), never started since: not flagged across
+                2.x/3.x/4.x, because boot admission migrates n72 1 -> 2 in place at the next start
+                (FirmwareWire.admissionRecipeSteps); an N72 lock below every declared step (recipe 0) still is
   n72 current   recipe 2, even an older tool-version field: not flagged
   k48           recipe 1 entries (RC4 to RC7 bases): not flagged
 The RC7 cases pin the shipped recipes: a later bump flags every existing device, so it must change them knowingly.
   n72 migrated  recipe 1 with boot admission's migrated-recipe.json (recipe 2) in the device directory: not
-                flagged; a marker naming an older recipe doesn't lift it
+                flagged; nor with a marker naming recipe 1 (the admission step still applies)
   device.py     a lock with no entry (the Python preparer): not flagged; nor an unreadable lock
 Also: Prepare Again needs the preparer and a stopped device; Start stays the placeholder's button.
 """
@@ -42,16 +44,17 @@ cases = [  # name, entry, lock (dict, or raw text), flagged[, the device directo
     ('n45-old-3A101a', 'n45ap-3A101a', lock('n45ap-3A101a', recipe=1), True),
     ('n45-current', 'n45ap-4B1', lock('n45ap-4B1'), False),
     ('n45-rc7', 'n45ap-3A101a', lock('n45ap-3A101a', recipe=2), False),
-    ('n72-old-2x', 'n72ap-5F138', lock('n72ap-5F138', recipe=1), True),
-    ('n72-old-3x', 'n72ap-7E18', lock('n72ap-7E18', recipe=1), True),
-    ('n72-old-4x', 'n72ap-8C148', lock('n72ap-8C148', recipe=1), True),
+    ('n72-rc7-unmigrated-2x', 'n72ap-5F138', lock('n72ap-5F138', recipe=1), False),
+    ('n72-rc7-unmigrated-3x', 'n72ap-7E18', lock('n72ap-7E18', recipe=1), False),
+    ('n72-rc7-unmigrated-4x', 'n72ap-8C148', lock('n72ap-8C148', recipe=1), False),
+    ('n72-below-admission-steps', 'n72ap-7E18', lock('n72ap-7E18', recipe=0), True),
     ('n72-current', 'n72ap-7E18', lock('n72ap-7E18'), False),
     ('n72-exact-gpt', 'n72ap-8C148', lock('n72ap-8C148', recipe=2), False),
     ('n72-current-old-tool-field', 'n72ap-7E18', lock('n72ap-7E18', tool='0.1.0'), False),
     ('n72-rc7-migrated-2x', 'n72ap-5F138', lock('n72ap-5F138', recipe=1), False, {'recipe': 2, 'step': 'n72-exact-gpt'}),
     ('n72-rc7-migrated-3x', 'n72ap-7E18', lock('n72ap-7E18', recipe=1), False, {'recipe': 2, 'step': 'n72-exact-gpt'}),
     ('n72-rc7-migrated-4x', 'n72ap-8C148', lock('n72ap-8C148', recipe=1), False, {'recipe': 2, 'step': 'n72-exact-gpt'}),
-    ('n72-rc7-marker-too-old', 'n72ap-7E18', lock('n72ap-7E18', recipe=1), True, {'recipe': 1}),
+    ('n72-rc7-marker-recipe-1', 'n72ap-7E18', lock('n72ap-7E18', recipe=1), False, {'recipe': 1}),
     ('k48-rc4', 'k48ap-7B500', lock('k48ap-7B500', tool='0.1.0'), False),
     ('k48-rc5', 'k48ap-8C148', lock('k48ap-8C148'), False),
     ('k48-rc7', 'k48ap-7B500', lock('k48ap-7B500', recipe=1), False),

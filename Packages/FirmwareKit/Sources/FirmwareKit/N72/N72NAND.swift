@@ -9,6 +9,7 @@
 
 import Foundation
 import HostRuntime
+import FirmwareSchema
 import zlib
 
 public enum N72NAND {
@@ -163,8 +164,8 @@ public enum N72NAND {
 
     // MARK: - Recipe 1 -> 2 in place
 
-    /// The recipe whose GPT ends at the HFS extent (0b43f26).
-    public static let exactGPTRecipe = 2
+    /// The recipe whose GPT ends at the HFS extent (0b43f26), as FirmwareWire.admissionRecipeSteps declares it.
+    public static let exactGPTRecipe = FirmwareWire.admissionRecipeSteps["n72ap"]![1]!
     static let legacyGPTSlack = 11
 
     /// A stopped device whose base still has recipe 1's overlong GPT gets recipe 2's two GPT pages (header, entry;

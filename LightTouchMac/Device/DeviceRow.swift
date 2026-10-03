@@ -284,7 +284,8 @@ nonisolated struct DeviceRow: Equatable, Sendable {
     /// The recipe version that made a base: firmwarekit's lock keeps the catalog entry it was prepared from
     /// (`entry.content.recipe.version`, every lock since the first firmwarekit). Nil for an unreadable lock or one
     /// without it (a device.py base): nothing to claim. `device`: the device's directory, whose
-    /// FirmwareWire.migratedRecipeFile raises it to the recipe boot admission migrated its storage to.
+    /// FirmwareWire.migratedRecipeFile raises it to the recipe boot admission migrated its storage to, and
+    /// FirmwareWire.admissionRecipeSteps to the one admission will migrate it to at its next start.
     static func baseRecipeVersion(_ lock: URL, device: URL? = nil) -> Int? {
         func object(_ url: URL?) -> [String: Any]? {
             url.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
@@ -292,7 +293,9 @@ nonisolated struct DeviceRow: Equatable, Sendable {
         guard let entry = object(lock)?["entry"] as? [String: Any], let content = entry["content"] as? [String: Any],
               let recipe = content["recipe"] as? [String: Any], let version = recipe["version"] as? Int else { return nil }
         let migrated = object(device?.appendingPathComponent(FirmwareWire.migratedRecipeFile))?["recipe"] as? Int
-        return max(version, migrated ?? 0)
+        // ponytail: a migration admission later declines (a guest-rewritten GPT) still reads as done; a declined
+        // marker from admission would let this flag those few.
+        return FirmwareWire.admittedRecipe(max(version, migrated ?? 0), board: content["board"] as? String)
     }
 
     /// The accessory's words: what VoiceOver reads after the version.

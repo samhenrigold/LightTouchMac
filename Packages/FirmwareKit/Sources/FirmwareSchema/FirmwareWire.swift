@@ -8,6 +8,18 @@ nonisolated public enum FirmwareWire {
     /// admission re-applies the migration's pages to a fresh overlay on every start.
     public static let migratedRecipeFile = "migrated-recipe.json"
 
+    /// Recipe steps boot admission migrates in place, per board: a stopped base at recipe `key` reaches `value` at
+    /// its next start (FirmwareBootAdmission), so the GUI counts it as already there and offers no Prepare Again.
+    /// The one list of such steps; a migration that isn't listed here leaves its devices flagged.
+    public static let admissionRecipeSteps: [String: [Int: Int]] = ["n72ap": [1: 2]]
+
+    /// `version` after every admission step for `board` (FirmwareWire.admissionRecipeSteps).
+    public static func admittedRecipe(_ version: Int, board: String?) -> Int {
+        var version = version
+        while let next = board.flatMap({ admissionRecipeSteps[$0]?[version] }), next > version { version = next }
+        return version
+    }
+
     /// Stopped launch admission reply shared by all host clients. Generation
     /// paths remain durable record data, rather than a second GUI device schema.
     public struct BootAdmission: Codable, Sendable, Equatable {
