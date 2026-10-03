@@ -156,6 +156,15 @@ extension String {
     var webProxy: WebProxyEndpoint?
     init(name: String, profile: DeviceProfile) { self.name = name; self.profile = profile }
     var dir: URL { work.appendingPathComponent(name) }
+    /// When `dir` is an app state's device (a link to Devices/<uuid> with its device.json): its storage key, and the
+    /// boot is admitted and pinned as the app's (EmulatorController: managed admission, instance.storage.key).
+    var managedKey: String? {
+        let device = dir.resolvingSymlinksInPath()
+        guard device.deletingLastPathComponent().lastPathComponent == "Devices", UUID(uuidString: device.lastPathComponent) != nil,
+              let data = try? Data(contentsOf: device.appendingPathComponent("device.json")),
+              let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (record["storage"] as? [String: Any])?["key"] as? String
+    }
 
     /// The same runtime boot preparation as the GUI, with explicit test paths and no audio.
     func boot(generation: Int, guestPackage: String? = nil) throws {
@@ -178,12 +187,12 @@ extension String {
                 let nor = profile == .iPodTouch1G || FileManager.default.fileExists(atPath: base.appendingPathComponent("nor.bin").path)
                     ? dir.appendingPathComponent("nor.bin") : nil
                 prepared = try PreparedDeviceBoot.prepare(board: profile == .iPad1 ? .k48 : .n45,
-                    base: base, overlay: overlay, writableNOR: nor, storageKey: nil,
+                    base: base, overlay: overlay, writableNOR: nor, storageKey: managedKey,
                     bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Self.files))
                 if profile == .iPad1 { offer = try iPadOffer(base: base) }
             } else if let base = preparedBase {
                 prepared = try PreparedDeviceBoot.prepare(board: .n72, base: base, overlay: overlay,
-                    writableNOR: dir.appendingPathComponent("nor.bin"), storageKey: nil,
+                    writableNOR: dir.appendingPathComponent("nor.bin"), storageKey: managedKey,
                     bootrom: BootRecipe.bootrom(profile.bootromName, filesRoot: Self.files))
             } else {
                 let files = ipod ?? IPodFiles(nand: Self.ipodNAND, nor: Self.files + "/ios3/nor_7E18.bin", iBoot: Self.files + "/ios3/iBoot.bin")
@@ -228,7 +237,7 @@ extension String {
             guard FileManager.default.isExecutableFile(atPath: worker.path) else {
                 throw DeviceError.preflight("firmwarekit boot admission worker missing: \(worker.path)")
             }
-            let changed = try await FirmwareTool.admitBoot(device: self.dir, managed: false, executable: worker)
+            let changed = try await FirmwareTool.admitBoot(device: self.dir.resolvingSymlinksInPath(), managed: self.managedKey != nil, executable: worker)
             emit("bootAdmission", ["device": self.name, "changed": changed, "generation": generation])
         }) { result in
             switch result {
