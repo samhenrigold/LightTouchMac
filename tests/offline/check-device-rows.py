@@ -184,7 +184,7 @@ import Foundation
                      == "Prepared without activation")
         // The prepare screen: the catalog note (untested, experimental, a beta's source) is one popover's text,
         // and disk numbers appear only when the volume can't hold the download and the preparation.
-        precondition(row(beta1).catalogNote?.hasPrefix("Untested. ") == true && row(iPad).catalogNote == nil, row(beta1).catalogNote ?? "nil")
+        precondition(row(beta1).catalogNote?.hasPrefix("Experimental. ") == true && row(entry("n45ap-3B48b")).catalogNote?.hasPrefix("Untested") == true && row(iPad).catalogNote == nil, row(beta1).catalogNote ?? "nil")
         precondition(row(iPod4).catalogNote?.hasPrefix("Experimental.") == true, row(iPod4).catalogNote ?? "nil")
         let needed = 479001595 + iPad.estimates.peakBytes
         precondition(needed > 479001595 && row(iPad).spaceShortage(available: needed) == nil)
