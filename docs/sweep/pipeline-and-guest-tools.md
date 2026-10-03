@@ -41,7 +41,7 @@ Same job twice: **it_agent vs it_pbd** (clipboard; the only real duplicate). pre
 | patch_codesign_gate.py:52-65 | drives the two above; GOLDEN path hardcoded | orchestration | delete | no |
 | README-appsync.md:22-25 | installd `0x9F34`,`0x605C`; cache `0x1750EF8` | doc of retired offsets | delete/mark historical | no |
 | patch_launchd_env.py:52-67 | bplist search by size+Label in raw NAND | pattern (not address) | superseded by mounted edit (ipad1_rootfs.rewrite_plist:273) | no |
-| patch_gpt.py:21 | `sys.path.insert(0, "/Users/shg/Developer/qemu-ios/.claude/worktrees/consolidate/imgtools")` | dead absolute path | delete | no |
+| patch_gpt.py:21 | `sys.path.insert(0, "<absolute path to a since-removed worktree>/imgtools")` | dead absolute path | delete | no |
 | patch_syscfg.py:46-59 | SysCfg found by magic scan | pattern | fine; superseded by build_nor.py | no |
 | appsync_cachepatch.py:15-17 | symbol `_MISValidateSignature`, Thumb entry check | **symbol** (model) | keep | no |
 | ipad1_kboot.py:63 / KBoot.swift:26 | DEFAULT_BOOT_ARGS incl. `enable-hsic=1` (Py) vs without (Swift) | per-build boot-args, **drifted** | manifest `boot_args` | medium |

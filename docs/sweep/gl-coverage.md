@@ -4,7 +4,7 @@
 
 Branch `gl-coverage` in `/Users/shg/Developer/qemu-ios-gl-coverage` (worktree off ipad1 5e4ab3e6bf), 6 commits, tree clean, `build/qemu-system-arm` built at the tip. Nothing touched in ~/Developer/qemu-ios or LightTouchMac; no main/ipod_touch_2g merges; no device identifiers in tracked files.
 
-## Commits (all end with the Claude-Session line)
+## Commits
 - 5ab34bdbda GL bridge: count every refusal, paint it magenta under gles-debug, take the rest of what the firmwares produce
 - 87c529f872 GL bridge: a guest page being faulted in is not a refusal
 - 4f520566f0 tests/ipad1: a --gl-test device's gles leg is the fixture; its screens are not read for magenta

@@ -16,4 +16,4 @@ The IOP as a real second core (QEMU arm946 + 8 cp15 overrides) running Apple's E
 - **Not done**: 4.3 clean-shutdown gate (behind the fsck gap), 5.1.1 on the core (its FMI kext waits for ring-1 endpoint-activation messages, which the real firmware produces), SDHCI model for the SDIO task (Wi-Fi off with the core: "SDIO In Reset"), retired-HLE deletion, ledger updates. Order and gates: the fsck read gap, then the 4.3 shutdown gate (clean power-off, no rescan); 5.1.1 to SpringBoard on the core; SDHCI registers until Wi-Fi joins on the core.
 
 ### Housekeeping
-Scratch cleaned (367 GB free); `~/Developer/qemu-ios-files/ios5-spike/` keeps IPSWs, keys, decrypted components, IOP firmware images and tools (3.8 GB); matrix-8L1 untouched; no emulator of mine running; every commit carries the Claude-Session trailer.
+Scratch cleaned (367 GB free); `~/Developer/qemu-ios-files/ios5-spike/` keeps IPSWs, keys, decrypted components, IOP firmware images and tools (3.8 GB); matrix-8L1 untouched; no emulator of mine running.
