@@ -10,3 +10,4 @@ __pycache__/
 tools/activation/build/
 
 build/
+docs/matrix-results.json.lock
