@@ -617,6 +617,7 @@ def notarize(args, env, log, state, app):
 
 
 PREPARE_ENTRY = 'k48ap-7B500'
+IPSW_CACHE = Path.home() / 'Library/Caches/gold.samhenri.LightTouchMac/IPSW'
 # verify: each entry is prepared by the bundled firmwarekit, then booted headless through the bundled helper,
 # dylib and usbmuxd (tests/sessions/check-sessions.py --single): lit, lockdown, AFC round trips past 16 KiB, an IPA
 # install, a clean shutdown. One entry per run; rerun --stage verify until every entry is current.
@@ -665,10 +666,12 @@ def check_prepare(args, log, state, app):
         return
     entry_id = pending[0]
     board, ipsw = VERIFY_ENTRIES[entry_id]
-    ipsw = ipsw or args.verify_ipsw
-    require(ipsw, f'{entry_id} IPSW for the in-bundle prepare check')
     catalog = json.loads((app / 'Contents/Resources/firmware-catalog.json').read_text())
     entry = next(e for e in catalog['entries'] if e['id'] == entry_id)
+    ipsw = ipsw or args.verify_ipsw
+    if not (ipsw and ipsw.exists()):   # else the app's IPSW cache, which names each by the catalog's sha1
+        ipsw = IPSW_CACHE / f'{entry["source"].get("sha1")}.ipsw'
+    require(ipsw, f'{entry_id} IPSW for the in-bundle prepare check')
     work, frames = args.output / 'prepare-check', args.output / 'verify-frames' / entry_id
 
     def clean():
