@@ -4,7 +4,7 @@
 Compiles the real view controller and sheet with the real catalog, SidebarList and DeviceRow, and stubs for the
 app singletons they ask (DeviceSessionHost, FirmwareJobs, the sessions). Everything lays out in windows that are
 never ordered front: nothing appears on screen. PNGs land in --out (default a temp dir):
-sidebar-{one-kind,mixed,renamed,empty}.png and add-device.png.
+sidebar-{one-kind,mixed,renamed,empty,multi-select}.png, batch-delete-alert.png and add-device.png.
 
 Checks what the user sees, from the rendered cells: one kind of device titles rows by version; mixed kinds show
 the short sidebar name ("iPod touch 2G", not the marketing name) over the version; a custom name shows over
@@ -12,6 +12,15 @@ the short sidebar name ("iPod touch 2G", not the marketing name) over the versio
 menu's Rename, typing, ending the edit) saves the name to defaults; Delete on a row with nothing on disk removes
 it (saved), on a prepared one it asks the delegate to delete instead; an empty sidebar shows Add Device…. A
 download starting for an entry not in the list adds it. The sheet lists every catalog entry once.
+
+Device artwork: every catalog board's profile resolves to a type macOS declares (com.apple.device-model-code), the
+iPod 1G's and 2G's differ, each mixed row and sheet header shows that artwork (not the SF Symbol fallback, and a
+different picture per board), and an unknown model code gets the fallback symbol.
+
+Several rows: ⌘A selects every row and no single entry; Delete over a mixed selection (two with nothing on disk, one
+prepared, one running) asks ONE question naming the prepared device and the skipped one; Cancel changes nothing,
+Delete deletes the prepared one and removes the others, the running one stays. Nothing prepared: no question. All
+running or busy: Edit ▸ Delete is dimmed.
 """
 from pathlib import Path
 import sys
@@ -50,11 +59,14 @@ final class DeviceSessionHost {
     let library = DeviceLibrary()
     var prepared: [String: UUID] = [:]
     var downloaded: Set<String> = []
+    var running: Set<String> = []
+    var deleted: [String] = []
+    func delete(_ instance: StubInstance) throws { deleted.append(instance.firmware); prepared[instance.firmware] = nil }
     init(catalog: FirmwareCatalog) { self.catalog = catalog }
     func instance(for entry: FirmwareCatalog.Entry) -> StubInstance? { prepared[entry.id].map { _ in StubInstance(firmware: entry.id) } }
     func session(for entry: FirmwareCatalog.Entry) -> DeviceSession? { nil }
     func row(for entry: FirmwareCatalog.Entry) -> DeviceRow {
-        DeviceRow(entry: entry, instanceID: prepared[entry.id], session: nil, job: FirmwareJobs.shared.jobs[entry.id],
+        DeviceRow(entry: entry, instanceID: prepared[entry.id], session: running.contains(entry.id) ? .running : nil, job: FirmwareJobs.shared.jobs[entry.id],
                   downloaded: downloaded.contains(entry.id))
     }
 }
@@ -66,7 +78,8 @@ import SwiftUI
 
 final class Delegate: DeviceLibraryDelegate {
     var deletes: [String] = []
-    func library(_ library: DeviceLibraryViewController, didSelect entry: FirmwareCatalog.Entry?) {}
+    var selected: [FirmwareCatalog.Entry?] = []
+    func library(_ library: DeviceLibraryViewController, didSelect entry: FirmwareCatalog.Entry?) { selected.append(entry) }
     func libraryRowsDidChange(_ library: DeviceLibraryViewController) {}
     func library(_ library: DeviceLibraryViewController, canPerform action: DeviceAction, for entry: FirmwareCatalog.Entry) -> Bool { true }
     func library(_ library: DeviceLibraryViewController, perform action: DeviceAction, for entry: FirmwareCatalog.Entry) {
@@ -140,6 +153,37 @@ final class Delegate: DeviceLibraryDelegate {
         (vc, w) = sidebar(["n72ap-8C148", "k48ap-7B500", "n72ap-8B5080c", "n45ap-4B1"], host: host)
         seen = rows(vc)
         if seen != [["iPad", "iOS 3.2.2"], ["iPod touch 1G", "iOS 1.1.5"], ["iPod touch 2G", "iOS 4.1 Beta 1"], ["iPod touch 2G", "iOS 4.2.1"]] { fail("mixed: \(seen)") }
+
+        // Artwork: macOS's declared type per board, the two iPods apart, the fallback for a model macOS doesn't know.
+        var types: [String: String] = [:]
+        for board in Set(catalog.entries.map(\.board)).sorted() {
+            guard let profile = catalog.entries.first(where: { $0.board == board })?.profile else { fail("\(board): no profile"); continue }
+            guard let type = profile.deviceType, type.contentType.isDeclared else { fail("\(board) (\(profile.productType)): no declared type"); continue }
+            types[board] = type.identifier
+            if profile.icon.isTemplate { fail("\(board)'s icon is the SF Symbol fallback") }
+        }
+        print("types: \(types)")
+        if types["n45ap"] == nil || types["n45ap"] == types["n72ap"] { fail("the iPod 1G and 2G share a type: \(types)") }
+        if Set(types.values).count != types.count { fail("boards share a type: \(types)") }
+        if !DeviceProfile.icon(modelCode: "Bogus9,9", fallbackSymbol: "ipodtouch").isTemplate { fail("an unknown model code didn't fall back to the symbol") }
+        /// The image as 24×24 pixels, to tell pictures apart.
+        func pixels(_ image: NSImage?) -> Data? {
+            guard let image, let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 24, pixelsHigh: 24, bitsPerSample: 8,
+                                                        samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                                        bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            image.draw(in: NSRect(x: 0, y: 0, width: 24, height: 24))
+            NSGraphicsContext.restoreGraphicsState()
+            return rep.bitmapData.map { Data(bytes: $0, count: rep.bytesPerRow * 24) }
+        }
+        let mixedOutline = all(vc.view).compactMap { $0 as? NSOutlineView }.first!
+        let rowIcons = (0..<mixedOutline.numberOfRows).map { (mixedOutline.view(atColumn: 0, row: $0, makeIfNecessary: true) as? NSTableCellView)?.imageView }
+        if rowIcons.contains(where: { $0?.image == nil || $0!.isHidden || $0!.image!.isTemplate }) { fail("a mixed row shows no device artwork") }
+        let iconPixels = rowIcons.map { pixels($0?.image) }
+        // iPad, 1G, 2G, 2G: three pictures, the 2G's twice.
+        if Set(iconPixels.prefix(3)).count != 3 || iconPixels[2] != iconPixels[3] { fail("the rows' artwork doesn't follow the board") }
+        if let icon = rowIcons[0], icon.frame.height < 24 || icon.frame.height > 34 { fail("a two-line row's icon is \(icon.frame.size)") }
         try render(vc.view, "sidebar-mixed")
 
         // Rename in place through the context menu's Rename: the title turns into a field; ending the edit saves.
@@ -195,6 +239,58 @@ final class Delegate: DeviceLibraryDelegate {
         if vc.entries.contains(where: { $0.id == "n72ap-8B117" }) { fail("a failed download's row came back") }
         FirmwareJobs.shared.jobs = [:]
 
+        // Several rows: ⌘A, then one Delete for the lot.
+        let multi = DeviceSessionHost(catalog: catalog)
+        multi.prepared = ["n72ap-8C148": UUID(), "k48ap-7B500": UUID()]
+        multi.running = ["k48ap-7B500"]
+        multi.downloaded = ["n72ap-8B117"]
+        (vc, w) = sidebar(["n72ap-8C148", "k48ap-7B500", "n72ap-8B117", "n45ap-4B1"], host: multi)
+        let multiDelegate = Delegate()
+        vc.delegate = multiDelegate
+        var alerts: [NSAlert] = []
+        var answer = NSApplication.ModalResponse.alertSecondButtonReturn
+        vc.presentAlert = { alert, _, done in alerts.append(alert); done(answer) }
+        let multiOutline = all(vc.view).compactMap { $0 as? NSOutlineView }.first!
+        w.makeFirstResponder(multiOutline)
+        multiOutline.selectAll(nil)
+        if vc.selectedEntries.count != 4 || vc.selectedEntry != nil { fail("⌘A: \(vc.selectedEntries.map(\.id)), single \(String(describing: vc.selectedEntry?.id))") }
+        if multiDelegate.selected.last != .some(nil) { fail("several rows selected still name one entry to the window") }
+        if !vc.canRemoveTargets { fail("Delete dimmed over a removable selection") }
+        // Offscreen, the selection's material draws black (as in sidebar-renamed's note): the rows' artwork shows on it.
+        try render(vc.view, "sidebar-multi-select")
+        multiOutline.keyDown(with: delete)   // Cancel
+        if alerts.count != 1 { fail("a mixed batch asked \(alerts.count) questions") }
+        if let alert = alerts.first {
+            if alert.messageText != "Delete 3 devices?" { fail("batch question: \(alert.messageText)") }
+            if !alert.informativeText.contains("iPod touch iOS 4.2.1") || !alert.informativeText.contains("iPad iOS 3.2.2") {
+                fail("the question doesn't name the prepared and the skipped device: \(alert.informativeText)")
+            }
+            alert.layout()
+            try render(alert.window.contentView!, "batch-delete-alert")
+        }
+        if vc.entries.count != 4 || !multi.deleted.isEmpty || !multiDelegate.deletes.isEmpty { fail("Cancel changed the sidebar: \(vc.entries.map(\.id)) \(multi.deleted)") }
+        answer = .alertFirstButtonReturn
+        multiOutline.selectAll(nil)
+        multiOutline.keyDown(with: delete)
+        if alerts.count != 2 { fail("the second Delete asked \(alerts.count - 1) questions") }
+        if multi.deleted != ["n72ap-8C148"] || !multiDelegate.deletes.isEmpty { fail("batch deleted \(multi.deleted), per-row deletes \(multiDelegate.deletes)") }
+        if vc.entries.map(\.id) != ["k48ap-7B500"] || defaults.stringArray(forKey: SidebarList.entriesKey) != ["k48ap-7B500"] {
+            fail("after the batch: \(vc.entries.map(\.id))")
+        }
+        // Nothing prepared: no question. All running or busy: Delete dims.
+        (vc, w) = sidebar(["k48ap-7B500", "n72ap-8B117", "n45ap-4B1"], host: multi)
+        vc.delegate = multiDelegate
+        vc.presentAlert = { alert, _, done in alerts.append(alert); done(answer) }
+        let plainOutline = all(vc.view).compactMap { $0 as? NSOutlineView }.first!
+        plainOutline.selectRowIndexes([1, 2], byExtendingSelection: false)
+        plainOutline.keyDown(with: delete)
+        if alerts.count != 2 || vc.entries.map(\.id) != ["k48ap-7B500"] { fail("unprepared batch: \(alerts.count) questions, left \(vc.entries.map(\.id))") }
+        FirmwareJobs.shared.jobs["n72ap-8B117"] = .downloading(fraction: 0.5)
+        plainOutline.selectAll(nil)
+        let editDelete = NSMenuItem(title: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: "")
+        if vc.selectedEntries.count != 2 || vc.validateMenuItem(editDelete) { fail("Edit ▸ Delete enabled over running and downloading rows") }
+        FirmwareJobs.shared.jobs = [:]
+
         // Empty: the sidebar's own Add Device….
         (vc, w) = sidebar([], host: DeviceSessionHost(catalog: catalog))
         let add = all(vc.view).compactMap { $0 as? NSButton }.filter { visible($0) && $0.title == "Add Device…" }
@@ -210,6 +306,7 @@ final class Delegate: DeviceLibraryDelegate {
                                   selection: ["n72ap-8B117"], onAdd: { _ in }, onCancel: {})
         if sheet.groups.flatMap(\.entries).map(\.id) != catalog.entries.map(\.id) { fail("the sheet's entries aren't the catalog's, in its order") }
         if sheet.groups.map(\.name) != ["iPad", "iPod touch", "iPod touch (2nd generation)"] { fail("sheet groups: \(sheet.groups.map(\.name))") }
+        if sheet.groups.contains(where: \.icon.isTemplate) || Set(sheet.groups.map { pixels($0.icon) }).count != 3 { fail("the sheet's headers don't show each device's artwork") }
         try renderSheet(sheet, "add-device")
         // The iPod touch (2nd generation) part, which a 480-point sheet shows after scrolling.
         var ipod = catalog
@@ -224,7 +321,7 @@ final class Delegate: DeviceLibraryDelegate {
         }
 
         precondition(failures.isEmpty, failures.joined(separator: "\n"))
-        print("PASS: sidebar titles (one kind, mixed, renamed), rename saves, Delete removes or asks, empty Add Device…, the Add Device sheet")
+        print("PASS: sidebar titles (one kind, mixed, renamed), device artwork, rename saves, Delete removes or asks, multi-select batch Delete, empty Add Device…, the Add Device sheet")
     }
 }
 '''
@@ -240,6 +337,6 @@ with tempfile.TemporaryDirectory(prefix='ltm-sidebar-ui-') as tmp:
                     str(app / 'Library/FirmwareCatalog.swift'), str(app / 'Device/DeviceProfile.swift'),
                     str(app / 'Device/DeviceRow.swift'), str(app / 'Library/SidebarList.swift'),
                     str(app / 'UI/DroppedFiles.swift'), str(app / 'UI/DeviceLibraryViewController.swift'),
-                    str(app / 'UI/AddDeviceView.swift'), str(tmp / 'stubs.swift'), str(tmp / 'main.swift'),
+                    str(app / 'UI/AddDeviceView.swift'), str(app / 'UI/AppleDeviceType.swift'), str(app / 'UI/DeviceProfile+Icon.swift'), str(tmp / 'stubs.swift'), str(tmp / 'main.swift'),
                     '-o', str(tmp / 'check')], check=True)
     subprocess.run([str(tmp / 'check'), str(app / 'Resources/firmware-catalog.json'), str(out)], check=True, timeout=60)

@@ -8,7 +8,7 @@ struct AddDeviceView: View {
     struct Group: Identifiable {
         let id: String
         let name: String
-        let symbol: String
+        let icon: NSImage
         let entries: [FirmwareCatalog.Entry]
     }
 
@@ -27,7 +27,8 @@ struct AddDeviceView: View {
             let entries = catalog.entries.filter { $0.board == board }
             let profile = entries[0].profile
             return Group(id: board, name: profile?.marketingName ?? entries[0].productType,
-                         symbol: profile == .iPad1 ? "ipad" : "ipodtouch", entries: entries)
+                         icon: profile?.icon ?? DeviceProfile.icon(modelCode: entries[0].productType, fallbackSymbol: "questionmark.square.dashed"),
+                         entries: entries)
         }
         self.added = added
         self.downloaded = downloaded
@@ -51,7 +52,11 @@ struct AddDeviceView: View {
                                 .selectionDisabled(added.contains(entry.id))
                         }
                     } header: {
-                        Label(group.name, systemImage: group.symbol)
+                        Label {
+                            Text(group.name)
+                        } icon: {
+                            Image(nsImage: group.icon).resizable().scaledToFit().frame(width: 20, height: 20)
+                        }
                     }
                 }
             }

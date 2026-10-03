@@ -18,7 +18,8 @@ import UniformTypeIdentifiers
     func library(_ library: DeviceLibraryViewController, importIPSW url: URL, for entry: FirmwareCatalog.Entry?)
 }
 
-final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate, NSTextFieldDelegate {
+final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate, NSTextFieldDelegate,
+                                         NSMenuItemValidation {
 
     /// Outline items are objects so the outline can keep them.
     private final class Entry {
@@ -60,14 +61,15 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
         outline.dataSource = self
         outline.delegate = self
         outline.allowsEmptySelection = true
-        outline.allowsMultipleSelection = false
+        // ⌘-click, ⇧-click and ⌘A pick several rows for one Delete; every other command wants exactly one.
+        outline.allowsMultipleSelection = true
         outline.setAccessibilityLabel("Devices")
         outline.menu = NSMenu()
         outline.menu?.delegate = self
         outline.registerForDraggedTypes([.fileURL])
         outline.target = self
         outline.doubleAction = #selector(renameClicked(_:))
-        outline.onDelete = { [weak self] in self?.targetEntry.map { self?.remove($0) } }
+        outline.onDelete = { [weak self] in self?.removeTargets() }
 
         let scroll = NSScrollView()
         scroll.documentView = outline
@@ -108,6 +110,25 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
 
     /// The row's name in titles and alerts: the user's, else nil.
     func customName(for entry: FirmwareCatalog.Entry) -> String? { list.names[entry.id] }
+
+    /// The row in an alert or a panel: “Lab iPad”, else iPad iOS 3.2.2.
+    func displayName(for entry: FirmwareCatalog.Entry) -> String {
+        customName(for: entry).map { "“\($0)”" } ?? "\(entry.profile?.displayName ?? entry.productType) iOS \(entry.version)"
+    }
+
+    /// Edit ▸ Delete while the sidebar has the focus (and its Delete key, SidebarOutlineView).
+    @objc func delete(_ sender: Any?) { removeTargets() }
+
+    /// Dims Edit ▸ Delete and the several-row Delete when none of the rows can go.
+    var canRemoveTargets: Bool {
+        let targets = targetEntries
+        guard targets.count > 1 else {
+            return targets.first.map { row(for: $0) }.map {
+                $0.instanceID != nil ? delegate?.library(self, canPerform: .delete, for: $0.entry) == true : $0.canRemoveFromSidebar
+            } ?? false
+        }
+        return !batch(targets).isEmpty
+    }
 
     /// Adds entries (the Add Device sheet) and selects the first of them.
     func add(_ ids: [String]) {
@@ -161,9 +182,86 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
         if list.add(owned.filter { host.catalog.entry(id: $0) != nil }) { listDidChange() }
     }
 
+    /// What Delete does with several rows: rows with nothing on disk leave the list, prepared devices are deleted
+    /// (after one question for the lot), running ones and ones with a job in flight are skipped.
+    struct Batch {
+        var remove: [FirmwareCatalog.Entry] = []
+        var delete: [FirmwareCatalog.Entry] = []
+        var skipped: [FirmwareCatalog.Entry] = []
+        var isEmpty: Bool { remove.isEmpty && delete.isEmpty }
+    }
+
+    func batch(_ entries: [FirmwareCatalog.Entry]) -> Batch {
+        var batch = Batch()
+        for entry in entries {
+            let row = row(for: entry)
+            if row.instanceID != nil, row.canRemoveFromSidebar, delegate?.library(self, canPerform: .delete, for: entry) == true {
+                batch.delete.append(entry)
+            } else if row.instanceID == nil, row.canRemoveFromSidebar {
+                batch.remove.append(entry)
+            } else {
+                batch.skipped.append(entry)
+            }
+        }
+        return batch
+    }
+
+    /// Delete, Edit ▸ Delete, File ▸ Delete Device… and the context menu: one row goes the single-row way
+    /// (`remove`); several ask once if any is prepared, else leave at once.
+    func removeTargets() {
+        let targets = targetEntries
+        guard targets.count > 1 else { targets.first.map(remove); return }
+        let batch = batch(targets)
+        guard !batch.isEmpty else { return }
+        guard !batch.delete.isEmpty, let window = view.window else { return finish(batch) }
+        presentAlert(Self.batchAlert(batch, name: displayName(for:)), window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            // Asked again on the answer: a device started while the question was up stays.
+            finish(self.batch(batch.remove + batch.delete))
+        }
+    }
+
+    /// Shows the batch question; a check answers it without a window on screen.
+    var presentAlert: (NSAlert, NSWindow, @escaping (NSApplication.ModalResponse) -> Void) -> Void = { alert, window, done in
+        alert.beginSheetModal(for: window, completionHandler: done)
+    }
+
+    static func batchAlert(_ batch: Batch, name: (FirmwareCatalog.Entry) -> String) -> NSAlert {
+        let count = batch.remove.count + batch.delete.count
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = count == 1 ? "Delete \(name(batch.delete[0]))?" : "Delete \(count) devices?"
+        var info = "This permanently removes the apps, settings, and saved state of "
+            + ListFormatter.localizedString(byJoining: batch.delete.map(name)) + "."
+        if !batch.skipped.isEmpty {
+            info += " " + ListFormatter.localizedString(byJoining: batch.skipped.map(name))
+                + (batch.skipped.count == 1 ? " is" : " are") + " running or busy and stays."
+        }
+        alert.informativeText = info
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        return alert
+    }
+
+    private func finish(_ batch: Batch) {
+        for entry in batch.delete {
+            guard let instance = host.instance(for: entry) else { continue }
+            do { try host.delete(instance) } catch {
+                if let window = view.window { NSAlert(error: error).beginSheetModal(for: window) }
+                break
+            }
+            list.remove(entry.id)
+        }
+        batch.remove.forEach { list.remove($0.id) }
+        listDidChange()
+    }
+
     // MARK: - Selection
 
-    var selectedEntry: FirmwareCatalog.Entry? { entry(at: outline.selectedRow) }
+    /// The one selected row; nil with none or several (single-device commands need exactly one).
+    var selectedEntry: FirmwareCatalog.Entry? { outline.selectedRowIndexes.count == 1 ? entry(at: outline.selectedRow) : nil }
+    var selectedEntries: [FirmwareCatalog.Entry] { outline.selectedRowIndexes.compactMap(entry(at:)) }
 
     func row(for entry: FirmwareCatalog.Entry) -> DeviceRow { rows[entry.id] ?? host.row(for: entry) }
 
@@ -181,9 +279,18 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
         row < 0 ? nil : (outline.item(atRow: row) as? Entry)?.entry
     }
 
-    /// The row a command acts on: the clicked one while its context menu is open.
+    /// The rows a command acts on: while a context menu is open, the selection if the clicked row is in it, else
+    /// the clicked row alone (AppKit's rule); otherwise the selection.
+    var targetEntries: [FirmwareCatalog.Entry] {
+        let clicked = outline.clickedRow
+        guard clicked >= 0, !outline.selectedRowIndexes.contains(clicked) else { return selectedEntries }
+        return entry(at: clicked).map { [$0] } ?? []
+    }
+
+    /// A single-row command's row: the one target, nil with several.
     private var targetEntry: FirmwareCatalog.Entry? {
-        outline.clickedRow >= 0 ? entry(at: outline.clickedRow) : selectedEntry
+        let targets = targetEntries
+        return targets.count == 1 ? targets[0] : nil
     }
 
     // MARK: - State
@@ -302,6 +409,14 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        let targets = targetEntries
+        if targets.count > 1 {
+            let batch = batch(targets)
+            let remove = NSMenuItem(title: Self.batchTitle(batch), action: #selector(removeFromMenu(_:)), keyEquivalent: "")
+            remove.target = self
+            menu.addItem(remove)
+            return
+        }
         guard let entry = targetEntry else { return }
         for (action, title) in Self.menuActions {
             guard let action else {
@@ -326,7 +441,18 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
         }
     }
 
-    @objc private func removeFromMenu(_ sender: Any?) { targetEntry.map(remove) }
+    @objc private func removeFromMenu(_ sender: Any?) { removeTargets() }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        [#selector(delete(_:)), #selector(removeFromMenu(_:))].contains(item.action) ? canRemoveTargets : true
+    }
+
+    /// The several-row Delete's title: Delete N Devices… when any is prepared (it asks), else Remove N Devices.
+    static func batchTitle(_ batch: Batch) -> String {
+        let count = batch.remove.count + batch.delete.count
+        let noun = count == 1 ? "Device" : count == 0 ? "Devices" : "\(count) Devices"
+        return batch.delete.isEmpty ? "Remove \(noun)" : "Delete \(noun)…"
+    }
 
     @objc private func contextAction(_ sender: NSMenuItem) {
         guard let action = sender.representedObject as? DeviceAction, let entry = targetEntry else { return }
@@ -404,11 +530,16 @@ final class DeviceRowCell: NSTableCellView {
     private let detail = NSTextField(labelWithString: "")
     private let ring = NSProgressIndicator()
     private let symbol = NSImageView()
+    /// The device's artwork (DeviceProfile.icon), sized to the row: as the cell's imageView, selection restyles it.
+    private let icon = NSImageView()
+    private lazy var iconSize = icon.widthAnchor.constraint(equalToConstant: 18)
 
     init() {
         super.init(frame: .zero)
         identifier = Self.identifier
         textField = title
+        imageView = icon
+        icon.imageScaling = .scaleProportionallyUpOrDown
         title.lineBreakMode = .byTruncatingTail
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -440,7 +571,7 @@ final class DeviceRowCell: NSTableCellView {
         text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let stack = NSStackView()
-        stack.setViews([text], in: .leading)
+        stack.setViews([icon, text], in: .leading)
         stack.setViews([detail, ring, symbol], in: .trailing)
         stack.orientation = .horizontal
         stack.spacing = 6
@@ -450,6 +581,8 @@ final class DeviceRowCell: NSTableCellView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconSize,
+            icon.heightAnchor.constraint(equalTo: icon.widthAnchor),
             ring.widthAnchor.constraint(equalToConstant: 16),
             ring.heightAnchor.constraint(equalToConstant: 16),
         ])
@@ -473,6 +606,10 @@ final class DeviceRowCell: NSTableCellView {
         title.textColor = row.isDimmed ? .disabledControlTextColor : .labelColor
         subtitle.stringValue = label.subtitle ?? ""
         subtitle.isHidden = label.subtitle == nil
+        icon.image = row.entry.profile?.icon
+        icon.isHidden = icon.image == nil
+        iconSize.constant = label.subtitle == nil ? 18 : 30
+        icon.alphaValue = row.isDimmed ? 0.5 : 1
         let size = row.entry.source.bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
         toolTip = (["iOS \(row.entry.version) (\(row.entry.build))",
                     row.supportNote, row.accessory == .notDownloaded ? size.map { "Not downloaded, \($0)" } ?? "Not downloaded" : nil]

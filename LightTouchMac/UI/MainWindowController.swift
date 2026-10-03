@@ -45,11 +45,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let placeholder = DevicePlaceholderViewController()
     /// The detail area with no row selected.
     private let nothingSelected = ContainerViewController()
+    /// With several rows selected (for one Delete): how many, and nothing starts.
+    private let multipleSelected = PaneLabelViewController()
     private let detail = ContainerViewController()
     /// The device pane over its console (ConsoleSplit.swift).
     private let console: ConsoleSplitViewController
     private let inspectorContainer = ContainerViewController()
-    private let noInspector = NotRunningViewController()
+    private let noInspector = PaneLabelViewController()
     private let sidebarItem: NSSplitViewItem
     private let inspectorItem: NSSplitViewItem
     private let zoomControl = NSSegmentedControl()
@@ -248,7 +250,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             session = next
             attachWorkspace()
         }
-        if session == nil { detail.show(entry == nil ? nothingSelected : placeholder) }
+        let count = library.selectedEntries.count
+        multipleSelected.text = "\(count) Devices"
+        if session == nil { detail.show(entry != nil ? placeholder : count > 1 ? multipleSelected : nothingSelected) }
         if let entry, session == nil { placeholder.update(host.row(for: entry), canDownload: FirmwareJobs.shared.canDownload) }
         // The console's picker: the same logs as Device Logs, without the rotated
         // copies, the device's serial log first.
@@ -363,9 +367,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
-    private func name(_ entry: FirmwareCatalog.Entry) -> String {
-        library.customName(for: entry).map { "“\($0)”" } ?? "\(entry.profile?.displayName ?? entry.productType) iOS \(entry.version)"
-    }
+    private func name(_ entry: FirmwareCatalog.Entry) -> String { library.displayName(for: entry) }
 
     private func start(_ entry: FirmwareCatalog.Entry) {
         library.select(entry)
@@ -384,8 +386,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc func importIPSW(_ sender: Any?) { selectedEntry.map { perform(.importIPSW, for: $0) } }
     @objc func cancelFirmwareJob(_ sender: Any?) { selectedEntry.map { perform(.cancel, for: $0) } }
     @objc func showDeviceInFinder(_ sender: Any?) { selectedEntry.map { perform(.showInFinder, for: $0) } }
-    /// Delete Device… for a prepared device (asks, then leaves the sidebar), Remove Device for the rest.
-    @objc func deleteDevice(_ sender: Any?) { selectedEntry.map(library.remove) }
+    /// Delete Device… for a prepared device (asks, then leaves the sidebar), Remove Device for the rest; with several
+    /// rows selected, one question for the lot (DeviceLibraryViewController.removeTargets).
+    @objc func deleteDevice(_ sender: Any?) { library.removeTargets() }
 
     /// The toolbar's +, the Device menu and the empty sidebar: the catalog in a sheet.
     @objc func addDevice(_ sender: Any?) {
@@ -1292,6 +1295,11 @@ extension MainWindowController: NSMenuItemValidation {
             return selectedEntry.map { canPerform(.cancel, for: $0) } ?? false
         case #selector(showDeviceInFinder(_:)): return selectedEntry.map { canPerform(.showInFinder, for: $0) } ?? false
         case #selector(deleteDevice(_:)):
+            let selected = library.selectedEntries
+            if selected.count > 1 {
+                menuItem.title = DeviceLibraryViewController.batchTitle(library.batch(selected))
+                return library.canRemoveTargets
+            }
             let row = selectedEntry.map(library.row(for:))
             menuItem.title = row?.removeTitle ?? "Delete Device…"
             return row.map { $0.instanceID != nil ? canPerform(.delete, for: $0.entry) : $0.canRemoveFromSidebar } ?? false
@@ -1432,13 +1440,14 @@ private final class ContainerViewController: NSViewController {
     }
 }
 
-/// The inspector while the selected device isn't running.
-private final class NotRunningViewController: NSViewController {
+/// A pane's one centred line: the inspector while the device isn't running, the detail area with several rows selected.
+private final class PaneLabelViewController: NSViewController {
     private let label = NSTextField(labelWithString: "")
-    var shortName = "device" { didSet { label.stringValue = "Start the \(shortName) to manage apps." } }
+    var text = "" { didSet { label.stringValue = text } }
+    var shortName = "device" { didSet { text = "Start the \(shortName) to manage apps." } }
 
     override func loadView() {
-        label.stringValue = "Start the \(shortName) to manage apps."
+        label.stringValue = text
         label.textColor = .secondaryLabelColor
         label.translatesAutoresizingMaskIntoConstraints = false
         view = NSView()
