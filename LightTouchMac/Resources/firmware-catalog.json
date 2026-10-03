@@ -1001,7 +1001,7 @@
   "version": "3.0",
   "build": "7A341",
   "released": "2009-06-17",
-  "status": "untested",
+  "status": "experimental",
   "status_note": "Apple never hosted this paid update; the download is a third-party mirror.",
   "source": {"kind": "ipsw", "url": "https://invoxiplaygames.uk/ipsw/iPod2,1_3.0_7A341_Restore.ipsw", "sha1": "0f7fc76d9b9aa826b5ab14be9821a315d3d9dc42", "bytes": 270315364},
   "keys": {
@@ -1488,7 +1488,7 @@
   "version": "4.2",
   "build": "8C5091e",
   "released": "2010-09-15",
-  "status": "untested",
+  "status": "experimental",
   "prerelease": "beta",
   "prerelease_number": 1,
   "status_note": "A developer build from the iOS Firmware Exhibit Collection on archive.org (third party; Apple never hosted it).",
