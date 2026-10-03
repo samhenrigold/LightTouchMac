@@ -3,6 +3,11 @@
 import Foundation
 
 nonisolated public enum FirmwareWire {
+    /// Devices/<uuid>/<this>: {"recipe": N}, the recipe a stopped device's storage was migrated up to in place
+    /// (boot admission), so a base whose lock names an older recipe is still current. Survives Erase on purpose:
+    /// admission re-applies the migration's pages to a fresh overlay on every start.
+    public static let migratedRecipeFile = "migrated-recipe.json"
+
     /// Stopped launch admission reply shared by all host clients. Generation
     /// paths remain durable record data, rather than a second GUI device schema.
     public struct BootAdmission: Codable, Sendable, Equatable {

@@ -283,13 +283,16 @@ nonisolated struct DeviceRow: Equatable, Sendable {
 
     /// The recipe version that made a base: firmwarekit's lock keeps the catalog entry it was prepared from
     /// (`entry.content.recipe.version`, every lock since the first firmwarekit). Nil for an unreadable lock or one
-    /// without it (a device.py base): nothing to claim.
-    static func baseRecipeVersion(_ lock: URL) -> Int? {
-        guard let data = try? Data(contentsOf: lock),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let entry = json["entry"] as? [String: Any], let content = entry["content"] as? [String: Any],
-              let recipe = content["recipe"] as? [String: Any] else { return nil }
-        return recipe["version"] as? Int
+    /// without it (a device.py base): nothing to claim. `device`: the device's directory, whose
+    /// FirmwareWire.migratedRecipeFile raises it to the recipe boot admission migrated its storage to.
+    static func baseRecipeVersion(_ lock: URL, device: URL? = nil) -> Int? {
+        func object(_ url: URL?) -> [String: Any]? {
+            url.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        }
+        guard let entry = object(lock)?["entry"] as? [String: Any], let content = entry["content"] as? [String: Any],
+              let recipe = content["recipe"] as? [String: Any], let version = recipe["version"] as? Int else { return nil }
+        let migrated = object(device?.appendingPathComponent(FirmwareWire.migratedRecipeFile))?["recipe"] as? Int
+        return max(version, migrated ?? 0)
     }
 
     /// The accessory's words: what VoiceOver reads after the version.
