@@ -857,22 +857,21 @@ func location(_ base: Base, tools: Tools, work: URL, _ r: Report) {
 
 /// The app's Compass Heading as CoreLocation reports it (contrib/it-heading's probe), face up and upright at two
 /// headings each: the 3GS's AK8973 sits turned against the iPad's (its DT compass node's orientation, which the
-/// driver undoes). The M68 has no magnetometer and refuses the heading. The iPhone 4 reads right only one of the two
-/// ways (qemu-ios docs/n90 debt 3) and iOS 4 reads headings unrelated to the one set, so neither is checked.
+/// driver undoes); the iPhone 4's AK8975B reads unturned. The M68 has no magnetometer and refuses the heading.
+/// Not checked: the 3GS on iOS 4-5, whose locationd adds 16 µT per offset-DAC step to the AK8973's readings
+/// (qemu-ios hw/arm/s5l8930_i2c.c, AK8973), and the iPhone 4 on 7.x, whose read-only root takes no probe.
 func compass(_ base: Base, tools: Tools, work: URL, _ r: Report) {
     print("compass")
-    if base.board == "n90ap" { return print("  (not checked on the iPhone 4: qemu-ios docs/n90/README.md debt 3)") }
-    if base.major == 4 {
-        // Open: 4.2.1's CoreLocation reads headings unrelated to the one set (90 reads 315, 200 reads 43) on the 3GS
-        // and the iPad alike, where 3.x and 6.x read right (overnight-10-09/app.md).
-        return print(
-            "  (not checked on iOS 4: its CoreLocation reads headings unrelated to the one set, an open finding)"
-        )
+    if base.board == "n88ap" && (4...5).contains(base.major) {
+        return print("  (not checked on the 3GS on iOS 4-5: its locationd adds the AK8973's offset DACs)")
+    }
+    if base.board == "n90ap" && base.major >= 7 {
+        return print("  (not checked on the iPhone 4 on 7.x: the probe needs a writable /usr/local/bin)")
     }
     // (UIDeviceOrientation, heading): face up, the top edge's heading; portrait upright, the screen's.
     let cases = [(5, 90), (5, 200), (1, 90), (1, 200)]
     let probe = checkout("qemu-ios").appendingPathComponent("contrib/it-heading/it_heading")
-    let modeled = base.board == "n88ap"
+    let modeled = base.board == "n88ap" || base.board == "n90ap"
     guard !modeled || FileManager.default.fileExists(atPath: probe.path) else {
         die("no it_heading at \(probe.path) (contrib/it-heading/build.sh)")
     }
