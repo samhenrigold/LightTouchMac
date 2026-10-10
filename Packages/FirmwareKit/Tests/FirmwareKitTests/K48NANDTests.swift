@@ -12,6 +12,12 @@ struct K48NANDTests {
         #expect(K48Board.oneshotTimeout(productVersion: "3.2.2") == 300)
     }
 
+    /// Only a jailbroken device boots with AMFI out of the way (Substrate's library in amfid).
+    @Test func amfiOutOfTheWayOnlyJailbroken() {
+        #expect(K48Board.bootArgs(jailbreak: false) == KBoot.defaultBootArgs)
+        #expect(K48Board.bootArgs(jailbreak: true) == KBoot.defaultBootArgs + " amfi_get_out_of_my_way=1")
+    }
+
     @Test(arguments: ["nand-xor-ff-v2", "future-format", ""])
     func physicalAndUnknownFormatsRefusedBeforePageMapping(_ format: String) throws {
         try Oracle.withTemp { dir in

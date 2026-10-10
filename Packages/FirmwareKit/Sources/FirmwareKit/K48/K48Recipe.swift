@@ -64,6 +64,13 @@ final class K48Board: Board {
         (Int(productVersion.split(separator: ".").first ?? "") ?? 0) >= 7 ? 900 : 300
     }
 
+    /// A jailbroken device's kernel leaves code signatures to AMFI alone (amfi_get_out_of_my_way), as the
+    /// jailbreaks' kernel patches did: with AMFI asking amfid about every ad hoc signed library, Substrate's launcher,
+    /// once in launchd, puts its library into amfid too, amfid waits on itself and the boot stops before SpringBoard.
+    static func bootArgs(jailbreak: Bool) -> String {
+        KBoot.defaultBootArgs + (jailbreak ? " amfi_get_out_of_my_way=1" : "")
+    }
+
     init(_ o: Preparer.Options) throws {
         guard let recipe = o.entry.recipe else { throw FirmwareError(.unsupported, "\(o.entry.id): no recipe") }
         self.recipe = recipe
@@ -136,7 +143,7 @@ final class K48Board: Board {
         let ident = try self.ident.filled("the identity")
         let e = c.e
         let ipsw = c.ipsw
-        let bootArgs = KBoot.defaultBootArgs
+        let bootArgs = Self.bootArgs(jailbreak: c.cydia != nil)
         let kernel = try Data(contentsOf: c.decFile("kernelcache.mach"), options: .alwaysMapped)
         try FitCheck.checkBootArgs(c.fit, kernel: kernel, args: bootArgs)
         // both chains add it

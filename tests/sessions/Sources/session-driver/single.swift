@@ -653,6 +653,7 @@ nonisolated enum WiFiProbe {
             emit("afc2", ["device": d.name, "top": top, "error": "\(error)"])
         }
         await cydia(d)
+        await substrate(d)
     }
     if s.install != false {
         await install(d)
@@ -1155,6 +1156,76 @@ enum DockBand {
     try? await Task.sleep(for: .milliseconds(150))
     d.process.link.send(.button(0, down: false))
     try? await Task.sleep(for: .seconds(3))
+}
+
+/// Substrate on a jailbroken device, through the guest's syslog (libimobiledevice's idevicesyslog on PATH, kept as
+/// substrate-syslog.txt): SpringBoard, restarted by launchd through the guest agent, logs Substrate's injection and
+/// loads a probe extension filtered to it (LTMProbe: a plist and a link to CydiaSubstrate itself, removed again);
+/// Cydia, launched, loads the extensions filtered to it (HTTPatch on 3.x); no Safe Mode, and SpringBoard is back and
+/// unlocked. MobileSafety, Substrate's safe-mode extension, loads only in Safe Mode. Emits `substrate`.
+@MainActor func substrate(_ d: Device) async {
+    var event: [String: Any] = ["device": d.name]
+    let agent = GuestAgent(link: d.process.link, cache: GuestAgentCache())
+    let dir = "/Library/MobileSubstrate/DynamicLibraries"
+    let probe = [dir + "/LTMProbe.plist", dir + "/LTMProbe.dylib"]
+    let installed = (try? await agent.get("/Library/Frameworks/CydiaSubstrate.framework/Info.plist")) ?? nil
+    event["installed"] = installed != nil
+    guard installed != nil else { return emit("substrate", event) }
+    let file = d.dir.appendingPathComponent("substrate-syslog.txt")
+    FileManager.default.createFile(atPath: file.path, contents: nil)
+    let syslog = Process()
+    syslog.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    syslog.arguments = ["idevicesyslog", "--no-colors"]
+    syslog.environment = ProcessInfo.processInfo.environment.merging(
+        ["USBMUXD_SOCKET_ADDRESS": d.mux.clientSocket]
+    ) { $1 }
+    syslog.standardOutput = FileHandle(forWritingAtPath: file.path)
+    syslog.standardError = FileHandle.nullDevice
+    do {
+        try syslog.run()
+        try await agent.put(
+            probe[0],
+            mode: 0o644,
+            Data(#"{ Filter = { Bundles = ( "com.apple.springboard" ); }; }"#.utf8)
+        )
+        try await agent.spawn([
+            "/bin/ln", "-s", "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate", probe[1],
+        ])
+        event["extensions"] = String(decoding: try await agent.spawn(["/bin/ls", dir]), as: UTF8.self)
+            .split(separator: "\n").map(String.init)
+        try await Task.sleep(for: .seconds(3))
+        try await agent.spawn(["/usr/bin/killall", "SpringBoard"])
+    } catch { event["error"] = "\(error)" }
+    var back = false
+    for _ in 0..<30 where !back {
+        try? await Task.sleep(for: .seconds(2))
+        back = (try? await agent.frontmost())?.bundleID == "com.apple.springboard"
+    }
+    for path in probe { try? await agent.unlink(path) }
+    try? await Task.sleep(for: .seconds(5))
+    await d.slideToUnlock(9, agent: agent)
+    event["locked"] = (try? await agent.isLocked()) ?? true
+    try? await agent.launch("com.saurik.Cydia")
+    try? await Task.sleep(for: .seconds(10))
+    d.process.link.send(.button(0, down: true))
+    try? await Task.sleep(for: .milliseconds(150))
+    d.process.link.send(.button(0, down: false))
+    try? await Task.sleep(for: .seconds(3))
+    syslog.terminate()
+    let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+    let lines = { (process: String) in text.split(separator: "\n").filter { $0.contains(" \(process)[") } }
+    let loaded = { (process: String) in
+        lines(process).compactMap { line in
+            line.range(of: "MS:Notice: Loading: ").map { String(line[$0.upperBound...]) }
+        }
+    }
+    event["injected"] = lines("SpringBoard").contains { $0.contains("MS:Notice: Injecting: com.apple.springboard") }
+    event["loaded"] = loaded("SpringBoard")
+    event["cydiaLoaded"] = loaded("Cydia")
+    event["errors"] = lines("SpringBoard").filter { $0.contains("MS:Error") }.map(String.init)
+    event["safeMode"] = text.contains("MS:Warning: Entering Safe Mode")
+    event["back"] = back
+    emit("substrate", event)
 }
 
 /// installd's own record of where each app lives (iOS 2-5): the container an upgrade must keep.

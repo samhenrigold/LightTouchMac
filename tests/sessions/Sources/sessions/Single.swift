@@ -267,6 +267,25 @@ func single(_ args: SingleCheck) -> Never {
             "\(d): Cydia launched and stayed frontmost (\(fronts.joined(separator: ", ")))"
                 + (cydia.string("launchError").map { ": \($0)" } ?? "")
         )
+        if (3...6).contains(base.major) {  // Substrate where FirmwareKit's jailbreak installs it
+            let ms = events.one("substrate", ["device": d])
+            let loaded = ms["loaded"] as? [String] ?? []
+            let errors = ms["errors"] as? [String] ?? []
+            r.check(
+                ms.bool("injected") && loaded.contains { $0.hasSuffix("/LTMProbe.dylib") } && errors.isEmpty
+                    && !ms.bool("safeMode") && ms.bool("back") && !ms.bool("locked"),
+                "\(d): Substrate loads into SpringBoard with its extension (\(loaded.joined(separator: ", "))), no "
+                    + "Safe Mode, SpringBoard back and unlocked"
+                    + ((ms.string("error") ?? errors.first).map { ": \($0)" } ?? "")
+            )
+            if base.major == 3 {
+                let cydia = ms["cydiaLoaded"] as? [String] ?? []
+                r.check(
+                    cydia.contains { $0.hasSuffix("/CydiaHTTPatch.dylib") },
+                    "\(d): Cydia loads HTTPatch (\(cydia.joined(separator: ", ")))"
+                )
+            }
+        }
     }
     if args.skipSetup {
         // Prepared past Setup: no Setup page on the first boot (a phone's lock screen slide is the only step the

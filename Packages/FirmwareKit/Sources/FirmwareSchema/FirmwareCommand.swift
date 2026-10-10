@@ -43,7 +43,7 @@ public enum FirmwareCommand {
         @Flag(help: "Adds the GL fixture job to a test device.") public var glTest = false
         @Flag(help: "Seeds Setup Assistant's finished state (iOS 5 and later): the device starts at the Home screen.")
         public var skipSetup = false
-        @Flag(help: "Prepares the device jailbroken: afc2 (the whole file system over USB) and Cydia.")
+        @Flag(help: "Prepares the device jailbroken: afc2 (the whole file system over USB), Cydia and Substrate.")
         public var jailbreak = false
 
         public init() {}

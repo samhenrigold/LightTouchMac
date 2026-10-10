@@ -50,8 +50,8 @@ public enum SystemEdits {
         /// is finished (seedFinishedSetup), so an iOS 5 or later device starts at the Home screen.
         public var skipSetup = false
         /// jailbreak (firmwarekit create --jailbreak, never set in the catalog): what a jailbreak of the time leaves on
-        /// the device: afc2 (installAFC2), lockdown's AFC over the whole file system, and Cydia (installCydia) from
-        /// `cydia`, the bootstrap Cydia.bootstrap fetched.
+        /// the device: afc2 (installAFC2), lockdown's AFC over the whole file system, and Cydia with Substrate
+        /// (installCydia) from `cydia`, the bootstrap Cydia.bootstrap fetched.
         public var jailbreak = false
         public var cydia: URL?
         public init() {}

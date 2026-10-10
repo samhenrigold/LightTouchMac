@@ -184,17 +184,39 @@ struct JailbreakTests {
 struct CydiaInstallTests {
     let fm = FileManager.default
 
+    /// The bootstrap's dpkg status, Patcyh between two others, as freeze.tar's has it.
+    static let status =
+        "Package: apt7\nStatus: install ok installed\n\nPackage: com.saurik.patcyh\nVersion: 1.2.0\n\n"
+        + "Package: bash\nStatus: install ok installed\n\n"
+
     /// A bootstrap laid out as freeze.tar is (the /etc link, mobile's SpringBoard preferences, a file the firmware
-    /// also has), gzipped by /usr/bin/tar.
+    /// also has, Patcyh), gzipped by /usr/bin/tar; beside it Substrate's and HTTPatch's packages as Legacy iOS Kit's
+    /// tars hold them.
     func bootstrap(in dir: URL) throws -> URL {
         let src = dir.appendingPathComponent("src")
         for (rel, text) in [
-            ("Applications/Cydia.app/Cydia", "cydia"), ("bin/bash", "bash"), ("private/var/lib/dpkg/status", "s"),
+            ("Applications/Cydia.app/Cydia", "cydia"), ("bin/bash", "bash"),
+            ("private/var/lib/dpkg/status", Self.status), ("private/var/lib/dpkg/available", Self.status),
             ("usr/libexec/afcd", "not the firmware's"),
-        ] {
+        ] + SystemEdits.Cydia.patcyh.map({ ($0, "patcyh") }) {
             let u = src.appendingPathComponent(rel)
             try fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data(text.utf8).write(to: u)
+        }
+        for (tar, rel) in [
+            ("cydiasubstrate.tar", "private/var/root/Media/Cydia/AutoInstall/mobilesubstrate_fix.deb"),
+            ("cydiahttpatch.tar", "private/var/root/Media/Cydia/AutoInstall/cydiahttpatch-1.0.deb"),
+        ] {
+            let pkg = dir.appendingPathComponent("pkg-" + tar)
+            let u = pkg.appendingPathComponent(rel)
+            try fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(tar.utf8).write(to: u)
+            let p = try Process.run(
+                URL(fileURLWithPath: "/usr/bin/tar"),
+                arguments: ["-cf", dir.appendingPathComponent(tar).path, "-C", pkg.path, "."]
+            )
+            p.waitUntilExit()
+            #expect(p.terminationStatus == 0)
         }
         let prefs = src.appendingPathComponent(SystemEdits.Cydia.springBoardPrefs)
         try fm.createDirectory(at: prefs.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -214,11 +236,16 @@ struct CydiaInstallTests {
         return file
     }
 
-    /// A firmware root: /etc, afcd, /private/var/mobile and (with `prefs`) mobile's SpringBoard preferences.
-    func firmware(in dir: URL, prefs: [String: Any]?) throws -> URL {
+    /// A firmware root: /etc, afcd, /private/var/mobile, (with `prefs`) mobile's SpringBoard preferences and (with
+    /// `version`) SystemVersion.plist.
+    func firmware(in dir: URL, prefs: [String: Any]?, version: String? = nil) throws -> URL {
         let m = dir.appendingPathComponent("volume")
-        for rel in ["private/etc", "usr/libexec", "private/var/mobile"] {
+        for rel in ["private/etc", "usr/libexec", "private/var/mobile", "System/Library/CoreServices"] {
             try fm.createDirectory(at: m.appendingPathComponent(rel), withIntermediateDirectories: true)
+        }
+        if let version {
+            try PropertyListSerialization.data(fromPropertyList: ["ProductVersion": version], format: .xml, options: 0)
+                .write(to: m.appendingPathComponent("System/Library/CoreServices/SystemVersion.plist"))
         }
         try Data("stock afcd".utf8).write(to: m.appendingPathComponent("usr/libexec/afcd"))
         try fm.createSymbolicLink(atPath: m.appendingPathComponent("etc").path, withDestinationPath: "private/etc")
@@ -275,6 +302,37 @@ struct CydiaInstallTests {
         #expect(prefs["SBShowNonDefaultSystemApps"] as? Bool == true)
         #expect(prefs["SBAutoLockTime"] as? Int == 60)
         #expect(r.mobile.isEmpty, "mobile's own preferences keep their owner")
+    }
+
+    /// Substrate's AutoInstall package on 3.x to 6.x and HTTPatch's on 3.x, as Legacy iOS Kit's restores add them
+    /// (and 6.x, which its restores leave to Cydia); none on 7.x; Patcyh (iOS 8.3 and later) out of the files and
+    /// dpkg's records everywhere.
+    @Test(arguments: ["3.1.3", "4.2.1", "5.1.1", "6.1.6", "7.1.2"])
+    func substrateAndHTTPatchByVersion(_ version: String) throws {
+        let dir = fm.temporaryDirectory.appendingPathComponent("ltm-cydia-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: dir) }
+        let m = try firmware(in: dir, prefs: nil, version: version)
+        let r = try SystemEdits.installCydia(m, bootstrap: try bootstrap(in: dir))
+        let major = Int(version.prefix(1)) ?? 0
+        let auto = "private/var/root/Media/Cydia/AutoInstall/"
+        for (deb, wanted) in [
+            ("mobilesubstrate_fix.deb", (3...6).contains(major)), ("cydiahttpatch-1.0.deb", major == 3),
+        ] {
+            #expect(fm.fileExists(atPath: m.appendingPathComponent(auto + deb).path) == wanted, "\(version): \(deb)")
+            #expect(r.root.contains(auto + deb) == wanted, "\(version): \(deb) is root's")
+        }
+        for rel in SystemEdits.Cydia.patcyh {
+            #expect(!fm.fileExists(atPath: m.appendingPathComponent(rel).path), "\(version): \(rel) is gone")
+            #expect(!r.root.contains(rel))
+        }
+        for rel in ["private/var/lib/dpkg/status", "private/var/lib/dpkg/available"] {
+            let text = try String(contentsOf: m.appendingPathComponent(rel), encoding: .utf8)
+            #expect(
+                text
+                    == "Package: apt7\nStatus: install ok installed\n\nPackage: bash\nStatus: install ok installed\n\n",
+                "\(version): \(rel) without Patcyh"
+            )
+        }
     }
 
     @Test func aBootstrapOfOtherBytesIsRefused() throws {

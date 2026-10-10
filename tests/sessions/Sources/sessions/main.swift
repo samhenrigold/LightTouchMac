@@ -78,7 +78,10 @@ struct SingleCheck: ParsableCommand {
     @Flag(help: "The base was prepared with --skip-setup: no Setup page, Setup's answers from the Mac.")
     var skipSetup = false
     @Flag(
-        help: "The base was prepared with --jailbreak: Files reads the whole file system through afc2, Cydia launches."
+        help: """
+            The base was prepared with --jailbreak: Files reads the whole file system through afc2, Cydia launches, \
+            Substrate loads into SpringBoard (3.x to 5.x; idevicesyslog on PATH).
+            """
     )
     var jailbreak = false
     @Option(help: "Install a newer build of the same app over it; its data must stay.", transform: path)
