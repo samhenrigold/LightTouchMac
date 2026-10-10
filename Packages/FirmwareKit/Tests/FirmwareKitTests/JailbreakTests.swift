@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -6,7 +7,8 @@ import Testing
 /// The jailbreak option (firmwarekit create --jailbreak): afc2 beside the stock AFC service.
 struct JailbreakTests {
     /// The stock com.apple.afc entries: 1.0's (no unactivated flag), 1.1.4 to 5.x's (afcd at the media folder) and 6.x
-    /// to 7.x's (afcd as an XPC service). afc2 is the same old-style entry on every one: afcd still takes --lockdown.
+    /// to 7.x's (afcd as an XPC service). Through 7.0 afc2 is the same old-style entry on every one: afcd still takes
+    /// --lockdown.
     static var stockAFC: [[String: Any]] {
         [
             ["Label": "com.apple.afc", "ProgramArguments": ["/usr/libexec/afcd", "--lockdown"]],
@@ -31,7 +33,9 @@ struct JailbreakTests {
         )
         let stock: [String: Any] = ["com.apple.afc": Self.stockAFC[era], "com.apple.syslog_relay": ["Label": "x"]]
         try PropertyListSerialization.data(fromPropertyList: stock, format: .binary, options: 0).write(to: services)
-        _ = try SystemEdits.installAFC2(root)
+        try Self.put(Data("usage: -L | --lockdown : run under old-style lockdown".utf8), root, SystemEdits.afcd)
+        #expect(try SystemEdits.installAFC2(root).root.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent(SystemEdits.afc2d).path))
         var format = PropertyListSerialization.PropertyListFormat.xml
         let edited = try #require(
             PropertyListSerialization.propertyList(from: Data(contentsOf: services), format: &format)
@@ -59,6 +63,103 @@ struct JailbreakTests {
         )
         try PropertyListSerialization.data(fromPropertyList: [String: Any](), format: .xml, options: 0)
             .write(to: services)
+        try Self.put(Data("--lockdown".utf8), root, SystemEdits.afcd)
+        #expect(throws: FirmwareError.self) { try SystemEdits.installAFC2(root) }
+    }
+
+    static func put(_ data: Data, _ root: URL, _ rel: String) throws {
+        let u = root.appendingPathComponent(rel)
+        try FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: u)
+    }
+
+    /// 7.1's afcd (no --lockdown, an XPC service at the media folder only), signed, with its root and service name.
+    static func afcd71() -> [UInt8] {
+        var b = ActivationTests.syntheticMachO()
+        for (offset, s) in [(48, "/private/var/mobile/Media"), (80, "com.apple.afcd"), (100, "com.apple.afcd")] {
+            b.replaceSubrange(offset..<(offset + s.utf8.count), with: Array(s.utf8))
+        }
+        return b
+    }
+
+    /// 7.1: afc2 is afc2d, a re-signed copy of afcd serving "/" as the XPC service com.apple.afc2, from a launchd job
+    /// made from afcd's own without its user.
+    @Test func afc2On71IsAnAfcdCopyAtTheRoot() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-afc2-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stockJob: [String: Any] = [
+            "Label": "com.apple.afcd", "MachServices": ["com.apple.afcd": true], "EnableTransactions": true,
+            "ProgramArguments": ["/usr/libexec/afcd"], "UserName": "mobile",
+        ]
+        try Self.put(
+            try PropertyListSerialization.data(
+                fromPropertyList: ["com.apple.afc": Self.stockAFC[2]],
+                format: .binary,
+                options: 0
+            ),
+            root,
+            SystemEdits.lockdownServices
+        )
+        try Self.put(
+            try PropertyListSerialization.data(fromPropertyList: stockJob, format: .binary, options: 0),
+            root,
+            SystemEdits.daemons + "/com.apple.afcd.plist"
+        )
+        let afcd = Self.afcd71()
+        try Self.put(Data(afcd), root, SystemEdits.afcd)
+
+        let added = try SystemEdits.installAFC2(root).root
+        #expect(added == [SystemEdits.afc2d, SystemEdits.afc2Job])
+
+        let services = try #require(NSDictionary(contentsOf: root.appendingPathComponent(SystemEdits.lockdownServices)))
+        #expect(
+            services["com.apple.afc2"] as? NSDictionary
+                == ["AllowUnactivatedService": true, "Label": "com.apple.afc2", "XPCServiceName": "com.apple.afc2"]
+        )
+        #expect(services["com.apple.afc"] as? NSDictionary == NSDictionary(dictionary: Self.stockAFC[2]))
+
+        let job = try #require(NSDictionary(contentsOf: root.appendingPathComponent(SystemEdits.afc2Job)))
+        #expect(job["Label"] as? String == "com.apple.afc2")
+        #expect(job["MachServices"] as? NSDictionary == ["com.apple.afc2": true])
+        #expect(job["ProgramArguments"] as? [String] == ["/usr/libexec/afc2d"])
+        #expect(job["UserName"] == nil, "afc2d runs as root")
+        #expect(job["EnableTransactions"] as? Bool == true, "the rest of afcd's job is kept")
+
+        let copy = try [UInt8](Data(contentsOf: root.appendingPathComponent(SystemEdits.afc2d)))
+        func text(_ offset: Int, _ count: Int) -> [UInt8] { Array(copy[offset..<(offset + count)]) }
+        #expect(text(48, 26) == Array("/".utf8) + [UInt8](repeating: 0, count: 25), "the root is /")
+        #expect(text(80, 15) == Array("com.apple.afc2\0".utf8))
+        #expect(text(100, 15) == Array("com.apple.afc2\0".utf8))
+        #expect(copy[ActivationTests.cd + 12] == 0 && copy[ActivationTests.cd + 15] & 2 == 2, "signed ad hoc")
+        let hash = ActivationTests.cd + 52
+        #expect(Array(copy[hash..<(hash + 20)]) == Array(Insecure.SHA1.hash(data: Data(copy[0..<256]))))
+        #expect(try Data(contentsOf: root.appendingPathComponent(SystemEdits.afcd)) == Data(afcd), "afcd is untouched")
+        let mode =
+            try FileManager.default.attributesOfItem(atPath: root.appendingPathComponent(SystemEdits.afc2d).path)[
+                .posixPermissions
+            ] as? Int
+        #expect(mode == 0o755)
+    }
+
+    /// An afcd with neither --lockdown nor the 7.1 strings is refused rather than given an entry that cannot run.
+    @Test func afc2NeedsAnAfcdItKnows() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-afc2-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.put(
+            try PropertyListSerialization.data(
+                fromPropertyList: ["com.apple.afc": Self.stockAFC[2]],
+                format: .xml,
+                options: 0
+            ),
+            root,
+            SystemEdits.lockdownServices
+        )
+        try Self.put(
+            try PropertyListSerialization.data(fromPropertyList: ["Label": "com.apple.afcd"], format: .xml, options: 0),
+            root,
+            SystemEdits.daemons + "/com.apple.afcd.plist"
+        )
+        try Self.put(Data(ActivationTests.syntheticMachO()), root, SystemEdits.afcd)
         #expect(throws: FirmwareError.self) { try SystemEdits.installAFC2(root) }
     }
 

@@ -442,7 +442,7 @@ final class N72Board: Board {
         }
 
         if opt["jailbreak"] == true {
-            report["afc2"] = try SystemEdits.installAFC2(m)
+            report["afc2"] = try SystemEdits.installAFC2(m).line
             guard let bootstrap = c.cydia else { throw FirmwareError(.internal, "jailbreak: no Cydia bootstrap") }
             let cydia = try SystemEdits.installCydia(m, bootstrap: bootstrap)
             report["cydia"] = cydia.line

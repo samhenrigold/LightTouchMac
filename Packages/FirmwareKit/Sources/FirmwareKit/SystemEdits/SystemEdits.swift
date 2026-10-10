@@ -317,7 +317,9 @@ public enum SystemEdits {
                 d["StandardErrorPath"] = "/dev/console"
             }
             if o.jailbreak {
-                log(try installAFC2(m))
+                let afc2 = try installAFC2(m)
+                log(afc2.line)
+                rootOwned += afc2.root
                 guard let bootstrap = o.cydia else { throw FirmwareError(.internal, "jailbreak: no Cydia bootstrap") }
                 let cydia = try installCydia(m, bootstrap: bootstrap)
                 log(cydia.line)
@@ -510,20 +512,62 @@ public enum SystemEdits {
     }
 
     static let lockdownServices = "System/Library/Lockdown/Services.plist"
-    /// afc2, as the jailbreaks of the time added it: a com.apple.afc2 lockdown service running the stock afcd at "/"
-    /// (old-style lockdown, which afcd keeps beside its XPC mode through 7.x), so the Mac can browse the whole file
-    /// system over USB. Returns the log line.
-    static func installAFC2(_ m: URL) throws -> String {
+    static let afcd = "usr/libexec/afcd", afc2d = "usr/libexec/afc2d", afc2Job = daemons + "/com.apple.afc2.plist"
+    /// afc2, as the jailbreaks of the time added it: a com.apple.afc2 lockdown service serving "/" as root, so the Mac
+    /// can browse the whole file system over USB. Through 7.0 it is the stock afcd under old-style lockdown at "/".
+    /// 7.1's afcd (afc-218) takes neither --lockdown nor -d: it is only an XPC service at the media folder and exits
+    /// on those options (Files: device connection lost). There afc2 is a copy of it, afc2d, serving "/" as its own
+    /// XPC service com.apple.afc2 from a launchd job without the stock job's user (so as root); afcd's own sandbox
+    /// profile still applies, and the root extension it issues itself covers "/". Returns the log line and the files it added (root's).
+    static func installAFC2(_ m: URL) throws -> (line: String, root: [String]) {
+        let stock = try Data(contentsOf: m.appendingPathComponent(afcd))
+        let oldStyle = stock.range(of: Data("--lockdown".utf8)) != nil
         try rewritePlist(m.appendingPathComponent(lockdownServices)) { services in
             guard services["com.apple.afc"] != nil else {
                 throw FirmwareError(.unsupported, "\(lockdownServices) has no com.apple.afc service")
             }
-            services["com.apple.afc2"] = [
-                "AllowUnactivatedService": true, "Label": "com.apple.afc2",
-                "ProgramArguments": ["/usr/libexec/afcd", "--lockdown", "-d", "/"],
-            ]
+            services["com.apple.afc2"] =
+                oldStyle
+                ? [
+                    "AllowUnactivatedService": true, "Label": "com.apple.afc2",
+                    "ProgramArguments": ["/usr/libexec/afcd", "--lockdown", "-d", "/"],
+                ]
+                : ["AllowUnactivatedService": true, "Label": "com.apple.afc2", "XPCServiceName": "com.apple.afc2"]
         }
-        return "afc2: com.apple.afc2 runs afcd at / (Lockdown/Services.plist)"
+        if oldStyle { return ("afc2: com.apple.afc2 runs afcd at / (Lockdown/Services.plist)", []) }
+        try put(try afc2Copy(stock), m.appendingPathComponent(afc2d), mode: 0o755)
+        let jobURL = m.appendingPathComponent(daemons + "/com.apple.afcd.plist")
+        guard let job = NSMutableDictionary(contentsOf: jobURL), job["Label"] as? String == "com.apple.afcd" else {
+            throw FirmwareError(.unsupported, "\(jobURL.lastPathComponent): not com.apple.afcd's job")
+        }
+        job["Label"] = "com.apple.afc2"
+        job["MachServices"] = ["com.apple.afc2": true]
+        job["ProgramArguments"] = ["/" + afc2d]
+        job.removeObject(forKey: "UserName")
+        try put(
+            PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0),
+            m.appendingPathComponent(afc2Job)
+        )
+        return (
+            "afc2: com.apple.afc2 is afc2d, afcd at / as an XPC service (Lockdown/Services.plist)", [afc2d, afc2Job]
+        )
+    }
+
+    /// 7.1's afcd serving "/" as the XPC service com.apple.afc2: its root and service name replaced in place (each
+    /// string by one no longer, padded with NULs), then signed again ad hoc, keeping its entitlements.
+    static func afc2Copy(_ afcd: Data) throws -> Data {
+        var d = afcd
+        for (from, to) in [("/private/var/mobile/Media", "/"), ("com.apple.afcd", "com.apple.afc2")] {
+            let f = Data((from + "\0").utf8)
+            let t = Data((to + "\0").utf8) + Data(count: f.count - to.utf8.count - 1)
+            var found = false
+            while let r = d.range(of: f) {
+                d.replaceSubrange(r, with: t)
+                found = true
+            }
+            guard found else { throw FirmwareError(.unsupported, "afcd: no \(from)") }
+        }
+        return try Activation.signed(d)
     }
 
     /// The program of the stock job `job` (volume-relative), checked by label.

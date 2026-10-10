@@ -251,8 +251,9 @@ func single(_ args: SingleCheck) -> Never {
         let top = Set(afc2["top"] as? [String] ?? [])
         r.check(
             top.isSuperset(of: ["Applications", "System", "private"])
-                && afc2.string("version") == base.version,
+                && afc2.string("version") == base.version && afc2.bool("roundTrip"),
             "\(d): afc2 lists / (\(top.sorted().joined(separator: ", "))) and reads iOS \(afc2.string("version") ?? "none")"
+                + (afc2.bool("roundTrip") ? ", a file round trip in /private/var/root" : "")
                 + (afc2.string("error").map { ": \($0)" } ?? "")
         )
         let cydia = events.one("cydia", ["device": d])

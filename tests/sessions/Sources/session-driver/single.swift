@@ -74,8 +74,8 @@ struct SingleConfig: Decodable {
     /// The base was prepared with firmwarekit create --skip-setup: what is frontmost when the agent first answers, and
     /// at Home what Setup's preferences say (`setupSeed`).
     var skipSetup: Bool?
-    /// The base was prepared with firmwarekit create --jailbreak: Files through afc2 lists "/" and reads the build's
-    /// SystemVersion.plist (`afc2`).
+    /// The base was prepared with firmwarekit create --jailbreak: Files through afc2 lists "/", reads the build's
+    /// SystemVersion.plist and round-trips a file in root's home (`afc2`).
     var jailbreak: Bool?
     /// contrib/it-proxy/httpget (armv6): at the first Home the guest fetches `WiFiProbe.url`, which only wifi0's
     /// guestfwd answers, so the board's Wi-Fi joined (`wifi`).
@@ -633,7 +633,22 @@ nonisolated enum WiFiProbe {
             let version =
                 (try PropertyListSerialization.propertyList(from: Data(contentsOf: back), format: nil)
                 as? [String: Any])?["ProductVersion"] as? String
-            emit("afc2", ["device": d.name, "top": top, "version": version ?? ""])
+            // A file round trip in root's home, which only root may write, outside the media folder.
+            let local = d.dir.appendingPathComponent("ltm-afc2.bin")
+            let bytes = Data((0..<70_001).map { UInt8(truncatingIfNeeded: $0 &* 2_654_435_761 >> 9) })
+            try bytes.write(to: local)
+            try await root.uploadFile(local, into: "private/var/root") { _ in }
+            guard
+                let copy = try await root.files(in: "private/var/root").first(where: {
+                    $0.name == local.lastPathComponent
+                })
+            else { throw DeviceError.preflight("the copy isn't listed in private/var/root") }
+            try await root.download(copy, to: back) { _ in }
+            let same = try Data(contentsOf: back) == bytes
+            try await root.delete("private/var/root/\(copy.name)")
+            let gone = try await !root.files(in: "private/var/root").contains { $0.name == copy.name }
+            try? FileManager.default.removeItem(at: local)
+            emit("afc2", ["device": d.name, "top": top, "version": version ?? "", "roundTrip": same && gone])
         } catch {
             emit("afc2", ["device": d.name, "top": top, "error": "\(error)"])
         }

@@ -134,7 +134,10 @@ struct ActivationTests {
         #expect(result.inputSHA256 == "input")
     }
 
-    @Test func activationSignsSyntheticMachO() throws {
+    /// A 32-bit Mach-O of 512 bytes signed over its first page (256 bytes, code from offset 44 free): a SHA-1 code
+    /// directory at `cd`, a requirements blob at 364, an entitlements blob at 380 and a CMS slot.
+    static let cd = 292
+    static func syntheticMachO() -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: 512)
         func put(_ offset: Int, _ value: UInt32, big: Bool = true) {
             for i in 0..<4 { bytes[offset + i] = UInt8(truncatingIfNeeded: value >> (big ? 24 - i * 8 : i * 8)) }
@@ -155,7 +158,6 @@ struct ActivationTests {
         put(280, 108)
         put(284, 0x10000)
         put(288, 124)
-        let cd = 292
         put(cd, 0xfade_0c02)
         put(cd + 4, 72)
         put(cd + 8, 0x20001)
@@ -170,6 +172,12 @@ struct ActivationTests {
         put(368, 16)
         put(380, 0xfade_0b01)
         put(384, 16)
+        return bytes
+    }
+
+    @Test func activationSignsSyntheticMachO() throws {
+        var bytes = Self.syntheticMachO()
+        let cd = Self.cd
         let output = [UInt8](try Activation.signed(Data(bytes)))
         #expect(u32(output, 264) == 2)
         #expect(u32(output, cd + 12) == 2)
