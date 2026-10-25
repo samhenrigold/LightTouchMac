@@ -1,0 +1,115 @@
+--- a/tools/inetcat.c
++++ b/tools/inetcat.c
+@@ -89,6 +89,27 @@
+     return (size_t)ret;
+ }
+ 
++/* devfd is non-blocking (libimobiledevice-glue's socket_connect_unix sets O_NONBLOCK), so a write can take part of
++ * the buffer or none of it while usbmuxd waits for the device's TCP window. What it doesn't take stays pending for the
++ * next select: dropping it loses those bytes from the middle of the stream, and waiting here for it would stop the
++ * other direction, which the device may have to send before it reads more. */
++static int write_pending(int fd, const uint8_t* buf, size_t len, size_t* done)
++{
++    while (*done < len) {
++        ssize_t n = write(fd, buf + *done, len - *done);
++        if (n > 0) {
++            *done += (size_t)n;
++        } else if (n < 0 && errno == EINTR) {
++            continue;
++        } else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
++            return 0;
++        } else {
++            return -1;
++        }
++    }
++    return 0;
++}
++
+ static void print_usage(int argc, char **argv, int is_error)
+ {
+     char *name = NULL;
+@@ -264,37 +285,69 @@
+         return 1;
+     }
+ 
+-    fd_set fds;
+-    FD_ZERO(&fds);
+-    FD_SET(STDIN_FILENO, &fds);
+-    FD_SET(devfd, &fds);
+-
+     int ret = 0;
+-    uint8_t buf[4096];
++    uint8_t in_buf[4096];
++    uint8_t out_buf[4096];
++    size_t in_len = 0, in_done = 0;
++    size_t out_len = 0, out_done = 0;
++    int stdin_eof = 0;
+     while (1) {
+-        fd_set read_fds = fds;
+-        int ret_sel = select(devfd+1, &read_fds, NULL, NULL, NULL);
++        /* each direction reads its source only once its last page is written, so a slow side holds back only itself */
++        fd_set read_fds;
++        fd_set write_fds;
++        FD_ZERO(&read_fds);
++        FD_ZERO(&write_fds);
++        if (stdin_eof && out_done == out_len) {
++            break;
++        }
++        if (!stdin_eof && in_done == in_len) {
++            FD_SET(STDIN_FILENO, &read_fds);
++        }
++        if (!stdin_eof && out_done == out_len) {
++            FD_SET(devfd, &read_fds);
++        }
++        if (in_done < in_len) {
++            FD_SET(devfd, &write_fds);
++        }
++        if (out_done < out_len) {
++            FD_SET(STDOUT_FILENO, &write_fds);
++        }
++        int ret_sel = select(devfd+1, &read_fds, &write_fds, NULL, NULL);
+         if (ret_sel < 0) {
++            if (errno == EINTR) {
++                continue;
++            }
+             perror("select");
+             ret = 1;
+             break;
+         }
+ 
+         if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+-            size_t n = read_data_socket(STDIN_FILENO, buf, sizeof(buf));
+-            if (n == 0) {
+-                break;
++            in_len = read_data_socket(STDIN_FILENO, in_buf, sizeof(in_buf));
++            in_done = 0;
++            if (in_len == 0) {
++                stdin_eof = 1;
+             }
+-            write(devfd, buf, n);
+         }
+ 
+         if (FD_ISSET(devfd, &read_fds)) {
+-            size_t n = read_data_socket(devfd, buf, sizeof(buf));
+-            if (n == 0) {
++            out_len = read_data_socket(devfd, out_buf, sizeof(out_buf));
++            out_done = 0;
++            if (out_len == 0) {
+                 break;
+             }
+-            write(STDOUT_FILENO, buf, n);
+         }
++
++        if (write_pending(devfd, in_buf, in_len, &in_done) < 0) {
++            perror("write to device failed");
++            ret = 1;
++            break;
++        }
++        if (write_pending(STDOUT_FILENO, out_buf, out_len, &out_done) < 0) {
++            perror("write to stdout failed");
++            ret = 1;
++            break;
++        }
+     }
+ 
+     socket_close(devfd);
