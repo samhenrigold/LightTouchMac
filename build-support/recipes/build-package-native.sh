@@ -208,7 +208,7 @@ LTM_ARCH="$ARCH" bash "$SRC/build-support/recipes/build-iboot32patcher.sh" "$ROO
 (cd ffmpeg-9.0.1 && ./configure --prefix="$NEUTRAL" ${FFMPEG_CROSS[@]+"${FFMPEG_CROSS[@]}"} \
     --disable-everything --disable-autodetect --disable-programs --disable-doc \
     --disable-avdevice --disable-avformat --disable-avfilter --disable-swscale --disable-swresample \
-    --enable-decoder=aac,mp3,alac,h264 --enable-shared --disable-static --install-name-dir=@rpath \
+    --enable-decoder=aac,mp3,alac,h264 --enable-encoder=aac --enable-shared --disable-static --install-name-dir=@rpath \
     --extra-cflags="$ARCH_FLAG-mmacosx-version-min=14.0" \
     --extra-ldflags="$ARCH_FLAG-mmacosx-version-min=14.0 -Wl,-rpath,@loader_path" \
     && make -j"$JOBS" && make install DESTDIR="$ROOT/stage") && restage
