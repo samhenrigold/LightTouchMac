@@ -84,19 +84,37 @@ enum K48NANDImage {
         return fd
     }
 
-    /// The erase blocks of `fd` holding data (SEEK_DATA/SEEK_HOLE); APFS zero-fills holes under 16 MiB, so these
-    /// include zeros, which read as erased in either format.
+    /// The byte ranges of `fd` holding data (SEEK_DATA/SEEK_HOLE). Only ENXIO means nothing is left: a volume that
+    /// can't answer (ENOTSUP) or any other failure leaves the rest counted as data, since skipping it loses it.
+    static func dataExtents(_ fd: Int32, seek: (Int32, off_t, Int32) -> off_t = lseek) -> [Range<off_t>] {
+        var extents: [Range<off_t>] = []
+        var info = stat()
+        guard fd >= 0, fstat(fd, &info) == 0 else { return extents }
+        var offset: off_t = 0
+        while offset < info.st_size {
+            let start = seek(fd, offset, SEEK_DATA)
+            if start < 0, errno == ENXIO { break }
+            guard start >= 0 else {
+                extents.append(offset..<info.st_size)
+                break
+            }
+            let end = seek(fd, start, SEEK_HOLE)
+            guard end > start else {
+                extents.append(start..<info.st_size)
+                break
+            }
+            extents.append(start..<end)
+            offset = end
+        }
+        return extents
+    }
+
+    /// The erase blocks of `fd` holding data; APFS zero-fills holes under 16 MiB, so these include zeros, which read
+    /// as erased in either format.
     static func dataBlocks(_ fd: Int32, blockBytes: Int) -> Set<Int> {
         var blocks = Set<Int>()
-        guard fd >= 0 else { return blocks }
-        var offset: off_t = 0
-        while true {
-            let start = lseek(fd, offset, SEEK_DATA)
-            if start < 0 { break }
-            let end = lseek(fd, start, SEEK_HOLE)
-            guard end > start else { break }
-            blocks.formUnion(Int(start) / blockBytes...(Int(end) - 1) / blockBytes)
-            offset = end
+        for extent in dataExtents(fd) {
+            blocks.formUnion(Int(extent.lowerBound) / blockBytes...(Int(extent.upperBound) - 1) / blockBytes)
         }
         return blocks
     }

@@ -177,7 +177,11 @@ extension FitCheck {
         guard let kernel else { return Fit(piece, fits: false, "no decrypted kernelcache to check it against") }
         do {
             let f = try SandboxPatch.locate([UInt8](kernel))
-            return Fit(piece, fits: true, "sb_evaluate at 0x\(String(f.address, radix: 16)) (\(f.original.hexString))")
+            return Fit(
+                piece, fits: true,
+                "sb_evaluate at 0x\(String(f.address, radix: 16)) (\(f.original.hexString)), profile switch "
+                    + (f.switchBit.map { "0x" + String($0, radix: 16) } ?? "not found")
+            )
         } catch SandboxPatch.Error.noSandboxKext, SandboxPatch.Error.noString {
             return Fit(piece, fits: true, "no Seatbelt sandbox kext on this kernel: nothing to patch")
         } catch {

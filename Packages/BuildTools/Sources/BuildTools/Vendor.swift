@@ -93,7 +93,8 @@ public struct Vendor {
     ]
     static let staticKeyed = [
         "build-support/recipes/build-static-deps.sh", "build-support/dependencies.json",
-        "build-support/patches/libplist-bin-limits.patch",
+        "build-support/patches/libplist-bin-limits.patch", "build-support/patches/libusbmuxd-inetcat-writes.patch",
+        "build-support/checks/inetcat-writes.c",
         "Packages/BuildTools/Sources/BuildTools/DependencySources.swift",
         "Packages/BuildTools/Sources/BuildTools/Records.swift"
     ]

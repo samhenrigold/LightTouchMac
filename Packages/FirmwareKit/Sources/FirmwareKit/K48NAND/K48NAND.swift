@@ -541,16 +541,9 @@ public enum K48NAND {
 
         /// Page numbers inside the file's data extents (SEEK_DATA/SEEK_HOLE), in order, as FilePages.written().
         func written() -> [Int] {
-            var out: [Int] = []
-            var off: off_t = 0
-            while true {
-                let start = lseek(fd, off, SEEK_DATA)
-                if start < 0 { break }
-                let end = lseek(fd, start, SEEK_HOLE)
-                out += Int(start) / page..<(Int(end) + page - 1) / page
-                off = end
+            K48NANDImage.dataExtents(fd).flatMap {
+                Int($0.lowerBound) / page..<(Int($0.upperBound) + page - 1) / page
             }
-            return out
         }
 
         func get<R>(_ n: Int, _ body: (UnsafeRawBufferPointer) throws -> R) throws -> R {

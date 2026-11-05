@@ -13,11 +13,72 @@ struct SandboxPatchTests {
         let (patched, f2) = try SandboxPatch.apply(kernel)
         #expect(f2.address == found.address, "\(label): apply and locate agree")
         let changed = zip(kernel, patched).enumerated().filter { $0.element.0 != $0.element.1 }.map(\.offset)
-        let n = SandboxPatch.patch.count
+        let n = SandboxPatch.patchSize
         let img = try Image(patched)
         let o = try #require(img.addrToOff(found.address))
-        #expect(Array(patched[o..<o + n]) == SandboxPatch.patch, "\(label): the patch landed")
+        let bytes = SandboxPatch.patch(switchBit: found.switchBit ?? 0)
+        #expect(Array(patched[o..<o + n]) == bytes, "\(label): the patch landed")
         #expect(changed.allSatisfy { (o..<o + n).contains($0) }, "\(label): only the patch site changed")
+    }
+
+    /// The verdict lets the execve hook switch profiles: an errno of 0 at +0, the hook's flag in the byte at +4, and
+    /// r0 left as the result pointer. An empty action byte killed BTServer at every start on a jailbroken device.
+    @Test func theVerdictCarriesTheProfileSwitchFlag() {
+        #expect(SandboxPatch.patch(switchBit: 0x10) == [0x00, 0x21, 0x01, 0x60, 0x10, 0x21, 0x01, 0x71, 0x70, 0x47])
+        #expect(SandboxPatch.patch(switchBit: 0x08).count == SandboxPatch.patchSize)
+    }
+
+    /// The flag is the single-bit test nearest each reference to the hook's message, and every reference must agree.
+    @Test func theSwitchFlagIsTheTestBesideTheMessage() {
+        let before = (address: UInt32(0x1000), bit: UInt8(0x10))
+        let far = (address: UInt32(0x2000), bit: UInt8(0x40))
+        #expect(SandboxPatch.switchBit(references: [0x1006], flagTests: [before, far]) == 0x10)  // 4.x/5.x
+        #expect(SandboxPatch.switchBit(references: [0x0FFC], flagTests: [before, far]) == 0x10)  // 6.x/7.x
+        #expect(SandboxPatch.switchBit(references: [0x1800], flagTests: [before, far]) == nil)  // none near
+        #expect(SandboxPatch.switchBit(references: [], flagTests: [before]) == nil)
+        #expect(SandboxPatch.switchBit(references: [0x1006, 0x2004], flagTests: [before, far]) == nil)  // disagree
+    }
+
+    /// A stopped device's Jailbreak patches the kernel inside kboot.bin as preparing it jailbroken does: for a stock
+    /// base and the same row prepared jailbroken (LTM_SANDBOX_KBOOTS="stock.bin:jailbroken.bin"), the bytes match but
+    /// for the boot-args. Opt-in, as no kernel is in the repository.
+    @Test func aStoppedDevicesKBootMatchesAPreparedOne() throws {
+        guard let pair = ProcessInfo.processInfo.environment["LTM_SANDBOX_KBOOTS"]?.split(separator: ":"),
+            pair.count == 2
+        else { return }
+        var stock = [UInt8](try Data(contentsOf: URL(fileURLWithPath: String(pair[0]))))
+        let jailbroken = [UInt8](try Data(contentsOf: URL(fileURLWithPath: String(pair[1]))))
+        let t = stock.count - 24
+        let bytes = Int(try le32(stock, t + 20))
+        let args = Int(try le32(stock, t + 16)) - Int(try le32(stock, t + 8)) + 56
+        let before = zip(stock, jailbroken).filter { $0 != $1 }.count
+        let found = try SandboxPatch.applyLoaded(&stock, imageBytes: bytes)
+        let different = zip(stock, jailbroken).enumerated().filter { $0.element.0 != $0.element.1 }.map(\.offset)
+        print(
+            "kboot: \(before) bytes differed, \(different.count) now; sb_evaluate \(String(found.address, radix: 16))")
+        #expect(different.allSatisfy { (args..<args + 256).contains($0) })
+    }
+
+    /// A kernel laid out by address maps each address to its place, not the file offset its load commands name.
+    @Test func aLoadedImageMapsAddressesByLayout() throws {
+        var b = [UInt8](repeating: 0, count: 0x4000)
+        func put(_ o: Int, _ v: UInt32) { for k in 0..<4 { b[o + k] = UInt8(truncatingIfNeeded: v >> (8 * k)) } }
+        put(0x1000, 0xFEED_FACE)
+        put(0x1004, 12)
+        put(0x1010, 1)  // ncmds
+        put(0x1014, 56)
+        put(0x101C, 1)  // LC_SEGMENT
+        put(0x1020, 56)
+        b.replaceSubrange(0x1024..<0x102A, with: Array("__TEXT".utf8))
+        put(0x1034, 0x8000_1000)  // vmaddr
+        put(0x1038, 0x2000)  // vmsize
+        put(0x103C, 0x77)  // fileoff, which the layout ignores
+        put(0x1040, 0x2000)  // filesize
+        let image = try Image(loaded: b)
+        #expect(image.addrToOff(0x8000_1000) == 0x1000)
+        #expect(image.addrToOff(0x8000_2FFF) == 0x2FFF)
+        #expect(image.offToAddr(0x2000) == 0x8000_2000)
+        #expect(throws: SandboxPatch.Error.self) { try Image(loaded: [UInt8](repeating: 0, count: 0x2000)) }
     }
 
     /// Every decrypted kernelcache in the app's cache that carries a Seatbelt kext resolves to a prologue. Opt-in:
@@ -40,7 +101,10 @@ struct SandboxPatchTests {
             do {
                 let f = try SandboxPatch.locate(kernel)
                 try Self.check(kernel, ver)
-                print("  OK   \(ver) sb_evaluate=\(String(f.address, radix: 16)) \(f.original.hexString)")
+                print(
+                    "  OK   \(ver) sb_evaluate=\(String(f.address, radix: 16)) \(f.original.hexString)"
+                        + " switch=\(f.switchBit.map { String($0, radix: 16) } ?? "none")"
+                )
                 ok += 1
             } catch SandboxPatch.Error.noSandboxKext, SandboxPatch.Error.noString {
                 noKext += 1  // iOS before the prelinked Seatbelt kext

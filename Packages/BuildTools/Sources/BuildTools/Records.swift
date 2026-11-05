@@ -72,7 +72,8 @@ public enum Records {
         "build-support/dependencies.json", "build-support/patches/glib-pipe2-availability.patch",
         "build-support/patches/iBoot32Patcher-ltm.patch", "build-support/patches/libimobiledevice-sslv3-ios1.patch",
         "build-support/patches/libplist-bin-limits.patch", "build-support/patches/libimobiledevice-reply-limits.patch",
-        "build-support/checks/reply-limit.c",
+        "build-support/patches/libusbmuxd-inetcat-writes.patch", "build-support/checks/reply-limit.c",
+        "build-support/checks/inetcat-writes.c",
         "Packages/BuildTools/Sources/BuildTools/DependencySources.swift",
         "Packages/BuildTools/Sources/BuildSupport/MachOClosure.swift"
     ]

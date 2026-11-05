@@ -217,7 +217,7 @@ extension DeviceTweaks {
         DeviceTweaks(
             settings: DeviceSettingsFile(directory: instance.paths.directory),
             version: FirmwareCatalog.bundled.entry(id: instance.firmware)?.version ?? "3.1.3",
-            guestTools: instance.profile?.hasGuestTools ?? false,
+            guestTools: GuestPackage.runsAgent(firmware: instance.firmware),
             clockPinned: (try? DeviceLock.read(base: instance.paths.base))??.pinsClock == true,
             cellular: instance.profile?.hasCellular ?? true
         )

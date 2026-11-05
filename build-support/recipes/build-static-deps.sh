@@ -103,7 +103,10 @@ license nettle nettle-3.10.2 COPYINGv2 COPYINGv3 COPYING.LESSERv3
 "$SRC/scripts/ltm-build" sources note nettle > "$PREFIX/share/licenses/nettle/SOURCE.txt"
 autobuild libplist-2.8.0.tar.bz2 libplist-2.8.0 --patch build-support/patches/libplist-bin-limits.patch --without-cython
 autobuild libimobiledevice-glue-1.3.2.tar.bz2 libimobiledevice-glue-1.3.2
-autobuild libusbmuxd-2.1.1.tar.bz2 libusbmuxd-2.1.1
+# inetcat's usbmuxd socket is non-blocking and it never retried a short write, so a stream faster than the device's
+# TCP window lost the bytes in between (an scp past about 140 KB); libusbmuxd-inetcat-writes.patch keeps them pending
+# and goes on reading the device meanwhile.
+autobuild libusbmuxd-2.1.1.tar.bz2 libusbmuxd-2.1.1 --patch build-support/patches/libusbmuxd-inetcat-writes.patch
 autobuild libtatsu-1.0.5.tar.bz2 libtatsu-1.0.5
 autobuild libimobiledevice-1.4.0.tar.bz2 libimobiledevice-1.4.0 --without-cython
 # Linked statically into the shipped libimobiledevice and usbmuxd (LGPL-2.1): their texts and sources.
@@ -114,7 +117,13 @@ done
 # The library is LGPL-2.1, but tools/inetcat.c is GPL-2.0-or-later.
 # Preserve its notice, GPL text and the same pinned archive provenance.
 license inetcat "$SRC/build-support/licenses" GPL-2.0.txt
-cp "$ROOT/build/libusbmuxd-2.1.1/tools/inetcat.c" "$PREFIX/share/licenses/inetcat/"
-"$SRC/scripts/ltm-build" sources note libusbmuxd > "$PREFIX/share/licenses/inetcat/SOURCE.txt"
+cp "$ROOT/build/libusbmuxd-2.1.1/tools/inetcat.c" "$SRC/build-support/patches/libusbmuxd-inetcat-writes.patch" \
+    "$PREFIX/share/licenses/inetcat/"
+"$SRC/scripts/ltm-build" sources note libusbmuxd libusbmuxd-inetcat-writes.patch \
+    > "$PREFIX/share/licenses/inetcat/SOURCE.txt"
+if [ "$ARCH" = arm64 ]; then   # the built inetcat: a stream taken slowly arrives whole, also while the device sends
+    xcrun clang -O2 "$SRC/build-support/checks/inetcat-writes.c" -o "$ROOT/inetcat-writes"
+    "$ROOT/inetcat-writes" "$PREFIX/bin/inetcat"
+fi
 "$SRC/scripts/ltm-build" static-record "$ROOT" "$ARCH"
 echo "Static dependencies ready: $PREFIX"

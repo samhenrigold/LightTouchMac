@@ -1738,6 +1738,9 @@ nonisolated enum CydiaSources {
     syslog.standardError = FileHandle.nullDevice
     do {
         try syslog.run()
+        try await Task.sleep(for: .seconds(1))
+        // Through env, a missing tool isn't a run() failure: it reads as Substrate never loading.
+        if !syslog.isRunning { event["error"] = "no idevicesyslog on PATH (the vendor directory's work/*/prefix/bin)" }
         try await agent.put(
             probe[0],
             mode: 0o644,
