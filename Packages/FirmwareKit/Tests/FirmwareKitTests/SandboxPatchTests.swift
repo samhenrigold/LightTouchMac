@@ -13,11 +13,30 @@ struct SandboxPatchTests {
         let (patched, f2) = try SandboxPatch.apply(kernel)
         #expect(f2.address == found.address, "\(label): apply and locate agree")
         let changed = zip(kernel, patched).enumerated().filter { $0.element.0 != $0.element.1 }.map(\.offset)
-        let n = SandboxPatch.patch.count
+        let n = SandboxPatch.patchSize
         let img = try Image(patched)
         let o = try #require(img.addrToOff(found.address))
-        #expect(Array(patched[o..<o + n]) == SandboxPatch.patch, "\(label): the patch landed")
+        let bytes = SandboxPatch.patch(switchBit: found.switchBit ?? 0)
+        #expect(Array(patched[o..<o + n]) == bytes, "\(label): the patch landed")
         #expect(changed.allSatisfy { (o..<o + n).contains($0) }, "\(label): only the patch site changed")
+    }
+
+    /// The verdict lets the execve hook switch profiles: an errno of 0 at +0, the hook's flag in the byte at +4, and
+    /// r0 left as the result pointer. An empty action byte killed BTServer at every start on a jailbroken device.
+    @Test func theVerdictCarriesTheProfileSwitchFlag() {
+        #expect(SandboxPatch.patch(switchBit: 0x10) == [0x00, 0x21, 0x01, 0x60, 0x10, 0x21, 0x01, 0x71, 0x70, 0x47])
+        #expect(SandboxPatch.patch(switchBit: 0x08).count == SandboxPatch.patchSize)
+    }
+
+    /// The flag is the single-bit test nearest each reference to the hook's message, and every reference must agree.
+    @Test func theSwitchFlagIsTheTestBesideTheMessage() {
+        let before = (address: UInt32(0x1000), bit: UInt8(0x10))
+        let far = (address: UInt32(0x2000), bit: UInt8(0x40))
+        #expect(SandboxPatch.switchBit(references: [0x1006], flagTests: [before, far]) == 0x10)  // 4.x/5.x
+        #expect(SandboxPatch.switchBit(references: [0x0FFC], flagTests: [before, far]) == 0x10)  // 6.x/7.x
+        #expect(SandboxPatch.switchBit(references: [0x1800], flagTests: [before, far]) == nil)  // none near
+        #expect(SandboxPatch.switchBit(references: [], flagTests: [before]) == nil)
+        #expect(SandboxPatch.switchBit(references: [0x1006, 0x2004], flagTests: [before, far]) == nil)  // disagree
     }
 
     /// Every decrypted kernelcache in the app's cache that carries a Seatbelt kext resolves to a prologue. Opt-in:
@@ -40,7 +59,10 @@ struct SandboxPatchTests {
             do {
                 let f = try SandboxPatch.locate(kernel)
                 try Self.check(kernel, ver)
-                print("  OK   \(ver) sb_evaluate=\(String(f.address, radix: 16)) \(f.original.hexString)")
+                print(
+                    "  OK   \(ver) sb_evaluate=\(String(f.address, radix: 16)) \(f.original.hexString)"
+                        + " switch=\(f.switchBit.map { String($0, radix: 16) } ?? "none")"
+                )
                 ok += 1
             } catch SandboxPatch.Error.noSandboxKext, SandboxPatch.Error.noString {
                 noKext += 1  // iOS before the prelinked Seatbelt kext

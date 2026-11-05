@@ -9,23 +9,47 @@
 // sb_evaluate is located by byte pattern, not a fixed offset: the Seatbelt kext's "bad opcode" string (the profile
 // interpreter's bad-opcode report, inside sb_evaluate) is found, its reference in the kext text walked for (both
 // the 4.x/5.x absolute literal-pool form and the 6.x/7.x PC-relative ldr/add form), and the function it sits in is
-// taken as the Thumb push{..,lr} prologue nearest before it. The prologue's four bytes become `movs r0, #0; bx lr`.
+// taken as the Thumb push{..,lr} prologue nearest before it, which becomes the allow in `patch`.
 
 import BinaryParsing
 import Foundation
 
 public enum SandboxPatch {
-    /// Return "allowed" at once, writing the decision the caller reads back. sb_evaluate(result, …) leaves its verdict
-    /// in the caller's `result` struct (status at +0, filter at +4; 0 = allow) and returns 0; a bare `return 0` left
-    /// that struct unwritten and the sandboxed daemons faulted. So: `movs r1,#0; str r1,[r0]; str r1,[r0,#4];
-    /// movs r0,#0; bx lr` — allow, result cleared, return 0. r0 is the result pointer on entry (the caller's arg0).
-    static let patch: [UInt8] = [0x00, 0x21, 0x01, 0x60, 0x41, 0x60, 0x00, 0x20, 0x70, 0x47]
+    /// Return "allowed" at once, writing the decision the caller reads back. sb_evaluate returns its verdict through
+    /// the caller's `result` struct (r0 on entry, returned in r0): an errno at +0 (0 = allow) and an action byte at +4,
+    /// whose `switchBit` lets the execve hook move a sandboxed process into the exec'd program's own profile. A bare
+    /// `return 0` left that struct unwritten and the sandboxed daemons faulted. So: `movs r1,#0; str r1,[r0];
+    /// movs r1,#switchBit; strb r1,[r0,#4]; bx lr`.
+    static func patch(switchBit: UInt8) -> [UInt8] {
+        [0x00, 0x21, 0x01, 0x60, switchBit, 0x21, 0x01, 0x71, 0x70, 0x47]
+    }
+    static let patchSize = 10
+
+    /// The execve hook's report when a sandboxed process may not switch to the exec'd program's own profile. BTServer
+    /// runs BlueTool that way, so without the flag this message's test wants, BTServer was killed at every start of a
+    /// jailbroken device and launchd restarted it all session.
+    static let switchMessage = "already in a sandbox, unable to switch to: "
+
+    /// The flag the hook tests: the single-bit `tst.w`/`ands.w` nearest each reference to its message, which sits just
+    /// before the literal load (4.x/5.x: `tst.w; it eq; ldreq`) or just after `add rD, pc` (6.x/7.x); nil unless
+    /// every reference agrees.
+    static func switchBit(references: [UInt32], flagTests: [(address: UInt32, bit: UInt8)]) -> UInt8? {
+        let bits = references.compactMap { r in
+            flagTests.filter { $0.address &+ 12 >= r && $0.address <= r &+ 8 }
+                .min { abs(Int64($0.address) - Int64(r)) < abs(Int64($1.address) - Int64(r)) }?.bit
+        }
+        guard let bit = bits.first, bits.allSatisfy({ $0 == bit }) else { return nil }
+        return bit
+    }
 
     public struct Found: Sendable {
         /// The virtual address of sb_evaluate's prologue (the patch site).
         public let address: UInt32
         /// The bytes there before the patch (a push{..,lr} prologue), for the record.
         public let original: [UInt8]
+        /// The action flag the execve hook tests before a sandboxed process may switch profiles on exec; nil on a
+        /// kernel where that test isn't found, which still gets the allow, without the switch.
+        public let switchBit: UInt8?
     }
 
     public enum Error: Swift.Error, CustomStringConvertible {
@@ -50,11 +74,14 @@ public enum SandboxPatch {
         guard let klo = img.sandboxKextLoadAddr() else { throw Error.noSandboxKext }
         guard let (taddr, tsize) = img.kextText(klo) else { throw Error.noKextText }
         guard let so = img.findCString("bad opcode"), let saddr = img.offToAddr(so) else { throw Error.noString }
+        let switchAddress = img.findCString(switchMessage).flatMap { img.offToAddr($0) }
         guard let toff = img.addrToOff(taddr), toff + Int(tsize) <= kernel.count else { throw Error.noKextText }
 
         // Resilient Thumb walk of the kext text: collect push{..,lr} prologues and references to saddr.
         var prologues: [UInt32] = []
         var refs: [UInt32] = []
+        var switchRefs: [UInt32] = []
+        var flagTests: [(address: UInt32, bit: UInt8)] = []  // tst.w / ands.w rN, #single bit
         var regWord: [Int: UInt32] = [:]  // register -> last pc-relative word loaded
         var pos = 0
         while pos + 1 < tsize {
@@ -75,6 +102,7 @@ public enum SandboxPatch {
                 let base = (addr &+ 4) & ~3
                 let la = base &+ UInt32((hw1 & 0xFF)) &* 4
                 reference(img, la: la, saddr: saddr, rt: rt, at: addr, regWord: &regWord, refs: &refs)
+                literal(img, la: la, target: switchAddress, at: addr, refs: &switchRefs)
             } else if len == 4, hw1 & 0xFF7F == 0xF85F {
                 // ldr.w rT, [pc, #imm12]  (T2)
                 let rt = Int((hw2 >> 12) & 0xF)
@@ -82,36 +110,45 @@ public enum SandboxPatch {
                 let imm = UInt32(hw2 & 0xFFF)
                 let la = (hw1 & 0x0080) != 0 ? base &+ imm : base &- imm
                 reference(img, la: la, saddr: saddr, rt: rt, at: addr, regWord: &regWord, refs: &refs)
-            } else if len == 2, hw1 & 0xFFF8 == 0x4478 {
-                // add rD, pc  (Rm == pc): resolve a PC-relative delta loaded earlier
-                let rd = Int(hw1 & 7)
+                literal(img, la: la, target: switchAddress, at: addr, refs: &switchRefs)
+            } else if len == 2, hw1 & 0xFF78 == 0x4478 {
+                // add rD, pc  (Rm == pc): resolve a PC-relative delta loaded earlier (sb_evaluate's string: r0-r7 only)
+                let rd = Int((hw1 & 7) | (hw1 >> 4 & 8))
                 if let w = regWord[rd] {
                     let resolved = addr &+ 4 &+ w
-                    if resolved == saddr { refs.append(addr) }
+                    if resolved == saddr, rd < 8 { refs.append(addr) }
+                    if resolved == switchAddress { switchRefs.append(addr) }
                 }
+            } else if len == 4, hw1 & 0xFBF0 == 0xF010, hw1 & 0x0400 == 0, hw2 & 0xF000 == 0 {
+                // tst.w / ands.w rN, #imm8 (i = imm3 = 0): a flag test
+                let imm = UInt8(hw2 & 0xFF)
+                if imm.nonzeroBitCount == 1 { flagTests.append((addr, imm)) }
             }
             pos += len
         }
         guard let x = refs.min() else { throw Error.noReference }
         guard let entry = prologues.filter({ $0 <= x }).max() else { throw Error.noPrologue }
-        guard let eo = img.addrToOff(entry), eo + patch.count <= kernel.count else { throw Error.noPrologue }
+        guard let eo = img.addrToOff(entry), eo + patchSize <= kernel.count else { throw Error.noPrologue }
         let orig = Array(kernel[eo..<eo + 4])
         // A real prologue: push {..,lr} (0xB5xx) or push.w {..,lr} (0xE92D, lr bit set).
         let hw = UInt16(orig[0]) | UInt16(orig[1]) << 8
         let isPush16 = hw & 0xFE00 == 0xB400 && hw & 0x0100 != 0
         let isPush32 = hw == 0xE92D && (UInt16(orig[2]) | UInt16(orig[3]) << 8) & 0x4000 != 0
         guard isPush16 || isPush32 else { throw Error.badPatchSite }
-        return Found(address: entry, original: orig)
+        return Found(
+            address: entry, original: orig,
+            switchBit: switchBit(references: switchRefs, flagTests: flagTests)
+        )
     }
 
     /// Apply the patch in place, returning the patched kernelcache and where it landed.
     public static func apply(_ kernel: [UInt8]) throws -> (kernel: [UInt8], found: Found) {
         let found = try locate(kernel)
         var out = kernel
-        guard let o = try Image(kernel).addrToOff(found.address), o + patch.count <= out.count else {
+        guard let o = try Image(kernel).addrToOff(found.address), o + patchSize <= out.count else {
             throw Error.badPatchSite
         }
-        out.replaceSubrange(o..<o + patch.count, with: patch)
+        out.replaceSubrange(o..<o + patchSize, with: patch(switchBit: found.switchBit ?? 0))
         return (out, found)
     }
 
@@ -183,6 +220,12 @@ public enum SandboxPatch {
     private static func le(_ v: UInt32) -> [UInt8] { (0..<4).map { UInt8(truncatingIfNeeded: v >> (8 * $0)) } }
     private static func putLE(_ b: inout [UInt8], _ o: Int, _ v: UInt32) {
         for k in 0..<4 { b[o + k] = UInt8(truncatingIfNeeded: v >> (8 * k)) }
+    }
+
+    /// A literal-pool word at `la` that is `target`'s address: a reference to it from `at`.
+    private static func literal(_ img: Image, la: UInt32, target: UInt32?, at: UInt32, refs: inout [UInt32]) {
+        guard let target, let lo = img.addrToOff(la), lo + 4 <= img.bytes.count, img.u32(lo) == target else { return }
+        refs.append(at)
     }
 
     private static func reference(
