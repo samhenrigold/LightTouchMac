@@ -180,6 +180,7 @@ xcodebuild test -skipMacroValidation -project LightTouchMac.xcodeproj -scheme Li
 swift run --package-path tests/sessions sessions single BASE [--launch] [--reboot]
 # a jailbroken base: Cydia refreshes and installs from local repositories the web proxy serves (no internet);
 # --network uses the real ones and installs bc (the nightly and pre-release matrix)
+# needs idevicesyslog on PATH for its Substrate check (build/vendor/work/native/arm64/prefix/bin)
 swift run --package-path tests/sessions sessions single JAILBROKEN_BASE --jailbreak [--network]
 # many rows at once: each job a base, or create's flags to prepare one, and a check (default single as prepared);
 # up to --lanes jobs share the Mac's emulator slots, so one row prepares while others boot (`sessions matrix --help`)
