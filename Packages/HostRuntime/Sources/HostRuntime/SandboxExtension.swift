@@ -10,11 +10,11 @@
 // - Grants are typed: the caller names each path and whether the helper writes it (BootFiles, from the boot recipe),
 //   nothing is derived from argv. Read-only unless the helper writes there.
 // - A path is resolved (a library behind a symlink or on another volume works) and issued with NOFOLLOW_ANY, so a
-//   symlink swapped in after that fails the grant instead of moving it. shortcut: macOS 14 lacks that flag, and its
-//   NOFOLLOW protects only the path's last component, so a folder swapped in above it during the issue moves the
-//   grant; drop NOFOLLOW when macOS 15 is the minimum. A symlink inside anything the helper may
-//   write (a previous run could have planted it) refuses the grant. So does the deny-list: /, the home folder and its
-//   ancestors, ~/Library and what runs or configures things from it, other apps' containers, /Applications, and
+//   symlink swapped in after that fails the grant instead of moving it. A macOS without that flag (14, or a later one
+//   that drops it) falls back to NOFOLLOW, on purpose, so devices still start: it protects only the path's last
+//   component, so a folder swapped in above it during the issue moves the grant. A symlink inside anything the helper
+//   may write (a previous run could have planted it) refuses the grant. So does the deny-list: /, the home folder and
+//   its ancestors, ~/Library and what runs or configures things from it, other apps' containers, /Applications, and
 //   writing inside any app bundle.
 // - Never user-intent, MACL, Mach, IOKit or generic extensions.
 // - The helper takes its tokens before it opens anything and releases them when it exits.
