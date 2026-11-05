@@ -29,6 +29,14 @@ public protocol EraseHost: AnyObject {
 }
 
 public final class DeviceErase {
+    /// iOS's own Erase All Content and Settings stopped short: mobile_obliterator leaves why in NVRAM with auto-boot
+    /// off, and iBoot goes to recovery. A device with no data partition (the n72, n45 and m68 recipes) always ends
+    /// here, since there is no /private/var to unmount. The person already confirmed the erase on the device.
+    public nonisolated static func guestAsked(nor: URL?) -> Bool {
+        guard let nor, let flash = try? Data(contentsOf: nor) else { return false }
+        return flash.range(of: Data("obliteration=".utf8)) != nil
+    }
+
     public nonisolated struct Targets: Sendable {
         public init(overlay: URL, snapshots: [URL], preparedNOR: URL?, state: URL, owner: UUID) {
             self.overlay = overlay
