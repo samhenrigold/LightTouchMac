@@ -39,6 +39,48 @@ struct SandboxPatchTests {
         #expect(SandboxPatch.switchBit(references: [0x1006, 0x2004], flagTests: [before, far]) == nil)  // disagree
     }
 
+    /// A stopped device's Jailbreak patches the kernel inside kboot.bin as preparing it jailbroken does: for a stock
+    /// base and the same row prepared jailbroken (LTM_SANDBOX_KBOOTS="stock.bin:jailbroken.bin"), the bytes match but
+    /// for the boot-args. Opt-in, as no kernel is in the repository.
+    @Test func aStoppedDevicesKBootMatchesAPreparedOne() throws {
+        guard let pair = ProcessInfo.processInfo.environment["LTM_SANDBOX_KBOOTS"]?.split(separator: ":"),
+            pair.count == 2
+        else { return }
+        var stock = [UInt8](try Data(contentsOf: URL(fileURLWithPath: String(pair[0]))))
+        let jailbroken = [UInt8](try Data(contentsOf: URL(fileURLWithPath: String(pair[1]))))
+        let t = stock.count - 24
+        let bytes = Int(try le32(stock, t + 20))
+        let args = Int(try le32(stock, t + 16)) - Int(try le32(stock, t + 8)) + 56
+        let before = zip(stock, jailbroken).filter { $0 != $1 }.count
+        let found = try SandboxPatch.applyLoaded(&stock, imageBytes: bytes)
+        let different = zip(stock, jailbroken).enumerated().filter { $0.element.0 != $0.element.1 }.map(\.offset)
+        print(
+            "kboot: \(before) bytes differed, \(different.count) now; sb_evaluate \(String(found.address, radix: 16))")
+        #expect(different.allSatisfy { (args..<args + 256).contains($0) })
+    }
+
+    /// A kernel laid out by address maps each address to its place, not the file offset its load commands name.
+    @Test func aLoadedImageMapsAddressesByLayout() throws {
+        var b = [UInt8](repeating: 0, count: 0x4000)
+        func put(_ o: Int, _ v: UInt32) { for k in 0..<4 { b[o + k] = UInt8(truncatingIfNeeded: v >> (8 * k)) } }
+        put(0x1000, 0xFEED_FACE)
+        put(0x1004, 12)
+        put(0x1010, 1)  // ncmds
+        put(0x1014, 56)
+        put(0x101C, 1)  // LC_SEGMENT
+        put(0x1020, 56)
+        Array("__TEXT".utf8).enumerated().forEach { b[0x1024 + $0.offset] = $0.element }
+        put(0x1034, 0x8000_1000)  // vmaddr
+        put(0x1038, 0x2000)  // vmsize
+        put(0x103C, 0x77)  // fileoff, which the layout ignores
+        put(0x1040, 0x2000)  // filesize
+        let image = try Image(loaded: b)
+        #expect(image.addrToOff(0x8000_1000) == 0x1000)
+        #expect(image.addrToOff(0x8000_2FFF) == 0x2FFF)
+        #expect(image.offToAddr(0x2000) == 0x8000_2000)
+        #expect(throws: SandboxPatch.Error.self) { try Image(loaded: [UInt8](repeating: 0, count: 0x2000)) }
+    }
+
     /// Every decrypted kernelcache in the app's cache that carries a Seatbelt kext resolves to a prologue. Opt-in:
     /// LTM_SANDBOX_KERNELS points at a directory tree of kernelcache.mach files (the Decrypted cache).
     @Test func locatesAcrossTheCachedKernels() throws {

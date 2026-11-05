@@ -69,8 +69,10 @@ public enum SandboxPatch {
 
     /// Locate sb_evaluate in a decrypted, decompressed kernelcache Mach-O. Throws when the kernel has no Seatbelt
     /// kext (iOS before the prelinked sandbox) or the pattern does not resolve.
-    public static func locate(_ kernel: [UInt8]) throws -> Found {
-        let img = try Image(kernel)
+    public static func locate(_ kernel: [UInt8]) throws -> Found { try locate(Image(kernel)) }
+
+    static func locate(_ img: Image) throws -> Found {
+        let kernel = img.bytes
         guard let klo = img.sandboxKextLoadAddr() else { throw Error.noSandboxKext }
         guard let (taddr, tsize) = img.kextText(klo) else { throw Error.noKextText }
         guard let so = img.findCString("bad opcode"), let saddr = img.offToAddr(so) else { throw Error.noString }
@@ -150,6 +152,17 @@ public enum SandboxPatch {
         }
         out.replaceSubrange(o..<o + patchSize, with: patch(switchBit: found.switchBit ?? 0))
         return (out, found)
+    }
+
+    /// Apply the patch inside a kboot.bin, whose `0..<imageBytes` is the kernel laid out by address (KBoot.build), for a
+    /// stopped device being jailbroken: preparation patches the Mach-O before that layout, and the Mach-O is gone by now.
+    public static func applyLoaded(_ kboot: inout [UInt8], imageBytes: Int) throws -> Found {
+        guard imageBytes > 0, imageBytes <= kboot.count else { throw Error.notMachO }
+        let img = try Image(loaded: Array(kboot[0..<imageBytes]))
+        let found = try locate(img)
+        guard let o = img.addrToOff(found.address), o + patchSize <= imageBytes else { throw Error.badPatchSite }
+        kboot.replaceSubrange(o..<o + patchSize, with: patch(switchBit: found.switchBit ?? 0))
+        return found
     }
 
     // MARK: - The real-iBoot kernelcache (k48)
@@ -253,6 +266,38 @@ struct Image {
         }
         bytes = b
         segs = load.segments
+    }
+
+    /// A kernel laid out by address (KBoot.build): its header on a page near the start, each segment at its vmaddr less
+    /// the kernel's base, so the file offsets its load commands name no longer hold.
+    init(loaded b: [UInt8]) throws {
+        let header = stride(from: 0, to: min(b.count, 0x10000), by: 0x1000).first { at in
+            at + 8 <= b.count && Array(b[at..<at + 4]) == [0xCE, 0xFA, 0xED, 0xFE] && b[at + 4] == 12
+        }
+        guard let header,
+            let load = try? parsing(
+                b, "kernel",
+                { s in
+                    try s.seek(toAbsoluteOffset: header)
+                    return try MachO.load(&s)
+                }),
+            let lowest = load.segments.filter({ $0.vmsize > 0 && $0.vmaddr > 0 }).map(\.vmaddr).min()
+        else { throw SandboxPatch.Error.notMachO }
+        let base = lowest & 0xF000_0000
+        bytes = b
+        segs = load.segments.compactMap { segment in
+            guard segment.vmaddr >= base, segment.vmsize > 0 else { return nil }
+            var flat = segment
+            flat.fileoff = segment.vmaddr &- base
+            flat.filesize = min(segment.filesize, segment.vmsize)
+            guard Int(flat.fileoff) + Int(flat.filesize) <= b.count else { return nil }
+            flat.sections = segment.sections.map { section in
+                var moved = section
+                moved.offset = section.addr &- base
+                return moved
+            }
+            return flat
+        }
     }
 
     /// The Thumb halfword at `o`, which the caller has kept within the kext text it checked against the file.

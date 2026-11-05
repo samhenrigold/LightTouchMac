@@ -102,6 +102,9 @@ final class K48Board: Board {
             let new = Array((line + " " + jailbreakBootArg).utf8)
             guard new.count < 256 else { throw FirmwareError(.unsupported, "kboot.bin: boot-args too long") }
             b.replaceSubrange(at..<at + 256, with: new + [UInt8](repeating: 0, count: 256 - new.count))
+            // Without it Substrate's library is denied inside the app profiles (Safari crashes), as when prepared
+            // jailbroken; a kernel with no Seatbelt kext has nothing to patch.
+            _ = try? SandboxPatch.applyLoaded(&b, imageBytes: Int(try le32(b, t + 20)))
             try Data(b).write(to: kboot)
             return kboot.lastPathComponent
         }
