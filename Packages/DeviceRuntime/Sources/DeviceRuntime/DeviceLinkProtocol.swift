@@ -184,8 +184,7 @@ nonisolated public final class LinkChannel<
     private let queue: DispatchQueue
     private var buffer = Data()
     private var closed = false  // on `queue`
-    private let lock = NSLock()
-    private var writeFailed = false  // under lock
+    private var writesEnded = false  // on `writeQueue`
 
     public init(
         fd: Int32,
@@ -215,7 +214,8 @@ nonisolated public final class LinkChannel<
             deliverFrames()
         }
         onCloseHandler = onClose
-        source.setCancelHandler { Darwin.close(fd) }
+        // Behind every queued write, so none of them can reach whatever opens this descriptor's number next.
+        source.setCancelHandler { [writeQueue] in writeQueue.async { Darwin.close(fd) } }
         source.resume()
     }
 
@@ -252,6 +252,7 @@ nonisolated public final class LinkChannel<
     private func finish(_ error: Error?) {
         guard !closed else { return }
         closed = true
+        writeQueue.async { self.writesEnded = true }
         source.cancel()
         let handler = onCloseHandler
         onCloseHandler = nil
@@ -266,15 +267,8 @@ nonisolated public final class LinkChannel<
     public func send(_ message: Outgoing) -> Bool {
         guard let frame = try? Self.frame(message) else { return false }
         writeQueue.async { [self] in
-            lock.lock()
-            let failed = writeFailed
-            lock.unlock()
-            guard !failed else { return }
-            if (try? FileHandle(fileDescriptor: fd).write(contentsOf: frame)) == nil {
-                lock.lock()
-                writeFailed = true
-                lock.unlock()
-            }
+            guard !writesEnded else { return }
+            if (try? FileHandle(fileDescriptor: fd).write(contentsOf: frame)) == nil { writesEnded = true }
         }
         return true
     }

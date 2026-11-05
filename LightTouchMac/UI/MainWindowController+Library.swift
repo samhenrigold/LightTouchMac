@@ -10,7 +10,10 @@ extension MainWindowController {
     /// Selects the launch device, and starts it when it is the only one set up.
     func selectLaunchDevice() {
         guard let entry = host.launchSelection.flatMap({ library.contains($0) ? $0 : nil }) ?? library.entries.first
-        else { return }
+        else {
+            show(nil)
+            return
+        }
         library.select(entry)
         // With several devices, which to run is the user's call: launch only selects.
         guard library.entries.filter({ host.instance(for: $0) != nil }).count <= 1 else { return }
@@ -90,7 +93,7 @@ extension MainWindowController {
             attachedSession = session
             attachWorkspace()
         }
-        noInspector.managesApps = entry?.managesApps ?? true
+        noInspector.managesApps = entry?.managesApps ?? false
         let count = library.selectedEntries.count
         multipleSelected.text = "\(count) Devices"
         if session == nil { showDetail(entry != nil ? placeholder : count > 1 ? multipleSelected : nothingSelected) }

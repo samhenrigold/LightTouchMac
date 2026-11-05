@@ -86,6 +86,24 @@ struct HelperSandboxTests {
         #expect(allowed.count == 2 && none.isEmpty, "\(none)")
     }
 
+    /// macOS 14's only flag (issue 137) issues a folder as NOFOLLOW_ANY does; every macOS still defines it.
+    @Test func noFollowIsReadAndIssuesAFolder() throws {
+        let flag = try #require(SandboxExtension.noFollow)
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        typealias Issue =
+            @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>, UInt32, pid_t) -> UnsafeMutablePointer<CChar>?
+        let issue = unsafeBitCast(
+            try #require(
+                dlsym(UnsafeMutableRawPointer(bitPattern: -2), "sandbox_extension_issue_file_to_process_by_pid")
+            ),
+            to: Issue.self
+        )
+        let token = issue(SandboxExtension.Access.read.rawValue, root.path, flag, getpid())
+        #expect(token != nil)
+        free(token)
+    }
+
     /// The flag that refuses a symlink swapped in between resolving and issuing is this macOS's, read at run time.
     @Test func noFollowAnyIsReadAndRefusesASymlink() throws {
         let flag = try #require(SandboxExtension.noFollowAny)

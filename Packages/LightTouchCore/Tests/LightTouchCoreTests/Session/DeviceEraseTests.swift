@@ -9,6 +9,19 @@ import Testing
 /// Erase completes after the helper exits, then restarts the device (never quits the app); a stopped device just
 /// erases; a helper that won't exit leaves the data and says so.
 struct DeviceEraseTests {
+    /// Issue 136: what mobile_obliterator wrote to an iPod touch 2G's NOR on 3.1.3, against a recovery with no erase.
+    @Test func recoveryFromTheGuestsOwnEraseIsAnErase() async throws {
+        try await withScratchDirectory { dir in
+            let nor = dir.appendingPathComponent("nor.bin")
+            #expect(!DeviceErase.guestAsked(nor: nor), "no NOR yet")
+            #expect(!DeviceErase.guestAsked(nor: nil))
+            try Data("debug-uarts=1\0auto-boot=false\0".utf8).write(to: nor)
+            #expect(!DeviceErase.guestAsked(nor: nor), "recovery for another reason")
+            try Data("obliteration=Could not unmount the Data partition\0auto-boot=false\0".utf8).write(to: nor)
+            #expect(DeviceErase.guestAsked(nor: nor))
+        }
+    }
+
     func session(_ directory: URL) throws -> FakeSession {
         let s = FakeSession(directory: directory)
         s.state = .running

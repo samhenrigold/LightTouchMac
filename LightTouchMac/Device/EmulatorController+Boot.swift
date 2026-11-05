@@ -233,6 +233,9 @@ extension EmulatorController {
                     guard let self else { return }
                     switch phrase {
                     case BootWatch.recoveryMarker:
+                        if DeviceErase.guestAsked(nor: self.eraseTargets.preparedNOR) {
+                            return self.requestFactoryReset()
+                        }
                         self.inRecovery = true
                         self.abortBoot(BootWatch.recoveryReason(self.profile))
                     case _ where GuestFaults.watched.contains(phrase):
