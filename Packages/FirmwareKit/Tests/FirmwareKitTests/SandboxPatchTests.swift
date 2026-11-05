@@ -69,7 +69,7 @@ struct SandboxPatchTests {
         put(0x1014, 56)
         put(0x101C, 1)  // LC_SEGMENT
         put(0x1020, 56)
-        Array("__TEXT".utf8).enumerated().forEach { b[0x1024 + $0.offset] = $0.element }
+        b.replaceSubrange(0x1024..<0x102A, with: Array("__TEXT".utf8))
         put(0x1034, 0x8000_1000)  // vmaddr
         put(0x1038, 0x2000)  // vmsize
         put(0x103C, 0x77)  // fileoff, which the layout ignores
