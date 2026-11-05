@@ -4,7 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DEST="${1:?usage: build-shell.sh NEW-OUTPUT-DIRECTORY}"
 [ ! -e "$DEST" ] || { echo 'destination exists' >&2; exit 1; }
-export LTM_QEMU_SOURCE_DIR="${LTM_QEMU_SOURCE_DIR:-$HOME/Developer/qemu-ios-ipad1}"
+export LTM_QEMU_SOURCE_DIR="${LTM_QEMU_SOURCE_DIR:-$HOME/Developer/qemu-ios}"
 export LTM_BASH_SDK="${LTM_BASH_SDK:-$HOME/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk}"
 export LTM_BASH_WORK="$(mktemp -d "${TMPDIR:-/tmp}/ltm-bash-source.XXXXXX")"
 trap 'rm -rf "$LTM_BASH_WORK"' EXIT

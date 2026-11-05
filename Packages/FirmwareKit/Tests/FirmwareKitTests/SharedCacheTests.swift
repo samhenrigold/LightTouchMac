@@ -4,7 +4,7 @@ import Testing
 @testable import FirmwareKit
 
 /// Fixture plumbing shared by the wave-A2 tests: firmware lives in ~/Developer/qemu-ios-files and
-/// ~/Downloads, qemu-ios builds in Oracle.qemuIOS (~/Developer/qemu-ios-ipad1). Nothing is written there; every
+/// ~/Downloads, qemu-ios builds in Oracle.qemuIOS (~/Developer/qemu-ios). Nothing is written there; every
 /// output goes to a temp dir that the test deletes.
 enum Fixtures {
     static let home = FileManager.default.homeDirectoryForCurrentUser

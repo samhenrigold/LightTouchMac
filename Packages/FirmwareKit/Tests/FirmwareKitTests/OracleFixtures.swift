@@ -19,7 +19,7 @@ enum Oracle {
     /// The qemu-ios checkout whose guest builds and C tools the tests read (FIRMWAREKIT_QEMU_IOS overrides).
     static let qemuIOS =
         ProcessInfo.processInfo.environment["FIRMWAREKIT_QEMU_IOS"].map { URL(fileURLWithPath: $0) }
-        ?? path("Developer/qemu-ios-ipad1")
+        ?? path("Developer/qemu-ios")
     /// Where armv6.itpack / armv7.itpack are: FIRMWAREKIT_GUEST_TOOLS (an export's ipad-guest-tools), else the
     /// checkout's contrib/guest-package/build.sh output.
     static let guestPackages =
