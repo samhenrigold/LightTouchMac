@@ -52,6 +52,17 @@ public struct DeviceFeatures: Sendable, Equatable {
 }
 
 extension GuestPackage {
+    /// Whether a device of `firmware` runs the guest agent: baked into its image (Board.hasGuestTools, only the iPod
+    /// touch 2G) or from a guest package at boot (the iPhones and iPads), as DeviceFeatures.guestTools says.
+    @MainActor public static func runsAgent(
+        firmware: String,
+        catalog: FirmwareCatalog = .bundled,
+        pack: (String) -> URL? = { bundledPack(arch: $0, filesRoot: Bundled.filesRoot, guestRoot: Bundled.guestRoot) }
+    ) -> Bool {
+        guard let entry = catalog.entry(id: firmware) else { return false }
+        return (entry.profile?.hasGuestTools ?? false) || packaged([entry], pack: pack).contains(entry.id)
+    }
+
     /// The entries whose board and build the bundled itpacks (`pack` by arch) hold a package with the guest agent
     /// for (not a stub, nor only a GL hook or it_prefs, as iPhone OS 1's and the iPod touch 2G's 4.x are); each
     /// itpack read once.

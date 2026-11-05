@@ -285,7 +285,7 @@ final class EmulatorController {
     @ObservationIgnored private(set) lazy var tweaks = DeviceTweaks(
         settings: settingsFile,
         version: iosVersion,
-        guestTools: hasGuestTools,
+        guestTools: GuestPackage.runsAgent(firmware: instance.firmware),
         clockPinned: lock?.pinsClock == true,
         cellular: profile.hasCellular
     )

@@ -58,4 +58,31 @@ struct DeviceFeaturesTests {
         #expect(found == Set(n72.filter { $0.build == "7E18" || $0.build.hasPrefix("5") }.map(\.id)))
         #expect(found.contains("n72ap-7E18") && !found.contains("n72ap-7A341") && !found.contains("n72ap-8C148"))
     }
+
+    /// Device ▸ Tweaks' availability: an iPhone takes the agent from a guest package at boot, so its rows aren't all
+    /// "Needs the guest tools"; the iPod touch 2G has it from its image, package or not; no package, no agent.
+    @Test func aPackagedAgentCountsForTweaks() throws {
+        _ = ShippedResources.machines
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let armv7 = dir.appendingPathComponent("armv7.itpack")
+        try GuestPackageOfferTests.itpack(
+            armv7,
+            GuestPackageOfferTests.package("n90-ios5", builds: ["9B208"], board: "n90ap", serial: 1)
+        )
+        let catalog = ShippedResources.catalog
+        func runs(_ id: String, _ pack: URL?) -> Bool {
+            GuestPackage.runsAgent(firmware: id, catalog: catalog) { _ in pack }
+        }
+        #expect(runs("n90ap-9B208", armv7))
+        #expect(!runs("n90ap-9B208", nil))
+        #expect(!runs("n90ap-8L1", armv7))
+        #expect(runs("n72ap-7E18", nil))
+        #expect(!runs("no-such-firmware", armv7))
+        let tweak = try #require(
+            Tweak.allCases.first { $0.unavailable(version: "5.1.1", guestTools: false, clockPinned: false) != nil }
+        )
+        #expect(tweak.unavailable(version: "5.1.1", guestTools: runs("n90ap-9B208", armv7), clockPinned: false) == nil)
+    }
 }

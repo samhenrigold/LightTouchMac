@@ -17,6 +17,7 @@ struct GuestPackageOfferTests {
     static func package(
         _ family: String,
         builds: [String],
+        board: String = "n72ap",
         serial: Int,
         stub: Bool = false,
         host: [String: [Int]] = ["guest-package": [1, 1], "gles": [1, 1]]
@@ -36,7 +37,7 @@ struct GuestPackageOfferTests {
         }
         let manifest: [String: Any] = [
             "format": 1, "serial": serial, "version": "1.\(serial).0", "family": family, "arch": "armv6", "stub": stub,
-            "requires": ["boards": ["n72ap"], "builds": builds, "link": "modern", "host": host],
+            "requires": ["boards": [board], "builds": builds, "link": "modern", "host": host],
             "provides": ["it_agent", "itmedia"], "files": files, "jobs": ["jobs/com.qemu.it-agent.plist"],
             "hooks": [
                 ["file": "hooks/MBXGLEngine", "target": mbx, "respring": true],
