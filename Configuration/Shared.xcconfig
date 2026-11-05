@@ -5,7 +5,7 @@ MACOSX_DEPLOYMENT_TARGET = 14.4
 // The pinned qemu-ios checkout and its development build (build-support/sources.json: "path" and
 // "build_dir"). A Debug helper loads libqemu-arm.dylib from there (its rpath) unless LTM_QEMU_DYLIB names
 // another; a release loads only the one Archive copies into Contents/Frameworks.
-QEMU_IOS_DIR = $(HOME)/Developer/qemu-ios-ipad1
+QEMU_IOS_DIR = $(HOME)/Developer/qemu-ios
 QEMU_BUILD_DIR = $(QEMU_IOS_DIR)/build-w1-native
 
 // scripts/vendor's directory for the current pins: what Archive copies into the app (Frameworks, the tools in

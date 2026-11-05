@@ -52,12 +52,10 @@ public nonisolated enum GuestPackage {
             if let dir = ProcessInfo.processInfo.environment["LTM_GUEST_PACKAGE"] {
                 candidates.append(URL(fileURLWithPath: dir).appendingPathComponent("\(arch).itpack"))
             }
-            for checkout in ["qemu-ios-ipad1", "qemu-ios"] {
-                candidates.append(
-                    URL(fileURLWithPath: filesRoot).deletingLastPathComponent()
-                        .appendingPathComponent("\(checkout)/build/guest-package/\(arch).itpack")
-                )
-            }
+            candidates.append(
+                URL(fileURLWithPath: filesRoot).deletingLastPathComponent()
+                    .appendingPathComponent("qemu-ios/build/guest-package/\(arch).itpack")
+            )
         #endif
         return candidates.first { FileManager.default.isReadableFile(atPath: $0.path) }
     }

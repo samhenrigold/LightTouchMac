@@ -54,7 +54,7 @@ target's base), and `App`, `Device`, `Services` and `Tool.xcconfig` are the four
 qemu-ios development build:
 
 ```
-QEMU_IOS_DIR   = $(HOME)/Developer/qemu-ios-ipad1
+QEMU_IOS_DIR   = $(HOME)/Developer/qemu-ios
 QEMU_BUILD_DIR = $(QEMU_IOS_DIR)/build-w1-native          # libqemu-arm.dylib, on a Debug helper's rpath
 ```
 
