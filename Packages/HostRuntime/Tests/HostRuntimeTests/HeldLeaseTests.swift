@@ -23,6 +23,7 @@ struct HeldLeaseTests {
         #expect(!refused.take(path) { logged.append($0) }, "a durable edit refuses the boot")
         #expect(refused.lease == nil, "a refusal keeps no lease")
         #expect(logged.last?.contains("unfinished storage edit \(edit.path)") == true)
+        #expect(refused.failure == logged.last)
 
         try FileManager.default.removeItem(at: edit)
         let resumed = HeldLease()
@@ -46,6 +47,19 @@ struct HeldLeaseTests {
         #expect(first.take(path) { logged.append($0) })
         #expect(!second.take(path) { logged.append($0) })
         #expect(logged == ["lease \(path) is held"])
+        #expect(second.failure == nil, "held by another helper: the link's own refusal says so")
         first.release()
+    }
+
+    /// Issue 137: a lease the helper can't open is not a device in use.
+    @Test func aLeaseItCantOpenSaysWhy() throws {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("held-lease-\(UUID().uuidString)/work")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work.deletingLastPathComponent()) }
+        let path = work.appendingPathComponent("lease")
+        try FileManager.default.createSymbolicLink(at: path, withDestinationURL: work)
+        let held = HeldLease()
+        #expect(!held.take(path.path) { _ in })
+        #expect(held.failure == "lease \(path.path): \(String(cString: strerror(ELOOP)))")
     }
 }

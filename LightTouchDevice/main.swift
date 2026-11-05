@@ -160,7 +160,7 @@ case .machines:
                     exit(70)
                 }
                 guard takeLease(launch.lease) else {
-                    channel?.send(.reply(id: id, .failure(DeviceLinkWire.leaseRefusal)))
+                    channel?.send(.reply(id: id, .failure(storageLease.failure ?? DeviceLinkWire.leaseRefusal)))
                     channel?.drain()
                     exit(75)
                 }

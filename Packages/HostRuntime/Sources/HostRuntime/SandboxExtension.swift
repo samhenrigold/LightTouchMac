@@ -10,7 +10,9 @@
 // - Grants are typed: the caller names each path and whether the helper writes it (BootFiles, from the boot recipe),
 //   nothing is derived from argv. Read-only unless the helper writes there.
 // - A path is resolved (a library behind a symlink or on another volume works) and issued with NOFOLLOW_ANY, so a
-//   symlink swapped in after that fails the grant instead of moving it. A symlink inside anything the helper may
+//   symlink swapped in after that fails the grant instead of moving it. shortcut: macOS 14 lacks that flag, and its
+//   NOFOLLOW protects only the path's last component, so a folder swapped in above it during the issue moves the
+//   grant; drop NOFOLLOW when macOS 15 is the minimum. A symlink inside anything the helper may
 //   write (a previous run could have planted it) refuses the grant. So does the deny-list: /, the home folder and its
 //   ancestors, ~/Library and what runs or configures things from it, other apps' containers, /Applications, and
 //   writing inside any app bundle.
@@ -56,10 +58,12 @@ public nonisolated enum SandboxExtension {
         dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
     }
 
-    /// SANDBOX_EXTENSION_NOFOLLOW_ANY as this macOS defines it (the values have moved between releases).
-    static var noFollowAny: UInt32? {
-        symbol("SANDBOX_EXTENSION_NOFOLLOW_ANY").map { $0.load(as: UInt32.self) }.flatMap { $0 == 0 ? nil : $0 }
+    /// A flag as this macOS defines it (the values have moved between releases).
+    private static func flag(_ name: String) -> UInt32? {
+        symbol(name).map { $0.load(as: UInt32.self) }.flatMap { $0 == 0 ? nil : $0 }
     }
+    static var noFollowAny: UInt32? { flag("SANDBOX_EXTENSION_NOFOLLOW_ANY") }
+    static var noFollow: UInt32? { flag("SANDBOX_EXTENSION_NOFOLLOW") }
 
     // MARK: - Spawner
 
@@ -70,7 +74,7 @@ public nonisolated enum SandboxExtension {
         to holder: Holder,
         deny: [URL] = []
     ) -> (tokens: [String], refused: [String]) {
-        guard let flags = noFollowAny else { return ([], grants.map { "\($0.path) (no NOFOLLOW_ANY)" }) }
+        guard let flags = noFollowAny ?? noFollow else { return ([], grants.map { "\($0.path) (no NOFOLLOW)" }) }
         let issue: (Access, String) -> UnsafeMutablePointer<CChar>?
         switch holder {
         case .process(let audit):
