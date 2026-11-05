@@ -288,6 +288,17 @@ nonisolated public enum PreparationChanges {
                 its seal boot set Auto-Lock Never only in ManagedConfiguration, which 4.0 beta 1's SpringBoard \
                 doesn't time the lock by, so the device locks a minute after the last touch
                 """
+        ),
+        Change(
+            serial: 18,
+            commit: "3eb0c3c3",
+            landed: "2026-11-05T22:30:00Z",
+            boards: ["n88ap", "n18ap", "k48ap", "n81ap", "n90ap"],
+            option: "jailbreak",
+            what: """
+                its sandbox patch left sb_evaluate's action byte empty, so the kernel kills a sandboxed daemon that \
+                switches profiles on exec: BTServer restarts all session on the boards that keep it
+                """
         )
     ]
 }
