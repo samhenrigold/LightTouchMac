@@ -137,12 +137,13 @@ license pixman pixman-0.46.4 COPYING
 license libslirp libslirp-v4.9.4 COPYRIGHT LICENSE
 "$MESON" setup pixman-out pixman-0.46.4 ${MESON_CROSS[@]+"${MESON_CROSS[@]}"} --prefix="$P" --buildtype=release -Ddefault_library=static -Dtests=disabled -Ddemos=disabled --wrap-mode=nofallback
 ninja -C pixman-out -j"$JOBS" && ninja -C pixman-out install
-# qemu-ios's libslirp patches, in its wrap's order (subprojects/slirp.wrap diff_files): slirp_set_restricted(), the
-# in-place restrict flip behind netdev_set_restrict / qemu_ios_ui_net_restrict (5.x networking on after Setup), and
-# slirp_add_guestfwd_connector(), behind guestfwd's fdpass: (a sandboxed helper's web proxy). Older qemu-ios pins
-# lack one or both files; their qemu-ios builds take a found libslirp only with both functions.
+# qemu-ios's libslirp patches, as its wrap lists them (subprojects/slirp.wrap diff_files), so a new one can't miss the
+# app: slirp_set_restricted(), the in-place restrict flip behind netdev_set_restrict / qemu_ios_ui_net_restrict (5.x
+# networking on after Setup); slirp_add_guestfwd_connector(), behind guestfwd's fdpass: (a sandboxed helper's web
+# proxy); restricted DNS's immediate NXDOMAIN. qemu-ios's builds take a found libslirp only with the first two's
+# functions.
 SLIRP_PATCHES=()
-for name in libslirp-set-restricted.patch libslirp-guestfwd-connector.patch; do
+for name in $(sed -n 's/^diff_files = //p' "$QEMU/subprojects/slirp.wrap" | tr -d ','); do
     patch_file="$QEMU/subprojects/packagefiles/$name"
     [ -f "$patch_file" ] || continue
     (cd libslirp-v4.9.4 && patch -p1 < "$patch_file")
