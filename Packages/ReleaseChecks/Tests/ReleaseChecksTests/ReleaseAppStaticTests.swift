@@ -322,16 +322,9 @@ struct ReleaseAppStaticTests {
         #expect(found.isEmpty, "\(found.joined(separator: "\n"))")
     }
 
-    /// The identity scan of a zip of the app (Sam's scrub tooling: LTM_SCRUB_DIR, default ~/Developer/qemu-ios-files/scrub).
+    /// The identity scan of a zip of the app (tools/release/scan-release-zip.py).
     @Test func identityScanOfTheZippedApp() throws {
-        let scrub =
-            ProcessInfo.processInfo.environment["LTM_SCRUB_DIR"].map { URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Developer/qemu-ios-files/scrub")
-        let scanner = scrub.appendingPathComponent("scan-release-zip.py")
-        try #require(
-            FileManager.default.fileExists(atPath: scanner.path),
-            "no identity scanner at \(scanner.path) (LTM_SCRUB_DIR)"
-        )
+        let scanner = repository.appendingPathComponent("tools/release/scan-release-zip.py")
         try withScratch { root in
             let zip = root.appendingPathComponent("LightTouchMac.zip")
             try #require(try Shell.run(["ditto", "-c", "-k", "--keepParent", app.path, zip.path]).succeeded)
