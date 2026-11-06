@@ -213,6 +213,8 @@ nonisolated public enum DeveloperTools {
             guard values.isSymbolicLink != true else { throw fail("developer payload must not contain symlinks") }
             if values.isDirectory == true { continue }
             guard values.isRegularFile == true else { throw fail("developer payload must contain regular files") }
+            // toolchain.txt describes the Mac that built the payload, so it can't be part of a fixed inventory.
+            if relative == "Sources/toolchain.txt" { continue }
             if relative.hasPrefix("Sources/") || relative.hasPrefix("Licenses/") {
                 let data = try Data(contentsOf: file)
                 sourceLines.append("\(relative) \(hash(data))\n")
@@ -221,7 +223,7 @@ nonisolated public enum DeveloperTools {
             }
         }
         let inventory = Data(sourceLines.sorted().joined().utf8)
-        guard hash(inventory) == "10119671db51abc5ab7b17030142c7b0a470ba932ab0830472f4039a683561ca" else {
+        guard hash(inventory) == "330116eaa80a7fb59845629b901d2d4cbcead6dca8146aa311fb3e55f5dc4736" else {
             throw fail("developer redistribution sources or notices are missing or changed")
         }
     }

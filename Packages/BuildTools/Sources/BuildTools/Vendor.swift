@@ -785,7 +785,8 @@ public struct Vendor {
         // tool: Homebrew formula (curl, make, file, lipo and xcrun come with macOS and Xcode)
         let path = (environment["PATH"] ?? "").split(separator: ":")
         let formulas = [
-            ("pkg-config", "pkgconf"), ("ninja", "ninja"), ("meson", "meson"), ("glibtoolize", "libtool"),
+            ("pkg-config", "pkgconf"), ("ninja", "ninja"), ("nasm", "nasm"), ("meson", "meson"),
+            ("glibtoolize", "libtool"),
             ("autoreconf", "autoconf"), ("automake", "automake"), ("python3.12", "python@3.12"), ("jq", "jq"),
             ("ldid", "ldid")
         ].filter { tool, _ in !path.contains { files.isExecutableFile(atPath: "\($0)/\(tool)") } }.map(\.1)
