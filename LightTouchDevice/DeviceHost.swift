@@ -12,11 +12,13 @@ final class DeviceHost: @unchecked Sendable {
     let status: StatusBlock
     let ring: FrameRingWriter
 
-    /// A new ring exists; send it to the reader BEFORE it is activated.
-    var onRingChanged: ((FrameRingWriter) -> Void)?
-    var onEvent: ((LinkEvent) -> Void)?
-    /// QEMU returned (or the shutdown gave up). Default: exit with the code.
-    var onExit: ((Int32) -> Void)?
+    /// A new ring exists; send it to the reader BEFORE it is activated. On the pump's queue: @Sendable, so a closure
+    /// main.swift's @MainActor modes set here isn't main-actor isolated, which Swift 6 checks where it runs (SIGTRAP).
+    var onRingChanged: (@Sendable (FrameRingWriter) -> Void)?
+    /// On the pump's or the audio queue, as onRingChanged.
+    var onEvent: (@Sendable (LinkEvent) -> Void)?
+    /// QEMU returned (or the shutdown gave up), on the main queue. Default: exit with the code.
+    var onExit: (@MainActor (Int32) -> Void)?
     var bootStorageAuthority: ((StorageBootProof) throws -> Void)?
     /// A sandboxed helper's USB cable (USBBridge): QEMU's usb-tcp-addr points at it. Set before the boot.
     var usbBridge: USBBridge?

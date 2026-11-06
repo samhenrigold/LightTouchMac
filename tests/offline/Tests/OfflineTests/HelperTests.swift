@@ -3,12 +3,14 @@ import DeviceRuntime
 import Foundation
 import Metal
 import Testing
+import os
 
 @testable import Helper
 @testable import LightTouchCore
 
 extension SharedState {
-    /// The helper's pieces that need no emulator: the libqemu binding's API check and the frame surface's colors.
+    /// The helper's pieces that need no emulator: the libqemu binding's API check, the frame surface's colors and the
+    /// frame ring callback's isolation.
     @Suite struct HelperTests {
         /// The helper loads only a libqemu-arm.dylib whose C API major version is its own (qemu_ios_api_version(),
         /// major << 16 | minor): fake 2.0 and 2.7 dylibs load; 1.2, 3.0 and one without the symbol (from before the
@@ -51,6 +53,43 @@ extension SharedState {
                     )
                 }
             }
+        }
+
+        /// The frame pump calls onRingChanged on its own queue, so the closure main.swift's @MainActor modes set there
+        /// must not take the main actor's isolation: Swift 6 checks it where it runs, and every headless boot trapped
+        /// at its first ring (SIGTRAP in dispatch_assert_queue_fail, in the reader's lock body).
+        @Test func aRingCallbackSetOnTheMainActorIsNotMainActorIsolated() async throws {
+            let work = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-ring-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: work) }
+            let source = work.appendingPathComponent("qemu.c")
+            try "unsigned qemu_ios_api_version(void) { return \(Qemu.apiMajor)u << 16; }\n".write(
+                to: source,
+                atomically: true,
+                encoding: .utf8
+            )
+            let dylib = work.appendingPathComponent("libqemu-arm.dylib")
+            let cc = Process()
+            cc.executableURL = URL(fileURLWithPath: "/usr/bin/cc")
+            cc.arguments = ["-dynamiclib", source.path, "-o", dylib.path]
+            try cc.run()
+            cc.waitUntilExit()
+            try #require(cc.terminationStatus == 0)
+            let status = StatusBlock.create()
+            let host = DeviceHost(qemu: try Qemu(path: dylib.path), status: status)
+            let isolations = OSAllocatedUnfairLock<[String]>(initialState: [])
+            host.onRingChanged = { _ in
+                let isolation = #isolation.map { "\($0)" } ?? "nonisolated"
+                isolations.withLock { $0.append(isolation) }
+            }
+            let ring = FrameRingWriter(status: status)
+            await withCheckedContinuation { done in
+                DispatchQueue(label: "LightTouch.frames").async {
+                    host.onRingChanged?(ring)
+                    done.resume()
+                }
+            }
+            #expect(isolations.withLock { $0 } == ["nonisolated"])
         }
 
         /// The app gone (crashed or killed): the helper's stderr pipe has no reader, and its "link closed" log line
