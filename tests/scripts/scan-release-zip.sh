@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/release/scan-release-zip.py over small zips: clean passes; a home path, an email it's asked for, a private key,
+# tools/release/scan-release-zip.py over small zips: clean passes; a build machine's paths, an email it's asked for, a private key,
 # a .DS_Store, and one inside a compressed NAND chunk fail; a code signature's name and sshd's bare key header don't.
 #     tests/scripts/scan-release-zip.sh
 set -uo pipefail
@@ -23,6 +23,12 @@ expect() {
 }
 expect 0 "a clean app passes" ":"
 expect 1 "the home folder" 'printf "%s/x" "$HOME" > leak'
+expect 1 "another user's home path" 'printf "/Users/somebody/src/x.c" > leak'
+expect 0 "/Users/Shared" 'printf "/Users/Shared/x" > ok2'
+expect 0 "a home-relative default" 'printf "\$HOME/Developer/x" > ok2'
+expect 1 "a build's temporary folder" 'printf "/var/folders/hg/abc/T/x" > leak'
+expect 1 "this project's build folders" 'printf "ltm-int-rel/ship-1/x" > leak'
+expect 1 "DerivedData" 'printf "/Library/Developer/Xcode/DerivedData/x" > leak'
 expect 1 "a word asked for" 'printf "me@example.test" > leak' --also me@example.test
 expect 1 "a private key" 'printf -- "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAwJ7wJ7wJ7wJ7wJ7wJ7wJ7wJ7wJ7wJ7w\n" > key'
 expect 0 "sshd's bare key header" 'printf -- "-----BEGIN RSA PRIVATE KEY-----\n\0" > sshd'

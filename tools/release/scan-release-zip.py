@@ -4,8 +4,9 @@
     scan-release-zip.py APP.zip [--also WORD]...
 
 Reads every file in the zip, and inside the guest archive (.aar, through `aa`), nested zips and the built-in device's
-compressed NAND chunks (.z): the builder's home folder, user, host, email, serial and hardware UUID, read from this Mac
-when it runs so that none is written down here; private keys and App Store Connect key names; and files that have no
+compressed NAND chunks (.z): any build machine's paths (home folders, temporary and build folders); the builder's home
+folder, host, email, serial and hardware UUID, read from this Mac when it runs so that none is written down here; private
+keys and App Store Connect key names; and files that have no
 place in a release. Prints one line per finding and exits 1 on any; exits 2 if it can't do the scan. The public name
 of the project and its signing identity aren't findings: the bundle IDs and license texts carry the first, and a code
 signature must carry the second.
@@ -20,8 +21,21 @@ import tempfile
 import zipfile
 import zlib
 
-# What a signature or a credit may say of the builder: taken out before a file is searched.
-PUBLIC = [rb"Developer ID Application: [^\0\n]{1,80}", rb"Developer ID Certification Authority"]
+# What may be said of a builder: taken out before a file is searched. A signature must carry its identity, and the guest's
+# prebuilt OpenSSL 0.9.8 carries /home/dat, where whoever built its llvm-gcc did, in libgcc's debug strings.
+PUBLIC = [
+    rb"Developer ID Application: [^\0\n]{1,80}", rb"Developer ID Certification Authority",
+    rb"/home/dat/[^\0\n]{0,80}"
+]
+# A build machine's paths, anyone's: a third party's build folder names its builder as ours names us. /Users/Shared and
+# a bare "$HOME/Developer/..." name nobody.
+MACHINE_PATH = [
+    (rb"/Users/(?!Shared[/\0])[A-Za-z0-9._-]+", "a user's home path"),
+    (rb"/home/[a-z_][a-z0-9_-]*/", "a user's home path"),
+    (rb"/var/folders/[a-z0-9_]{2}/", "a build's temporary folder"),
+    (rb"ltm-(?:scratch|worktrees|vendor)\.noindex|ltm-int-rel", "this project's build folders"),
+    (rb"/Library/Developer/Xcode/DerivedData", "Xcode's build folder"),
+]
 SECRET = [
     # A key has its body after the header; OpenSSH's sshd carries the header alone, as the format it parses.
     (rb"-----BEGIN [A-Z ]*PRIVATE KEY-----\r?\n[A-Za-z0-9+/=]{40}", "a private key"),
@@ -67,6 +81,10 @@ def search(name, data, words, findings):
     for pattern, what in SECRET:
         if re.search(pattern, data):
             findings.append(f"{name}: {what}")
+    for pattern, what in MACHINE_PATH:
+        match = re.search(pattern, data)
+        if match:
+            findings.append(f"{name}: {what} ({match.group().decode(errors='replace')})")
 
 
 def scan_aar(name, data, words, findings):
