@@ -9,6 +9,10 @@ typedef struct {
     unsigned width;
     uint8_t original[16];
     uint8_t replacement[16];
+    size_t continuation_offset;
+    unsigned continuation_width;
+    uint8_t continuation_original[16];
+    uint8_t continuation_replacement[16];
 } LTActivationReport;
 // As lt_activate, with the recognized operation recorded for preparation provenance.
 int lt_activate_report(uint8_t *bytes, size_t size, LTActivationReport *report, const char **error);

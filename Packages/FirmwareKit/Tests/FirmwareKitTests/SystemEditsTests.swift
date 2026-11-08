@@ -65,6 +65,16 @@ enum K48Oracle {
 }
 
 @Suite(.serialized, .detachesItsImages) struct SystemEditsTests {
+    @Test(arguments: ["7.0", "7.0.6", "7.1.2"]) func finishedSetupUsesTheFirmwareMinorVersion(version: String) throws {
+        let seeds = SystemEdits.finishedSetup(major: 7, language: "en", locale: "en_US", productVersion: version)
+        let buddy = try #require(seeds.first { $0.path == SystemEdits.purpleBuddy }?.keys)
+        let early = version.hasPrefix("7.0")
+        #expect(buddy["SetupVersion"] as? Int == (early ? 4 : 5))
+        #expect(buddy[early ? "AppleIDPB4Presented" : "AppleIDPB5Presented"] as? Bool == true)
+        #expect(buddy[early ? "AppleIDPB5Presented" : "AppleIDPB4Presented"] == nil)
+        #expect((buddy["AssistantPresented"] as? Bool) == (early ? true : nil))
+    }
+
     /// ipad1_rootfs FSTAB_RO: only the root line turns ro (7.x), /private/var stays rw.
     @Test func fstabRO() {
         #expect(SystemEdits.fstabRO == "/dev/disk0s1 / hfs ro 0 1\n/dev/disk0s2 /private/var hfs rw,nosuid,nodev 0 2\n")
@@ -106,7 +116,7 @@ enum K48Oracle {
     /// skip_setup: the keys Setup Assistant itself left on walked devices (the data volume diffed before and after the
     /// sessions harness's walk: n81ap/k48ap 9B206 for 5.x, n90ap 10B329 for 6.x, n90ap 11D257 for 7.x), seeded into the
     /// /private/var skeleton, merged with what is there; the Mac's language moved first. Nothing before iOS 5.
-    @Test(arguments: [4, 5, 6, 7]) func finishedSetupSeedsWhatSetupWrites(major: Int) throws {
+    @Test(arguments: [4, 5, 6, 7, 8]) func finishedSetupSeedsWhatSetupWrites(major: Int) throws {
         let skeleton = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-setup-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: skeleton) }
         let global = skeleton.appendingPathComponent(SystemEdits.globalPreferences)
@@ -159,20 +169,36 @@ enum K48Oracle {
             "WiFiPresented", "Language", "Locale"
         ]
         let buddy: [Int: Set<String>] = [
-            5: common.union(["AppleIDPresented"]), 6: common.union(["AppleIDPB3Presented", "SetupVersion"]),
+            5: common.union(["AppleIDPresented"]),
+            6: common.union(["AppleIDPB3Presented", "SetupVersion", "AssistantPresented"]),
             7: common.union([
                 "AppleIDPB5Presented", "PasscodePresented", "SetupVersion", "SetupState", "AppleIDForceUpgrade"
+            ]),
+            8: common.union([
+                "AppleIDPB6Presented", "PasscodePresented", "SetupVersion", "SetupState", "AppleIDForceUpgrade",
+                "AssistantPresented"
             ])
         ]
         #expect(keys(mobile + "com.apple.purplebuddy.plist") == buddy[major])
-        #expect(plist(mobile + "com.apple.purplebuddy.plist")["SetupVersion"] as? Int == [6: 3, 7: 5][major])
+        #expect(plist(mobile + "com.apple.purplebuddy.plist")["SetupVersion"] as? Int == [6: 3, 7: 5, 8: 7][major])
+        if major == 6 || major == 8 {
+            #expect(plist(mobile + "com.apple.purplebuddy.plist")["AssistantPresented"] as? Bool == true)
+        }
+        if major == 8 {
+            let local = plist(mobile + "com.apple.purplebuddy.notbackedup.plist")
+            #expect(local["ShouldRunKeychainSyncMiniBuddy"] as? Bool == false)
+            #expect(local["ShouldRunMesaMiniBuddy"] as? Bool == false)
+        }
         #expect(plist(mobile + "com.apple.purplebuddy.plist")["Locale"] as? String == "fr_CA")
         #expect(
             keys(mobile + "com.apple.purplebuddy.notbackedup.plist")
-                == (major == 7
-                    ? ["LocationServices2Presented", "CloudConfigPresented"] : ["LocationServicesPresented"])
+                == (major == 8
+                    ? ["LocationServices4Presented", "CloudConfigPresented", "ShouldRunKeychainSyncMiniBuddy",
+                       "ShouldRunMesaMiniBuddy"]
+                    : major == 7 ? ["LocationServices2Presented", "CloudConfigPresented"] : ["LocationServicesPresented"])
         )
-        let off = major == 7 ? "LocationServicesEnabledIn7.0" : "LocationServicesEnabled"
+        let off = major == 8 ? "LocationServicesEnabledIn8.0"
+            : major == 7 ? "LocationServicesEnabledIn7.0" : "LocationServicesEnabled"
         for name in ["com.apple.locationd.plist", "com.apple.locationd.notbackedup.plist"] {
             #expect(plist(mobile + name)[off] as? Int == 0, "\(name): Location Services off")
         }
@@ -180,18 +206,18 @@ enum K48Oracle {
             plist("mobile/Library/ConfigurationProfiles/CloudConfigurationDetails.plist")[
                 "CloudConfigurationUIComplete"
             ]
-                as? Bool == (major == 7 ? true : nil),
+                as? Bool == (major >= 7 ? true : nil),
             "7.x: the cloud configuration step done"
         )
         #expect(
             keys(mobile + "com.apple.mobile.user_preferences.plist")
-                == (major == 7 ? ["UserSetLanguage", "UserSetLocale"] : [])
+                == (major >= 7 ? ["UserSetLanguage", "UserSetLocale"] : [])
         )
         let g = plist(SystemEdits.globalPreferences)
         #expect(g["AppleLocale"] as? String == "fr_CA" && g["AppleLanguages"] as? [String] == ["fr", "en", "de"])
         #expect(
             keys(SystemEdits.dataArk)
-                == (major == 7
+                == (major >= 7
                     ? [
                         "-ActivationStateAcknowledged", "com.apple.mobile.chaperone-NotSoFresh",
                         "-FirstPurpleBuddyCompletion"

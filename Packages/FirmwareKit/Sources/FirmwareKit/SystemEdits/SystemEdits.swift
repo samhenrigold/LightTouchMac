@@ -48,6 +48,11 @@ public enum SystemEdits {
         /// skip_setup (firmwarekit create --skip-setup, never set in the catalog): the data volume says Setup Assistant
         /// is finished (seedFinishedSetup), so an iOS 5 or later device starts at the Home screen.
         public var skipSetup = false
+        /// Initial global Location Services choice; native per-app permission prompts remain in place.
+        public var locationServicesEnabled = false
+        /// N42 creation can stage a recognized data-only activation plan whose
+        /// cache is generated in the original restore environment, before normal boot.
+        public var nativeGestaltActivation = false
         /// jailbreak (firmwarekit create --jailbreak, never set in the catalog): what a jailbreak of the time leaves on
         /// the device: afc2 (installAFC2), lockdown's AFC over the whole file system, and Cydia with Substrate
         /// (installCydia) from `cydia`, the bootstrap Cydia.bootstrap fetched.
@@ -174,6 +179,7 @@ public enum SystemEdits {
         dataBytes: Int64,
         options o: Options,
         helpers: URL,
+        firmwareArch: String = "armv7",
         kernelcache: Data? = nil,
         kernel: Data? = nil,
         dataVolumeUUID: [UInt8]? = nil,
@@ -239,13 +245,14 @@ public enum SystemEdits {
         var rootModes: [(path: String, mode: UInt16)] = []
         var mobileOwned: [String] = []
         var productMajor = 0
+        var productVersion: String?
         var keyboards: KeyboardCatalog?
         var formats: Set<String>?
         try await VolumeMount.withVolume(system, at: work.appendingPathComponent("mnt-system"), date: newest) { v in
             keyboards = KeyboardCatalog(v)
             formats = regionFormats(v)
             // every baked helper proven to load on this firmware (FitCheck.loads), read before any edit
-            let fw = FitCheck.Firmware(volume: v, arch: "armv7", kernelcache: kernel)
+            let fw = FitCheck.Firmware(volume: v, arch: firmwareArch, kernelcache: kernel)
             // a dyld without LC_DYLD_INFO_ONLY (3.0's: none of its own executables carry one) takes the legacy builds
             let legacy = fw.precedent[MachO32.lcDyldInfoOnly] == nil
             let pick = { (n: String) in legacy ? Helpers.legacy(n) : n }
@@ -289,18 +296,19 @@ public enum SystemEdits {
                 try v.put(kernelcache, at: kernelcachePath, mode: 0o644)
             }
             productMajor = majorVersion(v)
+            productVersion = v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductVersion"] as? String
             // 7.x's launchd cannot remount / rw (mount_hfs: Operation not permitted) and reboots; keep its stock ro root
             try v.put(Data((productMajor >= 7 ? fstabRO : fstabRW).utf8), at: fstab)
             if o.webProxy {
                 try fit.check(
-                    FitCheck.webProxy(FitCheck.Firmware(volume: v, arch: "armv7")),
+                    FitCheck.webProxy(FitCheck.Firmware(volume: v, arch: firmwareArch)),
                     required: false,
                     outcome: "kept: the PAC is unused"
                 )
                 rootOwned += try installPAC(v)
             }
             if o.caOGL {  // GL first
-                let (engine, owned) = try installCAOGL(v, helpers: helpers, arch: "armv7", fw: fw, fit: fit, log: log)
+                let (engine, owned) = try installCAOGL(v, helpers: helpers, arch: firmwareArch, fw: fw, fit: fit, log: log)
                 result.engine = engine
                 rootOwned += owned
             }
@@ -315,11 +323,7 @@ public enum SystemEdits {
                 required: false,
                 outcome: "kept: a switch nothing reads is inert"
             )
-            try editSpringBoardJob(v) { env, d in
-                env.addEntries(from: o.caOGL ? sbEnvCAOGL : sbEnv)
-                d["StandardOutPath"] = "/dev/console"
-                d["StandardErrorPath"] = "/dev/console"
-            }
+            try configureGraphicsJob(v, accelerated: o.caOGL)
             if o.jailbreak {
                 guard let bootstrap = o.cydia else { throw FirmwareError(.internal, "jailbreak: no Cydia bootstrap") }
                 let jb = try installJailbreak(v, bootstrap: bootstrap, typeinBySubstrate: false)
@@ -333,7 +337,7 @@ public enum SystemEdits {
                 _ = try installAppSync(
                     v,
                     helper: try helper(pick(Helpers.appsync)),
-                    cache: dyldCache("armv7"),
+                    cache: dyldCache(firmwareArch),
                     log: log
                 )
                 rootOwned.append(appsyncPath)
@@ -357,11 +361,18 @@ public enum SystemEdits {
             do {
                 result.activation = try activate(v, log: log)
             } catch let e as ActivationFailure {
-                guard let r = Activation.dataArkRoute(lockdownd: try v.contents(at: lockdownd)) else { throw e }
-                log(
-                    "lockdownd: no binary strategy; activation by the data ark (\((r.dataArk?.keys.sorted() ?? []).joined(separator: ", ")))"
-                )
-                result.activation = r
+                let build = v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"] as? String
+                let daemon = build == "14G61" ? "usr/libexec/mobileactivationd"
+                    : "System/Library/PrivateFrameworks/MobileActivation.framework/Support/mobactivationd"
+                if o.nativeGestaltActivation, let build, let component = try? v.contents(at: daemon),
+                   let plan = Activation.nativeGestaltPlan(component: component, build: build) {
+                    result.activation = plan
+                    log("Activation requires native MobileGestalt cache initialization before normal boot")
+                } else {
+                    guard let r = Activation.dataArkRoute(lockdownd: try v.contents(at: lockdownd)) else { throw e }
+                    log("lockdownd: no binary strategy; activation by the data ark (\((r.dataArk?.keys.sorted() ?? []).joined(separator: ", ")))")
+                    result.activation = r
+                }
             }
             rootOwned.append(lockdownd)
             // what this bake left out on purpose: AppSync when off, it_msmquiet where it does not fit
@@ -399,6 +410,7 @@ public enum SystemEdits {
             skeleton,
             o,
             productMajor: productMajor,
+            productVersion: productVersion,
             dataArk: result.activation?.dataArk,
             keyboards: keyboards,
             formats: formats,
@@ -567,9 +579,50 @@ public enum SystemEdits {
         _ v: any VolumeFiles,
         _ edit: (NSMutableDictionary, NSMutableDictionary) throws -> Void
     ) throws {
-        try rewritePlist(v, springBoardJob) { d in
-            guard d["Label"] as? String == "com.apple.SpringBoard" else {
-                throw FirmwareError(.unsupported, "\(springBoardJob): not SpringBoard's job")
+        try editLaunchJob(v, path: springBoardJob, label: "com.apple.SpringBoard", edit)
+    }
+
+    public static func configureGraphicsJob(_ v: any VolumeFiles, accelerated: Bool) throws {
+        let version = v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductVersion"] as? String
+        let major = version.flatMap { Int($0.split(separator: ".").first ?? "") } ?? 0
+        try editSpringBoardJob(v) { env, d in
+            env.addEntries(from: accelerated ? sbEnvCAOGL : sbEnv)
+            if major >= 8 {
+                // Native release xpcproxy launches SpringBoard as mobile.
+                // Retain its stock stdio policy rather than requiring access
+                // to the root-owned console during service configuration.
+                if d["StandardOutPath"] as? String == "/dev/console" { d.removeObject(forKey: "StandardOutPath") }
+                if d["StandardErrorPath"] as? String == "/dev/console" { d.removeObject(forKey: "StandardErrorPath") }
+            } else {
+                d["StandardOutPath"] = "/dev/console"
+                d["StandardErrorPath"] = "/dev/console"
+            }
+        }
+    }
+
+    /// The same checked launchd-environment preparation used by the board
+    /// recipes, exposed for diagnostic configurations without other edits.
+    public static func setLaunchEnvironment(
+        _ v: any VolumeFiles, path: String, label: String, values: [String: String]
+    ) throws {
+        guard path.hasPrefix("System/Library/LaunchDaemons/"),
+              !path.split(separator: "/").contains(".."), !label.isEmpty,
+              values.keys.allSatisfy({ !$0.isEmpty && !$0.contains("=") && !$0.contains("\0") }),
+              values.values.allSatisfy({ !$0.contains("\0") }) else {
+            throw FirmwareError(.unsupported, "Invalid launch environment configuration")
+        }
+        try editLaunchJob(v, path: path, label: label) { env, _ in
+            env.addEntries(from: values)
+        }
+    }
+
+    static func editLaunchJob(
+        _ v: any VolumeFiles, path: String, label: String,
+        _ edit: (NSMutableDictionary, NSMutableDictionary) throws -> Void
+    ) throws {
+        try rewritePlist(v, path) { d in
+            guard d["Label"] as? String == label else {
+                throw FirmwareError(.unsupported, "\(path): expected launchd label \(label)")
             }
             try edit(dict(d, "EnvironmentVariables"), d)
         }
@@ -607,7 +660,7 @@ public enum SystemEdits {
     /// firmware, everything it looks up at run time: a misfit fails the prepare rather than quietly producing a
     /// software-CoreAnimation device. Nothing under OpenGLES (GLEngine, libGFXShared, a gld plugin) is touched.
     /// Returns the helper name and the files to own by root.
-    static func installCAOGL(
+    public static func installCAOGL(
         _ v: any VolumeFiles,
         helpers: URL,
         arch: String,
@@ -730,6 +783,7 @@ public enum SystemEdits {
         _ skeleton: URL,
         _ o: Options,
         productMajor: Int,
+        productVersion: String? = nil,
         dataArk: [String: String]?,
         keyboards: KeyboardCatalog? = nil,
         formats: Set<String>? = nil,
@@ -750,18 +804,65 @@ public enum SystemEdits {
         }
         if o.skipSetup, productMajor >= 5 {
             let (l, locale) = language.map { ($0.language, $0.locale) } ?? ("en", "en_US")
-            try seedFinishedSetup(MountedVolume(root: skeleton), "", major: productMajor, language: l, locale: locale)
+            try seedFinishedSetup(MountedVolume(root: skeleton), "", major: productMajor, language: l, locale: locale,
+                                  productVersion: productVersion, locationServicesEnabled: o.locationServicesEnabled)
             log("Setup Assistant: seeded as finished (iOS \(productMajor))")
         }
         if let dataArk {
             // 7.0 beta 1's lockdownd turns the brick state on for an ark without one and lifts it only for a valid
             // activation record, which this route has none of (Setup then insists on activating online). A dated
             // build says unbricked, as lockdownd's own "factoryactivation unbricks by default".
-            try seedPlist(skeleton.appendingPathComponent("root/Library/Lockdown/data_ark.plist")) { d in
-                d.addEntries(from: dataArk)
-                if o.dated { d["-BrickState"] = false }
+            try seedActivationArk(MountedVolume(root: skeleton), dataArk: dataArk, dated: o.dated)
+        }
+    }
+
+    static func seedActivationArk(_ v: any VolumeFiles, dataArk: [String: String], dated: Bool) throws {
+        try seedPlist(v, "root/Library/Lockdown/data_ark.plist") { d in
+            d.addEntries(from: dataArk)
+            if dated { d["-BrickState"] = false }
+        }
+    }
+
+    /// Apply the same local activation and finished-Setup preparation to separate
+    /// System/Data volumes, including a provisioned native NAND's extracted Data.
+    /// All callers retain the original images and record the returned provenance.
+    public static func prepareLocalSetup(
+        system: any VolumeFiles, data: any VolumeFiles, major: Int,
+        language: String = "en", locale: String = "en_US", dated: Bool = false,
+        log: (String) -> Void
+    ) throws -> Activation.Result {
+        let result: Activation.Result
+        do {
+            result = try activate(system, log: log)
+        } catch let error as ActivationFailure {
+            let original = try system.contents(at: lockdownd)
+            let daemon = "System/Library/PrivateFrameworks/MobileActivation.framework/Support/mobactivationd"
+            let component = major == 8 && system.exists(daemon) ? daemon : lockdownd
+            let nativeActivation = component == lockdownd ? original : try system.contents(at: component)
+            let cachePath = "mobile/Library/Caches/com.apple.MobileGestalt.plist"
+            if (7...8).contains(major), let cache = try? data.contents(at: cachePath),
+               let build = system.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"] as? String,
+               let route = Activation.gestaltRoute(lockdownd: nativeActivation, cache: cache, build: build),
+               let overrides = route.gestaltOverrides {
+                try rewritePlist(data, cachePath) { d in
+                    dict(d, "CacheExtra").addEntries(from: overrides)
+                }
+                var qualified = route
+                qualified.component = component
+                result = qualified
+                log("\(component): local activation through the existing MobileGestalt development flag")
+            } else if let route = Activation.dataArkRoute(lockdownd: original) {
+                result = route
+                log("lockdownd: activation by the existing data-ark route")
+            } else {
+                throw error
             }
         }
+        if let ark = result.dataArk { try seedActivationArk(data, dataArk: ark, dated: dated) }
+        let version = system.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductVersion"] as? String
+        try seedFinishedSetup(data, "", major: major, language: language, locale: locale, productVersion: version)
+        log("Setup Assistant: seeded as finished (iOS \(major))")
+        return result
     }
 
     static func wifiProxyPrefs(_ d: NSMutableDictionary) {

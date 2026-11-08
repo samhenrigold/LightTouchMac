@@ -16,11 +16,26 @@ public enum Activation {
         public let inputSHA256: String, outputSHA256: String
         // Optional so device records written by earlier releases remain decodable.
         public var patch: Patch? = nil
+        public var factoryContinuation: Patch? = nil
         /// The data route (iOS 6): lockdownd left stock, these keys seeded into /var/root/Library/Lockdown/data_ark.plist.
         public var dataArk: [String: String]? = nil
+        public var gestaltOverrides: [String: Bool]? = nil
+        /// The native component that owns a data-only activation shortcut,
+        /// when it has moved out of lockdownd (iOS 8's mobactivationd).
+        public var component: String? = nil
+        /// A fresh device must generate its authentic cache in the native
+        /// restore environment before this configuration can be finalized.
+        public var nativeCacheRequired: Bool? = nil
         var record: [String: Any] {
             var result: [String: Any] = ["input_sha256": inputSHA256, "output_sha256": outputSHA256]
             if let dataArk { result["data_ark"] = dataArk }
+            if let component { result["component"] = component }
+            if let gestaltOverrides { result["gestalt_overrides"] = gestaltOverrides }
+            if let nativeCacheRequired { result["native_cache_required"] = nativeCacheRequired }
+            if let p = factoryContinuation {
+                result["factory_continuation"] = ["strategy": p.strategy, "isa": p.isa,
+                    "offset": p.offset, "original": p.original.hexString, "replacement": p.replacement.hexString]
+            }
             if let patch {
                 result["patch"] = [
                     "strategy": patch.strategy, "isa": patch.isa, "offset": patch.offset,
@@ -53,6 +68,7 @@ public enum Activation {
     }
 
     static func activated(_ before: Data) throws -> (Data, Result) {
+        if let qualified = try qualifiedA6Factory(before) { return qualified }
         var after = before
         var error: UnsafePointer<CChar>?
         var report = LTActivationReport()
@@ -75,7 +91,53 @@ public enum Activation {
             original: withUnsafeBytes(of: report.original) { Data($0.prefix(Int(report.width))) },
             replacement: withUnsafeBytes(of: report.replacement) { Data($0.prefix(Int(report.width))) }
         )
-        return (after, Result(inputSHA256: Preparer.sha256(before), outputSHA256: Preparer.sha256(after), patch: patch))
+        let continuation: Patch? = report.continuation_width > 0 ? Patch(
+            strategy: "development-factory-continuation", isa: "thumb", offset: report.continuation_offset,
+            original: withUnsafeBytes(of: report.continuation_original) { Data($0.prefix(Int(report.continuation_width))) },
+            replacement: withUnsafeBytes(of: report.continuation_replacement) { Data($0.prefix(Int(report.continuation_width))) }
+        ) : nil
+        return (after, Result(inputSHA256: Preparer.sha256(before), outputSHA256: Preparer.sha256(after),
+                              patch: patch, factoryContinuation: continuation))
+    }
+
+    /// N42 10A405's Qualcomm activation handler predates the later development
+    /// shortcut. Its ShouldHactivate answer alone does not complete activation
+    /// without a modem. Qualify the entire stock executable before using this
+    /// build's no-record block; no model or MobileGestalt identity is changed.
+    /// The replacement initializes the handler's cleanup slots, selects its
+    /// native Activated constant, and enters its original BrickState=false
+    /// publication tail. The activation-record path remains untouched.
+    static func qualifiedA6Factory(_ before: Data) throws -> (Data, Result)? {
+        let input = Preparer.sha256(before)
+        let prepared = "dc5033e2bf1ba37790431cde3b3a19de8fe9dc799f46a348ad848eef3ca83fd4"
+        if input == prepared { throw ActivationFailure("Activation shortcut is already prepared") }
+        guard input == "ecb3e46cedceb255ee423fd455f7291b1abca7c72ed9c35c32fdf0c9d7500230" else { return nil }
+        let offset = 0x109ce
+        let original = Data([
+            0xc8, 0xb9, 0x49, 0xf6, 0x37, 0x51, 0x00, 0x20, 0xc0, 0xf2, 0x04, 0x01,
+            0x49, 0xf2, 0x58, 0x22, 0xc0, 0xf2, 0x07, 0x02, 0x79, 0x44, 0x7a, 0x44,
+            0x4f, 0xf0, 0x00, 0x0b, 0x01, 0xf0, 0x5b, 0xff, 0x48, 0xf2, 0x92, 0x70,
+            0xc0, 0xf2, 0x07, 0x00, 0xcd, 0xf8, 0x20, 0xb0, 0x78, 0x44,
+        ])
+        let replacement = Data([
+            0x00, 0xbf, 0x48, 0xf6, 0x74, 0x70, 0xc0, 0xf2, 0x07, 0x00, 0x78, 0x44,
+            0x09, 0x90, 0x00, 0x20, 0x04, 0x90, 0x06, 0x90, 0x08, 0x90, 0x83, 0x46,
+            0x82, 0x46, 0x43, 0xf6, 0xdc, 0x40, 0xc0, 0xf2, 0x07, 0x00, 0x78, 0x44,
+            0x00, 0x68, 0x00, 0x68, 0x80, 0x46, 0x00, 0xf0, 0x2b, 0xb9,
+        ])
+        let range = offset..<(offset + original.count)
+        guard before.subdata(in: range) == original else {
+            throw ActivationFailure("Qualified A6 activation block differs")
+        }
+        var after = before
+        after.replaceSubrange(range, with: replacement)
+        after = try signed(after)
+        guard Preparer.sha256(after) == prepared else {
+            throw ActivationFailure("Qualified A6 activation output differs")
+        }
+        return (after, Result(inputSHA256: input, outputSHA256: prepared,
+                              patch: Patch(strategy: "a6-native-no-record-factory-shortcut", isa: "thumb",
+                                           offset: offset, original: original, replacement: replacement)))
     }
 
     private static func overwrite(_ file: URL, with after: Data) throws {
@@ -124,9 +186,48 @@ public enum Activation {
         )
     }
 
+    /// iOS 7/8's local development-activation flag, as used by Hacktiv8's
+    /// jailbroken-device recipe. Only modify a real cache for this exact build;
+    /// never fabricate its opaque CacheData or firmware identity.
+    /// Reference: github.com/overcast302/hacktiv8/blob/main/exploits/sftp/sftp.py
+    public static func gestaltRoute(lockdownd: Data, cache: Data, build: String) -> Result? {
+        guard lockdownd.range(of: Data("ShouldHactivate\0".utf8)) != nil,
+              lockdownd.range(of: Data("Short circuiting activation state to Activated".utf8)) != nil,
+              let plist = try? PropertyListSerialization.propertyList(from: cache, format: nil) as? [String: Any],
+              plist["CacheVersion"] as? String == build,
+              let uuid = plist["CacheUUID"] as? String, UUID(uuidString: uuid) != nil,
+              let opaque = plist["CacheData"] as? Data, !opaque.isEmpty,
+              plist["CacheExtra"] is [String: Any] else { return nil }
+        let hash = Preparer.sha256(lockdownd)
+        return Result(inputSHA256: hash, outputSHA256: hash,
+                      gestaltOverrides: ["a6vjPkzcRjrsXmniFsm0dg": true])
+    }
+
+    /// Stage the already-qualified N42 data-only routes for a new device.
+    /// No opaque cache is manufactured here: the native initializer must
+    /// generate and verify it before a normal boot is permitted.
+    public static func nativeGestaltPlan(component: Data, build: String) -> Result? {
+        let known = [
+            "12A365": "1a2ea9ac54a5b7685cc70292a722762f4007c5cd493f85feb00738697756c513",
+            "13A344": "6f09a4c6cfc1738db32b6065c0f05d11d1604a57f5652ccb6b47d556ab3567f7",
+            "14G61": "0261d2d149140ce0c7d290dc7e33a454168e6f5a2c424122af27da38e92ef753"
+        ]
+        guard let expected = known[build], Preparer.sha256(component) == expected,
+              component.range(of: Data("ShouldHactivate\0".utf8)) != nil,
+              component.range(of: Data((build == "14G61"
+                  ? "Hactivation is enabled, short circuiting activation state to Activated."
+                  : "Short circuiting activation state to Activated").utf8)) != nil else { return nil }
+        let hash = Preparer.sha256(component)
+        return Result(inputSHA256: hash, outputSHA256: hash,
+                      gestaltOverrides: ["a6vjPkzcRjrsXmniFsm0dg": true],
+                      component: build == "14G61" ? "usr/libexec/mobileactivationd"
+                          : "System/Library/PrivateFrameworks/MobileActivation.framework/Support/mobactivationd",
+                      nativeCacheRequired: true)
+    }
+
     /// Rebuild the existing code-page hashes as an ad-hoc signature, retaining entitlements and
     /// special-slot hashes. Patching does not change the binary's size or its signing allocation.
-    static func signed(_ data: Data) throws -> Data {
+    static func signed(_ data: Data, preservingEmptyCMS: Bool = false) throws -> Data {
         var b = [UInt8](data)
         func invalid() -> ActivationFailure { ActivationFailure("Unsupported code signature") }
         guard let cs = MachOSignature.codeSignature(in: data) else { throw invalid() }
@@ -144,6 +245,12 @@ public enum Activation {
             let blob = start + offset
             let blobLength = Int(try be32(b, blob + 4))
             guard blobLength >= 8, blobLength <= length - offset else { throw invalid() }
+            if preservingEmptyCMS && type == 0x10000 {
+                // Some native metadata images carry an empty CMS wrapper as
+                // part of their ad-hoc signature. Retain that representation,
+                // but never preserve a stale, nonempty CMS signature.
+                guard blobLength == 8, try be32(b, blob) == 0xFADE_0B01 else { throw invalid() }
+            }
             if type == 0 || (0x1000...0x1005).contains(type) {
                 guard blobLength >= 44, try be32(b, blob) == 0xFADE_0C02 else { throw invalid() }
                 let hashOffset = Int(try be32(b, blob + 16))
@@ -176,7 +283,7 @@ public enum Activation {
                 }
                 directories += 1
             }
-            if type != 0x10000 { entries.append((type, offset)) }  // Remove the now-invalid CMS signature.
+            if type != 0x10000 || preservingEmptyCMS { entries.append((type, offset)) }
         }
         guard directories > 0, entries.contains(where: { $0.0 == 0 }) else { throw invalid() }
         for i in 0..<count {

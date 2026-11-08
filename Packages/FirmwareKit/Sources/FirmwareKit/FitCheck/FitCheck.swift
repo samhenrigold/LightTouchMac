@@ -265,7 +265,7 @@ public enum FitCheck {
     }
 
     /// ARM subtypes the recipes' archs name.
-    static let subtype: [String: Int32] = ["armv6": 6, "armv7": 9]
+    static let subtype: [String: Int32] = ["armv6": 6, "armv7": 9, "armv7s": 11]
 
     /// Does the guest Mach-O `bin` (thin or fat) load on this firmware? Proven, not assumed: a slice this board's
     /// CPU runs; every dyld-required load command one the firmware's own executables carry (so its dyld takes it);
@@ -429,7 +429,7 @@ struct MachO32 {
     /// The little-endian word at `o`, or the readers' error past the image.
     func u32(_ o: Int) throws -> UInt32 { try b.withParserSpan { s throws(ParsingError) in try s.le32(at: o) } }
 
-    /// The slice a CPU of `arch` runs: the exact subtype, else (armv7) an armv6 or ARM_ALL one.
+    /// Prefer the CPU's exact subtype, then its compatible older ARM slices.
     static func slice(_ d: Data, arch: String) -> (image: MachO32, arch: String)? {
         let b = [UInt8](d)
         let want = FitCheck.subtype[arch] ?? -1
@@ -456,10 +456,10 @@ struct MachO32 {
                 guard try s.le32(at: 0) == 12 else { return [] }
                 return [(Int32(bitPattern: try s.le32(at: 4)), b)]
             }) ?? []
-        let runnable = arch == "armv7" ? [want, 6, 0] : [want, 0]
+        let runnable = arch == "armv7s" ? [want, 9, 6, 0] : arch == "armv7" ? [want, 6, 0] : [want, 0]
         for s in runnable {
             if let hit = slices.first(where: { $0.0 == s }), let m = MachO32(hit.1) {
-                return (m, s == 9 ? "armv7" : s == 6 ? "armv6" : "arm")
+                return (m, s == 11 ? "armv7s" : s == 9 ? "armv7" : s == 6 ? "armv6" : "arm")
             }
         }
         return nil

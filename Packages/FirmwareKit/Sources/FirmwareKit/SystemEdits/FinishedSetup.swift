@@ -1,16 +1,28 @@
 // FinishedSetup: Setup Assistant's finished state, seeded into the data volume's /private/var skeleton (recipe option
-// skip_setup, firmwarekit create --skip-setup), so a fresh iOS 5-7 device starts at the Home screen.
+// skip_setup, firmwarekit create --skip-setup), so a fresh iOS 5-8 device starts at the Home screen.
 //
 // The keys are the ones Setup itself writes on a walk that picks English, the region, Location Services off, no Wi-Fi,
 // a new device, no Apple ID or passcode, the terms and Don't Send: the data volume of each base diffed before and
 // after the sessions harness's walk (n81ap/k48ap 9B206, n90ap 10B329, n90ap 11D257). What the boot's other parts
 // write anyway (lockdown's zone and clock, it_prefs, caches) is left to them. The language and region are
 // seedLanguage's, which every prepared device gets.
+// The 8.0 additions follow the original 12A365 Preferences setup predicate and Setup's own marker names;
+// live qualification of that profile is recorded separately from the walked 5-7 fixtures.
 
 import BinaryParsing
 import Foundation
 
 extension SystemEdits {
+    /// The same setup records used for image preparation, exported for native
+    /// guest provisioning. Callers merge them with existing device records;
+    /// live preference domains must be synchronized through CFPreferences.
+    public static func finishedSetupPlists(major: Int, productVersion: String,
+                                           language: String = "en", locale: String = "en_US", locationServicesEnabled: Bool = false) throws -> [String: Data] {
+        try Dictionary(uniqueKeysWithValues: finishedSetup(major: major, language: language, locale: locale,
+                                                           productVersion: productVersion, locationServicesEnabled: locationServicesEnabled).map { path, keys in
+            (path, try PropertyListSerialization.data(fromPropertyList: keys, format: .binary, options: 0))
+        })
+    }
     /// One plist under /private/var and the keys it gets.
     typealias Seed = (path: String, keys: [String: Any])
 
@@ -21,9 +33,9 @@ extension SystemEdits {
     static let globalPreferences = "mobile/Library/Preferences/.GlobalPreferences.plist"
     static let dataArk = "root/Library/Lockdown/data_ark.plist"
 
-    /// What Setup leaves on iOS `major` (5, 6, 7) after a walk in `language` and `locale` ("en", "en_AU"), finished at
+    /// What Setup leaves on iOS `major` (5-8) in `language` and `locale` ("en", "en_AU"), finished at
     /// `now`; empty before 5 (iTunes activated those, no Setup Assistant).
-    static func finishedSetup(major: Int, language: String, locale: String, now: Date = Date()) -> [Seed] {
+    static func finishedSetup(major: Int, language: String, locale: String, now: Date = Date(), productVersion: String? = nil, locationServicesEnabled: Bool = false) -> [Seed] {
         guard major >= 5 else { return [] }
         var buddy: [String: Any] = [
             "SetupDone": true, "SetupFinishedAllSteps": true, "RestoreChoice": true, "PBTCPresented": true,
@@ -36,9 +48,14 @@ extension SystemEdits {
         switch major {
         case 5, 6:
             buddy[major == 5 ? "AppleIDPresented" : "AppleIDPB3Presented"] = true
-            if major == 6 { buddy["SetupVersion"] = 3 }
+            if major == 6 {
+                buddy["SetupVersion"] = 3
+                // Siri-capable 6.x devices also run PSSetupAssistantNeedsToRun's
+                // assistant-upgrade predicate. The walked N90 has no Siri step.
+                buddy["AssistantPresented"] = true
+            }
             buddyLocal = ["LocationServicesPresented": true]
-            off = ["LocationServicesEnabled": 0]
+            off = ["LocationServicesEnabled": locationServicesEnabled ? 1 : 0]
             ark = [
                 "com.apple.purplebuddy-SetupState": "SetupUsingAssistant",
                 "com.apple.mobile.user_preferences-UserSetLanguage": true,
@@ -51,8 +68,52 @@ extension SystemEdits {
                     "SetupState": "SetupUsingAssistant", "AppleIDForceUpgrade": false
                 ]
             ) { $1 }
-            buddyLocal = ["LocationServices2Presented": true, "CloudConfigPresented": true]
-            off = ["LocationServicesEnabledIn7.0": 0]
+            // Native N42 11A465 completed setup uses version 4 / PB4 and
+            // records the Siri choice; 7.1's walked N90 oracle uses 5 / PB5.
+            if productVersion == "7.0" || productVersion?.hasPrefix("7.0.") == true {
+                buddy.removeValue(forKey: "AppleIDPB5Presented")
+                buddy["AppleIDPB4Presented"] = true
+                buddy["AssistantPresented"] = true
+                buddy["SetupVersion"] = 4
+            }
+            if major == 8 {
+                // Native 12A365 PSSetupAssistantNeedsToRun requires version >6,
+                // AssistantPresented, and neither upgrade mini-buddy flag.
+                // Its Setup executable names PB6 and LocationServices4.
+                buddy.removeValue(forKey: "AppleIDPB5Presented")
+                buddy["AppleIDPB6Presented"] = true
+                buddy["AssistantPresented"] = true
+                buddy["SetupVersion"] = 7
+            }
+            if major == 9 {
+                // Qualified against native 13A344's setup predicate and the
+                // completed-setup Data records; no Setup executable edits.
+                buddy.removeValue(forKey: "AppleIDPB5Presented")
+                buddy["AppleIDPB9Presented"] = true
+                buddy["AssistantPresented"] = true
+                buddy["Passcode4Presented"] = true
+                buddy["PBDiagnostics2Presented"] = true
+                buddy["SetupVersion"] = 9
+            }
+            if major == 10 {
+                // 14G61's native BYBuddyIOSCurrentVersion is 10; its qualified
+                // completed-setup records retain the shared cloud/Siri choices.
+                buddy.removeValue(forKey: "AppleIDPB5Presented")
+                buddy["AppleIDPB6Presented"] = true
+                buddy["AssistantPresented"] = true
+                buddy["SetupVersion"] = 10
+            }
+            buddyLocal = [major == 9 ? "LocationServices5Presented" : major == 8 || major == 10 ? "LocationServices4Presented" : "LocationServices2Presented": true,
+                          "CloudConfigPresented": true]
+            if (8...10).contains(major) {
+                buddyLocal["ShouldRunKeychainSyncMiniBuddy"] = false
+                buddyLocal["ShouldRunMesaMiniBuddy"] = false
+            }
+            if major == 9 {
+                buddyLocal["ShouldRunDiagnosticsMiniBuddy"] = false
+                buddyLocal["ShouldRunPaymentMiniBuddy"] = false
+            }
+            off = [(8...10).contains(major) ? "LocationServicesEnabledIn8.0" : "LocationServicesEnabledIn7.0": locationServicesEnabled ? 1 : 0]
             ark = [
                 "-ActivationStateAcknowledged": true, "com.apple.mobile.chaperone-NotSoFresh": true,
                 "-FirstPurpleBuddyCompletion": Int(now.timeIntervalSince1970)
@@ -61,7 +122,9 @@ extension SystemEdits {
             // PSSetupAssistantNeedsToRun brings Setup back for it (Wi-Fi, then Welcome) on every boot.
             extra = [
                 (
-                    "mobile/Library/ConfigurationProfiles/CloudConfigurationDetails.plist",
+                    major == 10
+                        ? "containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/ConfigurationProfiles/CloudConfigurationDetails.plist"
+                        : "mobile/Library/ConfigurationProfiles/CloudConfigurationDetails.plist",
                     [
                         "AllowPairing": true, "CloudConfigurationUIComplete": true, "IsSupervised": false,
                         "PostSetupProfileWasInstalled": false
@@ -184,10 +247,10 @@ extension SystemEdits {
 
     /// Seeds `finishedSetup` into `top` (/private/var, or "" for the skeleton of it) on `v`, merged into the plists
     /// already there, as Setup's walk in `language` and `locale` (seedLanguage's) leaves it.
-    static func seedFinishedSetup(_ v: any VolumeFiles, _ top: String, major: Int, language: String, locale: String)
+    static func seedFinishedSetup(_ v: any VolumeFiles, _ top: String, major: Int, language: String, locale: String, productVersion: String? = nil, locationServicesEnabled: Bool = false)
         throws
     {
-        for (path, keys) in finishedSetup(major: major, language: language, locale: locale) {
+        for (path, keys) in finishedSetup(major: major, language: language, locale: locale, productVersion: productVersion, locationServicesEnabled: locationServicesEnabled) {
             try seedPlist(v, top.isEmpty ? path : top + "/" + path) { $0.addEntries(from: keys) }
         }
     }

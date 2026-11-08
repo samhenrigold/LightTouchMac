@@ -42,6 +42,11 @@ public enum KBoot {
     public static let rootMatching =
         "<dict><key>IOProviderClass</key><string>IOMedia</string><key>IOPropertyMatch</key>"
         + "<dict><key>Partition ID</key><integer>1</integer></dict></dict>"
+    // The A6 PPN disk uses LwVM: the System filesystem is a child of the
+    // outer partition. Matching Partition ID 1 can select that parent media.
+    static let a6RootMatching =
+        "<dict><key>IOProviderClass</key><string>IOMedia</string><key>IOPropertyMatch</key>"
+        + "<dict><key>BSD Name</key><string>disk0s1s1</string></dict></dict>"
 
     // Measured on a real iPad 1 running 7B500: cpu/memory 0, bus/peripheral 100 MHz, fixed/timebase 24 MHz.
     static let cpuHz: UInt32 = 0, memHz: UInt32 = 0, busHz: UInt32 = 100_000_000, periphHz: UInt32 = 100_000_000
@@ -105,6 +110,22 @@ public enum KBoot {
         // _fmiInitVirtToPhysMap loops forever on an empty one. 4 CEs on each of 2 buses.
         ("ce-bitmap", 0x0F0F)
     ]
+    /// A pair of Hynix PPN packages, with two CAUs per package. The IPSW
+    /// contains empty slots for iBoot's probed storage identity.
+    static let a6PPN: [(String, UInt32)] = [
+        ("#ce", 2), ("#die-ce", 2), ("#ce-blocks", 2128), ("#block-pages", 256),
+        ("#page-bytes", 16384), ("#spare-bytes", 64), ("#databus", 2),
+        // The native request structure has 128 physical-page slots per bank.
+        ("max-transaction-size", 128),
+        ("ce-bitmap", 0x101), ("ppn-device", 1), ("ppn-spec-version", 0x10505),
+        ("ppn-ftl-ver", 2), ("caus-ce", 2), ("blocks-cau", 1064),
+        ("cau-bits", 4), ("block-bits", 11), ("page-bits", 8),
+        ("mlc-pages", 256), ("slc-pages", 128), ("toggle-device", 1),
+        ("logical-page-size", 4096), ("meta-per-logical-page", 16),
+        ("valid-meta-per-logical-page", 16), ("metadata-whitening", 0),
+        ("read-setup-clks", 1), ("read-hold-clks", 1), ("read-dccycle-clks", 1),
+        ("write-setup-clks", 1), ("write-hold-clks", 1)
+    ]
     /// The nodes the geometry goes in: iBoot-1219 DTs carry it on flash-controller0 itself as well as on its disk.
     static let nandNodes = ["arm-io/flash-controller0", "arm-io/flash-controller0/disk"]
     static let model = [("model-number", "MB292"), ("region-info", "LL/A")]
@@ -116,6 +137,7 @@ public enum KBoot {
         public var modelNumber: String
         /// DRAM bytes: memSize, vram and pram sit at its top, as iBoot puts them.
         public var dram: UInt32 = KBoot.dramSize
+        public var physicalBase: UInt32 = KBoot.physBase
         /// A radio board (N90) keeps its baseband node; the machine's `baseband` property unmatches it at boot.
         public var radio = false
         /// The machine answers the Bluetooth HCI on the UART the DT hangs the board's bluetooth node off (qemu-ios
@@ -185,6 +207,15 @@ public enum KBoot {
             rawPanelID: [0xA1, 0x8A, 0x58, 0x09, 0x07],
             backlightID: 5
         )
+        /// iPhone 5 (A6/Swift): its own kernel, DT, memory map and native panel.
+        public static let n42 = Board(
+            fbWidth: 640, fbHeight: 1136, rotation: 0, scale: 2,
+            boardID: 0x02, modelNumber: "MD299", dram: 0x4000_0000,
+            physicalBase: 0x8000_0000, radio: true,
+            platformName: "s5l8950x", chipID: 0x8950,
+            clocks: [UInt32](repeating: 24_000_000, count: 512),
+            dotPitch: 326, chipRevision: 0x20
+        )
         /// iPhone 3GS (S5L8920): -M n88, model MB715. Its baseband node is unmatched (no modem model yet).
         public static let n88 = Board(
             fbWidth: 320,
@@ -214,19 +245,21 @@ public enum KBoot {
             chipID: 0x8922
         )
         /// The S5L8920 family (-M n18, n88): no metadata whitening in its DTs, the IPSW's NAND epoch, no USB host.
-        public var isS5L8920: Bool { platformName != "s5l8930x" }
+        public var isS5L8920: Bool { chipID == 0x8920 || chipID == 0x8922 }
+        public var isA6: Bool { chipID == 0x8950 }
+        var wifiDTNode: String { isA6 ? "wlan" : "arm-io/sdio" }
 
         /// From the DT's compatible ("N81AP\0iPod4,1\0AppleARM" -> n81); K48 otherwise.
         public static func of(_ dt: DeviceTree) -> Board {
             let first = dt.value("", "compatible").map { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) } ?? ""
-            return ["N81AP": .n81, "N90AP": .n90, "N88AP": .n88, "N18AP": .n18][first] ?? .k48
+            return ["N81AP": .n81, "N90AP": .n90, "N88AP": .n88, "N18AP": .n18, "N42AP": .n42][first] ?? .k48
         }
 
         var memSize: UInt32 { dram - KBoot.pramSize - KBoot.vramSize }
-        var vramPA: UInt32 { KBoot.physBase + memSize }
+        var vramPA: UInt32 { physicalBase + memSize }
         /// iBoot puts the A4's PRAM at the top of its 512 MiB DRAM window whatever the DRAM (0x5fffc000 on the
         /// 256 MiB iPad too, where the window mirrors DRAM); the S5L8920's at the top of its DRAM.
-        var pramPA: UInt32 { KBoot.physBase + (isS5L8920 ? dram : 0x2000_0000) - KBoot.pramSize }
+        var pramPA: UInt32 { physicalBase + ((isS5L8920 || isA6) ? dram : 0x2000_0000) - KBoot.pramSize }
     }
 
     /// K48's 4.x (8C148) spi0/nor-flash subtree: diagnostics, nvram, the image area and effaceable storage
@@ -379,7 +412,7 @@ public enum KBoot {
             ("die-id", .words(dieWords))
         ]
         // Bluetooth hangs off whichever UART the board wires it to (K48 uart3, N81 uart1): fillDT finds it.
-        return (root, chosen, [("arm-io/sdio", try mac(need("wifi-mac"))), ("bluetooth", try mac(need("bt-mac")))])
+        return (root, chosen, [(board.wifiDTNode, try mac(need("wifi-mac"))), ("bluetooth", try mac(need("bt-mac")))])
     }
 
     /// An empty NVRAM image as IODTNVRAM parses it (ipad1_kboot.nvram_image): CHRP partitions, a 2 KiB "common"
@@ -442,7 +475,7 @@ public enum KBoot {
             try dt.set("product", "product-id", .bytes(Data(id)))
         }
         // iBoot-1940 also copies syscfg's MACs to /chosen; 7.x's MobileGestalt reads them there (and hashes them into the UDID).
-        for (k, node) in [("mac-address-wifi0", "arm-io/sdio"), ("mac-address-bluetooth0", "bluetooth")]
+        for (k, node) in [("mac-address-wifi0", board.wifiDTNode), ("mac-address-bluetooth0", "bluetooth")]
         where dt.props["chosen"]?[k] != nil {
             if let mac = macs.first(where: { $0.0 == node })?.1 { try dt.set("chosen", k, .bytes(mac)) }
         }
@@ -450,12 +483,26 @@ public enum KBoot {
             ("clock-frequency", cpuHz), ("memory-frequency", memHz), ("bus-frequency", busHz),
             ("peripheral-frequency", periphHz), ("fixed-frequency", fixedHz), ("timebase-frequency", timebaseHz)
         ] {
-            try dt.set("cpus/cpu0", k, .u32(hz))
+            for cpu in ["cpus/cpu0", "cpus/cpu1"] where dt.props[cpu]?[k] != nil {
+                try dt.set(cpu, k, .u32(board.isA6 && k == "clock-frequency" ? 1_300_000_000 : hz))
+            }
         }
         let slots = (dt.props["arm-io"]?["clock-frequencies"]?.length ?? board.clocks.count * 4) / 4
         try dt.set("arm-io", "clock-frequencies", .words(Array(board.clocks.prefix(slots))))
         try dt.set("arm-io", "usbphy-frequency", .u32(usbphyHz))
-        if !board.isS5L8920 {
+        if board.isA6,
+           let template = dt.value("arm-io/pmgr", "voltage-states1"),
+           template.allSatisfy({ $0 == 0 }),
+           let nominal = dt.value("arm-io/pmgr", "nominal-performance1"),
+           let boost = dt.value("arm-io/pmgr", "boost-performance1") {
+            // The restore DT reserves the GPU domain's state table for iBoot.
+            // Use its own declared nominal/boost levels, in the same 8-byte
+            // performance/voltage format as the supplied CPU-domain table.
+            // Voltage zero denotes the firmware default in this template.
+            let states = nominal.prefix(4) + Data(count: 4) + boost.prefix(4) + Data(count: 4)
+            try dt.set("arm-io/pmgr", "voltage-states1", .bytes(states))
+        }
+        if !board.isS5L8920 && !board.isA6 {
             if dt.props["arm-io/pmgr"]?["bridge-settings"]?.length ?? 0 >= a4BridgeSettings.count {
                 try dt.set("arm-io/pmgr", "bridge-settings", .bytes(a4BridgeSettings))
             }
@@ -506,7 +553,12 @@ public enum KBoot {
         }
         for node in nandNodes {
             guard let props = dt.props[node] else { continue }
-            for (k, v) in nand where props[k] != nil { try dt.set(node, k, .u32(v)) }
+            for (k, v) in (board.isA6 ? a6PPN : nand) where props[k] != nil {
+                try dt.set(node, k, .u32(v))
+            }
+            if board.isA6 && props["device-readid"] != nil {
+                try dt.set(node, "device-readid", .bytes(Data([0x50, 0x50, 0x4e, 1, 5, 5, 0, 0])))
+            }
         }
         try dt.set("pram", "reg", .words([board.pramPA, pramSize]))
         try dt.set("vram", "reg", .words([board.vramPA, vramSize]))
@@ -523,20 +575,58 @@ public enum KBoot {
         bootArgs: String = defaultBootArgs,
         identity: UnitIdentity,
         iboot: String = defaultIBootVersion,
-        ramdisk: Data? = nil
+        ramdisk: Data? = nil,
+        rootDevice: String? = nil
     ) throws -> Image {
         let page = { (n: Int) in (n + 0xFFF) & ~0xFFF }
         let m = try MachO(kernel)
+        if let rootDevice,
+           rootDevice.isEmpty || !rootDevice.utf8.allSatisfy({ (48...57).contains($0) || (97...122).contains($0) }) {
+            throw FirmwareError(.unsupported, "invalid root device name")
+        }
+        let namedRootMatching = rootDevice.map {
+            "<dict><key>IOProviderClass</key><string>IOMedia</string><key>IOPropertyMatch</key>"
+            + "<dict><key>BSD Name</key><string>\($0)</string></dict></dict>"
+        }
         let segs = m.segments.filter { $0.name != "__PAGEZERO" }
         guard let lowest = segs.map(\.vmaddr).min(), let end = segs.map({ Int($0.vmaddr) + Int($0.vmsize) }).max()
         else {
             throw FirmwareError(.unsupported, "kernelcache has no segments")
         }
         let vbase = Int(lowest & 0xF000_0000)
-        let pa = { (va: Int) in UInt32(truncatingIfNeeded: va - vbase + Int(physBase)) }
         var dt = try DeviceTree(deviceTree)
         let board = Board.of(dt)
-        try graftNOR(&dt)
+        // Later restore trees describe iBoot syscfg lookups rather than
+        // reserving zero-filled slots. Resolve the same expressions before
+        // measuring the tree. The original iBoot omits unavailable syscfg
+        // properties without a fallback (14G61 resolver +0x33d70/+0x33e3c).
+        let (rootIdentity, _, _) = try identityDT(identity, board: board)
+        var syscfg: [String: Data] = [:]
+        for (key, field) in [("MLB#", "mlb-serial-number"), ("Regn", "region-info"),
+                             ("Mod#", "model-number"), ("SrNm", "serial-number")] {
+            if let value = rootIdentity.first(where: { $0.0 == field })?.1 { syscfg[key] = value.encoded }
+        }
+        var macs: [String: Data] = [:]
+        for (key, field, name) in [("WMac", "wifi-mac", "wifiaddr"), ("BMac", "bt-mac", "btaddr")] {
+            if let text = identity[field], let value = Data(hex: text.replacingOccurrences(of: ":", with: "")) {
+                syscfg[key] = value
+                macs[name] = value
+            }
+        }
+        try dt.resolveBootDirectives(syscfg: syscfg, macAddresses: macs)
+        if board.isA6 {
+            // 6.x/7.x IPSWs reserve only a two-byte placeholder. iBoot
+            // replaces it with 64 bytes, which the emulator fills afresh at
+            // reset. An undersized record silently prevents that injection.
+            if let slot = dt.props["chosen"]?["random-seed"] {
+                if slot.length != 64 { try dt.replace("chosen", "random-seed", .bytes(Data(count: 64))) }
+            } else {
+                try dt.add("chosen", "random-seed", Data(count: 64))
+            }
+        }
+        let physicalBase = board.physicalBase
+        let pa = { (va: Int) in UInt32(truncatingIfNeeded: va - vbase + Int(physicalBase)) }
+        if !board.isA6 { try graftNOR(&dt) }
         // Host nubs (EHCI, OHCI0) up at arbitrator start, next to device mode (qemu-ios docs/ipad1/usb-keyboard.md).
         if dt.contains("arm-io/usb-complex") { try dt.add("arm-io/usb-complex", "hsic-enabled") }
         let dtLen = dt.data.count
@@ -581,7 +671,7 @@ public enum KBoot {
             memoryMap: memoryMap,
             identity: identity,
             iboot: iboot,
-            rootMatching: ramdisk == nil ? rootMatching : ""
+            rootMatching: ramdisk == nil ? (namedRootMatching ?? (board.isA6 ? a6RootMatching : rootMatching)) : ""
         )
         image.replaceSubrange(dtVA - vbase..<dtVA - vbase + dt.data.count, with: dt.data)
 
@@ -592,14 +682,14 @@ public enum KBoot {
         guard cmdline.count < 256 else { throw FirmwareError(.unsupported, "boot-args longer than BOOT_LINE_LENGTH") }
         var ba = Data([1, 0, m.bootArgsVersion(), 0])
         ba += DeviceTree.Value.le([
-            UInt32(vbase), physBase, board.memSize, topOfKernel,
+            UInt32(vbase), physicalBase, board.memSize, topOfKernel,
             board.vramPA, verbose ? 0 : 1, UInt32(board.fbWidth * fbDepth / 8), UInt32(board.fbWidth),
             UInt32(board.fbHeight), UInt32(fbDepth) | (board.scale - 1) << 16,
             0, UInt32(dtVA), UInt32(dtLen)
         ])
         ba += cmdline + [UInt8](repeating: 0, count: 256 - cmdline.count)
         image.replaceSubrange(argsVA - vbase..<argsVA - vbase + ba.count, with: ba)
-        return Image(image: image, loadPA: physBase, entryPA: pa(Int(try m.entry())), bootArgsPA: pa(argsVA))
+        return Image(image: image, loadPA: physicalBase, entryPA: pa(Int(try m.entry())), bootArgsPA: pa(argsVA))
     }
 
     /// image + segments ("K48SEG\0\0", pa, len, flags bit 0 = zero-fill, data) + the 24-byte trailer.
@@ -622,7 +712,8 @@ public enum KBoot {
         identity: UnitIdentity,
         bootArgs: String = defaultBootArgs,
         ramdisk: URL? = nil,
-        kernelOverride: Data? = nil
+        kernelOverride: Data? = nil,
+        rootDevice: String? = nil
     ) throws {
         let file = { (n: String) in dir.appendingPathComponent(n) }
         let exists = { (n: String) in FileManager.default.fileExists(atPath: file(n).path) }
@@ -632,7 +723,8 @@ public enum KBoot {
             bootArgs: bootArgs,
             identity: identity,
             iboot: ibootVersion(exists("iBoot.bin") ? try Data(contentsOf: file("iBoot.bin")) : nil),
-            ramdisk: try ramdisk.map { try Data(contentsOf: $0) }
+            ramdisk: try ramdisk.map { try Data(contentsOf: $0) },
+            rootDevice: rootDevice
         )
         let board = Board.of(try DeviceTree(Data(contentsOf: file("DeviceTree.bin"))))
         let logo =

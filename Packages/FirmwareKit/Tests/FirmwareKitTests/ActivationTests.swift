@@ -5,6 +5,57 @@ import Testing
 @testable import FirmwareKit
 
 struct ActivationTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_12A365"] != nil,
+                   "Set FK_ACTIVATION_N42_12A365 to the original mobactivationd executable"))
+    func nativeCachePlanIsRestrictedToTheQualifiedComponent() throws {
+        let path = try #require(ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_12A365"])
+        let original = try Data(contentsOf: URL(fileURLWithPath: path))
+        let plan = try #require(Activation.nativeGestaltPlan(component: original, build: "12A365"))
+        #expect(plan.nativeCacheRequired == true)
+        #expect(plan.inputSHA256 == plan.outputSHA256)
+        #expect(plan.patch == nil && plan.dataArk == nil)
+        #expect(plan.gestaltOverrides == ["a6vjPkzcRjrsXmniFsm0dg": true])
+        #expect(Activation.nativeGestaltPlan(component: original, build: "13A344") == nil)
+        var changed = original; changed[0] ^= 1
+        #expect(Activation.nativeGestaltPlan(component: changed, build: "12A365") == nil)
+        #expect(Activation.nativeGestaltPlan(component: Data(), build: "12A365") == nil)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_10A405"] != nil,
+                   "Set FK_ACTIVATION_N42_10A405 to the stock native executable"))
+    func qualifiedA6FactoryKeepsTheNativePublicationAndSignature() throws {
+        let path = try #require(ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_10A405"])
+        let before = try Data(contentsOf: URL(fileURLWithPath: path))
+        let (after, result) = try Activation.activated(before)
+        #expect(result.outputSHA256 == "dc5033e2bf1ba37790431cde3b3a19de8fe9dc799f46a348ad848eef3ca83fd4")
+        let patch = try #require(result.patch)
+        #expect(patch.strategy == "a6-native-no-record-factory-shortcut" && patch.replacement.count == 46)
+        #expect(after.subdata(in: patch.offset..<(patch.offset + 46)) == patch.replacement)
+        #expect(throws: ActivationFailure.self) { try Activation.activated(after) }
+        var otherBuild = before
+        otherBuild[0x109ce] ^= 1
+        #expect(try Activation.qualifiedA6Factory(otherBuild).map { _ in true } == nil)
+    }
+
+    @Test func gestaltRouteRequiresTheNativeFirmwareCache() throws {
+        let lockdownd = Data("ShouldHactivate\0Short circuiting activation state to Activated\0".utf8)
+        let cache: [String: Any] = ["CacheVersion": "11A465", "CacheUUID": UUID().uuidString,
+                                   "CacheData": Data([1, 2, 3]), "CacheExtra": ["Other": "keep"]]
+        func encode(_ p: [String: Any]) throws -> Data {
+            try PropertyListSerialization.data(fromPropertyList: p, format: .binary, options: 0)
+        }
+        let result = Activation.gestaltRoute(lockdownd: lockdownd, cache: try encode(cache), build: "11A465")
+        #expect(result?.gestaltOverrides == ["a6vjPkzcRjrsXmniFsm0dg": true])
+        #expect(result?.inputSHA256 == result?.outputSHA256)
+        #expect(result?.dataArk == nil && result?.patch == nil)
+        #expect(Activation.gestaltRoute(lockdownd: lockdownd, cache: try encode(cache), build: "12A365") == nil)
+        for key in ["CacheVersion", "CacheUUID", "CacheData", "CacheExtra"] {
+            var missing = cache; missing.removeValue(forKey: key)
+            #expect(Activation.gestaltRoute(lockdownd: lockdownd, cache: try encode(missing), build: "11A465") == nil)
+        }
+        #expect(Activation.gestaltRoute(lockdownd: Data(), cache: try encode(cache), build: "11A465") == nil)
+    }
+
     private func u32(_ b: [UInt8], _ o: Int, big: Bool = true) -> Int {
         (0..<4).reduce(0) { $0 | Int(b[o + $1]) << (big ? 24 - 8 * $1 : 8 * $1) }
     }
@@ -192,5 +243,21 @@ struct ActivationTests {
         for length in [0, 27, 28, 128] {
             #expect(throws: ActivationFailure.self) { try Activation.signed(Data(repeating: 0, count: length)) }
         }
+    }
+
+    @Test func metadataSigningPreservesOnlyAnEmptyCMSWrapper() throws {
+        var bytes = Self.syntheticMachO()
+        #expect(throws: ActivationFailure.self) {
+            try Activation.signed(Data(bytes), preservingEmptyCMS: true)
+        }
+        // The fixture's CMS slot points at 380; reduce its blob to an empty
+        // wrapper, matching the native metadata image's representation.
+        bytes[387] = 8
+        let output = [UInt8](try Activation.signed(Data(bytes), preservingEmptyCMS: true))
+        #expect(u32(output, 264) == 3)
+        #expect(output[268..<292] == bytes[268..<292])
+        #expect(output[380..<388] == bytes[380..<388])
+        #expect(try Activation.signed(Data(output), preservingEmptyCMS: true) == Data(output))
+        #expect(u32([UInt8](try Activation.signed(Data(bytes))), 264) == 2)
     }
 }

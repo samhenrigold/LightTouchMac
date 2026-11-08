@@ -71,6 +71,79 @@ public struct DeviceTree: Sendable {
         data.replaceSubrange(s.offset + 36..<s.offset + 36 + s.length, with: v + Data(count: s.length - v.count))
     }
 
+    /// Replaces a property with a resized record; calculate handoff addresses after this operation.
+    public mutating func replace(_ path: String, _ prop: String, _ value: Value) throws {
+        guard let slot = props[path]?[prop] else {
+            throw FirmwareError(.unsupported, "DeviceTree: no \(path):\(prop)")
+        }
+        let bytes = value.encoded
+        let record = Self.name32(prop) + Value.le([UInt32(bytes.count)]) + bytes
+            + Data(count: ((bytes.count + 3) & ~3) - bytes.count)
+        data.replaceSubrange(slot.offset..<slot.offset + 36 + ((slot.length + 3) & ~3), with: record)
+        try reparse()
+    }
+
+    /// Interpret restore-tree iBoot expressions before calculating handoff addresses.
+    /// Missing syscfg values follow iBoot: try the next alternative, or omit the property.
+    public mutating func resolveBootDirectives(
+        syscfg: [String: Data], macAddresses: [String: Data]
+    ) throws {
+        var changes: [(Slot, Data?)] = []
+        for properties in props.values {
+            for slot in properties.values where try u32(slot.offset + 32) & 0x8000_0000 != 0 {
+                let expression = String(decoding: data[slot.offset + 36..<slot.offset + 36 + slot.length]
+                    .prefix { $0 != 0 }, as: UTF8.self)
+                var result: Data?
+                var mayOmit = false
+                for option in expression.split(separator: ",") {
+                    let fields = option.split(separator: "/").map(String.init)
+                    guard fields.count >= 2 && fields.count <= 3 else {
+                        throw FirmwareError(.unsupported, "DeviceTree: invalid iBoot directive \(expression)")
+                    }
+                    var count: Int?
+                    if fields.count == 3 || fields[0] == "zeroes" {
+                        let text = fields.last!
+                        count = text.hasPrefix("0x") ? Int(text.dropFirst(2), radix: 16) : Int(text)
+                        guard let n = count, n >= 0, n <= 1 << 20 else {
+                            throw FirmwareError(.unsupported, "DeviceTree: invalid directive size \(expression)")
+                        }
+                    }
+                    switch fields[0] {
+                    case "syscfg":
+                        result = syscfg[fields[1]]
+                        mayOmit = true
+                    case "macaddr": result = macAddresses[fields[1]]
+                    case "zeroes": result = Data(count: count!)
+                    default:
+                        throw FirmwareError(.unsupported, "DeviceTree: unknown iBoot directive \(expression)")
+                    }
+                    if let value = result {
+                        if let count { result = Data(value.prefix(count)) + Data(count: max(0, count - value.count)) }
+                        break
+                    }
+                }
+                guard result != nil || mayOmit else {
+                    throw FirmwareError(.unsupported, "DeviceTree: unresolved iBoot directive \(expression)")
+                }
+                changes.append((slot, result))
+            }
+        }
+        // Descending offsets preserve every original slot until it is replaced.
+        for (slot, value) in changes.sorted(by: { $0.0.offset > $1.0.offset }) {
+            guard let value else {
+                let owner = nodes.values.filter { $0.start < slot.offset && slot.offset < $0.propsEnd }
+                    .max { $0.start < $1.start }!
+                data.replaceSubrange(owner.start..<owner.start + 4, with: Value.le([try u32(owner.start) - 1]))
+                data.removeSubrange(slot.offset..<slot.offset + 36 + ((slot.length + 3) & ~3))
+                continue
+            }
+            let record = data[slot.offset..<slot.offset + 32] + Value.le([UInt32(value.count)])
+                + value + Data(count: ((value.count + 3) & ~3) - value.count)
+            data.replaceSubrange(slot.offset..<slot.offset + 36 + ((slot.length + 3) & ~3), with: record)
+        }
+        try reparse()
+    }
+
     /// Appends a property to a node; the blob grows, so lay memory out after the last add().
     public mutating func add(_ path: String, _ prop: String, _ value: Data = Data()) throws {
         guard let node = nodes[path] else { throw FirmwareError(.unsupported, "DeviceTree: no node \(path)") }

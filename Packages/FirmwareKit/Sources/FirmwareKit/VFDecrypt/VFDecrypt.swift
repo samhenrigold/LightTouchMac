@@ -21,14 +21,22 @@ public enum VFDecrypt {
     }
 
     public static func decrypt(from fd: Int32, output: URL, key: Data) throws {
+        var header = [UInt8](repeating: 0, count: 0x100)
+        guard readFully(fd, &header, 0, header.count) == header.count else {
+            throw FirmwareError(.unsupported, "short encrcdsa header")
+        }
+        try decrypt(from: fd, header: header, output: output, key: key)
+    }
+
+    /// The caller has consumed exactly the first 256 bytes of a sequential input.
+    static func decrypt(from fd: Int32, header: [UInt8], output: URL, key: Data) throws {
         guard key.count == 36 else {
             throw FirmwareError(.keyMissing, "vfdecrypt key must be 36 bytes, got \(key.count)")
         }
         let aesKey = key.prefix(16)
         // Keyed once; each chunk's IV copies the keyed state rather than hashing the key again.
         let keyed = HMAC<Insecure.SHA1>(key: SymmetricKey(data: key.dropFirst(16)))
-        var header = [UInt8](repeating: 0, count: 0x100)
-        guard readFully(fd, &header, 0, 0x100) == 0x100, header[0..<8].elementsEqual("encrcdsa".utf8) else {
+        guard header.count == 0x100, header[0..<8].elementsEqual("encrcdsa".utf8) else {
             throw FirmwareError(.unsupported, "not encrcdsa")
         }
         // the block size (u32 at 52), the data's size and offset (u64s at 56 and 64), big-endian; an offset past

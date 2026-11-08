@@ -1,6 +1,6 @@
 // UDIF: the raw HFS+ volume out of a (decrypted) IPSW rootfs DMG. Ports ipad1_rootfs.extract_rootfs and
 // apm_hfs_slice: UDIFReader (the offline volume backend) or DiskImage.convertToRaw (hdiutil UDTO / diskutil RAW)
-// makes the raw disk, then the Apple_HFS(X) partition of its Apple Partition Map is copied out. A source that
+// makes the raw disk, then its HFS partition (Apple Partition Map or GPT) is copied out. A source that
 // already is a bare HFS volume is copied as is.
 //
 //   try await UDIF.extractRootfs(dmg: rootfsDMG, to: rawVolume)             // work files go next to `to`
@@ -36,7 +36,12 @@ public enum UDIF {
         }
         let f = try FileHandle(forReadingFrom: raw)
         defer { try? f.close() }
-        let (off, len) = try APM.hfsSlice(f.read(upToCount: 64 * 512) ?? Data())
+        let size = try f.seekToEnd()
+        try f.seek(toOffset: 0)
+        let header = try f.read(upToCount: 1 << 20) ?? Data()
+        let (off, len) = header.count >= 520 && header[512..<520] == Data("EFI PART".utf8)
+            ? try GPT.hfsSlice(header, diskBytes: size)
+            : try APM.hfsSlice(header)
         try f.seek(toOffset: UInt64(off))
         guard fm.createFile(atPath: out.path, contents: nil), let o = FileHandle(forWritingAtPath: out.path) else {
             throw FirmwareError(.internal, "cannot create \(out.path)")

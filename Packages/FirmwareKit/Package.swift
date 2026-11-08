@@ -18,7 +18,9 @@ let package = Package(
     products: [
         .library(name: "FirmwareKit", targets: ["FirmwareKit"]),
         .library(name: "FirmwareSchema", type: .static, targets: ["FirmwareSchema"]),
-        .executable(name: "firmwarekit", targets: ["FirmwareKitCLI"])
+        .executable(name: "firmwarekit", targets: ["FirmwareKitCLI"]),
+        .executable(name: "firmwarekit-prepare", targets: ["FirmwareKitPrepare"]),
+        .executable(name: "firmwarekit-provision-guest-tools", targets: ["FirmwareKitProvisionGuestTools"])
     ],
     dependencies: [
         .package(path: "../HostRuntime"),
@@ -62,6 +64,8 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),
+        .executableTarget(name: "FirmwareKitPrepare", dependencies: ["FirmwareKit"]),
+        .executableTarget(name: "FirmwareKitProvisionGuestTools", dependencies: ["FirmwareKit"]),
         .testTarget(
             name: "FirmwareKitTests",
             dependencies: [

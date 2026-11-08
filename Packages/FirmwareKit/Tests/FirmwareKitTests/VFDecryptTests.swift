@@ -35,6 +35,10 @@ import Testing
             try img.write(to: src)
             try VFDecrypt.decrypt(input: src, output: out, key: key)
             #expect(try Data(contentsOf: out) == plain.prefix(size))
+            let input = try FileHandle(forReadingFrom: src)
+            defer { try? input.close() }
+            try RootFilesystemImage.extract(from: input.fileDescriptor, output: out) { key }
+            #expect(try Data(contentsOf: out) == plain.prefix(size))
         }
     }
 
