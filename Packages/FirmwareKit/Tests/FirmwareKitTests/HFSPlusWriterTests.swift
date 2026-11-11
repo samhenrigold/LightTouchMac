@@ -245,7 +245,8 @@ import Testing
     /// sizes, content, link targets, flags) as the kernel route's extraction (MountedVolume.extract: /usr/bin/tar
     /// -xkf on the host, merged in) into a kernel-mounted newfs_hfs one, both over the same existing folder and file,
     /// which -k keeps; and every file and folder the archive dates has the same modification date in both.
-    @Test func tarExtractionMatchesTheKernel() async throws {
+    @Test(.enabled(if: FixtureRequirements.corpusEnabled, "Firmware corpus test; set FK_TEST_CORPUS=1 to run"))
+    func tarExtractionMatchesTheKernel() async throws {
         let tar = Oracle.path("Library/Caches/gold.samhenri.LightTouchMac/Jailbreak/freeze.tar.gz")
         guard Oracle.exists(tar) else { try FixtureRequirements.missing(tar.path) }
         try await Oracle.withTemp { dir in
@@ -336,8 +337,9 @@ import Testing
     }
 
     /// A file HFS-compressed by macOS (ditto --hfsCompression onto a kernel-mounted volume: its content in the
-    /// com.apple.decmpfs attribute or the resource fork) overwritten in place is stored plainly: compressed flag,
-    /// decmpfs attribute and kHFSHasAttributesMask gone, its record and owner kept, and fsck_hfs passes.
+    /// com.apple.decmpfs attribute or the resource fork) overwritten in place is stored plainly: compressed flag and
+    /// decmpfs attribute gone, its record and owner kept, and fsck_hfs passes. kHFSHasAttributesMask stays only while
+    /// another attribute does: macOS 13 on adds com.apple.provenance to what ditto writes, which the overwrite keeps.
     @Test func overwritingACompressedFileStoresItPlainly() async throws {
         try await Oracle.withTemp { dir in
             let img = dir.appendingPathComponent("c.img")
@@ -367,8 +369,10 @@ import Testing
             try w.put(Data("plain".utf8), at: "f")
             try w.close()
             let after = try flags()
-            #expect(after.owner & 0x20 == 0 && after.record & 0x04 == 0 && after.cnid == before.cnid)
-            #expect(try HFSPlusVolume(img).attributeOwners().isEmpty)
+            #expect(after.owner & 0x20 == 0 && after.cnid == before.cnid)
+            let v = try HFSPlusVolume(img)
+            #expect(try v.decmpfsHeader(after.cnid) == nil)
+            #expect((after.record & 0x04 != 0) == (try v.attributeOwners().contains(after.cnid)))
             #expect(try HFSPlusVolume(img).contents(HFSPlusVolume(img).record(at: "f")) == Data("plain".utf8))
             let fsck = try await Self.fsck(img)
             #expect(fsck.ok, "\(fsck.output)")
