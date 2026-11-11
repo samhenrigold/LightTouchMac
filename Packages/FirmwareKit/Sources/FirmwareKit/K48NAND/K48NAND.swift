@@ -705,7 +705,7 @@ public enum K48NAND {
     /// with the MBR, the third partition and the signature (epoch, flags, kernel version, whitening) that `store`
     /// plus `overlay` hold now. Whatever YaFTL state the guest left goes; the device restores its map on boot as it
     /// does from a prepared store. `work` keeps the MBR and third partition read back.
-    nonisolated(nonsending) static func rebuild(
+    nonisolated(nonsending) public static func rebuild(
         store: URL,
         overlay: URL?,
         system: URL,

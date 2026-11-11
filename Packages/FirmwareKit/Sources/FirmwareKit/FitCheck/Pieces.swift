@@ -468,7 +468,9 @@ extension FitCheck {
             }
             proof.append(String(sel.prefix { $0 != ":" }) + " signals through IOMobileFramebufferSwapSignal")
         }
-        if names(fw, quartzCore, "GetMacroContextPrivate") || names(fw, coreImage, "GetMacroContextPrivate") {
+        if ["GetMacroContextPrivate", "getMacroContextPrivate"].contains(where: {
+            names(fw, quartzCore, $0) || names(fw, coreImage, $0)
+        }) {
             let tag = "{__GLIFunctionDispatchRec="
             guard fw.cache != nil, let enc = string(fw, openGLES, prefix: tag),
                 let fields = GLIDispatch.fields(in: Data((enc + "}").utf8))

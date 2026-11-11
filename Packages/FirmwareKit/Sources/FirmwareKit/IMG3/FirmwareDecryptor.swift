@@ -1,7 +1,7 @@
 // FirmwareDecryptor: ipad1_fw.main. Decrypts an IPSW's boot chain, kernelcache, ramdisks and rootfs into a
 // directory laid out like the Python decrypt cache:
 //   iBSS.bin iBEC.bin iBoot.bin LLB.bin DeviceTree.bin AppleLogo.bin kernelcache.mach
-//   <RestoreRamDisk>-ramdisk.dmg <UpdateRamDisk>-ramdisk.dmg rootfs.dmg (vfdecrypted UDIF)
+//   <RestoreRamDisk>-ramdisk.dmg <UpdateRamDisk>-ramdisk.dmg rootfs.dmg (unencrypted UDIF)
 //
 //   let r = try FirmwareDecryptor.decrypt(ipsw: ipsw, entry: entry, into: dir)   // r.plainTail: 2.x img3s
 //   try FirmwareDecryptor.decrypt(ipsw: ipsw, entry: entry, into: dir, rootfs: false)
@@ -53,7 +53,7 @@ public enum FirmwareDecryptor {
                 let body = try Apple8900.body(raw)
                 return body.prefix(4) == Data("2gmI".utf8) ? try IMG2.payload(body) : body
             }
-            // 2.x DFU stages have no KBAG: the payload is in the clear (a key for one would only make noise).
+            // Clear IMG3s (including later firmware) have no KBAG and need no key.
             if try IMG3.tags(raw)["KBAG"] == nil { return try IMG3.payload(raw) }
             let (iv, key) = try img3Key(p)
             return try IMG3.decrypt(raw, iv: iv, key: key, plainTail: plainTail)
@@ -65,6 +65,8 @@ public enum FirmwareDecryptor {
         var kernel: Data
         if Apple8900.isContainer(kcRaw) {
             kernel = try LZSS.complzss(Apple8900.body(kcRaw))
+        } else if try IMG3.tags(kcRaw)["KBAG"] == nil {
+            kernel = try LZSS.complzss(IMG3.payload(kcRaw))
         } else {
             let (kcIV, kcKey) = try img3Key(kcPath)
             do {
@@ -114,12 +116,16 @@ public enum FirmwareDecryptor {
         }
         if rootfs {
             let os = try path("OS")
-            let k = try entry.key(forPath: os)
-            guard let key = Data(hex: k.key), key.count == 36 else {
-                throw FirmwareError(.keyMissing, "\(entry.id): no key for the root filesystem \(os)")
-            }
             let out = dir.appendingPathComponent("rootfs.dmg")
-            try ipsw.stream(os) { try VFDecrypt.decrypt(from: $0.fileDescriptor, output: out, key: key) }
+            try ipsw.stream(os) { input in
+                try RootFilesystemImage.extract(from: input.fileDescriptor, output: out) {
+                    let k = try entry.key(forPath: os)
+                    guard let key = Data(hex: k.key), key.count == 36 else {
+                        throw FirmwareError(.keyMissing, "\(entry.id): no key for the root filesystem \(os)")
+                    }
+                    return key
+                }
+            }
             files.append("rootfs.dmg")
         }
         return Result(plainTail: plainTail, paths: comp, files: files)
