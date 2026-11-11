@@ -270,11 +270,16 @@ nonisolated public final class FrameRingWriter: @unchecked Sendable {
         } else {
             for y in 0..<height { memcpy(dst + y * surface.bytesPerRow, pixels + y * rowBytes, rowBytes) }
         }
-        // The 4th byte of each pixel.
+        // The 4th byte of each pixel. A pointer, not a Range: unoptimized (the Debug helper), iterating a Range
+        // costs 50 ms an iPad frame, which held its frames to 19 a second; the pointer's operations inline anyway.
         let alpha = UInt32(0xFF00_0000).littleEndian
         for y in 0..<height {
-            let row = (dst + y * surface.bytesPerRow).bindMemory(to: UInt32.self, capacity: width)
-            for x in 0..<width { row[x] |= alpha }
+            var pixel = (dst + y * surface.bytesPerRow).bindMemory(to: UInt32.self, capacity: width)
+            let end = pixel + width
+            while pixel < end {
+                pixel.pointee |= alpha
+                pixel += 1
+            }
         }
     }
 }
