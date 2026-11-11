@@ -16,12 +16,17 @@ extension SystemEdits {
     /// The same setup records used for image preparation, exported for native
     /// guest provisioning. Callers merge them with existing device records;
     /// live preference domains must be synchronized through CFPreferences.
-    public static func finishedSetupPlists(major: Int, productVersion: String,
-                                           language: String = "en", locale: String = "en_US", locationServicesEnabled: Bool = false) throws -> [String: Data] {
-        try Dictionary(uniqueKeysWithValues: finishedSetup(major: major, language: language, locale: locale,
-                                                           productVersion: productVersion, locationServicesEnabled: locationServicesEnabled).map { path, keys in
-            (path, try PropertyListSerialization.data(fromPropertyList: keys, format: .binary, options: 0))
-        })
+    public static func finishedSetupPlists(
+        major: Int, productVersion: String,
+        language: String = "en", locale: String = "en_US", locationServicesEnabled: Bool = false
+    ) throws -> [String: Data] {
+        try Dictionary(
+            uniqueKeysWithValues: finishedSetup(
+                major: major, language: language, locale: locale,
+                productVersion: productVersion, locationServicesEnabled: locationServicesEnabled
+            ).map { path, keys in
+                (path, try PropertyListSerialization.data(fromPropertyList: keys, format: .binary, options: 0))
+            })
     }
     /// One plist under /private/var and the keys it gets.
     typealias Seed = (path: String, keys: [String: Any])
@@ -35,7 +40,10 @@ extension SystemEdits {
 
     /// What Setup leaves on iOS `major` (5-8) in `language` and `locale` ("en", "en_AU"), finished at
     /// `now`; empty before 5 (iTunes activated those, no Setup Assistant).
-    static func finishedSetup(major: Int, language: String, locale: String, now: Date = Date(), productVersion: String? = nil, locationServicesEnabled: Bool = false) -> [Seed] {
+    static func finishedSetup(
+        major: Int, language: String, locale: String, now: Date = Date(), productVersion: String? = nil,
+        locationServicesEnabled: Bool = false
+    ) -> [Seed] {
         guard major >= 5 else { return [] }
         var buddy: [String: Any] = [
             "SetupDone": true, "SetupFinishedAllSteps": true, "RestoreChoice": true, "PBTCPresented": true,
@@ -103,8 +111,12 @@ extension SystemEdits {
                 buddy["AssistantPresented"] = true
                 buddy["SetupVersion"] = 10
             }
-            buddyLocal = [major == 9 ? "LocationServices5Presented" : major == 8 || major == 10 ? "LocationServices4Presented" : "LocationServices2Presented": true,
-                          "CloudConfigPresented": true]
+            buddyLocal = [
+                major == 9
+                    ? "LocationServices5Presented"
+                    : major == 8 || major == 10 ? "LocationServices4Presented" : "LocationServices2Presented": true,
+                "CloudConfigPresented": true
+            ]
             if (8...10).contains(major) {
                 buddyLocal["ShouldRunKeychainSyncMiniBuddy"] = false
                 buddyLocal["ShouldRunMesaMiniBuddy"] = false
@@ -113,7 +125,10 @@ extension SystemEdits {
                 buddyLocal["ShouldRunDiagnosticsMiniBuddy"] = false
                 buddyLocal["ShouldRunPaymentMiniBuddy"] = false
             }
-            off = [(8...10).contains(major) ? "LocationServicesEnabledIn8.0" : "LocationServicesEnabledIn7.0": locationServicesEnabled ? 1 : 0]
+            off = [
+                (8...10).contains(major) ? "LocationServicesEnabledIn8.0" : "LocationServicesEnabledIn7.0":
+                    locationServicesEnabled ? 1 : 0
+            ]
             ark = [
                 "-ActivationStateAcknowledged": true, "com.apple.mobile.chaperone-NotSoFresh": true,
                 "-FirstPurpleBuddyCompletion": Int(now.timeIntervalSince1970)
@@ -247,10 +262,16 @@ extension SystemEdits {
 
     /// Seeds `finishedSetup` into `top` (/private/var, or "" for the skeleton of it) on `v`, merged into the plists
     /// already there, as Setup's walk in `language` and `locale` (seedLanguage's) leaves it.
-    static func seedFinishedSetup(_ v: any VolumeFiles, _ top: String, major: Int, language: String, locale: String, productVersion: String? = nil, locationServicesEnabled: Bool = false)
+    static func seedFinishedSetup(
+        _ v: any VolumeFiles, _ top: String, major: Int, language: String, locale: String,
+        productVersion: String? = nil, locationServicesEnabled: Bool = false
+    )
         throws
     {
-        for (path, keys) in finishedSetup(major: major, language: language, locale: locale, productVersion: productVersion, locationServicesEnabled: locationServicesEnabled) {
+        for (path, keys) in finishedSetup(
+            major: major, language: language, locale: locale, productVersion: productVersion,
+            locationServicesEnabled: locationServicesEnabled)
+        {
             try seedPlist(v, top.isEmpty ? path : top + "/" + path) { $0.addEntries(from: keys) }
         }
     }

@@ -193,11 +193,16 @@ enum K48Oracle {
         #expect(
             keys(mobile + "com.apple.purplebuddy.notbackedup.plist")
                 == (major == 8
-                    ? ["LocationServices4Presented", "CloudConfigPresented", "ShouldRunKeychainSyncMiniBuddy",
-                       "ShouldRunMesaMiniBuddy"]
-                    : major == 7 ? ["LocationServices2Presented", "CloudConfigPresented"] : ["LocationServicesPresented"])
+                    ? [
+                        "LocationServices4Presented", "CloudConfigPresented", "ShouldRunKeychainSyncMiniBuddy",
+                        "ShouldRunMesaMiniBuddy"
+                    ]
+                    : major == 7
+                        ? ["LocationServices2Presented", "CloudConfigPresented"] : ["LocationServicesPresented"])
         )
-        let off = major == 8 ? "LocationServicesEnabledIn8.0"
+        let off =
+            major == 8
+            ? "LocationServicesEnabledIn8.0"
             : major == 7 ? "LocationServicesEnabledIn7.0" : "LocationServicesEnabled"
         for name in ["com.apple.locationd.plist", "com.apple.locationd.notbackedup.plist"] {
             #expect(plist(mobile + name)[off] as? Int == 0, "\(name): Location Services off")

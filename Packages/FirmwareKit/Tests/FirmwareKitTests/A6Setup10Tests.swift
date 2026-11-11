@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct A6Setup10Tests {
@@ -13,13 +14,19 @@ struct A6Setup10Tests {
         // Retain PB6 observed in the earlier completed14G61 records.
         // Runtime qualification must also cover its post-update setup gates.
         #expect(buddy["AppleIDPB6Presented"] as? Bool == true)
-        let cloud = try #require(seeds.first { $0.path == "containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/ConfigurationProfiles/CloudConfigurationDetails.plist" }?.keys)
+        let cloud = try #require(
+            seeds.first {
+                $0.path
+                    == "containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/ConfigurationProfiles/CloudConfigurationDetails.plist"
+            }?.keys)
         #expect(cloud["CloudConfigurationUIComplete"] as? Bool == true)
         #expect(!seeds.contains { $0.path == "mobile/Library/ConfigurationProfiles/CloudConfigurationDetails.plist" })
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_14G61"] != nil,
-                   "Set FK_ACTIVATION_N42_14G61 to original mobileactivationd"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_14G61"] != nil,
+            "Set FK_ACTIVATION_N42_14G61 to original mobileactivationd"))
     func qualifiesOriginalRelocatedDaemon() throws {
         let path = try #require(ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_14G61"])
         let bytes = try Data(contentsOf: URL(fileURLWithPath: path))

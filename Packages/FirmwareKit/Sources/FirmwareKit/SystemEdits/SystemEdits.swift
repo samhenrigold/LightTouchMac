@@ -296,7 +296,8 @@ public enum SystemEdits {
                 try v.put(kernelcache, at: kernelcachePath, mode: 0o644)
             }
             productMajor = majorVersion(v)
-            productVersion = v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductVersion"] as? String
+            productVersion =
+                v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductVersion"] as? String
             // 7.x's launchd cannot remount / rw (mount_hfs: Operation not permitted) and reboots; keep its stock ro root
             try v.put(Data((productMajor >= 7 ? fstabRO : fstabRW).utf8), at: fstab)
             if o.webProxy {
@@ -308,7 +309,8 @@ public enum SystemEdits {
                 rootOwned += try installPAC(v)
             }
             if o.caOGL {  // GL first
-                let (engine, owned) = try installCAOGL(v, helpers: helpers, arch: firmwareArch, fw: fw, fit: fit, log: log)
+                let (engine, owned) = try installCAOGL(
+                    v, helpers: helpers, arch: firmwareArch, fw: fw, fit: fit, log: log)
                 result.engine = engine
                 rootOwned += owned
             }
@@ -361,16 +363,22 @@ public enum SystemEdits {
             do {
                 result.activation = try activate(v, log: log)
             } catch let e as ActivationFailure {
-                let build = v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"] as? String
-                let daemon = build == "14G61" ? "usr/libexec/mobileactivationd"
+                let build =
+                    v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"] as? String
+                let daemon =
+                    build == "14G61"
+                    ? "usr/libexec/mobileactivationd"
                     : "System/Library/PrivateFrameworks/MobileActivation.framework/Support/mobactivationd"
                 if o.nativeGestaltActivation, let build, let component = try? v.contents(at: daemon),
-                   let plan = Activation.nativeGestaltPlan(component: component, build: build) {
+                    let plan = Activation.nativeGestaltPlan(component: component, build: build)
+                {
                     result.activation = plan
                     log("Activation requires native MobileGestalt cache initialization before normal boot")
                 } else {
                     guard let r = Activation.dataArkRoute(lockdownd: try v.contents(at: lockdownd)) else { throw e }
-                    log("lockdownd: no binary strategy; activation by the data ark (\((r.dataArk?.keys.sorted() ?? []).joined(separator: ", ")))")
+                    log(
+                        "lockdownd: no binary strategy; activation by the data ark (\((r.dataArk?.keys.sorted() ?? []).joined(separator: ", ")))"
+                    )
                     result.activation = r
                 }
             }
@@ -606,9 +614,10 @@ public enum SystemEdits {
         _ v: any VolumeFiles, path: String, label: String, values: [String: String]
     ) throws {
         guard path.hasPrefix("System/Library/LaunchDaemons/"),
-              !path.split(separator: "/").contains(".."), !label.isEmpty,
-              values.keys.allSatisfy({ !$0.isEmpty && !$0.contains("=") && !$0.contains("\0") }),
-              values.values.allSatisfy({ !$0.contains("\0") }) else {
+            !path.split(separator: "/").contains(".."), !label.isEmpty,
+            values.keys.allSatisfy({ !$0.isEmpty && !$0.contains("=") && !$0.contains("\0") }),
+            values.values.allSatisfy({ !$0.contains("\0") })
+        else {
             throw FirmwareError(.unsupported, "Invalid launch environment configuration")
         }
         try editLaunchJob(v, path: path, label: label) { env, _ in
@@ -804,8 +813,9 @@ public enum SystemEdits {
         }
         if o.skipSetup, productMajor >= 5 {
             let (l, locale) = language.map { ($0.language, $0.locale) } ?? ("en", "en_US")
-            try seedFinishedSetup(MountedVolume(root: skeleton), "", major: productMajor, language: l, locale: locale,
-                                  productVersion: productVersion, locationServicesEnabled: o.locationServicesEnabled)
+            try seedFinishedSetup(
+                MountedVolume(root: skeleton), "", major: productMajor, language: l, locale: locale,
+                productVersion: productVersion, locationServicesEnabled: o.locationServicesEnabled)
             log("Setup Assistant: seeded as finished (iOS \(productMajor))")
         }
         if let dataArk {
@@ -841,9 +851,11 @@ public enum SystemEdits {
             let nativeActivation = component == lockdownd ? original : try system.contents(at: component)
             let cachePath = "mobile/Library/Caches/com.apple.MobileGestalt.plist"
             if (7...8).contains(major), let cache = try? data.contents(at: cachePath),
-               let build = system.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"] as? String,
-               let route = Activation.gestaltRoute(lockdownd: nativeActivation, cache: cache, build: build),
-               let overrides = route.gestaltOverrides {
+                let build = system.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"]
+                    as? String,
+                let route = Activation.gestaltRoute(lockdownd: nativeActivation, cache: cache, build: build),
+                let overrides = route.gestaltOverrides
+            {
                 try rewritePlist(data, cachePath) { d in
                     dict(d, "CacheExtra").addEntries(from: overrides)
                 }

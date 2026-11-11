@@ -39,7 +39,8 @@ public enum UDIF {
         let size = try f.seekToEnd()
         try f.seek(toOffset: 0)
         let header = try f.read(upToCount: 1 << 20) ?? Data()
-        let (off, len) = header.count >= 520 && header[512..<520] == Data("EFI PART".utf8)
+        let (off, len) =
+            header.count >= 520 && header[512..<520] == Data("EFI PART".utf8)
             ? try GPT.hfsSlice(header, diskBytes: size)
             : try APM.hfsSlice(header)
         try f.seek(toOffset: UInt64(off))

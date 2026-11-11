@@ -5,8 +5,10 @@ import Foundation
 public enum A6RestoreKernel {
     static let originalSHA256 = "14b955200561e63d71cf67366668b54d1463fd2c42ce28c9cdb672947479850d"
 
-    public static func prepare(_ original: Data, build: String,
-                               log: (String) -> Void = { _ in }) throws -> Data {
+    public static func prepare(
+        _ original: Data, build: String,
+        log: (String) -> Void = { _ in }
+    ) throws -> Data {
         guard build == "12A365" else { return original }
         func invalid(_ reason: String) -> FirmwareError {
             FirmwareError(.unsupported, "N42 restore PRNG compatibility: " + reason)
@@ -16,10 +18,12 @@ public enum A6RestoreKernel {
         }
         let image = try MachO(original)
         func offset(_ address: UInt32, bytes: Int) throws -> Int {
-            guard let segment = image.segments.first(where: {
-                UInt64(address) >= UInt64($0.vmaddr) &&
-                UInt64(address) + UInt64(bytes) <= UInt64($0.vmaddr) + UInt64($0.filesize)
-            }) else { throw invalid("address outside file-backed segments") }
+            guard
+                let segment = image.segments.first(where: {
+                    UInt64(address) >= UInt64($0.vmaddr)
+                        && UInt64(address) + UInt64(bytes) <= UInt64($0.vmaddr) + UInt64($0.filesize)
+                })
+            else { throw invalid("address outside file-backed segments") }
             let position = Int(segment.fileoff) + Int(address - segment.vmaddr)
             guard position >= 0, position <= original.count - bytes else { throw invalid("truncated segment") }
             return position
@@ -39,14 +43,14 @@ public enum A6RestoreKernel {
             0x20, 0x46, 0x39, 0x46, 0xb0, 0x47, 0x3c, 0x44,
             0xed, 0x1b, 0xf2, 0xe7, 0x01, 0xb0, 0xf0, 0xbd
         ])
-        let slot = try offset(0x8075c0c0, bytes: 4)
-        guard word(slot) == 0x80099cc9 else { throw invalid("read_random import changed") }
+        let slot = try offset(0x8075_c0c0, bytes: 4)
+        guard word(slot) == 0x8009_9cc9 else { throw invalid("read_random import changed") }
         wrapper.append(original.subdata(in: slot..<(slot + 4)))
-        let header = try offset(0x8074c000, bytes: 24)
-        guard word(header) == 0xfeedface, word(header + 20) + 28 <= 0x600 else {
+        let header = try offset(0x8074_c000, bytes: 24)
+        guard word(header) == 0xfeed_face, word(header + 20) + 28 <= 0x600 else {
             throw invalid("IOFlashStorage header occupies wrapper space")
         }
-        let cave = try offset(0x8074c600, bytes: wrapper.count)
+        let cave = try offset(0x8074_c600, bytes: wrapper.count)
         guard original.subdata(in: cave..<(cave + wrapper.count)) == Data(count: wrapper.count) else {
             throw invalid("IOFlashStorage header padding is in use")
         }

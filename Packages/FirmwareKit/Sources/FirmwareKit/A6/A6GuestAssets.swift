@@ -24,7 +24,8 @@ public enum A6GuestAssets {
 
     public static func prepare(kernel: Data, system: URL, restoreRAMDisk: URL? = nil) throws -> Result {
         let volume = try HFSPlusVolume(system)
-        var assets: [Asset] = [], hashes = Set<Data>()
+        var assets: [Asset] = []
+        var hashes = Set<Data>()
         // 13A344's qualified preparation needs only the edited cache's exact
         // identity. Do not broaden that recipe to unrelated support binaries.
         let kernelHash = Preparer.sha256(kernel)
@@ -35,18 +36,22 @@ public enum A6GuestAssets {
         // Optional preparation-only sealer; never broaden older recipes or
         // accept a caller-supplied digest in place of verifying the staged file.
         if kernelHash == "bbc90ec2bd9ce1cc43c6a98b47d39348d63443b5d6c22293f23a1f43bebe4b46",
-           (try? volume.record(at: A6Sealing.executable)) != nil {
+            (try? volume.record(at: A6Sealing.executable)) != nil
+        {
             selected.append(A6Sealing.executable)
         }
         for path in selected {
             let bytes = try volume.contents(volume.record(at: path))
             let directories = try verifiedCodeDirectories(bytes)
             hashes.formUnion(directories)
-            assets.append(Asset(path: path, sha256: Preparer.sha256(bytes),
-                                codeDirectories: directories.map(\.hexString)))
+            assets.append(
+                Asset(
+                    path: path, sha256: Preparer.sha256(bytes),
+                    codeDirectories: directories.map(\.hexString)))
         }
         if let restoreRAMDisk,
-           Preparer.sha256(kernel) == "bbc90ec2bd9ce1cc43c6a98b47d39348d63443b5d6c22293f23a1f43bebe4b46" {
+            Preparer.sha256(kernel) == "bbc90ec2bd9ce1cc43c6a98b47d39348d63443b5d6c22293f23a1f43bebe4b46"
+        {
             // The temporary restore environment executes our initializer and
             // cache worker too. Derive their identities from the staged files,
             // using exactly the same signed-page validation as System support.
@@ -56,8 +61,10 @@ public enum A6GuestAssets {
                 let bytes = try restore.contents(record)
                 let directories = try verifiedCodeDirectories(bytes)
                 hashes.formUnion(directories)
-                assets.append(Asset(path: "restore:/" + path, sha256: Preparer.sha256(bytes),
-                                    codeDirectories: directories.map(\.hexString)))
+                assets.append(
+                    Asset(
+                        path: "restore:/" + path, sha256: Preparer.sha256(bytes),
+                        codeDirectories: directories.map(\.hexString)))
             }
         }
         return Result(kernel: try registering(hashes, in: kernel), assets: assets)
@@ -80,7 +87,10 @@ public enum A6GuestAssets {
     /// Validate every signed page before deriving the native architecture's
     /// CodeDirectory identities. No caller-supplied digest strings are used.
     static func verifiedCodeDirectories(_ bytes: Data) throws -> [Data] {
-        var base = 0, size = bytes.count, signature = 0, allocation = 0
+        var base = 0
+        var size = bytes.count
+        var signature = 0
+        var allocation = 0
         if bytes.starts(with: Data("dyld_v1".utf8)) {
             guard bytes.prefix(16).range(of: Data("armv7s".utf8)) != nil else { throw invalid("not an armv7s cache") }
             signature = try number(bytes, 40, count: 8)
@@ -102,22 +112,27 @@ public enum A6GuestAssets {
                 for i in 0..<count {
                     let entry = 8 + i * 20
                     let cpu = try number(bytes, entry, big: true)
-                    let sub = try number(bytes, entry + 4, big: true) & 0x00ffffff
+                    let sub = try number(bytes, entry + 4, big: true) & 0x00ff_ffff
                     if cpu == 12, [9, 11].contains(sub), sub > (selected?.subtype ?? 0) {
-                        selected = (sub, try number(bytes, entry + 8, big: true), try number(bytes, entry + 12, big: true))
+                        selected = (
+                            sub, try number(bytes, entry + 8, big: true), try number(bytes, entry + 12, big: true)
+                        )
                     }
                 }
                 guard let selected else { throw invalid("no native ARM slice") }
-                base = selected.base; size = selected.size
+                base = selected.base
+                size = selected.size
             }
             guard size >= 28, base <= bytes.count - size,
-                  try number(bytes, base) == 0xfeedface, try number(bytes, base + 4) == 12 else {
+                try number(bytes, base) == 0xfeed_face, try number(bytes, base + 4) == 12
+            else {
                 throw invalid("invalid native slice")
             }
             let commands = try number(bytes, base + 16)
             var cursor = base + 28
             for _ in 0..<commands {
-                let command = try number(bytes, cursor), length = try number(bytes, cursor + 4)
+                let command = try number(bytes, cursor)
+                let length = try number(bytes, cursor + 4)
                 guard length >= 8, cursor <= base + size - length else { throw invalid("invalid load command") }
                 if command == 0x1d {
                     guard length >= 16, allocation == 0 else { throw invalid("ambiguous code signature") }
@@ -128,26 +143,36 @@ public enum A6GuestAssets {
             }
         }
         guard allocation >= 12, signature >= base, signature <= base + size - allocation,
-              try number(bytes, signature, big: true) == 0xfade0cc0 else { throw invalid("missing code signature") }
-        let length = try number(bytes, signature + 4, big: true), count = try number(bytes, signature + 8, big: true)
-        guard length >= 12, length <= allocation, count <= (length - 12) / 8 else { throw invalid("invalid signature index") }
+            try number(bytes, signature, big: true) == 0xfade_0cc0
+        else { throw invalid("missing code signature") }
+        let length = try number(bytes, signature + 4, big: true)
+        let count = try number(bytes, signature + 8, big: true)
+        guard length >= 12, length <= allocation, count <= (length - 12) / 8 else {
+            throw invalid("invalid signature index")
+        }
         var directories: [Data] = []
         for i in 0..<count {
             let relative = try number(bytes, signature + 16 + i * 8, big: true)
             guard relative >= 12 + count * 8, relative <= length - 8 else { throw invalid("invalid signature blob") }
-            let cd = signature + relative, magic = try number(bytes, cd, big: true)
+            let cd = signature + relative
+            let magic = try number(bytes, cd, big: true)
             let cdLength = try number(bytes, cd + 4, big: true)
             guard cdLength >= 8, cdLength <= length - relative else { throw invalid("truncated signature blob") }
-            guard magic == 0xfade0c02 else { continue }
+            guard magic == 0xfade_0c02 else { continue }
             guard cdLength >= 44 else { throw invalid("truncated CodeDirectory") }
             let version = try number(bytes, cd + 8, big: true)
-            let hashes = try number(bytes, cd + 16, big: true), special = try number(bytes, cd + 24, big: true)
-            let pages = try number(bytes, cd + 28, big: true), limit = try number(bytes, cd + 32, big: true)
-            let width = Int(bytes[cd + 36]), kind = bytes[cd + 37], exponent = Int(bytes[cd + 39])
+            let hashes = try number(bytes, cd + 16, big: true)
+            let special = try number(bytes, cd + 24, big: true)
+            let pages = try number(bytes, cd + 28, big: true)
+            let limit = try number(bytes, cd + 32, big: true)
+            let width = Int(bytes[cd + 36])
+            let kind = bytes[cd + 37]
+            let exponent = Int(bytes[cd + 39])
             guard (kind == 1 && width == 20) || (kind == 2 && width == 32),
-                  (1...20).contains(exponent), limit > 0, limit <= signature - base,
-                  hashes >= 44 + special * width, hashes <= cdLength,
-                  pages <= (cdLength - hashes) / width else { throw invalid("unsupported signed page layout") }
+                (1...20).contains(exponent), limit > 0, limit <= signature - base,
+                hashes >= 44 + special * width, hashes <= cdLength,
+                pages <= (cdLength - hashes) / width
+            else { throw invalid("unsupported signed page layout") }
             if version >= 0x20100 {
                 guard cdLength >= 48 else { throw invalid("truncated scatter metadata") }
                 let scatter = try number(bytes, cd + 44, big: true)
@@ -159,7 +184,8 @@ public enum A6GuestAssets {
                     guard bytes.starts(with: Data("dyld_v1".utf8)), scatter >= 48 else {
                         throw invalid("unsupported scatter signature")
                     }
-                    var entry = scatter, previousEnd = 0
+                    var entry = scatter
+                    var previousEnd = 0
                     while true {
                         guard entry <= cdLength - 24 else { throw invalid("unterminated scatter vector") }
                         let count = try number(bytes, cd + entry, big: true)
@@ -172,8 +198,10 @@ public enum A6GuestAssets {
                             break
                         }
                         guard first >= previousEnd, count <= pages, first <= pages - count,
-                              target > 0, target % (1 << exponent) == 0 else { throw invalid("invalid scatter mapping") }
-                        previousEnd = first + count; entry += 24
+                            target > 0, target % (1 << exponent) == 0
+                        else { throw invalid("invalid scatter mapping") }
+                        previousEnd = first + count
+                        entry += 24
                     }
                 }
             }
@@ -201,14 +229,20 @@ public enum A6GuestAssets {
             return try registeringIOS9(owned, in: kernel)
         }
         guard Preparer.sha256(kernel) == "bbc90ec2bd9ce1cc43c6a98b47d39348d63443b5d6c22293f23a1f43bebe4b46",
-              !owned.isEmpty, owned.allSatisfy({ $0.count == 20 }) else { throw invalid("unsupported kernel or asset inventory") }
-        let file = 0x790000, header = 0x6fd4, oldBase = header + 1024
+            !owned.isEmpty, owned.allSatisfy({ $0.count == 20 })
+        else { throw invalid("unsupported kernel or asset inventory") }
+        let file = 0x790000
+        let header = 0x6fd4
+        let oldBase = header + 1024
         let original = kernel.subdata(in: file..<(file + 0x26000))
         guard Preparer.sha256(original) == "ad6cf379d838fcf0fc44d146c19e3e435a3c068b9f6915c8bad2ddd9c2daf2ed",
-              original[0x482..<0x12f4].allSatisfy({ $0 == 0 }),
-              try number(original, 0x23b4) == 0x5066 else { throw invalid("native table layout differs") }
-        var patched = original, native = Set<Data>()
-        let newBase = 0x482 + (oldBase - 0x482) % 19, delta = (oldBase - newBase) / 19
+            original[0x482..<0x12f4].allSatisfy({ $0 == 0 }),
+            try number(original, 0x23b4) == 0x5066
+        else { throw invalid("native table layout differs") }
+        var patched = original
+        var native = Set<Data>()
+        let newBase = 0x482 + (oldBase - 0x482) % 19
+        let delta = (oldBase - newBase) / 19
         var cursor = newBase
         func put(_ value: Int, _ offset: Int, count: Int) {
             for i in 0..<count { patched[offset + i] = UInt8(truncatingIfNeeded: value >> (i * 8)) }
@@ -220,28 +254,36 @@ public enum A6GuestAssets {
             var entries: [Data] = []
             for i in 0..<count {
                 let suffix = original.subdata(in: (oldBase + (index + i) * 19)..<(oldBase + (index + i + 1) * 19))
-                entries.append(suffix); native.insert(Data([UInt8(first)]) + suffix)
+                entries.append(suffix)
+                native.insert(Data([UInt8(first)]) + suffix)
             }
-            guard entries == entries.sorted(by: { $0.lexicographicallyPrecedes($1) }) else { throw invalid("unsorted native bucket") }
+            guard entries == entries.sorted(by: { $0.lexicographicallyPrecedes($1) }) else {
+                throw invalid("unsorted native bucket")
+            }
             let additions = owned.filter { Int($0[0]) == first && !native.contains($0) }.map { Data($0.dropFirst()) }
             if additions.isEmpty {
                 guard index + delta <= 65535 else { throw invalid("bucket index overflow") }
                 put(index + delta, header + first * 4 + 2, count: 2)
             } else {
-                entries.append(contentsOf: additions); entries.sort(by: { $0.lexicographicallyPrecedes($1) })
+                entries.append(contentsOf: additions)
+                entries.sort(by: { $0.lexicographicallyPrecedes($1) })
                 guard entries.count <= 65535 else { throw invalid("bucket count overflow") }
                 if cursor + entries.count * 19 > 0x12f4 {
                     return try registeringCompact(owned, in: kernel, kext: original)
                 }
                 put(entries.count, header + first * 4, count: 2)
                 put((cursor - newBase) / 19, header + first * 4 + 2, count: 2)
-                for entry in entries { patched.replaceSubrange(cursor..<(cursor + 19), with: entry); cursor += 19 }
+                for entry in entries {
+                    patched.replaceSubrange(cursor..<(cursor + 19), with: entry)
+                    cursor += 19
+                }
             }
         }
         guard native.count == 5635 else { throw invalid("native inventory differs") }
-        put(0x807e7000 + newBase - 0x807e936e, 0x23b4, count: 4)
+        put(0x807e_7000 + newBase - 0x807e_936e, 0x23b4, count: 4)
         guard patched[0x234c..<0x23b0] == original[0x234c..<0x23b0],
-              patched[oldBase..<0x2160d] == original[oldBase..<0x2160d] else { throw invalid("native lookup changed") }
+            patched[oldBase..<0x2160d] == original[oldBase..<0x2160d]
+        else { throw invalid("native lookup changed") }
         var result = kernel
         result.replaceSubrange(file..<(file + original.count), with: patched)
         return result
@@ -254,12 +296,16 @@ public enum A6GuestAssets {
         guard !owned.isEmpty, owned.allSatisfy({ $0.count == 20 }) else {
             throw invalid("invalid iOS 9 asset inventory")
         }
-        let file = 0x70c000, header = 0x6eb0, oldBase = header + 1024
-        let literal = 0x3bfc, anchor = 0x3bc6
+        let file = 0x70c000
+        let header = 0x6eb0
+        let oldBase = header + 1024
+        let literal = 0x3bfc
+        let anchor = 0x3bc6
         guard kernel.count >= file + 0x22000 else { throw invalid("truncated iOS 9 kernel") }
         let original = kernel.subdata(in: file..<(file + 0x22000))
         guard Preparer.sha256(original) == "7096ef21f4bfa88072c27ccebc0cb365a6b2d5b3d60caca5c7507f7332993e09",
-              try number(original, literal) + anchor == oldBase else {
+            try number(original, literal) + anchor == oldBase
+        else {
             throw invalid("iOS 9 native table layout differs")
         }
         let newBase = 0x450 + (oldBase - 0x450) % 19
@@ -267,7 +313,9 @@ public enum A6GuestAssets {
         guard original[newBase..<0xb44].allSatisfy({ $0 == 0 }) else {
             throw invalid("iOS 9 header padding is in use")
         }
-        var patched = original, native = Set<Data>(), cursor = newBase
+        var patched = original
+        var native = Set<Data>()
+        var cursor = newBase
         func put(_ value: Int, _ at: Int, count: Int) {
             for i in 0..<count { patched[at + i] = UInt8(truncatingIfNeeded: value >> (i * 8)) }
         }
@@ -280,7 +328,8 @@ public enum A6GuestAssets {
             var entries: [Data] = []
             for i in 0..<count {
                 let entry = original.subdata(in: (oldBase + (index + i) * 19)..<(oldBase + (index + i + 1) * 19))
-                entries.append(entry); native.insert(Data([UInt8(first)]) + entry)
+                entries.append(entry)
+                native.insert(Data([UInt8(first)]) + entry)
             }
             guard entries == entries.sorted(by: { $0.lexicographicallyPrecedes($1) }) else {
                 throw invalid("unsorted iOS 9 native bucket")
@@ -290,24 +339,30 @@ public enum A6GuestAssets {
                 guard index + delta <= 65535 else { throw invalid("iOS 9 bucket index overflow") }
                 put(index + delta, header + first * 4 + 2, count: 2)
             } else {
-                entries.append(contentsOf: additions); entries.sort(by: { $0.lexicographicallyPrecedes($1) })
+                entries.append(contentsOf: additions)
+                entries.sort(by: { $0.lexicographicallyPrecedes($1) })
                 guard entries.count <= 65535, cursor + entries.count * 19 <= 0xb44 else {
                     throw invalid("iOS 9 expanded buckets exceed verified padding")
                 }
                 put(entries.count, header + first * 4, count: 2)
                 put((cursor - newBase) / 19, header + first * 4 + 2, count: 2)
-                for entry in entries { patched.replaceSubrange(cursor..<(cursor + 19), with: entry); cursor += 19 }
+                for entry in entries {
+                    patched.replaceSubrange(cursor..<(cursor + 19), with: entry)
+                    cursor += 19
+                }
             }
         }
         guard native.count == 4921 else { throw invalid("iOS 9 native inventory differs") }
         if owned.isSubset(of: native) { return kernel }
-        put((newBase - anchor) & 0xffffffff, literal, count: 4)
+        put((newBase - anchor) & 0xffff_ffff, literal, count: 4)
         guard patched[oldBase..<0x1dfeb] == original[oldBase..<0x1dfeb] else {
             throw invalid("iOS 9 native suffix table changed")
         }
         for i in original.indices where patched[i] != original[i] {
-            guard (newBase..<cursor).contains(i) || (header..<oldBase).contains(i) ||
-                    (literal..<(literal + 4)).contains(i) else {
+            guard
+                (newBase..<cursor).contains(i) || (header..<oldBase).contains(i)
+                    || (literal..<(literal + 4)).contains(i)
+            else {
                 throw invalid("iOS 9 native lookup changed")
             }
         }
@@ -320,10 +375,14 @@ public enum A6GuestAssets {
     /// into the same verified padding and pack the complete catalog into its
     /// original directory+catalog allocation. No executable bytes are moved.
     private static func registeringCompact(_ owned: Set<Data>, in kernel: Data, kext original: Data) throws -> Data {
-        let header = 0x6fd4, oldBase = header + 1024, end = 0x2160d
-        let newHeader = 0x484, newBase = header
+        let header = 0x6fd4
+        let oldBase = header + 1024
+        let end = 0x2160d
+        let newHeader = 0x484
+        let newBase = header
         guard try number(original, 0x23b0) == 0x4c74,
-              newHeader + 1024 <= 0x12f4 else { throw invalid("native directory pointer differs") }
+            newHeader + 1024 <= 0x12f4
+        else { throw invalid("native directory pointer differs") }
         var native = Set<Data>()
         for first in 0..<256 {
             let count = try number(original, header + first * 4, count: 2)
@@ -337,7 +396,8 @@ public enum A6GuestAssets {
         guard native.count == 5635 else { throw invalid("native inventory differs") }
         let all = native.union(owned)
         guard all.count <= (end - newBase) / 19 else { throw invalid("owned assets exceed native catalog allocation") }
-        var result = original, index = 0
+        var result = original
+        var index = 0
         func put(_ value: Int, _ offset: Int, count: Int) {
             for i in 0..<count { result[offset + i] = UInt8(truncatingIfNeeded: value >> (8 * i)) }
         }
@@ -348,7 +408,8 @@ public enum A6GuestAssets {
             put(index, newHeader + first * 4 + 2, count: 2)
             for entry in entries {
                 let start = newBase + index * 19
-                result.replaceSubrange(start..<(start + 19), with: entry.dropFirst()); index += 1
+                result.replaceSubrange(start..<(start + 19), with: entry.dropFirst())
+                index += 1
             }
         }
         // The two original PC-relative additions use PCs 0x2360 and 0x236e.

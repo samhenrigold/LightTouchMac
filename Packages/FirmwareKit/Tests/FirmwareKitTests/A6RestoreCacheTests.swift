@@ -1,11 +1,14 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct A6RestoreCacheTests {
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_A6_CACHE_LIBRARY_14G61"] != nil &&
-                       ProcessInfo.processInfo.environment["FK_A6_CACHE_WORKER"] != nil,
-                   "Set paths to original iOS 10 restore library and source-built worker"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_A6_CACHE_LIBRARY_14G61"] != nil
+                && ProcessInfo.processInfo.environment["FK_A6_CACHE_WORKER"] != nil,
+            "Set paths to original iOS 10 restore library and source-built worker"))
     func admitsOriginalIOS10Library() throws {
         let env = ProcessInfo.processInfo.environment
         let library = try Data(contentsOf: URL(fileURLWithPath: #require(env["FK_A6_CACHE_LIBRARY_14G61"])))
@@ -28,8 +31,8 @@ struct A6RestoreCacheTests {
         }
     }
     private func plan(_ build: String = "12A365", value: Any = true) throws -> Data {
-        try PropertyListSerialization.data(fromPropertyList:
-            ["Build": build, "Overrides": ["test-policy": value]], format: .binary, options: 0)
+        try PropertyListSerialization.data(
+            fromPropertyList: ["Build": build, "Overrides": ["test-policy": value]], format: .binary, options: 0)
     }
 
     @Test func rejectsUnqualifiedBuildAndNonBooleanPolicy() throws {
@@ -47,9 +50,11 @@ struct A6RestoreCacheTests {
         }
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_A6_CACHE_LIBRARY_12A365"] != nil &&
-                       ProcessInfo.processInfo.environment["FK_A6_CACHE_WORKER"] != nil,
-                   "Set paths to original restore library and source-built worker"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_A6_CACHE_LIBRARY_12A365"] != nil
+                && ProcessInfo.processInfo.environment["FK_A6_CACHE_WORKER"] != nil,
+            "Set paths to original restore library and source-built worker"))
     func admitsQualifiedInputsAndRejectsWrongHelper() throws {
         let env = ProcessInfo.processInfo.environment
         let library = try Data(contentsOf: URL(fileURLWithPath: #require(env["FK_A6_CACHE_LIBRARY_12A365"])))
@@ -59,15 +64,17 @@ struct A6RestoreCacheTests {
             try A6RestoreCache.validate(plan: plan(), originalLibrary: library, helper: Data())
         }
         var wrongArchitecture = helper
-        wrongArchitecture[4] = 7 // x86 rather than ARM
+        wrongArchitecture[4] = 7  // x86 rather than ARM
         #expect(throws: FirmwareError.self) {
             try A6RestoreCache.validate(plan: plan(), originalLibrary: library, helper: wrongArchitecture)
         }
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_A6_CACHE_LIBRARY_13A344"] != nil &&
-                       ProcessInfo.processInfo.environment["FK_A6_CACHE_WORKER"] != nil,
-                   "Set paths to original iOS 9 restore library and source-built worker"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_A6_CACHE_LIBRARY_13A344"] != nil
+                && ProcessInfo.processInfo.environment["FK_A6_CACHE_WORKER"] != nil,
+            "Set paths to original iOS 9 restore library and source-built worker"))
     func ios9RejectsWorkerWithoutPrivateMappingEntitlement() throws {
         let env = ProcessInfo.processInfo.environment
         let library = try Data(contentsOf: URL(fileURLWithPath: #require(env["FK_A6_CACHE_LIBRARY_13A344"])))

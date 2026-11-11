@@ -65,7 +65,8 @@ struct KBootTests {
         var source = try DeviceTree(Self.dtBlob)
         try source.add("", "compatible", Data("N42AP\0iPhone5,2\0AppleARM\0".utf8))
         for ramdisk: Data? in [nil, Data(repeating: 0, count: 4096)] {
-            let image = try KBoot.build(kernel: Self.kernel(at: 0x8000_0000),
+            let image = try KBoot.build(
+                kernel: Self.kernel(at: 0x8000_0000),
                 deviceTree: source.data, identity: Self.placeholder, ramdisk: ramdisk)
             let argsOffset = Int(image.bootArgsPA - 0x8000_0000)
             let treeOffset = Int(Self.u32(image.image, argsOffset + 0x30) - 0x8000_0000)
@@ -78,7 +79,8 @@ struct KBootTests {
                 #expect((match["IOPropertyMatch"] as? [String: String])?["BSD Name"] == "disk0s1s1")
             }
         }
-        let flat = try KBoot.build(kernel: Self.kernel(at: 0x8000_0000),
+        let flat = try KBoot.build(
+            kernel: Self.kernel(at: 0x8000_0000),
             deviceTree: source.data, identity: Self.placeholder, rootDevice: "disk0s1")
         let args = Int(flat.bootArgsPA - 0x8000_0000)
         let at = Int(Self.u32(flat.image, args + 0x30) - 0x8000_0000)
@@ -88,7 +90,8 @@ struct KBootTests {
         let match = try PropertyListSerialization.propertyList(from: Data(xml), format: nil) as! [String: Any]
         #expect((match["IOPropertyMatch"] as? [String: String])?["BSD Name"] == "disk0s1")
         #expect(throws: FirmwareError.self) {
-            try KBoot.build(kernel: Self.kernel(at: 0x8000_0000), deviceTree: source.data,
+            try KBoot.build(
+                kernel: Self.kernel(at: 0x8000_0000), deviceTree: source.data,
                 identity: Self.placeholder, rootDevice: "disk0s1</string>")
         }
     }
@@ -99,7 +102,8 @@ struct KBootTests {
             try source.add("", "compatible", Data("N42AP\0iPhone5,2\0AppleARM\0".utf8))
             if let seedLength { try source.add("chosen", "random-seed", Data(count: seedLength)) }
             for ramdisk: Data? in [nil, Data(count: 4096)] {
-                let image = try KBoot.build(kernel: Self.kernel(at: 0x8000_0000),
+                let image = try KBoot.build(
+                    kernel: Self.kernel(at: 0x8000_0000),
                     deviceTree: source.data, identity: Self.placeholder, ramdisk: ramdisk)
                 let args = Int(image.bootArgsPA - image.loadPA)
                 let at = Int(Self.u32(image.image, args + 0x30) - image.loadPA)
@@ -110,7 +114,8 @@ struct KBootTests {
             }
             #expect(source.value("chosen", "random-seed")?.count == seedLength)
         }
-        let a4 = try KBoot.build(kernel: Self.kernel(at: 0x4000_0000),
+        let a4 = try KBoot.build(
+            kernel: Self.kernel(at: 0x4000_0000),
             deviceTree: Self.dtBlob, identity: Self.placeholder)
         let args = Int(a4.bootArgsPA - a4.loadPA)
         let at = Int(Self.u32(a4.image, args + 0x30) - a4.loadPA)
@@ -188,21 +193,27 @@ struct KBootTests {
     /// provisioning manager the same unit identity the other boards receive.
     @Test func n42WiFiIdentity() throws {
         let n = { (s: String) in Data((s + "\0").utf8) }
-        let usb = Self.node([("name", n("usb-complex"))], [
-            Self.node([("name", n("usb-ehci"))], [
-                Self.node([("name", n("wlan")), ("local-mac-address", Self.z(6))])
+        let usb = Self.node(
+            [("name", n("usb-complex"))],
+            [
+                Self.node(
+                    [("name", n("usb-ehci"))],
+                    [
+                        Self.node([("name", n("wlan")), ("local-mac-address", Self.z(6))])
+                    ])
             ])
-        ])
         var tree = try DeviceTree(Self.deviceTree(armIO: [usb]))
         try tree.add("", "compatible", n("N42AP"))
         try tree.add("chosen", "mac-address-wifi0", Self.z(6))
-        let img = try KBoot.build(kernel: Self.kernel(at: 0x8000_0000),
-                                 deviceTree: tree.data, identity: Self.placeholder)
+        let img = try KBoot.build(
+            kernel: Self.kernel(at: 0x8000_0000),
+            deviceTree: tree.data, identity: Self.placeholder)
         let r0 = Int(img.bootArgsPA - img.loadPA)
         let start = Int(Self.u32(img.image, r0 + 0x30)) - 0x8000_0000
         let count = Int(Self.u32(img.image, r0 + 0x34))
         let result = try DeviceTree(img.image[start..<start + count])
-        #expect(result.value("arm-io/usb-complex/usb-ehci/wlan", "local-mac-address")
+        #expect(
+            result.value("arm-io/usb-complex/usb-ehci/wlan", "local-mac-address")
                 == Data([2, 0, 0, 0, 0, 1]))
         #expect(result.value("chosen", "mac-address-wifi0") == Data([2, 0, 0, 0, 0, 1]))
     }

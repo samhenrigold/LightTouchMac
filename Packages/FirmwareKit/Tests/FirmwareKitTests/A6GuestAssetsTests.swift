@@ -1,10 +1,13 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct A6GuestAssetsTests {
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_A6_RESTORE_SYSTEM"] != nil,
-                   "Set native iOS 10 System, restore RAM disk and original kernel paths"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_A6_RESTORE_SYSTEM"] != nil,
+            "Set native iOS 10 System, restore RAM disk and original kernel paths"))
     func includesStagedRestoreExecutables() throws {
         let env = ProcessInfo.processInfo.environment
         let system = URL(fileURLWithPath: try #require(env["FK_A6_RESTORE_SYSTEM"]))
@@ -33,8 +36,10 @@ struct A6GuestAssetsTests {
         #expect(prepared.kernel.prefix(0x790000) == kernel.prefix(0x790000))
         #expect(prepared.kernel.suffix(from: 0x7b6000) == kernel.suffix(from: 0x7b6000))
     }
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_A6_IOS9_KERNEL"] != nil,
-                   "Optional native-qualified 13A344 cache preparation fixture"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_A6_IOS9_KERNEL"] != nil,
+            "Optional native-qualified 13A344 cache preparation fixture"))
     func matchesQualifiedIOS9CachePreparation() throws {
         let env = ProcessInfo.processInfo.environment
         let kernelPath = try #require(env["FK_A6_IOS9_KERNEL"])
@@ -51,9 +56,10 @@ struct A6GuestAssetsTests {
         func word(_ b: Data, _ at: Int, count: Int = 4) -> Int {
             (0..<count).reduce(0) { $0 | Int(b[at + $1]) << (8 * $1) }
         }
-        let file = 0x70c000, size = 0x22000
+        let file = 0x70c000
+        let size = 0x22000
         let load = word(expected, expected.count - 16)
-        let at = 0x80755000 - load
+        let at = 0x8075_5000 - load
         try #require(at >= 0 && at <= expected.count - size)
         #expect(prepared.subdata(in: file..<(file + size)) == expected.subdata(in: at..<(at + size)))
         #expect(prepared.prefix(file) == kernel.prefix(file))
@@ -69,28 +75,36 @@ struct A6GuestAssetsTests {
                 break
             }
         }
-        var unsupported = kernel; unsupported[0] ^= 1
+        var unsupported = kernel
+        unsupported[0] ^= 1
         #expect(throws: FirmwareError.self) { try A6GuestAssets.registering(Set(hashes), in: unsupported) }
     }
 
     @Test func verifiesPagesBeforeAcceptingAssetIdentities() throws {
         var bytes = ActivationTests.syntheticMachO()
-        bytes[4] = 12; bytes[8] = 9
+        bytes[4] = 12
+        bytes[8] = 9
         let signed = try Activation.signed(Data(bytes))
         #expect(try A6GuestAssets.verifiedCodeDirectories(signed).count == 1)
-        var corrupt = signed; corrupt[44] ^= 1
+        var corrupt = signed
+        corrupt[44] ^= 1
         #expect(throws: FirmwareError.self) { try A6GuestAssets.verifiedCodeDirectories(corrupt) }
-        #expect(throws: FirmwareError.self) { try A6GuestAssets.registering([Data(repeating: 0, count: 20)], in: signed) }
+        #expect(throws: FirmwareError.self) {
+            try A6GuestAssets.registering([Data(repeating: 0, count: 20)], in: signed)
+        }
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_A6_ASSET_INVENTORY"] != nil,
-                   "Optional qualified 14G61 native preparation fixture"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_A6_ASSET_INVENTORY"] != nil,
+            "Optional qualified 14G61 native preparation fixture"))
     func matchesQualifiedNativePreparation() throws {
         let env = ProcessInfo.processInfo.environment
         let inventory = try #require(env["FK_A6_ASSET_INVENTORY"])
         let kernelPath = try #require(env["FK_A6_ORIGINAL_KERNEL"])
         let expectedPath = try #require(env["FK_A6_EXPECTED_KERNEL"])
-        let rows = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: inventory))) as? [[String: Any]])
+        let rows = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: inventory))) as? [[String: Any]])
         var hashes = Set<Data>()
         for row in rows {
             let path = try #require(row["path"] as? String)
@@ -110,14 +124,16 @@ struct A6GuestAssetsTests {
         var extra = Set<Data>()
         for first in 0..<32 { extra.insert(Data([UInt8(first)]) + Data(repeating: 0, count: 19)) }
         let compact = try A6GuestAssets.registering(extra, in: kernel)
-        let old = kernel.subdata(in: 0x790000..<0x7b6000), new = compact.subdata(in: 0x790000..<0x7b6000)
+        let old = kernel.subdata(in: 0x790000..<0x7b6000)
+        let new = compact.subdata(in: 0x790000..<0x7b6000)
         func word(_ b: Data, _ off: Int, _ size: Int) -> Int {
             (0..<size).reduce(0) { $0 | Int(b[off + $1]) << (8 * $1) }
         }
         func catalog(_ b: Data, header: Int, base: Int) -> Set<Data> {
             var entries = Set<Data>()
             for first in 0..<256 {
-                let count = word(b, header + first * 4, 2), index = word(b, header + first * 4 + 2, 2)
+                let count = word(b, header + first * 4, 2)
+                let index = word(b, header + first * 4 + 2, 2)
                 for i in 0..<count {
                     let start = base + (index + i) * 19
                     entries.insert(Data([UInt8(first)]) + b.subdata(in: start..<(start + 19)))
@@ -125,8 +141,8 @@ struct A6GuestAssetsTests {
             }
             return entries
         }
-        #expect((word(new, 0x23b0, 4) + 0x2360) & 0xffffffff == 0x484)
-        #expect((word(new, 0x23b4, 4) + 0x236e) & 0xffffffff == 0x6fd4)
+        #expect((word(new, 0x23b0, 4) + 0x2360) & 0xffff_ffff == 0x484)
+        #expect((word(new, 0x23b4, 4) + 0x236e) & 0xffff_ffff == 0x6fd4)
         #expect(catalog(new, header: 0x484, base: 0x6fd4) == catalog(old, header: 0x6fd4, base: 0x73d4).union(extra))
         #expect(new[0x234c..<0x23b0] == old[0x234c..<0x23b0])
         for i in old.indices where old[i] != new[i] {

@@ -33,8 +33,10 @@ public enum Activation {
             if let gestaltOverrides { result["gestalt_overrides"] = gestaltOverrides }
             if let nativeCacheRequired { result["native_cache_required"] = nativeCacheRequired }
             if let p = factoryContinuation {
-                result["factory_continuation"] = ["strategy": p.strategy, "isa": p.isa,
-                    "offset": p.offset, "original": p.original.hexString, "replacement": p.replacement.hexString]
+                result["factory_continuation"] = [
+                    "strategy": p.strategy, "isa": p.isa,
+                    "offset": p.offset, "original": p.original.hexString, "replacement": p.replacement.hexString
+                ]
             }
             if let patch {
                 result["patch"] = [
@@ -91,13 +93,23 @@ public enum Activation {
             original: withUnsafeBytes(of: report.original) { Data($0.prefix(Int(report.width))) },
             replacement: withUnsafeBytes(of: report.replacement) { Data($0.prefix(Int(report.width))) }
         )
-        let continuation: Patch? = report.continuation_width > 0 ? Patch(
-            strategy: "development-factory-continuation", isa: "thumb", offset: report.continuation_offset,
-            original: withUnsafeBytes(of: report.continuation_original) { Data($0.prefix(Int(report.continuation_width))) },
-            replacement: withUnsafeBytes(of: report.continuation_replacement) { Data($0.prefix(Int(report.continuation_width))) }
-        ) : nil
-        return (after, Result(inputSHA256: Preparer.sha256(before), outputSHA256: Preparer.sha256(after),
-                              patch: patch, factoryContinuation: continuation))
+        let continuation: Patch? =
+            report.continuation_width > 0
+            ? Patch(
+                strategy: "development-factory-continuation", isa: "thumb", offset: report.continuation_offset,
+                original: withUnsafeBytes(of: report.continuation_original) {
+                    Data($0.prefix(Int(report.continuation_width)))
+                },
+                replacement: withUnsafeBytes(of: report.continuation_replacement) {
+                    Data($0.prefix(Int(report.continuation_width)))
+                }
+            ) : nil
+        return (
+            after,
+            Result(
+                inputSHA256: Preparer.sha256(before), outputSHA256: Preparer.sha256(after),
+                patch: patch, factoryContinuation: continuation)
+        )
     }
 
     /// N42 10A405's Qualcomm activation handler predates the later development
@@ -117,13 +129,13 @@ public enum Activation {
             0xc8, 0xb9, 0x49, 0xf6, 0x37, 0x51, 0x00, 0x20, 0xc0, 0xf2, 0x04, 0x01,
             0x49, 0xf2, 0x58, 0x22, 0xc0, 0xf2, 0x07, 0x02, 0x79, 0x44, 0x7a, 0x44,
             0x4f, 0xf0, 0x00, 0x0b, 0x01, 0xf0, 0x5b, 0xff, 0x48, 0xf2, 0x92, 0x70,
-            0xc0, 0xf2, 0x07, 0x00, 0xcd, 0xf8, 0x20, 0xb0, 0x78, 0x44,
+            0xc0, 0xf2, 0x07, 0x00, 0xcd, 0xf8, 0x20, 0xb0, 0x78, 0x44
         ])
         let replacement = Data([
             0x00, 0xbf, 0x48, 0xf6, 0x74, 0x70, 0xc0, 0xf2, 0x07, 0x00, 0x78, 0x44,
             0x09, 0x90, 0x00, 0x20, 0x04, 0x90, 0x06, 0x90, 0x08, 0x90, 0x83, 0x46,
             0x82, 0x46, 0x43, 0xf6, 0xdc, 0x40, 0xc0, 0xf2, 0x07, 0x00, 0x78, 0x44,
-            0x00, 0x68, 0x00, 0x68, 0x80, 0x46, 0x00, 0xf0, 0x2b, 0xb9,
+            0x00, 0x68, 0x00, 0x68, 0x80, 0x46, 0x00, 0xf0, 0x2b, 0xb9
         ])
         let range = offset..<(offset + original.count)
         guard before.subdata(in: range) == original else {
@@ -135,9 +147,14 @@ public enum Activation {
         guard Preparer.sha256(after) == prepared else {
             throw ActivationFailure("Qualified A6 activation output differs")
         }
-        return (after, Result(inputSHA256: input, outputSHA256: prepared,
-                              patch: Patch(strategy: "a6-native-no-record-factory-shortcut", isa: "thumb",
-                                           offset: offset, original: original, replacement: replacement)))
+        return (
+            after,
+            Result(
+                inputSHA256: input, outputSHA256: prepared,
+                patch: Patch(
+                    strategy: "a6-native-no-record-factory-shortcut", isa: "thumb",
+                    offset: offset, original: original, replacement: replacement))
+        )
     }
 
     private static func overwrite(_ file: URL, with after: Data) throws {
@@ -192,15 +209,17 @@ public enum Activation {
     /// Reference: github.com/overcast302/hacktiv8/blob/main/exploits/sftp/sftp.py
     public static func gestaltRoute(lockdownd: Data, cache: Data, build: String) -> Result? {
         guard lockdownd.range(of: Data("ShouldHactivate\0".utf8)) != nil,
-              lockdownd.range(of: Data("Short circuiting activation state to Activated".utf8)) != nil,
-              let plist = try? PropertyListSerialization.propertyList(from: cache, format: nil) as? [String: Any],
-              plist["CacheVersion"] as? String == build,
-              let uuid = plist["CacheUUID"] as? String, UUID(uuidString: uuid) != nil,
-              let opaque = plist["CacheData"] as? Data, !opaque.isEmpty,
-              plist["CacheExtra"] is [String: Any] else { return nil }
+            lockdownd.range(of: Data("Short circuiting activation state to Activated".utf8)) != nil,
+            let plist = try? PropertyListSerialization.propertyList(from: cache, format: nil) as? [String: Any],
+            plist["CacheVersion"] as? String == build,
+            let uuid = plist["CacheUUID"] as? String, UUID(uuidString: uuid) != nil,
+            let opaque = plist["CacheData"] as? Data, !opaque.isEmpty,
+            plist["CacheExtra"] is [String: Any]
+        else { return nil }
         let hash = Preparer.sha256(lockdownd)
-        return Result(inputSHA256: hash, outputSHA256: hash,
-                      gestaltOverrides: ["a6vjPkzcRjrsXmniFsm0dg": true])
+        return Result(
+            inputSHA256: hash, outputSHA256: hash,
+            gestaltOverrides: ["a6vjPkzcRjrsXmniFsm0dg": true])
     }
 
     /// Stage the already-qualified N42 data-only routes for a new device.
@@ -213,16 +232,21 @@ public enum Activation {
             "14G61": "0261d2d149140ce0c7d290dc7e33a454168e6f5a2c424122af27da38e92ef753"
         ]
         guard let expected = known[build], Preparer.sha256(component) == expected,
-              component.range(of: Data("ShouldHactivate\0".utf8)) != nil,
-              component.range(of: Data((build == "14G61"
-                  ? "Hactivation is enabled, short circuiting activation state to Activated."
-                  : "Short circuiting activation state to Activated").utf8)) != nil else { return nil }
+            component.range(of: Data("ShouldHactivate\0".utf8)) != nil,
+            component.range(
+                of: Data(
+                    (build == "14G61"
+                        ? "Hactivation is enabled, short circuiting activation state to Activated."
+                        : "Short circuiting activation state to Activated").utf8)) != nil
+        else { return nil }
         let hash = Preparer.sha256(component)
-        return Result(inputSHA256: hash, outputSHA256: hash,
-                      gestaltOverrides: ["a6vjPkzcRjrsXmniFsm0dg": true],
-                      component: build == "14G61" ? "usr/libexec/mobileactivationd"
-                          : "System/Library/PrivateFrameworks/MobileActivation.framework/Support/mobactivationd",
-                      nativeCacheRequired: true)
+        return Result(
+            inputSHA256: hash, outputSHA256: hash,
+            gestaltOverrides: ["a6vjPkzcRjrsXmniFsm0dg": true],
+            component: build == "14G61"
+                ? "usr/libexec/mobileactivationd"
+                : "System/Library/PrivateFrameworks/MobileActivation.framework/Support/mobactivationd",
+            nativeCacheRequired: true)
     }
 
     /// Rebuild the existing code-page hashes as an ad-hoc signature, retaining entitlements and

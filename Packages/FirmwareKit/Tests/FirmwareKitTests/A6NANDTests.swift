@@ -1,11 +1,14 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct A6NANDTests {
     @Test func matchesQualifiedFactoryAllocation() throws {
         // Frozen from the native-qualified 10A405 factory-allocation header.
-        #expect(Preparer.sha256(A6NAND.factoryHeader()) == "e78a752b1f3402c36510ffdffa24f90460eb7b513ad6c7b2162240688b339f15")
+        #expect(
+            Preparer.sha256(A6NAND.factoryHeader())
+                == "e78a752b1f3402c36510ffdffa24f90460eb7b513ad6c7b2162240688b339f15")
     }
     @Test func createsErasedSparseBanksAndRefusesOverwrite() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

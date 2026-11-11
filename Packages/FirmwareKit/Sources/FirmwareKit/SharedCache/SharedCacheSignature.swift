@@ -23,51 +23,66 @@ extension DyldSharedCache {
         guard signature >= 56, signature <= data.count - 12 else { throw invalid("missing signature") }
         if allocation == 0 { allocation = data.count - signature }
         guard allocation >= 12, allocation <= data.count - signature,
-              try word(signature) == 0xfade0cc0 else { throw invalid("invalid signature extent") }
-        let length = try word(signature + 4), count = try word(signature + 8)
+            try word(signature) == 0xfade_0cc0
+        else { throw invalid("invalid signature extent") }
+        let length = try word(signature + 4)
+        let count = try word(signature + 8)
         guard length >= 12, length <= allocation, count <= (length - 12) / 8 else {
             throw invalid("invalid signature index")
         }
         struct Directory {
             let start: Int, hashes: Int, pages: Int, limit: Int, width: Int, kind: Int, pageSize: Int
         }
-        var directories: [Directory] = [], spans: [Range<Int>] = []
+        var directories: [Directory] = []
+        var spans: [Range<Int>] = []
         for i in 0..<count {
             let relative = try word(signature + 16 + i * 8)
             guard relative >= 12 + count * 8, relative <= length - 8 else {
                 throw invalid("invalid blob offset")
             }
-            let cd = signature + relative, size = try word(cd + 4)
+            let cd = signature + relative
+            let size = try word(cd + 4)
             guard size >= 8, size <= length - relative else { throw invalid("truncated blob") }
             spans.append(relative..<(relative + size))
-            guard try word(cd) == 0xfade0c02 else { continue }
+            guard try word(cd) == 0xfade_0c02 else { continue }
             guard size >= 44 else { throw invalid("truncated CodeDirectory") }
             let version = try word(cd + 8)
             guard (0x20000...0x20100).contains(version) else { throw invalid("unsupported CodeDirectory version") }
             let minimum = version >= 0x20100 ? 48 : 44
             guard size >= minimum else { throw invalid("truncated CodeDirectory header") }
-            let hashes = try word(cd + 16), identifier = try word(cd + 20)
-            let special = try word(cd + 24), pages = try word(cd + 28), limit = try word(cd + 32)
-            let width = Int(data[cd + 36]), kind = Int(data[cd + 37]), exponent = Int(data[cd + 39])
+            let hashes = try word(cd + 16)
+            let identifier = try word(cd + 20)
+            let special = try word(cd + 24)
+            let pages = try word(cd + 28)
+            let limit = try word(cd + 32)
+            let width = Int(data[cd + 36])
+            let kind = Int(data[cd + 37])
+            let exponent = Int(data[cd + 39])
             guard (kind == 1 && width == 20) || (kind == 2 && width == 32),
-                  (1...20).contains(exponent), limit > 0, limit <= signature,
-                  hashes >= minimum + special * width, hashes <= size,
-                  pages <= (size - hashes) / width else { throw invalid("unsupported code-page layout") }
-            let pageSize = 1 << exponent, metadataEnd = hashes - special * width
+                (1...20).contains(exponent), limit > 0, limit <= signature,
+                hashes >= minimum + special * width, hashes <= size,
+                pages <= (size - hashes) / width
+            else { throw invalid("unsupported code-page layout") }
+            let pageSize = 1 << exponent
+            let metadataEnd = hashes - special * width
             guard pages == (limit + pageSize - 1) / pageSize,
-                  identifier >= minimum, identifier < metadataEnd,
-                  data[(cd + identifier)..<(cd + metadataEnd)].contains(0) else {
+                identifier >= minimum, identifier < metadataEnd,
+                data[(cd + identifier)..<(cd + metadataEnd)].contains(0)
+            else {
                 throw invalid("invalid code-page coverage or identifier")
             }
             if version >= 0x20100 {
                 let scatter = try word(cd + 44)
                 if scatter != 0 {
                     guard scatter >= minimum else { throw invalid("invalid scatter vector") }
-                    var entry = scatter, previousEnd = 0
+                    var entry = scatter
+                    var previousEnd = 0
                     while true {
                         guard entry <= metadataEnd - 24 else { throw invalid("unterminated scatter vector") }
-                        let amount = try word(cd + entry), first = try word(cd + entry + 4)
-                        let target = try word(cd + entry + 8, count: 8), spare = try word(cd + entry + 16, count: 8)
+                        let amount = try word(cd + entry)
+                        let first = try word(cd + entry + 4)
+                        let target = try word(cd + entry + 8, count: 8)
+                        let spare = try word(cd + entry + 16, count: 8)
                         guard spare == 0 else { throw invalid("unsupported scatter record") }
                         if amount == 0 {
                             guard first == 0, target == 0 else { throw invalid("invalid scatter terminator") }
@@ -76,13 +91,17 @@ extension DyldSharedCache {
                         // Cache scatter targets are virtual mappings. Hash
                         // slots still cover the signed file range in order.
                         guard first >= previousEnd, amount <= pages, first <= pages - amount,
-                              target > 0, target % pageSize == 0 else { throw invalid("invalid scatter mapping") }
-                        previousEnd = first + amount; entry += 24
+                            target > 0, target % pageSize == 0
+                        else { throw invalid("invalid scatter mapping") }
+                        previousEnd = first + amount
+                        entry += 24
                     }
                 }
             }
-            directories.append(Directory(start: cd, hashes: hashes, pages: pages, limit: limit,
-                                         width: width, kind: kind, pageSize: pageSize))
+            directories.append(
+                Directory(
+                    start: cd, hashes: hashes, pages: pages, limit: limit,
+                    width: width, kind: kind, pageSize: pageSize))
         }
         let sorted = spans.sorted { $0.lowerBound < $1.lowerBound }
         for i in sorted.indices.dropFirst() where sorted[i - 1].upperBound > sorted[i].lowerBound {

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct A6StorageLayoutTests {
@@ -18,7 +19,7 @@ struct A6StorageLayoutTests {
         #expect(table.count == 4096 && table[510] == 0x55 && table[511] == 0xaa)
         #expect(table[450] == 0xaf && table[466] == 0xaf)
         #expect(word(table, 454) == 4096 && word(table, 458) == 786432)
-        #expect(word(table, 470) == 790528 && word(table, 474) == 3115722)
+        #expect(word(table, 470) == 790528 && word(table, 474) == 3_115_722)
         #expect(table[478..<510] == Data(repeating: 0, count: 32))
         #expect((word(table, 470) + word(table, 474)) * 4096 == plan.mediaBytes)
     }
@@ -31,10 +32,12 @@ struct A6StorageLayoutTests {
     }
 
     @Test func refusesTruncationOverlapAndInvalidSectorGeometry() {
-        for (media, system) in [(UInt64(16_000_000_000), UInt64(0)),
-                                (16_000_000_000, 4097), (16_000_000_001, 3 << 30),
-                                (16 << 20, 4096), (16_000_000_000, UInt64.max),
-                                (UInt64.max - 4095, 3 << 30)] {
+        for (media, system) in [
+            (UInt64(16_000_000_000), UInt64(0)),
+            (16_000_000_000, 4097), (16_000_000_001, 3 << 30),
+            (16 << 20, 4096), (16_000_000_000, UInt64.max),
+            (UInt64.max - 4095, 3 << 30)
+        ] {
             #expect(throws: FirmwareError.self) { try A6StorageLayout(mediaBytes: media, systemBytes: system) }
         }
     }

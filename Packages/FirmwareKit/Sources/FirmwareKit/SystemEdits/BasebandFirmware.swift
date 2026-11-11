@@ -14,7 +14,8 @@ public enum BasebandFirmware {
         let archive = try Archive(data: bytes, accessMode: .read)
         return try mav5Payloads.map { name in
             guard let entry = archive[name], entry.type == .file,
-                  entry.uncompressedSize > 0, entry.uncompressedSize <= 64 << 20 else {
+                entry.uncompressedSize > 0, entry.uncompressedSize <= 64 << 20
+            else {
                 throw FirmwareError(.unsupported, "Missing or invalid Mav5 payload: \(name)")
             }
             var data = Data()
@@ -25,10 +26,11 @@ public enum BasebandFirmware {
 
     static func mav5Members(components: [String: String], board: String) throws -> [String] {
         guard ["n41ap", "n42ap"].contains(board.lowercased()),
-              let member = components["BasebandFirmware"],
-              member.hasPrefix("Firmware/Mav5-"), member.hasSuffix(".Release.bbfw"),
-              member.split(separator: "/", omittingEmptySubsequences: false).count == 2,
-              !member.contains("\\"), !member.contains("..") else {
+            let member = components["BasebandFirmware"],
+            member.hasPrefix("Firmware/Mav5-"), member.hasSuffix(".Release.bbfw"),
+            member.split(separator: "/", omittingEmptySubsequences: false).count == 2,
+            !member.contains("\\"), !member.contains("..")
+        else {
             throw FirmwareError(.unsupported, "No supported Mav5 firmware for \(board)")
         }
         return [member, String(member.dropLast(5)) + ".plist"]
@@ -38,8 +40,10 @@ public enum BasebandFirmware {
     /// Both archive members and existing destinations are checked before writes.
     /// Existing identical assets are accepted; conflicting assets are never replaced.
     @discardableResult
-    public static func installMav5(from ipsw: IPSWArchive, board: String,
-                                   system: any VolumeFiles) throws -> [String] {
+    public static func installMav5(
+        from ipsw: IPSWArchive, board: String,
+        system: any VolumeFiles
+    ) throws -> [String] {
         let members = try mav5Members(components: BuildComponents.load(ipsw, board: board), board: board)
         var assets = try members.map { member -> (String, Data) in
             let bytes = try ipsw.read(member)

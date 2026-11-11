@@ -5,8 +5,10 @@ import Testing
 @testable import FirmwareKit
 
 struct ActivationTests {
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_12A365"] != nil,
-                   "Set FK_ACTIVATION_N42_12A365 to the original mobactivationd executable"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_12A365"] != nil,
+            "Set FK_ACTIVATION_N42_12A365 to the original mobactivationd executable"))
     func nativeCachePlanIsRestrictedToTheQualifiedComponent() throws {
         let path = try #require(ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_12A365"])
         let original = try Data(contentsOf: URL(fileURLWithPath: path))
@@ -16,13 +18,16 @@ struct ActivationTests {
         #expect(plan.patch == nil && plan.dataArk == nil)
         #expect(plan.gestaltOverrides == ["a6vjPkzcRjrsXmniFsm0dg": true])
         #expect(Activation.nativeGestaltPlan(component: original, build: "13A344") == nil)
-        var changed = original; changed[0] ^= 1
+        var changed = original
+        changed[0] ^= 1
         #expect(Activation.nativeGestaltPlan(component: changed, build: "12A365") == nil)
         #expect(Activation.nativeGestaltPlan(component: Data(), build: "12A365") == nil)
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_10A405"] != nil,
-                   "Set FK_ACTIVATION_N42_10A405 to the stock native executable"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_10A405"] != nil,
+            "Set FK_ACTIVATION_N42_10A405 to the stock native executable"))
     func qualifiedA6FactoryKeepsTheNativePublicationAndSignature() throws {
         let path = try #require(ProcessInfo.processInfo.environment["FK_ACTIVATION_N42_10A405"])
         let before = try Data(contentsOf: URL(fileURLWithPath: path))
@@ -39,8 +44,10 @@ struct ActivationTests {
 
     @Test func gestaltRouteRequiresTheNativeFirmwareCache() throws {
         let lockdownd = Data("ShouldHactivate\0Short circuiting activation state to Activated\0".utf8)
-        let cache: [String: Any] = ["CacheVersion": "11A465", "CacheUUID": UUID().uuidString,
-                                   "CacheData": Data([1, 2, 3]), "CacheExtra": ["Other": "keep"]]
+        let cache: [String: Any] = [
+            "CacheVersion": "11A465", "CacheUUID": UUID().uuidString,
+            "CacheData": Data([1, 2, 3]), "CacheExtra": ["Other": "keep"]
+        ]
         func encode(_ p: [String: Any]) throws -> Data {
             try PropertyListSerialization.data(fromPropertyList: p, format: .binary, options: 0)
         }
@@ -50,7 +57,8 @@ struct ActivationTests {
         #expect(result?.dataArk == nil && result?.patch == nil)
         #expect(Activation.gestaltRoute(lockdownd: lockdownd, cache: try encode(cache), build: "12A365") == nil)
         for key in ["CacheVersion", "CacheUUID", "CacheData", "CacheExtra"] {
-            var missing = cache; missing.removeValue(forKey: key)
+            var missing = cache
+            missing.removeValue(forKey: key)
             #expect(Activation.gestaltRoute(lockdownd: lockdownd, cache: try encode(missing), build: "11A465") == nil)
         }
         #expect(Activation.gestaltRoute(lockdownd: Data(), cache: try encode(cache), build: "11A465") == nil)

@@ -1,6 +1,7 @@
 import Crypto
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct SideloadInsertionTests {
@@ -13,22 +14,31 @@ struct SideloadInsertionTests {
             let raw = Array(value.utf8)
             b.replaceSubrange(offset..<(offset + raw.count), with: raw)
         }
-        word(4, 12); word(8, 9); word(16, 2); word(20, 140)
-        word(44, 1); word(48, 124); name(52, "__RESTRICT"); word(92, 1)
-        name(100, "__restrict"); name(116, "__RESTRICT")
+        word(4, 12)
+        word(8, 9)
+        word(16, 2)
+        word(20, 140)
+        word(44, 1)
+        word(48, 124)
+        name(52, "__RESTRICT")
+        word(92, 1)
+        name(100, "__restrict")
+        name(116, "__RESTRICT")
         if nonempty { word(136, 1) }
         return Data(b)
     }
 
     @Test func removesOnlyTheEmptyMarkerAndKeepsSigningMetadata() throws {
-        let before = fixture(), after = try SideloadTools.installationServiceAllowingHelper(before)
+        let before = fixture()
+        let after = try SideloadTools.installationServiceAllowingHelper(before)
         #expect(before.count == after.count)
         #expect(String(decoding: after[100..<114], as: UTF8.self) == "__qemu_appsync")
         #expect(after[0..<100] == before[0..<100])
         #expect(after[116..<256] == before[116..<256])
-        #expect(after[364..<380] == before[364..<380]) // original entitlement blob
-        #expect(after[(ActivationTests.cd + 52)..<(ActivationTests.cd + 72)] ==
-                Data(Insecure.SHA1.hash(data: after[0..<256])))
+        #expect(after[364..<380] == before[364..<380])  // original entitlement blob
+        #expect(
+            after[(ActivationTests.cd + 52)..<(ActivationTests.cd + 72)]
+                == Data(Insecure.SHA1.hash(data: after[0..<256])))
         #expect(try SideloadTools.installationServiceAllowingHelper(after) == after)
     }
 
@@ -44,8 +54,10 @@ struct SideloadInsertionTests {
         }
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_SIDELOAD_INSTALLD"] != nil,
-                   "Optional original installd fixture"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_SIDELOAD_INSTALLD"] != nil,
+            "Optional original installd fixture"))
     func nativeInstallationServicePreservesItsEntitlements() throws {
         let path = try #require(ProcessInfo.processInfo.environment["FK_SIDELOAD_INSTALLD"])
         let before = try Data(contentsOf: URL(fileURLWithPath: path))

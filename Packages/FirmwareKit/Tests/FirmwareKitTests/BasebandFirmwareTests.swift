@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct BasebandFirmwareTests {
@@ -38,11 +39,15 @@ struct BasebandFirmwareTests {
     }
 
     @Test func selectsManifestVersionAndRejectsOtherFamilies() throws {
-        #expect(try BasebandFirmware.mav5Members(
-            components: ["BasebandFirmware": "Firmware/Mav5-1.00.16.Release.bbfw"], board: "n42ap") == [
-                "Firmware/Mav5-1.00.16.Release.bbfw", "Firmware/Mav5-1.00.16.Release.plist"])
-        for path in ["Firmware/Mav7-1.Release.bbfw", "Firmware/Mav5-../bad.Release.bbfw",
-                     "Firmware/Mav5-\\bad.Release.bbfw", "/Firmware/Mav5-1.Release.bbfw"] {
+        #expect(
+            try BasebandFirmware.mav5Members(
+                components: ["BasebandFirmware": "Firmware/Mav5-1.00.16.Release.bbfw"], board: "n42ap") == [
+                    "Firmware/Mav5-1.00.16.Release.bbfw", "Firmware/Mav5-1.00.16.Release.plist"
+                ])
+        for path in [
+            "Firmware/Mav7-1.Release.bbfw", "Firmware/Mav5-../bad.Release.bbfw",
+            "Firmware/Mav5-\\bad.Release.bbfw", "/Firmware/Mav5-1.Release.bbfw"
+        ] {
             #expect(throws: FirmwareError.self) {
                 try BasebandFirmware.mav5Members(components: ["BasebandFirmware": path], board: "n42ap")
             }
@@ -92,7 +97,8 @@ struct BasebandFirmwareTests {
         for path in paths {
             let record = try result.record(at: path)
             #expect(record.uid == 0 && record.gid == 0 && record.mode & 0o777 == 0o644)
-            #expect(try result.contents(record) == ipsw.read("Firmware/" + URL(fileURLWithPath: path).lastPathComponent))
+            #expect(
+                try result.contents(record) == ipsw.read("Firmware/" + URL(fileURLWithPath: path).lastPathComponent))
         }
     }
 }

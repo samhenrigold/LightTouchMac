@@ -178,32 +178,50 @@ int main(void) {
     /* The established iOS4-6 answer override, in both instruction schedules.
      * No firmware offsets are part of recognition: the CFString argument and
      * paired flag stores must establish the actual ShouldHactivate answer. */
-    for (unsigned schedule=0; schedule<2; schedule++) {
-        fixture(d, 1);memset(d+0x100,0,0x300);
-        unsigned at=0x200;
-        put16(d+at,0x4601);
-        movwide(d+at+2,0,0x1600-(0x1000+at+16),false);
-        movwide(d+at+6,0,0,true);
-        put16(d+at+10,0x73a9);put16(d+at+12,0x4478);
-        put16(d+at+14,0xf000);put16(d+at+16,0xf800);
-        put16(d+at+18,0x4602);
-        put16(d+at+36,0x4478);
-        put16(d+at+38,schedule?0x73ea:0x4479);
-        put16(d+at+40,schedule?0x4479:0x73ea);
-        put32(d+0x604,0x7c8);put32(d+0x608,0x1620);put32(d+0x60c,15);
-        memcpy(d+0x620,"ShouldHactivate",16);
-        save(p,d,sizeof d);assert(!run(p,true));same(p,d,sizeof d);
-        assert(!run(p,false));put16(d+at+18,0x2201);same(p,d,sizeof d);
-        assert(run(p,false));same(p,d,sizeof d);
-        put16(d+at+18,0x4602);
-        d[0x620]='X';save(p,d,sizeof d);assert(run(p,true));same(p,d,sizeof d);d[0x620]='S';
-        unsigned store=at+(schedule?38:40);
-        put16(d+store,0x73e1);save(p,d,sizeof d);assert(run(p,true));same(p,d,sizeof d);
-        put16(d+store,0x73ea);
-        memcpy(d+0x280,d+at,42);
-        movwide(d+0x282,0,0x1600-(0x1280+16),false);
-        save(p,d,sizeof d);assert(run(p,true));same(p,d,sizeof d);
-
+    for (unsigned schedule = 0; schedule < 2; schedule++) {
+        fixture(d, 1);
+        memset(d + 0x100, 0, 0x300);
+        unsigned at = 0x200;
+        put16(d + at, 0x4601);
+        movwide(d + at + 2, 0, 0x1600 - (0x1000 + at + 16), false);
+        movwide(d + at + 6, 0, 0, true);
+        put16(d + at + 10, 0x73a9);
+        put16(d + at + 12, 0x4478);
+        put16(d + at + 14, 0xf000);
+        put16(d + at + 16, 0xf800);
+        put16(d + at + 18, 0x4602);
+        put16(d + at + 36, 0x4478);
+        put16(d + at + 38, schedule ? 0x73ea : 0x4479);
+        put16(d + at + 40, schedule ? 0x4479 : 0x73ea);
+        put32(d + 0x604, 0x7c8);
+        put32(d + 0x608, 0x1620);
+        put32(d + 0x60c, 15);
+        memcpy(d + 0x620, "ShouldHactivate", 16);
+        save(p, d, sizeof d);
+        assert(!run(p, true));
+        same(p, d, sizeof d);
+        assert(!run(p, false));
+        put16(d + at + 18, 0x2201);
+        same(p, d, sizeof d);
+        assert(run(p, false));
+        same(p, d, sizeof d);
+        put16(d + at + 18, 0x4602);
+        d[0x620] = 'X';
+        save(p, d, sizeof d);
+        assert(run(p, true));
+        same(p, d, sizeof d);
+        d[0x620] = 'S';
+        unsigned store = at + (schedule ? 38 : 40);
+        put16(d + store, 0x73e1);
+        save(p, d, sizeof d);
+        assert(run(p, true));
+        same(p, d, sizeof d);
+        put16(d + store, 0x73ea);
+        memcpy(d + 0x280, d + at, 42);
+        movwide(d + 0x282, 0, 0x1600 - (0x1280 + 16), false);
+        save(p, d, sizeof d);
+        assert(run(p, true));
+        same(p, d, sizeof d);
     }
     for (int isa = 0; isa < 3; isa++) {
         fixture(d, isa);

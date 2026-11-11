@@ -491,10 +491,11 @@ public enum KBoot {
         try dt.set("arm-io", "clock-frequencies", .words(Array(board.clocks.prefix(slots))))
         try dt.set("arm-io", "usbphy-frequency", .u32(usbphyHz))
         if board.isA6,
-           let template = dt.value("arm-io/pmgr", "voltage-states1"),
-           template.allSatisfy({ $0 == 0 }),
-           let nominal = dt.value("arm-io/pmgr", "nominal-performance1"),
-           let boost = dt.value("arm-io/pmgr", "boost-performance1") {
+            let template = dt.value("arm-io/pmgr", "voltage-states1"),
+            template.allSatisfy({ $0 == 0 }),
+            let nominal = dt.value("arm-io/pmgr", "nominal-performance1"),
+            let boost = dt.value("arm-io/pmgr", "boost-performance1")
+        {
             // The restore DT reserves the GPU domain's state table for iBoot.
             // Use its own declared nominal/boost levels, in the same 8-byte
             // performance/voltage format as the supplied CPU-domain table.
@@ -581,12 +582,13 @@ public enum KBoot {
         let page = { (n: Int) in (n + 0xFFF) & ~0xFFF }
         let m = try MachO(kernel)
         if let rootDevice,
-           rootDevice.isEmpty || !rootDevice.utf8.allSatisfy({ (48...57).contains($0) || (97...122).contains($0) }) {
+            rootDevice.isEmpty || !rootDevice.utf8.allSatisfy({ (48...57).contains($0) || (97...122).contains($0) })
+        {
             throw FirmwareError(.unsupported, "invalid root device name")
         }
         let namedRootMatching = rootDevice.map {
             "<dict><key>IOProviderClass</key><string>IOMedia</string><key>IOPropertyMatch</key>"
-            + "<dict><key>BSD Name</key><string>\($0)</string></dict></dict>"
+                + "<dict><key>BSD Name</key><string>\($0)</string></dict></dict>"
         }
         let segs = m.segments.filter { $0.name != "__PAGEZERO" }
         guard let lowest = segs.map(\.vmaddr).min(), let end = segs.map({ Int($0.vmaddr) + Int($0.vmsize) }).max()
@@ -602,8 +604,10 @@ public enum KBoot {
         // properties without a fallback (14G61 resolver +0x33d70/+0x33e3c).
         let (rootIdentity, _, _) = try identityDT(identity, board: board)
         var syscfg: [String: Data] = [:]
-        for (key, field) in [("MLB#", "mlb-serial-number"), ("Regn", "region-info"),
-                             ("Mod#", "model-number"), ("SrNm", "serial-number")] {
+        for (key, field) in [
+            ("MLB#", "mlb-serial-number"), ("Regn", "region-info"),
+            ("Mod#", "model-number"), ("SrNm", "serial-number")
+        ] {
             if let value = rootIdentity.first(where: { $0.0 == field })?.1 { syscfg[key] = value.encoded }
         }
         var macs: [String: Data] = [:]

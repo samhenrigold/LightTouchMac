@@ -11,8 +11,9 @@ extension SideloadTools {
             FirmwareError(.unsupported, "Unsupported installation-service dyld restriction")
         }
         guard let parsed = MachOSignature.images(input), !parsed.fat,
-              parsed.images.count == 1, let image = parsed.images.first,
-              image.cputype == 12, !image.is64Bit else { throw unsupported() }
+            parsed.images.count == 1, let image = parsed.images.first,
+            image.cputype == 12, !image.is64Bit
+        else { throw unsupported() }
         var output = input
         func word(_ offset: Int) throws -> UInt32 {
             guard offset >= 0, offset <= input.count - 4 else { throw unsupported() }
@@ -24,7 +25,8 @@ extension SideloadTools {
         }
         var changed = false
         for command in image.commands where command.cmd == 1 {
-            let offset = command.offset, size = Int(try word(offset + 4))
+            let offset = command.offset
+            let size = Int(try word(offset + 4))
             guard size >= 56, offset <= input.count - size else { throw unsupported() }
             guard try name(offset + 8) == "__RESTRICT" else { continue }
             let count = Int(try word(offset + 48))
@@ -33,8 +35,9 @@ extension SideloadTools {
                 let section = offset + 56 + index * 68
                 guard try name(section) == "__restrict" else { continue }
                 guard try name(section + 16) == "__RESTRICT",
-                      try word(offset + 28) == 0, try word(offset + 36) == 0,
-                      try word(section + 36) == 0 else { throw unsupported() }
+                    try word(offset + 28) == 0, try word(offset + 36) == 0,
+                    try word(section + 36) == 0
+                else { throw unsupported() }
                 var marker = Data("__qemu_appsync".utf8)
                 marker.append(contentsOf: repeatElement(0, count: 16 - marker.count))
                 output.replaceSubrange(section..<(section + 16), with: marker)

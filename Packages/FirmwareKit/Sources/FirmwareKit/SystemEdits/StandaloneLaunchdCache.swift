@@ -10,39 +10,50 @@ extension LaunchdCache {
             return (0..<4).reduce(0) { $0 | Int(bytes[offset + $1]) << (big ? 24 - 8 * $1 : 8 * $1) }
         }
         guard let parsed = MachOSignature.images(original), parsed.fat,
-              try word(original, 0, big: true) == 0xcafebabe else { throw invalid() }
+            try word(original, 0, big: true) == 0xcafe_babe
+        else { throw invalid() }
         let count = try word(original, 4, big: true)
         guard count == parsed.images.count, count <= (original.count - 8) / 20 else { throw invalid() }
-        var result = original, ranges: [Range<Int>] = [], updated = 0
+        var result = original
+        var ranges: [Range<Int>] = []
+        var updated = 0
         for index in 0..<count {
             let arch = 8 + index * 20
-            let cpu = try word(original, arch, big: true), subtype = try word(original, arch + 4, big: true)
-            let start = try word(original, arch + 8, big: true), size = try word(original, arch + 12, big: true)
+            let cpu = try word(original, arch, big: true)
+            let subtype = try word(original, arch + 4, big: true)
+            let start = try word(original, arch + 8, big: true)
+            let size = try word(original, arch + 12, big: true)
             guard start >= 8 + count * 20, size > 0, start <= original.count - size else { throw invalid() }
             let range = start..<(start + size)
             guard !ranges.contains(where: { $0.overlaps(range) }) else { throw invalid() }
             ranges.append(range)
-            guard cpu == 12, [9, 11].contains(subtype & 0x00ffffff) else { continue }
+            guard cpu == 12, [9, 11].contains(subtype & 0x00ff_ffff) else { continue }
             var slice = original.subdata(in: range)
             guard try word(slice, 4) == cpu, try word(slice, 8) == subtype,
-                  let section = try MachO(slice).segments.flatMap(\.sections).first(where: { $0.name == "__xpcd_cache" }) else {
+                let section = try MachO(slice).segments.flatMap(\.sections).first(where: { $0.name == "__xpcd_cache" })
+            else {
                 throw invalid()
             }
-            let offset = Int(section.offset), capacity = Int(section.size)
+            let offset = Int(section.offset)
+            let capacity = Int(section.size)
             guard capacity >= 40, offset <= slice.count - capacity else { throw invalid() }
             let before = slice.subdata(in: offset..<(offset + capacity))
             guard var plist = try PropertyListSerialization.propertyList(from: before, format: nil) as? [String: Any],
-                  plist["VersionNumber"] as? Int == 4,
-                  var daemons = plist["LaunchDaemons"] as? [String: Any] else { throw invalid() }
+                plist["VersionNumber"] as? Int == 4,
+                var daemons = plist["LaunchDaemons"] as? [String: Any]
+            else { throw invalid() }
             for (path, data) in jobs {
                 guard path.hasPrefix("/System/Library/LaunchDaemons/"), path.hasSuffix(".plist"),
-                      let job = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+                    let job = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+                else {
                     throw invalid()
                 }
                 daemons[path] = job
             }
             for path in removing {
-                guard path.hasPrefix("/System/Library/LaunchDaemons/"), path.hasSuffix(".plist") else { throw invalid() }
+                guard path.hasPrefix("/System/Library/LaunchDaemons/"), path.hasSuffix(".plist") else {
+                    throw invalid()
+                }
                 daemons.removeValue(forKey: path)
             }
             plist["LaunchDaemons"] = daemons

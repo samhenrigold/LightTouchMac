@@ -1,14 +1,19 @@
+import Crypto
 import Foundation
 import Testing
-import Crypto
+
 @testable import FirmwareKit
 
 struct SideloadDeveloperEnvironmentTests {
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_SIDELOAD_INSTALLD_IOS9"] != nil,
-                   "Set path to the prepared iOS 9 installer without the developer entitlement"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_SIDELOAD_INSTALLD_IOS9"] != nil,
+            "Set path to the prepared iOS 9 installer without the developer entitlement"))
     func nativeInstallerPreservesCodeAndExistingEntitlements() throws {
-        let input = try Data(contentsOf: URL(fileURLWithPath:
-            #require(ProcessInfo.processInfo.environment["FK_SIDELOAD_INSTALLD_IOS9"])))
+        let input = try Data(
+            contentsOf: URL(
+                fileURLWithPath:
+                    #require(ProcessInfo.processInfo.environment["FK_SIDELOAD_INSTALLD_IOS9"])))
         let oldSignature = try #require(MachOSignature.codeSignature(in: input))
         let output = try SideloadTools.installationServiceAllowingEnvironment(input)
         let signature = try #require(MachOSignature.codeSignature(in: output))
@@ -20,7 +25,10 @@ struct SideloadDeveloperEnvironmentTests {
             if command.cmd == MachOSignature.lcCodeSignature {
                 permitted.formUnion((command.offset + 12)..<(command.offset + 16))
             } else if command.cmd == 1,
-                      String(decoding: input[(command.offset + 8)..<(command.offset + 24)].prefix(while: { $0 != 0 }), as: UTF8.self) == "__LINKEDIT" {
+                String(
+                    decoding: input[(command.offset + 8)..<(command.offset + 24)].prefix(while: { $0 != 0 }),
+                    as: UTF8.self) == "__LINKEDIT"
+            {
                 permitted.formUnion((command.offset + 28)..<(command.offset + 32))
                 permitted.formUnion((command.offset + 36)..<(command.offset + 40))
             }
@@ -34,25 +42,31 @@ struct SideloadDeveloperEnvironmentTests {
             }
             var result: [Int: Data] = [:]
             for i in 0..<be(s.offset + 8) {
-                let type = be(s.offset + 12 + i * 8), offset = s.offset + be(s.offset + 16 + i * 8)
+                let type = be(s.offset + 12 + i * 8)
+                let offset = s.offset + be(s.offset + 16 + i * 8)
                 result[type] = data.subdata(in: offset..<(offset + be(offset + 4)))
             }
             return result
         }
-        let oldBlobs = try blobs(input), newBlobs = try blobs(output)
-        let oldEnt = try #require(oldBlobs[5]), newEnt = try #require(newBlobs[5])
-        var expected = try #require(PropertyListSerialization.propertyList(
-            from: Data(oldEnt.dropFirst(8)), format: nil) as? [String: Any])
+        let oldBlobs = try blobs(input)
+        let newBlobs = try blobs(output)
+        let oldEnt = try #require(oldBlobs[5])
+        let newEnt = try #require(newBlobs[5])
+        var expected = try #require(
+            PropertyListSerialization.propertyList(
+                from: Data(oldEnt.dropFirst(8)), format: nil) as? [String: Any])
         #expect(expected["get-task-allow"] == nil)
         expected["get-task-allow"] = true
-        let actual = try #require(PropertyListSerialization.propertyList(
-            from: Data(newEnt.dropFirst(8)), format: nil) as? NSDictionary)
+        let actual = try #require(
+            PropertyListSerialization.propertyList(
+                from: Data(newEnt.dropFirst(8)), format: nil) as? NSDictionary)
         #expect(actual == expected as NSDictionary)
         for (type, blob) in newBlobs where type == 0 || (0x1000...0x1005).contains(type) {
             func be(_ offset: Int) -> Int {
                 (0..<4).reduce(0) { $0 | Int(blob[offset + $1]) << (24 - $1 * 8) }
             }
-            let width = Int(blob[36]), start = be(16) - 5 * width
+            let width = Int(blob[36])
+            let start = be(16) - 5 * width
             let digest = blob[37] == 1 ? Data(Insecure.SHA1.hash(data: newEnt)) : Data(SHA256.hash(data: newEnt))
             #expect(blob.subdata(in: start..<(start + width)) == digest)
         }

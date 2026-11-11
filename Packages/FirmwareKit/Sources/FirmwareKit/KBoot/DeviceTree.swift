@@ -77,7 +77,8 @@ public struct DeviceTree: Sendable {
             throw FirmwareError(.unsupported, "DeviceTree: no \(path):\(prop)")
         }
         let bytes = value.encoded
-        let record = Self.name32(prop) + Value.le([UInt32(bytes.count)]) + bytes
+        let record =
+            Self.name32(prop) + Value.le([UInt32(bytes.count)]) + bytes
             + Data(count: ((bytes.count + 3) & ~3) - bytes.count)
         data.replaceSubrange(slot.offset..<slot.offset + 36 + ((slot.length + 3) & ~3), with: record)
         try reparse()
@@ -91,8 +92,9 @@ public struct DeviceTree: Sendable {
         var changes: [(Slot, Data?)] = []
         for properties in props.values {
             for slot in properties.values where try u32(slot.offset + 32) & 0x8000_0000 != 0 {
-                let expression = String(decoding: data[slot.offset + 36..<slot.offset + 36 + slot.length]
-                    .prefix { $0 != 0 }, as: UTF8.self)
+                let expression = String(
+                    decoding: data[slot.offset + 36..<slot.offset + 36 + slot.length]
+                        .prefix { $0 != 0 }, as: UTF8.self)
                 var result: Data?
                 var mayOmit = false
                 for option in expression.split(separator: ",") {
@@ -137,7 +139,8 @@ public struct DeviceTree: Sendable {
                 data.removeSubrange(slot.offset..<slot.offset + 36 + ((slot.length + 3) & ~3))
                 continue
             }
-            let record = data[slot.offset..<slot.offset + 32] + Value.le([UInt32(value.count)])
+            let record =
+                data[slot.offset..<slot.offset + 32] + Value.le([UInt32(value.count)])
                 + value + Data(count: ((value.count + 3) & ~3) - value.count)
             data.replaceSubrange(slot.offset..<slot.offset + 36 + ((slot.length + 3) & ~3), with: record)
         }

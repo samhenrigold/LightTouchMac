@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct A6GraphicsCacheTests {
@@ -9,8 +10,10 @@ struct A6GraphicsCacheTests {
         #expect(try A6GraphicsCache.prepare(bytes, build: "13A344") == bytes)
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_A6_GRAPHICS_CACHE_14G61"] != nil,
-                   "Set path to the original 14G61 cache; no Apple fixture is distributed"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_A6_GRAPHICS_CACHE_14G61"] != nil,
+            "Set path to the original 14G61 cache; no Apple fixture is distributed"))
     func changesOnlyCacheTypeAndExistingSignatureHashes() throws {
         let path = try #require(ProcessInfo.processInfo.environment["FK_A6_GRAPHICS_CACHE_14G61"])
         let original = try Data(contentsOf: URL(fileURLWithPath: path))

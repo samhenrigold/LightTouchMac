@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct ARMv7sFitTests {
@@ -7,7 +8,7 @@ struct ARMv7sFitTests {
         Data(words.flatMap { n in [UInt8(n & 255), UInt8(n >> 8 & 255), UInt8(n >> 16 & 255), UInt8(n >> 24)] })
     }
     private func thin(_ subtype: UInt32) -> Data {
-        le([0xfeedface, 12, subtype, 6, 0, 0, 0])
+        le([0xfeed_face, 12, subtype, 6, 0, 0, 0])
     }
     @Test func cpuCompatibilityIsDirectional() {
         #expect(MachO32.slice(thin(11), arch: "armv7s")?.arch == "armv7s")
@@ -18,8 +19,9 @@ struct ARMv7sFitTests {
         #expect(MachO32.slice(thin(9), arch: "armv6") == nil)
     }
     @Test func fatImagePrefersNativeSliceOverCompatibleFirstEntry() {
-        let words: [UInt32] = [0xcafebabe, 2, 12, 9, 48, 28, 0, 12, 11, 76, 28, 0]
-        let header = Data(words.flatMap { n in [UInt8(n >> 24), UInt8(n >> 16 & 255), UInt8(n >> 8 & 255), UInt8(n & 255)] })
+        let words: [UInt32] = [0xcafe_babe, 2, 12, 9, 48, 28, 0, 12, 11, 76, 28, 0]
+        let header = Data(
+            words.flatMap { n in [UInt8(n >> 24), UInt8(n >> 16 & 255), UInt8(n >> 8 & 255), UInt8(n & 255)] })
         let image = header + thin(9) + thin(11)
         #expect(MachO32.slice(image, arch: "armv7s")?.arch == "armv7s")
         #expect(MachO32.slice(image, arch: "armv7")?.arch == "armv7")

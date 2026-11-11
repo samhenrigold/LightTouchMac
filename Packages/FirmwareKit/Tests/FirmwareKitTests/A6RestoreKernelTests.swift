@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct A6RestoreKernelTests {
@@ -11,8 +12,10 @@ struct A6RestoreKernelTests {
         #expect(try A6RestoreKernel.prepare(input, build: "10A405") == input)
         #expect(try A6RestoreKernel.prepare(input, build: "13A344") == input)
     }
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["FK_A6_RESTORE_KERNEL_12A365"] != nil,
-                   "Set FK_A6_RESTORE_KERNEL_12A365 to the original kernel"))
+    @Test(
+        .enabled(
+            if: ProcessInfo.processInfo.environment["FK_A6_RESTORE_KERNEL_12A365"] != nil,
+            "Set FK_A6_RESTORE_KERNEL_12A365 to the original kernel"))
     func matchesNativeQualifiedWrapperAndPreservesEverythingElse() throws {
         let path = try #require(ProcessInfo.processInfo.environment["FK_A6_RESTORE_KERNEL_12A365"])
         let input = try Data(contentsOf: URL(fileURLWithPath: path))

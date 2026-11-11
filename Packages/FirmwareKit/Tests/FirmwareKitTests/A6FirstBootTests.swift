@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import FirmwareKit
 
 struct A6FirstBootTests {
@@ -34,14 +35,17 @@ struct A6FirstBootTests {
             let prepared = try A6FirstBoot.prepare(original, component: component)
             #expect(prepared.count == original.count)
             let signature = try #require(MachOSignature.codeSignature(in: original))
-            let allowed = component.edits.map { $0.offset..<($0.offset + $0.original.count) }
+            let allowed =
+                component.edits.map { $0.offset..<($0.offset + $0.original.count) }
                 + [signature.offset..<(signature.offset + signature.size)]
-            #expect(zip(original, prepared).enumerated().allSatisfy { index, pair in
-                pair.0 == pair.1 || allowed.contains { $0.contains(index) }
-            })
+            #expect(
+                zip(original, prepared).enumerated().allSatisfy { index, pair in
+                    pair.0 == pair.1 || allowed.contains { $0.contains(index) }
+                })
             #expect(try A6GuestAssets.verifiedCodeDirectories(prepared).count > 0)
             #expect(try A6FirstBoot.prepare(prepared, component: component) == prepared)
-            var changed = original; changed[0] ^= 1
+            var changed = original
+            changed[0] ^= 1
             #expect(throws: FirmwareError.self) { try A6FirstBoot.prepare(changed, component: component) }
         }
     }
@@ -51,33 +55,46 @@ struct A6FirstBootTests {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let system = root.appendingPathComponent("system.img"), data = root.appendingPathComponent("data.img")
+        let system = root.appendingPathComponent("system.img")
+        let data = root.appendingPathComponent("data.img")
         for file in [system, data] { try HFSPlusWriter.makeHFS(file, size: 16 << 20, journaled: false) }
-        let s = try HFSPlusWriter(system), d = try HFSPlusWriter(data)
-        s.owner = (0, 0); d.owner = (0, 0)
+        let s = try HFSPlusWriter(system)
+        let d = try HFSPlusWriter(data)
+        s.owner = (0, 0)
+        d.owner = (0, 0)
         try s.makeDirectory("System/Library/CoreServices", mode: 0o755)
-        try s.put(PropertyListSerialization.data(fromPropertyList: ["ProductBuildVersion": "14G61"], format: .binary, options: 0),
-                  at: "System/Library/CoreServices/SystemVersion.plist")
+        try s.put(
+            PropertyListSerialization.data(
+                fromPropertyList: ["ProductBuildVersion": "14G61"], format: .binary, options: 0),
+            at: "System/Library/CoreServices/SystemVersion.plist")
         for (component, bytes) in zip(A6FirstBoot.components, try fixtures()) {
             try s.makeDirectory((component.path as NSString).deletingLastPathComponent, mode: 0o755)
             try s.put(bytes, at: component.path, mode: 0o755)
         }
         try d.makeDirectory((A6FirstBoot.cloudPath as NSString).deletingLastPathComponent, mode: 0o755)
-        try d.put(PropertyListSerialization.data(fromPropertyList: ["CloudConfigurationUIComplete": true], format: .binary, options: 0),
-                  at: A6FirstBoot.cloudPath)
-        try s.close(); try d.close()
-        let plan = try PropertyListSerialization.data(fromPropertyList:
-            ["Build": "14G61", "Overrides": ["a6vjPkzcRjrsXmniFsm0dg": true]], format: .binary, options: 0)
+        try d.put(
+            PropertyListSerialization.data(
+                fromPropertyList: ["CloudConfigurationUIComplete": true], format: .binary, options: 0),
+            at: A6FirstBoot.cloudPath)
+        try s.close()
+        try d.close()
+        let plan = try PropertyListSerialization.data(
+            fromPropertyList: ["Build": "14G61", "Overrides": ["a6vjPkzcRjrsXmniFsm0dg": true]], format: .binary,
+            options: 0)
         let record = try A6FirstBoot.install(system: system, data: data, activationPlan: plan)
-        #expect((try JSONSerialization.jsonObject(with: record) as? [String: Any])?["mode"] as? String == "first-normal-boot")
+        #expect(
+            (try JSONSerialization.jsonObject(with: record) as? [String: Any])?["mode"] as? String
+                == "first-normal-boot")
         #expect(try A6FirstBoot.preparedPaths(in: HFSPlusVolume(system)) == A6FirstBoot.components.map(\.path))
         let before = try HFSPlusVolume(data)
-        let metadata = try A6FirstBoot.groups.map { try before.contents(before.record(at: A6FirstBoot.groupRoot + $0 + "/" + A6FirstBoot.metadataName)) }
+        let metadata = try A6FirstBoot.groups.map {
+            try before.contents(before.record(at: A6FirstBoot.groupRoot + $0 + "/" + A6FirstBoot.metadataName))
+        }
         _ = try A6FirstBoot.install(system: system, data: data, activationPlan: plan)
         let after = try HFSPlusVolume(data)
         for (group, bytes) in zip(A6FirstBoot.groups, metadata) {
             let path = A6FirstBoot.groupRoot + group + "/" + A6FirstBoot.metadataName
-            #expect(try after.contents(after.record(at: path)) == bytes) // no identity churn
+            #expect(try after.contents(after.record(at: path)) == bytes)  // no identity churn
         }
         let partial = try HFSPlusWriter(system)
         try partial.put(fixtures()[1], at: A6FirstBoot.components[1].path, mode: 0o755)
