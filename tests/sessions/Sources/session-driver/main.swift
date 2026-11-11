@@ -408,13 +408,17 @@ extension String {
     /// A gesture made on the guest's clock, so a busy Mac neither stretches nor squeezes it, and waited for until
     /// the emulator made all of it and the guest's digitizer driver read the touch (HostInputAutomation.perform).
     /// One the emulator refused or the guest didn't read is in the events, as `gesture` with its error: the
-    /// caller's own evidence then fails with the reason beside it.
-    func gesture(_ events: [VirtualInputEvent], _ what: String) async {
+    /// caller's own evidence then fails with the reason beside it. False when the guest's digitizer driver didn't read
+    /// it.
+    @discardableResult
+    func gesture(_ events: [VirtualInputEvent], _ what: String) async -> Bool {
         do {
             try await HostInputAutomation.perform(events) { try await self.process.link.request($0, timeout: 5) }
         } catch {
             emit("gesture", ["device": name, "what": what, "error": "\(error)"])
+            return (error as? HostInputAutomation.Failure) != .unread
         }
+        return true
     }
     /// Home, pressed and released: wakes a display that slept.
     func home() async { await gesture(HostInputAutomation.press(0), "home") }
@@ -437,20 +441,25 @@ extension String {
             [
                 "device": name, "path": url.path, "serial": frame.serial,
                 "width": frame.surface.width, "height": frame.surface.height,
-                "brightness": FrameTools.brightness(frame.surface)
+                "brightness": FrameTools.brightness(frame.surface), "asleep": displaySleeping.map { $0 ? 1 : 0 } ?? -1
             ]
         )
         return url.path
     }
 
+    /// Whether the emulator says the guest turned its panel off (SharedStatus.displaySleeping); nil before the helper
+    /// publishes a status.
+    var displaySleeping: Bool? { process.status?.displaySleeping }
+
     /// Wake the panel, then capture. The display sleeps ~12 s after `lit`, so an unqualified
-    /// screenshot lands on a black panel (audit finding 3). Press Home, re-check brightness, and
-    /// capture only once it is lit -- or capture the black frame after the last try, so the matrix
-    /// fails the row honestly rather than passing a slept panel.
+    /// screenshot lands on a black panel (audit finding 3). Press Home while the emulator says the panel
+    /// is off or the frame is dark (a panel that slept keeps its last frame), and capture only once it is
+    /// lit -- or capture the frame after the last try, so the matrix fails the row honestly rather than
+    /// passing a slept panel.
     @discardableResult
     func wakeForShot(_ label: String, floor: Double = 0.05, tries: Int = 5) async -> String? {
         for _ in 0..<tries {
-            if (brightness() ?? 0) >= floor { break }
+            if displaySleeping != true, (brightness() ?? 0) >= floor { break }
             process.link.send(.button(0, down: true))
             try? await Task.sleep(for: .milliseconds(150))
             process.link.send(.button(0, down: false))
@@ -461,13 +470,22 @@ extension String {
 
     /// Slide to unlock, again while the guest agent (where the boot has one) says it is still locked: a slide can
     /// miss (4.2.1's iPod, rejudge 09-29; 4.2.1's iPad first boot under host load, smoke #66), and the lock screen
-    /// sleeps a few seconds after a miss, so each retry wakes the panel first (`unlockN-M.png`). Emits `unlock`.
+    /// sleeps a few seconds after a miss, so each retry wakes the panel first (`unlockN-M.png`). A lock screen left
+    /// alone turns its panel off, and the digitizer with it (about 10 s after a respring brings it up): Home first
+    /// while the emulator says the panel is off, or when the guest's digitizer driver didn't read the last slide (it
+    /// slept as the slide began). Emits `unlock`.
     func slideToUnlock(_ generation: Int, agent: GuestAgent?) async {
         var attempts = 0
         var locked: Bool?
+        var read = true
         for attempt in 0..<3 {
+            if !read || displaySleeping == true {
+                await home()
+                try? await Task.sleep(for: .seconds(2))
+            }
             if attempt > 0 { await wakeForShot("unlock\(generation)-\(attempt)") }
-            if profile == .k48 { await drag(0.9365, 0.621, 0.9365, 0.0612) } else { await drag(0.18, 0.9, 0.92, 0.9) }
+            read =
+                profile == .k48 ? await drag(0.9365, 0.621, 0.9365, 0.0612) : await drag(0.18, 0.9, 0.92, 0.9)
             attempts += 1
             try? await Task.sleep(for: .seconds(5))
             locked = try? await agent?.isLocked()
@@ -499,7 +517,8 @@ extension String {
         }
     }
 
-    func drag(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) async {
+    @discardableResult
+    func drag(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) async -> Bool {
         await gesture(HostInputAutomation.drag(from: (x0, y0), to: (x1, y1)), "drag")
     }
 
@@ -763,8 +782,8 @@ func checkPreparedFiles() throws {
     await ipad.wakeIPad()
     ipod.screenshot("ipod-lock")
     ipad.screenshot("ipad-lock")
-    async let u1: Void = ipod.drag(0.18, 0.9, 0.92, 0.9)
-    async let u2: Void = ipad.drag(0.9365, 0.621, 0.9365, 0.0612)
+    async let u1 = ipod.drag(0.18, 0.9, 0.92, 0.9)
+    async let u2 = ipad.drag(0.9365, 0.621, 0.9365, 0.0612)
     _ = await (u1, u2)
     try? await Task.sleep(for: .seconds(5))
     ipod.screenshot("ipod-home")
