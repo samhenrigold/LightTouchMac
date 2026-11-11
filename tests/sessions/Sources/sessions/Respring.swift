@@ -32,22 +32,25 @@ func respringCheck(_ args: RespringCheck) -> Never {
     let r = Report()
     let window = base.major >= 6
     let unlock = base.major >= 7 ? "drag 0.2 0.86 0.9 0.86" : "drag 0.18 0.9 0.92 0.9"
-    let wake = ["wait 20", unlock.replacingOccurrences(of: "drag", with: "wake"), "wait 3"]
+    // Home while the display sleeps and the slide while the agent says locked, until neither (helper-driver's wake).
+    let wake = [unlock.replacingOccurrences(of: "drag", with: "wake")]
     let list = "spawn /bin/launchctl list"
-    var steps = [
-        "boot", "lit 0.1 400", "wait 20", "button 0", "wait 2", unlock, "wait 3", "waitagent 240", "wait 10"
-    ]
+    var steps = ["boot", "lit 0.1 400", "waitagent 240"] + wake + ["wait 10"]
     steps += closeApp + ["sample stock 3", list]
     // The key, then SpringBoard alone (what Respring did before)
     steps += [
-        "defaults com.apple.UIKit UIAnimationDragCoefficient int 10", "spawn /bin/launchctl stop com.apple.SpringBoard"
+        "defaults com.apple.UIKit UIAnimationDragCoefficient int 10", "spawn /bin/launchctl stop com.apple.SpringBoard",
+        "until 60 locked"
     ]
     steps += wake + [list] + closeApp + ["sample springboard 3"]
     steps += ["respring"] + wake + [list] + closeApp + ["sample respring 3"]
-    // A tap on the dock's first icon opens its app, once Slow Animations' Home screen has settled.
+    // A tap on the dock's first icon opens its app, once Slow Animations' Home screen has settled: until the app is
+    // in front. Read 15 s on, the iPod touch 2G's Music had already gone again (its first launch on a fresh 3.1.3
+    // base ends by itself within seconds).
     steps += [
-        "wait 15", "agentop frontmost", "tap 0.16 0.9", "wait 15", "agentop frontmost", "button 0", "wait 5", "quit",
-        "expectExit 60"
+        "until 30 text Settings", "agentop frontmost", "tap 0.16 0.9", "until 20 front", "dump after-tap", "button 0",
+        "wait 5",
+        "quit", "expectExit 60"
     ]
     var s = preparedScenario(base, tools: tools, work: work, name: "respring", steps: steps)
     var prepared = s["prepared"] as? [String: Any] ?? [:]
@@ -95,11 +98,14 @@ func respringCheck(_ args: RespringCheck) -> Never {
         "Slow Animations took effect after Respring (\(fps["respring"] ?? -1) frames/s vs stock \(stock))"
     )
     // SpringBoard's own screen before the tap (not Setup), the dock's app after it.
-    let fronts = e.find("agent").suffix(2).map { String($0.string("output")?.split(separator: "\n").first ?? "-") }
+    let before = e.find("agent").last.map { String($0.string("output")?.split(separator: "\n").first ?? "-") } ?? "-"
+    let opened = e.find("until").last ?? [:]
+    let app = opened.string("front") ?? ""
     r.check(
-        fronts.count == 2 && fronts[0] == "com.apple.springboard" && fronts[1].hasPrefix("com.apple.")
-            && !["com.apple.springboard", "com.apple.purplebuddy"].contains(fronts[1]),
-        "a tap on the Home screen opens an app (frontmost \(fronts))"
+        before == "com.apple.springboard" && opened.bool("met") && app.hasPrefix("com.apple.")
+            && app != "com.apple.purplebuddy",
+        "a tap on the Home screen opens an app (frontmost \(before), then \(app.isEmpty ? "-" : app) after "
+            + "\(format(opened.double("seconds"))) s)"
     )
     finish(r, work: work)
 }

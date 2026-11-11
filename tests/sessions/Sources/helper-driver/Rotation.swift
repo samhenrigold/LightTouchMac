@@ -106,8 +106,33 @@ func readText(in image: URL) -> [String] {
     TextReader.read(image, languageCorrection: false).sorted { $0.y < $1.y }.map(\.text)
 }
 
-/// How much redder than green an image is on average (0...255): Core Animation's blended-layers tint.
-func redness(of image: URL) -> Double {
+/// The lines Vision reads on the status bar alone (an image's top 4.5%), grayscale and scaled to 1280 points wide: its
+/// small text (an iPod's "-45" beside "iPod") goes unread on the whole picture.
+func readStatusBar(in image: URL) -> [String] {
+    guard let input = CGImageSourceCreateWithURL(image as CFURL, nil),
+        let cg = CGImageSourceCreateImageAtIndex(input, 0, nil),
+        case let height = Int((Double(cg.height) * 0.045).rounded(.up)),
+        let strip = cg.cropping(to: CGRect(x: 0, y: 0, width: cg.width, height: height)),
+        case let scale = max(1, 1280 / max(cg.width, 1)),
+        let ctx = CGContext(
+            data: nil,
+            width: cg.width * scale,
+            height: height * scale,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        )
+    else { return [] }
+    ctx.interpolationQuality = .high
+    ctx.draw(strip, in: CGRect(x: 0, y: 0, width: cg.width * scale, height: height * scale))
+    guard let scaled = ctx.makeImage() else { return [] }
+    return TextReader.read(scaled, languageCorrection: false).sorted { $0.x < $1.x }.map(\.text)
+}
+
+/// How far red and green are apart on average (0...255), either way: Core Animation's blended-layers tint, red where
+/// layers blend and green where they're opaque (a 7.x Home screen turns red, a 3.x one mostly green).
+func tint(of image: URL) -> Double {
     guard let input = CGImageSourceCreateWithURL(image as CFURL, nil),
         let cg = CGImageSourceCreateImageAtIndex(input, 0, nil),
         let ctx = CGContext(
@@ -124,6 +149,8 @@ func redness(of image: URL) -> Double {
     guard let data = ctx.data else { return 0 }
     let p = data.bindMemory(to: UInt8.self, capacity: 256 * 96)
     var sum = 0
-    for i in stride(from: 0, to: 256 * 96, by: 4) { sum += Int(p[i]) - Int(p[i + 1]) }
+    for i in stride(from: 0, to: 256 * 96, by: 4) {
+        sum += abs(Int(p[i]) - Int(p[i + 1]))
+    }
     return Double(sum) / Double(64 * 96)
 }

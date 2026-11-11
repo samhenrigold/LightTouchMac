@@ -78,8 +78,8 @@ func resumeCheck(_ args: ResumeCheck) -> Never {
             work: work,
             name: name,
             steps: [
-                "boot", "lit 0.03 120", "seen Settings 120", "status", "tapword Settings",
-                "seen General 30", "status", "quit", "expectExit 60"
+                "boot", "lit 0.03 120", "seen Settings 120", "waitagent 120", "status", "tapword Settings",
+                "until 20 front", "seen General 30", "status", "quit", "expectExit 60"
             ]
         )
         if var prepared = scenario["prepared"] as? [String: Any] {
@@ -103,7 +103,14 @@ func resumeCheck(_ args: ResumeCheck) -> Never {
             status.count == 2 && status.last?.int("agentStatus") == 1 && frames > 0,
             "\(name): the guest's agent answers and the screen updates (\(frames) new frames after the tap)"
         )
-        r.check(seen.count == 2 && seen.last?.bool("found") == true, "\(name): a tap on Settings opens it")
+        // The agent says which app the tap opened; the screen is judged on its own: a restored iPod touch 2G opens
+        // Settings and goes on showing the Home screen it was saved with.
+        let front = d.events.one("until")
+        r.check(
+            front.bool("met") && front.string("front") == "com.apple.Preferences",
+            "\(name): a tap on Settings opens it (frontmost \(front.string("front") ?? "-"))"
+        )
+        r.check(seen.count == 2 && seen.last?.bool("found") == true, "\(name): the screen shows Settings")
         if !r.allPassed { print(d.tail) }
     }
     finish(r, work: work)

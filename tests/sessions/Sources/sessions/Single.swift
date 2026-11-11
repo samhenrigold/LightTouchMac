@@ -371,6 +371,12 @@ func single(_ args: SingleCheck) -> Never {
             let ms = events.one("substrate", ["device": d])
             let loaded = ms["loaded"] as? [String] ?? []
             let errors = ms["errors"] as? [String] ?? []
+            // An empty capture is the relay failing, not Substrate: its own verdict, read first.
+            r.check(
+                (ms.int("relayLines") ?? 0) > 0,
+                "\(d): the syslog relay delivered the guest's log (\(ms.int("relayLines") ?? 0) lines"
+                    + (ms.bool("relayRestarted") ? ", started again after delivering nothing)" : ")")
+            )
             r.check(
                 ms.bool("injected") && loaded.contains { $0.hasSuffix("/LTMProbe.dylib") } && errors.isEmpty
                     && !ms.bool("safeMode") && ms.bool("back") && !ms.bool("locked"),

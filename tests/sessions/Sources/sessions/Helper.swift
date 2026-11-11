@@ -64,6 +64,8 @@ func preparedScenario(
 }
 
 let unlockSlide = "drag 0.18 0.9 0.92 0.9"  // a phone's or iPod's lock-screen slider, portrait
+/// The slider again until the agent says unlocked: a lock screen just drawn doesn't take it yet (helper-driver's wake).
+let unlockWake = unlockSlide.replacingOccurrences(of: "drag", with: "wake")
 
 /// SIGKILL the driver (the "app") once it holds: the helper must notice, hard-halt (pause, flush, quit QEMU; no guest
 /// shutdown) and exit.
@@ -192,7 +194,8 @@ func helperChecks(_ args: HelperCheck) -> Never {
 }
 
 /// `sessions helper-boot BASE` (an n72 base): the helper booting a guest with no app around it. `ipod`: lit through the
-/// frame ring, the slider, rotation (the landscape Home screen is shown), a battery request, then the parent SIGKILLed:
+/// frame ring, the slider (unlocked), ⌘→ (the guest's chord: 3.1.3's Home screen doesn't turn, and the frame keeps
+/// the panel's scan), a battery request, then the parent SIGKILLed:
 /// hard halt. `meddle`: the app's DeviceFileWatch on the overlay sees its NOR unlinked under the
 /// running helper (the app's notice); SIGTERM halts the helper. `power`: the pump at 60 Hz before boot (30 with the host
 /// constrained); shown 60 Hz with an idle-sleep assertion, hidden at most 5 Hz and none, back to 60 Hz within 100 ms,
@@ -218,9 +221,9 @@ func helperBoot(_ args: HelperBootCheck) -> Never {
                 work: work,
                 name: "ipod",
                 steps: [
-                    "boot", "lit 0.03 240", "dump lock", unlockSlide, "wait 4", "dump home", "rotate cw", "wait 2",
-                    "dump rotated",
-                    "rotate ccw", "wait 2", "battery 50 0", "wait 2", "status", "hold"
+                    "boot", "lit 0.03 240", "dump lock", "waitagent 240", unlockWake, "dump home", "rotate cw",
+                    "wait 2",
+                    "dump rotated", "rotate ccw", "wait 2", "battery 50 0", "wait 2", "status", "hold"
                 ]
             )
         )
@@ -229,14 +232,20 @@ func helperBoot(_ args: HelperBootCheck) -> Never {
         r.check(e.any("lit"), "ipod: lit through the ring after \(format(e.one("lit").double("seconds"))) s")
         var dumps: [String: Event] = [:]
         for x in e.find("dump") { dumps[x.string("name") ?? ""] = x }
-        r.check(dumps["home"]?.bool("ok") == true && dumps["lock"]?.bool("ok") == true, "ipod: lock and home dumps")
-        // The rotated Home screen is one new frame: a frame the ring dropped would stay black.
+        r.check(
+            dumps["home"]?.bool("ok") == true && dumps["lock"]?.bool("ok") == true
+                && e.one("wake").bool("locked") == false,
+            "ipod: lock and home dumps, unlocked after \(e.one("wake").int("tries") ?? 0) slides"
+        )
+        // The rotation was the emulator's once (a landscape frame, 3693dddf); it is the guest's now, and the app turns
+        // its shell (sessions rotation): the frame keeps the panel's scan and stays lit.
         let rotated = dumps["rotated"] ?? [:]
         let home = dumps["home"] ?? [:]
         r.check(
-            rotated.int("width") == 480 && (rotated.double("brightness") ?? 0) > 0.5 * (home.double("brightness") ?? 1),
-            "ipod: the rotated Home screen is shown (\(rotated.int("width") ?? 0)x\(rotated.int("height") ?? 0), brightness "
-                + "\(format(rotated.double("brightness"), 2)) vs \(format(home.double("brightness"), 2)))"
+            rotated.int("width") == 320 && (rotated.double("brightness") ?? 0) > 0.5 * (home.double("brightness") ?? 1),
+            "ipod: after ⌘→ the frame keeps the panel's scan and the Home screen (\(rotated.int("width") ?? 0)x"
+                + "\(rotated.int("height") ?? 0), brightness \(format(rotated.double("brightness"), 2)) vs "
+                + "\(format(home.double("brightness"), 2)))"
         )
         r.check(
             e.find("reply").contains { ($0.string("reply") ?? "").contains("ok(true)") },

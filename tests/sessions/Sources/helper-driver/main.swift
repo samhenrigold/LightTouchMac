@@ -354,11 +354,14 @@ Thread.detachNewThread {
             }
             usleep(300_000)
             link.send(.touch(slot: 0, phase: 2, x: v[2], y: v[3]))
-        // wake X0 Y0 X1 Y1: until the display is on and the agent says unlocked (6 tries): Home (then Sleep/Wake)
-        // while it sleeps, the unlock drag while locked
+        // wake X0 Y0 X1 Y1 [SECONDS]: until the display is on and the agent says unlocked, at most SECONDS (60): Home
+        // (then Sleep/Wake) while it sleeps, the unlock drag while locked, nothing while SpringBoard doesn't answer (a
+        // respring) or its lock screen doesn't take the drag yet
         case "wake":
             var tries = 0
-            while tries < 6 {
+            var lockedNow: Bool?
+            let start = Date()
+            while Date().timeIntervalSince(start) < (v.count > 4 ? v[4] : 60) {
                 tries += 1
                 if link.status?.displaySleeping == true {
                     let button = tries > 2 ? 1 : 0  // Home, then Sleep/Wake
@@ -367,7 +370,12 @@ Thread.detachNewThread {
                     link.send(.button(button, down: false))
                     usleep(2_000_000)
                 }
-                guard (try? blocking({ try await guest.agent.isLocked() }).get()) != false else {
+                lockedNow = try? blocking({ try await guest.agent.isLocked() }).get()
+                guard let locked = lockedNow else {
+                    usleep(1_000_000)
+                    continue
+                }
+                guard locked else {
                     if link.status?.displaySleeping == false { break }
                     continue
                 }
@@ -382,7 +390,13 @@ Thread.detachNewThread {
                 link.send(.touch(slot: 0, phase: 2, x: v[2], y: v[3]))
                 usleep(3_000_000)
             }
-            emit("wake", ["tries": tries, "sleeping": link.status?.displaySleeping ?? true])
+            emit(
+                "wake",
+                [
+                    "tries": tries, "sleeping": link.status?.displaySleeping ?? true, "locked": lockedNow ?? true,
+                    "seconds": Date().timeIntervalSince(start)
+                ]
+            )
         case "button":
             link.send(.button(Int(v[0]), down: true))
             usleep(150_000)
@@ -627,11 +641,13 @@ Thread.detachNewThread {
                 tweaksWritten = result.written
                 tweaksApplied = true
             }
+            let resprung = (try? r.get().resprung) ?? false
             emit(
                 "tweaks",
                 [
                     "result": "\(r.map { "written \($0.written) resprung \($0.resprung) missing \($0.missing)" })",
-                    "resprung": (try? r.get().resprung) ?? false, "ok": (try? r.get()) != nil
+                    "resprung": resprung, "ok": (try? r.get()) != nil,
+                    "landedSeconds": resprung ? respringLanded() : 0
                 ]
             )
         // sbread NAME: what SpringBoard's status bar server holds (the agent's statusbarget): whether its overrides
@@ -665,7 +681,13 @@ Thread.detachNewThread {
             dump(p[1])
             let shown = URL(fileURLWithPath: "\(dumpDir)/\(p[1])-shown.png")
             _ = onMain { r.writeShown(URL(fileURLWithPath: "\(dumpDir)/\(p[1]).png"), to: shown) }
-            emit("ocr", ["name": p[1], "lines": readText(in: shown), "redness": redness(of: shown)])
+            emit(
+                "ocr",
+                [
+                    "name": p[1], "lines": readText(in: shown), "statusBar": readStatusBar(in: shown),
+                    "tint": tint(of: shown)
+                ]
+            )
         case "seen":  // seen WORD SECONDS: until Vision reads WORD on the screen (an icon's label: Home is up)
             guard let r = rotationDriver else { fail("seen: no board") }
             let start = Date()
@@ -694,9 +716,46 @@ Thread.detachNewThread {
                 ]
             )
         case "respring":  // Device ▸ Respring and Tweaks' restart (GuestServices.respring)
-            emit("respring", ["result": "\(blocking { try await guest.respring() })"])
+            let r = blocking { try await guest.respring() }
+            emit("respring", ["result": "\(r)", "landedSeconds": respringLanded()])
         case "reset":  // the app's Restart (MachineOp.reset): the guest reboots in place
             link.send(.machine(.reset))
+        // until SECONDS CONDITION: polls until CONDITION holds, at most SECONDS, where a fixed wait would stand in for
+        // it; an "until" event says whether it was met. `text REGEX` (_ for a space): Vision reads a line matching
+        // REGEX on the window's picture or its status bar; `locked`: the agent says locked (a restarted SpringBoard is
+        // at its lock screen); `front`: an app, not SpringBoard, is frontmost (an app that quits soon after counts).
+        case "until":
+            let condition = p.dropFirst(2).joined(separator: " ")
+            let start = Date()
+            var met = false
+            var front = ""
+            while !met {
+                switch p[2] {
+                case "text":
+                    dump("until")
+                    var shown = URL(fileURLWithPath: "\(dumpDir)/until.png")
+                    if let r = rotationDriver {
+                        let turned = URL(fileURLWithPath: "\(dumpDir)/until-shown.png")
+                        if onMain({ r.writeShown(shown, to: turned) }) { shown = turned }
+                    }
+                    let lines = readText(in: shown) + readStatusBar(in: shown)
+                    let pattern = p[3].replacingOccurrences(of: "_", with: " ")
+                    met = lines.contains { $0.range(of: pattern, options: .regularExpression) != nil }
+                case "locked":
+                    met = (try? blocking({ try await guest.agent.isLocked() }).get()) == true
+                case "front":
+                    front = (try? blocking({ try await guest.agent.frontmost() }).get())?.bundleID ?? ""
+                    met = !front.isEmpty && front != "com.apple.springboard"
+                default:
+                    fail("unknown condition \(condition)")
+                }
+                if met || Date().timeIntervalSince(start) >= v[0] { break }
+                usleep(500_000)
+            }
+            emit(
+                "until",
+                ["condition": condition, "met": met, "seconds": Date().timeIntervalSince(start), "front": front]
+            )
         case "waitagent":  // waitagent SECONDS: until the agent is alive
             let start = Date()
             while link.status?.agentStatus != 1, Date().timeIntervalSince(start) < v[0] { usleep(250_000) }
@@ -851,6 +910,16 @@ Thread.detachNewThread {
     }
     emit("done")
     exit(0)
+}
+
+/// After a respring, until the new SpringBoard is up at its lock screen (the agent says locked; the old one, still
+/// answering, says unlocked), at most 60 s: the seconds it took.
+func respringLanded() -> Double {
+    let start = Date()
+    while (try? blocking({ try await guest.agent.isLocked() }).get()) != true, Date().timeIntervalSince(start) < 60 {
+        usleep(500_000)
+    }
+    return Date().timeIntervalSince(start)
 }
 
 /// The helper's CPU seconds, wakeups and energy (nJ) so far.
