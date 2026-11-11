@@ -125,6 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return validation.isEnabled
     }
 
+    @objc func sponsorProject(_ sender: Any?) {
+        NSWorkspace.shared.open(URL(string: "https://github.com/sponsors/samhenrigold")!)
+    }
+
     @objc func showHelp(_ sender: Any?) {
         if helpController == nil {
             helpController = HelpWindowController(

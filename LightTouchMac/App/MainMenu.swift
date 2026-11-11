@@ -337,6 +337,7 @@ enum MainMenuBuilder {
     private static func helpMenu(_ appName: String) -> NSMenu {
         let menu = NSMenu(title: "Help")
         menu.addItem(item("\(appName) Help", #selector(AppDelegate.showHelp(_:)), "?"))
+        menu.addItem(item("Sponsor the Light Touch project", #selector(AppDelegate.sponsorProject(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Export Diagnostics…", #selector(MainWindowController.exportDiagnostics(_:))))
         menu.addItem(item(BugReportCopy.title, #selector(AppDelegate.copyBugReportInfo(_:))))
