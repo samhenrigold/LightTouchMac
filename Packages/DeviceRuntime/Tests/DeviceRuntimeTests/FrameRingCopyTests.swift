@@ -6,6 +6,23 @@ import Testing
 @testable import DeviceRuntime
 
 struct FrameRingCopyTests {
+    /// An iPad frame (768x1024) is copied in well under a 60 Hz frame as these tests build it, unoptimized, as the
+    /// Debug helper runs: the copy is on the publishing queue's one thread, so its time caps the frame rate.
+    @Test func anIPadFrameCopiesWithinAFrame() {
+        let (width, height) = (768, 1024)
+        let pixels = UnsafeMutableRawPointer.allocate(byteCount: width * height * 4, alignment: 16)
+        defer { pixels.deallocate() }
+        let surface = makeSurface(width: width, height: height)
+        surface.lock(options: [], seed: nil)
+        defer { surface.unlock(options: [], seed: nil) }
+        let clock = ContinuousClock()
+        let fastest =
+            (0..<5).map { _ in
+                clock.measure { FrameRingWriter.copy(pixels, width: width, height: height, into: surface) }
+            }.min() ?? .zero
+        #expect(fastest < .milliseconds(8), "\(fastest)")
+    }
+
     /// The copy forces each pixel's 4th byte to 255 and leaves the rest, as vImageOverwriteChannelsWithScalar did,
     /// on a surface whose rows are padded and on one whose rows are not.
     @Test(arguments: [(37, 5), (64, 3)]) func theCopyIsOpaqueAsVImageMadeIt(width: Int, height: Int) {
