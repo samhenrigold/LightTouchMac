@@ -160,6 +160,7 @@ public protocol GuestPackageHost: AnyObject {
                         logEvent(
                             "guest package: serial \(serial) judged bad (no healthy session in \(GuestPackage.badAfter))"
                         )
+                        AppReports.failed("Guest.packageBad", nil, ["serial": "\(serial)"])
                     case .legacy?: logEvent("guest package: no report; legacy baked guest tools")
                     default: break
                     }

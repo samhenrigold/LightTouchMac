@@ -336,7 +336,13 @@ extension MainWindowController {
         if let emulator = host.session(for: entry)?.emulator { return emulator.requestFactoryReset() }
         let erase = host.erase(instance)
         Task {
-            do { try await erase.value } catch { await NSAlert(error: error).beginSheetModal(for: window) }
+            do {
+                try await erase.value
+                Analytics.signal("Device.erased", ["board": instance.board])
+            } catch {
+                Analytics.failure("Device.eraseFailed", error, ["board": instance.board])
+                await NSAlert(error: error).beginSheetModal(for: window)
+            }
         }
     }
 

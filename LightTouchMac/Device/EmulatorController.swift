@@ -38,6 +38,10 @@ final class EmulatorController {
     /// When this boot powered on, and the processes whose crash reports it has logged (openSerialLog resets both).
     @ObservationIgnored var poweredOn = Date()
     @ObservationIgnored var crashesLogged: Set<String> = []
+    /// The app in front of the guest at the last look, and whether this boot's guest tools going quiet was reported
+    /// (openSerialLog resets it): for Analytics.
+    @ObservationIgnored var frontBundleID: String?
+    @ObservationIgnored var reportedToolsQuiet = false
     var isErasing = false { didSet { trackStartup(was: oldValue || state == .booting || preparingDevice) } }
     /// When the current startup (erase, boot, readiness) began: the toast's counter, per device, not per window.
     private(set) var startupBegan = Date()
@@ -134,7 +138,10 @@ final class EmulatorController {
         didSet { trackStartup(was: isErasing || oldValue == .booting || preparingDevice) }
     }
     /// The one way `state` changes (VMState.transition(to:): its table, and why erasing and stopping aren't states).
-    func transition(to next: VMState) { state.transition(to: next) }
+    func transition(to next: VMState) {
+        if next != state { Analytics.breadcrumb("\(profile.rawValue) \(next)") }
+        state.transition(to: next)
+    }
 
     /// Set by the inspector's poll: nil = never checked, true/false = last read.
     var deviceReachable: Bool? {
@@ -143,6 +150,7 @@ final class EmulatorController {
             if deviceReachable == true { recovery.servicesAnswered() }
             if deviceReachable == true, reachableSince == nil {
                 reachableSince = Date()
+                Analytics.signal("Device.booted", analyticsParameters, value: Date().timeIntervalSince(poweredOn))
                 startFileWatch()  // iOS is up: every file the helper depends on exists now
                 checkGuestMounts()
                 watchCrashReports()

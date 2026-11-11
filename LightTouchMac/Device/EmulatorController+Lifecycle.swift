@@ -10,7 +10,10 @@ import Observation
 extension EmulatorController {
     /// Why the helper died, for the row and the dead overlay.
     var deathReason: String? { bootWatch.deathReason }
-    func failBoot(_ error: Error) { bootWatch.failBoot(error) }
+    func failBoot(_ error: Error) {
+        Analytics.failure("Device.bootFailed", error, analyticsParameters)
+        bootWatch.failBoot(error)
+    }
     func startBootWatch() { bootWatch.start() }
     func abortBoot(_ reason: String) { bootWatch.abort(reason) }
 
@@ -54,6 +57,7 @@ extension EmulatorController {
         var exited = await process.waitForExit(timeout: ladder.budgets.halt)
         if !exited {
             logEvent("release: the device helper did not exit in \(Int(ladder.budgets.halt)) s; killing it")
+            Analytics.fault("Device.releaseTimedOut", analyticsParameters)
             process.kill()
             exited = await process.waitForExit(timeout: ladder.budgets.kill)
         }
@@ -143,7 +147,39 @@ extension EmulatorController {
 
     /// The helper is gone (QEMU returned, it crashed or was killed). Flip to
     /// `.dead`; the window shows a Restart overlay, and the other devices keep running.
-    func helperDied(_ reason: String) { bootWatch.helperDied(reason) }
+    func helperDied(_ reason: String) {
+        var parameters = analyticsParameters
+        parameters["exit"] = process?.exitStatus
+        if !halting, !shuttingDown, !state.isDead {
+            // an aborted boot (BootWatch.abort) has its reason already, and its helper stopped as asked
+            if let aborted = deathReason {
+                let recovery = aborted == BootWatch.recoveryReason(profile)
+                Analytics.failure(recovery ? "Device.recoveryMode" : "Device.bootTimedOut", nil, parameters)
+            } else if let death = process?.death, death != .stopped {
+                if case .startFailed(let error) = death { parameters["errorCode"] = "\((error as NSError).code)" }
+                Analytics.failure("Device.helperDied", nil, parameters)
+            }
+        } else if !state.isDead {
+            // how long devices run, and on what
+            Analytics.signal("Device.stopped", parameters, value: Date().timeIntervalSince(poweredOn))
+        }
+        bootWatch.helperDied(reason)
+    }
+
+    /// What every device signal carries: its firmware (board, iOS version and build), how it was prepared, its guest
+    /// tools and the app in front, nothing of the device's own.
+    var analyticsParameters: [String: String] {
+        var parameters = ["board": profile.rawValue, "iosVersion": iosVersion, "firmware": instance.firmware]
+        if let lock {
+            parameters["jailbreak"] = "\(lock.jailbroken)"
+            parameters["skipSetup"] = "\(lock.skippedSetup)"
+            parameters["recipe"] = lock.recipeVersion.map(String.init)
+        }
+        parameters["guestTools"] = guestOffer.map { "\($0.serial)" }
+        parameters["network"] = "\(network)"
+        parameters["frontApp"] = frontBundleID
+        return parameters
+    }
 
     func releaseBootResources() {
         fileWatch = nil

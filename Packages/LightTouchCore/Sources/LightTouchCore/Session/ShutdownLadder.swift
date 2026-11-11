@@ -152,6 +152,7 @@ public enum ShutdownOutcome: Equatable {
             var exited = await process?.waitForExit(timeout: budgets.halt) ?? true
             if !exited {
                 logEvent("stop: the device helper did not exit in \(Int(budgets.halt)) s; killing it")
+                AppReports.failed("Device.haltTimedOut")
                 process?.kill()
                 exited = await process?.waitForExit(timeout: budgets.kill) ?? true
             }

@@ -77,6 +77,7 @@ public final class WorkerRetirement {
         signal.finish()
         if !finished {
             logEvent("stop: the services worker did not finish in \(Int(budget)) s; it is reaped in the background")
+            AppReports.failed("Services.workerStuck")
         }
         return finished
     }

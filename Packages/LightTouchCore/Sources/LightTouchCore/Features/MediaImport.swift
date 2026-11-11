@@ -32,6 +32,7 @@ public struct MediaImport: Sendable {
         } catch let error as GuestAgentError {
             // The helper refused (its reason is in app.log through failureText); the row gets plain words.
             logEvent("media: \(error)")
+            AppReports.failed("Media.commitFailed", error, ["destination": media.destination])
             throw DeviceToolsError.failed("\(media.destination) couldn’t add “\(media.title)”.")
         }
     }

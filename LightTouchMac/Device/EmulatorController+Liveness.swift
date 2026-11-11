@@ -60,6 +60,11 @@ extension EmulatorController {
                 agentStatus = status.agentStatus
             }
             if status.agentStatus == 2 { agentStaleSince = agentStaleSince ?? now } else { agentStaleSince = nil }
+            // the guest froze, or its tools did (issues 83, 123): once a boot
+            if case .notResponding = guestToolsState, !reportedToolsQuiet {
+                reportedToolsQuiet = true
+                Analytics.fault("Guest.toolsNotResponding", analyticsParameters)
+            }
         }
         if !poweringOn, status.shutdownConfirmed, !isDead, !isPoweredOff { endBoot(.guestPoweredOff) }
         if state == .running, !preparingDevice, !shuttingDown {
@@ -72,6 +77,9 @@ extension EmulatorController {
             reportedStorageFailure = true
             withMutation(keyPath: \.storageFailed) {}
             reportDeviceNotice(statusLine, for: .storage)
+            // the helper couldn't write the device's NAND or NOR
+            Analytics.fault(
+                "Device.storageFailed", analyticsParameters.merging(["freeSpace": Analytics.freeSpace]) { $1 })
         }
     }
 

@@ -23,6 +23,7 @@ extension EmulatorController {
             return
         }
         started = true
+        Analytics.signal("Device.started", analyticsParameters)
         transition(to: .booting)
         notices.helperStarted()  // the last boot's notices end; a fresh helper opens the files as they are now
         let process = DeviceProcess(
@@ -83,7 +84,10 @@ extension EmulatorController {
                     log: self.instance.paths.logs.appendingPathComponent("firmwarekit.log")
                 )
                 // a storage update that couldn't run (no room, or it failed): the device starts as before
-                if let notice = admitted.report.notice { self.reportDeviceNotice(notice, for: .storageUpdate) }
+                if let notice = admitted.report.notice {
+                    self.reportDeviceNotice(notice, for: .storageUpdate)
+                    Analytics.failure("Device.storageUpdateSkipped", nil, self.analyticsParameters)
+                }
                 self.instance = admitted.instance
                 self.admittedStorage = admitted.proof
                 self.onStorageGenerationChanged?()
@@ -224,6 +228,7 @@ extension EmulatorController {
         guestFaultsSeen = []
         poweredOn = Date()
         crashesLogged = []
+        reportedToolsQuiet = false
         do {
             serialCapture = try SerialLogCapture(
                 url: instance.paths.logs.appendingPathComponent("serial.log"),
@@ -242,6 +247,7 @@ extension EmulatorController {
                         self.guestFaultsSeen.insert(phrase)
                         if let meaning = GuestFaults.phrases[phrase] {
                             logEvent("guest: \(self.instance.name): error: \(meaning) (Device Console: “\(phrase)”)")
+                            Analytics.fault("Guest.fault", self.analyticsParameters.merging(["fault": phrase]) { $1 })
                         }
                     default: self.noteBoot(.serial(phrase))
                     }
@@ -254,6 +260,7 @@ extension EmulatorController {
     func checkGuestMounts() {
         if let fault = GuestFaults.dataVolumeFault(seen: guestFaultsSeen, dataVolume: lock?.hasDataVolume == true) {
             logEvent("guest: \(instance.name): error: \(fault)")
+            Analytics.fault("Guest.dataVolumeMissing", analyticsParameters)
         }
     }
 
@@ -276,6 +283,7 @@ extension EmulatorController {
         for process in GuestFaults.crashedProcesses(ages: ages, uptime: uptime)
         where crashesLogged.insert(process).inserted {
             logEvent("guest: \(instance.name): error: \(process) crashed (the device wrote a crash report for it)")
+            Analytics.fault("Guest.processCrashed", analyticsParameters.merging(["process": process]) { $1 })
         }
     }
 
@@ -298,6 +306,7 @@ extension EmulatorController {
         filesMeddled = true
         fileWatch = nil
         logEvent("files: \(path) changed under the running device; Stop will quit without a flush")
+        Analytics.fault("Device.filesChanged", analyticsParameters)
         reportDeviceNotice(DeviceFileWatch.notice(shortName: profile.shortName), for: .files)
     }
 }

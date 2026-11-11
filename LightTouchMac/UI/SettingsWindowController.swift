@@ -126,6 +126,7 @@ struct GeneralSettingsView: View {
     @AppStorage(ANGLERenderer.key) private var angle = false
     @AppStorage(FirmwareJobs.withoutMountingKey) private var withoutMounting = false
     @AppStorage(ClipboardSync.key) private var shareClipboard = true
+    @AppStorage(Analytics.key) private var shareReports = true
 
     var body: some View {
         Form {
@@ -149,6 +150,10 @@ struct GeneralSettingsView: View {
                 Text(
                     "Edits a new device’s disk images directly instead of mounting them in macOS, groundwork for other platforms. May be slower, or fail on some versions."
                 )
+            }
+            Toggle(isOn: $shareReports) {
+                Text("Share anonymous usage and error reports")
+                Text("Which devices start and what fails, sent to TelemetryDeck. Nothing identifies you or this Mac.")
             }
         }
     }

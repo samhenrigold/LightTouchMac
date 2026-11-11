@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Light Touch ▸ Check for Updates… and Sparkle's scheduled checks.
     let updaterController = SPUStandardUpdaterController(
         startingUpdater: true,
-        updaterDelegate: nil,
+        updaterDelegate: Analytics.updates,
         userDriverDelegate: nil
     )
     private let quitting = QuitCoordinator(budget: EmulatorController.stopBudget, retry: AppDelegate.requestTermination)
@@ -168,12 +168,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Analytics.launch()
         do { try Bundled.requireStorage() } catch {
             let alert = NSAlert()
             if (error as? CocoaError)?.code == .fileLocking {
                 alert.messageText = Bundled.appLockMessage
                 alert.informativeText = "Quit the other copy first."
             } else {
+                Analytics.failure("App.storageUnavailable", error)
                 alert.alertStyle = .critical
                 alert.messageText = "Couldn’t open device storage"
                 alert.informativeText = error.localizedDescription
@@ -188,7 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             logEvent("logging: native output capture unavailable: \(error.localizedDescription)")
         }
         // This copy holds the library: the marks of the steps a crash interrupted are its own to read.
-        CrashGuard.launch()
+        for step in CrashGuard.launch() { Analytics.lastRunDied(in: step) }
         // State from before devices were prepared from IPSWs: erased once, or the app quits. The erase
         // runs off the main actor behind a progress window; a launch after a quit midway resumes without asking.
         if let legacy = LegacyState.find(
@@ -243,6 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// The rest of the launch, once no legacy state is left.
     private func finishLaunching() {
+        warnIfIncomplete()
         // The network question belongs to the device being started (DeviceSessionHost.start), not to the app.
         let host = DeviceSessionHost()
         Self.sweepStorage()
@@ -264,11 +267,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         ClipboardSharing.shared.emulators = { [weak self] in self?.emulators ?? [] }
         ClipboardSharing.shared.start()
         controller.selectLaunchDevice()
+        Analytics.libraryOpened(host.library.instances)
         dockProgress.start()
         if !pendingOpen.isEmpty {
             controller.open(pendingOpen)
             pendingOpen = []
         }
+    }
+
+    /// A copy missing a part it ships (a partial copy, something quarantined, a Debug build without the checkout's
+    /// usbmuxd) loses app management or the guest tools without a word, so say so before a device starts, until
+    /// "don't show" is checked for that same set of missing parts.
+    private func warnIfIncomplete() {
+        var missing: [String] = []
+        if !FileManager.default.isExecutableFile(atPath: USBMux.binary) { missing.append("usbmuxd") }
+        if Bundled.resource("Guest/guest.aar") == nil { missing.append("guest.aar") }
+        guard !missing.isEmpty else { return }
+        let names = missing.joined(separator: " ")
+        Analytics.failure("App.componentsMissing", nil, ["missing": names])
+        let ignoredKey = "ignoredMissingComponents"
+        guard UserDefaults.standard.string(forKey: ignoredKey) != names else { return }
+        let alert = NSAlert()
+        alert.messageText = "Some of Light Touch’s files are missing"
+        alert.informativeText =
+            "Installing apps and transferring files won’t work until you download Light Touch again."
+        alert.addButton(withTitle: "Download Light Touch")
+        alert.addButton(withTitle: "Continue")
+        alert.showsSuppressionButton = true
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(URL(string: "https://samhenri.gold/lighttouch/")!)
+        }
+        if alert.suppressionButton?.state == .on { UserDefaults.standard.set(names, forKey: ignoredKey) }
     }
 
     /// Development runs: LTM_DEV_BASE names a `firmwarekit create` output directory to run as a

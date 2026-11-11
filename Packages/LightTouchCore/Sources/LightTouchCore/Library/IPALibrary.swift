@@ -107,6 +107,7 @@ public enum IPALibrary {
             try PropertyListFile.write(index, to: indexURL)
         } catch {
             logEvent("library: could not write the index: %@", error.localizedDescription)
+            AppReports.failed("Library.writeFailed", error, ["what": "index"])
         }
     }
 
@@ -164,6 +165,7 @@ public enum IPALibrary {
             record(try await store(ipa, cloneTo: file(id, device: device)), metadata)
         } catch {
             logEvent("library: could not preserve IPA for %@: %@", id, error.localizedDescription)
+            AppReports.failed("Library.writeFailed", error, ["what": "preserve"])
         }
     }
 
@@ -277,6 +279,7 @@ public enum IPALibrary {
                 stored += 1
             } catch {
                 logEvent("library: could not store \(name) from \(directory.path): \(error.localizedDescription)")
+                AppReports.failed("Library.writeFailed", error, ["what": "store"])
                 missed.append(copy)
             }
         }

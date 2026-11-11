@@ -60,7 +60,7 @@ import System
     /// The fork ships in the bundle; a dev build falls back to the checkout
     /// (see qemu-ios' usbmuxd-qemu). LTM_USBMUXD names another build for a Debug
     /// run. A Release build runs only the bundled one.
-    private static var binary: String {
+    public static var binary: String {
         #if DEBUG
             if let override = ProcessInfo.processInfo.environment["LTM_USBMUXD"] { return override }
             return Bundled.tool("usbmuxd") ?? "\(NSHomeDirectory())/Developer/usbmuxd-qemu/usbmuxd/src/usbmuxd"
@@ -118,6 +118,7 @@ import System
         let binary = binaryOverride ?? Self.binary
         guard FileManager.default.isExecutableFile(atPath: binary) else {
             logEvent("usbmux: no binary at \(binary); app management disabled")
+            AppReports.failed("Services.usbmuxdMissing")
             return nil
         }
 
@@ -231,7 +232,10 @@ import System
                     }
                 }
             } catch {
-                if !Task.isCancelled { logEvent("usbmux: could not run daemon: \(error.localizedDescription)") }
+                if !Task.isCancelled {
+                    logEvent("usbmux: could not run daemon: \(error.localizedDescription)")
+                    AppReports.failed("Services.usbmuxdFailed", error)
+                }
             }
             // Distinguish an orderly stop() from an unexpected death: on the
             // latter the task was never cancelled.
@@ -250,10 +254,12 @@ import System
         if restarts < Self.restartLimit {
             restarts += 1
             logEvent("usbmux: daemon exited unexpectedly; starting it again (\(restarts) of \(Self.restartLimit))")
+            AppReports.failed("Services.usbmuxdExited", nil, ["restarts": "\(restarts)"])
             launch(session, paths: launched.paths)
             return
         }
         logEvent("usbmux: daemon exited unexpectedly; app management disabled")
+        AppReports.failed("Services.usbmuxdGaveUp")
         self.session = nil
         onUnexpectedExit?()
     }

@@ -268,6 +268,19 @@
       "checksum_source": "SHA-256 calculated from this GitHub archive on 2026-10-13. The app pins it exact through Xcode; SwiftPM fetches its signed binary framework. Light Touch > Check for Updates... and the scheduled update checks go through it."
     },
     {
+      "name": "SwiftSDK",
+      "version": "2.14.2",
+      "groups": [
+        "swiftpm"
+      ],
+      "archive": "SwiftSDK-2.14.2.tar.gz",
+      "directory": "SwiftSDK-2.14.2",
+      "url": "https://github.com/TelemetryDeck/SwiftSDK/archive/refs/tags/2.14.2.tar.gz",
+      "sha256": "a64e8cc95c9963a9e1630dd3962d09c127edb600e60816853161a5896eb65614",
+      "license": "MIT",
+      "checksum_source": "SHA-256 calculated from this GitHub archive on 2026-11-10. The app pins it exact through Xcode (its TelemetryDeck product; no dependencies of its own). Settings > General > Share anonymous usage and error reports sends through it."
+    },
+    {
       "name": "Unrar.swift",
       "version": "0.5.4",
       "groups": [

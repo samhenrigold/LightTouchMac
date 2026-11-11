@@ -40,6 +40,7 @@
 		A1D0C0DE36000000000000003 = {isa = PBXBuildFile; productRef = A1D0C0DE36000000000000002; };
 		A1D0C0DE37000000000000003 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE37000000000000002; };
 		A1D0C0DE3D000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3D000000000000002; };
+		A1D0C0DE40000000000000003 /* TelemetryDeck in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE40000000000000002; };
 		A1D0C0DE36000000000000004 = {isa = PBXBuildFile; productRef = A1D0C0DE36000000000000002; };
 /* End PBXBuildFile section */
 
@@ -178,6 +179,7 @@
 				EA17D84D3023A55900BDF83E /* Subprocess in Frameworks */,
 				A1D0C0DE37000000000000003 /* ZIPFoundation in Frameworks */,
 				A1D0C0DE3D000000000000003 /* Sparkle in Frameworks */,
+				A1D0C0DE40000000000000003 /* TelemetryDeck in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -309,6 +311,7 @@
 				EA17D84C3023A55900BDF83E /* Subprocess */,
 				A1D0C0DE37000000000000002 /* ZIPFoundation */,
 				A1D0C0DE3D000000000000002 /* Sparkle */,
+				A1D0C0DE40000000000000002 /* TelemetryDeck */,
 			);
 			productName = LightTouchMac;
 			productReference = EA17D83230239D9B00BDF83E /* Light Touch.app */;
@@ -354,6 +357,7 @@
 				EA17D84B3023A55900BDF83E /* XCRemoteSwiftPackageReference "swift-subprocess" */,
 				A1D0C0DE37000000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				A1D0C0DE3D000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				A1D0C0DE40000000000000001 /* XCRemoteSwiftPackageReference "SwiftSDK" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = EA17D83330239D9B00BDF83E /* Products */;
@@ -552,6 +556,14 @@
 				version = 2.10.0;
 			};
 		};
+		A1D0C0DE40000000000000001 /* XCRemoteSwiftPackageReference "SwiftSDK" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/TelemetryDeck/SwiftSDK";
+			requirement = {
+				kind = exactVersion;
+				version = 2.14.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -589,6 +601,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A1D0C0DE3D000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		A1D0C0DE40000000000000002 /* TelemetryDeck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1D0C0DE40000000000000001 /* XCRemoteSwiftPackageReference "SwiftSDK" */;
+			productName = TelemetryDeck;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

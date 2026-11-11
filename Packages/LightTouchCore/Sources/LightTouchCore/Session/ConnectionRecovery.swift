@@ -57,6 +57,8 @@ public protocol ConnectionHost: AnyObject {
         if self.issue?.persistent == true, !issue.persistent { return }
         if self.issue != issue {
             logEvent("device connection: \(issue.detail); agent=\(host.liveAgentStatus)")
+            AppReports.failed(
+                "Services.connectionLost", error, ["issue": issue.summary, "board": host.profile.rawValue])
         }
         self.issue = issue
         if issue.blocksCommands {
@@ -125,12 +127,16 @@ public protocol ConnectionHost: AnyObject {
                 if host.guestAgentAlive {
                     try await host.reconnectManagement()
                     logEvent("device: restarted unresponsive management service; reconnecting")
+                    AppReports.failed("Services.restarted", nil, ["board": host.profile.rawValue])
                     try await Task.sleep(for: settle)
                     guard !Task.isCancelled, generation == host.bootScope.generation, host.isRunning else { return }
                     host.appsMayHaveChanged()
                 }
             } catch {
-                if !Task.isCancelled { logEvent("device: connection recovery failed: \(error.localizedDescription)") }
+                if !Task.isCancelled {
+                    logEvent("device: connection recovery failed: \(error.localizedDescription)")
+                    AppReports.failed("Services.recoveryFailed", error, ["board": host.profile.rawValue])
+                }
             }
         }
     }

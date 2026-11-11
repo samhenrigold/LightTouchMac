@@ -120,6 +120,7 @@ public final class DeviceErase {
             do {
                 try await Task.detached { try targets.remove() }.value
                 Self.erased(host.notices)
+                AppReports.used("Device.erased", ["board": host.profile.rawValue])
                 host.isErasing = false
                 if host.started {
                     logEvent("reset: device erased; starting it fresh")
@@ -129,6 +130,7 @@ public final class DeviceErase {
                 }
             } catch {
                 host.isErasing = false
+                AppReports.failed("Device.eraseFailed", error, ["board": host.profile.rawValue])
                 host.notices.report(
                     "Couldn’t finish erasing the \(host.profile.shortName): \(error.localizedDescription)",
                     for: .erase

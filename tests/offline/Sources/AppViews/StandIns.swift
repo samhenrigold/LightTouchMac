@@ -7,9 +7,10 @@ import HostServiceWire
 // late, which records uploads and writes downloads.
 import LightTouchCore
 
-/// Settings ▸ Storage listens for the sessions changing; Settings ▸ General keeps the vibration sound's switch.
+/// Settings ▸ Storage listens for the sessions changing; Settings ▸ General keeps the vibration sound's and the reports' switches.
 enum DeviceSessionHost { static let didChangeNotification = Notification.Name("DeviceSessionHostDidChange") }
 enum VibrationSound { static let key = "PlayVibrationSound" }
+enum Analytics { static let key = "shareUsageReports" }
 
 final class EmulatorController {
     struct Instance { let name = "iPhone" }

@@ -51,6 +51,7 @@ public struct WebProxySetup: Sendable {
                 ) as Data
         } catch {
             logEvent("proxy: certificate preparation failed: \(error)")
+            AppReports.failed("Network.proxyCertificateFailed", error)
             throw DeviceToolsError.failed("Couldn’t prepare the proxy certificate.")
         }
         if let stopped = stoppedTrust {
@@ -65,6 +66,7 @@ public struct WebProxySetup: Sendable {
                 return .ready
             } catch is CancellationError { throw CancellationError() } catch {
                 logEvent("proxy: agent trust failed, offering the profile instead: \(error.localizedDescription)")
+                AppReports.failed("Network.proxyTrustFailed", error)
             }
         }
         return try await services.offerProfile(proxyFile + ".ca.der") ? .needsTap : .ready

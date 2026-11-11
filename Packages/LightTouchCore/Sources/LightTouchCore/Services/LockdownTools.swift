@@ -121,6 +121,7 @@ extension DeviceServices {
         let offered = try await Self.lockdownChild(tool, ["lockdown-mcinstall", certificate], socket: clientSocket)
         guard offered.status == 0 else {
             logEvent("proxy: offering the certificate profile failed: \(offered.error)")
+            AppReports.failed("Network.proxyProfileFailed")
             throw DeviceToolsError.failed("Couldn’t offer the proxy certificate to the device.")
         }
         logEvent("proxy: no guest agent; certificate profile offered, confirm Install on the device")

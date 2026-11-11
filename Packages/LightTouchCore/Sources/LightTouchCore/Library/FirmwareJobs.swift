@@ -21,6 +21,8 @@ import HostRuntime
     public static let didChangeNotification = Notification.Name("FirmwareJobsDidChange")
     /// Posted on the main actor when a preparation becomes a device; `object` is its catalog entry id.
     public static let didPublishNotification = Notification.Name("FirmwareJobsDidPublish")
+    /// Each preparation's step under way, for its failure's report.
+    private var steps: [String: String] = [:]
 
     /// What each entry's row shows.
     public var jobs: [String: FirmwareJob] { table.shown }
@@ -365,7 +367,9 @@ import HostRuntime
             let name = entry(sha1: sha1)?.id ?? sha1
             switch event {
             case .finished: logEvent("firmware: downloaded \(name)")
-            case .failed(let error): logEvent("firmware: download of \(name) failed: \(error.localizedDescription)")
+            case .failed(let error):
+                logEvent("firmware: download of \(name) failed: \(error.localizedDescription)")
+                AppReports.failed("Firmware.downloadFailed", error, ["firmware": name])
             case .cancelled: logEvent("firmware: download of \(name) cancelled and discarded")
             case .progress, .mirror, .resumed: break
             }
@@ -374,18 +378,27 @@ import HostRuntime
         case .preparation(let id, let job, let event):
             let effects = table.preparation(id, job, event, now: now)
             switch event {
-            case .begin, .step, .progress: break
+            case .step(_, _, let name): steps[id] = name
+            case .begin, .progress: break
             case .warning(let message): logEvent("firmware: \(id): \(message)")
             case .published(let instance):
                 preparations[job] = nil
+                steps[id] = nil
                 logEvent("firmware: \(id) is device \(instance.id.uuidString)")
+                AppReports.used("Firmware.prepared", ["firmware": id])
                 library.reload()
                 NotificationCenter.default.post(name: Self.didPublishNotification, object: id)
             case .failed(let message):
                 preparations[job] = nil
                 logEvent("firmware: \(id): \(message)")
+                AppReports.failed(
+                    "Firmware.preparationFailed",
+                    nil,
+                    ["firmware": id, "step": steps.removeValue(forKey: id) ?? "starting"]
+                )
             case .cancelled:
                 preparations[job] = nil
+                steps[id] = nil
                 logEvent("firmware: preparation of \(id) cancelled")
             }
             run(effects)
@@ -401,6 +414,7 @@ import HostRuntime
             case .failure(let error):
                 guard !(error is CancellationError) else { return logEvent("firmware: import cancelled") }
                 logEvent("firmware: import: \(error.localizedDescription)")
+                AppReports.failed("Firmware.importFailed", error, ["firmware": id ?? ""])
                 if let id {
                     _ = table.importFailed(token, onto: id, error.localizedDescription)
                 } else {

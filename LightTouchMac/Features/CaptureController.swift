@@ -74,11 +74,14 @@ import UniformTypeIdentifiers
             guard let self else { return }
             switch result {
             case .saved(let url):
+                Analytics.signal("Capture.recorded")
                 if capturePreferences.openFinderAfterCapture { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             case .failed(let kept?):
+                Analytics.failure("Capture.recordingFailed", recording.failure)
                 // The unsaved take, beside the alert saying why.
                 NSWorkspace.shared.activateFileViewerSelecting([kept])
-            case .discarded, .failed: break
+            case .failed: Analytics.failure("Capture.recordingFailed", recording.failure)
+            case .discarded: break
             }
         }
         recording.onFinished = { [weak self] success in
@@ -114,6 +117,7 @@ import UniformTypeIdentifiers
     private enum ScreenshotAction { case copy, save, saveAs, open }
     private func takeScreenshot(_ action: ScreenshotAction) {
         guard canTakeScreenshot, let window else { return }
+        Analytics.signal("Capture.screenshot", ["action": "\(action)"])
         screenshotBusy = true
         onChange()
         Task { [weak self] in

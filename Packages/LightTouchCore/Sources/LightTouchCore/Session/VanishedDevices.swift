@@ -39,6 +39,7 @@ public final class VanishedDevices {
             let id = session.instance.id
             guard stopping.insert(id).inserted else { continue }
             logEvent("library: \(session.instance.name)'s folder left Devices; stopping it")
+            AppReports.failed("Library.deviceVanished")
             let halt = session.ladder.halt()
             Task {
                 _ = await halt.value
