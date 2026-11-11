@@ -1728,19 +1728,44 @@ nonisolated enum CydiaSources {
     guard installed != nil else { return emit("substrate", event) }
     let file = d.dir.appendingPathComponent("substrate-syslog.txt")
     FileManager.default.createFile(atPath: file.path, contents: nil)
-    let syslog = Process()
-    syslog.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    syslog.arguments = ["idevicesyslog", "--no-colors"]
-    syslog.environment = ProcessInfo.processInfo.environment.merging(
-        ["USBMUXD_SOCKET_ADDRESS": d.mux.clientSocket]
-    ) { $1 }
-    syslog.standardOutput = FileHandle(forWritingAtPath: file.path)
-    syslog.standardError = FileHandle.nullDevice
+    var syslog: Process?
+    func relay() throws {
+        syslog?.terminate()
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        p.arguments = ["idevicesyslog", "--no-colors"]
+        p.environment = ProcessInfo.processInfo.environment.merging(["USBMUXD_SOCKET_ADDRESS": d.mux.clientSocket]) {
+            $1
+        }
+        p.standardOutput = FileHandle(fileDescriptor: open(file.path, O_WRONLY | O_APPEND), closeOnDealloc: true)
+        p.standardError = FileHandle.nullDevice
+        try p.run()
+        syslog = p
+    }
+    /// The guest's log lines the relay wrote ("… SpringBoard[42] <Notice>: …"), not its banner or connection notes.
+    func delivered() -> Int {
+        ((try? String(contentsOf: file, encoding: .utf8)) ?? "").split(separator: "\n").filter {
+            $0.contains(#/\[\d+\] </#)
+        }.count
+    }
+    /// launchd restarts SpringBoard: until the agent's frontmost is it again, then until the relay has its lines.
+    func respring() async -> Bool {
+        _ = try? await agent.spawn(["/usr/bin/killall", "SpringBoard"])
+        var back = false
+        for _ in 0..<30 where !back {
+            try? await Task.sleep(for: .seconds(2))
+            back = (try? await agent.frontmost())?.bundleID == "com.apple.springboard"
+        }
+        for _ in 0..<10 where delivered() == 0 { try? await Task.sleep(for: .seconds(1)) }
+        return back
+    }
     do {
-        try syslog.run()
+        try relay()
         try await Task.sleep(for: .seconds(1))
         // Through env, a missing tool isn't a run() failure: it reads as Substrate never loading.
-        if !syslog.isRunning { event["error"] = "no idevicesyslog on PATH (the vendor directory's work/*/prefix/bin)" }
+        if syslog?.isRunning != true {
+            event["error"] = "no idevicesyslog on PATH (the vendor directory's work/*/prefix/bin)"
+        }
         try await agent.put(
             probe[0],
             mode: 0o644,
@@ -1752,13 +1777,17 @@ nonisolated enum CydiaSources {
         event["extensions"] = String(decoding: try await agent.spawn(["/bin/ls", dir]), as: UTF8.self)
             .split(separator: "\n").map(String.init)
         try await Task.sleep(for: .seconds(3))
-        try await agent.spawn(["/usr/bin/killall", "SpringBoard"])
     } catch { event["error"] = "\(error)" }
-    var back = false
-    for _ in 0..<30 where !back {
-        try? await Task.sleep(for: .seconds(2))
-        back = (try? await agent.frontmost())?.bundleID == "com.apple.springboard"
+    var back = await respring()
+    // A relay can connect, print syslogd's banner and deliver nothing after it (a loaded host): that reads as
+    // Substrate never loading, so it is started again and SpringBoard restarted once more, the probe still in place.
+    if delivered() == 0, syslog?.isRunning == true {
+        event["relayRestarted"] = true
+        try? relay()
+        try? await Task.sleep(for: .seconds(1))
+        back = await respring()
     }
+    event["relayLines"] = delivered()
     for path in probe { try? await agent.unlink(path) }
     try? await Task.sleep(for: .seconds(5))
     await d.slideToUnlock(9, agent: agent)
@@ -1770,7 +1799,7 @@ nonisolated enum CydiaSources {
     try? await Task.sleep(for: .milliseconds(150))
     d.process.link.send(.button(0, down: false))
     try? await Task.sleep(for: .seconds(3))
-    syslog.terminate()
+    syslog?.terminate()
     let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
     let lines = { (process: String) in text.split(separator: "\n").filter { $0.contains(" \(process)[") } }
     let loaded = { (process: String) in

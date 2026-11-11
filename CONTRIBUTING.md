@@ -193,7 +193,7 @@ swift run --package-path tests/sessions sessions affected main [--run] [--bases 
 # and prints every change, and the commit that re-records says why each changed path changed
 swift run --package-path tests/sessions sessions listings [ROW …] [--record]
 # snapshot resume (an n72ap base): Home saved after a cold boot, booted again from it; not yet a way to skip boots,
-# since a resumed guest takes no taps
+# since a resumed guest's screen stops following it (a tap opens Settings, the screen keeps the Home screen it saved)
 swift run --package-path tests/sessions sessions resume N72_BASE
 # as a device the user already has, through the app's boot admission; an old device must take its admission steps
 # (the old devices in ~/Developer/qemu-ios-files/old-devices: tests/sessions/Sources/sessions/Managed.swift)
