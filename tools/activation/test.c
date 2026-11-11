@@ -77,7 +77,7 @@ static void save(const char *p, const uint8_t *d, size_t n) {
     assert(!fclose(f));
     assert(!chmod(p, 0751));
 }
-static int runx(const char *p, bool probe, bool experimental) {
+static int runx(const char *p, bool probe, bool experimental, bool a6) {
     pid_t pid = fork();
     assert(pid >= 0);
     if (!pid) {
@@ -85,12 +85,14 @@ static int runx(const char *p, bool probe, bool experimental) {
         dup2(f, 1);
         dup2(f, 2);
         close(f);
-        char *a[] = {"lt-activation", NULL, NULL, NULL, NULL};
+        char *a[] = {"lt-activation", NULL, NULL, NULL, NULL, NULL};
         int n = 1;
         if (probe)
             a[n++] = "--probe";
         if (experimental)
             a[n++] = "--experimental-legacy";
+        if (a6)
+            a[n++] = "--a6";
         a[n++] = (char *)p;
         exit(activation_main(n, a));
     }
@@ -99,7 +101,9 @@ static int runx(const char *p, bool probe, bool experimental) {
     assert(WIFEXITED(status));
     return WEXITSTATUS(status);
 }
-static int run(const char *p, bool probe) { return runx(p, probe, false); }
+static int run(const char *p, bool probe) { return runx(p, probe, false, false); }
+/* the iPhone 5's forms (lt_activate_report's a6) */
+static int runa6(const char *p, bool probe) { return runx(p, probe, false, true); }
 static void same(const char *p, const uint8_t *d, size_t n) {
     uint8_t got[2048];
     FILE *f = fopen(p, "rb");
@@ -198,29 +202,33 @@ int main(void) {
         put32(d + 0x60c, 15);
         memcpy(d + 0x620, "ShouldHactivate", 16);
         save(p, d, sizeof d);
-        assert(!run(p, true));
+        /* Every other board's lockdownd is matched as recorded: without --a6 the answer is not a path. */
+        assert(run(p, true));
+        assert(run(p, false));
         same(p, d, sizeof d);
-        assert(!run(p, false));
+        assert(!runa6(p, true));
+        same(p, d, sizeof d);
+        assert(!runa6(p, false));
         put16(d + at + 18, 0x2201);
         same(p, d, sizeof d);
-        assert(run(p, false));
+        assert(runa6(p, false));
         same(p, d, sizeof d);
         put16(d + at + 18, 0x4602);
         d[0x620] = 'X';
         save(p, d, sizeof d);
-        assert(run(p, true));
+        assert(runa6(p, true));
         same(p, d, sizeof d);
         d[0x620] = 'S';
         unsigned store = at + (schedule ? 38 : 40);
         put16(d + store, 0x73e1);
         save(p, d, sizeof d);
-        assert(run(p, true));
+        assert(runa6(p, true));
         same(p, d, sizeof d);
         put16(d + store, 0x73ea);
         memcpy(d + 0x280, d + at, 42);
         movwide(d + 0x282, 0, 0x1600 - (0x1280 + 16), false);
         save(p, d, sizeof d);
-        assert(run(p, true));
+        assert(runa6(p, true));
         same(p, d, sizeof d);
     }
     for (int isa = 0; isa < 3; isa++) {
@@ -273,7 +281,7 @@ int main(void) {
         put32(d + 0x200, 0xe59f208c);
         put32(d + 0x20c, kind ? 0xe3a06000 : 0xe3a04000);
         same(p, d, sizeof(d));
-        assert(runx(p, false, true));
+        assert(runx(p, false, true, false));
         same(p, d, sizeof(d));
     }
     // Early 1.x stores the state and brick boolean directly in distinct slots.

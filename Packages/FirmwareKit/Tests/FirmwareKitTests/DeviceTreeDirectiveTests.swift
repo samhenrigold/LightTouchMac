@@ -79,4 +79,22 @@ struct DeviceTreeDirectiveTests {
         let tree = try DeviceTree(image.image[offset..<offset + length])
         #expect(tree.value("chosen", "large-calibration") == Data(count: 0x4000))
     }
+    /// Every board but the iPhone 5 keeps its tree as recorded: 9B208's (iPhone 4) zero-length content-protect has the
+    /// directive bit set, which resolveBootDirectives refuses, so KBoot resolves directives on the iPhone 5 only.
+    @Test func kbootResolvesDirectivesOnTheIPhone5Only() throws {
+        var source = try DeviceTree(KBootTests.dtBlob)
+        try source.add("chosen", "content-protect", Data())
+        let slot = source.props["chosen"]!["content-protect"]!
+        var bytes = source.data
+        bytes.replaceSubrange(slot.offset + 32..<slot.offset + 36, with: DeviceTree.Value.le([0x8000_0000]))
+        var flagged = try DeviceTree(bytes)
+        #expect(throws: FirmwareError.self) { try flagged.resolveBootDirectives(syscfg: [:], macAddresses: [:]) }
+        let image = try KBoot.build(
+            kernel: KBootTests.kernel(at: KBoot.physBase), deviceTree: bytes, identity: KBootTests.placeholder)
+        let args = Int(image.bootArgsPA - image.loadPA)
+        let offset = Int(KBootTests.u32(image.image, args + 0x30) - image.loadPA)
+        let length = Int(KBootTests.u32(image.image, args + 0x34))
+        let tree = try DeviceTree(image.image[offset..<offset + length])
+        #expect(tree.props["chosen"]?["content-protect"]?.length == 0)
+    }
 }

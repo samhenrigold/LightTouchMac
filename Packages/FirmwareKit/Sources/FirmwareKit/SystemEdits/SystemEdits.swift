@@ -361,7 +361,7 @@ public enum SystemEdits {
             }
             if !o.bluetooth { try rewritePlist(v, btJob) { $0["Disabled"] = true } }
             do {
-                result.activation = try activate(v, log: log)
+                result.activation = try activate(v, a6: firmwareArch == "armv7s", log: log)
             } catch let e as ActivationFailure {
                 let build =
                     v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"] as? String
@@ -419,6 +419,7 @@ public enum SystemEdits {
             o,
             productMajor: productMajor,
             productVersion: productVersion,
+            a6: firmwareArch == "armv7s",
             dataArk: result.activation?.dataArk,
             keyboards: keyboards,
             formats: formats,
@@ -637,10 +638,10 @@ public enum SystemEdits {
         }
     }
 
-    /// lockdownd activated in place (Activation); the caller makes it root-owned.
-    static func activate(_ v: any VolumeFiles, log: (String) -> Void) throws -> Activation.Result {
+    /// lockdownd activated in place (Activation); the caller makes it root-owned. `a6`: the iPhone 5's forms too.
+    static func activate(_ v: any VolumeFiles, a6: Bool = false, log: (String) -> Void) throws -> Activation.Result {
         log("Activating device")
-        return try Activation.run(on: v, lockdownd)
+        return try Activation.run(on: v, lockdownd, a6: a6)
     }
 
     /// The guest-package loader and the arch's seed package (GuestPackage.seed of <arch>.itpack).
@@ -793,6 +794,7 @@ public enum SystemEdits {
         _ o: Options,
         productMajor: Int,
         productVersion: String? = nil,
+        a6: Bool = false,
         dataArk: [String: String]?,
         keyboards: KeyboardCatalog? = nil,
         formats: Set<String>? = nil,
@@ -815,7 +817,8 @@ public enum SystemEdits {
             let (l, locale) = language.map { ($0.language, $0.locale) } ?? ("en", "en_US")
             try seedFinishedSetup(
                 MountedVolume(root: skeleton), "", major: productMajor, language: l, locale: locale,
-                productVersion: productVersion, locationServicesEnabled: o.locationServicesEnabled)
+                productVersion: productVersion, locationServicesEnabled: o.locationServicesEnabled,
+                a6: a6)
             log("Setup Assistant: seeded as finished (iOS \(productMajor))")
         }
         if let dataArk {
@@ -842,8 +845,10 @@ public enum SystemEdits {
         log: (String) -> Void
     ) throws -> Activation.Result {
         let result: Activation.Result
+        // the iPhone 5's local preparation (FirmwareKitPrepare): its lockdownd forms and Setup records
+        let a6 = system.exists("System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv7s")
         do {
-            result = try activate(system, log: log)
+            result = try activate(system, a6: a6, log: log)
         } catch let error as ActivationFailure {
             let original = try system.contents(at: lockdownd)
             let daemon = "System/Library/PrivateFrameworks/MobileActivation.framework/Support/mobactivationd"
@@ -872,7 +877,8 @@ public enum SystemEdits {
         }
         if let ark = result.dataArk { try seedActivationArk(data, dataArk: ark, dated: dated) }
         let version = system.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductVersion"] as? String
-        try seedFinishedSetup(data, "", major: major, language: language, locale: locale, productVersion: version)
+        try seedFinishedSetup(
+            data, "", major: major, language: language, locale: locale, productVersion: version, a6: a6)
         log("Setup Assistant: seeded as finished (iOS \(major))")
         return result
     }

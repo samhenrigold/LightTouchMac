@@ -18,12 +18,14 @@ extension SystemEdits {
     /// live preference domains must be synchronized through CFPreferences.
     public static func finishedSetupPlists(
         major: Int, productVersion: String,
-        language: String = "en", locale: String = "en_US", locationServicesEnabled: Bool = false
+        language: String = "en", locale: String = "en_US", locationServicesEnabled: Bool = false,
+        a6: Bool = false
     ) throws -> [String: Data] {
         try Dictionary(
             uniqueKeysWithValues: finishedSetup(
                 major: major, language: language, locale: locale,
-                productVersion: productVersion, locationServicesEnabled: locationServicesEnabled
+                productVersion: productVersion, locationServicesEnabled: locationServicesEnabled,
+                a6: a6
             ).map { path, keys in
                 (path, try PropertyListSerialization.data(fromPropertyList: keys, format: .binary, options: 0))
             })
@@ -39,10 +41,11 @@ extension SystemEdits {
     static let dataArk = "root/Library/Lockdown/data_ark.plist"
 
     /// What Setup leaves on iOS `major` (5-8) in `language` and `locale` ("en", "en_AU"), finished at
-    /// `now`; empty before 5 (iTunes activated those, no Setup Assistant).
+    /// `now`; empty before 5 (iTunes activated those, no Setup Assistant). `a6`: the iPhone 5, whose 6.x Setup also asks
+    /// about Siri.
     static func finishedSetup(
         major: Int, language: String, locale: String, now: Date = Date(), productVersion: String? = nil,
-        locationServicesEnabled: Bool = false
+        locationServicesEnabled: Bool = false, a6: Bool = false
     ) -> [Seed] {
         guard major >= 5 else { return [] }
         var buddy: [String: Any] = [
@@ -59,8 +62,9 @@ extension SystemEdits {
             if major == 6 {
                 buddy["SetupVersion"] = 3
                 // Siri-capable 6.x devices also run PSSetupAssistantNeedsToRun's
-                // assistant-upgrade predicate. The walked N90 has no Siri step.
-                buddy["AssistantPresented"] = true
+                // assistant-upgrade predicate. The walked N90 has no Siri step, and no other board in the catalog
+                // runs Siri: the iPhone 5 only.
+                if a6 { buddy["AssistantPresented"] = true }
             }
             buddyLocal = ["LocationServicesPresented": true]
             off = ["LocationServicesEnabled": locationServicesEnabled ? 1 : 0]
@@ -78,7 +82,8 @@ extension SystemEdits {
             ) { $1 }
             // Native N42 11A465 completed setup uses version 4 / PB4 and
             // records the Siri choice; 7.1's walked N90 oracle uses 5 / PB5.
-            if productVersion == "7.0" || productVersion?.hasPrefix("7.0.") == true {
+            // The iPhone 5 only: the iPhone 4's 7.0 rows keep what they were qualified with.
+            if a6, productVersion == "7.0" || productVersion?.hasPrefix("7.0.") == true {
                 buddy.removeValue(forKey: "AppleIDPB5Presented")
                 buddy["AppleIDPB4Presented"] = true
                 buddy["AssistantPresented"] = true
@@ -264,13 +269,13 @@ extension SystemEdits {
     /// already there, as Setup's walk in `language` and `locale` (seedLanguage's) leaves it.
     static func seedFinishedSetup(
         _ v: any VolumeFiles, _ top: String, major: Int, language: String, locale: String,
-        productVersion: String? = nil, locationServicesEnabled: Bool = false
+        productVersion: String? = nil, locationServicesEnabled: Bool = false, a6: Bool = false
     )
         throws
     {
         for (path, keys) in finishedSetup(
             major: major, language: language, locale: locale, productVersion: productVersion,
-            locationServicesEnabled: locationServicesEnabled)
+            locationServicesEnabled: locationServicesEnabled, a6: a6)
         {
             try seedPlist(v, top.isEmpty ? path : top + "/" + path) { $0.addEntries(from: keys) }
         }

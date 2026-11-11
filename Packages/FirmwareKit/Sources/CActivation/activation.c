@@ -29,6 +29,7 @@ typedef struct {
     Segment segments[64];
     size_t count;
     uint32_t text_va, text_size, text_off, message_va;
+    bool a6; /* the iPhone 5's lockdownd forms: the ShouldHactivate answer, MOV register and MOV.W #0 */
 } Image;
 typedef struct {
     size_t off;
@@ -37,9 +38,6 @@ typedef struct {
     const char *isa;
     uint8_t replacement[16];
     bool legacy, shared_no_record, conditional, hactivation;
-    size_t continuation_off;
-    unsigned continuation_width;
-    uint8_t continuation_replacement[16];
 } Match;
 #ifdef LT_ACTIVATION_LIBRARY
 #include <setjmp.h>
@@ -207,7 +205,7 @@ static bool log_block_named(const Image *m, uint32_t pc, bool thumb, uint32_t *a
                     regs[rd] = imm;
                 known |= 1u << rd;
                 pc += 4;
-            } else if ((ins & 0xff00) == 0x4600) { /* MOV register, not evidence from an unknown source */
+            } else if (m->a6 && (ins & 0xff00) == 0x4600) { /* MOV register, not evidence from an unknown source */
                 rd = (ins & 7) | ((ins >> 4) & 8);
                 unsigned rm = (ins >> 3) & 15;
                 if (rd >= 13)
@@ -218,7 +216,7 @@ static bool log_block_named(const Image *m, uint32_t pc, bool thumb, uint32_t *a
                 } else
                     known &= ~(1u << rd);
                 pc += 2;
-            } else if (ins == 0xf04f && text_address(m, pc, 4) &&
+            } else if (m->a6 && ins == 0xf04f && text_address(m, pc, 4) &&
                        (u16(m->bytes + o + 2) & 0xf0ff) == 0) { /* MOV.W rN,#0 */
                 rd = (u16(m->bytes + o + 2) >> 8) & 15;
                 if (rd >= 13)
@@ -551,7 +549,7 @@ static Match locate(const Image *m) {
         size_t o = m->text_off + rel;
         uint32_t va = m->text_va + (uint32_t)rel;
         Match answer = {0};
-        if (hactivation_answer(m, o, va, &answer)) {
+        if (m->a6 && hactivation_answer(m, o, va, &answer)) {
             result = answer;
             count++;
         }
@@ -631,7 +629,7 @@ static Match locate(const Image *m) {
     return result;
 }
 #ifdef LT_ACTIVATION_LIBRARY
-int lt_activate_report(uint8_t *bytes, size_t size, LTActivationReport *report, const char **error) {
+int lt_activate_report(uint8_t *bytes, size_t size, bool a6, LTActivationReport *report, const char **error) {
     if (report)
         memset(report, 0, sizeof(*report));
     if (setjmp(failure)) {
@@ -640,7 +638,7 @@ int lt_activate_report(uint8_t *bytes, size_t size, LTActivationReport *report, 
     }
     if (size < 28 || size > LIMIT)
         fail("invalid input size");
-    Image m = {.bytes = bytes, .size = size};
+    Image m = {.bytes = bytes, .size = size, .a6 = a6};
     parse(&m);
     Match match = locate(&m);
     if (report) {
@@ -654,20 +652,12 @@ int lt_activate_report(uint8_t *bytes, size_t size, LTActivationReport *report, 
         report->width = match.width;
         memcpy(report->original, bytes + match.off, match.width);
         memcpy(report->replacement, match.replacement, match.width);
-        report->continuation_offset = match.continuation_off;
-        report->continuation_width = match.continuation_width;
-        if (match.continuation_width) {
-            memcpy(report->continuation_original, bytes + match.continuation_off, match.continuation_width);
-            memcpy(report->continuation_replacement, match.continuation_replacement, match.continuation_width);
-        }
     }
     memcpy(bytes + match.off, match.replacement, match.width);
-    if (match.continuation_width)
-        memcpy(bytes + match.continuation_off, match.continuation_replacement, match.continuation_width);
     return match.legacy ? 2 : 1;
 }
 int lt_activate(uint8_t *bytes, size_t size, const char **error) {
-    return lt_activate_report(bytes, size, NULL, error);
+    return lt_activate_report(bytes, size, false, NULL, error);
 }
 #else
 static void atomic_write(const char *path, const Image *m, const struct stat *original) {
@@ -707,23 +697,25 @@ static void atomic_write(const char *path, const Image *m, const struct stat *or
     free(temp);
 }
 int main(int argc, char **argv) {
-    bool probe = false, experimental = false;
+    bool probe = false, experimental = false, a6 = false;
     const char *path = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--probe"))
             probe = true;
         else if (!strcmp(argv[i], "--experimental-legacy"))
             experimental = true;
+        else if (!strcmp(argv[i], "--a6"))
+            a6 = true;
         else if (argv[i][0] != '-' && !path)
             path = argv[i];
         else {
-            fprintf(stderr, "Usage: %s [--probe] [--experimental-legacy] LOCKDOWND\n", argv[0]);
+            fprintf(stderr, "Usage: %s [--probe] [--experimental-legacy] [--a6] LOCKDOWND\n", argv[0]);
             return 2;
         }
     }
     if (!path) {
         fprintf(stderr,
-                "Usage: %s [--probe] [--experimental-legacy] LOCKDOWND\nSigning is the caller's "
+                "Usage: %s [--probe] [--experimental-legacy] [--a6] LOCKDOWND\nSigning is the caller's "
                 "responsibility.\n",
                 argv[0]);
         return 2;
@@ -735,6 +727,7 @@ int main(int argc, char **argv) {
     if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode) || st.st_size < 28 || st.st_size > LIMIT)
         fail("invalid input file size or type");
     Image m = {0};
+    m.a6 = a6;
     m.size = (size_t)st.st_size;
     m.bytes = malloc(m.size);
     if (!m.bytes)
@@ -758,28 +751,19 @@ int main(int argc, char **argv) {
     char replacement[33] = {0};
     for (unsigned i = 0; i < match.width; i++)
         snprintf(replacement + 2 * i, 3, "%02x", match.replacement[i]);
-    char continuation_old[33] = {0}, continuation_new[33] = {0};
-    for (unsigned i = 0; i < match.continuation_width; i++) {
-        snprintf(continuation_old + 2 * i, 3, "%02x", m.bytes[match.continuation_off + i]);
-        snprintf(continuation_new + 2 * i, 3, "%02x", match.continuation_replacement[i]);
-    }
     if (!probe) {
         memcpy(m.bytes + match.off, match.replacement, match.width);
-        if (match.continuation_width)
-            memcpy(m.bytes + match.continuation_off, match.continuation_replacement, match.continuation_width);
         atomic_write(path, &m, &st);
     }
     printf("{\"mode\":\"%s\",\"strategy\":\"%s\",\"isa\":\"%s\",\"file_offset\":%zu,\"virtual_"
-           "address\":%" PRIu32 ",\"size\":%u,\"old\":\"%s\",\"new\":\"%s\","
-           "\"factory_continuation\":{\"offset\":%zu,\"size\":%u,\"old\":\"%s\",\"new\":\"%s\"}}\n",
+           "address\":%" PRIu32 ",\"size\":%u,\"old\":\"%s\",\"new\":\"%s\"}\n",
            probe ? "probe" : "apply",
            match.hactivation        ? "development-hactivation-answer"
            : match.conditional      ? "conditional-no-record-initializer"
            : match.legacy           ? "legacy-no-record-initializer"
            : match.shared_no_record ? "ipod-no-record-initializer"
                                     : "development-activation-shortcut",
-           match.isa, match.off, match.va, match.width, old, replacement, match.continuation_off,
-           match.continuation_width, continuation_old, continuation_new);
+           match.isa, match.off, match.va, match.width, old, replacement);
     free(m.bytes);
     return 0;
 }

@@ -1,2 +1,4 @@
-# Whole-repository reformats (scripts/format --all), skipped by git blame (scripts/vendor sets blame.ignoreRevsFile).
+# Reformats (scripts/format), skipped by git blame (scripts/vendor sets blame.ignoreRevsFile): the whole repository's
+# (--all), and the iPhone 5 change's files, so blame names their author.
 b387566ecbf78ba7a17c18e92980f77b3fda40c4
+519a77321266d791d3bf67306f904cfefa5e6352

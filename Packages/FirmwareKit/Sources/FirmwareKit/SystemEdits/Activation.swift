@@ -16,7 +16,6 @@ public enum Activation {
         public let inputSHA256: String, outputSHA256: String
         // Optional so device records written by earlier releases remain decodable.
         public var patch: Patch? = nil
-        public var factoryContinuation: Patch? = nil
         /// The data route (iOS 6): lockdownd left stock, these keys seeded into /var/root/Library/Lockdown/data_ark.plist.
         public var dataArk: [String: String]? = nil
         public var gestaltOverrides: [String: Bool]? = nil
@@ -32,12 +31,6 @@ public enum Activation {
             if let component { result["component"] = component }
             if let gestaltOverrides { result["gestalt_overrides"] = gestaltOverrides }
             if let nativeCacheRequired { result["native_cache_required"] = nativeCacheRequired }
-            if let p = factoryContinuation {
-                result["factory_continuation"] = [
-                    "strategy": p.strategy, "isa": p.isa,
-                    "offset": p.offset, "original": p.original.hexString, "replacement": p.replacement.hexString
-                ]
-            }
             if let patch {
                 result["patch"] = [
                     "strategy": patch.strategy, "isa": patch.isa, "offset": patch.offset,
@@ -56,26 +49,27 @@ public enum Activation {
 
     /// lockdownd at `path` on the volume activated in place: its catalog record and metadata kept. A mounted
     /// volume's file is written through `run(on:)` (which makes a read-only file writable for the write).
-    public static func run(on v: any VolumeFiles, _ path: String) throws -> Result {
-        if let m = v as? MountedVolume { return try run(on: m.url(path)) }
-        let (after, result) = try activated(try v.contents(at: path))
+    /// `a6`: the iPhone 5's lockdownd forms too (lt_activate_report); off, every other board's is matched as recorded.
+    public static func run(on v: any VolumeFiles, _ path: String, a6: Bool = false) throws -> Result {
+        if let m = v as? MountedVolume { return try run(on: m.url(path), a6: a6) }
+        let (after, result) = try activated(try v.contents(at: path), a6: a6)
         try v.put(after, at: path)
         return result
     }
 
-    public static func run(on file: URL) throws -> Result {
-        let (after, result) = try activated(try Data(contentsOf: file))
+    public static func run(on file: URL, a6: Bool = false) throws -> Result {
+        let (after, result) = try activated(try Data(contentsOf: file), a6: a6)
         try overwrite(file, with: after)
         return result
     }
 
-    static func activated(_ before: Data) throws -> (Data, Result) {
+    static func activated(_ before: Data, a6: Bool = false) throws -> (Data, Result) {
         if let qualified = try qualifiedA6Factory(before) { return qualified }
         var after = before
         var error: UnsafePointer<CChar>?
         var report = LTActivationReport()
         let success = after.withUnsafeMutableBytes {
-            lt_activate_report($0.bindMemory(to: UInt8.self).baseAddress, $0.count, &report, &error)
+            lt_activate_report($0.bindMemory(to: UInt8.self).baseAddress, $0.count, a6, &report, &error)
         }
         guard success != 0 else {
             throw ActivationFailure(error.map { String(cString: $0) } ?? "Unsupported activation path")
@@ -93,23 +87,7 @@ public enum Activation {
             original: withUnsafeBytes(of: report.original) { Data($0.prefix(Int(report.width))) },
             replacement: withUnsafeBytes(of: report.replacement) { Data($0.prefix(Int(report.width))) }
         )
-        let continuation: Patch? =
-            report.continuation_width > 0
-            ? Patch(
-                strategy: "development-factory-continuation", isa: "thumb", offset: report.continuation_offset,
-                original: withUnsafeBytes(of: report.continuation_original) {
-                    Data($0.prefix(Int(report.continuation_width)))
-                },
-                replacement: withUnsafeBytes(of: report.continuation_replacement) {
-                    Data($0.prefix(Int(report.continuation_width)))
-                }
-            ) : nil
-        return (
-            after,
-            Result(
-                inputSHA256: Preparer.sha256(before), outputSHA256: Preparer.sha256(after),
-                patch: patch, factoryContinuation: continuation)
-        )
+        return (after, Result(inputSHA256: Preparer.sha256(before), outputSHA256: Preparer.sha256(after), patch: patch))
     }
 
     /// N42 10A405's Qualcomm activation handler predates the later development

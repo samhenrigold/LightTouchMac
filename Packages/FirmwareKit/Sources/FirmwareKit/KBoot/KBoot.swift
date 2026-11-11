@@ -598,27 +598,29 @@ public enum KBoot {
         let vbase = Int(lowest & 0xF000_0000)
         var dt = try DeviceTree(deviceTree)
         let board = Board.of(dt)
-        // Later restore trees describe iBoot syscfg lookups rather than
-        // reserving zero-filled slots. Resolve the same expressions before
-        // measuring the tree. The original iBoot omits unavailable syscfg
-        // properties without a fallback (14G61 resolver +0x33d70/+0x33e3c).
-        let (rootIdentity, _, _) = try identityDT(identity, board: board)
-        var syscfg: [String: Data] = [:]
-        for (key, field) in [
-            ("MLB#", "mlb-serial-number"), ("Regn", "region-info"),
-            ("Mod#", "model-number"), ("SrNm", "serial-number")
-        ] {
-            if let value = rootIdentity.first(where: { $0.0 == field })?.1 { syscfg[key] = value.encoded }
-        }
-        var macs: [String: Data] = [:]
-        for (key, field, name) in [("WMac", "wifi-mac", "wifiaddr"), ("BMac", "bt-mac", "btaddr")] {
-            if let text = identity[field], let value = Data(hex: text.replacingOccurrences(of: ":", with: "")) {
-                syscfg[key] = value
-                macs[name] = value
-            }
-        }
-        try dt.resolveBootDirectives(syscfg: syscfg, macAddresses: macs)
         if board.isA6 {
+            // Later restore trees describe iBoot syscfg lookups rather than
+            // reserving zero-filled slots. Resolve the same expressions before
+            // measuring the tree. The original iBoot omits unavailable syscfg
+            // properties without a fallback (14G61 resolver +0x33d70/+0x33e3c).
+            // The iPhone 5's trees only: the older boards' are kept as recorded, and 9B208's (iPhone 4) carries a
+            // zero-length content-protect with the directive bit set, which this resolver refuses.
+            let (rootIdentity, _, _) = try identityDT(identity, board: board)
+            var syscfg: [String: Data] = [:]
+            for (key, field) in [
+                ("MLB#", "mlb-serial-number"), ("Regn", "region-info"),
+                ("Mod#", "model-number"), ("SrNm", "serial-number")
+            ] {
+                if let value = rootIdentity.first(where: { $0.0 == field })?.1 { syscfg[key] = value.encoded }
+            }
+            var macs: [String: Data] = [:]
+            for (key, field, name) in [("WMac", "wifi-mac", "wifiaddr"), ("BMac", "bt-mac", "btaddr")] {
+                if let text = identity[field], let value = Data(hex: text.replacingOccurrences(of: ":", with: "")) {
+                    syscfg[key] = value
+                    macs[name] = value
+                }
+            }
+            try dt.resolveBootDirectives(syscfg: syscfg, macAddresses: macs)
             // 6.x/7.x IPSWs reserve only a two-byte placeholder. iBoot
             // replaces it with 64 bytes, which the emulator fills afresh at
             // reset. An undersized record silently prevents that injection.

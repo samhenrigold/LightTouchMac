@@ -65,10 +65,23 @@ enum K48Oracle {
 }
 
 @Suite(.serialized, .detachesItsImages) struct SystemEditsTests {
-    @Test(arguments: ["7.0", "7.0.6", "7.1.2"]) func finishedSetupUsesTheFirmwareMinorVersion(version: String) throws {
-        let seeds = SystemEdits.finishedSetup(major: 7, language: "en", locale: "en_US", productVersion: version)
+    /// The iPhone 5's 6.x Setup also asks about Siri; the walked boards' (n90ap 10B329) records stay as walked.
+    @Test func finishedSetupPresentsSiriOnTheIPhone5Only() throws {
+        func buddy(a6: Bool) -> [String: Any]? {
+            SystemEdits.finishedSetup(major: 6, language: "en", locale: "en_US", a6: a6)
+                .first { $0.path == SystemEdits.purpleBuddy }?.keys
+        }
+        #expect(buddy(a6: true)?["AssistantPresented"] as? Bool == true)
+        #expect(buddy(a6: false)?["AssistantPresented"] == nil)
+    }
+
+    @Test(arguments: ["7.0", "7.0.6", "7.1.2"], [true, false])
+    func finishedSetupUsesTheFirmwareMinorVersion(version: String, a6: Bool) throws {
+        let seeds = SystemEdits.finishedSetup(
+            major: 7, language: "en", locale: "en_US", productVersion: version, a6: a6)
         let buddy = try #require(seeds.first { $0.path == SystemEdits.purpleBuddy }?.keys)
-        let early = version.hasPrefix("7.0")
+        // the iPhone 5's 7.0 Setup; the iPhone 4's 7.0 rows keep the walked 7.1 records
+        let early = a6 && version.hasPrefix("7.0")
         #expect(buddy["SetupVersion"] as? Int == (early ? 4 : 5))
         #expect(buddy[early ? "AppleIDPB4Presented" : "AppleIDPB5Presented"] as? Bool == true)
         #expect(buddy[early ? "AppleIDPB5Presented" : "AppleIDPB4Presented"] == nil)
@@ -170,7 +183,7 @@ enum K48Oracle {
         ]
         let buddy: [Int: Set<String>] = [
             5: common.union(["AppleIDPresented"]),
-            6: common.union(["AppleIDPB3Presented", "SetupVersion", "AssistantPresented"]),
+            6: common.union(["AppleIDPB3Presented", "SetupVersion"]),
             7: common.union([
                 "AppleIDPB5Presented", "PasscodePresented", "SetupVersion", "SetupState", "AppleIDForceUpgrade"
             ]),
@@ -181,7 +194,7 @@ enum K48Oracle {
         ]
         #expect(keys(mobile + "com.apple.purplebuddy.plist") == buddy[major])
         #expect(plist(mobile + "com.apple.purplebuddy.plist")["SetupVersion"] as? Int == [6: 3, 7: 5, 8: 7][major])
-        if major == 6 || major == 8 {
+        if major == 8 {
             #expect(plist(mobile + "com.apple.purplebuddy.plist")["AssistantPresented"] as? Bool == true)
         }
         if major == 8 {

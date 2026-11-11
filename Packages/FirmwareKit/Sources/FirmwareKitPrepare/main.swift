@@ -100,7 +100,7 @@ if args.count == 5 && args[1] == "--finished-setup-seeds" {
         }
         let output = URL(fileURLWithPath: args[4])
         guard !FileManager.default.fileExists(atPath: output.path) else { fail("Expected a new output directory") }
-        let seeds = try SystemEdits.finishedSetupPlists(major: major, productVersion: args[3])
+        let seeds = try SystemEdits.finishedSetupPlists(major: major, productVersion: args[3], a6: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         for (path, bytes) in seeds {
             let target = output.appendingPathComponent(path)
