@@ -24,6 +24,13 @@ nonisolated final class FakeGuestLink: GuestAgentLink, @unchecked Sendable {
     init(version: Int = 2) { self.version = version }
 
     var agentStatus: Int? { lock.withLock { agent } }
+    /// A v6 agent's report of the guest; nil for the agents before it, which are asked.
+    var report: String?
+    /// SpringBoard refuses this many launches (another app is still closing) before it takes one.
+    var launchesRefused = 0
+    /// The `type` op: what was typed, the status it answers, or no answer at all (its deadline passes).
+    var typed: [String] = [], typeStatus = 0, typeUnanswered = false, types = false
+    var agentReport: String? { lock.withLock { report } }
 
     func send(_ command: LinkCommand) {
         guard case .agentCancel(let id) = command else { return }
@@ -49,7 +56,8 @@ nonisolated final class FakeGuestLink: GuestAgentLink, @unchecked Sendable {
                 Data(
                     (version == 2
                         ? "it_agent v\(v4 ? 4 : 2)\nops ping "
-                            + (Self.v2ops + (v4 ? ["cadebug", "statusbar"] : []) + (v5 ? ["statusbarget"] : []))
+                            + (Self.v2ops + (v4 ? ["cadebug", "statusbar"] : []) + (v5 ? ["statusbarget"] : [])
+                            + (types ? ["type"] : []))
                             .joined(separator: " ") + "\n" : "it_agent v1\n").utf8
                 )
             )
@@ -90,7 +98,16 @@ nonisolated final class FakeGuestLink: GuestAgentLink, @unchecked Sendable {
             owners[w[2]] = w[0] + ":" + w[1]
             return (0, Data())
         case "unlink": return files.removeValue(forKey: args) == nil ? (-2, Data()) : (0, Data())
-        case "launch": return launchFails ? (-1, Data()) : (0, Data())
+        case "type":
+            if typeStatus == 0 { typed.append(String(decoding: body, as: UTF8.self)) }
+            return (typeStatus, Data())
+        case "launch":
+            if launchFails { return (-1, Data()) }
+            if launchesRefused > 0 {
+                launchesRefused -= 1
+                return (7, Data())
+            }
+            return (0, Data())
         case "lockstatus": return (0, Data("locked=\(locked ? 1 : 0) passcode=0\n".utf8))
         case "frontmost":
             return (0, Data((locked ? "com.apple.springboard\nLock Screen\n" : "com.example.game\nGame\n").utf8))
@@ -125,6 +142,7 @@ nonisolated final class FakeGuestLink: GuestAgentLink, @unchecked Sendable {
             return .ok(true)
         }
         let (status, data) = lock.withLock { answer(op, args, body) }
+        if op == "type", lock.withLock({ typeUnanswered }) { return .agent(nil) }
         let reply = "\(id) \(status)\n\(data.base64EncodedString())"
         return try await withCheckedThrowingContinuation { c in
             let held: Bool = lock.withLock {

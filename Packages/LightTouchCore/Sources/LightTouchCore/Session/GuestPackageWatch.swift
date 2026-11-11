@@ -17,6 +17,8 @@ public protocol GuestPackageHost: AnyObject {
     var shuttingDown: Bool { get }
     var hasGuestTools: Bool { get }
     var deviceReachable: Bool? { get }
+    /// When a reporting guest agent's session last ended (LinkEvent.agentReport's empty text); nil: not this run.
+    var agentSessionEnded: Date? { get }
 }
 
 @Observable public final class GuestPackageWatch {
@@ -43,6 +45,8 @@ public protocol GuestPackageHost: AnyObject {
     public private(set) var status: GuestPackage.Status = .unknown
     /// The watch's sampling interval (shorter in tests).
     @ObservationIgnored var interval: Duration = .seconds(1)
+    /// How long after its session ended a guest agent has not yet shown it stays up: past the emulator's 10 s lease.
+    static let agentSettle: TimeInterval = 12
 
     private var task: Task<Void, Never>? {
         get { host.bootScope[.guestPackage] }
@@ -116,8 +120,12 @@ public protocol GuestPackageHost: AnyObject {
         else { return nil }
         // iPods report their agent channel; iPads use a real lockdown
         // round trip because the helper has no pasteboard-agent status.
+        // An agent whose session ended within a lease and a bit died and was started again (launchd waits ten seconds):
+        // one that dies at every start shows as alive between deaths, and lockdown answers without it, so neither
+        // makes its package a healthy one.
+        let agentRestarted = host.agentSessionEnded.map { Date().timeIntervalSince($0) < Self.agentSettle } ?? false
         let healthy =
-            host.state == .running && status.uiReady
+            host.state == .running && status.uiReady && !agentRestarted
             && (host.hasGuestTools ? status.agentStatus == 1 : host.deviceReachable == true)
         return .init(
             report: status.guestPackage,

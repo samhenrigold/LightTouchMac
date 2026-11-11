@@ -22,6 +22,10 @@ import HostRuntime
         get { process.onGuestPasteboard }
         set { process.onGuestPasteboard = newValue }
     }
+    public var onAgentReport: ((String) -> Void)? {
+        get { process.onAgentReport }
+        set { process.onAgentReport = newValue }
+    }
     public var onDeath: ((String) -> Void)?
 
     public init(

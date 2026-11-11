@@ -26,6 +26,7 @@ final class DeviceHost: @unchecked Sendable {
     private var ticks = 0
     private var frameSerial: UInt64 = 0
     private var guestPasteboardSerial: UInt64 = 0
+    private var agentReportSerial: UInt64 = 0
     private let stateLock = NSLock()
     private var bootConfig: BootConfig?
     /// The device's web proxy (WebProxy.swift), for the life of the process.
@@ -205,6 +206,11 @@ final class DeviceHost: @unchecked Sendable {
         // A copy inside the guest, at the status rate (the agent itself looks 4 times a second).
         if let text = qemu.guestPasteboard?(&guestPasteboardSerial) {
             onEvent?(.guestPasteboard(String(cString: text)))
+            free(text)
+        }
+        // What the agent says of the guest, when it changed (the agent sends it with each poll, 4 times a second).
+        if let text = qemu.agentReport?(&agentReportSerial) {
+            onEvent?(.agentReport(String(cString: text)))
             free(text)
         }
     }
@@ -402,6 +408,7 @@ final class DeviceHost: @unchecked Sendable {
                 reply(.failure("Virtual input unavailable or invalid sequence"))
                 return
             }
+            noteInput()
             let at = events.map(\.atMilliseconds)
             let kind = events.map(\.kind)
             let value = events.map(\.value)
@@ -426,6 +433,11 @@ final class DeviceHost: @unchecked Sendable {
                 }
             }
             reply(.ok(queued))
+        case .touchWaiting:
+            guard let touchWaiting = qemu.touchWaiting else { return reply(.failure("Touch delivery unavailable")) }
+            var reads: UInt64 = 0
+            let waiting = touchWaiting(&reads)
+            reply(.touchWaiting(waiting, reads: reads))
         case .inputSequenceStatus(let id):
             if let status = qemu.inputSequenceStatus {
                 reply(.inputSequenceStatus(Int(status(id))))

@@ -15,7 +15,13 @@ struct DeviceRotationTests {
         var state: VMState = .running
         var preparingDevice = false, isSleeping = false, isInstalling = false, canReachDevice = true
         var guestReadings: [Int?] = []
-        func interfaceOrientation() async throws -> Int { 1 }
+        /// What the guest agent's report tells; lockdown's relay answers `asked` (and counts the asking).
+        var reportedInterfaceOrientation: Int?
+        var asked = 0
+        func interfaceOrientation() async throws -> Int {
+            asked += 1
+            return 1
+        }
         func guestOrientation() async throws -> Int? {
             guard !guestReadings.isEmpty else { throw CancellationError() }
             return guestReadings.removeFirst()
@@ -210,6 +216,24 @@ struct DeviceRotationTests {
             await eventually("the guest's turn") { rotation.degrees == 270 }
             await eventually("the failed read") { rotation.lastGuestOrientation == nil }
             rotation.stopWatching()
+        }
+    }
+
+    /// The interface watch takes what the guest agent tells, with no lockdown to reach first and nothing asked of
+    /// its relay: the first reading adopted, a change followed within the agent's quarter second.
+    @Test func theInterfaceWatchIsToldBeforeLockdownAnswers() async throws {
+        try await withScratchDirectory { directory in
+            let (rotation, host) = rotation(directory, iPad: true)
+            host.canReachDevice = false
+            host.reportedInterfaceOrientation = 4
+            rotation.startInterfaceWatch()
+            await eventually("the first reading, adopted") { rotation.degrees == 90 && rotation.heldDegrees == 90 }
+            host.reportedInterfaceOrientation = 1
+            await eventually("the app's turn, followed by the shell") {
+                rotation.degrees == 0 && rotation.heldDegrees == 90
+            }
+            rotation.stopWatching()
+            #expect(host.asked == 0, "lockdown's relay wasn't asked")
         }
     }
 }

@@ -25,6 +25,7 @@ struct GuestPackageWatchTests {
         var state = VMState.running
         var isDead = false, shuttingDown = false, hasGuestTools = true
         var deviceReachable: Bool?
+        var agentSessionEnded: Date?
     }
 
     func report(_ serial: Int64) -> SharedStatus {
@@ -69,6 +70,16 @@ struct GuestPackageWatchTests {
             #expect(watch.sample(generation: generation)?.healthy == false, "the iPad: lockdown hasn't answered")
             host.deviceReachable = true
             #expect(watch.sample(generation: generation)?.healthy == true)
+            // An agent that keeps dying (a session ended moments ago, again and again) isn't a healthy package's,
+            // though lockdown answers and its status reads alive between deaths; one that has stayed up since is.
+            host.agentSessionEnded = Date()
+            #expect(watch.sample(generation: generation)?.healthy == false, "the iPad: its agent just died")
+            host.hasGuestTools = true
+            host.status?.agentStatus = 1
+            #expect(watch.sample(generation: generation)?.healthy == false, "the iPod: alive again, for now")
+            host.agentSessionEnded = Date(timeIntervalSinceNow: -GuestPackageWatch.agentSettle - 1)
+            #expect(watch.sample(generation: generation)?.healthy == true, "it stayed up past a lease")
+            host.hasGuestTools = false
             host.state = .booting
             #expect(watch.sample(generation: generation)?.healthy == false)
             host.isDead = true

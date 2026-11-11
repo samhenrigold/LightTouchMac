@@ -53,6 +53,22 @@ extension SharedState {
             }
         }
 
+        /// An emulator named by LTM_QEMU_DYLIB (a Debug helper) is the only one tried: when it can't load, the start
+        /// fails naming it, and the bundle's emulator never answers in its place (a run of another build than the
+        /// one asked for, which `sessions --dylib` then reported on as if it were).
+        @Test func aNamedEmulatorIsTheOnlyCandidate() {
+            let before = ProcessInfo.processInfo.environment["LTM_QEMU_DYLIB"]
+            defer {
+                if let before { setenv("LTM_QEMU_DYLIB", before, 1) } else { unsetenv("LTM_QEMU_DYLIB") }
+            }
+            unsetenv("LTM_QEMU_DYLIB")
+            #expect(Qemu.candidates().count == 2, "the bundle's, then the build's")
+            let named = "/nowhere/ltm-test/libqemu-arm.dylib"
+            setenv("LTM_QEMU_DYLIB", named, 1)
+            #expect(Qemu.candidates() == [named])
+            #expect { try Qemu.load() } throws: { "\($0)".contains(named) }
+        }
+
         /// The app gone (crashed or killed): the helper's stderr pipe has no reader, and its "link closed" log line
         /// must not abort it before the shutdown that flushes the device's storage. FileHandle.write(_:) raised on
         /// EPIPE there (SIGPIPE is ignored in the helper, as here).

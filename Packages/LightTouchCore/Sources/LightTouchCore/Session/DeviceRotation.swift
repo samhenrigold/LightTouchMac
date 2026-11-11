@@ -52,6 +52,13 @@ public protocol RotationHost: AnyObject {
     func interfaceOrientation() async throws -> Int
     /// SpringBoard's degrees through the guest agent; nil when this image has no agent.
     func guestOrientation() async throws -> Int?
+    /// The UIInterfaceOrientation the guest agent last told (GuestReport.interfaceOrientation), a quarter second old
+    /// at most and with no USB to wait for; nil where it tells none, and lockdown's relay is asked.
+    var reportedInterfaceOrientation: Int? { get }
+}
+
+extension RotationHost {
+    public var reportedInterfaceOrientation: Int? { nil }
 }
 
 @Observable public final class DeviceRotation {
@@ -203,13 +210,18 @@ public protocol RotationHost: AnyObject {
         task = Task { [weak self] in
             var last: Int?
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
+                // Told by the guest agent, as often as it samples; else lockdown's relay is asked every 3 s.
+                let told = self?.host.reportedInterfaceOrientation != nil
+                try? await Task.sleep(for: told ? .milliseconds(250) : .seconds(3))
                 guard let self else { return }
                 if host.state == .booting { last = nil }  // a restart: adopt again
+                guard !host.isSleeping, !host.isInstalling else { continue }
+                if let reading = host.reportedInterfaceOrientation {
+                    last = interfaceRead(reading, last: last)
+                    continue
+                }
                 // Only once lockdown has answered: before that every try is "not reachable over USB yet", every 3 s in the log.
-                guard host.canReachDevice, !host.isSleeping, !host.isInstalling,
-                    let reading = try? await host.interfaceOrientation()
-                else { continue }
+                guard host.canReachDevice, let reading = try? await host.interfaceOrientation() else { continue }
                 last = interfaceRead(reading, last: last)
             }
         }

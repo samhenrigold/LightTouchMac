@@ -14,7 +14,7 @@ public nonisolated struct GuestAgentError: LocalizedError, CustomStringConvertib
     public let operation: String
     public let status: Int
     public let output: Data
-    public static let notFound = -2, tooBig = -27, again = -35, connectionReset = -54, notImplemented = -78
+    public static let notFound = -2, io = -5, tooBig = -27, again = -35, connectionReset = -54, notImplemented = -78
     /// The alert's words; `description` (what logs interpolate) keeps the status and output.
     public var errorDescription: String? { "The device couldn’t do that. Try again." }
     public var description: String {
@@ -54,11 +54,13 @@ public nonisolated final class GuestAgentCache: @unchecked Sendable {
     public func reset() { capabilities = nil }
 }
 
-/// What the agent needs of a device's link: DeviceLink's agent status, request and send. Tests stand a fake guest
-/// behind it.
+/// What the agent needs of a device's link: DeviceLink's agent status, report, request and send. Tests stand a fake
+/// guest behind it.
 public nonisolated protocol GuestAgentLink: AnyObject, Sendable {
     /// 0 absent or not running, 1 alive, 2 stale; nil before the helper published a status.
     var agentStatus: Int? { get }
+    /// The agent's latest report of the guest (GuestReport reads it); nil or empty when it has sent none.
+    var agentReport: String? { get }
     func request(_ request: LinkRequest, timeout: TimeInterval) async throws -> LinkReply
     func send(_ command: LinkCommand)
 }
@@ -80,6 +82,21 @@ public nonisolated struct GuestAgent: Sendable {
     /// 0 absent or not running, 1 alive, 2 stale.
     public var status: Int { link?.agentStatus ?? 0 }
     public var isAlive: Bool { status == 1 }
+    /// What a live agent last said of the guest, at most a quarter second old; nil from an agent that doesn't
+    /// report (before v6), which is asked instead.
+    public var report: GuestReport? { isAlive ? link?.agentReport.flatMap(GuestReport.init) : nil }
+
+    /// The answer a report holds, as the op it stands for would give it: SpringBoard not answering is that op's EIO.
+    private func told<Value>(_ operation: String, by report: GuestReport, _ value: Value?) throws -> Value {
+        guard report.isAnswering, let value else {
+            throw GuestAgentError(
+                operation: operation,
+                status: GuestAgentError.io,
+                output: Data("SpringBoard isn’t answering the guest agent".utf8)
+            )
+        }
+        return value
+    }
 
     // MARK: Wire
 
@@ -252,8 +269,10 @@ public nonisolated struct GuestAgent: Sendable {
 
     public func launch(_ bundleID: String) async throws { try await perform("launch", bundleID) }
 
-    /// SpringBoard's foreground bundle id and localized name; `Lock Screen` when locked.
+    /// SpringBoard's foreground bundle id and localized name; `Lock Screen` when locked. From the agent's report
+    /// where it sends one: no request, so nothing to wait for or lose.
     public func frontmost() async throws -> (bundleID: String, name: String) {
+        if let report { return try told("frontmost", by: report, report.foreground) }
         let lines = String(decoding: try await perform("frontmost"), as: UTF8.self).split(separator: "\n").map(
             String.init
         )
@@ -261,10 +280,18 @@ public nonisolated struct GuestAgent: Sendable {
     }
 
     public func isLocked() async throws -> Bool {
-        String(decoding: try await perform("lockstatus"), as: UTF8.self).contains("locked=1")
+        if let report { return try told("lockstatus", by: report, report.isLocked) }
+        return String(decoding: try await perform("lockstatus"), as: UTF8.self).contains("locked=1")
     }
 
     public func orientation() async throws -> Int {
+        if let report {
+            // An answering SpringBoard whose report names no orientation is firmware without the call, as the op says.
+            guard report.uiDegrees != nil || !report.isAnswering else {
+                throw GuestAgentError(operation: "orientation", status: GuestAgentError.notImplemented, output: Data())
+            }
+            return try told("orientation", by: report, report.uiDegrees)
+        }
         let text = String(decoding: try await perform("orientation"), as: UTF8.self)
         guard let degrees = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)),
             [0, 90, 180, -90].contains(degrees)
@@ -290,6 +317,18 @@ public nonisolated struct GuestAgent: Sendable {
         guard let link, isAlive else { return false }
         let reply = try? await link.request(.agent(request: "\(UUID().uuidString) halt \n", deadline: 0), timeout: 5)
         return reply == .ok(true)
+    }
+
+    /// Waits until the agent's report (which follows the guest within a quarter second) meets `condition`: a wait
+    /// for the fact, not for a time. False at `seconds`, on cancellation, or from an agent that doesn't report.
+    public func waitForReport(seconds: Double, _ condition: (GuestReport) -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now + .seconds(seconds)
+        while !Task.isCancelled, let report {
+            if condition(report) { return true }
+            guard ContinuousClock.now < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
     }
 
     /// Wait for a (re)started agent to claim the channel.

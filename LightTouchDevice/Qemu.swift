@@ -3,8 +3,8 @@ import Foundation
 import HostRuntime
 
 // libqemu-arm.dylib, dlopen'ed. The helper never links it: which build runs is
-// chosen at launch (LTM_QEMU_DYLIB in a Debug build, else the bundle's
-// Frameworks, else the build rpath) and reported in the hello.
+// chosen at launch (LTM_QEMU_DYLIB alone in a Debug build that names one, else
+// the bundle's Frameworks, else the build rpath) and reported in the hello.
 
 /// qemu-ios-ui.h QemuIosDeviceInfo (C API 2.0).
 struct QemuDeviceInfoC {
@@ -26,8 +26,10 @@ final class Qemu: @unchecked Sendable {
     static func candidates() -> [String] {
         var list: [String] = []
         #if DEBUG
+            // A named emulator is the only candidate: when it can't load (a library it needs outside the sandbox's
+            // grants), the bundle's answering in its place would pass for the build that was asked for.
             if let override = ProcessInfo.processInfo.environment["LTM_QEMU_DYLIB"], !override.isEmpty {
-                list.append(override)
+                return [override]
             }
         #endif
         let exe = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
@@ -66,7 +68,10 @@ final class Qemu: @unchecked Sendable {
     static func load() throws -> Qemu {
         var errors: [String] = []
         for candidate in candidates() {
-            if candidate.hasPrefix("/"), !FileManager.default.fileExists(atPath: candidate) { continue }
+            if candidate.hasPrefix("/"), !FileManager.default.fileExists(atPath: candidate) {
+                errors.append("\(candidate): not there, or not readable from the sandbox")
+                continue
+            }
             do { return try Qemu(path: candidate) } catch { errors.append("\(candidate): \(error)") }
         }
         throw HelperError.dylib("no libqemu-arm.dylib loaded: " + errors.joined(separator: "; "))
@@ -106,6 +111,11 @@ final class Qemu: @unchecked Sendable {
         "qemu_ios_ui_vibrator",
         (@convention(c) (UnsafeMutablePointer<UInt64>?) -> Bool).self
     )  // API 2.2
+    /// API 2.4: whether a press or lift still waits for the guest's digitizer driver; its reads so far.
+    lazy var touchWaiting = optionalSym(
+        "qemu_ios_ui_touch_waiting",
+        (@convention(c) (UnsafeMutablePointer<UInt64>?) -> Bool).self
+    )
     lazy var touch = sym("qemu_ios_ui_touch", (@convention(c) (Int32, Int32, Double, Double) -> Void).self)
     lazy var touch2 = sym("qemu_ios_ui_touch2", (@convention(c) (Int32, Double, Double) -> Void).self)
     lazy var inputSequence = optionalSym(
@@ -180,6 +190,11 @@ final class Qemu: @unchecked Sendable {
         (@convention(c) (UnsafeMutablePointer<CChar>?) -> Void).self
     )
     lazy var agentStatus = sym("qemu_ios_agent_status", IntFn.self)
+    /// API 2.4: the agent's state report when newer than the serial (malloc'd, free()); "" once its session ended.
+    lazy var agentReport = optionalSym(
+        "qemu_ios_agent_report",
+        (@convention(c) (UnsafeMutablePointer<UInt64>) -> UnsafeMutablePointer<CChar>?).self
+    )
     lazy var glesContexts = sym("qemu_ios_gles_contexts", IntFn.self)
     /// Optional: dylibs before the guest-package hypercalls lack them.
     lazy var guestPackageReport = optionalSym(
