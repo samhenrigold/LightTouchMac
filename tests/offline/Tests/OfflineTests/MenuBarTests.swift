@@ -342,7 +342,13 @@ extension SharedState {
                 keyCode: 53
             )!
             #expect(!capture.performKeyEquivalent(with: esc), "with no device window key, Escape passes on")
-            let deviceWindow = NSWindow(
+            /// A window that reports a sheet without beginSheet, which orders it and the sheet in: both stayed on screen in a
+            /// corner (with AutoFill's popup for the field below) until the test process ended.
+            final class SheetedWindow: NSWindow {
+                var reported: NSWindow?
+                override var attachedSheet: NSWindow? { reported ?? super.attachedSheet }
+            }
+            let deviceWindow = SheetedWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 200, height: 200),
                 styleMask: [.titled],
                 backing: .buffered,
@@ -358,14 +364,7 @@ extension SharedState {
             #expect(deviceWindow.makeFirstResponder(field) && deviceWindow.firstResponder is NSText)
             #expect(!CaptureMenu.escapeDiscards(in: deviceWindow), "Escape stays the text field's")
             deviceWindow.makeFirstResponder(nil)
-            deviceWindow.beginSheet(
-                NSWindow(
-                    contentRect: NSRect(x: 0, y: 0, width: 50, height: 50),
-                    styleMask: [.titled],
-                    backing: .buffered,
-                    defer: false
-                )
-            )
+            deviceWindow.reported = NSWindow()
             #expect(!CaptureMenu.escapeDiscards(in: deviceWindow), "Escape stays the sheet's")
             withExtendedLifetime(owner) {}
             #expect(find("Save Screenshot As…", in: file) == nil)
