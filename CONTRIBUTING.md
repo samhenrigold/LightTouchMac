@@ -201,6 +201,10 @@ swift run --package-path tests/sessions sessions single BASE --managed
 swift run --package-path tests/sessions sessions single OLD_DEVICE --expect-admission STEP
 swift run --package-path tests/sessions sessions phone N90_BASE --only carrier --overlay PAST_SETUP_OVERLAY
 swift run --package-path tests/sessions sessions local-network N72_BASE
+# the guest agent's report on a base past Setup (2.x on): what the host is told without asking (SpringBoard
+# answering, the lock, the frontmost app, the interface's orientation, a respring), against the agent's own ops, and
+# a tap and Home made on the guest's clock reaching its digitizer driver; about half a minute after the boot
+swift run --package-path tests/sessions sessions told BASE
 # a built app (Releases, step 2)
 TEST_RUNNER_LTM_RELEASE_APP="path/to/Light Touch.app" xcodebuild test -skipMacroValidation -project LightTouchMac.xcodeproj \
     -scheme LightTouchMac -testPlan Release
@@ -315,7 +319,7 @@ those two places; its firmware is catalog entries, and preparing it is a Firmwar
 | `LightTouchMac/` | The app, one directory per layer (below), plus `Resources/firmware-catalog.json` (its `bundled` names the built-in iPod, `Resources/Device/n72ap-7E18.itbase`, which a fresh install unpacks and selects; `first_run` is what a first launch selects without it: an `available` build Apple still serves), `Assets.xcassets`, `Shim/` |
 | `LightTouchMac/Transport/` | The wire to a device and the app's logs: `USBMux` (each device's usbmuxd), `NativeLogging`, `AppEventLog` |
 | `LightTouchMac/Services/` | What the app layers on the stock services: `LockdownTools` (the lockdown-tz and lockdown-mcinstall writes run as child processes of the services helper, `LightTouchServices/Lockdown`), `MediaStaging`, `HomeScreenOrdering`, `ClockRegion` |
-| `LightTouchMac/Guest/` | The guest agent: `GuestAgent` (the wire and typed ops), `GuestServices` (media commit, trust, proxy route, respring, launch), `GuestPackage` |
+| `LightTouchMac/Guest/` | The guest agent: `GuestAgent` (the wire and typed ops), `GuestReport` (what an agent from v6 tells of the guest with each poll: SpringBoard, the lock, the frontmost app, the orientation; the ops that would ask answer from it), `GuestServices` (media commit, trust, proxy route, respring, launch, typing), `GuestPackage` |
 | `LightTouchMac/Library/` | What the app keeps: `DeviceInstance`, `DeviceLibrary`, `DeviceStateStorage`, `StorageLocations`, `Bundled`, `LegacyState`, `IPSWStore`, `FirmwareCatalog`, `FirmwareJobs`, `FirmwareDownloads`, `PreparationJob`, `IPALibrary`, `IPAMembers`, `AppMetadataCache` |
 | `LightTouchMac/Device/` | One running device: `Board+App` (what the app derives from a board), `DeviceSession`, `DeviceProcess` (its helper), `EmulatorController` (lifecycle and input; vends `services`, `guest`, `installPipeline`), `DeviceRow`, `DeviceConnectionIssue`, `DeviceFileWatch`, `WebProxyConfiguration` |
 | `LightTouchMac/Features/` | What the app does with a device: `AppInstaller` (the per-device install and removal queue), `AppInstallPipeline`, `MediaImport` (+ `Media*`, `PreparedMedia`), `WebProxySetup`, `CaptureController` (+ recording, movie writer, canvas capture, capture preferences), `CatalogClient`/`CatalogCopy`, `DiagnosticsExport` |

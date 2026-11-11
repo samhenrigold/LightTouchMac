@@ -405,12 +405,19 @@ extension String {
     var services: DeviceServices { DeviceServices(clientSocket: mux.clientSocket, session: serviceSession) }
 
     func brightness() -> Double? { process.link.frontSurface().map { FrameTools.brightness($0.surface) } }
-    /// Home, pressed and released: wakes a display that slept.
-    func home() async {
-        process.link.send(.button(0, down: true))
-        try? await Task.sleep(for: .milliseconds(150))
-        process.link.send(.button(0, down: false))
+    /// A gesture made on the guest's clock, so a busy Mac neither stretches nor squeezes it, and waited for until
+    /// the emulator made all of it and the guest's digitizer driver read the touch (HostInputAutomation.perform).
+    /// One the emulator refused or the guest didn't read is in the events, as `gesture` with its error: the
+    /// caller's own evidence then fails with the reason beside it.
+    func gesture(_ events: [VirtualInputEvent], _ what: String) async {
+        do {
+            try await HostInputAutomation.perform(events) { try await self.process.link.request($0, timeout: 5) }
+        } catch {
+            emit("gesture", ["device": name, "what": what, "error": "\(error)"])
+        }
     }
+    /// Home, pressed and released: wakes a display that slept.
+    func home() async { await gesture(HostInputAutomation.press(0), "home") }
     /// An iPad's lock screen turns its panel off about 7 s after it appears (iPhone OS 3.2, untouched): Home wakes it,
     /// up to three times while the frame stays dark.
     func wakeIPad() async {
@@ -493,24 +500,11 @@ extension String {
     }
 
     func drag(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) async {
-        let link = process.link
-        link.send(.touch(slot: 0, phase: 0, x: x0, y: y0))
-        try? await Task.sleep(for: .milliseconds(150))
-        for i in 1...30 {
-            let f = Double(i) / 30
-            link.send(.touch(slot: 0, phase: 1, x: x0 + (x1 - x0) * f, y: y0 + (y1 - y0) * f))
-            try? await Task.sleep(for: .milliseconds(30))
-        }
-        try? await Task.sleep(for: .milliseconds(300))
-        link.send(.touch(slot: 0, phase: 2, x: x1, y: y1))
+        await gesture(HostInputAutomation.drag(from: (x0, y0), to: (x1, y1)), "drag")
     }
 
     /// A short tap (a drag holds long enough to start SpringBoard's icon editing).
-    func tap(_ x: Double, _ y: Double) async {
-        process.link.send(.touch(slot: 0, phase: 0, x: x, y: y))
-        try? await Task.sleep(for: .milliseconds(80))
-        process.link.send(.touch(slot: 0, phase: 2, x: x, y: y))
-    }
+    func tap(_ x: Double, _ y: Double) async { await gesture(HostInputAutomation.tap(x, y), "tap") }
 
     /// lockdown's ProductType through this device's socket, under the gate.
     func productType() async -> String? { await lockdownValue("ProductType") }
