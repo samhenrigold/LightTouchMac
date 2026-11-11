@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var settingsMenu: DeviceSettingsMenu {
         let stopped = stoppedSelection.flatMap { instance in
             instance.profile.map {
-                var device = DeviceSettingsMenu.Device(marketingName: $0.marketingName, shortName: $0.shortName)
+                var device = DeviceSettingsMenu.Device(marketingName: $0.preferredName, shortName: $0.shortName)
                 device.localNetworkEnabled = DeviceSettings.load(instance.paths.directory).localNetwork ?? false
                 device.isRunning = false
                 return device
@@ -93,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             device: stopped
                 ?? emulator.map {
                     var device = DeviceSettingsMenu.Device(
-                        marketingName: $0.profile.marketingName,
+                        marketingName: $0.profile.preferredName,
                         shortName: $0.profile.shortName
                     )
                     device.localNetworkEnabled = $0.localNetworkEnabled
@@ -249,6 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // The network question belongs to the device being started (DeviceSessionHost.start), not to the app.
         let host = DeviceSessionHost()
         Self.sweepStorage()
+        Board.prepareIcons()
         #if DEBUG
             Self.adoptDevelopmentBase(catalog: host.catalog)
         #endif
@@ -279,6 +280,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// usbmuxd) loses app management or the guest tools without a word, so say so before a device starts, until
     /// "don't show" is checked for that same set of missing parts.
     private func warnIfIncomplete() {
+        // an Xcode preview launches the app too, and a modal alert there crashes it
+        guard ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" else { return }
         var missing: [String] = []
         if !FileManager.default.isExecutableFile(atPath: USBMux.binary) { missing.append("usbmuxd") }
         if Bundled.resource("Guest/guest.aar") == nil { missing.append("guest.aar") }

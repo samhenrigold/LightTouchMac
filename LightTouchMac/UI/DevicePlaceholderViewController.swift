@@ -197,7 +197,7 @@ final class DevicePlaceholderViewController: NSViewController {
             image.size = NSSize(width: 256, height: 256)
             return image
         }
-        model.stringValue = profile?.marketingName ?? entry.productType
+        model.stringValue = profile?.preferredName ?? entry.productType
         version.stringValue = "iOS \(entry.version)" + (row.badge.map { " \($0)" } ?? "") + " (\(entry.build))"
         info.isHidden = row.catalogNote == nil
 

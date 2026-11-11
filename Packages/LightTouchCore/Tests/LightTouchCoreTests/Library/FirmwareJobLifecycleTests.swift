@@ -33,11 +33,12 @@ import Testing
         return (h, catalog.entries[0], data)
     }
 
-    /// A preparer script that appends a line to `runs` each time it starts, then runs `body`.
+    /// A preparer script that appends a line to `runs` each time it starts a preparation (not the decrypt-cache prune
+    /// that follows one), then runs `body`.
     static func counting(_ tmp: URL, runs: URL, _ body: String) throws -> URL {
         try LibraryFixtures.script(
             tmp.appendingPathComponent("counting-\(UUID().uuidString.prefix(8))"),
-            "echo run >> '\(runs.path)'\n" + body
+            "[ \"$1\" = cache-prune ] && exit 0\necho run >> '\(runs.path)'\n" + body
         )
     }
     static func runs(_ url: URL) -> Int {
@@ -180,7 +181,8 @@ import Testing
             await Self.until { storeChanges > 0 }
             try await Task.sleep(for: .milliseconds(500))
             #expect(h.store.existing(e.source.sha1!) == h.store.imported(e.source.sha1!), "stored: the row says so")
-            #expect(storeChanges == 1, "the rows were told")
+            // At least: IPSWStoreTests, running alongside, posts the same process-wide notification.
+            #expect(storeChanges >= 1, "the rows were told")
             #expect(h.changes[e.id] == nil && h.devices(e.id).isEmpty, "nothing prepared: \(h.seen)")
             #expect(h.errors.isEmpty, "the skipped files raised no alert: \(h.errors)")
 

@@ -17,23 +17,52 @@ extension Board {
         )
     }
 
+    /// Made once per model: reading the icns and looking for a plate in every image took the Add Device sheet, which
+    /// shows every board, 200 ms each time it opened, and the iPhone 4's lift 3 s in a Debug build (prepareIcons).
     static func icon(modelCode: String, fallbackSymbol: String) -> NSImage {
-        guard let icon = AppleDeviceType(modelCode)?.icon else {
+        if let cached = icons[modelCode] {
+            return cached
+        }
+        guard let icon = artwork(modelCode) else {
             return NSImage(systemSymbolName: fallbackSymbol, accessibilityDescription: nil) ?? NSImage()
         }
-        if let lifted = withoutPlate[modelCode] { return lifted }
-        guard let lifted = liftingPlate(icon) else { return icon }
-        withoutPlate[modelCode] = lifted
-        return lifted
+        icons[modelCode] = icon
+        return icon
     }
 
-    private static var withoutPlate: [String: NSImage] = [:]
+    private static var icons: [String: NSImage] = [:]
+
+    /// At launch: every board's artwork, made off the main thread, so the sidebar and Add Device find them ready.
+    static func prepareIcons() {
+        let codes = allCases.map(\.productType)
+        Task {
+            for (code, icon) in await artwork(codes) where icons[code] == nil {
+                icons[code] = icon
+            }
+        }
+    }
+
+    @concurrent private nonisolated static func artwork(_ codes: [String]) async -> sending [String: NSImage] {
+        var made: [String: NSImage] = [:]
+        for code in codes {
+            made[code] = artwork(code)
+        }
+        return made
+    }
+
+    /// macOS's icon for the model with any plate lifted; nil where this macOS doesn't declare the model.
+    private nonisolated static func artwork(_ modelCode: String) -> NSImage? {
+        guard let icon = AppleDeviceType(modelCode)?.icon else {
+            return nil
+        }
+        return liftingPlate(icon) ?? icon
+    }
 
     /// macOS's iPhone 4 icon (CoreTypes' com.apple.iphone-4-*.icns) lays its 256-1024 px images on a square of 12%
     /// white, which shows as a lighter square in dark mode (issue 44). Where an image's four corners are one
     /// translucent color, that uniform backing is composited out of every pixel (shadow included); nil when no image
     /// has one.
-    private static func liftingPlate(_ icon: NSImage) -> NSImage? {
+    private nonisolated static func liftingPlate(_ icon: NSImage) -> NSImage? {
         var lifted = false
         let image = NSImage(size: icon.size)
         var sizes: Set<[CGFloat]> = []

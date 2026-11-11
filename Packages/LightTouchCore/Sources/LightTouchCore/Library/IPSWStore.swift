@@ -264,6 +264,22 @@ public nonisolated struct IPSWStore: Sendable {
         return (entry, destination)
     }
 
+    /// Copy into Light Touch: a reference's file copied into State/IPSW, so the IPSW no longer needs that file's disk.
+    /// The copy replaces the reference only once it's whole, by rename(2), which replaces the link itself and never
+    /// follows it to the user's file.
+    public func copyIn(_ sha1: String) throws {
+        guard existing(sha1) != nil, let file = referenced(sha1) else { throw CocoaError(.fileNoSuchFile) }
+        let temporary = imports.appendingPathComponent(".\(sha1).importing")
+        try? FileManager.default.removeItem(at: temporary)
+        try FileManager.default.copyItem(at: file, to: temporary)
+        guard rename(temporary.path, imported(sha1).path) == 0 else {
+            let error = StorageLocations.posixError()
+            try? FileManager.default.removeItem(at: temporary)
+            throw error
+        }
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+    }
+
     // MARK: - Removal
 
     /// Posted after Remove IPSW: rows that said Downloaded read the store again.

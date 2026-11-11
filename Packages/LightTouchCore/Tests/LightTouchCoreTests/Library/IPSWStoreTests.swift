@@ -192,6 +192,15 @@ struct IPSWStoreTests {
             try importKnown()
             #expect(try store.importIPSW(known, catalog: pinned).ipsw == store.imported(sha), "a second import dedupes")
 
+            // Copy into Light Touch: a whole copy in the reference's place; the user's file is untouched.
+            try store.copyIn(sha)
+            #expect(store.referenced(sha) == nil && store.existing(sha) == store.imported(sha), "no longer a reference")
+            #expect(
+                try fm.attributesOfItem(atPath: store.imported(sha).path)[.type] as? FileAttributeType == .typeRegular
+            )
+            #expect(try IPSWStore.sha1(of: store.imported(sha)) == sha && Data(contentsOf: known) == original)
+            #expect(try fm.contentsOfDirectory(atPath: store.imports.path) == ["\(sha).ipsw"], "no copy left over")
+
             // Removed: the reference goes, the file stays.
             try store.remove(sha)
             #expect(store.existing(sha) == nil && store.referenced(sha) == nil && fm.fileExists(atPath: known.path))

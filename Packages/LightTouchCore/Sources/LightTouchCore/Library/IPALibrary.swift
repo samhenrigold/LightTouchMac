@@ -24,7 +24,8 @@ public enum IPALibrary {
             minOS: String? = nil,
             size: Int64,
             md5: String,
-            catalogIpaID: Int? = nil
+            catalogIpaID: Int? = nil,
+            kept: Bool? = nil
         ) {
             self.bundleID = bundleID
             self.name = name
@@ -33,6 +34,7 @@ public enum IPALibrary {
             self.size = size
             self.md5 = md5
             self.catalogIpaID = catalogIpaID
+            self.kept = kept
         }
         public var bundleID: String
         public var name: String? = nil
@@ -42,6 +44,8 @@ public enum IPALibrary {
         /// The archive's own checksum, which is what Legacy Store publishes.
         public var md5: String
         public var catalogIpaID: Int? = nil
+        /// Added in Settings ▸ Storage to keep, not by an install: Remove Unused leaves it.
+        public var kept: Bool? = nil
     }
 
     /// What an install knows about the archive it just landed.
@@ -111,7 +115,7 @@ public enum IPALibrary {
         }
     }
 
-    private static func record(_ digests: Digests, _ metadata: Metadata) {
+    private static func record(_ digests: Digests, _ metadata: Metadata, kept: Bool? = nil) {
         var index = index
         let old = index[digests.sha256]
         let new = Entry(
@@ -121,7 +125,8 @@ public enum IPALibrary {
             minOS: metadata.minOS ?? old?.minOS,
             size: digests.size,
             md5: digests.md5,
-            catalogIpaID: metadata.catalogIpaID ?? old?.catalogIpaID
+            catalogIpaID: metadata.catalogIpaID ?? old?.catalogIpaID,
+            kept: kept ?? old?.kept
         )
         guard new != old else { return }
         index[digests.sha256] = new
@@ -169,13 +174,29 @@ public enum IPALibrary {
         }
     }
 
-    /// The archive is read end to end, off the main actor.
-    @concurrent private nonisolated static func store(_ ipa: URL, cloneTo copy: URL) async throws -> Digests {
+    /// The archive is read end to end, off the main actor; `copy`, when given, is a clone for a device.
+    @concurrent private nonisolated static func store(_ ipa: URL, cloneTo copy: URL? = nil) async throws -> Digests {
         let digests = try digests(of: ipa)
         let blob = blob(digests.sha256)
         if !FileManager.default.fileExists(atPath: blob.path) { try clone(ipa, to: blob) }
-        try clone(blob, to: copy)
+        if let copy { try clone(blob, to: copy) }
         return digests
+    }
+
+    /// Settings ▸ Storage's Add App…: an .ipa kept in the store (a clone on the same volume) without installing it,
+    /// which Remove Unused leaves. The user's file stays where it is.
+    public static func keep(_ ipa: URL) async throws {
+        guard let id = await AppMetadataCache.bundleID(of: ipa) else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSURLErrorKey: ipa])
+        }
+        let info = await AppMetadataCache.info(of: ipa) ?? [:]
+        let metadata = Metadata(
+            bundleID: id,
+            name: (info["CFBundleDisplayName"] ?? info["CFBundleName"]) as? String,
+            version: (info["CFBundleShortVersionString"] ?? info["CFBundleVersion"]) as? String,
+            minOS: info["MinimumOSVersion"] as? String
+        )
+        record(try await store(ipa), metadata, kept: true)
     }
 
     /// The uninstall path drops the device's copy; the blob stays.
@@ -203,24 +224,47 @@ public enum IPALibrary {
 
     /// Blobs no device copy references. A reference is a copy named for the
     /// entry's bundle id with the entry's size.
-    public static func unused(devices: [DeviceInstance]) -> [String: Entry] {
-        index.filter { _, entry in
-            !devices.contains { device in
-                guard let copy = url(for: entry.bundleID, device: device) else { return false }
+    public static func unused(devices: [DeviceInstance]) -> [String: Entry] { unused(index, devices: devices) }
+
+    /// `index`'s entries no device has a copy of and nobody kept, off the main thread (Settings ▸ Storage measures
+    /// with it).
+    public nonisolated static func unused(_ index: [String: Entry], devices: [DeviceInstance]) -> [String: Entry] {
+        let devices = deviceCounts(index, devices: devices)
+        return index.filter { sha256, entry in
+            entry.kept != true && devices[sha256] == nil
+        }
+    }
+
+    /// How many devices have a copy of each of `index`'s entries, by sha256 (none: absent). One archive can be on
+    /// several devices, and each version of an app is its own entry.
+    public nonisolated static func deviceCounts(_ index: [String: Entry], devices: [DeviceInstance]) -> [String: Int] {
+        index.compactMapValues { entry in
+            let count = devices.count { device in
+                guard let copy = url(for: entry.bundleID, device: device) else {
+                    return false
+                }
                 return Self.size(of: copy) == entry.size
             }
+            return count > 0 ? count : nil
         }
     }
 
     /// Settings ▸ Storage's Remove Unused.
     public static func removeUnused(devices: [DeviceInstance]) throws {
+        try remove(Array(unused(devices: devices).keys))
+    }
+
+    /// Settings ▸ Storage's Delete for apps no device has: their blobs and entries. The user's own files elsewhere stay.
+    public static func remove(_ sha256s: [String]) throws {
         var index = index
-        for sha256 in unused(devices: devices).keys {
+        defer { save(index) }
+        for sha256 in sha256s {
             let url = blob(sha256)
-            if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
             index[sha256] = nil
         }
-        save(index)
     }
 
     /// Launch, under the app lock: every device copy is in the store once.

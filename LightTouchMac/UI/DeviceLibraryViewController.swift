@@ -121,6 +121,13 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
             name: DeviceSessionHost.didChangeNotification,
             object: nil
         )
+        // Settings ▸ General's Device Names: every row's name, and the window's title with it.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(nameStyleDidChange),
+            name: Board.NameStyle.didChangeNotification,
+            object: nil
+        )
         sessionTracking = ObservationLoop(
             read: { [weak self] in self?.trackedSessionState() },
             onChange: { [weak self] in self?.stateDidChange() }
@@ -150,7 +157,7 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
 
     /// The row in an alert or a panel: “Lab iPad”, else iPad iOS 3.2.2.
     func displayName(for entry: FirmwareCatalog.Entry) -> String {
-        customName(for: entry).map { "“\($0)”" } ?? "\(entry.marketingName) iOS \(entry.version)"
+        SidebarList.reference(for: entry, name: customName(for: entry))
     }
 
     /// Edit ▸ Delete while the sidebar has the focus.
@@ -201,6 +208,7 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
     /// Saves, rebuilds the rows, keeps the selection.
     private func listDidChange() {
         list.save(defaults)
+        NotificationCenter.default.post(name: SidebarList.didChangeNotification, object: nil)
         let selected = selectedEntry?.id
         items = list.entries(in: host.catalog).map { Entry($0) }
         rows = [:]
@@ -363,6 +371,8 @@ final class DeviceLibraryViewController: NSViewController, NSOutlineViewDataSour
     }
 
     // MARK: - State
+
+    @objc private func nameStyleDidChange() { listDidChange() }
 
     @objc private func stateDidChange() {
         adoptOwned()

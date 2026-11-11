@@ -40,7 +40,7 @@ struct AddDeviceSummary: View {
                         .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(entry.marketingName).font(.headline)
+                    Text(entry.preferredName).font(.headline)
                     HStack(spacing: 6) {
                         Text("iOS \(entry.version)")
                         if let badge = entry.prereleaseBadge { Badge(text: badge) }
@@ -108,7 +108,7 @@ struct AddDeviceSummary: View {
                 // One line each, the first few; the rest counted.
                 ForEach(entries.prefix(4)) { entry in
                     Text(
-                        "\(entry.marketingName), iOS \(entry.version)"
+                        "\(entry.preferredName), iOS \(entry.version)"
                             + (entry.prereleaseBadge.map { " \($0)" } ?? "")
                     )
                     .foregroundStyle(.secondary)

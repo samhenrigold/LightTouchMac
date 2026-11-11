@@ -1,119 +1,112 @@
 import Cocoa
+import HostRuntime
 import LightTouchCore
 import SwiftUI
 
-/// Settings…: one window, a toolbar button per pane, the window sized to the
-/// pane and titled after it (HIG, "Settings"). Each pane is a grouped Form.
+/// Settings…: one window, a toolbar button per pane, the window sized to the selected pane (AppKit, from each
+/// hosting controller's preferredContentSize) and titled after it (HIG, "Settings"). Each pane is a grouped Form.
+// At a macOS 26 deployment target this class can go: an NSHostingSceneRepresentation of a Settings scene with a
+// TabView(selection:), opened by its environment's openSettings(). Before 26 only NSTabViewController has these tabs.
 final class SettingsWindowController: NSWindowController {
     enum Pane: Int { case general, capture, storage }
 
     private let tabs = SettingsTabViewController()
-    private let panes: [NSView]
 
-    /// `storage` is measured again each time its pane is shown.
+    /// `storage` is measured each time its pane is shown (StorageSettingsView). IPSWs and apps dropped on any pane go
+    /// to Storage, which comes forward.
     init(general: some View, capture: some View, storage: StorageUsage) {
-        let resize = SettingsResize()
-        panes = [
-            NSHostingView(rootView: general.settingsPane(resize)),
-            NSHostingView(rootView: capture.settingsPane(resize)),
-            NSHostingView(rootView: StorageSettingsView(model: storage).settingsPane(resize, maxHeight: 560))
-        ]
+        let tabs = tabs
+        let drop: ([URL]) -> Bool = { urls in
+            guard storage.add(urls) else {
+                return false
+            }
+            tabs.selectedTabViewItemIndex = Pane.storage.rawValue
+            return true
+        }
         tabs.tabStyle = .toolbar
         tabs.canPropagateSelectedChildViewControllerTitle = true
-        for (view, (title, symbol)) in zip(
-            panes,
-            [("General", "gearshape"), ("Capture", "camera"), ("Storage", "internaldrive")]
-        ) {
-            let pane = NSViewController()
-            pane.view = view
-            pane.title = title
-            let item = NSTabViewItem(viewController: pane)
-            item.label = title
-            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
-            tabs.addTabViewItem(item)
-        }
+        tabs.addTabViewItem(Self.item(general.settingsPane(), "General", "gearshape", drop: drop))
+        tabs.addTabViewItem(Self.item(capture.settingsPane(), "Capture", "camera", drop: drop))
+        tabs.addTabViewItem(
+            Self.item(
+                StorageSettingsView(model: storage).settingsPane(maxHeight: 560),
+                "Storage",
+                "internaldrive",
+                drop: drop
+            )
+        )
+
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
         window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
-        // Where it was left; each pane sizes it (fit).
+
         let restored = WindowRestorationPolicy.configure(window, frameAutosaveName: "Settings")
         super.init(window: window)
-        resize.action = { [weak self] in self?.fit() }
-        tabs.onSelect = { [weak self] in
-            self?.fit()
-            if self?.pane == .storage { storage.reload() }
+
+        storage.isShown = { [weak self] in
+            self?.window?.isVisible == true && self?.pane == .storage
         }
-        storage.isShown = { [weak self] in self?.window?.isVisible == true && self?.pane == .storage }
-        fit()
-        if !restored { window.center() }
+
+        if !restored {
+            window.center()
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    private static func item(
+        _ content: some View,
+        _ title: String,
+        _ symbol: String,
+        drop: @escaping ([URL]) -> Bool
+    ) -> NSTabViewItem {
+        let pane = NSHostingController(
+            rootView: content.dropDestination(for: URL.self) { urls, _ in
+                drop(urls)
+            }
+        )
+        pane.sizingOptions = .preferredContentSize
+        pane.title = title
+        let item = NSTabViewItem(viewController: pane)
+        item.label = title
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+        return item
+    }
 
     var pane: Pane {
         get { Pane(rawValue: tabs.selectedTabViewItemIndex) ?? .general }
         set { tabs.selectedTabViewItemIndex = newValue.rawValue }
     }
 
-    func view(for pane: Pane) -> NSView { panes[pane.rawValue] }
+    func view(for pane: Pane) -> NSView { tabs.tabViewItems[pane.rawValue].viewController!.view }
+}
 
-    /// The window takes the selected pane's size, keeping its top edge.
-    private func fit() {
-        guard let window else { return }
-        let view = self.view(for: pane)
-        view.layoutSubtreeIfNeeded()
-        let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: view.fittingSize))
-        guard frame.size != window.frame.size else { return }
+/// A pane switch animates the window to the new pane's height, keeping its top edge, as Settings windows do; AppKit
+/// resizes it to the pane's preferredContentSize without animating.
+private final class SettingsTabViewController: NSTabViewController {
+    override func tabView(_ tabView: NSTabView, willSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, willSelect: tabViewItem)
+        guard let window = view.window, window.isVisible, let size = tabViewItem?.viewController?.preferredContentSize
+        else {
+            return
+        }
+        let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
         window.setFrame(
             NSRect(x: window.frame.minX, y: window.frame.maxY - frame.height, width: frame.width, height: frame.height),
             display: true,
-            animate: window.isVisible
+            animate: true
         )
     }
 }
 
-/// A pane's content changed height: the window refits.
-final class SettingsResize {
-    var action: (() -> Void)?
-}
-
-/// A Settings pane: a grouped Form at a fixed width and its whole height; one taller than `maxHeight` scrolls
-/// inside that. The window is told when the height changes.
-private struct SettingsPane<Content: View>: View {
-    let content: Content
-    let resize: SettingsResize
-    var maxHeight: CGFloat = .infinity
-    @State private var height: CGFloat = 0
-
-    var body: some View {
-        ScrollView {
-            content
-                .formStyle(.grouped)
-                .scrollDisabled(true)
-                .fixedSize(horizontal: false, vertical: true)
-                .onGeometryChange(for: CGFloat.self, of: \.size.height) { height = $0 }
-        }
-        .scrollDisabled(height <= maxHeight)
-        .frame(width: 500, height: min(height, maxHeight))
-        .onChange(of: height) {
-            // After this layout pass, so the hosting view's fitting size is the new one.
-            DispatchQueue.main.async { resize.action?() }
-        }
-    }
-}
-
 extension View {
-    func settingsPane(_ resize: SettingsResize, maxHeight: CGFloat = .infinity) -> some View {
-        SettingsPane(content: self, resize: resize, maxHeight: maxHeight)
-    }
-}
-
-private final class SettingsTabViewController: NSTabViewController {
-    var onSelect: (() -> Void)?
-    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
-        super.tabView(tabView, didSelect: tabViewItem)
-        onSelect?()
+    /// A Settings pane: a grouped Form 500 pt wide at its content's height, which scrolls past `maxHeight`.
+    func settingsPane(maxHeight: CGFloat = .infinity) -> some View {
+        formStyle(.grouped)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(width: 500)
+            .frame(maxHeight: maxHeight)
     }
 }
 
@@ -127,34 +120,95 @@ struct GeneralSettingsView: View {
     @AppStorage(FirmwareJobs.withoutMountingKey) private var withoutMounting = false
     @AppStorage(ClipboardSync.key) private var shareClipboard = true
     @AppStorage(Analytics.key) private var shareReports = true
+    @AppStorage(Board.NameStyle.key) private var nameStyle = Board.NameStyle.marketing
 
     var body: some View {
         Form {
-            Picker("Connect to the internet…", selection: $internet) {
-                Text("Always").tag(Bool?.some(true))
-                Text("Never").tag(Bool?.some(false))
-                Text("Ask When a Device Starts").tag(Bool?.none)
+            Section {
+                Picker("Device name style", selection: $nameStyle) {
+                    ForEach(Board.NameStyle.allCases, id: \.self) { style in
+                        Text(Board.n72.name(style))
+                            .tag(style)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                .onChange(of: nameStyle) {
+                    NotificationCenter.default.post(name: Board.NameStyle.didChangeNotification, object: nil)
+                }
             }
-            Toggle("Play vibration sound", isOn: $vibrationSound)
-            Toggle("Share clipboard with devices", isOn: $shareClipboard)
-            Toggle(isOn: $refresh120) {
-                Text("120 Hz refresh (experimental)")
-                Text("Takes effect when a device next starts. Games that count frames run too fast.")
+
+            Section {
+                Picker("Connect to the internet…", selection: $internet) {
+                    Text("Always").tag(Bool?.some(true))
+                    Text("Never").tag(Bool?.some(false))
+                    Text("Ask When a Device Starts").tag(Bool?.none)
+                }
+
+                Toggle("Sync clipboard between devices and this Mac", isOn: $shareClipboard)
+
+                Toggle("Simulate vibration sounds", isOn: $vibrationSound)
             }
-            Toggle(isOn: $angle) {
-                Text("ANGLE renderer (experimental)")
-                Text("Takes effect when a device next starts. Draws with Metal through ANGLE instead of OpenGL.")
+
+            Section {
+                Toggle(isOn: $refresh120) {
+                    Text("120Hz refresh rate")
+                    Text("Some games may run too fast when enabled.\nTakes effect when a device next starts.")
+                }
+                Toggle(isOn: $angle) {
+                    Text("ANGLE renderer")
+                    Text("Experimental. Takes effect when a device next starts.")
+                }
             }
-            Toggle(isOn: $withoutMounting) {
-                Text("Prepare devices without mounting disk images (experimental)")
-                Text(
-                    "Edits a new device’s disk images directly instead of mounting them in macOS, groundwork for other platforms. May be slower, or fail on some versions."
-                )
+
+            Section {
+                Toggle(isOn: $withoutMounting) {
+                    Text("Prepare new devices without mounting disk images")
+                    Text("Experimental. May be slower, or fail on some versions.")
+                }
             }
-            Toggle(isOn: $shareReports) {
-                Text("Share anonymous usage and error reports")
-                Text("Which devices start and what fails, sent to TelemetryDeck. Nothing identifies you or this Mac.")
+
+            Section {
+                Toggle("Share anonymous usage and error reports", isOn: $shareReports)
+            }
+
+            Section {
+                Button("Restore Defaults", action: restoreDefaults)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
     }
+
+    /// This pane's settings only; the defaults are the ones declared above.
+    private func restoreDefaults() {
+        internet = nil
+        vibrationSound = true
+        refresh120 = false
+        angle = false
+        withoutMounting = false
+        shareClipboard = true
+        shareReports = true
+    }
+}
+
+/// The Settings window's tabs, opened at `pane`, with Storage's preview data.
+@MainActor private func settingsPreview(_ pane: SettingsWindowController.Pane) -> NSViewController {
+    let settings = SettingsWindowController(
+        general: GeneralSettingsView(),
+        capture: CaptureOptionsView(preferences: .shared),
+        storage: .preview
+    )
+    settings.pane = pane
+    return settings.window!.contentViewController!
+}
+
+#Preview("General", traits: .fixedLayout(width: 520, height: 640)) {
+    settingsPreview(.general)
+}
+
+#Preview("Capture", traits: .fixedLayout(width: 520, height: 640)) {
+    settingsPreview(.capture)
+}
+
+#Preview("Storage", traits: .fixedLayout(width: 520, height: 640)) {
+    settingsPreview(.storage)
 }

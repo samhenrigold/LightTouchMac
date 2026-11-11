@@ -36,7 +36,10 @@ extension MainWindowController {
                 catalog: host.catalog,
                 jobs: .shared,
                 delete: { [weak self] instance in self?.deleteFromStorage(instance) },
-                canDelete: { [weak self] instance in self?.canDeleteFromStorage(instance) ?? false }
+                canDelete: { [weak self] instance in self?.canDeleteFromStorage(instance) ?? false },
+                label: { [weak self] instance in
+                    self?.sidebarLabel(instance)
+                }
             )
             let settings = SettingsWindowController(general: GeneralSettingsView(), capture: capture, storage: storage)
             storageUsage = storage

@@ -77,8 +77,8 @@ extension SharedState {
                 }
                 return true
             }
-            func window(_ size: NSSize) -> NSWindow {
-                let w = NSWindow(
+            func window(_ size: NSSize) -> QuietWindow {
+                let w = QuietWindow(
                     contentRect: NSRect(origin: .zero, size: size),
                     styleMask: [.titled],
                     backing: .buffered,
@@ -107,7 +107,7 @@ extension SharedState {
                 }
             }
             func sidebar(_ ids: [String], names: [String: String] = [:], host: DeviceSessionHost) -> (
-                DeviceLibraryViewController, NSWindow
+                DeviceLibraryViewController, QuietWindow
             ) {
                 SidebarList(ids: ids, names: names).save(defaults)
                 let vc = DeviceLibraryViewController(host: host, defaults: defaults)
@@ -380,6 +380,9 @@ extension SharedState {
             outline.keyDown(with: forwardDelete)
             if !delegate.deletes.isEmpty || vc.entries.map(\.id) != before {
                 fail("a bare Delete key removed \(delegate.deletes), left \(vc.entries.map(\.id))")
+            }
+            if w.unhandled != [#selector(NSResponder.keyDown(with:)), #selector(NSResponder.keyDown(with:))] {
+                fail("Delete and Forward Delete reached no handler: \(w.unhandled)")
             }
             vc.delete(nil)
             if delegate.deletes != ["n72ap-8C148"] || !vc.entries.contains(where: { $0.id == "n72ap-8C148" }) {
@@ -939,4 +942,11 @@ extension SharedState {
             #expect(delegate.sessionChanges == 1)
         }
     }
+}
+
+/// A key nothing handles ends at the window, which beeps; this window notes it instead, so a test that checks a key
+/// does nothing stays quiet and can say the key went unhandled.
+final class QuietWindow: NSWindow {
+    var unhandled: [Selector] = []
+    override func noResponder(for eventSelector: Selector) { unhandled.append(eventSelector) }
 }

@@ -388,8 +388,7 @@ import os
 /// WebSocket once the request is read would be tidier, but prependApplicationProtocol refuses it (EINVAL, macOS 27).
 nonisolated final class PhoneRemoteFramer: NWProtocolFramerImplementation {
     static let label = "PhoneRemote"
-    // nonisolated(unsafe): made once, then only read; Network.framework holds definitions across its own queues.
-    nonisolated(unsafe) static let definition = NWProtocolFramer.Definition(implementation: PhoneRemoteFramer.self)
+    static let definition = NWProtocolFramer.Definition(implementation: PhoneRemoteFramer.self)
     /// The running session's token (PhoneRemoteController.start); empty, which opens nothing, while stopped.
     static let token = OSAllocatedUnfairLock(initialState: "")
     static let page =

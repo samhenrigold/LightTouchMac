@@ -40,7 +40,7 @@ import os
         private let alerts: Alerts
         private var observer: (any NSObjectProtocol)?
 
-        init(_ root: URL, catalog: FirmwareCatalog, preparer: URL?, resources: URL? = nil) throws {
+        init(_ root: URL, catalog: FirmwareCatalog, preparer: URL?, resources: URL? = nil, sweep: Bool = false) throws {
             self.catalog = catalog
             let alerts = Alerts()
             self.alerts = alerts
@@ -61,7 +61,7 @@ import os
                 preparer: preparer,
                 resources: resources,
                 library: library,
-                sweep: false,
+                sweep: sweep,
                 defaults: defaults,
                 presentError: { [alerts] in alerts.messages.append($0.localizedDescription) }
             )
@@ -318,6 +318,61 @@ import os
             #expect(seen["k48ap-9B206 false"]?.contains("--jailbreak") == false, "5.1.1, turned off")
             #expect(seen["k48ap-8C148 false"]?.contains("--jailbreak") == false, "4.2.1 iPad, turned off")
             #expect(seen["k48ap-7B500 false"]?.contains("--jailbreak") == false, "3.2.2 iPad, turned on")
+        }
+    }
+
+    /// Launch (the sweep): a decrypt cache holding anything a quit, crash or older build left is pruned whole; an empty
+    /// one runs nothing.
+    @Test func launchPrunesADecryptCacheLeftBehind() async throws {
+        try await LibraryFixtures.withScratch { tmp in
+            let catalog = try Self.catalog([Self.entry("k48ap-9B206")], in: tmp)
+            let argvURL = tmp.appendingPathComponent("argv.json")
+            let prune = URL(fileURLWithPath: argvURL.path + ".prune")
+            let preparer = try LibraryFixtures.fakePreparer(in: tmp, argv: argvURL)
+            let empty = try Harness(
+                tmp.appendingPathComponent("empty"), catalog: catalog, preparer: preparer, sweep: true)
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(!FileManager.default.fileExists(atPath: prune.path), "an empty cache: nothing run")
+            let left = tmp.appendingPathComponent("left")
+            try FileManager.default.createDirectory(
+                at: left.appendingPathComponent("Caches/Decrypted/decrypted-v2/stale"),
+                withIntermediateDirectories: true
+            )
+            let leftOver = try Harness(left, catalog: catalog, preparer: preparer, sweep: true)
+            try await until("the prune") { FileManager.default.fileExists(atPath: prune.path) }
+            let arguments = try String(contentsOf: prune, encoding: .utf8)
+            #expect(arguments.contains("Caches/Decrypted") && !arguments.contains("--ipsw"), "\(arguments)")
+            withExtendedLifetime((empty, leftOver)) {}
+        }
+    }
+
+    /// A prepared device's IPSW leaves the decrypt cache (firmwarekit cache-prune --ipsw), as only a retry reuses it.
+    @Test func aPreparedDevicesIPSWIsPrunedFromTheDecryptCache() async throws {
+        try await LibraryFixtures.withScratch { tmp in
+            let id = "k48ap-9B206"
+            var e = Self.entry(id)
+            let data = LibraryFixtures.randomData(1 << 20)
+            let url = tmp.appendingPathComponent("\(id).ipsw")
+            try data.write(to: url)
+            let sha1 = IPSWStoreTests.sha1Hex(data)
+            e["source"] = ["kind": "ipsw", "url": url.absoluteString, "sha1": sha1, "bytes": 1 << 20]
+            e["estimates"] = Self.smallEstimates
+            e.removeValue(forKey: "bundled")
+            let catalog = try Self.catalog([e], in: tmp)
+            let argvURL = tmp.appendingPathComponent("argv.json")
+            let prune = URL(fileURLWithPath: argvURL.path + ".prune")
+            let h = try Harness(
+                tmp.appendingPathComponent("state"),
+                catalog: catalog,
+                preparer: try LibraryFixtures.fakePreparer(in: tmp, argv: argvURL)
+            )
+            h.jobs.downloadAndPrepare(try #require(catalog.entry(id: id)))
+            await h.settle(id)
+            #expect(h.devices(id).count == 1, "prepared: \(h.seen)")
+            try await until("the prune") { FileManager.default.fileExists(atPath: prune.path) }
+            let arguments = try String(contentsOf: prune, encoding: .utf8)
+            #expect(arguments.contains("--ipsw \(sha1)"), "\(arguments)")
+            #expect(arguments.contains("/Decrypted"), "\(arguments)")
         }
     }
 

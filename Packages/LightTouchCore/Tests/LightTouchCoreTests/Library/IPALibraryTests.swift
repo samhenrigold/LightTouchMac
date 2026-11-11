@@ -26,6 +26,23 @@ extension SharedState {
             var all: [String] { lock.withLock { paths } }
         }
 
+        /// Settings ▸ Storage's Add App…: an archive kept in the store with no device, named from its own Info.plist,
+        /// and left by Remove Unused, as is the user's file.
+        @Test func anAddedAppIsKeptThroughRemoveUnused() async throws {
+            let a = FakeDevice("a")
+            let devices: () -> [DeviceInstance] = { [a.instance] }
+            try await withInstallerState(devices: devices) { state, _ in
+                let ipa = state.appendingPathComponent("Kept.ipa")
+                try makeIPA(at: ipa, bundleID: "test.kept", name: "Kept", info: ["CFBundleShortVersionString": "2.1"])
+                try await IPALibrary.keep(ipa)
+                let entry = try #require(IPALibrary.index.values.first { $0.bundleID == "test.kept" })
+                #expect(entry.kept == true && entry.version == "2.1" && blobs().count == 1, "\(entry)")
+                #expect(IPALibrary.unused(devices: [a.instance]).isEmpty, "kept, so not unused")
+                try IPALibrary.removeUnused(devices: [a.instance])
+                #expect(blobs().count == 1 && FileManager.default.fileExists(atPath: ipa.path))
+            }
+        }
+
         @Test func blobsCopiesUninstallReuseAndSweep() async throws {
             let a = FakeDevice("a")
             let b = FakeDevice("b")

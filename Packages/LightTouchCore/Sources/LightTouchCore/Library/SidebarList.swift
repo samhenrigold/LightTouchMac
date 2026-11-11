@@ -6,6 +6,20 @@ import Foundation
 public nonisolated struct SidebarList: Equatable {
     public static let entriesKey = "sidebarEntries"
     public static let namesKey = "sidebarNames"
+    /// Posted when the sidebar's list or a name changes (a rename, Device Name Style): names shown elsewhere follow.
+    public static let didChangeNotification = Notification.Name("SidebarListDidChange")
+
+    /// The saved custom name for an entry, for names shown outside the sidebar.
+    public static func savedName(_ id: String, in defaults: UserDefaults = .standard) -> String? {
+        (defaults.dictionary(forKey: namesKey) as? [String: String])?[id]
+    }
+
+    /// A device in an alert, a panel or a menu: “Lab iPad”, else iPad iOS 3.2.2.
+    public static func reference(for entry: FirmwareCatalog.Entry, name: String?) -> String {
+        name.map { name in
+            "“\(name)”"
+        } ?? "\(entry.preferredName) iOS \(entry.version)"
+    }
 
     /// Entry ids, in the order they were added; `entries(in:)` lists them in catalog order.
     public private(set) var ids: [String]
@@ -76,7 +90,7 @@ public nonisolated struct SidebarList: Equatable {
 
     public static func label(for entry: FirmwareCatalog.Entry, name: String?) -> Label {
         let version = (["iOS \(entry.version)"] + [entry.prereleaseBadge].compactMap { $0 }).joined(separator: " ")
-        guard let name else { return Label(title: entry.marketingName, subtitle: version) }
-        return Label(title: name, subtitle: "\(entry.marketingName), \(version)")
+        guard let name else { return Label(title: entry.preferredName, subtitle: version) }
+        return Label(title: name, subtitle: "\(entry.preferredName), \(version)")
     }
 }

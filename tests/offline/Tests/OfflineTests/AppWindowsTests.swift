@@ -113,6 +113,50 @@ extension SharedState {
             #expect(heard == 1, "a device started or stopped: measured, and Delete asked, again")
         }
 
+        /// AppKit sizes Settings to the selected pane (each hosting controller's preferredContentSize): a switch takes the
+        /// window to that pane's height, and Storage stops at 560 pt and scrolls.
+        @Test func settingsTakesEachPanesHeight() async throws {
+            func rows(_ count: Int) -> some View { Form { ForEach(0..<count, id: \.self) { Text("Row \($0)") } } }
+            let catalog = try FirmwareCatalog.load(
+                from: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                    .appendingPathComponent("../../../../LightTouchMac/Resources/firmware-catalog.json")
+                    .standardizedFileURL
+            )
+            let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-settings-\(UUID())")
+            defer { try? FileManager.default.removeItem(at: scratch) }
+            let jobs = FirmwareJobs(
+                catalog: catalog,
+                configuration: .ephemeral,
+                state: scratch,
+                logs: scratch,
+                caches: scratch,
+                preparer: nil,
+                resources: nil,
+                sweep: false
+            ) { _ in }
+            var usage = StorageUsage.Usage(measured: true)
+            usage.ipsws = (0..<40).map { ("n72ap-7E18", URL(fileURLWithPath: "/ipsw/\($0).ipsw"), 1 << 30, nil) }
+            let settings = SettingsWindowController(
+                general: rows(2),
+                capture: rows(12),
+                storage: StorageUsage(preview: usage, catalog: catalog, jobs: jobs)
+            )
+            defer { UserDefaults.standard.removeObject(forKey: "NSWindow Frame Settings") }
+            let window = settings.window!
+            func height() -> CGFloat { window.contentRect(forFrameRect: window.frame).height }
+            func settled(_ pane: SettingsWindowController.Pane) async -> CGFloat {
+                settings.pane = pane
+                try? await Task.sleep(for: .milliseconds(300))
+                return height()
+            }
+            let general = await settled(.general)
+            let capture = await settled(.capture)
+            let storage = await settled(.storage)
+            #expect(general < capture && capture < 560, "general \(general), capture \(capture)")
+            #expect(storage == 560, "storage \(storage)")
+            #expect(await settled(.general) == general, "back to general")
+        }
+
         /// Windows opt out of state restoration (no restoration class, no autosave) unless named; a named window keeps
         /// only its frame: the first has nothing to apply, a later one with the same name opens where it was left.
         /// LightTouchApplication's own restoration overrides need their own app process and aren't checked here;

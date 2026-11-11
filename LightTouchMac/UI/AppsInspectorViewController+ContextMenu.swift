@@ -23,7 +23,9 @@ extension AppsInspectorViewController: NSMenuDelegate {
             targets: (DeviceSessionHost.shared?.sessions ?? []).map { session in
                 let entry = FirmwareCatalog.bundled.entry(id: session.instance.firmware)
                 return AppsMenuTarget(
-                    title: entry.map { "\($0.marketingName) iOS \($0.version)" } ?? session.instance.name,
+                    title: entry.map { entry in
+                        SidebarList.reference(for: entry, name: SidebarList.savedName(entry.id))
+                    } ?? session.instance.name,
                     canQueueInstall: session.emulator.canQueueInstall,
                     isThisDevice: session.emulator === emulator,
                     device: session.emulator

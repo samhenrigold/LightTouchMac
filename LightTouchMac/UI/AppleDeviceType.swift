@@ -1,7 +1,7 @@
 import Cocoa
 import UniformTypeIdentifiers
 
-public struct AppleDeviceType: Hashable, Sendable, CustomStringConvertible {
+public nonisolated struct AppleDeviceType: Hashable, Sendable, CustomStringConvertible {
     public let modelIdentifier: String
     public let contentType: UTType
 
@@ -47,5 +47,7 @@ public struct AppleDeviceType: Hashable, Sendable, CustomStringConvertible {
 }
 
 extension UTTagClass {
-    fileprivate static let appleDeviceModelCode = UTTagClass(rawValue: "com.apple.device-model-code")
+    fileprivate nonisolated static var appleDeviceModelCode: UTTagClass {
+        UTTagClass(rawValue: "com.apple.device-model-code")
+    }
 }

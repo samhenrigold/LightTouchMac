@@ -198,6 +198,8 @@ import HostRuntime
             for await input in stream { self?.receive(input) }
         }
         downloads.active { inputs.yield(.tasks($0)) }
+        // The decrypt cache is only for a retry: what a quit, a crash or an older build left goes now.
+        if sweep { pruneDecrypted() }
     }
 
     deinit { inputs.finish() }
@@ -298,13 +300,14 @@ import HostRuntime
     /// IPSWs and folders of them (Import IPSW… for no row, a drop, Finder's Open), matched by sha1 off the main
     /// thread. One file is imported and prepared as above. Several, or a folder, are only stored, one after another,
     /// so their rows say Downloaded and Download and Prepare uses them: one that matches no entry is skipped and
-    /// logged, and if none matches, one error says so.
-    public func importIPSWs(_ urls: [URL]) {
+    /// logged, and if none matches, one error says so. Without `prepare` (Settings ▸ Storage's Add IPSW…) one file is
+    /// only stored too.
+    public func importIPSWs(_ urls: [URL], prepare: Bool = true) {
         let catalog = catalog
         let store = store
         let inputs = inputs
         Task.detached {
-            if urls.count == 1, !DroppedFiles.isFolder(urls[0]) {
+            if prepare, urls.count == 1, !DroppedFiles.isFolder(urls[0]) {
                 inputs.yield(.imported(UUID(), nil, Result { try store.importIPSW(urls[0], catalog: catalog) }))
                 return
             }
@@ -349,7 +352,7 @@ import HostRuntime
     private func refuseExisting(_ entry: FirmwareCatalog.Entry) -> Bool {
         guard !library.instances(firmware: entry.id).isEmpty else { return false }
         logEvent("firmware: \(entry.id) already has a device; not preparing another")
-        presentError(FirmwareError.failed("\(entry.marketingName) iOS \(entry.version) already has a device."))
+        presentError(FirmwareError.failed("\(entry.preferredName) iOS \(entry.version) already has a device."))
         return true
     }
 
@@ -357,6 +360,26 @@ import HostRuntime
 
     /// The entry's row left the sidebar: a failure it showed is forgotten, so adding the row again starts clean.
     public func dismissFailure(_ entry: FirmwareCatalog.Entry) { table.dismiss(entry.id) }
+
+    /// An IPSW's decrypted boot files and root filesystem (hundreds of MB), once its device is prepared or the IPSW is
+    /// removed: a failed preparation keeps them for its retry, and the IPSW, while it's here, decrypts again. No
+    /// `sha1`: the whole cache, at launch, when it holds anything.
+    public func pruneDecrypted(_ sha1: String? = nil) {
+        let root = caches.appendingPathComponent("Decrypted", isDirectory: true)
+        let names = sha1 == nil ? (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [] : []
+        guard let preparer, sha1 != nil || names.contains(where: { $0 != ".lease" }) else { return }
+        var prune = FirmwareCommand.CachePrune(root: root)
+        prune.ipsw = sha1
+        Task {
+            do {
+                _ = try await FirmwareTool.run(prune, executable: preparer)
+            } catch {
+                // shortcut: another IPSW's preparation holds the cache, so this copy stays until Settings ▸ Storage's
+                // Clear; prune again when the jobs go idle if leftovers show up
+                logEvent("firmware: kept \(sha1 ?? "the cache")'s decrypted files: \(error.localizedDescription)")
+            }
+        }
+    }
 
     // MARK: - Steps
 
@@ -386,6 +409,7 @@ import HostRuntime
                 steps[id] = nil
                 logEvent("firmware: \(id) is device \(instance.id.uuidString)")
                 AppReports.used("Firmware.prepared", ["firmware": id])
+                if let sha1 = catalog.entry(id: id)?.source.sha1 { pruneDecrypted(sha1) }
                 library.reload()
                 NotificationCenter.default.post(name: Self.didPublishNotification, object: id)
             case .failed(let message):

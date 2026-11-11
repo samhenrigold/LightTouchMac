@@ -7,46 +7,44 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A1D0C0DE3800000000000000030 /* libqemu-arm.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000010; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000031 /* libavcodec.63.1.101.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000011; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000032 /* libavutil.61.1.101.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000012; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000035 /* libEGL.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000015; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000036 /* libGLESv2.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000016; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000033 /* libimobiledevice-1.0.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000013; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000034 /* libplist-2.0.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000014; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000070 /* usbmuxd in Embed Vendor Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000050; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000071 /* iBoot32Patcher in Embed Vendor Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000051; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000072 /* inetcat in Embed Vendor Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000052; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3800000000000000073 /* ipod-helper in Embed Vendor Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000053; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		A1D0C0DE3900000000000000010 /* Guest in Copy Guest Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000090; };
-		A1D0C0DE3900000000000000011 /* Device in Copy Vendor Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000091; };
-		A1D0C0DE3900000000000000012 /* licenses in Copy Vendor Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000092; };
-		A1D0C0DE3900000000000000013 /* usbmuxd-conf in Copy Vendor Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000093; };
-		A1D0C0DE3900000000000000014 /* build-inputs.json in Copy Vendor Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000094; };
-		A1D0C0DE39000000000000031 /* Models in Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE39000000000000030; };
-		A1D0C0DE3A000000000000002 /* firmwarekit in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3A000000000000001; };
-		A1D0C0DE3A000000000000020 /* FirmwareKit in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3A000000000000011; };
-		A1D0C0DE3A000000000000022 /* FirmwareSchema in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3A000000000000012; };
-		A1D0C0DE3C000000000000012 /* LightTouchCore in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3C000000000000002; };
-		A1D0C0DE3B000000000000012 /* HostServiceWire in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3B000000000000002; };
-		A1D0C0DE3B000000000000013 /* HostServiceClient in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3B000000000000003; };
-		A1D0C0DE3B000000000000014 /* HostServiceWire in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3B000000000000004; };
-		A1D0C0DE3A000000000000021 /* HostRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002; };
-		A1D0C0DE32000000000000002 /* LightTouchServices in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE32000000000000001; };
 		A1D0C0DE3100000000000002 /* LightTouchDevice in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3100000000000001 /* LightTouchDevice */; };
+		A1D0C0DE32000000000000002 /* LightTouchServices in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE32000000000000001 /* LightTouchServices */; };
+		A1D0C0DE35000000000000003 /* HostRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002 /* HostRuntime */; };
+		A1D0C0DE35000000000000004 /* HostRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002 /* HostRuntime */; };
+		A1D0C0DE36000000000000003 /* DeviceRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE36000000000000002 /* DeviceRuntime */; };
+		A1D0C0DE36000000000000004 /* DeviceRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE36000000000000002 /* DeviceRuntime */; };
+		A1D0C0DE37000000000000003 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE37000000000000002 /* ZIPFoundation */; };
+		A1D0C0DE3800000000000000030 /* Frameworks/libqemu-arm.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000010 /* Frameworks/libqemu-arm.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000031 /* Frameworks/libavcodec.63.1.101.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000011 /* Frameworks/libavcodec.63.1.101.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000032 /* Frameworks/libavutil.61.1.101.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000012 /* Frameworks/libavutil.61.1.101.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000033 /* Frameworks/libimobiledevice-1.0.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000013 /* Frameworks/libimobiledevice-1.0.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000034 /* Frameworks/libplist-2.0.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000014 /* Frameworks/libplist-2.0.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000035 /* Frameworks/libEGL.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000015 /* Frameworks/libEGL.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000036 /* Frameworks/libGLESv2.dylib in Embed Vendor Frameworks */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000016 /* Frameworks/libGLESv2.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000070 /* MacOS/usbmuxd in Embed Vendor Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000050 /* MacOS/usbmuxd */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000071 /* MacOS/iBoot32Patcher in Embed Vendor Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000051 /* MacOS/iBoot32Patcher */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000072 /* MacOS/inetcat in Embed Vendor Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000052 /* MacOS/inetcat */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3800000000000000073 /* MacOS/ipod-helper in Embed Vendor Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000053 /* MacOS/ipod-helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A1D0C0DE3900000000000000010 /* Resources/Guest in Copy Guest Tools */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000090 /* Resources/Guest */; };
+		A1D0C0DE3900000000000000011 /* Resources/Device in Copy Vendor Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000091 /* Resources/Device */; };
+		A1D0C0DE3900000000000000012 /* Resources/licenses in Copy Vendor Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000092 /* Resources/licenses */; };
+		A1D0C0DE3900000000000000013 /* Resources/usbmuxd-conf in Copy Vendor Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000093 /* Resources/usbmuxd-conf */; };
+		A1D0C0DE3900000000000000014 /* Resources/build-inputs.json in Copy Vendor Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3800000000000000094 /* Resources/build-inputs.json */; };
+		A1D0C0DE39000000000000031 /* Models in Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE39000000000000030 /* Models */; };
+		A1D0C0DE3A000000000000002 /* firmwarekit in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE3A000000000000001 /* firmwarekit */; };
+		A1D0C0DE3A000000000000020 /* FirmwareKit in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3A000000000000011 /* FirmwareKit */; };
+		A1D0C0DE3A000000000000021 /* HostRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002 /* HostRuntime */; };
+		A1D0C0DE3A000000000000022 /* FirmwareSchema in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3A000000000000012 /* FirmwareSchema */; };
+		A1D0C0DE3B000000000000012 /* HostServiceWire in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3B000000000000002 /* HostServiceWire */; };
+		A1D0C0DE3B000000000000013 /* HostServiceClient in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3B000000000000003 /* HostServiceClient */; };
+		A1D0C0DE3B000000000000014 /* HostServiceWire in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3B000000000000004 /* HostServiceWire */; };
+		A1D0C0DE3C000000000000012 /* LightTouchCore in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3C000000000000002 /* LightTouchCore */; };
+		A1D0C0DE3D000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3D000000000000002 /* Sparkle */; };
+		A1D0C0DE40000000000000003 /* TelemetryDeck in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE40000000000000002 /* TelemetryDeck */; };
 		EA17D84D3023A55900BDF83E /* Subprocess in Frameworks */ = {isa = PBXBuildFile; productRef = EA17D84C3023A55900BDF83E /* Subprocess */; };
-		A1D0C0DE35000000000000003 = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002; };
-		A1D0C0DE35000000000000004 = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002; };
-		A1D0C0DE36000000000000003 = {isa = PBXBuildFile; productRef = A1D0C0DE36000000000000002; };
-		A1D0C0DE37000000000000003 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE37000000000000002; };
-		A1D0C0DE3D000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE3D000000000000002; };
-		A1D0C0DE40000000000000003 /* TelemetryDeck in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE40000000000000002; };
-		A1D0C0DE36000000000000004 = {isa = PBXBuildFile; productRef = A1D0C0DE36000000000000002; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		A1D0C0DE3A000000000000003 = {isa = PBXContainerItemProxy; containerPortal = EA17D82A30239D9B00BDF83E; proxyType = 1; remoteGlobalIDString = A1D0C0DE3A000000000000005; remoteInfo = firmwarekit; };
-		A1D0C0DE32000000000000003 = {isa = PBXContainerItemProxy; containerPortal = EA17D82A30239D9B00BDF83E; proxyType = 1; remoteGlobalIDString = A1D0C0DE32000000000000005; remoteInfo = LightTouchServices; };
 		A1D0C0DE3100000000000005 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = EA17D82A30239D9B00BDF83E /* Project object */;
@@ -54,41 +52,23 @@
 			remoteGlobalIDString = A1D0C0DE3100000000000006;
 			remoteInfo = LightTouchDevice;
 		};
+		A1D0C0DE32000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EA17D82A30239D9B00BDF83E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1D0C0DE32000000000000005;
+			remoteInfo = LightTouchServices;
+		};
+		A1D0C0DE3A000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EA17D82A30239D9B00BDF83E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1D0C0DE3A000000000000005;
+			remoteInfo = firmwarekit;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		A1D0C0DE39000000000000001 /* Embed Vendor Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			dstPath = "";
-			dstSubfolder = Frameworks;
-			files = (A1D0C0DE3800000000000000030, A1D0C0DE3800000000000000031, A1D0C0DE3800000000000000032, A1D0C0DE3800000000000000033, A1D0C0DE3800000000000000034, A1D0C0DE3800000000000000035, A1D0C0DE3800000000000000036);
-			name = "Embed Vendor Frameworks";
-			runOnlyForDeploymentPostprocessing = 1;
-		};
-		A1D0C0DE39000000000000002 /* Embed Vendor Tools */ = {
-			isa = PBXCopyFilesBuildPhase;
-			dstPath = "";
-			dstSubfolder = Executables;
-			files = (A1D0C0DE3800000000000000070, A1D0C0DE3800000000000000071, A1D0C0DE3800000000000000072, A1D0C0DE3800000000000000073);
-			name = "Embed Vendor Tools";
-			runOnlyForDeploymentPostprocessing = 1;
-		};
-		A1D0C0DE39000000000000003 /* Copy Vendor Resources */ = {
-			isa = PBXCopyFilesBuildPhase;
-			dstPath = "";
-			dstSubfolder = Resources;
-			files = (A1D0C0DE3900000000000000011, A1D0C0DE3900000000000000012, A1D0C0DE3900000000000000013, A1D0C0DE3900000000000000014);
-			name = "Copy Vendor Resources";
-			runOnlyForDeploymentPostprocessing = 1;
-		};
-		A1D0C0DE39000000000000004 /* Copy Guest Tools */ = {
-			isa = PBXCopyFilesBuildPhase;
-			dstPath = "";
-			dstSubfolder = Resources;
-			files = (A1D0C0DE3900000000000000010);
-			name = "Copy Guest Tools";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		A1D0C0DE3100000000000003 /* Embed Device Helper */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "";
@@ -100,54 +80,113 @@
 			);
 			name = "Embed Device Helper";
 		};
+		A1D0C0DE39000000000000001 /* Embed Vendor Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = Frameworks;
+			files = (
+				A1D0C0DE3800000000000000030 /* Frameworks/libqemu-arm.dylib in Embed Vendor Frameworks */,
+				A1D0C0DE3800000000000000031 /* Frameworks/libavcodec.63.1.101.dylib in Embed Vendor Frameworks */,
+				A1D0C0DE3800000000000000032 /* Frameworks/libavutil.61.1.101.dylib in Embed Vendor Frameworks */,
+				A1D0C0DE3800000000000000033 /* Frameworks/libimobiledevice-1.0.dylib in Embed Vendor Frameworks */,
+				A1D0C0DE3800000000000000034 /* Frameworks/libplist-2.0.dylib in Embed Vendor Frameworks */,
+				A1D0C0DE3800000000000000035 /* Frameworks/libEGL.dylib in Embed Vendor Frameworks */,
+				A1D0C0DE3800000000000000036 /* Frameworks/libGLESv2.dylib in Embed Vendor Frameworks */,
+			);
+			name = "Embed Vendor Frameworks";
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		A1D0C0DE39000000000000002 /* Embed Vendor Tools */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = Executables;
+			files = (
+				A1D0C0DE3800000000000000070 /* MacOS/usbmuxd in Embed Vendor Tools */,
+				A1D0C0DE3800000000000000071 /* MacOS/iBoot32Patcher in Embed Vendor Tools */,
+				A1D0C0DE3800000000000000072 /* MacOS/inetcat in Embed Vendor Tools */,
+				A1D0C0DE3800000000000000073 /* MacOS/ipod-helper in Embed Vendor Tools */,
+			);
+			name = "Embed Vendor Tools";
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		A1D0C0DE39000000000000003 /* Copy Vendor Resources */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = Resources;
+			files = (
+				A1D0C0DE3900000000000000011 /* Resources/Device in Copy Vendor Resources */,
+				A1D0C0DE3900000000000000012 /* Resources/licenses in Copy Vendor Resources */,
+				A1D0C0DE3900000000000000013 /* Resources/usbmuxd-conf in Copy Vendor Resources */,
+				A1D0C0DE3900000000000000014 /* Resources/build-inputs.json in Copy Vendor Resources */,
+			);
+			name = "Copy Vendor Resources";
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		A1D0C0DE39000000000000004 /* Copy Guest Tools */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = Resources;
+			files = (
+				A1D0C0DE3900000000000000010 /* Resources/Guest in Copy Guest Tools */,
+			);
+			name = "Copy Guest Tools";
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A1D0C0DE3F000000000000001 /* LightTouchCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/LightTouchCore; sourceTree = "<group>"; };
-		A1D0C0DE3F000000000000002 /* HostRuntime */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/HostRuntime; sourceTree = "<group>"; };
-		A1D0C0DE3F000000000000003 /* FirmwareKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/FirmwareKit; sourceTree = "<group>"; };
-		A1D0C0DE3F000000000000004 /* DeviceRuntime */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/DeviceRuntime; sourceTree = "<group>"; };
-		A1D0C0DE3F000000000000005 /* DeviceServices */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/DeviceServices; sourceTree = "<group>"; };
-		A1D0C0DE3F000000000000006 /* ReleaseChecks */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/ReleaseChecks; sourceTree = "<group>"; };
-		A1D0C0DE3F000000000000007 /* BuildTools */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/BuildTools; sourceTree = "<group>"; };
-		A1D0C0DE3F000000000000008 /* sessions */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = tests/sessions; sourceTree = "<group>"; };
-		A1D0C0DE3F000000000000009 /* offline */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = tests/offline; sourceTree = "<group>"; };
-		A1D0C0DE3A000000000000031 /* Tool.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Tool.entitlements; sourceTree = "<group>"; };
-		A1D0C0DE3800000000000000010 /* libqemu-arm.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libqemu-arm.dylib"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000011 /* libavcodec.63.1.101.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libavcodec.63.1.101.dylib"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000012 /* libavutil.61.1.101.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libavutil.61.1.101.dylib"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000015 /* libEGL.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libEGL.dylib"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000016 /* libGLESv2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libGLESv2.dylib"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000013 /* libimobiledevice-1.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libimobiledevice-1.0.dylib"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000014 /* libplist-2.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libplist-2.0.dylib"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000050 /* usbmuxd */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "MacOS/usbmuxd"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000051 /* iBoot32Patcher */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "MacOS/iBoot32Patcher"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000052 /* inetcat */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "MacOS/inetcat"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000053 /* ipod-helper */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "MacOS/ipod-helper"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000090 /* Guest */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Resources/Guest"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000091 /* Device */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Resources/Device"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000092 /* licenses */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Resources/licenses"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000093 /* usbmuxd-conf */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Resources/usbmuxd-conf"; sourceTree = VENDOR_DIR; };
-		A1D0C0DE3800000000000000094 /* build-inputs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Resources/build-inputs.json"; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3100000000000001 /* LightTouchDevice */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LightTouchDevice; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1D0C0DE32000000000000001 /* LightTouchServices */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LightTouchServices; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1D0C0DE3800000000000000010 /* Frameworks/libqemu-arm.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libqemu-arm.dylib"; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000011 /* Frameworks/libavcodec.63.1.101.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = Frameworks/libavcodec.63.1.101.dylib; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000012 /* Frameworks/libavutil.61.1.101.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = Frameworks/libavutil.61.1.101.dylib; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000013 /* Frameworks/libimobiledevice-1.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libimobiledevice-1.0.dylib"; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000014 /* Frameworks/libplist-2.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "Frameworks/libplist-2.0.dylib"; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000015 /* Frameworks/libEGL.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = Frameworks/libEGL.dylib; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000016 /* Frameworks/libGLESv2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = Frameworks/libGLESv2.dylib; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000050 /* MacOS/usbmuxd */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = MacOS/usbmuxd; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000051 /* MacOS/iBoot32Patcher */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = MacOS/iBoot32Patcher; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000052 /* MacOS/inetcat */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = MacOS/inetcat; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000053 /* MacOS/ipod-helper */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "MacOS/ipod-helper"; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000090 /* Resources/Guest */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/Guest; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000091 /* Resources/Device */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/Device; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000092 /* Resources/licenses */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/licenses; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000093 /* Resources/usbmuxd-conf */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Resources/usbmuxd-conf"; sourceTree = VENDOR_DIR; };
+		A1D0C0DE3800000000000000094 /* Resources/build-inputs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Resources/build-inputs.json"; sourceTree = VENDOR_DIR; };
 		A1D0C0DE39000000000000030 /* Models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Models; sourceTree = "<group>"; };
 		A1D0C0DE3A000000000000001 /* firmwarekit */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = firmwarekit; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1D0C0DE3A000000000000030 /* LightTouchDevice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LightTouchDevice.entitlements; sourceTree = "<group>"; };
-		A1D0C0DE32000000000000001 /* LightTouchServices */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LightTouchServices; sourceTree = BUILT_PRODUCTS_DIR; };
-		A1D0C0DE3100000000000001 /* LightTouchDevice */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LightTouchDevice; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1D0C0DE3A000000000000031 /* Tool.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Tool.entitlements; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000001 /* Packages/LightTouchCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/LightTouchCore; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000002 /* Packages/HostRuntime */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/HostRuntime; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000003 /* Packages/FirmwareKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/FirmwareKit; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000004 /* Packages/DeviceRuntime */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/DeviceRuntime; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000005 /* Packages/DeviceServices */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/DeviceServices; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000006 /* Packages/ReleaseChecks */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/ReleaseChecks; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000007 /* Packages/BuildTools */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Packages/BuildTools; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000008 /* tests/sessions */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = tests/sessions; sourceTree = "<group>"; };
+		A1D0C0DE3F000000000000009 /* tests/offline */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = tests/offline; sourceTree = "<group>"; };
 		EA17D83230239D9B00BDF83E /* Light Touch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Light Touch.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		EB72984030B2091100000001 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		EB72984030B2091100000003 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 		EB72984030B2091100000004 /* Device.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Device.xcconfig; sourceTree = "<group>"; };
 		EB72984030B2091100000005 /* Services.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Services.xcconfig; sourceTree = "<group>"; };
 		EB72984030B2091100000006 /* Tool.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Tool.xcconfig; sourceTree = "<group>"; };
-		EB72984030B2091100000001 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A1D0C0DE3A000000000000006 /* FirmwareKitCLI */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Packages/FirmwareKit/Sources/FirmwareKitCLI; sourceTree = "<group>"; };
-		A1D0C0DE3200000000000000B /* LightTouchServices */ = {isa = PBXFileSystemSynchronizedRootGroup; path = LightTouchServices; sourceTree = "<group>"; };
 		A1D0C0DE3100000000000012 /* LightTouchDevice */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = LightTouchDevice;
+			sourceTree = "<group>";
+		};
+		A1D0C0DE3200000000000000B /* LightTouchServices */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LightTouchServices;
+			sourceTree = "<group>";
+		};
+		A1D0C0DE3A000000000000006 /* Packages/FirmwareKit/Sources/FirmwareKitCLI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/FirmwareKit/Sources/FirmwareKitCLI;
 			sourceTree = "<group>";
 		};
 		EA17D83430239D9B00BDF83E /* LightTouchMac */ = {
@@ -158,20 +197,31 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A1D0C0DE3A000000000000007 = {isa = PBXFrameworksBuildPhase; files = (A1D0C0DE3A000000000000020, A1D0C0DE3A000000000000021); };
-		A1D0C0DE32000000000000007 = {isa = PBXFrameworksBuildPhase; files = (A1D0C0DE3B000000000000014); };
 		A1D0C0DE3100000000000008 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
-				A1D0C0DE35000000000000004,
-				A1D0C0DE36000000000000004,
+				A1D0C0DE35000000000000004 /* HostRuntime in Frameworks */,
+				A1D0C0DE36000000000000004 /* DeviceRuntime in Frameworks */,
+			);
+		};
+		A1D0C0DE32000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				A1D0C0DE3B000000000000014 /* HostServiceWire in Frameworks */,
+			);
+		};
+		A1D0C0DE3A000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				A1D0C0DE3A000000000000020 /* FirmwareKit in Frameworks */,
+				A1D0C0DE3A000000000000021 /* HostRuntime in Frameworks */,
 			);
 		};
 		EA17D82F30239D9B00BDF83E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
-				A1D0C0DE35000000000000003,
-				A1D0C0DE36000000000000003,
+				A1D0C0DE35000000000000003 /* HostRuntime in Frameworks */,
+				A1D0C0DE36000000000000003 /* DeviceRuntime in Frameworks */,
 				A1D0C0DE3A000000000000022 /* FirmwareSchema in Frameworks */,
 				A1D0C0DE3B000000000000012 /* HostServiceWire in Frameworks */,
 				A1D0C0DE3B000000000000013 /* HostServiceClient in Frameworks */,
@@ -185,26 +235,48 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A1D0C0DE39000000000000050 /* Vendor */ = {isa = PBXGroup; children = (A1D0C0DE3800000000000000010, A1D0C0DE3800000000000000011, A1D0C0DE3800000000000000012, A1D0C0DE3800000000000000013, A1D0C0DE3800000000000000014, A1D0C0DE3800000000000000015, A1D0C0DE3800000000000000016, A1D0C0DE3800000000000000050, A1D0C0DE3800000000000000051, A1D0C0DE3800000000000000052, A1D0C0DE3800000000000000053, A1D0C0DE3800000000000000090, A1D0C0DE3800000000000000091, A1D0C0DE3800000000000000092, A1D0C0DE3800000000000000093, A1D0C0DE3800000000000000094); name = Vendor; sourceTree = "<group>"; };
+		A1D0C0DE39000000000000050 /* Vendor */ = {
+			isa = PBXGroup;
+			children = (
+				A1D0C0DE3800000000000000010 /* Frameworks/libqemu-arm.dylib */,
+				A1D0C0DE3800000000000000011 /* Frameworks/libavcodec.63.1.101.dylib */,
+				A1D0C0DE3800000000000000012 /* Frameworks/libavutil.61.1.101.dylib */,
+				A1D0C0DE3800000000000000013 /* Frameworks/libimobiledevice-1.0.dylib */,
+				A1D0C0DE3800000000000000014 /* Frameworks/libplist-2.0.dylib */,
+				A1D0C0DE3800000000000000015 /* Frameworks/libEGL.dylib */,
+				A1D0C0DE3800000000000000016 /* Frameworks/libGLESv2.dylib */,
+				A1D0C0DE3800000000000000050 /* MacOS/usbmuxd */,
+				A1D0C0DE3800000000000000051 /* MacOS/iBoot32Patcher */,
+				A1D0C0DE3800000000000000052 /* MacOS/inetcat */,
+				A1D0C0DE3800000000000000053 /* MacOS/ipod-helper */,
+				A1D0C0DE3800000000000000090 /* Resources/Guest */,
+				A1D0C0DE3800000000000000091 /* Resources/Device */,
+				A1D0C0DE3800000000000000092 /* Resources/licenses */,
+				A1D0C0DE3800000000000000093 /* Resources/usbmuxd-conf */,
+				A1D0C0DE3800000000000000094 /* Resources/build-inputs.json */,
+			);
+			name = Vendor;
+			sourceTree = "<group>";
+		};
 		EA17D82930239D9B00BDF83E = {
 			isa = PBXGroup;
 			children = (
 				EA17D83430239D9B00BDF83E /* LightTouchMac */,
 				A1D0C0DE39000000000000030 /* Models */,
-				A1D0C0DE3A000000000000006 /* FirmwareKitCLI */,
+				A1D0C0DE3A000000000000006 /* Packages/FirmwareKit/Sources/FirmwareKitCLI */,
 				A1D0C0DE39000000000000050 /* Vendor */,
 				A1D0C0DE3100000000000012 /* LightTouchDevice */,
 				A1D0C0DE3200000000000000B /* LightTouchServices */,
 				EB72984030B2091100000002 /* Configuration */,
-				A1D0C0DE3F000000000000001 /* LightTouchCore */,
-				A1D0C0DE3F000000000000002 /* HostRuntime */,
-				A1D0C0DE3F000000000000003 /* FirmwareKit */,
-				A1D0C0DE3F000000000000004 /* DeviceRuntime */,
-				A1D0C0DE3F000000000000005 /* DeviceServices */,
-				A1D0C0DE3F000000000000006 /* ReleaseChecks */,
-				A1D0C0DE3F000000000000007 /* BuildTools */,
-				A1D0C0DE3F000000000000008 /* sessions */,
-				A1D0C0DE3F000000000000009 /* offline */,
+				A1D0C0DE3F000000000000001 /* Packages/LightTouchCore */,
+				A1D0C0DE3F000000000000002 /* Packages/HostRuntime */,
+				A1D0C0DE3F000000000000003 /* Packages/FirmwareKit */,
+				A1D0C0DE3F000000000000004 /* Packages/DeviceRuntime */,
+				A1D0C0DE3F000000000000005 /* Packages/DeviceServices */,
+				A1D0C0DE3F000000000000006 /* Packages/ReleaseChecks */,
+				A1D0C0DE3F000000000000007 /* Packages/BuildTools */,
+				A1D0C0DE3F000000000000008 /* tests/sessions */,
+				A1D0C0DE3F000000000000009 /* tests/offline */,
 				EA17D83330239D9B00BDF83E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -237,27 +309,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A1D0C0DE3A000000000000005 /* firmwarekit */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A1D0C0DE3A000000000000009;
-			buildPhases = (A1D0C0DE3A000000000000008, A1D0C0DE3A000000000000007);
-			buildRules = (); dependencies = ();
-			fileSystemSynchronizedGroups = (A1D0C0DE3A000000000000006);
-			name = firmwarekit; productName = firmwarekit;
-			packageProductDependencies = (A1D0C0DE3A000000000000011, A1D0C0DE35000000000000002);
-			productReference = A1D0C0DE3A000000000000001; productType = "com.apple.product-type.tool";
-		};
-		A1D0C0DE32000000000000005 /* LightTouchServices */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A1D0C0DE32000000000000008;
-			buildPhases = (A1D0C0DE3200000000000000C, A1D0C0DE32000000000000006, A1D0C0DE32000000000000007);
-			buildRules = (); dependencies = ();
-			fileSystemSynchronizedGroups = (A1D0C0DE3200000000000000B);
-			name = LightTouchServices; productName = LightTouchServices;
-			packageProductDependencies = (A1D0C0DE3B000000000000004);
-			productReference = A1D0C0DE32000000000000001; productType = "com.apple.product-type.tool";
-		};
-
 		A1D0C0DE3100000000000006 /* LightTouchDevice */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A1D0C0DE3100000000000009 /* Build configuration list for PBXNativeTarget "LightTouchDevice" */;
@@ -270,10 +321,55 @@
 			fileSystemSynchronizedGroups = (
 				A1D0C0DE3100000000000012 /* LightTouchDevice */,
 			);
-			packageProductDependencies = (A1D0C0DE35000000000000002, A1D0C0DE36000000000000002);
 			name = LightTouchDevice;
+			packageProductDependencies = (
+				A1D0C0DE35000000000000002 /* HostRuntime */,
+				A1D0C0DE36000000000000002 /* DeviceRuntime */,
+			);
 			productName = LightTouchDevice;
 			productReference = A1D0C0DE3100000000000001 /* LightTouchDevice */;
+			productType = "com.apple.product-type.tool";
+		};
+		A1D0C0DE32000000000000005 /* LightTouchServices */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1D0C0DE32000000000000008 /* Build configuration list for PBXNativeTarget "LightTouchServices" */;
+			buildPhases = (
+				A1D0C0DE3200000000000000C /* Vendor Directory */,
+				A1D0C0DE32000000000000006 /* Sources */,
+				A1D0C0DE32000000000000007 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1D0C0DE3200000000000000B /* LightTouchServices */,
+			);
+			name = LightTouchServices;
+			packageProductDependencies = (
+				A1D0C0DE3B000000000000004 /* HostServiceWire */,
+			);
+			productName = LightTouchServices;
+			productReference = A1D0C0DE32000000000000001 /* LightTouchServices */;
+			productType = "com.apple.product-type.tool";
+		};
+		A1D0C0DE3A000000000000005 /* firmwarekit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1D0C0DE3A000000000000009 /* Build configuration list for PBXNativeTarget "firmwarekit" */;
+			buildPhases = (
+				A1D0C0DE3A000000000000008 /* Sources */,
+				A1D0C0DE3A000000000000007 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1D0C0DE3A000000000000006 /* Packages/FirmwareKit/Sources/FirmwareKitCLI */,
+			);
+			name = firmwarekit;
+			packageProductDependencies = (
+				A1D0C0DE3A000000000000011 /* FirmwareKit */,
+				A1D0C0DE35000000000000002 /* HostRuntime */,
+			);
+			productName = firmwarekit;
+			productReference = A1D0C0DE3A000000000000001 /* firmwarekit */;
 			productType = "com.apple.product-type.tool";
 		};
 		EA17D83130239D9B00BDF83E /* Light Touch */ = {
@@ -294,16 +390,16 @@
 			);
 			dependencies = (
 				A1D0C0DE3100000000000004 /* PBXTargetDependency */,
-				A1D0C0DE32000000000000004,
-				A1D0C0DE3A000000000000004,
+				A1D0C0DE32000000000000004 /* PBXTargetDependency */,
+				A1D0C0DE3A000000000000004 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				EA17D83430239D9B00BDF83E /* LightTouchMac */,
 			);
 			name = "Light Touch";
 			packageProductDependencies = (
-				A1D0C0DE35000000000000002,
-				A1D0C0DE36000000000000002,
+				A1D0C0DE35000000000000002 /* HostRuntime */,
+				A1D0C0DE36000000000000002 /* DeviceRuntime */,
 				A1D0C0DE3A000000000000012 /* FirmwareSchema */,
 				A1D0C0DE3B000000000000002 /* HostServiceWire */,
 				A1D0C0DE3B000000000000003 /* HostServiceClient */,
@@ -345,15 +441,15 @@
 			mainGroup = EA17D82930239D9B00BDF83E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				A1D0C0DE35000000000000001,
-				A1D0C0DE36000000000000001,
-				A1D0C0DE3B000000000000001,
-				A1D0C0DE3C000000000000001,
-				A1D0C0DE3A000000000000010,
-				A1D0C0DE3E000000000000001,
-				A1D0C0DE3E000000000000002,
-				A1D0C0DE3E000000000000003,
-				A1D0C0DE3E000000000000004,
+				A1D0C0DE35000000000000001 /* XCLocalSwiftPackageReference "Packages/HostRuntime" */,
+				A1D0C0DE36000000000000001 /* XCLocalSwiftPackageReference "Packages/DeviceRuntime" */,
+				A1D0C0DE3B000000000000001 /* XCLocalSwiftPackageReference "Packages/DeviceServices" */,
+				A1D0C0DE3C000000000000001 /* XCLocalSwiftPackageReference "Packages/LightTouchCore" */,
+				A1D0C0DE3A000000000000010 /* XCLocalSwiftPackageReference "Packages/FirmwareKit" */,
+				A1D0C0DE3E000000000000001 /* XCLocalSwiftPackageReference "Packages/ReleaseChecks" */,
+				A1D0C0DE3E000000000000002 /* XCLocalSwiftPackageReference "Packages/BuildTools" */,
+				A1D0C0DE3E000000000000003 /* XCLocalSwiftPackageReference "tests/sessions" */,
+				A1D0C0DE3E000000000000004 /* XCLocalSwiftPackageReference "tests/offline" */,
 				EA17D84B3023A55900BDF83E /* XCRemoteSwiftPackageReference "swift-subprocess" */,
 				A1D0C0DE37000000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				A1D0C0DE3D000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
@@ -385,29 +481,43 @@
 		A1D0C0DE3200000000000000C /* Vendor Directory */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			files = ();
-			inputPaths = ();
 			name = "Vendor Directory";
-			outputPaths = ();
 			shellPath = /bin/sh;
-			shellScript = "# The first phase of the first target that reads VENDOR_DIR: find the current pins' vendor directory, or fail.\nexec \"$SRCROOT/scripts/vendor-check\"\n";
+			shellScript = (
+				"# The first phase of the first target that reads VENDOR_DIR: find the current pins' vendor directory, or fail.",
+				"exec \"$SRCROOT/scripts/vendor-check\"",
+				"",
+			);
 		};
 		A1D0C0DE3A000000000000040 /* Build Number */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			files = ();
-			inputPaths = ("$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)");
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
 			name = "Build Number";
-			outputPaths = ();
 			shellPath = /bin/sh;
-			shellScript = "# CFBundleVersion: the commit count, so every build is numbered without a bump commit.\ncount=$(git -C \"$SRCROOT\" rev-list --count HEAD) || exit 1\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $count\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\n";
+			shellScript = (
+				"# CFBundleVersion: the commit count, so every build is numbered without a bump commit.",
+				"count=$(git -C \"$SRCROOT\" rev-list --count HEAD) || exit 1",
+				"/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $count\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A1D0C0DE3A000000000000008 = {isa = PBXSourcesBuildPhase; files = (); };
-		A1D0C0DE32000000000000006 = {isa = PBXSourcesBuildPhase; files = (); };
 		A1D0C0DE3100000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		A1D0C0DE32000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		A1D0C0DE3A000000000000008 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
 			);
@@ -420,80 +530,88 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		A1D0C0DE3A000000000000004 = {isa = PBXTargetDependency; target = A1D0C0DE3A000000000000005; targetProxy = A1D0C0DE3A000000000000003; };
-		A1D0C0DE32000000000000004 = {isa = PBXTargetDependency; target = A1D0C0DE32000000000000005; targetProxy = A1D0C0DE32000000000000003; };
 		A1D0C0DE3100000000000004 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A1D0C0DE3100000000000006 /* LightTouchDevice */;
 			targetProxy = A1D0C0DE3100000000000005 /* PBXContainerItemProxy */;
 		};
+		A1D0C0DE32000000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1D0C0DE32000000000000005 /* LightTouchServices */;
+			targetProxy = A1D0C0DE32000000000000003 /* PBXContainerItemProxy */;
+		};
+		A1D0C0DE3A000000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1D0C0DE3A000000000000005 /* firmwarekit */;
+			targetProxy = A1D0C0DE3A000000000000003 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		A1D0C0DE3A00000000000000A /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = EB72984030B2091100000006 /* Tool.xcconfig */;
-			buildSettings = {
-			};
-			name = Debug;
-		};
-		A1D0C0DE3A00000000000000B /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = EB72984030B2091100000006 /* Tool.xcconfig */;
-			buildSettings = {
-			};
-			name = Release;
-		};
-		A1D0C0DE32000000000000009 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = EB72984030B2091100000005 /* Services.xcconfig */;
-			buildSettings = {
-			};
-			name = Debug;
-		};
-		A1D0C0DE3200000000000000A /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = EB72984030B2091100000005 /* Services.xcconfig */;
-			buildSettings = {
-			};
-			name = Release;
-		};
-		A1D0C0DE3100000000000010 /* Debug */ = {
+		A1D0C0DE3100000000000010 /* Debug configuration for PBXNativeTarget "LightTouchDevice" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EB72984030B2091100000004 /* Device.xcconfig */;
 			buildSettings = {
 			};
 			name = Debug;
 		};
-		A1D0C0DE3100000000000011 /* Release */ = {
+		A1D0C0DE3100000000000011 /* Release configuration for PBXNativeTarget "LightTouchDevice" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EB72984030B2091100000004 /* Device.xcconfig */;
 			buildSettings = {
 			};
 			name = Release;
 		};
-		EA17D83C30239D9B00BDF83E /* Debug */ = {
+		A1D0C0DE32000000000000009 /* Debug configuration for PBXNativeTarget "LightTouchServices" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = EB72984030B2091100000005 /* Services.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		A1D0C0DE3200000000000000A /* Release configuration for PBXNativeTarget "LightTouchServices" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = EB72984030B2091100000005 /* Services.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		A1D0C0DE3A00000000000000A /* Debug configuration for PBXNativeTarget "firmwarekit" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = EB72984030B2091100000006 /* Tool.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		A1D0C0DE3A00000000000000B /* Release configuration for PBXNativeTarget "firmwarekit" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = EB72984030B2091100000006 /* Tool.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		EA17D83C30239D9B00BDF83E /* Debug configuration for PBXProject "LightTouchMac" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EB72984030B2091100000001 /* Shared.xcconfig */;
 			buildSettings = {
 			};
 			name = Debug;
 		};
-		EA17D83D30239D9B00BDF83E /* Release */ = {
+		EA17D83D30239D9B00BDF83E /* Release configuration for PBXProject "LightTouchMac" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EB72984030B2091100000001 /* Shared.xcconfig */;
 			buildSettings = {
 			};
 			name = Release;
 		};
-		EA17D83F30239D9B00BDF83E /* Debug */ = {
+		EA17D83F30239D9B00BDF83E /* Debug configuration for PBXNativeTarget "Light Touch" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EB72984030B2091100000003 /* App.xcconfig */;
 			buildSettings = {
 			};
 			name = Debug;
 		};
-		EA17D84030239D9B00BDF83E /* Release */ = {
+		EA17D84030239D9B00BDF83E /* Release configuration for PBXNativeTarget "Light Touch" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EB72984030B2091100000003 /* App.xcconfig */;
 			buildSettings = {
@@ -503,13 +621,27 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A1D0C0DE3A000000000000009 = {isa = XCConfigurationList; buildConfigurations = (A1D0C0DE3A00000000000000A, A1D0C0DE3A00000000000000B); defaultConfigurationName = Release; };
-		A1D0C0DE32000000000000008 = {isa = XCConfigurationList; buildConfigurations = (A1D0C0DE32000000000000009, A1D0C0DE3200000000000000A); defaultConfigurationName = Release; };
 		A1D0C0DE3100000000000009 /* Build configuration list for PBXNativeTarget "LightTouchDevice" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A1D0C0DE3100000000000010 /* Debug configuration for PBXNativeTarget "LightTouchDevice" */,
 				A1D0C0DE3100000000000011 /* Release configuration for PBXNativeTarget "LightTouchDevice" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		A1D0C0DE32000000000000008 /* Build configuration list for PBXNativeTarget "LightTouchServices" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1D0C0DE32000000000000009 /* Debug configuration for PBXNativeTarget "LightTouchServices" */,
+				A1D0C0DE3200000000000000A /* Release configuration for PBXNativeTarget "LightTouchServices" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		A1D0C0DE3A000000000000009 /* Build configuration list for PBXNativeTarget "firmwarekit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1D0C0DE3A00000000000000A /* Debug configuration for PBXNativeTarget "firmwarekit" */,
+				A1D0C0DE3A00000000000000B /* Release configuration for PBXNativeTarget "firmwarekit" */,
 			);
 			defaultConfigurationName = Release;
 		};
@@ -531,15 +663,46 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		EA17D84B3023A55900BDF83E /* XCRemoteSwiftPackageReference "swift-subprocess" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/swiftlang/swift-subprocess";
-			requirement = {
-				kind = exactVersion;
-				version = 1.0.2;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		A1D0C0DE35000000000000001 /* XCLocalSwiftPackageReference "Packages/HostRuntime" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/HostRuntime;
 		};
+		A1D0C0DE36000000000000001 /* XCLocalSwiftPackageReference "Packages/DeviceRuntime" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DeviceRuntime;
+		};
+		A1D0C0DE3A000000000000010 /* XCLocalSwiftPackageReference "Packages/FirmwareKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/FirmwareKit;
+		};
+		A1D0C0DE3B000000000000001 /* XCLocalSwiftPackageReference "Packages/DeviceServices" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DeviceServices;
+		};
+		A1D0C0DE3C000000000000001 /* XCLocalSwiftPackageReference "Packages/LightTouchCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LightTouchCore;
+		};
+		A1D0C0DE3E000000000000001 /* XCLocalSwiftPackageReference "Packages/ReleaseChecks" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/ReleaseChecks;
+		};
+		A1D0C0DE3E000000000000002 /* XCLocalSwiftPackageReference "Packages/BuildTools" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/BuildTools;
+		};
+		A1D0C0DE3E000000000000003 /* XCLocalSwiftPackageReference "tests/sessions" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = tests/sessions;
+		};
+		A1D0C0DE3E000000000000004 /* XCLocalSwiftPackageReference "tests/offline" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = tests/offline;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
 		A1D0C0DE37000000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
@@ -564,38 +727,61 @@
 				version = 2.14.2;
 			};
 		};
+		EA17D84B3023A55900BDF83E /* XCRemoteSwiftPackageReference "swift-subprocess" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-subprocess";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		A1D0C0DE3A000000000000010 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/FirmwareKit; };
-		A1D0C0DE35000000000000001 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/HostRuntime; };
-		A1D0C0DE36000000000000001 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/DeviceRuntime; };
-		A1D0C0DE3B000000000000001 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/DeviceServices; };
-		A1D0C0DE3C000000000000001 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/LightTouchCore; };
-		A1D0C0DE3E000000000000001 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/ReleaseChecks; };
-		A1D0C0DE3E000000000000002 = {isa = XCLocalSwiftPackageReference; relativePath = Packages/BuildTools; };
-		A1D0C0DE3E000000000000003 = {isa = XCLocalSwiftPackageReference; relativePath = tests/sessions; };
-		A1D0C0DE3E000000000000004 = {isa = XCLocalSwiftPackageReference; relativePath = tests/offline; };
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
-		A1D0C0DE3A000000000000011 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE3A000000000000010; productName = FirmwareKit; };
-		A1D0C0DE3A000000000000012 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE3A000000000000010; productName = FirmwareSchema; };
-		A1D0C0DE35000000000000002 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE35000000000000001; productName = HostRuntime; };
-		EA17D84C3023A55900BDF83E /* Subprocess */ = {
+		A1D0C0DE35000000000000002 /* HostRuntime */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = EA17D84B3023A55900BDF83E /* XCRemoteSwiftPackageReference "swift-subprocess" */;
-			productName = Subprocess;
+			package = A1D0C0DE35000000000000001 /* XCLocalSwiftPackageReference "Packages/HostRuntime" */;
+			productName = HostRuntime;
 		};
-		A1D0C0DE3C000000000000002 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE3C000000000000001; productName = LightTouchCore; };
-		A1D0C0DE3B000000000000002 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE3B000000000000001; productName = HostServiceWire; };
-		A1D0C0DE3B000000000000003 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE3B000000000000001; productName = HostServiceClient; };
-		A1D0C0DE3B000000000000004 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE3B000000000000001; productName = HostServiceWire; };
-		A1D0C0DE36000000000000002 = {isa = XCSwiftPackageProductDependency; package = A1D0C0DE36000000000000001; productName = DeviceRuntime; };
+		A1D0C0DE36000000000000002 /* DeviceRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1D0C0DE36000000000000001 /* XCLocalSwiftPackageReference "Packages/DeviceRuntime" */;
+			productName = DeviceRuntime;
+		};
 		A1D0C0DE37000000000000002 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A1D0C0DE37000000000000001 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
+		};
+		A1D0C0DE3A000000000000011 /* FirmwareKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1D0C0DE3A000000000000010 /* XCLocalSwiftPackageReference "Packages/FirmwareKit" */;
+			productName = FirmwareKit;
+		};
+		A1D0C0DE3A000000000000012 /* FirmwareSchema */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1D0C0DE3A000000000000010 /* XCLocalSwiftPackageReference "Packages/FirmwareKit" */;
+			productName = FirmwareSchema;
+		};
+		A1D0C0DE3B000000000000002 /* HostServiceWire */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1D0C0DE3B000000000000001 /* XCLocalSwiftPackageReference "Packages/DeviceServices" */;
+			productName = HostServiceWire;
+		};
+		A1D0C0DE3B000000000000003 /* HostServiceClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1D0C0DE3B000000000000001 /* XCLocalSwiftPackageReference "Packages/DeviceServices" */;
+			productName = HostServiceClient;
+		};
+		A1D0C0DE3B000000000000004 /* HostServiceWire */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1D0C0DE3B000000000000001 /* XCLocalSwiftPackageReference "Packages/DeviceServices" */;
+			productName = HostServiceWire;
+		};
+		A1D0C0DE3C000000000000002 /* LightTouchCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1D0C0DE3C000000000000001 /* XCLocalSwiftPackageReference "Packages/LightTouchCore" */;
+			productName = LightTouchCore;
 		};
 		A1D0C0DE3D000000000000002 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -606,6 +792,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A1D0C0DE40000000000000001 /* XCRemoteSwiftPackageReference "SwiftSDK" */;
 			productName = TelemetryDeck;
+		};
+		EA17D84C3023A55900BDF83E /* Subprocess */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EA17D84B3023A55900BDF83E /* XCRemoteSwiftPackageReference "swift-subprocess" */;
+			productName = Subprocess;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

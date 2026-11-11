@@ -47,7 +47,7 @@ struct AddDeviceView: View {
             let profile = entries[0].profile
             return Group(
                 id: board,
-                name: profile?.marketingName ?? entries[0].productType,
+                name: profile?.preferredName ?? entries[0].productType,
                 icon: profile?.icon
                     ?? Board.icon(modelCode: entries[0].productType, fallbackSymbol: "questionmark.square.dashed"),
                 entries: entries

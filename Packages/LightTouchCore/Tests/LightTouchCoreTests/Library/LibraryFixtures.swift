@@ -72,6 +72,8 @@ nonisolated enum LibraryFixtures {
         let name = "preparer-\(mode)-\(UUID().uuidString.prefix(8))"
         var body = ""
         if let unwrap { body += "[ \"$1\" = unwrap ] && exec '\(unwrap.path)' \"$@\"\n" }
+        // The decrypt-cache prune after a device is prepared: its arguments go beside `argv`, which keeps create's.
+        body += "[ \"$1\" = cache-prune ] && { echo \"$@\" > '\(argv?.path ?? "/dev/null").prune'; exit 0; }\n"
         body += "FAKE_MODE=\(mode) FAKE_ARGV='\(argv?.path ?? "")' exec '\(fakeFirmwarekit.path)' \"$@\"\n"
         return try script(directory.appendingPathComponent(name), body)
     }

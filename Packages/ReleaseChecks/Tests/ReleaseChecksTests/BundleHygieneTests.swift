@@ -145,13 +145,16 @@ struct BundleHygieneTests {
             contentsOf: repository.appendingPathComponent("LightTouchMac.xcodeproj/project.pbxproj"),
             encoding: .utf8
         )
-        let guestFile = try #require(project.firstMatch(of: /(\w+) \/\* Guest in [^*]+\*\/ = \{isa = PBXBuildFile/))
+        // Xcode 27 names the file by its path (Resources/Guest) and leaves out a phase's flag when it's 0.
+        let guestFile = try #require(
+            project.firstMatch(of: /(\w+) \/\* (?:Resources\/)?Guest in [^*]+\*\/ = \{isa = PBXBuildFile/)
+        )
         let phases = project.split(separator: "isa = PBXCopyFilesBuildPhase;").dropFirst()
             .map { $0.prefix { $0 != "}" } }
             .filter { $0.contains("files = (") && $0.split(separator: "files = (")[1].contains(guestFile.1) }
         #expect(phases.count == 1, "one phase copies Guest")
         #expect(
-            phases.first?.contains("runOnlyForDeploymentPostprocessing = 0;") == true,
+            phases.first?.contains("runOnlyForDeploymentPostprocessing = 1;") == false,
             "and not only when archiving"
         )
     }

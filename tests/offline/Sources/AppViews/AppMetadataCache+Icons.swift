@@ -1,0 +1,1 @@
+../../../../LightTouchMac/Library/AppMetadataCache+Icons.swift

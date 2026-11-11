@@ -53,7 +53,7 @@ public nonisolated enum AccessibilityFeature: Int, CaseIterable, Sendable {
     /// Why a device can't have it, or nil where it can.
     public static func unavailableReason(board: Board, version: String) -> String? {
         guard board.soc == .s5l8920 || board.soc == .s5l8930 else {
-            return "The \(board.marketingName) has no accessibility features."
+            return "The \(board.preferredName) has no accessibility features."
         }
         if version.compare("3.0", options: .numeric) == .orderedAscending {
             return "Accessibility features arrived with iPhone OS 3.0."

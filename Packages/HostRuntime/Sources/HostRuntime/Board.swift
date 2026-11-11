@@ -50,6 +50,8 @@ public enum Board: String, Sendable, CaseIterable, Codable {
         /// The model ID ("iPod2,1"): macOS's device type, the store's device.
         public var productType: String
         public var marketingName: String
+        /// The short name people use ("iPod 2G", "iPhone 3GS", "iPad 1").
+        public var abbreviatedName: String
         /// The image carries our guest agent and shell from preparation (iPod touch 2G); the others get theirs as
         /// a guest package at boot.
         public var guestTools = false
@@ -86,6 +88,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 kind: .iPod,
                 productType: "iPod1,1",
                 marketingName: "iPod touch",
+                abbreviatedName: "iPod 1G",
                 art: art("shell-1g", "N45", (734, 1311), (70, 211, 594, 891), home: 112, inset: 59, ppi: 163)
             )
         case .m68:
@@ -94,6 +97,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 kind: .iPhone,
                 productType: "iPhone1,1",
                 marketingName: "iPhone",
+                abbreviatedName: "iPhone 2G",
                 art: art("shell-iphone2g", nil, (383, 729), (33, 130, 320, 480), home: 70, inset: 34, ppi: 163)
             )
         case .n72:
@@ -102,6 +106,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 kind: .iPod,
                 productType: "iPod2,1",
                 marketingName: "iPod touch (2nd generation)",
+                abbreviatedName: "iPod 2G",
                 guestTools: true,
                 art: art("shell", "N72", (737, 1318), (74, 213, 594, 891), home: 122, inset: 54, ppi: 163)
             )
@@ -111,6 +116,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 kind: .iPod,
                 productType: "iPod3,1",
                 marketingName: "iPod touch (3rd generation)",
+                abbreviatedName: "iPod 3G",
                 art: art("shell", "N72", (737, 1318), (74, 213, 594, 891), home: 122, inset: 54, ppi: 163)
             )
         case .n88:
@@ -119,6 +125,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 kind: .iPhone,
                 productType: "iPhone2,1",
                 marketingName: "iPhone 3GS",
+                abbreviatedName: "iPhone 3GS",
                 hasGPS: true,
                 art: art("shell-iphone2g", "N88", (383, 729), (33, 130, 320, 480), home: 70, inset: 34, ppi: 163)
             )
@@ -129,6 +136,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 kind: .iPad,
                 productType: "iPad1,1",
                 marketingName: "iPad",
+                abbreviatedName: "iPad 1",
                 art: art("ipad-frame", "K48", (852, 1108), (42, 42, 768, 1024), home: 31, inset: 9, ppi: 132)
             )
         case .n81:
@@ -137,6 +145,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 kind: .iPod,
                 productType: "iPod4,1",
                 marketingName: "iPod touch (4th generation)",
+                abbreviatedName: "iPod 4G",
                 art: art("shell-4g", "N81", (696, 1310), (54, 213, 590, 886), home: 119, inset: 49, ppi: 326)
             )
         case .n90:
@@ -145,6 +154,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 kind: .iPhone,
                 productType: "iPhone3,1",
                 marketingName: "iPhone 4",
+                abbreviatedName: "iPhone 4",
                 art: art("shell-iphone4", nil, (730, 1426), (48, 236, 640, 960), home: 140, inset: 52, ppi: 326)
             )
         }
@@ -171,6 +181,35 @@ public enum Board: String, Sendable, CaseIterable, Codable {
 
     public var productType: String { facts.productType }
     public var marketingName: String { facts.marketingName }
+
+    /// How the app names a device: Settings ▸ General's Device Names.
+    public enum NameStyle: String, CaseIterable, Sendable {
+        /// "iPod touch (2nd generation)".
+        case marketing
+        /// "iPod2,1".
+        case model
+        /// "iPod 2G".
+        case abbreviated
+
+        public static let key = "deviceNameStyle"
+        /// Posted when the setting changes, for the names already on screen.
+        public static let didChangeNotification = Notification.Name("DeviceNameStyleDidChange")
+
+        public static var current: NameStyle {
+            UserDefaults.standard.string(forKey: key).flatMap(NameStyle.init(rawValue:)) ?? .marketing
+        }
+    }
+
+    public func name(_ style: NameStyle) -> String {
+        switch style {
+        case .marketing: marketingName
+        case .model: productType
+        case .abbreviated: facts.abbreviatedName
+        }
+    }
+
+    /// The device's name as Settings ▸ General's Device Names chose.
+    public var preferredName: String { name(.current) }
     /// "iPod touch", "iPhone", "iPad".
     public var displayName: String { facts.kind.rawValue }
     /// What the device is called in menus, titles and messages ("the iPod").
