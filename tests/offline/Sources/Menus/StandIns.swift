@@ -12,6 +12,7 @@ import LightTouchCore
     @objc func copyBugReportInfo(_ sender: Any?) {}
     @objc func showHelp(_ sender: Any?) {}
     @objc func showAbout(_ sender: Any?) {}
+    @objc func sponsorProject(_ sender: Any?) {}
     @objc func showDeviceWindow(_ sender: Any?) {}
     @objc func showFilesWindow(_ sender: Any?) {}
     @objc func quit(_ sender: Any?) {}

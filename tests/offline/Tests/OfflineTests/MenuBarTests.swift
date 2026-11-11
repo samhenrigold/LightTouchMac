@@ -14,7 +14,11 @@ extension SharedState {
     @Suite struct MenuBarTests {
         /// One line per item; "-" is a separator. The iPad's differs only in its name: every board lists every item
         /// (Compass Heading, Carrier…), and what its hardware lacks is dimmed by validation, never left out.
-        static func bar(_ app: String) -> String { ipodBar.replacingOccurrences(of: "Light Touch", with: app) }
+        /// The process's name where the menus use it; Help's sponsor item names the project, whatever the process.
+        static func bar(_ app: String) -> String {
+            ipodBar.replacingOccurrences(of: "Light Touch", with: app)
+                .replacingOccurrences(of: "Sponsor the \(app) project", with: "Sponsor the Light Touch project")
+        }
         static let ipodBar = """
             Light Touch/About Light Touch
             Light Touch/Check for Updates…
@@ -163,6 +167,7 @@ extension SharedState {
             Window/-
             Window/Bring All to Front
             Help/Light Touch Help  ⌘?
+            Help/Sponsor the Light Touch project
             Help/-
             Help/Export Diagnostics…
             Help/Copy Bug Report Info
