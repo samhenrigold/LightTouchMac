@@ -327,6 +327,9 @@ struct Base {
     /// The kboot boards boot as the iPad does (an armv7 offer); the rest take the armv6 package.
     var armv7: Bool { ["k48ap", "n81ap", "n90ap", "n18ap", "n88ap"].contains(board) }
     var firstGeneration: Bool { ["n45ap", "m68ap"].contains(board) }
+    /// Its first boot sits in Setup until Setup is walked: 5.x and later on the armv7 boards, unless prepared
+    /// --skip-setup (the lock's skip_setup), which boots straight to the Home screen.
+    var bootsIntoSetup: Bool { armv7 && major >= 5 && lock["skip_setup"] as? Bool != true }
     /// The layout has a data partition (fstab mounts it on /private/var).
     var dataVolume: Bool {
         (((lock["entry"] as? [String: Any])?["content"] as? [String: Any])?["recipe"] as? [String: Any])?["data_size"]

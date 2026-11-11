@@ -433,9 +433,9 @@ private func describe(_ buzzes: [(start: Double, seconds: Double?)]) -> String {
 /// capture) and hung up, an unknown property refused, and the vibration motor buzzing for the SMS and while ringing, as
 /// the status block reports it (issue 38). `rotate`: a new frame within 1 s of the app's rotation request,
 /// different from portrait. `shutdown`: the guest confirms its own power-off. `keyboard` (A4): Connect Hardware Keyboard
-/// off and on. A 5.x+ first boot sits in Setup, which rejects calls and stays portrait: the carrier and rotate cases then
-/// need --overlay, the overlay of a boot that walked Setup (`sessions single --keep` leaves one in its work
-/// directory), cloned, never changed.
+/// off and on. A 5.x+ first boot sits in Setup, which rejects calls and stays portrait, unless the base was prepared
+/// --skip-setup: the carrier and rotate cases then need --overlay, the overlay of a boot that walked Setup (`sessions
+/// single --keep` leaves one in its work directory), cloned, never changed.
 /// `emergency` (4.x and 7.x): 911 from the emergency dialer, which asks the modem first (issue 32).
 func phone(_ args: PhoneCheck) -> Never {
     let base = Base(args.base, args.inputs)
@@ -445,11 +445,11 @@ func phone(_ args: PhoneCheck) -> Never {
     var only = Set(args.only.split(separator: ",").map(String.init))
     if base.board != "n90ap" { only.remove("keyboard") }
     let r = Report()
-    // A 5.x+ first boot on these boards sits in Setup, which rejects calls and stays portrait (as Rotation.swift's
-    // guard): the carrier and rotate cases boot a clone of --overlay instead.
-    if base.armv7, base.major >= 5, args.overlay == nil, !only.isDisjoint(with: ["carrier", "rotate"]) {
+    // A first boot in Setup rejects calls and stays portrait (Base.bootsIntoSetup): the carrier and rotate cases boot a
+    // clone of --overlay instead.
+    if base.bootsIntoSetup, args.overlay == nil, !only.isDisjoint(with: ["carrier", "rotate"]) {
         die(
-            "a \(base.version) base is in Setup on its first boot, which rejects calls and does not turn: pass --overlay (or --only emergency,location,shutdown,keyboard)"
+            "a \(base.version) base is in Setup on its first boot, which rejects calls and does not turn: prepare it with --skip-setup or pass --overlay (or --only emergency,location,shutdown,keyboard)"
         )
     }
     func cloneOverlay(_ name: String) {

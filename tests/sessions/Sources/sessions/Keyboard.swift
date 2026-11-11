@@ -19,6 +19,8 @@ func keyboardCheck(_ args: KeyboardCheck) -> Never {
             withIntermediateDirectories: true
         )
         run("/bin/cp", ["-cR", source.path, overlay.path])  // a clone: the source stays as it was
+    } else if base.bootsIntoSetup {
+        die("a \(base.version) base is in Setup on its first boot: prepare it with --skip-setup or pass --overlay")
     }
     let slide = "dragshown 0.18 0.9 0.92 0.9"
     let word = "lighttouch"

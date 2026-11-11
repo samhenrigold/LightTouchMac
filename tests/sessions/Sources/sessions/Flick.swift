@@ -4,9 +4,13 @@ import SessionKit
 /// `sessions flick BASE [--overlay DIR] [--runs N]`: two-finger trackpad swipes on the Home screen through the app's
 /// ScrollDrag (helper-driver's `flicks`, synthetic AppKit scroll events at their own times). Between the first page and
 /// the page left of it (Spotlight), each quick short flick must turn the page and each slow short drag must snap back.
-/// The helper alone boots the base, as `sessions rotation` does; a 5.x-7.x base needs --overlay.
+/// The helper alone boots the base, as `sessions rotation` does; a 5.x or 6.x base not prepared --skip-setup needs
+/// --overlay. 3.0 to 6.x only: iPhone OS 1 and 2 have no Spotlight page, and 7.x's Spotlight is a pull-down.
 func flickCheck(_ args: FlickCheck) -> Never {
     let base = Base(args.base, args.inputs)
+    guard (3...6).contains(base.major) else {
+        die("flick swipes between the first Home page and Spotlight left of it, 3.0 to 6.x: \(base.version) has none")
+    }
     let work = workDirectory(args.inputs, "flick")
     let tools = Tools.resolve(args.inputs, work: work)
     let r = Report()
@@ -17,8 +21,8 @@ func flickCheck(_ args: FlickCheck) -> Never {
             withIntermediateDirectories: true
         )
         run("/bin/cp", ["-cR", source.path, overlay.path])  // a clone: the source stays as it was
-    } else if base.armv7, base.major >= 5 {
-        die("a \(base.version) base is in Setup on its first boot: pass --overlay")
+    } else if base.bootsIntoSetup {
+        die("a \(base.version) base is in Setup on its first boot: prepare it with --skip-setup or pass --overlay")
     }
     let iPad = base.board == "k48ap"
     let slide = iPad ? "dragshown 0.36 0.935 0.8 0.935" : "dragshown 0.18 0.9 0.92 0.9"
