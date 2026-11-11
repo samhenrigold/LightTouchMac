@@ -942,7 +942,14 @@ func checkPreparedFiles() throws {
         var status: Int32 = 0
         errno = 0
         let reaped = pid > 0 && waitpid(pid, &status, WNOHANG) == -1 && errno == ECHILD
-        let expected: DeviceLinkError = .helperFailure(admitted ? "not booted" : DeviceLinkWire.leaseRefusal)
+        // Only a lease another helper holds is refused as a device in use; the rest say why (HeldLease.failure).
+        let refusal =
+            switch name {
+            case "pending": "unfinished storage edit \(intent.path); resolve it before booting"
+            case "symlink": "lease \(lease.path): \(String(cString: strerror(ELOOP)))"
+            default: DeviceLinkWire.leaseRefusal
+            }
+        let expected: DeviceLinkError = .helperFailure(admitted ? "not booted" : refusal)
         guard exited, reaped, deaths == 1, process.link.pid == 0,
             hello == admitted, completionError == expected
         else {
