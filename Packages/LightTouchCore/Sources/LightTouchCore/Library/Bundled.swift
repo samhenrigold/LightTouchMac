@@ -103,7 +103,23 @@ public nonisolated enum Bundled {
         return fd
     }
 
-    public static func requireStorage() throws { _ = try appLock.get() }
+    public static func requireStorage() throws {
+        // A preview's host never holds the library: the app run beside it from Xcode would be refused.
+        guard !isPreview else {
+            throw CocoaError(
+                .fileLocking, userInfo: [NSLocalizedDescriptionKey: "An Xcode preview doesn’t open the library."])
+        }
+        _ = try appLock.get()
+    }
+
+    /// An Xcode preview's host: a copy of the app Xcode launches to draw views, which skips the launch (Debug only).
+    public static let isPreview: Bool = {
+        #if DEBUG
+            ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+        #else
+            false
+        #endif
+    }()
 
     /// The fallback is only a path for error reporting, never an alternate
     /// writable root. App startup requires the successful layout above.

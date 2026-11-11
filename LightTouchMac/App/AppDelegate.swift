@@ -168,6 +168,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // An Xcode preview's host only draws views: no library lock (the app run beside it would be refused), alerts,
+        // reports or devices.
+        guard !Bundled.isPreview else {
+            return
+        }
         Analytics.launch()
         do { try Bundled.requireStorage() } catch {
             let alert = NSAlert()
@@ -280,8 +285,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// usbmuxd) loses app management or the guest tools without a word, so say so before a device starts, until
     /// "don't show" is checked for that same set of missing parts.
     private func warnIfIncomplete() {
-        // an Xcode preview launches the app too, and a modal alert there crashes it
-        guard ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" else { return }
         var missing: [String] = []
         if !FileManager.default.isExecutableFile(atPath: USBMux.binary) { missing.append("usbmuxd") }
         if Bundled.resource("Guest/guest.aar") == nil { missing.append("guest.aar") }
