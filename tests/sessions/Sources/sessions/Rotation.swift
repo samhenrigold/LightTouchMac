@@ -44,7 +44,10 @@ func rotationCheck(_ args: RotationCheck) -> Never {
             steps: [
                 // Home first: the S5L8920 boards power the digitizer down on the lock screen; their first slide
                 // after boot can go unanswered, so twice (on the Home screen the second is a page swipe).
-                "boot", "lit 0.03 300", "wait 5", "button 0", "wait 2", slide, "wait 4", "button 0", "wait 2", slide,
+                // Connect Hardware Keyboard off, as a user who types on the screen boots: with the USB keyboard in,
+                // 7.x keeps its on-screen keyboard down (and on the iPhone 4 refuses it with an alert).
+                "boot", "lit 0.03 300", "keyboard off", "wait 5", "button 0", "wait 2", slide, "wait 4", "button 0",
+                "wait 2", slide,
                 // The app's watch takes its first reading (portrait at Home) as the boot's, before any turn.
                 "wait 4", "shot home", "follow start",
                 // Safari through the guest agent; without one (iPhone OS 1), its Home screen icon.
@@ -194,8 +197,7 @@ private func bottomLuminance(_ image: CGImage) -> Double {
 /// stays at Connect to iTunes until a host activates it and sets its clock over lockdown, as the app does at every
 /// boot; iOS 5 and later sit in Setup until it is walked, unless prepared --skip-setup.
 func activatedOverlay(_ base: Base, _ inputs: Inputs, work: URL) -> URL? {
-    let setup = base.armv7 && base.major >= 5 && base.lock["skip_setup"] as? Bool != true
-    guard base.major == 2 || setup else { return nil }
+    guard base.major == 2 || base.bootsIntoSetup else { return nil }
     let boot = work.appendingPathComponent("activation")
     print("\(base.version): a first boot as the app boots it, for its overlay (sessions single, in \(boot.path))")
     guard

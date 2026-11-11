@@ -336,7 +336,7 @@ struct FlickCheck: ParsableCommand {
             "Trackpad swipes on the Home screen: a quick short flick turns the page, a slow short drag snaps back."
     )
     @Argument var base: String
-    @Option(help: "The overlay of a boot that walked Setup (5.x-7.x), cloned.", transform: path) var overlay: URL?
+    @Option(help: "The overlay of a boot that walked Setup (5.x or 6.x), cloned.", transform: path) var overlay: URL?
     @Option(help: "Gestures of each kind.") var runs = 10
     @Option(help: "The kinds, comma-separated (helper-driver's trackpadGesture).") var kinds = "flick,slow"
     @Option(help: "The least median frames/s of motion each kind's gestures may reach the app at.") var minFps = 45.0
