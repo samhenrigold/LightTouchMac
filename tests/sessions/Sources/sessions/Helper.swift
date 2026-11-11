@@ -238,12 +238,15 @@ func helperBoot(_ args: HelperBootCheck) -> Never {
             "ipod: lock and home dumps, unlocked after \(e.one("wake").int("tries") ?? 0) slides"
         )
         // The rotation was the emulator's once (a landscape frame, 3693dddf); it is the guest's now, and the app turns
-        // its shell (sessions rotation): the frame keeps the panel's scan and stays lit.
+        // its shell: the frame keeps the panel's scan and stays lit. That ⌘→ reaches the guest isn't proved here, as
+        // 3.1.3's Home screen doesn't turn and the frame is the same either way: sessions rotation reads the interface
+        // turning in Safari through the same LinkCommand.rotate (DeviceRotation on a stepped board).
         let rotated = dumps["rotated"] ?? [:]
         let home = dumps["home"] ?? [:]
         r.check(
             rotated.int("width") == 320 && (rotated.double("brightness") ?? 0) > 0.5 * (home.double("brightness") ?? 1),
-            "ipod: after ⌘→ the frame keeps the panel's scan and the Home screen (\(rotated.int("width") ?? 0)x"
+            "ipod: after ⌘→ the frame keeps the panel's scan and stays lit, the turn itself sessions rotation's ("
+                + "\(rotated.int("width") ?? 0)x"
                 + "\(rotated.int("height") ?? 0), brightness \(format(rotated.double("brightness"), 2)) vs "
                 + "\(format(home.double("brightness"), 2)))"
         )
