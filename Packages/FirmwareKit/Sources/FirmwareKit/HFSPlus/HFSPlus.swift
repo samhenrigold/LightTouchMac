@@ -739,12 +739,19 @@ public final class HFSPlusVolume {
             throw FirmwareError(.internal, "\(url.lastPathComponent) has no journal in the volume")
         }
         let at = Int(try be32(vh, 12)) * blockSize
-        var jib = [UInt8](repeating: 0, count: 4)
-        guard pread(fd, &jib, 4, off_t(at)) == 4 else {
+        var jib = [UInt8](repeating: 0, count: 52)  // flags, device_signature[8], offset, size
+        guard pread(fd, &jib, 52, off_t(at)) == 52 else {
             throw FirmwareError(.internal, "read the journal info block of \(url.lastPathComponent)")
         }
-        putBE32(&jib, 0, try be32(jib, 0) | 4)
-        try restore([(j.offset, Data(count: j.size)), (at, Data(jib))])
+        // Write the whole block, not just the flags word: the kernel's newfs leaves its own fill in the bytes after
+        // offset/size (0x5a on some hosts, 0 on others), so trusting them made the output depend on the host that
+        // prepared the volume — two hosts recorded different .journal_info_block listings. A fresh block, with only
+        // the needs-init flag set, the device signature zeroed and the journal's offset and size kept, is the same
+        // everywhere, as newfs_hfs leaves it.
+        var block = [UInt8](repeating: 0, count: blockSize)
+        putBE32(&block, 0, (try be32(jib, 0) | 4) & 0x7)  // kJIJournalInFSMask | kJIJournalNeedInitMask
+        block.replaceSubrange(36..<52, with: jib[36..<52])  // offset, size, as diskutil/newfs wrote them
+        try restore([(j.offset, Data(count: j.size)), (at, Data(block))])
     }
 
     /// Sets kHFSContentProtectionBit (0x40000000) in the volume header's attributes, as a restore formats iOS's

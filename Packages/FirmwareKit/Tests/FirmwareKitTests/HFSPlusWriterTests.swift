@@ -65,6 +65,35 @@ import Testing
         }
     }
 
+    /// leaveJournalToDevice writes the whole .journal_info_block, not the bytes newfs left after offset/size (0x5a
+    /// on some hosts, 0 on others), so two hosts prepare the same block: the block is a zeroed 4096 bytes with only
+    /// the in-FS and need-init flags and the journal's offset and size. Here the block is pre-filled with 0x5a, as a
+    /// host's kernel can leave it, and comes out the same as newfs's.
+    @Test func leaveJournalToDeviceWritesADeterministicInfoBlock() async throws {
+        try await Oracle.withTemp { dir in
+            let img = dir.appendingPathComponent("j.img")
+            try HFSPlusWriter.makeHFS(img, size: 64 << 20, journaled: true)
+            let v = try HFSPlusVolume(img, writable: true)
+            // the info block's location (volume header journalInfoBlock, at file offset 1024 + 12), then its offset
+            // and size as makeHFS wrote them
+            let at = try Data(contentsOf: img)[1036..<1040].reduce(0) { $0 << 8 | Int($1) } * v.blockSize
+            let before = try Data(contentsOf: img)[at..<(at + 52)]
+            let offsetSize = before[(at + 36)..<(at + 52)]
+            // a host's kernel fill: 0x5a over the whole block, offset and size restored
+            var dirty = Data(repeating: 0x5a, count: v.blockSize)
+            // kJIJournalInFSMask, as the block says before the handoff
+            dirty.replaceSubrange(0..<4, with: [0, 0, 0, 1])
+            dirty.replaceSubrange(36..<52, with: offsetSize)
+            try v.restore([(at, dirty)])
+            try v.leaveJournalToDevice()
+            let block = try Data(contentsOf: img)[at..<(at + v.blockSize)]
+            #expect(block[(at)..<(at + 4)].elementsEqual([0, 0, 0, 5]))  // in-FS + need-init
+            #expect(block[(at + 4)..<(at + 36)].allSatisfy { $0 == 0 })  // the device signature, zeroed
+            #expect(block[(at + 36)..<(at + 52)].elementsEqual(offsetSize))  // the journal's offset and size kept
+            #expect(block[(at + 52)...].allSatisfy { $0 == 0 })  // the fill newfs leaves zero
+        }
+    }
+
     @Test func aFreshVolumeIsCleanAndEmpty() async throws {
         try await Oracle.withTemp { dir in
             for journaled in [true, false] {
