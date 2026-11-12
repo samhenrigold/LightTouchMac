@@ -126,5 +126,21 @@
   "screenHeight": 960,
   "screenScale": 2,
   "screenWidth": 640
+ },
+ {
+  "board": "n42ap",
+  "defaultOrientation": 0,
+  "hasCellular": true,
+  "hasCompass": false,
+  "hasUSBHost": false,
+  "machine": "iPhone-5",
+  "panelMaxHeight": 1136,
+  "panelMaxPixels": 727040,
+  "panelMaxWidth": 640,
+  "panelMin": 640,
+  "panelWidthStep": 16,
+  "screenHeight": 1136,
+  "screenScale": 2,
+  "screenWidth": 640
  }
 ]
