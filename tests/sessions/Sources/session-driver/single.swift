@@ -513,7 +513,11 @@ nonisolated enum WiFiProbe {
                         let page = try await guestAgent.spawn(["/tmp/ltm-httpget", WiFiProbe.url])
                         output = String(decoding: page, as: UTF8.self)
                     } catch let error as GuestAgentError {
-                        output = String(decoding: error.output.prefix(300), as: UTF8.self)
+                        // A failed put or exec says nothing on its own: its status (a negative errno, or 128 plus
+                        // a signal) is what the verdict shows then.
+                        output =
+                            error.output.isEmpty
+                            ? "agent status \(error.status)" : String(decoding: error.output.prefix(300), as: UTF8.self)
                     } catch { output = "\(error)" }
                     if output.hasPrefix("HTTP 200") { break }
                 }
