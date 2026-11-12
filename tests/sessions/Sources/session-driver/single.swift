@@ -19,7 +19,8 @@ import SessionKit
 // lockdown and still hold a file uploaded before the clean shutdown (the persist check).
 
 struct SingleConfig: Decodable {
-    var board: String  // "ipod" | "ipad" | "ipod1g" | "iphone2g" | "ipod4g" | "iphone4" | "ipod3g" | "iphone3gs"
+    /// "ipod", "ipad", "ipod1g", "iphone2g", "ipod4g", "iphone4", "ipod3g", "iphone3gs" or "iphone5".
+    var board: String
     var base: String
     /// AFC upload + download sizes; 16384 and 65536 are 512-byte multiples (a ZLP ends each transfer).
     var afcBytes: [Int]?
@@ -136,6 +137,7 @@ nonisolated enum WiFiProbe {
         case "iphone4": (.n90, "n90ap")
         case "ipod3g": (.n18, "n18ap")
         case "iphone3gs": (.n88, "n88ap")
+        case "iphone5": (.n42, "n42ap")
         default: (.n72, "n72ap")
         }
     // The A4 and S5L8920 boards boot as the iPad does (kboot, the armv7 offer from ipadItpack); input, wake and
@@ -263,6 +265,7 @@ nonisolated enum WiFiProbe {
         poweredOn = Date()
         do { try d.boot(generation: generation, guestPackage: offer()) } catch { fail("boot \(generation): \(error)") }
         await waitLit(d, ipad ? 0.2 : 0.03, d.profile.bootBudget * slow)  // the app's own boot budget (iPad 300 s)
+        if d.profile == .n42 { await d.trustThisComputer(generation, 300 * slow) }
         await waitUSB(d, expecting: d.profile.productType, 300 * slow)
         // The app's readiness answer (ReadinessWatch through DeviceApps.waitForSpringBoard): SpringBoard's layout
         // service, or the agent naming SpringBoard or Setup frontmost. Until wave 2.5 the app gave up after one 45 s
@@ -424,7 +427,8 @@ nonisolated enum WiFiProbe {
                 ]
             )
         }
-        if !ipad { await d.home() }  // wake: the display may have slept while it booted
+        // wake: the display may have slept while it booted (iOS 10 unlocked at Home would take Home to Spotlight)
+        if !ipad, d.profile != .n42 { await d.home() }
         try? await Task.sleep(for: .seconds(3))
         if ipad { await d.wakeIPad() }
         let lockShot = d.screenshot(generation == 1 ? "lock" : "lock\(generation)")

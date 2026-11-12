@@ -422,6 +422,42 @@ extension String {
     }
     /// Home, pressed and released: wakes a display that slept.
     func home() async { await gesture(HostInputAutomation.press(0), "home") }
+    /// iOS 10's lock screen: one Home press wakes the panel ("Press home to open"), a second while it is lit opens it.
+    func unlockWithHome() async {
+        await home()
+        try? await Task.sleep(for: .seconds(1.5))
+        await home()
+    }
+    /// iOS 7 and later pair with a computer only once the device's "Trust This Computer?" is answered, which it asks
+    /// while unlocked; the iPhone 5 (iOS 10) asks on a new device's first connection. Answered as a user does: lockdown
+    /// says the device is locked (-17), so it is opened; the answer is pending (-19), so Trust is tapped (the left
+    /// button of the centered alert, 640x1136). Returns once lockdown answers, or after `seconds`.
+    func trustThisComputer(_ generation: Int, _ seconds: Double) async {
+        let start = Date()
+        var taps = 0
+        while Date().timeIntervalSince(start) < seconds {
+            do {
+                _ = try await services.lockdownValue("ProductType")
+                break
+            } catch DeviceError.lockdown(-17) {
+                await unlockWithHome()
+            } catch DeviceError.lockdown(-19) {
+                // the alert waits on an unlocked screen; a panel that slept has locked again
+                if (brightness() ?? 0) < 0.03 {
+                    await unlockWithHome()
+                    try? await Task.sleep(for: .seconds(2))
+                }
+                _ = screenshot("trust\(generation)-\(taps)")
+                await tap(0.29, 0.6)
+                taps += 1
+            } catch {}
+            try? await Task.sleep(for: .seconds(3))
+        }
+        emit(
+            "trust",
+            ["device": name, "generation": generation, "taps": taps, "seconds": Date().timeIntervalSince(start)]
+        )
+    }
     /// An iPad's lock screen turns its panel off about 7 s after it appears (iPhone OS 3.2, untouched): Home wakes it,
     /// up to three times while the frame stays dark.
     func wakeIPad() async {
@@ -484,8 +520,15 @@ extension String {
                 try? await Task.sleep(for: .seconds(2))
             }
             if attempt > 0 { await wakeForShot("unlock\(generation)-\(attempt)") }
-            read =
-                profile == .k48 ? await drag(0.9365, 0.621, 0.9365, 0.0612) : await drag(0.18, 0.9, 0.92, 0.9)
+            if profile == .n42 {
+                // iOS 10 (the iPhone 5's) opens from the lock screen with Home, where a slide shows the widgets; a panel
+                // that slept was woken above
+                if attempt == 0, (try? await agent?.isLocked()) == false { break }  // trustThisComputer opened it
+                await home()
+            } else {
+                read =
+                    profile == .k48 ? await drag(0.9365, 0.621, 0.9365, 0.0612) : await drag(0.18, 0.9, 0.92, 0.9)
+            }
             attempts += 1
             try? await Task.sleep(for: .seconds(5))
             locked = try? await agent?.isLocked()

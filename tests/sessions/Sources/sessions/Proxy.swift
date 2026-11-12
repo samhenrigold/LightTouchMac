@@ -3,8 +3,10 @@ import HostRuntime
 import SessionKit
 
 /// contrib/it-proxy/httpget of the pinned qemu-ios checkout (armv6; the guest's own CFNetwork client), or --httpget.
-func httpget(_ args: Inputs) -> URL {
-    let url = args.httpget ?? checkout("qemu-ios").appendingPathComponent("contrib/it-proxy/httpget")
+/// iOS 10 runs no armv6 code: its build for armv7 (httpget-armv7) there.
+func httpget(_ args: Inputs, major: Int = 0) -> URL {
+    let name = major >= 10 ? "httpget-armv7" : "httpget"
+    let url = args.httpget ?? checkout("qemu-ios").appendingPathComponent("contrib/it-proxy/" + name)
     guard FileManager.default.fileExists(atPath: url.path) else {
         die("no httpget at \(url.path) (contrib/it-proxy/build.sh, or --httpget)")
     }

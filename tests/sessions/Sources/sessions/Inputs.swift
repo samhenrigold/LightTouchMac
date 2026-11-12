@@ -314,18 +314,18 @@ struct Base {
     var driverBoard: String {
         [
             "n72ap": "ipod", "k48ap": "ipad", "n45ap": "ipod1g", "m68ap": "iphone2g", "n81ap": "ipod4g",
-            "n90ap": "iphone4",
+            "n90ap": "iphone4", "n42ap": "iphone5",
             "n18ap": "ipod3g", "n88ap": "iphone3gs"
         ][board] ?? board
     }
     var productType: String {
         [
             "n72ap": "iPod2,1", "k48ap": "iPad1,1", "n45ap": "iPod1,1", "m68ap": "iPhone1,1", "n81ap": "iPod4,1",
-            "n90ap": "iPhone3,1", "n18ap": "iPod3,1", "n88ap": "iPhone2,1"
+            "n90ap": "iPhone3,1", "n18ap": "iPod3,1", "n88ap": "iPhone2,1", "n42ap": "iPhone5,2"
         ][board] ?? ""
     }
     /// The kboot boards boot as the iPad does (an armv7 offer); the rest take the armv6 package.
-    var armv7: Bool { ["k48ap", "n81ap", "n90ap", "n18ap", "n88ap"].contains(board) }
+    var armv7: Bool { ["k48ap", "n81ap", "n90ap", "n18ap", "n88ap", "n42ap"].contains(board) }
     var firstGeneration: Bool { ["n45ap", "m68ap"].contains(board) }
     /// Its first boot sits in Setup until Setup is walked: 5.x and later on the armv7 boards, unless prepared
     /// --skip-setup (the lock's skip_setup), which boots straight to the Home screen.

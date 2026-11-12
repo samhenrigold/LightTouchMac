@@ -8,7 +8,7 @@ public enum Affected {
     /// is prepared with (the 5.1 iPod touch also jailbroken: Cydia, Substrate, afc2).
     public static let families: [(row: String, create: [String])] = [
         ("m68ap-1A543a", []), ("n45ap-4A102", []), ("n72ap-7E18", []), ("k48ap-7B500", []),
-        ("n81ap-9B176", ["--jailbreak"]), ("n88ap-10B500", []), ("n90ap-11D257", [])
+        ("n81ap-9B176", ["--jailbreak"]), ("n88ap-10B500", []), ("n90ap-11D257", []), ("n42ap-14G61", [])
     ]
 
     public struct Plan: Equatable {
@@ -32,8 +32,11 @@ public enum Affected {
         let firmware = "Packages/FirmwareKit/Sources/FirmwareKit/"
         if path.hasPrefix(firmware) {
             let rest = path.dropFirst(firmware.count)
-            // K48Board prepares the iPad, the 3GS and the A4 boards; N45Board the first iPhone and iPod touch.
-            if rest.hasPrefix("K48") || rest.hasPrefix("KBoot") { return ["k48ap", "n81ap", "n88ap", "n90ap"] }
+            // K48Board prepares the iPad, the 3GS and the A4 boards; N45Board the first iPhone and iPod touch;
+            // N42Board (with the A6 pieces) the iPhone 5, which boots KBoot's kboot.bin too.
+            if rest.hasPrefix("K48") { return ["k48ap", "n81ap", "n88ap", "n90ap"] }
+            if rest.hasPrefix("KBoot") { return ["k48ap", "n81ap", "n88ap", "n90ap", "n42ap"] }
+            if rest.hasPrefix("N42") || rest.hasPrefix("A6") { return ["n42ap"] }
             if rest.hasPrefix("N45") { return ["n45ap", "m68ap"] }
             if rest.hasPrefix("N72") { return ["n72ap"] }
             return all

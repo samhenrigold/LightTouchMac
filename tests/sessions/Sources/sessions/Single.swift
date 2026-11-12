@@ -13,7 +13,12 @@ func single(_ args: SingleCheck) -> Never {
     let tools = Tools.resolve(args.inputs, work: work)
     let d = base.driverBoard
     let install = !args.noInstall && base.major >= 2  // 1.x has no installation_proxy
-    let ipa = args.ipa ?? checkout("qemu-ios").appendingPathComponent("contrib/it-harness/build/Harness.ipa")
+    // iOS 10 runs no armv6 code: the harness app's armv7 build there
+    let ipa =
+        args.ipa
+        ?? checkout("qemu-ios").appendingPathComponent(
+            "contrib/it-harness/build/" + (base.major >= 10 ? "Harness-armv7.ipa" : "Harness.ipa")
+        )
     if install, !FileManager.default.fileExists(atPath: ipa.path) { die("no test IPA at \(ipa.path) (--ipa)") }
     let before = SessionJudge.tree(base.url)
     // The driver's state is the work directory (LTM_STATE_DIR), so the device is under its Devices/.
@@ -34,7 +39,8 @@ func single(_ args: SingleCheck) -> Never {
 
     var single: [String: Any] = [
         "board": d, "base": base.url.path, "lockdownTZ": tools.services.path,
-        "launch": args.launch, "reboot": args.reboot, "install": install, "httpget": httpget(args.inputs).path
+        "launch": args.launch, "reboot": args.reboot, "install": install,
+        "httpget": httpget(args.inputs, major: base.major).path
     ]
     let homeReference = repository.appendingPathComponent("tests/sessions/matrix-refs/\(base.entryID)-home.png")
     if FileManager.default.fileExists(atPath: homeReference.path) { single["homeReference"] = homeReference.path }
