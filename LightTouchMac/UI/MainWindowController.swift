@@ -261,9 +261,19 @@ final class PaneLabelViewController: NSViewController {
     let label = NSTextField(labelWithString: "")
     var text = "" { didSet { label.stringValue = text } }
     var shortName = "device" { didSet { update() } }
-    /// False for a device with no apps to manage (Entry.managesApps): then it says nothing.
+    /// False for a device with no apps to manage (Entry.managesApps).
     var managesApps = true { didSet { update() } }
-    func update() { text = managesApps ? "Start the \(shortName) to manage apps." : "" }
+    /// The firmware major version, to tell iOS 10 (installs gated) from iPhone OS 1 (no installation service).
+    var major = 2 { didSet { update() } }
+    func update() {
+        if managesApps {
+            text = "Start the \(shortName) to manage apps."
+        } else if major >= 10 {
+            text = "App installs aren’t supported on iOS 10 yet."
+        } else {
+            text = ""  // iPhone OS 1 has no installation service: nothing to say.
+        }
+    }
 
     override func loadView() {
         label.stringValue = text
