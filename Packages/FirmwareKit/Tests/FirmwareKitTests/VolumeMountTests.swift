@@ -51,6 +51,44 @@ import Testing
         }
     }
 
+    /// The host's fseventsd writes nothing on a volume mounted for an edit (.fseventsd/no_log, put there before the
+    /// mount): its uuid file and event logs took blocks the kernel then didn't give to what came after them, so where
+    /// a recipe's files and the 1.x root's journal landed varied by host and run. It goes with the junk at the end.
+    @Test func fseventsdWritesNothingOnTheMount() async throws {
+        try await Oracle.withTemp { dir in
+            let fm = FileManager.default
+            // fseventsd passes over mounts in the temporary directory (/var/folders), so these mount outside it
+            let mnt = fm.homeDirectoryForCurrentUser.appendingPathComponent(
+                "Library/Caches/FirmwareKitTests-\(UUID().uuidString)"
+            )
+            defer { try? fm.removeItem(at: mnt) }
+            let logs = { (root: URL) in
+                (try? fm.contentsOfDirectory(atPath: root.appendingPathComponent(".fseventsd").path)) ?? []
+            }
+            // without no_log, fseventsd makes its uuid file within a second or so of the mount
+            let control = dir.appendingPathComponent("control.img")
+            try await VolumeMount.makeHFS(control, size: 64 << 20, journaled: false)
+            let plain = try await VolumeMount.attachHidden(control, at: mnt)
+            var seen: [String] = []
+            for _ in 0..<20 {
+                try await Task.sleep(for: .milliseconds(250))
+                seen = logs(mnt)
+                if !seen.isEmpty { break }
+            }
+            try await VolumeMount.detach(plain.device)
+            try #require(!seen.isEmpty, "fseventsd logged nothing on a plain mount at \(mnt.path)")
+            let img = dir.appendingPathComponent("data.img")
+            try await VolumeMount.makeHFS(img, size: 64 << 20, journaled: false)
+            let logged = try await VolumeMount.withMounted(img, at: mnt) { root in
+                try Data(count: 4096).write(to: root.appendingPathComponent("a"))
+                try await Task.sleep(for: .seconds(2))
+                return logs(root)
+            }
+            #expect(logged == ["no_log"])
+            #expect(try !HFSPlusVolume(img).listing().contains { $0.path.hasPrefix(".fseventsd") })
+        }
+    }
+
     /// A handle left open on the volume: unmount fails, the image is force-detached and the call throws.
     /// iOS 6's data volume: kHFSContentProtectionBit in both volume headers, the rest of the attributes kept.
     @Test func contentProtection() async throws {

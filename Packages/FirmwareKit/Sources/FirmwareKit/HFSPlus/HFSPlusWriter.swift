@@ -29,6 +29,9 @@ public final class HFSPlusWriter: VolumeFiles {
     /// The owner of new items; nil: this process's uid and gid, as a noowners mount gives them (not the parent
     /// folder's gid).
     public var owner: (uid: UInt32, gid: UInt32)?
+    /// Whether `close()` sets every folder's valence and folder count from its children (recountFolders); false keeps
+    /// the counts the catalog has, adjusted by the edits, so a damaged count is left for fsck_hfs to find.
+    var recountsFolders = true
     private let fd: Int32
     private var vh: [UInt8]
     private(set) var totalBlocks: Int
@@ -1058,7 +1061,7 @@ public final class HFSPlusWriter: VolumeFiles {
     }
 
     private func flush() throws {
-        try recountFolders()
+        if recountsFolders { try recountFolders() }
         try store(catalog, forkAt: 272)
         try store(attributes, forkAt: 352)
         try store(extents, forkAt: 192)

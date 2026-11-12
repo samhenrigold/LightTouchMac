@@ -46,6 +46,7 @@ public enum VolumeMount {
         try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
         let mountPoint = try DevicePath.real(mountPoint)
         let journal = (try? HFSPlusVolume(image).journalSnapshot()) ?? nil
+        try silenceFSEvents(image)
         let dev = try await attach(image)
         let value: T
         do {
@@ -75,6 +76,24 @@ public enum VolumeMount {
         }
         if let journal { try HFSPlusVolume(image, writable: true).restore(journal) }
         return value
+    }
+
+    /// Puts `.fseventsd/no_log` on the unmounted `image` (HFSPlusWriter), so the host's fseventsd logs nothing on it
+    /// once mounted; the junk removal takes it away again. Its uuid file and event logs took a block each on the mount,
+    /// how many and when varying by host and run, and the kernel put everything allocated after them that much further
+    /// on (the 1.x root's journal moved with them). A volume the writer refuses is mounted as it is.
+    static func silenceFSEvents(_ image: URL) throws {
+        let w: HFSPlusWriter
+        do { w = try HFSPlusWriter(image) } catch let refusal as FirmwareError where refusal.code == .unsupported {
+            // shortcut: case-insensitive HFS+ (the restore ramdisks) or a journal to replay mounts with fseventsd on;
+            // none is in a recorded listing, so upgrade if one has to be deterministic
+            return
+        }
+        guard !w.exists(".fseventsd/no_log") else { return }
+        w.recountsFolders = false  // what fsck_hfs finds after the mount is the volume's own
+        try w.makeDirectory(".fseventsd")
+        try w.put(Data(), at: ".fseventsd/no_log")
+        try w.close()
     }
 
     /// `body` with the files of `image` through `backend`: kernel, `withMounted` at `mountPoint` (a MountedVolume);
