@@ -119,7 +119,8 @@ nonisolated enum ProxyProbe {
         for attempt in 0..<8 {
             if attempt > 0 { try? await Task.sleep(for: .seconds(10)) }
             do {
-                let output = try await agent.spawn([agent.httpget(bytes), url])  // the v1 exec fallback where spawn is missing
+                // the v1 exec fallback where spawn is missing
+                let output = try await agent.spawn([agent.httpget(bytes), url])
                 status = 0
                 text = String(decoding: output.prefix(300), as: UTF8.self)
             } catch let error as GuestAgentError {
