@@ -15,7 +15,7 @@ public enum A6GuestAssets {
     private static let sharedCachePath = "System/Library/Caches/com.apple.dyld/dyld_shared_cache_armv7s"
     private static let paths = [
         "System/Library/Frameworks/OpenGLES.framework/OpenGLES",
-        "usr/local/bin/it_agent",
+        "usr/local/bin/it_agent", "usr/local/bin/ltm-httpget",
         "usr/lib/libappsync.dylib", "usr/libexec/installd",
         "System/Library/Caches/com.apple.xpcd/xpcd_cache.dylib",
         sharedCachePath

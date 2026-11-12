@@ -86,8 +86,9 @@ public struct Vendor {
         "it_pbd", "it_prefs", "it_msmquiet.dylib", "it_seal", "it_keybag", "libappsync.dylib",
         "OpenGLES", "gles-names.h", "OpenGLES-1x", "opengles-1x.exports", "armv6.itpack", "armv7.itpack",
         "sblaunch", "sbdlicon", "it_agent", "it_typein.dylib", "it_keybag-armv6",
-        // the iPhone 5 recipe's restore initializer, its MobileGestalt worker and the launchd cache template
-        "it_initialize", "it_mobilegestalt", "launchd-cache-template"
+        // the iPhone 5 recipe's restore initializer, its MobileGestalt worker, the launchd cache template and the
+        // armv7 httpget its image carries
+        "it_initialize", "it_mobilegestalt", "launchd-cache-template", "httpget-armv7"
     ]
     static let guestPackageMinSerial = 16
     static let tools = [

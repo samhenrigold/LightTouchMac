@@ -18,8 +18,11 @@ public enum SideloadTools {
             if after != before { try v.put(after, at: path, mode: 0o755) }
         }
         try v.makeDirectory("usr/local/bin", mode: 0o755)
+        // ltm-httpget: the harness's Wi-Fi check, baked in because the image's root is read-only and its sandbox
+        // lets it_agent exec only what is on the system volume, so nothing the agent puts at run time can run.
         for (name, path) in [
             ("it_agent", "usr/local/bin/it_agent"),
+            ("httpget-armv7", "usr/local/bin/ltm-httpget"),
             ("libappsync.dylib", "usr/lib/libappsync.dylib")
         ] {
             try v.put(contentsOf: helpers.appendingPathComponent(name), at: path, mode: 0o755)

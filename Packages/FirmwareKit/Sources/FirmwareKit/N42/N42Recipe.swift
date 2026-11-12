@@ -67,8 +67,11 @@ final class N42Board: Board {
             throw FirmwareError(.internal, "\(helper.lastPathComponent)'s emulator library has no machine for n42ap")
         }
         self.hardware = hardware
-        let missing = [Self.initializer, Self.mobileGestalt, "launchd-cache-template", "it_agent", "libappsync.dylib"]
-            .filter { !FileManager.default.fileExists(atPath: c.o.guestTools.appendingPathComponent($0).path) }
+        let missing = [
+            Self.initializer, Self.mobileGestalt, "launchd-cache-template", "it_agent", "httpget-armv7",
+            "libappsync.dylib"
+        ]
+        .filter { !FileManager.default.fileExists(atPath: c.o.guestTools.appendingPathComponent($0).path) }
         guard missing.isEmpty else {
             throw FirmwareError(
                 .internal, "--guest-tools \(c.o.guestTools.path) lacks \(missing.joined(separator: ", "))")

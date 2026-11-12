@@ -92,8 +92,9 @@ struct SingleConfig: Decodable {
     /// The app's armv6.itpack: ittrust for a guest whose package lacks it (WebProxySetup.bundledGuestTool, which
     /// the app runs on every board).
     var proxyItpack: String?
-    /// contrib/it-proxy/httpget (armv6): at the first Home the guest fetches `WiFiProbe.url`, which only wifi0's
-    /// guestfwd answers, so the board's Wi-Fi joined (`wifi`).
+    /// contrib/it-proxy/httpget (armv6, or httpget-armv7 for 10.x): at the first Home the guest fetches
+    /// `WiFiProbe.url`, which only wifi0's guestfwd answers, so the board's Wi-Fi joined (`wifi`). A guest whose image
+    /// carries it runs that copy (GuestAgent.httpget).
     var httpget: String?
     /// Free-form Apply at this panel ("WxH" as it scans): after boot 1's home, the app's Stop and a fresh boot at
     /// panel=WxH on the same overlay (EmulatorController.setPanel); then the frame's size, the dock row in the new
@@ -509,8 +510,7 @@ nonisolated enum WiFiProbe {
                 for attempt in 0..<9 {
                     if attempt > 0 { try? await Task.sleep(for: .seconds(10)) }
                     do {
-                        try await guestAgent.put("/tmp/ltm-httpget", mode: 0o755, bytes)
-                        let page = try await guestAgent.spawn(["/tmp/ltm-httpget", WiFiProbe.url])
+                        let page = try await guestAgent.spawn([guestAgent.httpget(bytes), WiFiProbe.url])
                         output = String(decoding: page, as: UTF8.self)
                     } catch let error as GuestAgentError {
                         // A failed put or exec says nothing on its own: its status (a negative errno, or 128 plus

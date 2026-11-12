@@ -114,14 +114,12 @@ nonisolated enum ProxyProbe {
     func fetch(_ label: String, scheme: String = "https") async {
         guard let httpget = p.httpget, let bytes = try? Data(contentsOf: URL(fileURLWithPath: httpget)) else { return }
         let url = "\(scheme)://\(ProxyProbe.host)/"
-        let remote = "/tmp/ltm-httpget"
         var status = -1
         var text = ""
         for attempt in 0..<8 {
             if attempt > 0 { try? await Task.sleep(for: .seconds(10)) }
             do {
-                try await agent.put(remote, mode: 0o755, bytes)
-                let output = try await agent.spawn([remote, url])  // the v1 exec fallback where spawn is missing
+                let output = try await agent.spawn([agent.httpget(bytes), url])  // the v1 exec fallback where spawn is missing
                 status = 0
                 text = String(decoding: output.prefix(300), as: UTF8.self)
             } catch let error as GuestAgentError {
@@ -211,8 +209,7 @@ nonisolated enum ProxyProbe {
         for attempt in 0..<8 {
             if attempt > 0 { try? await Task.sleep(for: .seconds(10)) }
             do {
-                try await agent.put("/tmp/ltm-httpget", mode: 0o755, bytes)
-                text = String(decoding: try await agent.spawn(["/tmp/ltm-httpget", url]).prefix(300), as: UTF8.self)
+                text = String(decoding: try await agent.spawn([agent.httpget(bytes), url]).prefix(300), as: UTF8.self)
                 status = 0
             } catch let error as GuestAgentError {
                 status = error.status
