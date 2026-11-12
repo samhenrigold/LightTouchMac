@@ -395,5 +395,18 @@ extension SharedState {
                 #expect(device.prepared.isEmpty && device.started.isEmpty && !AppInstaller.hasPendingWork)
             }
         }
+
+        /// An app install on iOS 10+ is refused before it reaches the device: installd's signature check
+        /// isn't bypassed on 10.x yet (issue #ios10-installs).
+        @Test func appInstallsRefusedOniOS10() async throws {
+            try await withInstallerState { _, _ in
+                let device = FakeDevice()
+                device.iosVersion = "10.3.4"
+                let job = AppInstaller.start(URL(fileURLWithPath: "/tmp/App.ipa"), with: device, presenting: nil)
+                await job.task?.value
+                #expect(job.failed && job.status == "App installs aren’t supported on iOS 10 yet.")
+                #expect(device.started.isEmpty)
+            }
+        }
     }
 }

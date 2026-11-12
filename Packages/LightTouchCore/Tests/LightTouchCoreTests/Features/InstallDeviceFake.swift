@@ -13,7 +13,8 @@ final class FakeDevice: InstallDevice {
         name: "iOS 3.1.3",
         media: ["Music", "Photos", "Videos"]
     )
-    let productType: String? = "iPod2,1", iosVersion = "3.1.3", guestArch = "armv6"
+    let productType: String? = "iPod2,1", guestArch = "armv6"
+    var iosVersion = "3.1.3"
     var deviceReachable: Bool? = true
     var failures = 0, overlapped = false
     var errors: [Error] = []
