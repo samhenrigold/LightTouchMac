@@ -185,10 +185,12 @@ public enum SessionJudge {
     }
 
     /// Every path under a directory with its size, mode and modification time: a prepared base must not change.
+    /// Finder's .DS_Store is left out: a window open on the folder rewrites it while a run boots.
     public static func tree(_ root: URL) -> [String: [Int]] {
         var out: [String: [Int]] = [:]
         guard let walk = FileManager.default.enumerator(atPath: root.path) else { return out }
         while let rel = walk.nextObject() as? String {
+            if (rel as NSString).lastPathComponent == ".DS_Store" { continue }
             var st = stat()
             guard lstat(root.appendingPathComponent(rel).path, &st) == 0 else { continue }
             out[rel] = [
