@@ -763,6 +763,12 @@ nonisolated enum WiFiProbe {
             ["System/Library/Audio/UISounds/lock.caf", "System/Library/CoreServices/SpringBoard.app/lock.aiff"],
             agent: agent
         )
+        // Hold locks only an open device: one that sat past Auto-Lock (the iPhone 5 locked itself during the Wi-Fi
+        // check's retries) would only wake, and a wake plays nothing.
+        let locked = try? await agent?.isLocked()
+        if d.displaySleeping == true || locked == true {
+            await d.slideToUnlock(1, agent: agent)
+        }
         let plain = await lockSound(references: [lockFile].compactMap { $0 }, wav: wav, label: "lock-sound")
         (event["scale"], event["match"], event["reference"], event["support"], event["loud"]) =
             (plain.scale, plain.match, plain.reference, plain.support, plain.loud)

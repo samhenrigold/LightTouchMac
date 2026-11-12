@@ -75,6 +75,29 @@ struct SoundScaleTests {
         #expect(scale.match > 0.9)
     }
 
+    /// A lock sound through a phone's speaker: the file is a bright click over a slower thump, the speaker plays the
+    /// click and little of the thump (the iPhone 5's, 16 dB down below 200 Hz), so the recording's tail is the click's
+    /// and the file's is the thump's. The click still measures at its own speed, in more than one stretch.
+    @Test func aSoundWithoutItsBassStillMeasures() throws {
+        func sound(rate: Double, bass: Bool) -> [Float] {
+            let click = Self.click(rate: rate, seconds: 0.3)
+            return click.indices.map { n in
+                let t = Double(n) / rate
+                return click[n] * Float(exp(-t * 10)) + (bass ? Float(0.8 * sin(2 * .pi * 90 * t) * exp(-t * 6)) : 0)
+            }
+        }
+        let scale = try #require(
+            SoundScale.scale(
+                reference: sound(rate: 22050, bass: true),
+                referenceRate: 22050,
+                recording: Self.late(sound(rate: 44100, bass: false), rate: 44100),
+                recordingRate: 44100
+            )
+        )
+        #expect(abs(scale.factor - 1) < 0.02)
+        #expect(scale.match > 0.5 && scale.support >= 2)
+    }
+
     @Test func silenceHasNoScale() {
         #expect(
             SoundScale.scale(

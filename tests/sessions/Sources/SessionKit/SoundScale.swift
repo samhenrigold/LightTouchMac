@@ -18,6 +18,10 @@ public nonisolated enum SoundScale {
     static let voting = 0.55
     static let agree = 0.02
     static let range = (low: 0.4, high: 2.6)
+    /// Both sounds are compared above this (a second-order high-pass): a phone's speaker plays little of a sound's
+    /// bass, which the file's slow-decaying tail is mostly made of. The iPhone 5 (iOS 10) plays the lock sound 16 dB
+    /// down below 200 Hz, and its tail, the file's thump, matched only at a wrong speed.
+    static let bassCutoff = 500.0
 
     /// The factor, from 0.4 to 2.6 to within 0.5%, how well the source at that speed matches (the best correlation
     /// of the stretches that agree on it, at most 1), and how many stretches agree (0: no two do, the single best
@@ -30,6 +34,8 @@ public nonisolated enum SoundScale {
     ) -> (factor: Double, match: Double, support: Int)? {
         let width = Int(window * recordingRate)
         guard recording.count > width, reference.count > 1 else { return nil }
+        let reference = highPassed(reference, rate: referenceRate)
+        let recording = highPassed(recording, rate: recordingRate)
         let votes = stretches(recording, width: width, segment: Int(segment * recordingRate)).map { start in
             let stretch = Array(recording[start..<start + width])
             func match(_ k: Double) -> Double {
@@ -61,9 +67,11 @@ public nonisolated enum SoundScale {
             (start, x[start..<min(start + step, x.count)].reduce(0) { $0 + Double($1) * Double($1) })
         }
         let floor = (segments.map(\.1).max() ?? 0) * 1e-3
-        return segments.filter { $0.1 > floor && floor > 0 }.prefix(candidates).compactMap { start, _ in
+        let starts = segments.filter { $0.1 > floor && floor > 0 }.prefix(candidates).compactMap { start, _ in
             loudest(Array(x[start..<min(start + step + width, x.count)]), width: width).map { start + $0 }
         }
+        // A segment's loudest stretch can run into the next one's and be the same stretch: it votes once.
+        return starts.enumerated().filter { $0.offset == 0 || starts[$0.offset - 1] != $0.element }.map(\.element)
     }
 
     /// Where the `width` samples of `x` with the most energy start, or nil if `x` is silent or too short.
@@ -77,6 +85,22 @@ public nonisolated enum SoundScale {
             if sum > best.sum { best = (start, sum) }
         }
         return best.sum > 0 ? best.start : nil
+    }
+
+    /// `x` above `bassCutoff` (two one-pole high-pass sections), at `rate`.
+    static func highPassed(_ x: [Float], rate: Double) -> [Float] {
+        let a = Float(exp(-2 * .pi * bassCutoff / rate))
+        var y = x
+        for _ in 0..<2 {
+            var (previousIn, previousOut): (Float, Float) = (0, 0)
+            for i in y.indices {
+                let input = y[i]
+                previousOut = a * (previousOut + input - previousIn)
+                previousIn = input
+                y[i] = previousOut
+            }
+        }
+        return y
     }
 
     /// `x` read every `step` samples (linear interpolation).
