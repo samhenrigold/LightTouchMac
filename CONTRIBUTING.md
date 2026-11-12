@@ -300,6 +300,23 @@ those two places; its firmware is catalog entries, and preparing it is a Firmwar
 
 `device.lock.json` is `DeviceLock` (HostRuntime): FirmwareKit writes it, everything else reads it through that type.
 
+### Porting a board
+
+- PRs: one concern each; shared code before boards. qemu-ios lands first; the app PR pins it.
+- Shared code: gate per board (SoC compat props, e.g. `s5l8950.c`'s `a6`/`mca`) or per host capability
+  (`GLES_CAP_*`; the guest GL library runs on iOS 1–10). Changed snapshot state: bump `SNAP_VERSION`, keep old
+  versions loading. Full matrix (all catalog rows, jailbroken with `--network`) plus `sessions resume`.
+- Guest package: bump `contrib/guest-package/VERSION` only when contents change; on collision the merge takes the
+  next free serial. Guest binaries are built from source by `contrib/export-guest-artifacts.sh`, every arch the
+  boards need; none checked in or hand-made.
+- Preparation: one more board in FirmwareKit's `Recipe`/`Preparer` (shared steps, caches, lock), no separate tool.
+  Bakes are deterministic for a seed (seeded UUIDs, fixed dates, sorted plists) or `sessions listings` can't hold.
+- Done = `sessions single` passes on its catalog row prepared from the IPSW alone, first boot inside the app's 300 s
+  budget (migrate during preparation), and the row is in `Packages/ReleaseChecks/boots.json`.
+- Misbehavior: fix the model (register, PMU, codec) to match hardware; reuse another SoC's mechanism where one exists.
+  Harness or app waits only for races hardware has too.
+- qemu-ios: `tests/gate.sh --all` (qtests built beside `qemu-system-arm`); each fix adds a `tests/slice/` test.
+
 ## Rules
 
 - **No Python bridge.** The app runs one preparer, the Swift `firmwarekit`. qemu-ios's Python `imgtools/` is the test oracle, not a runtime.
