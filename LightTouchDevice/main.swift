@@ -369,6 +369,11 @@ struct OneShotConfig: Decodable {
     /// Or as soon as this regular expression matches the log with its newlines removed: other kernel
     /// messages interleave with a line on the serial log (qemu-ios ipad1_seal.py FTL_OPEN_RE).
     var stopPattern: String?
+    /// Or ask the guest to shut down (the machine's powerdown, as Shut Down does) this many seconds after the serial
+    /// log first contains `powerdownMarker`, and end when it halts: the iPhone 5's first boot, run once in
+    /// preparation (FirmwareKit's N42 recipe), ends at its Home screen.
+    var powerdownMarker: String?
+    var powerdownDelay: Double?
     var timeout: Double
 }
 
@@ -413,8 +418,18 @@ struct OneShotConfig: Decodable {
         qemu.quit()
     }
     Thread.detachNewThread {
+        var poweringDown: Date?
         while !host.hasExited {
             usleep(500_000)
+            if let marker = config.powerdownMarker, poweringDown == nil,
+                let text = try? String(contentsOfFile: config.serialLog, encoding: .isoLatin1), text.contains(marker)
+            {
+                poweringDown = Date().addingTimeInterval(config.powerdownDelay ?? 0)
+            }
+            if let at = poweringDown, Date() >= at {
+                poweringDown = .distantFuture  // asked once; the guest's halt ends the boot
+                DispatchQueue.main.async { qemu.powerdown() }
+            }
             if config.stopMarker != nil || config.stopPattern != nil,
                 let text = try? String(contentsOfFile: config.serialLog, encoding: .isoLatin1)
             {

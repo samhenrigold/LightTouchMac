@@ -8,6 +8,19 @@ import Foundation
 enum LaunchdCache {
     static let path = "System/Library/Caches/com.apple.xpcd/xpcd_cache.dylib"
 
+    /// `plist` with every dictionary rebuilt by inserting its keys in order: a binary plist keeps its dictionaries'
+    /// enumeration order, which for a Swift dictionary changes from process to process, so the same edit wrote
+    /// different bytes on every run.
+    static func ordered(_ plist: Any) -> Any {
+        if let d = plist as? [String: Any] {
+            let o = NSMutableDictionary()
+            for k in d.keys.sorted() { o[k] = ordered(d[k] as Any) }
+            return o
+        }
+        if let a = plist as? [Any] { return a.map(ordered) }
+        return plist
+    }
+
     static func refresh(_ v: any VolumeFiles, jobs: [String], helpers: URL) throws {
         if v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"] as? String == "13A344"
         {
@@ -95,7 +108,7 @@ enum LaunchdCache {
             }
         }
         plist["LaunchDaemons"] = daemons
-        let payload = try PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0)
+        let payload = try PropertyListSerialization.data(fromPropertyList: ordered(plist), format: .binary, options: 0)
         var template = try Data(contentsOf: helpers.appendingPathComponent("launchd-cache-template"))
         guard
             let section = try MachO(template).segments.flatMap(\.sections).first(where: { $0.name == "__xpcd_cache" }),

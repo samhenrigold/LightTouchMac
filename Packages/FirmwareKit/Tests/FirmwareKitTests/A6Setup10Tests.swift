@@ -4,6 +4,27 @@ import Testing
 @testable import FirmwareKit
 
 struct A6Setup10Tests {
+    /// The same seed writes the same SystemGroup container files (sessions listings prepares a row twice and compares):
+    /// the UUID comes from the seed and the identifier, and the plist's keys are written in order.
+    @Test func containerMetadataFollowsTheSeed() throws {
+        let group = A6FirstBoot.groups[0]
+        let a = try A6FirstBoot.containerMetadata(group, seed: "iphone5-14G61-default")
+        let b = try A6FirstBoot.containerMetadata(group, seed: "iphone5-14G61-default")
+        let other = try A6FirstBoot.containerMetadata(group, seed: "iphone5-14G61-other")
+        #expect(a["MCMMetadataUUID"] as? String == b["MCMMetadataUUID"] as? String)
+        #expect(a["MCMMetadataUUID"] as? String != other["MCMMetadataUUID"] as? String)
+        #expect(A6FirstBoot.validMetadata(a, identifier: group))
+        // an NSDictionary, whose order is its keys' (NSString) hashes', the same in every process
+        let ordered = try #require(LaunchdCache.ordered(["a": a, "list": [a]]) as? NSDictionary)
+        #expect(ordered["a"] is NSMutableDictionary && (ordered["list"] as? [Any])?.first is NSMutableDictionary)
+        #expect(ordered.isEqual(to: ["a": a, "list": [a]]))
+        // the Setup completion the data ark records is the one the recipe gives
+        let day = Date(timeIntervalSince1970: 1_563_796_800)
+        let ark = SystemEdits.finishedSetup(major: 10, language: "en", locale: "en_US", now: day)
+            .first { $0.path == SystemEdits.dataArk }?.keys
+        #expect(ark?["-FirstPurpleBuddyCompletion"] as? Int == 1_563_796_800)
+    }
+
     @Test func matchesQualifiedSetupVersionAndCloudContainer() throws {
         let seeds = SystemEdits.finishedSetup(major: 10, language: "en", locale: "en_US", productVersion: "10.3.4")
         let buddy = try #require(seeds.first { $0.path == SystemEdits.purpleBuddy }?.keys)

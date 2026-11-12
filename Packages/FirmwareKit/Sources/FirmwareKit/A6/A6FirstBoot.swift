@@ -1,3 +1,4 @@
+import Crypto
 import Foundation
 
 /// Retain the qualified preparation records through 14G61's first migration.
@@ -51,12 +52,23 @@ enum A6FirstBoot {
         return prepared
     }
 
-    static func containerMetadata(_ identifier: String, uuid: UUID = UUID()) throws -> [String: Any] {
+    /// `seed`: the device's identity seed, which the container's UUID is derived from (the same seed, the same
+    /// files); nil: a random one.
+    static func containerMetadata(_ identifier: String, seed: String? = nil) throws -> [String: Any] {
+        var uuid = UUID().uuid
+        if let seed {
+            var b = Array(SHA256.hash(data: Data("\(seed) \(identifier)".utf8)).prefix(16))
+            b[6] = b[6] & 0x0f | 0x50  // a name-based (version 5 layout) UUID
+            b[8] = b[8] & 0x3f | 0x80
+            uuid = (
+                b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]
+            )
+        }
         guard groups.contains(identifier) else { throw invalid("unqualified SystemGroup") }
         // Source-generated schema and a fresh identity; never import an Apple
         // metadata file or an identity from a previously initialized guest.
         return [
-            "MCMMetadataIdentifier": identifier, "MCMMetadataUUID": uuid.uuidString,
+            "MCMMetadataIdentifier": identifier, "MCMMetadataUUID": UUID(uuid: uuid).uuidString,
             "MCMMetadataPersona": 499, "MCMMetadataContentClass": 13
         ]
     }
@@ -86,7 +98,7 @@ enum A6FirstBoot {
         return paths
     }
 
-    static func install(system: URL, data: URL, activationPlan: Data) throws -> Data {
+    static func install(system: URL, data: URL, activationPlan: Data, seed: String? = nil) throws -> Data {
         let s = try HFSPlusWriter(system)
         let d = try HFSPlusWriter(data)
         s.owner = (0, 0)
@@ -118,7 +130,8 @@ enum A6FirstBoot {
                     return try d.contents(at: path)
                 }
                 return try PropertyListSerialization.data(
-                    fromPropertyList: containerMetadata(identifier), format: .binary, options: 0)
+                    fromPropertyList: LaunchdCache.ordered(containerMetadata(identifier, seed: seed)), format: .binary,
+                    options: 0)
             }
             for (component, bytes) in zip(components, prepared) { try s.put(bytes, at: component.path, mode: 0o755) }
             for (identifier, bytes) in zip(groups, metadata) {

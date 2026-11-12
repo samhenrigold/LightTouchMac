@@ -7,8 +7,10 @@ public enum A6Preparation {
     /// setting already used by its restore path and earlier normal profiles.
     public static let defaultBootArgs = KBoot.defaultBootArgs + " amfi_get_out_of_my_way=1"
 
-    public static func volumes(
+    nonisolated(nonsending) public static func volumes(
         ipsw: URL, decrypted: URL, helpers: URL, out: URL,
+        language: String? = nil, keyboards: [String]? = nil, fit: FitCheck.Log = FitCheck.Log(),
+        seed: String? = nil, setupFinished: Date? = nil,
         log: (String) -> Void = { _ in }
     ) async throws -> SystemEdits.Result {
         let fm = FileManager.default
@@ -26,7 +28,9 @@ public enum A6Preparation {
         options.skipSetup = true
         options.nativeGestaltActivation = true
         options.locationServicesEnabled = true
-        let fit = FitCheck.Log()
+        options.language = language
+        options.keyboards = keyboards
+        options.setupFinished = setupFinished
         let result = try await SystemEdits.buildK48(
             rootfs: decrypted.appendingPathComponent("rootfs.dmg"),
             work: out, systemBytes: Int(layout.systemBytes), dataBytes: Int64(layout.dataBytes),
@@ -70,7 +74,7 @@ public enum A6Preparation {
                 try plan.write(to: out.appendingPathComponent("activation-plan.plist"), options: .withoutOverwriting)
                 if build == "14G61" {
                     let preparation = try A6FirstBoot.install(
-                        system: result.system, data: result.data, activationPlan: plan)
+                        system: result.system, data: result.data, activationPlan: plan, seed: seed)
                     try preparation.write(
                         to: out.appendingPathComponent("first-boot-preparation.json"), options: .withoutOverwriting)
                     log(

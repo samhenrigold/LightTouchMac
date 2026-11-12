@@ -354,7 +354,7 @@ if args.count >= 4 && args[1] == "--a6-kboot" {
 }
 if args.count >= 4 && args[1] == "--a6-restore" {
     do {
-        var factoryArgs = ""
+        var factoryFormat = false
         var extraArgs = ""
         var identitySeed = "n42ap-11A465-local"
         var dataSeed: URL?
@@ -364,7 +364,7 @@ if args.count >= 4 && args[1] == "--a6-restore" {
         var option = 4
         while option < args.count {
             if args[option] == "--factory-format" {
-                factoryArgs = " nand-enable-reformat=1"
+                factoryFormat = true
                 option += 1
             } else if args[option] == "--boot-args", option + 1 < args.count {
                 extraArgs += " " + args[option + 1]
@@ -390,142 +390,20 @@ if args.count >= 4 && args[1] == "--a6-restore" {
         }
         let dir = URL(fileURLWithPath: args[2])
         let helper = URL(fileURLWithPath: args[3])
-        let dec = dir.appendingPathComponent("decrypted")
-        let files = try FileManager.default.contentsOfDirectory(atPath: dec.path)
-            .filter { $0.hasSuffix("-ramdisk.dmg") }.sorted()
-        // Update ramdisks can sort before restore ramdisks. Select the
-        // original native restore service, never an arbitrary filename.
-        let restoreCandidates = try files.compactMap { name -> HFSPlusVolume? in
-            let candidate = try HFSPlusVolume(dec.appendingPathComponent(name))
-            guard (try? candidate.record(at: "usr/local/bin/restored_external")) != nil else { return nil }
-            let hasJob =
-                (try? candidate.record(at: "System/Library/LaunchDaemons/com.apple.restored_external.plist")) != nil
-            // Earlier restore images invoke the service from their native
-            // rc.boot executable instead of a launchdaemon. Both layouts
-            // must identify the erase service, not restored_update.
-            let service = Data("/usr/local/bin/restored_external\0".utf8)
-            let hasBootInvocation = ["private/etc/rc.boot", "etc/rc.boot"].contains { path in
-                guard let record = try? candidate.record(at: path),
-                    let contents = try? candidate.contents(record)
-                else { return false }
-                return contents.range(of: service) != nil
-            }
-            guard hasJob || hasBootInvocation else { return nil }
-            return candidate
-        }
-        guard restoreCandidates.count == 1, let source = restoreCandidates.first else {
-            fail("Expected exactly one native restored_external RAM disk, found \(restoreCandidates.count)")
-        }
-        let rd = dir.appendingPathComponent("restore-ramdisk.hfs")
-        let paths = try source.paths().sorted {
-            $0.path.split(separator: "/").count < $1.path.split(separator: "/").count
-        }
-        // Compressed restore images can expand beyond their volume size when
-        // materialized. Reserve their actual file bytes plus catalog/helper
-        // space; keep the same preparation path for every supported release.
-        let fileBytes = try paths.reduce(UInt64(0)) { total, item in
-            total + (item.record.kind == .file ? try source.size(item.record) : 0)
-        }
-        let mib = 1 << 20
-        let ramdiskBytes = max(64 << 20, ((Int(fileBytes) + mib - 1) / mib + 32) * mib)
-        try HFSPlusWriter.makeHFS(rd, size: Int64(ramdiskBytes), name: "Restore", journaled: false)
-        let writer = try HFSPlusWriter(rd)
-        for item in paths {
-            let p = item.path
-            let r = item.record
-            if p.isEmpty { continue }
-            writer.owner = (r.uid, r.gid)
-            if r.kind == .folder {
-                try writer.makeDirectory(p, mode: r.mode & 0o7777)
-            } else if r.isSymlink {
-                try writer.makeSymlink(p, to: String(decoding: source.contents(r), as: UTF8.self))
-            } else {
-                try writer.put(source.contents(r), at: p, mode: r.mode & 0o7777)
-            }
-        }
-        writer.owner = (0, 0)
-        try writer.put(contentsOf: helper, at: "usr/local/bin/restored_external", mode: 0o755)
-        if let dataSeed {
-            let source = try HFSPlusVolume(dataSeed)
-            let seedBase = try seedBaseSystem.map { try HFSPlusVolume($0) }
-            let target = "usr/local/share/qemu/data-seed"
-            guard (try? source.record(at: "keybags/systembag.kb")) == nil else {
-                fail("Prepared Data seed must not contain a device keybag")
-            }
-            try writer.makeDirectory(target, mode: 0o755)
-            for item in try source.paths().sorted(by: {
-                $0.path.split(separator: "/").count < $1.path.split(separator: "/").count
-            }) {
-                if let first = item.path.split(separator: "/").first,
-                    [".journal", ".journal_info_block"].contains(String(first))
-                        || VolumeMount.junk.contains(String(first)) || first.hasPrefix(".HFS+")
-                {
-                    continue
-                }
-                let r = item.record
-                let path = item.path.isEmpty ? target : target + "/" + item.path
-                // Stock /private/var is copied natively from System after the
-                // keybag exists. Carry only FirmwareKit's additions/changes in
-                // the temporary ramdisk, rather than duplicate large assets.
-                if r.kind != .folder, let seedBase,
-                    let old = try? seedBase.record(at: "private/var/" + item.path),
-                    old.kind == r.kind, old.uid == r.uid, old.gid == r.gid, old.mode == r.mode,
-                    try seedBase.contents(old) == source.contents(r)
-                {
-                    continue
-                }
-                writer.owner = (r.uid, r.gid)
-                if item.path.isEmpty {
-                    try writer.setAttributes(path, uid: r.uid, gid: r.gid, mode: r.mode & 0o7777)
-                } else if r.kind == .folder {
-                    try writer.makeDirectory(path, mode: r.mode & 0o7777)
-                } else if r.isSymlink {
-                    try writer.makeSymlink(path, to: String(decoding: source.contents(r), as: UTF8.self))
-                } else {
-                    try writer.put(source.contents(r), at: path, mode: r.mode & 0o7777)
-                }
-            }
-        }
-        if let activationPlan {
-            let worker = helper.deletingLastPathComponent().appendingPathComponent("it_mobilegestalt")
-            let workerData = try Data(contentsOf: worker)
-            try A6RestoreCache.validate(
-                plan: Data(contentsOf: activationPlan),
-                originalLibrary: source.contents(source.record(at: "usr/lib/libMobileGestalt.dylib")),
-                helper: workerData)
-            writer.owner = (0, 0)
-            try writer.put(workerData, at: "usr/local/bin/it_mobilegestalt", mode: 0o755)
-            try writer.makeDirectory("usr/local/share/qemu", mode: 0o755)
-            try writer.put(contentsOf: activationPlan, at: "usr/local/share/qemu/activation-plan.plist", mode: 0o644)
-        }
-        try writer.close()
+        var inputs = A6RestoreBundle.Inputs(decrypted: dir.appendingPathComponent("decrypted"), initializer: helper)
+        inputs.mobileGestalt = helper.deletingLastPathComponent().appendingPathComponent("it_mobilegestalt")
+        inputs.factoryFormat = factoryFormat
+        inputs.dataSeed = dataSeed
+        inputs.seedBaseSystem = seedBaseSystem
+        inputs.activationPlan = activationPlan
+        inputs.guestAssetsSystem = guestAssetsSystem
+        inputs.extraBootArgs = extraArgs
         let identity = try UnitIdentity.synthesize(seed: identitySeed, storage: "16g", modelNumber: "MD299").addingIMEI(
             seed: identitySeed)
-        let originalKernel = try Data(contentsOf: dec.appendingPathComponent("kernelcache.mach"))
-        let assets = try guestAssetsSystem.map {
-            try A6GuestAssets.prepare(kernel: originalKernel, system: $0, restoreRAMDisk: rd)
-        }
-        var restoreKernel = assets?.kernel
-        if !factoryArgs.isEmpty {
-            let version =
-                try PropertyListSerialization.propertyList(
-                    from: source.contents(source.record(at: "System/Library/CoreServices/SystemVersion.plist")),
-                    format: nil) as? [String: Any]
-            guard let build = version?["ProductBuildVersion"] as? String else {
-                fail("Native restore build identity missing")
-            }
-            restoreKernel = try A6RestoreKernel.prepare(
-                restoreKernel ?? originalKernel,
-                build: build, log: { print($0) })
-        }
-        try KBoot.write(
-            decrypted: dec, to: dir.appendingPathComponent("kboot-restore.bin"), identity: identity,
-            bootArgs: A6Preparation.defaultBootArgs + " -v" + factoryArgs + extraArgs,
-            ramdisk: rd, kernelOverride: restoreKernel)
-        if let assets {
+        if let assets = try A6RestoreBundle.write(inputs, work: dir, identity: identity, log: { print($0) }) {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(assets.assets).write(to: dir.appendingPathComponent("restore-assets.json"))
+            try encoder.encode(assets).write(to: dir.appendingPathComponent("restore-assets.json"))
         }
         print("N42 temporary restoration RAM disk prepared")
         exit(0)

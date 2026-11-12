@@ -24,6 +24,8 @@ protocol Board: AnyObject {
     var seedPrefix: String { get }
     var bootStep: String { get }
     var volumesStep: String { get }
+    /// The store step's name: "Writing the NAND", or the N42's restore boot.
+    var storeStep: String { get }
     var keybagStep: String { get }
     var dataProtection: Bool { get }
     var needsSeal: Bool { get }
@@ -46,6 +48,7 @@ protocol Board: AnyObject {
 }
 
 extension Board {
+    var storeStep: String { "Writing the NAND" }
     func inspect(_ c: Recipe.Context) throws {}
     nonisolated(nonsending) func keybag(_ c: Recipe.Context) async throws {}
     func seal(_ c: Recipe.Context) throws {}
@@ -116,7 +119,7 @@ public enum Recipe {
             try StorageCapacity.require(e.estimates.peakBytes - (cloned ? e.source.bytes ?? 0 : 0), at: o.out)
         }
         let steps =
-            ["Verifying the IPSW", "Decrypting the firmware", board.bootStep, board.volumesStep, "Writing the NAND"]
+            ["Verifying the IPSW", "Decrypting the firmware", board.bootStep, board.volumesStep, board.storeStep]
             + (board.dataProtection ? [board.keybagStep] : []) + (board.needsSeal ? [StepPlan.sealStep] : []) + [
                 "Writing the lock"
             ]

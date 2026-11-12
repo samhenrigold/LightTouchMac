@@ -5,7 +5,7 @@ extension LaunchdCache {
     /// Padding goes before the offset table; object offsets stay unchanged.
     static func paddedMetadata(_ plist: [String: Any], capacity: Int) throws -> Data {
         func invalid() -> FirmwareError { FirmwareError(.unsupported, "native launchd metadata capacity or encoding") }
-        let payload = try PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0)
+        let payload = try PropertyListSerialization.data(fromPropertyList: ordered(plist), format: .binary, options: 0)
         guard payload.count >= 40, payload.count <= capacity else { throw invalid() }
         var table: UInt64 = 0
         for byte in payload.suffix(8) { table = (table << 8) | UInt64(byte) }

@@ -10,7 +10,8 @@ struct BuildIdentityTests {
         for e in raw["entries"] as! [[String: Any]] {
             let entry = try JSONDecoder().decode(FirmwareEntry.self, from: JSONSerialization.data(withJSONObject: e))
             #expect(entry.id == e["id"] as? String)
-            #expect(!entry.keys.isEmpty)
+            // iOS 10's components ship unencrypted: no keys to pin
+            #expect(!entry.keys.isEmpty || entry.version.compare("10", options: .numeric) != .orderedAscending)
         }
         let e = try Oracle.entry("k48ap-7B500")
         #expect(try e.key(forPath: "kernelcache.release.k48").iv == "f89438cd21803ce315d98c032c4e6c27")
@@ -67,6 +68,32 @@ struct BuildIdentityTests {
         )
         try r.verify(against: Oracle.entry("k48ap-7B500"))
         #expect(throws: FirmwareError.self) { try r.verify(against: Oracle.entry("k48ap-7B367")) }
+    }
+
+    /// The 32-bit 10.3.4 IPSW is one for iPhone5,1 to 5,4: its Restore.plist names the first (iPhone5,1, n41ap), and
+    /// it verifies for the iPhone 5 (n42ap, iPhone5,2) because its DeviceMap and SupportedProductTypes list it too.
+    @Test func aUniversalIPSWVerifiesForEveryDeviceItLists() throws {
+        let plist: [String: Any] = [
+            "ProductType": "iPhone5,1", "ProductBuildVersion": "14G61", "ProductVersion": "10.3.4",
+            "SupportedProductTypes": ["iPhone5,1", "iPhone5,2", "iPhone5,3", "iPhone5,4"],
+            "DeviceMap": ["n41ap", "n42ap", "n48ap", "n49ap"].map { ["BoardConfig": $0, "Platform": "s5l8950x"] }
+        ]
+        let r = try RestoreInfo(
+            plistData: PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        )
+        #expect(r.boardConfig == "n41ap")
+        let n42 = try Oracle.entry("n42ap-14G61")
+        try r.verify(against: n42)
+        // a board or product type it doesn't list, or another build, still fails
+        var other = n42
+        other.board = "n90ap"
+        #expect(throws: FirmwareError.self) { try r.verify(against: other) }
+        other = n42
+        other.productType = "iPhone3,1"
+        #expect(throws: FirmwareError.self) { try r.verify(against: other) }
+        other = n42
+        other.build = "14G60"
+        #expect(throws: FirmwareError.self) { try r.verify(against: other) }
     }
 
     /// iOS 5.1.1: the Erase identity's components, the Update identity's ramdisk as UpdateRamDisk (the keybag

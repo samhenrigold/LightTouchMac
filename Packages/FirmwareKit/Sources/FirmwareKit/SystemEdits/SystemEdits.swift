@@ -48,6 +48,8 @@ public enum SystemEdits {
         /// skip_setup (firmwarekit create --skip-setup, never set in the catalog): the data volume says Setup Assistant
         /// is finished (seedFinishedSetup), so an iOS 5 or later device starts at the Home screen.
         public var skipSetup = false
+        /// When the seeded Setup finished (the data ark's -FirstPurpleBuddyCompletion); nil: now.
+        public var setupFinished: Date?
         /// Initial global Location Services choice; native per-app permission prompts remain in place.
         public var locationServicesEnabled = false
         /// N42 creation can stage a recognized data-only activation plan whose
@@ -818,7 +820,7 @@ public enum SystemEdits {
             try seedFinishedSetup(
                 MountedVolume(root: skeleton), "", major: productMajor, language: l, locale: locale,
                 productVersion: productVersion, locationServicesEnabled: o.locationServicesEnabled,
-                a6: a6)
+                a6: a6, now: o.setupFinished ?? Date())
             log("Setup Assistant: seeded as finished (iOS \(productMajor))")
         }
         if let dataArk {

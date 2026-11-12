@@ -605,7 +605,7 @@ extension SharedState {
             if sheet.groups.map(\.name) != [
                 "iPad", "iPod touch", "iPod touch (2nd generation)", "iPod touch (3rd generation)",
                 "iPod touch (4th generation)", "iPhone", "iPhone 3GS",
-                "iPhone 4"
+                "iPhone 4", "iPhone 5"
             ] {
                 fail("sheet groups: \(sheet.groups.map(\.name))")
             }
@@ -876,7 +876,7 @@ extension SharedState {
             // Experimental shown: every device. One pick on each device below, and several, in light and dark;
             // type-select reaches the iPhone 3GS.
             (window, tables) = sheet(experimental: true, selection: ["n88ap-10B500"], device: "n88ap")
-            if tables.first?.numberOfRows != 8 { fail("experimental devices: \(tables.first?.numberOfRows ?? -1)") }
+            if tables.first?.numberOfRows != 9 { fail("experimental devices: \(tables.first?.numberOfRows ?? -1)") }
             let picks: [(String, Set<String>, String)] = [
                 ("iphone3gs-6.1.6", ["n88ap-10B500"], "n88ap"),
                 ("iphone4-7.1.2", ["n90ap-11D257"], "n90ap"),

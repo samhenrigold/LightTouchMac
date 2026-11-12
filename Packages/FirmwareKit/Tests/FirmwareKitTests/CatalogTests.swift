@@ -60,7 +60,7 @@ struct CatalogTests {
             if mine != shared { differ.append("\(e.id) \(mine) vs \(shared)") }
         }
         #expect(differ.isEmpty, "\(differ)")
-        #expect(recipes.count == 8)
+        #expect(recipes.count == 9)
     }
 
     /// Whether a device keeps BTServer is the board's machine's, never a row's: BTServer is kept where the machine
@@ -75,7 +75,8 @@ struct CatalogTests {
         #expect(flagged.isEmpty, "\(flagged)")
         var judged = 0
         try Oracle.withTemp { dir in
-            for e in entries where e.recipe?.dataSize == "partition" {
+            // the k48 recipe's boards (the iPhone 5's A6Preparation keeps its qualified options)
+            for e in entries where e.recipe?.dataSize == "partition" && e.recipe?.name != "n42" {
                 let o = Preparer.Options(entry: e, ipsw: dir, out: dir, helper: nil, guestTools: dir)
                 let expected = try #require(Self.machineAnswersHCI[e.board], "\(e.id): no board fact")
                 #expect(try K48Board(o).systemOptions.bluetooth == expected, "\(e.id)")

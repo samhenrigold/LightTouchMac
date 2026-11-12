@@ -23,8 +23,11 @@ guest helpers, and `NEW-OUT` must not exist. The output includes the NAND,
 KBoot bundle, identity and provenance. Native keybag initialization is a
 separate preparation stage; producing those files alone does not complete it.
 
-N42 preparation uses the stage commands below. The qualified builds are
-6.0/10A405, 7.0/11A465, 8.0/12A365, 9.0/13A344 and 10.3.4/14G61.
+`firmwarekit create` prepares the iPhone 5's catalog row (n42ap-14G61) through the N42 recipe
+(`Sources/FirmwareKit/N42/N42Recipe.swift`), which runs these stages itself, the restore boot included, with the
+initializer and its worker from `--guest-tools` (qemu-ios's export). The stage commands below remain for
+development; the builds they were qualified on are 6.0/10A405, 7.0/11A465, 8.0/12A365, 9.0/13A344 and
+10.3.4/14G61.
 
 | Command | Inputs after the command | Output |
 | --- | --- | --- |
@@ -78,18 +81,7 @@ IPA. Operate on a stopped snapshot and keep the source device intact.
 
 ## Why these are separate executables
 
-The current catalog recipe dispatcher does not select an N42 board, and the
-N42 creation path needs a native restore initialization sequence before its
-first normal boot. The stage driver exposes that working sequence without
-changing the existing recipe, helper lifecycle, progress, cancellation or
-device-lock contracts. It also exposes individual filesystem inspection
-operations. The provisioning driver serves the separate case of upgrading
-an existing legacy image with guest-service support.
-
-The firmware transformations and shared service configuration live in the
-library. The remaining integration boundary is host orchestration: selecting
-the N42 recipe, supplying exported guest helpers, running and supervising
-initialization, and recording the prepared device. These entry points can be
-kept or incorporated into the main CLI according to the consuming project's
-preferred integration. No choice of that interface is required by the image
-or emulator contracts.
+The stage driver exposes the N42 preparation one stage at a time, and individual filesystem inspection operations,
+for development; `firmwarekit create` runs the same library code (its `--a6-restore` and the N42 recipe share
+`A6RestoreBundle`). The provisioning driver serves the separate case of upgrading an existing legacy image with
+guest-service support.

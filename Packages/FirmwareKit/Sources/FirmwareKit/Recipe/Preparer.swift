@@ -108,6 +108,7 @@ public enum Preparer {
                 try K48Board(o)
             case ("n72ap", "n72"): try N72Board(o)
             case ("n45ap", "n45"), ("m68ap", "m68"): try N45Board(o)
+            case ("n42ap", "n42"): try N42Board(o)
             default:
                 throw FirmwareError(
                     .unsupported,
@@ -154,7 +155,8 @@ public enum Preparer {
 
     static func esc(_ p: URL) -> String { p.path.replacingOccurrences(of: ",", with: ",,") }
 
-    /// One `LightTouchDevice` oneshot boot of `argv` (which routes -serial to `serial`). `during` runs on its own
+    /// One `LightTouchDevice` oneshot boot of `argv` (which routes -serial to `serial`). `powerdown`: the guest is asked
+    /// to shut down `delay` s after the serial log shows `marker`, and the boot ends at its halt. `during` runs on its own
     /// thread once the helper is started (the iPod keybag's gdbstub handoff); if it throws, the helper is stopped
     /// and the error rethrown. `grants`: what argv opens outside `work`, by role, for a sandboxed helper.
     static func oneshot(
@@ -164,6 +166,7 @@ public enum Preparer {
         serial: URL,
         stop: String?,
         stopPattern: String? = nil,
+        powerdown: (marker: String, delay: Double)? = nil,
         timeout: Double,
         work: URL,
         grants: [SandboxExtension.Grant],
@@ -177,6 +180,10 @@ public enum Preparer {
         ]
         if let stop { config["stopMarker"] = stop }
         if let stopPattern { config["stopPattern"] = stopPattern }
+        if let powerdown {
+            config["powerdownMarker"] = powerdown.marker
+            config["powerdownDelay"] = powerdown.delay
+        }
         let cfg = work.appendingPathComponent("oneshot.json")
         try JSONSerialization.data(withJSONObject: config).write(to: cfg)
         let out = Pipe()

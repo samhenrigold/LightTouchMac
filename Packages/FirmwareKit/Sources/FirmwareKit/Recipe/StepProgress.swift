@@ -49,6 +49,19 @@ struct StepPlan: Sendable {
             ]
         ),
         "Writing the lock": .init(seconds: 3, text: "Hashing the prepared flash"),
+        // n42 (N42Recipe): its volumes restored in the guest, from the IPSW's restore ramdisk. 14G61's restore boot
+        // took 157 s (2026-11-11); the milestones between are estimates.
+        "Writing the identity": .init(seconds: 1, text: "Writing the identity"),
+        N42Board.restoreStep: .init(
+            seconds: 170,
+            text: "Booting the restore ramdisk",
+            milestones: [
+                .init(file: "restore.log", marker: "A6RESTORE START", at: 20, text: "Restoring the system"),
+                .init(file: "restore.log", marker: "A6RESTORE DONE", at: 100, text: "Creating the keybag"),
+                .init(file: "restore.log", marker: "A6NATIVEGESTALT", at: 130, text: "Preparing the device"),
+                .init(file: "restore.log", marker: "it_keybag: effaceable", at: 165, text: "Shutting down")
+            ]
+        ),
         // n72 (N72Recipe; ~35 s for 7E18)
         "Writing the identity, NOR and boot files": .init(seconds: 2, text: "Writing the NOR and boot files"),
         "Building the system volume": .init(seconds: 20, text: "Building the system volume"),

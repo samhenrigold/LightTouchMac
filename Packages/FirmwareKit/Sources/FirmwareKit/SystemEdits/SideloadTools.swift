@@ -20,8 +20,6 @@ public enum SideloadTools {
         try v.makeDirectory("usr/local/bin", mode: 0o755)
         for (name, path) in [
             ("it_agent", "usr/local/bin/it_agent"),
-            ("it_install", "usr/local/bin/it_install"),
-            ("it_netcheck", "usr/local/bin/it_netcheck"),
             ("libappsync.dylib", "usr/lib/libappsync.dylib")
         ] {
             try v.put(contentsOf: helpers.appendingPathComponent(name), at: path, mode: 0o755)

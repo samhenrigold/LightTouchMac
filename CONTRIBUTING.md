@@ -1,8 +1,8 @@
 # Contributing to Light Touch
 
 Light Touch is a native macOS (AppKit) app that runs a library of emulated legacy iOS devices.
-The device catalog covers the iPhone (m68ap), iPhone 3GS (n88ap), iPhone 4 (n90ap), iPod touch 1G to 4G
-(n45ap, n72ap, n18ap, n81ap) and iPad (k48ap). Each device is prepared
+The device catalog covers the iPhone (m68ap), iPhone 3GS (n88ap), iPhone 4 (n90ap), iPhone 5 (n42ap), iPod touch 1G
+to 4G (n45ap, n72ap, n18ap, n81ap) and iPad (k48ap). Each device is prepared
 from a stock Apple IPSW by the bundled Swift preparer, `firmwarekit` (`Packages/FirmwareKit`), using
 the keys pinned in `LightTouchMac/Resources/firmware-catalog.json`; there are no hand-prepared images
 per firmware. Each running device is its own helper process (`LightTouchDevice`), which is the only
@@ -294,8 +294,11 @@ the USB charger and the `panel=` limits; the helper reports them in its hello an
 `LightTouchDevice '{"mode":{"machines":{}}}'`, and the app reads them as `DeviceInfo` (`Board.hardware`). The app's: one `Board`
 case and its `Facts` in `Packages/HostRuntime/Sources/HostRuntime/Board.swift`: the names, the model ID, the SoC
 family (which decides how its prepared base boots and its guest architecture) and the art. Adding a board touches
-those two places; its firmware is catalog entries, and preparing it is a FirmwareKit recipe if no existing one fits.
-`tests/fixtures/machines.json` is the listing the tests use without an emulator; the Release plan
+those two places, and a new SoC family also the branches on `Board.soc` (PreparedDeviceBoot's recipe, `isKBoot`,
+`requiredFiles`) and the harness's board names (`tests/sessions`: Inputs.swift, session-driver's single.swift,
+SessionKit's Affected rows); its firmware is catalog entries, and preparing it is a FirmwareKit recipe if no existing
+one fits. `tests/fixtures/machines.json` is the listing the tests use without an emulator (and the machines
+`scripts/vendor` lists options for); the Release plan
 (`ReleaseAppStaticTests`) holds each of its machines to the bundled library's.
 
 `device.lock.json` is `DeviceLock` (HostRuntime): FirmwareKit writes it, everything else reads it through that type.

@@ -76,6 +76,9 @@ public struct RestoreInfo: Sendable, Equatable {
     /// the system partition to (3.x+; nil and empty before).
     public var minimumSystemMiB: Int?
     public var systemPaddingMiB: [String: Int] = [:]
+    /// A universal IPSW's other devices (the 32-bit 10.3.4's, iPhone5,1 to 5,4): its DeviceMap's boards and its
+    /// SupportedProductTypes. Restore.plist's ProductType and first board name only the first of them.
+    public var boards: [String] = [], supportedProductTypes: [String] = []
 
     public init(_ ipsw: IPSWArchive) throws { try self.init(plistData: ipsw.read("Restore.plist")) }
 
@@ -109,6 +112,8 @@ public struct RestoreInfo: Sendable, Equatable {
         let padding =
             (p["SystemPartitionPadding"] as? [String: Any])?[String(board.dropLast(2))] as? [String: Any] ?? [:]
         systemPaddingMiB = padding.compactMapValues { ($0 as? NSNumber)?.intValue }
+        boards = maps.compactMap { $0["BoardConfig"] as? String }
+        supportedProductTypes = p["SupportedProductTypes"] as? [String] ?? []
     }
 
     /// The system partition a restore of this IPSW gives a `storage` ("16g") unit, in MiB: minimum plus padding.
@@ -118,11 +123,15 @@ public struct RestoreInfo: Sendable, Equatable {
 
     /// device.py's check: (ProductType, ProductBuildVersion, BoardConfig) must be the entry's. The 1.1.2 beta
     /// (3B48b) gives ProductType as the board name ("N45AP"), which stands for the entry's product type.
+    /// A universal IPSW passes for any device it lists both the board and the product type of.
     public func verify(against entry: FirmwareEntry) throws {
-        let type = productType.caseInsensitiveCompare(entry.board) == .orderedSame ? entry.productType : productType
+        let listed = boards.contains(entry.board) && supportedProductTypes.contains(entry.productType)
+        let board = listed ? entry.board : boardConfig
+        let type =
+            listed || productType.caseInsensitiveCompare(entry.board) == .orderedSame ? entry.productType : productType
         let found = [productType, productBuildVersion, boardConfig]
         let want = [entry.productType, entry.build, entry.board]
-        guard [type, productBuildVersion, boardConfig] == want else {
+        guard [type, productBuildVersion, board] == want else {
             throw FirmwareError(
                 .unsupported,
                 "IPSW is \(found.joined(separator: " ")), \(entry.id) wants \(want.joined(separator: " "))"

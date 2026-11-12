@@ -269,12 +269,12 @@ extension SystemEdits {
     /// already there, as Setup's walk in `language` and `locale` (seedLanguage's) leaves it.
     static func seedFinishedSetup(
         _ v: any VolumeFiles, _ top: String, major: Int, language: String, locale: String,
-        productVersion: String? = nil, locationServicesEnabled: Bool = false, a6: Bool = false
+        productVersion: String? = nil, locationServicesEnabled: Bool = false, a6: Bool = false, now: Date = Date()
     )
         throws
     {
         for (path, keys) in finishedSetup(
-            major: major, language: language, locale: locale, productVersion: productVersion,
+            major: major, language: language, locale: locale, now: now, productVersion: productVersion,
             locationServicesEnabled: locationServicesEnabled, a6: a6)
         {
             try seedPlist(v, top.isEmpty ? path : top + "/" + path) { $0.addEntries(from: keys) }
