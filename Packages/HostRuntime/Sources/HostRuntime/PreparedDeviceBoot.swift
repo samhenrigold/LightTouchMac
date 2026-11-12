@@ -21,6 +21,8 @@ public struct PreparedDeviceBoot {
     private let gidBlobs: String?
     private let dieID: String?
     private let machine: [String: String]
+    /// The unit's Wi-Fi MAC (identity.json), which the iPhone 5 boot gives its Wi-Fi device.
+    private var wifiMAC: String? = nil
 
     public static func prepare(
         board: Board,
@@ -85,7 +87,8 @@ public struct PreparedDeviceBoot {
                 (panel.map { ["panel": $0] } ?? [:])
                     // Tweaks' Time Machine: the PMU's clock (and the agent's time sync) start at that moment.
                     .merging(clock.map { ["rtc-epoch": String(Int64($0.timeIntervalSince1970))] } ?? [:]) { $1 }
-            ) { $1 }
+            ) { $1 },
+            wifiMAC: identity?["wifi-mac"] as? String
         )
     }
 
@@ -314,7 +317,8 @@ public struct PreparedDeviceBoot {
     func machineOptions() -> [String: String] {
         let declared = board.machineOptions
         var options = machine.filter { declared.contains($0.key) }
-        for key in machine.keys.sorted() where options[key] == nil {
+        // the iPhone 5's modem takes its IMEI as a -global (BootRecipe.iPhone5)
+        for key in machine.keys.sorted() where options[key] == nil && !(board.soc == .s5l8950 && key == "imei") {
             FileHandle.standardError.write(Data("boot: \(board.rawValue)'s machine has no \(key); left out\n".utf8))
         }
         if declared.contains("wifi-country"), options["wifi-country"] == nil, let country = Self.wifiCountry() {
@@ -413,6 +417,28 @@ public struct PreparedDeviceBoot {
             ipad.cellular = cellular
             config = BootRecipe.iPad(
                 ipad,
+                hardware: hardware,
+                serial: serial,
+                audio: audio,
+                netdev: netdev,
+                restore: restore
+            )
+        case .s5l8950:
+            var phone = BootRecipe.IPad(
+                boot: .kernel(image: boot.path, writableNOR: nil),
+                nand: nand.path,
+                overlay: nandOverlay?.path,
+                dieID: nil,
+                usbAddress: usbAddress,
+                wifi: wifi,
+                guestPackage: guestPackage,
+                machineOptions: machine
+            )
+            phone.cellular = cellular
+            phone.wifiMAC = wifiMAC
+            phone.imei = self.machine["imei"]
+            config = BootRecipe.iPhone5(
+                phone,
                 hardware: hardware,
                 serial: serial,
                 audio: audio,

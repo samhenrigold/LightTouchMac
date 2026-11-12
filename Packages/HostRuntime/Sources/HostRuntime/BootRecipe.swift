@@ -168,6 +168,10 @@ public nonisolated enum BootRecipe {
         /// The radio boards' (-M iPhone-4, n88) modem: always attached, as on a real iPhone (its IMEI is in the UDID);
         /// `.noSIM` and `.noService` keep it answering without a SIM or a network.
         public var cellular: Cellular = .on
+        /// The iPhone 5's (BootRecipe.iPhone5): its Wi-Fi's MAC (identity.json wifi-mac, the device tree's) and the
+        /// IMEI its modem reports (the lock's imei), which the other machines take as -M options.
+        public var wifiMAC: String?
+        public var imei: String?
     }
 
     /// What the modem of a radio board offers: a registered SIM, no SIM, or a SIM with no network.
@@ -386,6 +390,40 @@ public nonisolated enum BootRecipe {
             + (hardware.hasUSBHost && !d.oneShot ? ["-device", "usb-kbd,bus=usb-bus.0,max-power=20"] : [])
             + (netdev.map { ["-netdev", $0] } ?? []) + cellular + restore
         return BootConfig(argv: argv, machine: board)
+    }
+
+    /// The iPhone 5 (-M iPhone-5, the S5L8950): kboot on its PPN store (the lock's ppn, camera and quiet-boot options),
+    /// the modem always (baseband=on, its cell0 netdev and IMEI), Wi-Fi a BCM4334 on the HSIC port (the machine has no
+    /// wifi=) with the unit's MAC, and no die-id or USB keyboard. Its four cores run multi-threaded TCG, the A6
+    /// machine's qualified configuration.
+    public static func iPhone5(
+        _ d: IPad,
+        hardware: DeviceInfo,
+        serial: String,
+        audio: [String],
+        netdev: String?,
+        restore: [String]
+    ) -> BootConfig {
+        var machine = hardware.machine
+        if case .kernel(let image, _) = d.boot { machine += ",kboot=\(escape(image))" }
+        // no nand-overlay: its store is an image store, which a boot writes as a live clone (PreparedDeviceBoot)
+        machine += ",nand=\(escape(d.nand))"
+        if let usb = d.usbAddress { machine += ",usb-tcp-addr=\(usb)" }
+        if let offer = d.guestPackage { machine += ",guest-package=\(escape(offer))" }
+        machine += ",baseband=on" + options(d.machineOptions)
+        let wifi =
+            d.wifi
+            ? ["-device", "usb-bcm-hsic,bus=usb-bus.0,port=4" + (d.wifiMAC.map { ",mac=\($0)" } ?? "")] : []
+        // Without an explicit wifi0 the machine makes none (the iPad's makes its own): one off the LAN, as theirs.
+        let wifi0 = netdev ?? "user,id=wifi0,lan=off"
+        let cellular =
+            ["-netdev", wifi0.replacingOccurrences(of: "id=wifi0", with: "id=cell0")]
+            + (d.imei.map { ["-global", "ios-baseband.imei=\($0)"] } ?? []) + d.cellular.globals
+        let argv =
+            ["LightTouchMac", "-M", machine, "-accel", "tcg,thread=multi", "-display", "none"]
+            + (d.oneShot ? ["-monitor", "none", "-no-reboot"] : ["-no-shutdown"])
+            + audio + ["-serial", serial] + wifi + ["-netdev", wifi0] + cellular + restore
+        return BootConfig(argv: argv, machine: hardware.machine)
     }
 
     /// A prepared device's boot files (W5/W6): the board's boot file (the iPad's

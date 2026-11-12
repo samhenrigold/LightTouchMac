@@ -17,10 +17,12 @@ public enum Board: String, Sendable, CaseIterable, Codable {
     case k48 = "k48ap"
     case n81 = "n81ap"
     case n90 = "n90ap"
+    case n42 = "n42ap"
 
     /// The SoC family, which decides the prepared base's boot: the S5L8900's iBoot + NOR (iPhone OS 1), the
-    /// S5L8720's direct iBoot or SecureROM chain, the S5L8920/S5L8930's direct-kernel kboot (iBoot too on K48).
-    public enum SoC: Sendable { case s5l8900, s5l8720, s5l8920, s5l8930 }
+    /// S5L8720's direct iBoot or SecureROM chain, the S5L8920/S5L8930's direct-kernel kboot (iBoot too on K48), the
+    /// S5L8950's (A6) kboot on its PPN store.
+    public enum SoC: Sendable { case s5l8900, s5l8720, s5l8920, s5l8930, s5l8950 }
     public enum Kind: String, Sendable {
         case iPod = "iPod touch"
         case iPhone
@@ -157,6 +159,17 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 abbreviatedName: "iPhone 4",
                 art: art("shell-iphone4", nil, (730, 1426), (48, 236, 640, 960), home: 140, inset: 52, ppi: 326)
             )
+        // Its image carries the guest agent from preparation (FirmwareKit's N42 recipe, SideloadTools).
+        case .n42:
+            return Facts(
+                soc: .s5l8950,
+                kind: .iPhone,
+                productType: "iPhone5,2",
+                marketingName: "iPhone 5",
+                abbreviatedName: "iPhone 5",
+                guestTools: true,
+                art: art("shell-iphone5", nil, (730, 1602), (48, 236, 640, 1136), home: 140, inset: 52, ppi: 326)
+            )
         }
     }
 
@@ -221,8 +234,8 @@ public enum Board: String, Sendable, CaseIterable, Codable {
     public var hasGPS: Bool { facts.hasGPS }
 
     /// The S5L8920/S5L8930 boards: FirmwareKit prepares them alike and they boot kboot (iBoot too on K48) through
-    /// BootRecipe.iPad.
-    public var isKBoot: Bool { soc == .s5l8920 || soc == .s5l8930 }
+    /// BootRecipe.iPad; and the S5L8950 (iPhone 5), which boots kboot through BootRecipe.iPhone5.
+    public var isKBoot: Bool { soc == .s5l8920 || soc == .s5l8930 || soc == .s5l8950 }
     /// The guest packages' architecture.
     public var arch: String { soc == .s5l8900 || soc == .s5l8720 ? "armv6" : "armv7" }
     /// The SecureROM image the machine boots, under the device assets (BootRecipe.bootrom).
@@ -255,6 +268,8 @@ public enum Board: String, Sendable, CaseIterable, Codable {
         case (_, "bootrom") where self == .k48: return ("SecureROM.bin", ["nor.bin", "gid-blobs.bin"])
         case (.s5l8920, nil), (.s5l8920, "kboot"), (.s5l8930, nil), (.s5l8930, "kboot"):
             return ("kboot.bin", ["nor.bin"])
+        // no NOR: the A6 keeps its NVRAM and effaceable storage on the PPN store
+        case (.s5l8950, nil), (.s5l8950, "kboot"): return ("kboot.bin", [])
         default: throw unknown()
         }
     }

@@ -169,6 +169,7 @@ struct BootTests {
         case .s5l8900: ["iboot"]
         case .s5l8720: ["bootrom", "iboot"]
         case .s5l8920, .s5l8930: board == .k48 ? ["kboot", "iboot", "bootrom"] : ["kboot"]
+        case .s5l8950: ["kboot"]
         }
     }
 
@@ -182,7 +183,7 @@ struct BootTests {
         ]
         for board in Board.allCases {
             let declared = board.machineOptions
-            #expect(declared.contains("panel"), "\(board): no machine options listed")
+            #expect(declared.contains("nand"), "\(board): no machine options listed")
             for strategy in Self.strategies(board) {
                 let f = try Fixture(board: board, strategy: strategy, machine: lock)
                 for wifi in [true, false] {
@@ -350,7 +351,7 @@ extension BootTests {
                 netdev: "user,id=wifi0",
                 restore: []
             )
-        case .n81, .n90, .n88, .n18:
+        case .n81, .n90, .n88, .n18, .n42:
             return  // kboot only: missingLegacyStrategyKeepsBoardDefault covers it
         }
         if board.hardware!.hasCellular {
@@ -610,6 +611,14 @@ extension BootTests {
             let m = board == .n88 ? "n88" : "n18"
             #expect(c.argv[2].hasPrefix(m + ",kboot=") && c.argv[2].contains(",nor-rw=") && c.machine == m)
             #expect(c.argv[2].contains(",wifi=off") && !c.argv.contains { $0.hasPrefix("usb-kbd") })
+        case .n42:
+            // The A6 machine: kboot on its PPN store, no NOR, die-id or wifi= (Wi-Fi is the HSIC device, here off),
+            // its own Wi-Fi and cell slirps, multi-threaded TCG.
+            #expect(c.argv[2].hasPrefix("iPhone-5,kboot=") && c.machine == "iPhone-5", "\(c.argv[2])")
+            #expect(!c.argv[2].contains(",nor-rw=") && !c.argv[2].contains(",die-id=") && !c.argv[2].contains("wifi="))
+            #expect(c.argv[2].contains(",baseband=on") && !c.argv.contains { $0.hasPrefix("usb-bcm-hsic") })
+            #expect(c.argv.contains("user,id=wifi0,lan=off") && c.argv.contains("user,id=cell0,lan=off"))
+            #expect(c.argv.contains("tcg,thread=multi"))
         case .n72:
             #expect(
                 c.argv[2].contains(

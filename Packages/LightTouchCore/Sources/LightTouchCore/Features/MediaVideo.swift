@@ -206,8 +206,10 @@ private final class MediaVideoExport {
     private let profile: Board
     private var session: AVAssetExportSession?
 
-    /// The A4 devices (iPad, iPhone 4, iPod touch 4th generation) play H.264 up to 720p.
-    public nonisolated static func playsHD(_ profile: Board) -> Bool { profile.soc == .s5l8930 }
+    /// The A4 devices (iPad, iPhone 4, iPod touch 4th generation) and the iPhone 5 play H.264 up to 720p.
+    public nonisolated static func playsHD(_ profile: Board) -> Bool {
+        profile.soc == .s5l8930 || profile.soc == .s5l8950
+    }
 
     public init(source: URL, destination: URL, profile: Board) {
         self.source = source

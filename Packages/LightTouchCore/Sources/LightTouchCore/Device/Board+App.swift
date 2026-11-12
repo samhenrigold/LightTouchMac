@@ -77,10 +77,12 @@ nonisolated extension Board {
 
     // MARK: - Free-form screen (machine panel=WxH, issue #21)
 
-    /// iPhone OS 1's SpringBoard keeps its icons and dock at 320x480 whatever the panel (its machines take panel=).
-    public var supportsFreeForm: Bool { soc != .s5l8900 }
+    /// iPhone OS 1's SpringBoard keeps its icons and dock at 320x480 whatever the panel (its machines take panel=);
+    /// the iPhone 5's machine takes no panel=.
+    public var supportsFreeForm: Bool { soc != .s5l8900 && soc != .s5l8950 }
     public var freeFormUnavailableReason: String? {
-        supportsFreeForm ? nil : "iPhone OS 1 keeps its Home screen at 320 × 480, whatever size the screen is."
+        if soc == .s5l8950 { return "The \(preferredName)’s screen has one size." }
+        return supportsFreeForm ? nil : "iPhone OS 1 keeps its Home screen at 320 × 480, whatever size the screen is."
     }
 
     /// The scan of an upright size by the board's convention (the iPad's panel is mounted landscape), and back.
