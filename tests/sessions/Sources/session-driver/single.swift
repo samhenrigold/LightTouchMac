@@ -210,6 +210,9 @@ nonisolated enum WiFiProbe {
     /// idevicecrashreport on PATH where there is one; before 3.0 every report, by the services worker) to read.
     var poweredOn = Date()
     /// The reports the base already carries (baseCrashReports), read at the first listing: none of them is this run's.
+    /// Where its data volume can't be read offline (the iPhone 5's: content-protected Data on a PPN flash, whose FTL and
+    /// keys VolumeRebuild doesn't have) and the boot leaves the guest's clock alone, the first listing's reports older
+    /// than this boot by the guest's own clock: its preparation's boot wrote them.
     var baseRead = false
     var inBase: [String]?
     func crashReports(_ generation: Int, _ when: String) async {
@@ -219,7 +222,6 @@ nonisolated enum WiFiProbe {
             baseRead = true
         }
         var event: [String: Any] = ["device": d.name, "generation": generation, "when": when]
-        if let inBase { event["base"] = inBase }
         for attempt in 0..<3 {
             if attempt > 0 { try? await Task.sleep(for: .seconds(10)) }
             do {
@@ -234,6 +236,13 @@ nonisolated enum WiFiProbe {
                 let uptime = Date().timeIntervalSince(poweredOn)
                 event = event.merging(["ages": ages, "uptime": uptime]) { $1 }
                 event["error"] = nil
+                if inBase == nil, lock?.pinsClock == false {
+                    // where the crash report service serves them from, as the base's own paths would name them
+                    inBase = ages.filter { $0.value > uptime }.map {
+                        "/var/mobile/Library/Logs/CrashReporter/" + $0.key
+                    }
+                    .sorted()
+                }
                 if !whole, when != "booted",
                     !GuestFaults.crashedProcesses(listed: ages.keys, base: inBase ?? []).isEmpty
                 {
@@ -259,6 +268,7 @@ nonisolated enum WiFiProbe {
                 break
             } catch { event["error"] = "\(error)" }
         }
+        if let inBase { event["base"] = inBase }
         emit("crashReports", event)
     }
 
