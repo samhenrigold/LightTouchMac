@@ -296,7 +296,7 @@ final class N45Board: Board {
             newest = try v.newestDate()
         }
         var owners: [(UInt32, String)] = [(0, kcPath), (0, SystemEdits.lockdownd)]
-        let (activation, removed) = try await VolumeMount.withVolume(
+        let (activation, removed) = try await Self.withJournaledRoot(
             volume,
             at: c.work.appendingPathComponent("mnt"),
             date: newest
@@ -371,24 +371,35 @@ final class N45Board: Board {
             for (k, v) in report { derived[k] = v }
             c.guestPackage = record
             owners += owned.map { (0, $0) }
-            // One partition, so the root holds what a device keeps in its journaled /private/var: journaled, so a
-            // hard power-off is replayed at mount (the stock root is unjournaled and 1.x runs no fsck or update);
-            // the journal itself is left for the device's first mount to initialize (leaveJournalToDevice).
-            if let m = v as? MountedVolume {
-                try await VolumeMount.run("/usr/sbin/diskutil", ["enableJournal", m.root.path])
-            } else if let w = v as? HFSPlusWriter {
-                try w.enableJournal()
-            }
             return (try SystemEdits.activate(v, log: c.log), removed)
         }
         c.activation = activation
         derived["launch_daemons_removed"] = removed
         let hfs = try HFSPlusVolume(volume, writable: true)
-        try hfs.leaveJournalToDevice()
         for (uid, paths) in Dictionary(grouping: owners, by: \.0) {
             c.log("\(uid):\(uid) patched \(try hfs.setOwner(paths.map(\.1), uid: uid, gid: uid)) catalog record(s)")
         }
         c.log("\(try hfs.normalize(after: newest, to: newest)) catalog records dated as of the IPSW's newest file")
+    }
+
+    /// `body` over the 1.x root (VolumeMount.withVolume), journaled first. One partition, so the root holds what a
+    /// device keeps in its journaled /private/var: journaled, so a hard power-off is replayed at mount (the stock root
+    /// is unjournaled and 1.x runs no fsck or update). FirmwareKit places the journal on the unmounted volume
+    /// (HFSPlusWriter.enableJournal, left for the device's first mount to initialize), not `diskutil enableJournal`
+    /// on the mount: the kernel put that journal after whatever it had allocated by then, fseventsd's event logs
+    /// included (removed with the junk before unmounting), and how many fseventsd had written varied by host and run,
+    /// so the journal moved a block or two. A mount keeps the journal where it is and puts its bytes back
+    /// (VolumeMount.withMounted).
+    nonisolated(nonsending) static func withJournaledRoot<T>(
+        _ volume: URL,
+        at mountPoint: URL,
+        date: UInt32,
+        _ body: (any VolumeFiles) async throws -> T
+    ) async throws -> T {
+        let w = try HFSPlusWriter(volume)
+        try w.enableJournal()
+        try w.close()
+        return try await VolumeMount.withVolume(volume, at: mountPoint, date: date, body)
     }
 
     /// ipod1g_device.bake over the 1.x system volume `v`: the GL front end if the stock OpenGLES exports exactly

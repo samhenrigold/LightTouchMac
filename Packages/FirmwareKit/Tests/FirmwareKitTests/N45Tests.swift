@@ -410,6 +410,30 @@ import Testing
             #expect(Oracle.exists(m.appendingPathComponent("private/var/logs/BTServer")))
         }
     }
+    /// The 1.x root's journal is placed before the mount, so what the host writes on the mount and removes before
+    /// unmounting doesn't move it: here a block of fseventsd's event log, which fseventsd writes before the recipe's
+    /// edits on some hosts and runs and not on others. Journaled by `diskutil enableJournal` on the mount, the journal
+    /// came after that block and moved with it.
+    @Test func theRootJournalStaysWhereItIsWhateverTheHostWritesOnTheMount() async throws {
+        try await Oracle.withTemp { dir in
+            var journals: [Int?] = []
+            for junk in [false, true] {
+                let image = dir.appendingPathComponent("root-\(junk).img")
+                try HFSPlusWriter.makeHFS(image, size: 64 << 20, name: "Root", journaled: false)
+                try await N45Board.withJournaledRoot(image, at: dir.appendingPathComponent("mnt"), date: 0) { v in
+                    if junk {
+                        try v.makeDirectory(".fseventsd")
+                        try v.put(Data(count: 4096), at: ".fseventsd/0000000000000001")
+                    }
+                    try v.put(Data(count: 3 * 4096), at: "a")
+                }
+                let journal = try HFSPlusVolume(image).journal()
+                #expect(journal?.needsInit == true, "left for the device's first mount")
+                journals.append(journal?.offset)
+            }
+            #expect(journals[0] != nil && journals[0] == journals[1], "journal offsets \(journals)")
+        }
+    }
     /// 1.x's lock screen deep-sleeps seconds after boot and the machine cannot resume: SBDisableIdleSleep in the user's
     /// SpringBoard preferences where SpringBoard names it, beside what is there; nothing where it does not.
     @Test func noIdleSleepBaked() throws {
