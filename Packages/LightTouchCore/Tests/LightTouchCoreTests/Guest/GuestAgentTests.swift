@@ -109,6 +109,8 @@ struct GuestAgentTests {
     }
 
     @Test func launchRefusedOnALockedDeviceIsLocked() async throws {
+        GuestServices.launchRetryPause = .milliseconds(10)
+        defer { GuestServices.launchRetryPause = .seconds(1) }
         let link = FakeGuestLink()
         let services = GuestServices(agent: GuestAgent(link: link, cache: GuestAgentCache()))
         try await services.launch("com.example.game")
@@ -187,6 +189,140 @@ struct GuestAgentTests {
         )
         #expect(GuestAgentCapabilities.parse("nonsense") == nil)
     }
+
+    /// A v6 agent tells the host what the foreground, lock and orientation ops would: they answer from its report
+    /// with no request (so none can be lost or wait behind another), and a SpringBoard that isn't answering is the
+    /// ops' own error, at once.
+    @Test func aReportingAgentIsNotAsked() async throws {
+        let link = FakeGuestLink()
+        let agent = GuestAgent(link: link, cache: GuestAgentCache())
+        link.report =
+            "agent 6\nspringboard 1\nlocked 0\npasscode 0\nfront com.apple.mobilesafari\nname Safari\nuidegrees -90\n"
+        let front = try await agent.frontmost()
+        #expect(front.bundleID == "com.apple.mobilesafari" && front.name == "Safari")
+        #expect(try await agent.isLocked() == false)
+        #expect(try await agent.orientation() == -90)
+        link.report = "agent 6\nspringboard 1\nlocked 0\npasscode 0\n"
+        #expect(try await agent.frontmost() == ("com.apple.springboard", "Home Screen"))
+        await #expect(throws: GuestAgentError.self, "firmware without the orientation call") {
+            try await agent.orientation()
+        }
+        link.report = "agent 6\nspringboard 2\nlocked 1\npasscode 1\nfront com.apple.mobileipod\nname iPod\n"
+        #expect(try await agent.frontmost() == ("com.apple.springboard", "Lock Screen"))
+        #expect(try await agent.isLocked())
+        for gone in ["agent 6\nspringboard 0\n", "agent 6\n", "agent 6\nspringboard 2\nstalled 1\nlocked 0\n"] {
+            link.report = gone
+            await #expect(throws: GuestAgentError.self, "\(gone)") { try await agent.frontmost() }
+            await #expect(throws: GuestAgentError.self, "\(gone)") { try await agent.isLocked() }
+            await #expect(throws: GuestAgentError.self, "\(gone)") { try await agent.orientation() }
+        }
+        #expect(link.ops.isEmpty, "asked \(link.ops)")
+        // Its session over (the emulator's empty report), or an agent that is no longer alive: asked again.
+        link.report = ""
+        #expect(try await agent.frontmost().bundleID == "com.example.game")
+        link.report = "agent 6\nspringboard 1\nlocked 0\n"
+        link.agent = 2
+        #expect(agent.report == nil)
+        await #expect(throws: (any Error).self) { try await agent.frontmost() }
+        #expect(link.ops == ["frontmost"])
+    }
+
+    /// SpringBoard refuses a launch while another app is still closing and takes it a moment later: the refusal is
+    /// asked again, a few times; the lock is not, and neither is a launch that keeps being refused past them.
+    @Test func aLaunchSpringBoardIsTooBusyForIsAskedAgain() async throws {
+        GuestServices.launchRetryPause = .milliseconds(10)
+        defer { GuestServices.launchRetryPause = .seconds(1) }
+        let link = FakeGuestLink()
+        let services = GuestServices(agent: GuestAgent(link: link, cache: GuestAgentCache()))
+        link.launchesRefused = 2
+        try await services.launch("com.apple.Preferences")
+        #expect(link.ops.filter { $0 == "launch" }.count == 3, "refused twice, taken the third time")
+        link.ops = []
+        link.launchesRefused = 3
+        await #expect(throws: AppLaunchError.failed) { try await services.launch("com.apple.Preferences") }
+        #expect(link.ops.filter { $0 == "launch" }.count == 3, "and no more than that")
+        link.ops = []
+        link.launchesRefused = 9
+        link.locked = true
+        await #expect(throws: AppLaunchError.locked) { try await services.launch("com.apple.Preferences") }
+        #expect(link.ops.filter { $0 == "launch" }.count == 1, "a locked device is refused for good")
+        // A report tells a wait when its fact comes, and the wait ends at its time when it doesn't.
+        link.locked = false
+        link.report = "agent 6\nspringboard 57\nlocked 0\npasscode 0\nfront com.apple.Preferences\n"
+        #expect(await services.agent.waitForReport(seconds: 1) { $0.frontmost == "com.apple.Preferences" })
+        let waited = await services.agent.waitForReport(seconds: 0.1) { $0.frontmost == "com.apple.mobilesafari" }
+        #expect(!waited)
+    }
+
+    /// Typing through the agent: its refusal (no field, no it_typein in this guest) hands the text to the caller's
+    /// keys, and so does an agent without the op; an agent that never answers may have typed it, so nothing types
+    /// it again.
+    @Test func textTheAgentMayHaveTypedIsNotTypedAgain() async throws {
+        let link = FakeGuestLink()
+        let services = GuestServices(agent: GuestAgent(link: link, cache: GuestAgentCache()))
+        #expect(await services.type("héllo") == false && link.typed.isEmpty, "an agent without the op")
+        link.types = true
+        services.agent.cache.reset()
+        #expect(await services.type("héllo") && link.typed == ["héllo"])
+        link.typeStatus = -5
+        #expect(await services.type("more") == false, "refused: the keys type it")
+        link.typeStatus = 0
+        link.typeUnanswered = true
+        #expect(await services.type("again"), "no answer: it may be in the field")
+        #expect(link.typed == ["héllo", "again"])
+    }
+
+    /// A respring returns when another SpringBoard answers the agent, not while the one it stopped still does or
+    /// while none is up; an agent that doesn't say which SpringBoard answers returns at once, as before.
+    @Test func aRespringReturnsWhenAnotherSpringBoardAnswers() async throws {
+        let link = FakeGuestLink()
+        let services = GuestServices(agent: GuestAgent(link: link, cache: GuestAgentCache()))
+        link.report = "agent 6\nspringboard 57\nlocked 0\npasscode 0\n"
+        let done = LockedFlag()
+        let respring = Task {
+            try await services.respring()
+            done.set()
+        }
+        await eventually("the stop") { link.lock.withLock { link.spawns.last?.last == "com.apple.SpringBoard" } }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(!done.value, "the stopped one still answers")
+        link.lock.withLock { link.report = "agent 6\nspringboard 0\n" }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(!done.value, "none is up")
+        link.lock.withLock { link.report = "agent 6\nspringboard 63\nstalled 1\nlocked 1\n" }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(!done.value, "the next one hasn't answered yet")
+        link.lock.withLock { link.report = "agent 6\nspringboard 63\nlocked 1\npasscode 0\n" }
+        try await respring.value
+        #expect(done.value)
+    }
+
+    /// The guest wrote the report: a value out of its domain is no value, and an unknown key is skipped.
+    @Test func reportsAreReadAsUntrusted() {
+        #expect(GuestReport("") == nil && GuestReport("springboard 1\nlocked 0\n") == nil)
+        #expect(GuestReport("agent 5\n") == nil && GuestReport("agent x\n") == nil)
+        let odd = GuestReport(
+            "agent 7\nspringboard -3\nlocked 2\npasscode yes\nfront \nname\nuidegrees 45\nfuture key\n\n \nstalled 0\n"
+        )
+        #expect(odd?.agent == 7 && odd?.springBoard == nil && odd?.isLocked == nil && odd?.hasPasscode == nil)
+        #expect(odd?.frontmost == nil && odd?.name == nil && odd?.uiDegrees == nil && odd?.isStalled == false)
+        #expect(odd?.isAnswering == false && odd?.foreground == nil)
+        let long = GuestReport("agent 6\nspringboard 1\nlocked 0\nfront " + String(repeating: "a", count: 4000) + "\n")
+        #expect(long?.frontmost?.count == 255)
+        let named = GuestReport("agent 6\nspringboard 3\nlocked 0\nfront com.x\nname Two Words\nuidegrees 180\n")
+        #expect(named?.springBoard == 3 && named?.name == "Two Words" && named?.uiDegrees == 180)
+        #expect(GuestReport("agent 6\nspringboard 57\ninterface 4\n")?.interfaceOrientation == 4)
+        #expect(GuestReport("agent 6\nspringboard 57\ninterface 5\n")?.interfaceOrientation == nil)
+        #expect(GuestReport("agent 6\nspringboard 1\nlocked 0\nfront com.x\n")?.foreground?.name == "com.x")
+    }
+}
+
+/// A flag a task sets and a test reads.
+nonisolated final class LockedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+    var value: Bool { lock.withLock { flag } }
+    func set() { lock.withLock { flag = true } }
 }
 
 /// withTemporaryDirectory for async bodies.

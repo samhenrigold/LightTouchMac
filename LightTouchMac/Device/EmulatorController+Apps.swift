@@ -53,6 +53,9 @@ extension EmulatorController {
         return try await guestAgent.orientation()
     }
     func interfaceOrientation() async throws -> Int { try await services.interfaceOrientation() }
+    var reportedInterfaceOrientation: Int? {
+        guestAgent.report.flatMap { $0.isAnswering ? $0.interfaceOrientation : nil }
+    }
 
     /// This device's firmware, from its catalog entry: what an app's minimum
     /// iOS and architecture are checked against.

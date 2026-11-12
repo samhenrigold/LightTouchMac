@@ -32,6 +32,8 @@ public enum DeviceProcessDeath: Equatable {
     public let link: DeviceLink
     public var onAudio: ((LinkEvent) -> Void)?
     public var onGuestPasteboard: ((String) -> Void)?
+    /// The guest agent's report changed (LinkEvent.agentReport; `link.agentReport` holds the latest).
+    public var onAgentReport: ((String) -> Void)?
     public var onDeath: ((DeviceProcessDeath) -> Void)?
     public var onTermination: ((pid_t, DeviceTermination, Int32?) -> Void)?
     public private(set) var death: DeviceProcessDeath?
@@ -182,6 +184,7 @@ public enum DeviceProcessDeath: Equatable {
         case .qemuExited(let code): qemuExitCode = code
         case .audio, .audioEnded: onAudio?(event)
         case .guestPasteboard(let text): onGuestPasteboard?(text)
+        case .agentReport(let text): onAgentReport?(text)
         }
     }
 

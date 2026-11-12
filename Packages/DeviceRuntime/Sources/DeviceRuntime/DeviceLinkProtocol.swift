@@ -13,7 +13,7 @@ import HostRuntime
 nonisolated public enum DeviceLinkWire {
     /// Bumped on any incompatible change to the messages below, the status block
     /// layout or the Mach hello. The helper refuses a hello with another version.
-    public static let protocolVersion = 4
+    public static let protocolVersion = 5
     /// The helper's hello refusal when another helper holds the device's lease; the app shows it as is.
     public static let leaseRefusal = "This device is in use by another copy of Light Touch."
     /// Upper bound on one framed message, either direction. An agent request is
@@ -97,6 +97,9 @@ nonisolated public enum LinkRequest: Codable, Sendable, Equatable {
     case inputSequence(id: UInt64, events: [VirtualInputEvent])
     case inputSequenceStatus(id: UInt64)
     case inputSequenceCancel(id: UInt64)
+    /// qemu_ios_ui_touch_waiting (API 2.4) -> `.touchWaiting`: whether a press or lift the host sent still waits for
+    /// the guest's digitizer driver to read it, read now. `.failure` from an older dylib.
+    case touchWaiting
     /// qemu_ios_ui_modem_set: one modem property (CarrierSettings, the call and SMS actions) from its string form.
     /// `.ok(false)`: no modem, no such property, or an older dylib.
     case modemSet(property: String, value: String)
@@ -116,6 +119,8 @@ nonisolated public enum LinkReply: Codable, Sendable, Equatable {
     case failure(String)
     case inputSequenceStatus(Int)
     case modemStatus(String?)
+    /// `reads`: the presses and lifts the driver has read since the helper loaded the emulator.
+    case touchWaiting(Bool, reads: UInt64)
 }
 
 nonisolated public enum LinkEvent: Codable, Sendable, Equatable {
@@ -129,6 +134,10 @@ nonisolated public enum LinkEvent: Codable, Sendable, Equatable {
     /// Text copied inside the guest (qemu_ios_ui_guest_pasteboard): never the text the app pasted in, nor what the
     /// guest held when its agent started.
     case guestPasteboard(String)
+    /// What the guest agent says of the guest (qemu_ios_agent_report, an it_agent from v6), whenever it changes:
+    /// `key value` lines, which LightTouchCore's GuestReport reads; empty once the agent's session ended (the guest
+    /// reset, the agent restarted or went silent). The guest wrote it.
+    case agentReport(String)
 }
 
 nonisolated public struct HelperInfo: Codable, Sendable, Equatable {

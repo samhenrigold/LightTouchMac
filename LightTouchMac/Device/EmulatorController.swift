@@ -262,6 +262,8 @@ final class EmulatorController {
     @ObservationIgnored var lastFrameAdvance = Date.distantPast
     /// The agent's ping (its ops), until it restarts.
     let agentCache = GuestAgentCache()
+    /// When a reporting guest agent's session last ended (its report dropped): the agent died or was restarted.
+    @ObservationIgnored var agentSessionEnded: Date?
     @ObservationIgnored var lastAgentStatusCheck = Date.distantPast
     var agentStatus = 0
     /// Set by the status poll: when the agent last went stale (2), nil while it answers.

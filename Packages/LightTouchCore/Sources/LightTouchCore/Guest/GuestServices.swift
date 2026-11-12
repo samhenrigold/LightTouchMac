@@ -174,15 +174,24 @@ public nonisolated struct GuestServices: Sendable {
     /// What the era's jailbreak respring restarted: from iOS 6, where backboardd is the window server and owns HID,
     /// backboardd (sbreload, `killall backboardd`), and SpringBoard and every app go with it; before that, SpringBoard
     /// (and its apps). launchd's KeepAlive brings them straight back. Which one is the guest's own answer: the
-    /// firmware has a backboardd job or not.
+    /// firmware has a backboardd job or not. Where the agent tells which SpringBoard answers it, this returns when
+    /// another one does (a minute at most): the one being stopped still answers for a moment, as if nothing happened.
     public func respring() async throws {
         let job =
             try await agent.get(Self.backboarddJob, limit: 1 << 20) != nil
             ? "com.apple.backboardd" : "com.apple.SpringBoard"
+        let stopped = agent.report?.springBoard
         try await agent.spawn([Self.launchctl, "stop", job])
+        if let stopped, stopped > 1 {
+            _ = await agent.waitForReport(seconds: 60) { $0.isAnswering && $0.springBoard != stopped }
+            try Task.checkCancellation()
+        }
     }
 
     static let backboarddJob = "/System/Library/LaunchDaemons/com.apple.backboardd.plist"
+    /// A launch SpringBoard refuses while it is busy is asked this many times, this far apart (shorter in tests).
+    static let launchTries = 3
+    nonisolated(unsafe) static var launchRetryPause: Duration = .seconds(1)
 
     /// launchd owns and relaunches lockdownd.
     public func reconnectManagement() async throws {
@@ -190,12 +199,36 @@ public nonisolated struct GuestServices: Sendable {
     }
 
     /// SpringBoardServices' launch, the same path a tap on the icon takes. It
-    /// refuses a locked device, which lockstatus then tells apart.
+    /// refuses a locked device, which lockstatus then tells apart. It also refuses while another app is still
+    /// closing (3.1.3 answers an error a third of a second after Home, and takes the same launch a moment later),
+    /// so a refusal that isn't the lock is asked again, `launchTries` times in all. Only a refusal: a request whose
+    /// answer was lost is never repeated (GuestAgent).
     public func launch(_ bundleID: String) async throws {
-        do { try await agent.launch(bundleID) } catch is CancellationError { throw CancellationError() } catch {
-            logEvent("launch \(bundleID): \(error.localizedDescription)")
-            if (try? await agent.isLocked()) == true { throw AppLaunchError.locked }
-            throw AppLaunchError.failed
+        for attempt in 1...Self.launchTries {
+            do {
+                try await agent.launch(bundleID)
+                return
+            } catch is CancellationError { throw CancellationError() } catch {
+                logEvent("launch \(bundleID): \(error.localizedDescription)")
+                if (try? await agent.isLocked()) == true { throw AppLaunchError.locked }
+                guard error is GuestAgentError, attempt < Self.launchTries else { throw AppLaunchError.failed }
+                try await Task.sleep(for: Self.launchRetryPause)
+            }
+        }
+    }
+
+    /// Text into the focused field through the agent's `type` (it_typein in the frontmost app). False when the agent
+    /// said it didn't type it (no such op, no it_typein polling in this guest, no field, a locked device): the
+    /// caller's keys do then. True when it did, and also when it never answered: the text may be in the field, and
+    /// typing it again would double it.
+    public func type(_ text: String) async -> Bool {
+        guard (try? await agent.capabilities().has("type")) == true else { return false }
+        do {
+            // The emulator gives a routed request 5 s (qemu-ios hw/arm/ipod-agent.c); past that the agent is gone.
+            return try await agent.raw("type", body: Data(text.utf8), deadline: 10).status == 0
+        } catch {
+            logEvent("typing: no answer from the guest agent; \(text.count) characters not typed again")
+            return true
         }
     }
 

@@ -69,7 +69,8 @@ struct Sessions: ParsableCommand {
             SingleCheck.self, PairCheck.self, ProxyTrustCheck.self, LocalNetworkCheck.self, HelperCheck.self,
             HelperBootCheck.self, PhoneCheck.self, RotationCheck.self, KeyboardCheck.self, FlickCheck.self,
             ScrollTopCheck.self, MatrixCheck.self, AffectedCheck.self, ListingsCheck.self, ResumeCheck.self,
-            TweaksCheck.self, RespringCheck.self, ClipboardCheck.self, BasesCheck.self, ReprepareCheck.self
+            TweaksCheck.self, RespringCheck.self, ClipboardCheck.self, ToldCheck.self, BasesCheck.self,
+            ReprepareCheck.self
         ]
     )
 }

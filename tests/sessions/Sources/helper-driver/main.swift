@@ -170,6 +170,8 @@ link.onEvent = { event in
         audioLoud = 0
     case .guestPasteboard(let text):
         emit("guestPasteboard", ["text": text])
+    case .agentReport(let text):
+        emit("agentReport", ["text": text])
     }
 }
 link.onInvalidated = { error in
@@ -296,6 +298,8 @@ func blocking<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) -> 
     sync { done in Task { done(await Result { try await body() }) } }
 }
 
+/// What each `told` step last read for its key (its `~` waits for another value).
+nonisolated(unsafe) var toldLast: [String: String] = [:]
 Thread.detachNewThread {
     for step in scenario.steps {
         let p = step.split(separator: " ").map(String.init)
@@ -312,6 +316,94 @@ Thread.detachNewThread {
             guard case .success(.ok(true)) = request(.boot(boot)) else { fail("boot refused") }
         case "wait":
             usleep(UInt32(v[0] * 1e6))
+        // told SECONDS KEY VALUE…: until the guest agent's report says `KEY VALUE` (`-`: it has no KEY line, `+`: it
+        // has one, `~`: one with another value than the last told of KEY got, and not 0), which it does within a
+        // quarter second of the guest changing: a wait for the fact, not for a time
+        case "told":
+            let want = p.dropFirst(3).joined(separator: " ")
+            let before = toldLast[p[2]]
+            let start = Date()
+            var got = "-"
+            func met() -> Bool {
+                guard got != "no report" else { return false }
+                return want == "+" ? got != "-" : want == "~" ? !["-", "0", before].contains(got) : got == want
+            }
+            repeat {
+                // No report (none yet, or its session ended) tells nothing, the absence of a line included.
+                let report = link.agentReport ?? ""
+                got =
+                    report.isEmpty
+                    ? "no report"
+                    : report.split(separator: "\n").first { $0.hasPrefix(p[2] + " ") }
+                        .map { String($0.dropFirst(p[2].count + 1)) } ?? "-"
+                if met() { break }
+                usleep(50_000)
+            } while Date().timeIntervalSince(start) < v[0]
+            toldLast[p[2]] = got
+            emit(
+                "told",
+                [
+                    "key": p[2], "want": want, "got": got, "ok": met(),
+                    "report": link.agentReport ?? "", "seconds": Date().timeIntervalSince(start),
+                    "sinceBoot": Date().timeIntervalSince(bootAt)
+                ]
+            )
+        // home [PRESSES]: Home (on the guest's clock) until the agent's report shows no app in front, at most PRESSES
+        // (3) times 5 s apart: an alert standing over the app takes a press for itself (7.x's notice of the USB
+        // keyboard does at every boot). `presses`, and `ok` when the app left
+        case "home":
+            var presses = 0
+            var left = false
+            let start = Date()
+            while !left, presses < (v.first.map(Int.init) ?? 3) {
+                presses += 1
+                _ = blocking {
+                    try await HostInputAutomation.perform(HostInputAutomation.press(0)) {
+                        try await link.request($0, timeout: 5)
+                    }
+                }
+                left =
+                    (try? blocking {
+                        await guest.agent.waitForReport(seconds: 5) { $0.isAnswering && $0.frontmost == nil }
+                    }
+                    .get()) == true
+            }
+            emit("home", ["presses": presses, "ok": left, "seconds": Date().timeIntervalSince(start)])
+        // launch BUNDLE-ID: the app's own launch (GuestServices.launch, which asks a busy SpringBoard again)
+        case "launch":
+            let start = Date()
+            let r = blocking { try await guest.launch(p[1]) }
+            emit("launch", ["bundle": p[1], "result": "\(r)", "seconds": Date().timeIntervalSince(start)])
+        // gesture tap X Y | drag X0 Y0 X1 Y1 | press BUTTON: made on the guest's clock, until the emulator made all
+        // of it and the guest's digitizer driver read the touch (HostInputAutomation.perform); `ok` or why not.
+        // tapshown and dragshown: the points as the window shows the picture (tapshown's mapping)
+        case "gesture":
+            var v = v
+            if p[1].hasSuffix("shown"), let r = rotationDriver {
+                v = onMain {
+                    stride(from: 0, to: v.count - 1, by: 2).flatMap { i -> [Double] in
+                        let point = r.touchPoint(shown: v[i], v[i + 1])
+                        return [point.0, point.1]
+                    }
+                }
+            }
+            let events =
+                p[1].hasPrefix("tap")
+                ? HostInputAutomation.tap(v[0], v[1])
+                : p[1].hasPrefix("drag")
+                    ? HostInputAutomation.drag(from: (v[0], v[1]), to: (v[2], v[3]))
+                    : HostInputAutomation.press(Int32(v[0]))
+            let start = Date()
+            let r = blocking {
+                try await HostInputAutomation.perform(events) { try await link.request($0, timeout: 5) }
+            }
+            emit(
+                "gesture",
+                [
+                    "kind": p[1], "ok": (try? r.get()) != nil, "result": "\(r)",
+                    "seconds": Date().timeIntervalSince(start)
+                ]
+            )
         case "lit":
             let start = Date()
             var b = 0.0

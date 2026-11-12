@@ -24,11 +24,7 @@ extension EmulatorController {
     func setTilt(angle: Double, pitch: Double = 0) { input.setTilt(angle: angle, pitch: pitch) }
     func pasteToGuest(_ text: String) { input.paste(text) }
     func typeText(_ text: String, shiftHeld: Bool) { input.typeText(text, shiftHeld: shiftHeld) }
-    func typeThroughAgent(_ text: String) async -> Bool {
-        let agent = guestAgent
-        guard (try? await agent.capabilities().has("type")) == true else { return false }
-        return (try? await agent.perform("type", body: Data(text.utf8))) != nil
-    }
+    func typeThroughAgent(_ text: String) async -> Bool { await guest.type(text) }
 
     /// A control request; `done(true)` when the machine applied it (false on a
     /// machine without the control, the iPod, or from a helper that's gone).

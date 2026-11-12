@@ -100,6 +100,7 @@ nonisolated public final class DeviceLink: @unchecked Sendable {
     private var statusBlock: StatusBlock?
     private var ring: FrameRingReader?
     private var _info: HelperInfo?
+    private var _agentReport: String?
     private var nextID: UInt64 = 1
     public typealias Reply = @Sendable (Result<LinkReply, DeviceLinkError>) -> Void
     private struct Pending: @unchecked Sendable {
@@ -142,6 +143,9 @@ nonisolated public final class DeviceLink: @unchecked Sendable {
     public var info: HelperInfo? { lock.withLock { _info } }
     /// The status block, read now. nil until the helper's first hello.
     public var status: SharedStatus? { lock.withLock { statusBlock }?.snapshot() }
+    /// The guest agent's latest report (LinkEvent.agentReport), kept so it can be read at any time like `status`;
+    /// nil until the helper sent one.
+    public var agentReport: String? { lock.withLock { _agentReport } }
 
     /// The front frame surface. `isNew` when it changed since the last call.
     /// Call from one thread only (the display link); hold the surface, not the tuple.
@@ -388,6 +392,7 @@ nonisolated public final class DeviceLink: @unchecked Sendable {
             entry.timer.cancel()
             entry.reply(.success(reply))
         case .event(let event):
+            if case .agentReport(let text) = event { lock.withLock { _agentReport = text } }
             onEvent?(event)
         }
     }

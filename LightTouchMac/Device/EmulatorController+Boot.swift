@@ -44,6 +44,13 @@ extension EmulatorController {
             guard let self else { return }
             ClipboardSharing.shared.guestCopied(text, on: self)
         }
+        // An empty report is the end of an agent's session (the guest reset, the agent restarted): the next agent
+        // may be another version, whatever the status poll's once-a-second sample caught of the change.
+        process.onAgentReport = { [weak self] text in
+            guard let self, text.isEmpty else { return }
+            agentCache.reset()
+            agentSessionEnded = Date()
+        }
         startStatusPoll()
         // Low space doesn't stop a boot; it's said before writes start failing.
         warnIfLowOnSpace()
