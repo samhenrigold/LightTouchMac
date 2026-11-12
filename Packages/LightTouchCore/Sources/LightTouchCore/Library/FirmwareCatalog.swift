@@ -136,7 +136,11 @@ public nonisolated struct FirmwareCatalog: Codable, Sendable {
         /// with 2.0). iOS 10 and later are gated off too: installd's code-signature check runs inside the dyld
         /// shared cache and isn't bypassed on 10.x yet, so a user app won't install or launch (issue #ios10-installs).
         public static func managesApps(major: Int) -> Bool { major >= 2 && major < 10 }
-        public var managesApps: Bool { Self.managesApps(major: Int(version.prefix { $0 != "." }) ?? 2) }
+        public var managesApps: Bool { Self.managesApps(major: major) }
+
+        /// A firmware version's major number ("10.3.4" is 10); 2 for a version that doesn't start with one.
+        public static func major(of version: String) -> Int { Int(version.prefix { $0 != "." }) ?? 2 }
+        public var major: Int { Self.major(of: version) }
 
         /// The sidebar's badge, always numbered: "beta 1", "beta 3", "GM 1", "GM 2"; nil for a release.
         public var prereleaseBadge: String? {
