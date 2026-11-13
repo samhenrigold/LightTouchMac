@@ -50,6 +50,12 @@ struct GuestFaultsTests {
         #expect(faults.contains { $0.hasPrefix("a system process crashed (1×): Oct 17") })
         #expect(faults.contains { $0.hasPrefix("the file system check failed (1×): fsck exited with status: 8") })
         #expect(faults.contains { $0.hasPrefix("the iOS kernel panicked") })
+        #expect(
+            GuestFaults.line("panic(cpu ", in: log)
+                == #"panic(cpu 0 caller 0x80a74efb): "CDMA: client driver(s) left channel(s) 0x2 active when sleeping""#
+        )
+        #expect(GuestFaults.line("fsck exited with status: 8", in: log) == "fsck exited with status: 8")
+        #expect(GuestFaults.line("Invalid content in Journal", in: log) == nil)
     }
 
     /// A crash report written during this boot names its process, once; one from before the boot, a LatestCrash link,

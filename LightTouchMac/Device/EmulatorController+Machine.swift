@@ -103,7 +103,8 @@ extension EmulatorController {
                     services: self.services,
                     guest: self.guest,
                     proxyDirectory: self.proxyDirectory,
-                    stoppedTrust: self.trustsStopped ? (self.instance.paths.directory, self.instance.storage.key) : nil
+                    stoppedTrust: self.trustsStopped ? (self.instance.paths.directory, self.instance.storage.key) : nil,
+                    reportParameters: self.analyticsParameters
                 )
                 .configure(enabled: enabled)
             }

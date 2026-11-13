@@ -150,6 +150,8 @@ extension EmulatorController {
     func helperDied(_ reason: String) {
         var parameters = analyticsParameters
         parameters["exit"] = process?.exitStatus
+        // a boot that ended before iOS answered (a stop, a quit, a timeout): how far it got
+        if reachableSince == nil { parameters["bootStage"] = "\(bootStage)" }
         if !halting, !shuttingDown, !state.isDead {
             // an aborted boot (BootWatch.abort) has its reason already, and its helper stopped as asked
             if let aborted = deathReason {

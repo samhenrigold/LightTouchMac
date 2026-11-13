@@ -48,6 +48,13 @@ public nonisolated enum GuestFaults {
         return out
     }
 
+    /// The last line of `log` that shows `phrase`, as faults(log:) quotes it: what a fault said, for its report (a
+    /// panic's string, the process that exited).
+    public static func line(_ phrase: String, in log: String) -> String? {
+        log.split(whereSeparator: \.isNewline).last { $0.contains(phrase) }
+            .map { String($0.trimmingCharacters(in: .whitespaces).prefix(160)) }
+    }
+
     // MARK: - Crash reports
 
     /// The processes the guest wrote a crash report for during this boot, each once, sorted: `ages` are the reports'

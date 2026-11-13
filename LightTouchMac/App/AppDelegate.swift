@@ -389,6 +389,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// On quit: guard an in-flight install, then halt each device
     /// (EmulatorController.halt: storage flushed, no guest shutdown).
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // the trail says a run that ended in a step (CrashGuard) was asked to quit: a force quit after it, not a crash
+        Analytics.breadcrumb("App.quitAsked")
         let answer = quitting.shouldTerminate(
             busy: { [weak self] in
                 if self?.emulators.contains(where: \.isErasing) == true || self?.host?.storageWork.isErasing == true {

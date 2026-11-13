@@ -287,14 +287,17 @@ public enum AppInstaller {
         log(
             "install: \(job.name) failed: \(String(reflecting: error)) [\((error as NSError).domain) \((error as NSError).code)]"
         )
-        AppReports.failed(report, error, reportParameters(job))
+        // the host a network error came from: Legacy Store's API or archive.org's copy
+        AppReports.failed(report, error, reportParameters(job, ["host": (error as? URLError)?.failingURL?.host ?? ""]))
         return error is DecodingError ? CatalogError.unreadable.localizedDescription : error.localizedDescription
     }
 
-    /// A job's report: the app's bundle id (a public App Store identifier) and its device's firmware.
+    /// A job's report: the app's bundle id (a public App Store identifier), whether it came from Legacy Store and its
+    /// device's firmware.
     static func reportParameters(_ job: InstallJob, _ more: [String: String] = [:]) -> [String: String] {
         var parameters = more
         parameters["bundleID"] = job.bundleID
+        parameters["store"] = job.catalogIpaID == nil ? "no" : "yes"
         parameters["firmware"] = devices().first { $0.id == job.deviceID }?.firmware
         return parameters
     }
@@ -454,7 +457,7 @@ public enum AppInstaller {
                     device: emulator.instance
                 )
             }
-            AppReports.used("Apps.installed", reportParameters(job, ["store": job.catalogIpaID == nil ? "no" : "yes"]))
+            AppReports.used("Apps.installed", reportParameters(job))
             if output.contains("newer than the device's") { emulator.warnMayNotLaunch(job.name, in: window) }
         } catch is CancellationError {
             // Cancelling is a decision, not a failure. The placeholder icon

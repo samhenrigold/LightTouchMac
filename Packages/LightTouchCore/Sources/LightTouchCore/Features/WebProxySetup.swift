@@ -16,12 +16,14 @@ public struct WebProxySetup: Sendable {
         services: DeviceServices,
         guest: GuestServices,
         proxyDirectory: URL,
-        stoppedTrust: (device: URL, storageKey: String)? = nil
+        stoppedTrust: (device: URL, storageKey: String)? = nil,
+        reportParameters: [String: String] = [:]
     ) {
         self.services = services
         self.guest = guest
         self.proxyDirectory = proxyDirectory
         self.stoppedTrust = stoppedTrust
+        self.reportParameters = reportParameters
     }
     public let services: DeviceServices
     public let guest: GuestServices
@@ -30,6 +32,8 @@ public struct WebProxySetup: Sendable {
     /// iPhone OS 1.x (no agent, no MCInstall): the device directory and storage key the stopped trust is judged
     /// against (FirmwareWire.trustAnchorFile, written when the stopped device took the certificate).
     public var stoppedTrust: (device: URL, storageKey: String)? = nil
+    /// The device's report parameters (its board and firmware), for a failure's report.
+    public var reportParameters: [String: String] = [:]
 
     private var proxyFile: String { WebProxyConfiguration.file(in: proxyDirectory).path }
 
@@ -59,17 +63,19 @@ public struct WebProxySetup: Sendable {
         }
         // The agent claims its channel shortly after lockdown answers; give it a moment before falling back.
         if await guest.agent.waitAlive(seconds: 15) {
+            var step = "route"
             do {
                 try await guest.routeThroughProxy(localTool: Self.bundledGuestTool)
+                step = "trust"
                 try await guest.trustCertificate(der, localTool: Self.bundledGuestTool)
                 logEvent("proxy: certificate trusted through the guest agent")
                 return .ready
             } catch is CancellationError { throw CancellationError() } catch {
                 logEvent("proxy: agent trust failed, offering the profile instead: \(error.localizedDescription)")
-                AppReports.failed("Network.proxyTrustFailed", error)
+                AppReports.failed("Network.proxyTrustFailed", error, reportParameters.merging(["step": step]) { $1 })
             }
         }
-        return try await services.offerProfile(proxyFile + ".ca.der") ? .needsTap : .ready
+        return try await services.offerProfile(proxyFile + ".ca.der", report: reportParameters) ? .needsTap : .ready
     }
 
     /// A guest binary out of the package for the catalog's built-in device (the iPod's armv6; ittrust runs on the

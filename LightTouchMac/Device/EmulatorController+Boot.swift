@@ -254,13 +254,30 @@ extension EmulatorController {
                         self.guestFaultsSeen.insert(phrase)
                         if let meaning = GuestFaults.phrases[phrase] {
                             logEvent("guest: \(self.instance.name): error: \(meaning) (Device Console: “\(phrase)”)")
-                            Analytics.fault("Guest.fault", self.analyticsParameters.merging(["fault": phrase]) { $1 })
+                            let serial = self.instance.paths.logs.appendingPathComponent("serial.log")
+                            Task {
+                                try? await Task.sleep(for: .seconds(2))  // the rest of the phrase's line
+                                let line = await Self.serialLine(phrase, at: serial) ?? ""
+                                Analytics.fault(
+                                    "Guest.fault",
+                                    self.analyticsParameters.merging(["fault": phrase, "line": line]) { $1 }
+                                )
+                            }
                         }
                     default: self.noteBoot(.serial(phrase))
                     }
                 }
             }
         } catch { logEvent("logging: serial capture unavailable: \(error.localizedDescription)") }
+    }
+
+    /// The serial log's last line showing `phrase`, from its last 64 KB (the fault was just printed).
+    @concurrent nonisolated static func serialLine(_ phrase: String, at url: URL) async -> String? {
+        guard let file = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? file.close() }
+        let end = (try? file.seekToEnd()) ?? 0
+        try? file.seek(toOffset: end > 65_536 ? end - 65_536 : 0)
+        return GuestFaults.line(phrase, in: String(decoding: (try? file.readToEnd()) ?? Data(), as: UTF8.self))
     }
 
     /// iOS answered: by now launchd has mounted every volume it is going to.

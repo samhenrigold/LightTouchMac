@@ -112,8 +112,8 @@ extension DeviceServices {
     /// Offer a CA as a configuration profile through lockdown's stock MCInstall
     /// service (the lockdown-mcinstall operation's child, like lockdown-tz), once:
     /// false when one is installed already, true when it was offered and waits for
-    /// Install on the device.
-    public func offerProfile(_ certificate: String) async throws -> Bool {
+    /// Install on the device. `report`: the device's parameters for a failure's report.
+    public func offerProfile(_ certificate: String, report: [String: String] = [:]) async throws -> Bool {
         guard let tool = Self.servicesHelper else { throw DeviceToolsError.toolMissing("LightTouchServices") }
         if try await Self.lockdownChild(tool, ["lockdown-mcinstall", "--installed"], socket: clientSocket).status == 0 {
             return false
@@ -121,7 +121,7 @@ extension DeviceServices {
         let offered = try await Self.lockdownChild(tool, ["lockdown-mcinstall", certificate], socket: clientSocket)
         guard offered.status == 0 else {
             logEvent("proxy: offering the certificate profile failed: \(offered.error)")
-            AppReports.failed("Network.proxyProfileFailed")
+            AppReports.failed("Network.proxyProfileFailed", nil, report.merging(["status": "\(offered.status)"]) { $1 })
             throw DeviceToolsError.failed("Couldn’t offer the proxy certificate to the device.")
         }
         logEvent("proxy: no guest agent; certificate profile offered, confirm Install on the device")

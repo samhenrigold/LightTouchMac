@@ -7,9 +7,9 @@ import TelemetryDeck
 
 /// Settings ▸ General ▸ Share anonymous usage and error reports, on unless turned off: TelemetryDeck signals for a
 /// launch, a device's start, the apps opened in it and what failed, with no names, paths or messages (an error goes as
-/// its domain and code, a crash as image+offset). Every signal carries the Mac's graphics and the display settings,
-/// which the bug reports kept turning on (issues 26, 99, 122), and every failure the steps that led to it, a trail
-/// kept on this Mac. Every signal goes through here, as the SDK starts only while sharing is on (a signal before it
+/// its domain and code, a crash as image+offset, a guest fault as the iOS line that showed it). Every signal carries the
+/// Mac's graphics and the display settings, which the bug reports kept turning on (issues 26, 99, 122), and every
+/// failure the steps that led to it, a trail kept on this Mac. Every signal goes through here, as the SDK starts only while sharing is on (a signal before it
 /// starts would go with no app ID); turning sharing off stops new signals at once, and the next launch doesn't start
 /// the SDK. What it already queued still goes: within 10 s, or, saved at a quit, once sharing is next on.
 enum Analytics {
@@ -100,6 +100,11 @@ enum Analytics {
         if let error = error as NSError? {
             parameters["errorDomain"] = error.domain
             parameters["errorCode"] = String(error.code)
+            // what a wrapping error (Sparkle's download error) wraps: the network's, the disk's
+            if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+                parameters["underlyingDomain"] = underlying.domain
+                parameters["underlyingCode"] = String(underlying.code)
+            }
         }
         parameters["breadcrumbs"] = lastRun ? self.lastRun : trail(steps)
         breadcrumb([id, parameters["board"]].compactMap { $0 }.joined(separator: " "))

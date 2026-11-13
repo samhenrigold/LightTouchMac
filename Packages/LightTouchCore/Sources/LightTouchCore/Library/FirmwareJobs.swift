@@ -23,6 +23,8 @@ import HostRuntime
     public static let didPublishNotification = Notification.Name("FirmwareJobsDidPublish")
     /// Each preparation's step under way, for its failure's report.
     private var steps: [String: String] = [:]
+    /// Each preparation's start and where its IPSW came from, for Firmware.prepared.
+    private var started: [UUID: (at: Date, source: String)] = [:]
 
     /// What each entry's row shows.
     public var jobs: [String: FirmwareJob] { table.shown }
@@ -408,12 +410,17 @@ import HostRuntime
                 preparations[job] = nil
                 steps[id] = nil
                 logEvent("firmware: \(id) is device \(instance.id.uuidString)")
-                AppReports.used("Firmware.prepared", ["firmware": id])
+                let start = started.removeValue(forKey: job)
+                AppReports.used(
+                    "Firmware.prepared", ["firmware": id, "source": start?.source ?? ""],
+                    value: start.map { now.timeIntervalSince($0.at) }
+                )
                 if let sha1 = catalog.entry(id: id)?.source.sha1 { pruneDecrypted(sha1) }
                 library.reload()
                 NotificationCenter.default.post(name: Self.didPublishNotification, object: id)
             case .failed(let message):
                 preparations[job] = nil
+                started[job] = nil
                 logEvent("firmware: \(id): \(message)")
                 AppReports.failed(
                     "Firmware.preparationFailed",
@@ -422,6 +429,7 @@ import HostRuntime
                 )
             case .cancelled:
                 preparations[job] = nil
+                started[job] = nil
                 steps[id] = nil
                 logEvent("firmware: preparation of \(id) cancelled")
             }
@@ -527,6 +535,7 @@ import HostRuntime
             inputs.yield(.preparation(entryID, id, event))
         }
         preparations[id] = job
+        started[id] = (Date(), bundled ? "builtIn" : afterDownload ? "downloaded" : "onMac")
         table.preparing(entry.id, id, afterDownload: afterDownload, now: Date())
         logEvent("firmware: \(bundled ? "unpacking the built-in" : "preparing") \(entry.id) as \(job.id.uuidString)")
         job.start()

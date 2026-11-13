@@ -127,7 +127,11 @@ final class EmulatorController {
     var preparationStatus: String { readiness.preparationStatus }
     /// How far this boot has provably got (BootStage): the boot toast's subtitle.
     var bootStage: BootStage { readiness.bootStage }
-    func noteBoot(_ event: BootStage.Event) { readiness.noteBoot(event) }
+    func noteBoot(_ event: BootStage.Event) {
+        let was = bootStage
+        readiness.noteBoot(event)
+        if bootStage != was { Analytics.breadcrumb("\(profile.rawValue) \(bootStage)") }
+    }
     var readinessFailure: String? { readiness.readinessFailure }
 
     /// The VM's lifecycle. Everything the UI enables or disables keys off this;
