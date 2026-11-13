@@ -160,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func showAbout(_ sender: Any?) { AboutCredits.show() }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        offerMoveToApplications()
         // The boards' hardware facts are the emulator's: the bundled helper lists them once, here off the main thread.
         Machines.helper = DeviceLink.Configuration.bundledHelper
         Task.detached { _ = Board.n72.hardware }
@@ -169,6 +170,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.disableRelaunchOnLogin()
 
         MainMenuBuilder.install(profile: .n72)
+    }
+
+    private static let moveDeclinedKey = "moveToApplicationsDeclined"
+
+    /// Sparkle can't update a copy macOS runs translocated (opened where it was downloaded) or from a disk image
+    /// (AppMove), so the launch offers to move it before anything else runs: the move copies Light Touch to an
+    /// Applications folder, opens the copy and quits this one; Don’t Move, or a move that fails, carries on here.
+    private func offerMoveToApplications() {
+        let bundle = Bundle.main.bundleURL
+        guard AppMove.isStuck(bundle), !UserDefaults.standard.bool(forKey: Self.moveDeclinedKey) else { return }
+        let destination = AppMove.destination(for: bundle)
+        let alert = NSAlert()
+        alert.messageText =
+            destination.deletingLastPathComponent().path == "/Applications"
+            ? "Move Light Touch to the Applications folder?"
+            : "Move Light Touch to the Applications folder in your home folder?"
+        alert.informativeText = "Light Touch needs to be in the Applications folder to install updates."
+        alert.addButton(withTitle: "Move to Applications Folder")
+        alert.addButton(withTitle: "Don’t Move")
+        alert.showsSuppressionButton = true
+        NSApp.activate()
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            if alert.suppressionButton?.state == .on { UserDefaults.standard.set(true, forKey: Self.moveDeclinedKey) }
+            return
+        }
+        do {
+            try AppMove.copy(bundle, to: destination)
+            // -n: a new instance, as Launch Services would otherwise bring this one forward
+            let open = try Process.run(URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-n", destination.path])
+            open.waitUntilExit()
+            if open.terminationStatus == 0 { exit(0) }
+            logEvent("move: open exited \(open.terminationStatus) for \(destination.path)")
+        } catch {
+            logEvent("move: copying to \(destination.path) failed: \(error)")
+        }
+        let failed = NSAlert()
+        failed.messageText = "Light Touch couldn’t move to the Applications folder."
+        failed.runModal()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
