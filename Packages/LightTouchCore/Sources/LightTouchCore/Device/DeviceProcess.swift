@@ -30,6 +30,10 @@ import HostRuntime
         get { process.onAgentReport }
         set { process.onAgentReport = newValue }
     }
+    public var onGLESRefusals: ((String) -> Void)? {
+        get { process.onGLESRefusals }
+        set { process.onGLESRefusals = newValue }
+    }
     public var onDeath: ((String) -> Void)?
 
     public init(

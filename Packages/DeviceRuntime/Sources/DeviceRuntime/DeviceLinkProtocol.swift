@@ -138,6 +138,10 @@ nonisolated public enum LinkEvent: Codable, Sendable, Equatable {
     /// `key value` lines, which LightTouchCore's GuestReport reads; empty once the agent's session ended (the guest
     /// reset, the agent restarted or went silent). The guest wrote it.
     case agentReport(String)
+    /// The GL bridge's refusals whose count moved since the last of these (qemu_ios_gles_refusals, API 2.5), at most
+    /// once a second: "NAME\tCOUNT\tCALL" lines, which LightTouchCore's GLESRefusals reads. A guest shim's names are
+    /// the guest's text.
+    case glesRefusals(String)
 }
 
 nonisolated public struct HelperInfo: Codable, Sendable, Equatable {

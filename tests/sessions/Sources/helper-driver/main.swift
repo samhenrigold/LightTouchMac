@@ -172,6 +172,8 @@ link.onEvent = { event in
         emit("guestPasteboard", ["text": text])
     case .agentReport(let text):
         emit("agentReport", ["text": text])
+    case .glesRefusals(let text):
+        emit("glesRefusals", ["text": text])
     }
 }
 link.onInvalidated = { error in

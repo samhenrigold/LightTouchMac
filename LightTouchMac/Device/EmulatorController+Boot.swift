@@ -51,6 +51,13 @@ extension EmulatorController {
             agentCache.reset()
             agentSessionEnded = Date()
         }
+        glesRefusals = GLESRefusals()
+        process.onGLESRefusals = { [weak self] lines in
+            guard let self else { return }
+            for refusal in glesRefusals.reports(lines, frontApp: frontBundleID) {
+                Analytics.fault("Guest.glRefused", analyticsParameters.merging(refusal) { $1 })
+            }
+        }
         startStatusPoll()
         // Low space doesn't stop a boot; it's said before writes start failing.
         warnIfLowOnSpace()

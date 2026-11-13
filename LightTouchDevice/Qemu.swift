@@ -196,6 +196,12 @@ final class Qemu: @unchecked Sendable {
         (@convention(c) (UnsafeMutablePointer<UInt64>) -> UnsafeMutablePointer<CChar>?).self
     )
     lazy var glesContexts = sym("qemu_ios_gles_contexts", IntFn.self)
+    /// API 2.5: the GL bridge's refusals whose count moved since the serial ("NAME\tCOUNT\tCALL" lines, malloc'd,
+    /// free()); NULL when none did.
+    lazy var glesRefusals = optionalSym(
+        "qemu_ios_gles_refusals",
+        (@convention(c) (UnsafeMutablePointer<UInt64>) -> UnsafeMutablePointer<CChar>?).self
+    )
     /// Optional: dylibs before the guest-package hypercalls lack them.
     lazy var guestPackageReport = optionalSym(
         "qemu_ios_guest_package_report",

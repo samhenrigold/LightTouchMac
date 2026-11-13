@@ -7,7 +7,8 @@ import TelemetryDeck
 
 /// Settings ▸ General ▸ Share anonymous usage and error reports, on unless turned off: TelemetryDeck signals for a
 /// launch, a device's start, the apps opened in it and what failed, with no names, paths or messages (an error goes as
-/// its domain and code, a crash as image+offset, a guest fault as the iOS line that showed it). Every signal carries the
+/// its domain and code, a crash as image+offset, a guest fault as the iOS line that showed it, a GL call the emulator
+/// refused as the call's name and numbers). Every signal carries the
 /// Mac's graphics and the display settings, which the bug reports kept turning on (issues 26, 99, 122), and every
 /// failure the steps that led to it, a trail kept on this Mac. Every signal goes through here, as the SDK starts only while sharing is on (a signal before it
 /// starts would go with no app ID); turning sharing off stops new signals at once, and the next launch doesn't start
@@ -132,7 +133,8 @@ enum Analytics {
         return [1, 5, 20, 100].first { gigabytes < $0 }.map { "<\($0) GB" } ?? "100+ GB"
     }
 
-    /// Something in a device went wrong that no error was thrown for (a guest fault, a guest app's crash).
+    /// Something in a device went wrong that no error was thrown for (a guest fault, a guest app's crash, a GL call the
+    /// emulator refused).
     static func fault(_ id: String, _ parameters: [String: String]) { failure(id, category: .appState, parameters) }
 
     /// CrashGuard found the last run died in `step`.

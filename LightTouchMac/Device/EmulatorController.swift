@@ -42,6 +42,8 @@ final class EmulatorController {
     /// (openSerialLog resets it): for Analytics.
     @ObservationIgnored var frontBundleID: String?
     @ObservationIgnored var reportedToolsQuiet = false
+    /// The GL bridge's refusals this helper's emulator has reported, per front app (a fresh helper starts over).
+    @ObservationIgnored var glesRefusals = GLESRefusals()
     var isErasing = false { didSet { trackStartup(was: oldValue || state == .booting || preparingDevice) } }
     /// When the current startup (erase, boot, readiness) began: the toast's counter, per device, not per window.
     private(set) var startupBegan = Date()

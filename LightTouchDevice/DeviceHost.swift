@@ -27,6 +27,8 @@ final class DeviceHost: @unchecked Sendable {
     private var frameSerial: UInt64 = 0
     private var guestPasteboardSerial: UInt64 = 0
     private var agentReportSerial: UInt64 = 0
+    private var glesRefusalSerial: UInt64 = 0
+    private var glesRefusalsDue: UInt64 = 0
     private let stateLock = NSLock()
     private var bootConfig: BootConfig?
     /// The device's web proxy (WebProxy.swift), for the life of the process.
@@ -212,6 +214,15 @@ final class DeviceHost: @unchecked Sendable {
         if let text = qemu.agentReport?(&agentReportSerial) {
             onEvent?(.agentReport(String(cString: text)))
             free(text)
+        }
+        // What the GL bridge refused again, once a second at most: a refused call can come with every frame.
+        let now = DispatchTime.now().uptimeNanoseconds
+        if now >= glesRefusalsDue {
+            glesRefusalsDue = now + 1_000_000_000
+            if let text = qemu.glesRefusals?(&glesRefusalSerial) {
+                onEvent?(.glesRefusals(String(cString: text)))
+                free(text)
+            }
         }
     }
 
