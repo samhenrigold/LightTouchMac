@@ -129,6 +129,28 @@ struct SetupWalkTests {
         #expect(SetupPlan.plan(["Syria": (0.2, 0.3)], pages: ["Skip This Step"]) == [.slideIfLockScreen])
     }
 
+    /// n90ap-11D257 (7.1.2): a slide over the language list chose 繁體中文, the walk tapped English under its "Setting
+    /// language" alert in vain, and read only the status bar on the country page that followed ("選擇您的國家或地區")
+    /// for the rest of its 80 pages. The page after English is the country page in English (its heading, or United
+    /// States where the country was guessed); anything else that reads goes back.
+    @Test func aCountryPageInAnotherLanguageGoesBackToTheLanguages() {
+        let afterEnglish = ["English", "Light Touch 5:06 AM"]
+        let chinese: [String: (x: Double, y: Double)] = ["•••• Light Touch 5:06 AM": (0.29, 0.02), "<": (0.05, 0.09)]
+        #expect(SetupPlan.plan(chinese, pages: afterEnglish) == [.tap(SetupPlan.back.x, SetupPlan.back.y, "(Back)")])
+        // a Back that didn't land is tapped again; back on the languages, English again
+        #expect(taps(SetupPlan.plan(chinese, pages: afterEnglish + ["(Back)"])) == ["(Back)"])
+        #expect(taps(SetupPlan.plan(Self.language7, pages: afterEnglish + ["(Back)"])).first == "English")
+        // the country page in English, its list or its guess, and the language page still up: no Back
+        #expect(SetupPlan.plan(Self.country7, pages: afterEnglish) == [.scroll(0.85, 0.25, fast: true)])
+        let guessed: [String: (x: Double, y: Double)] = [
+            "•••• Light Touch 5:06 AM": (0.29, 0.02), "United States": (0.24, 0.39), "Afghanistan": (0.2, 0.72)
+        ]
+        #expect(taps(SetupPlan.plan(guessed, pages: afterEnglish)) == ["United States"])
+        #expect(taps(SetupPlan.plan(Self.language7, pages: afterEnglish)).first == "English")
+        // a read that failed (nothing at all) is not a page to leave
+        #expect(SetupPlan.plan([:], pages: afterEnglish) == [.slideIfLockScreen])
+    }
+
     /// n90ap-11D257 (7.1.2): the passcode page as Vision read it on 15 pages in a row (a stray mark, a curly apostrophe).
     @Test func thePasscodePageIsReadPastAStrayMark() {
         let passcode: [String: (x: Double, y: Double)] = [
@@ -158,15 +180,17 @@ struct SetupWalkTests {
         #expect(taps(SetupPlan.plan(country, pages: [])).first == "English")
     }
 
+    /// n90ap-11D257 (7.1.2): the language page as Vision reads it.
+    static let language7: [String: (x: Double, y: Double)] = [
+        "•••• Light Touch = 9:11 PM": (0.29, 0.02), "English": (0.14, 0.27), ">": (0.94, 0.27),
+        "Français": (0.16, 0.4), "Deutsch": (0.16, 0.52)
+    ]
+
     /// The pages four walks stopped on with "Setup still up after 80 pages" (10-18), as Vision reads them: each has a
     /// step, so a walk that took none there had read nothing (TextReader). "Light Touch = 9:11 PM" is the status bar
     /// (carrier and clock) the language page's arrow tap is logged by.
     @Test func thePagesWalksStoppedOnEachHaveAStep() {
-        let language: [String: (x: Double, y: Double)] = [
-            "•••• Light Touch = 9:11 PM": (0.29, 0.02), "English": (0.14, 0.27), ">": (0.94, 0.27),
-            "Français": (0.16, 0.4), "Deutsch": (0.16, 0.52)
-        ]
-        #expect(taps(SetupPlan.plan(language, pages: [])) == ["English", "Light Touch = 9:11 PM"])
+        #expect(taps(SetupPlan.plan(Self.language7, pages: [])) == ["English", "Light Touch = 9:11 PM"])
         let k: [String: (x: Double, y: Double)] = [
             "•••• Light Touch F 9:12 PM": (0.29, 0.02), "stan": (0.29, 0.07), "< Back": (0.12, 0.09),
             "Kenya": (0.13, 0.19), ">": (0.94, 0.19), "Kiribati": (0.14, 0.32), "Kuwait": (0.14, 0.44),

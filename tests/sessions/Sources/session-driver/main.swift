@@ -468,8 +468,8 @@ extension String {
         return screenshot(label)
     }
 
-    /// Slide to unlock, again while the guest agent (where the boot has one) says it is still locked: a slide can
-    /// miss (4.2.1's iPod, rejudge 09-29; 4.2.1's iPad first boot under host load, smoke #66), and the lock screen
+    /// Slide to unlock, again while the guest agent (where the boot has one) says it is still locked 20 s on: a slide
+    /// can miss (4.2.1's iPod, rejudge 09-29; 4.2.1's iPad first boot under host load, smoke #66), and the lock screen
     /// sleeps a few seconds after a miss, so each retry wakes the panel first (`unlockN-M.png`). A lock screen left
     /// alone turns its panel off, and the digitizer with it (about 10 s after a respring brings it up): Home first
     /// while the emulator says the panel is off, or when the guest's digitizer driver didn't read the last slide (it
@@ -489,6 +489,13 @@ extension String {
             attempts += 1
             try? await Task.sleep(for: .seconds(5))
             locked = try? await agent?.isLocked()
+            // A guest slowed by host load can still say locked 5 s after a slide that landed, and a slide then lands on
+            // what the unlock brings up (n90 11D257: Setup's language list, whose row at y 0.9, 繁體中文, the slide
+            // chose): the guest has 15 s more to say so before the next slide.
+            for _ in 0..<15 where locked == true {
+                try? await Task.sleep(for: .seconds(1))
+                locked = try? await agent?.isLocked()
+            }
             guard locked == true else { break }
         }
         emit(

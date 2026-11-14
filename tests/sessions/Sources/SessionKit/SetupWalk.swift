@@ -75,6 +75,8 @@ public enum SetupPlan {
     public static let country = "United States"
     public static let alertYes = ["OK", "Skip", "Agree", "Continue", "Don't Use", "Don't Add"]
     public static let nextArrow = (x: 587.0 / 640, y: 84.0 / 960)
+    /// The navigation bar's Back (top left), in any language.
+    public static let back = (x: 0.08, y: 84.0 / 960)
     /// Rows the language page shows together only when it lists every language: 5.x and 6.x Setup does that when it
     /// guessed no country (no SIM country, no 802.11d country from a Wi-Fi scan), and then has no Welcome animation
     /// above the list; a guessed country's page offers at most four of its languages and More.
@@ -122,9 +124,18 @@ public enum SetupPlan {
         }
         var steps: [Step] = []
         let pick = picks.first { found[$0] != nil }
+        let heading = found.keys.contains { $0.localizedCaseInsensitiveContains("countr") }
+        // The page after the language page's English (and its arrow) is the country page in English: its heading or
+        // United States. A read (the status bar at least) with neither, and English gone, is the country page in a
+        // language chosen before English was (n90 11D257: 繁體中文, by a slide, under whose "Setting language" alert
+        // English was tapped in vain), which the walk can't read: back to the languages, again until they are up.
+        let language = pages.filter { $0 != "(Back)" }.suffix(2).first == "English"
+        if language, !found.isEmpty, found["English"] == nil, !heading, pick != country {
+            return [.tap(back.x, back.y, "(Back)")]
+        }
         // The country list without United States on screen (its title or section heading, or a list the walk has
         // scrolled): scroll toward it by the names on screen. Next stays disabled until a country is chosen.
-        let list = pages.last == "(scroll)" || found.keys.contains { $0.localizedCaseInsensitiveContains("countr") }
+        let list = pages.last == "(scroll)" || heading
         if pick == nil, list, let move = scroll(found) {
             return [move]
         }
