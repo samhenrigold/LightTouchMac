@@ -168,7 +168,7 @@ import Testing
         // Spawned and reaped here rather than through Process, whose waitUntilExit once missed the exit under load and hung the plan.
         var sh: pid_t = 0
         let argv: [UnsafeMutablePointer<CChar>?] =
-            ["/bin/sh", "-c", "sleep 60 & wait"].map { (s: String) in strdup(s) } + [nil]
+            ["/bin/sh", "-c", "sleep 600 & wait"].map { (s: String) in strdup(s) } + [nil]
         defer { for arg in argv { free(arg) } }
         try #require(posix_spawn(&sh, "/bin/sh", nil, nil, argv, environ) == 0)
         var reaped = false
@@ -186,8 +186,9 @@ import Testing
         #expect(kids.count == 1)
         let t0 = Date()
         await Preparer.terminateDescendants(of: sh, grace: 1)
-        // Its `wait` returns once sleep is gone; well short of sleep's 60 s, with room for a loaded host.
-        while !reaped, Date().timeIntervalSince(t0) < 10 {
+        // Its `wait` returns once sleep is gone: 60 s is well short of sleep's 600, and at load 100 or more a shell
+        // has taken over 10 s to be scheduled and exit.
+        while !reaped, Date().timeIntervalSince(t0) < 60 {
             reaped = waitpid(sh, nil, WNOHANG) == sh
             if !reaped { usleep(20_000) }
         }
