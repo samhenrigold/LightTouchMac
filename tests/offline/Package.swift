@@ -85,6 +85,20 @@ let package = Package(
             ],
             swiftSettings: settings
         ),
+        // The helper's web proxy (WebProxy.swift and what it reaches: GuestTLS.c as CGuestTLS for its bridging header),
+        // compiled as the helper target is, nonisolated in Swift 6.
+        .target(name: "CGuestTLS"),
+        .target(
+            name: "HelperProxy",
+            dependencies: [
+                "CGuestTLS",
+                .product(name: "DeviceRuntime", package: "DeviceRuntime"),
+                .product(name: "HostRuntime", package: "HostRuntime")
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6), .unsafeFlags(["-Xfrontend", "-import-module", "-Xfrontend", "CGuestTLS"])
+            ]
+        ),
         // The services helper's engine (LightTouchServices/Engine) over a libimobiledevice of the tests' own
         // (tests/fixtures/imobiledevice-fake.swift), with the vendored libimobiledevice's headers.
         .target(
@@ -103,7 +117,8 @@ let package = Package(
         .testTarget(
             name: "OfflineTests",
             dependencies: [
-                "AppViews", "Display", "Engine", "Helper", "Menus", "Model", "Sidebar", "OfflineIsolation",
+                "AppViews", "Display", "Engine", "Helper", "HelperProxy", "Menus", "Model", "Sidebar",
+                "OfflineIsolation",
                 .product(name: "DeviceRuntime", package: "DeviceRuntime")
             ],
             swiftSettings: settings + [.unsafeFlags(imobiledevice)]

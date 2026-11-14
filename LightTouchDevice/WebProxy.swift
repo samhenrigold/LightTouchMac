@@ -5,7 +5,8 @@
 //
 // Routing is CONFIG (web-proxy.conf), read per connection: `direct`, `off`, or
 // `archive` and a yyyyMMdd date. Upstream is URLSession (HTTP/2, the Mac's
-// trust store, a 128 MiB per-device URLCache beside CONFIG) whose only way out
+// trust store, no cache: the guest keeps its own, and its conditional requests
+// and the origin's 304s pass as they are) whose only way out
 // is this proxy's egress, a CONNECT listener on loopback that connects where
 // HostRuntime's NetworkPolicy allows: never this Mac itself, the local networks
 // only with Attach to Local Network on. A name is resolved once there and
@@ -18,9 +19,10 @@
 //          (WebProxyAdapters): Weather, Wi-Fi location, 410 for retired hosts.
 // archive  GET/HEAD replayed from the Wayback Machine's closest capture,
 //          redirects resolved here, text links kept on http, no guest cookies or
-//          credentials sent, one fetch a second, a Retry-After cooldown, a day's cache.
+//          credentials sent, one fetch a second, a Retry-After cooldown, a day's cache
+//          (a 128 MiB per-device URLCache beside CONFIG).
 // off      Pass-through while the guest switches its proxy off: CONNECT is a raw
-//          tunnel (the origin's own certificate), HTTP forwarded uncached.
+//          tunnel (the origin's own certificate), HTTP forwarded.
 // The location answer (origin-form /clls/wloc) is served in every mode.
 
 import DeviceRuntime
@@ -32,6 +34,8 @@ import Security
 final class WebProxy: @unchecked Sendable {
     let config: URL
     let session: URLSession
+    /// The archive's replies, a day each; nothing else is cached here.
+    private let archiveCache: URLCache
     let archiveOrigin: String
     /// Extra upstream roots; the Mac's trust store otherwise.
     let anchors: [SecCertificate]
@@ -95,12 +99,15 @@ final class WebProxy: @unchecked Sendable {
         self.config = config
         self.archiveOrigin = archiveOrigin
         self.anchors = anchors
-        let configuration = URLSessionConfiguration.default
-        configuration.urlCache = URLCache(
+        archiveCache = URLCache(
             memoryCapacity: 8 << 20,
             diskCapacity: 128 << 20,
             directory: URL(fileURLWithPath: config.path + ".cache")
         )
+        let configuration = URLSessionConfiguration.default
+        // With a cache URLSession answers a guest's If-Modified-Since from it: the origin's 304 became a 200 and the
+        // whole body (mobileassetd's catalog refreshes, each time).
+        configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCredentialStorage = nil
@@ -120,7 +127,7 @@ final class WebProxy: @unchecked Sendable {
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 1
         session = URLSession(configuration: configuration, delegate: nil, delegateQueue: queue)
-        // The C helper's archive cache and gate files (64 slots of up to 2 MiB) are the URLCache's job now.
+        // The C helper's archive cache and gate files (64 slots of up to 2 MiB) are archiveCache's job now.
         let directory = config.deletingLastPathComponent()
         for name in (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         where name.hasPrefix(config.lastPathComponent + ".archive-") {
@@ -384,13 +391,7 @@ final class WebProxy: @unchecked Sendable {
             request.httpShouldHandleCookies = false
             for (name, value) in forwarded { request.addValue(value, forHTTPHeaderField: name) }
             if length != nil { request.httpBody = body }
-            let reload =
-                mode == .off
-                || forwarded.contains {
-                    ["pragma", "cache-control"].contains($0.0.lowercased()) && $0.1.lowercased().contains("no-cache")
-                }
-            if reload { request.cachePolicy = .reloadIgnoringLocalCacheData }
-            try stream(request, store: mode != .off, to: guest)
+            try stream(request, to: guest)
             return
         }
     }
@@ -463,9 +464,9 @@ final class WebProxy: @unchecked Sendable {
 
     /// The origin's response, streamed as it arrives; its status and headers as they were, less the hop-by-hop
     /// ones and what URLSession consumed (Content-Encoding it decoded, with that length; Set-Cookie re-split).
-    private func stream(_ request: URLRequest, store: Bool, to guest: Guest) throws {
+    func stream(_ request: URLRequest, to guest: Guest) throws {
         guard egressReady else { throw Reply(503, "Proxy egress unavailable") }
-        let upstream = Upstream(anchors: anchors, store: store)
+        let upstream = Upstream(anchors: anchors)
         let task = session.dataTask(with: request)
         upstream.task = task
         task.delegate = upstream
@@ -523,7 +524,7 @@ final class WebProxy: @unchecked Sendable {
     /// A whole response, at most `limit` bytes (nil past it or on an error).
     private func fetch(_ request: URLRequest, limit: Int) -> (HTTPURLResponse, Data)? {
         guard egressReady else { return nil }
-        let upstream = Upstream(anchors: anchors, store: false)
+        let upstream = Upstream(anchors: anchors)
         let task = session.dataTask(with: request)
         upstream.task = task
         task.delegate = upstream
@@ -564,7 +565,7 @@ final class WebProxy: @unchecked Sendable {
             throw Reply(400, "Bad archive address")
         }
         let key = URLRequest(url: archiveURL)
-        if !head, let cached = session.configuration.urlCache?.cachedResponse(for: key),
+        if !head, let cached = archiveCache.cachedResponse(for: key),
             let stored = cached.userInfo?["stored"] as? Date, Date().timeIntervalSince(stored) < 86400
         {
             return cached.data
@@ -616,7 +617,7 @@ final class WebProxy: @unchecked Sendable {
             if !head { lines.append("Content-Length: \(body.count)") }
             let reply = Self.head(status, "Archive response", lines) + (head ? Data() : body)
             if !head, status == 200 {
-                session.configuration.urlCache?.storeCachedResponse(
+                archiveCache.storeCachedResponse(
                     CachedURLResponse(
                         response: response,
                         data: reply,
@@ -799,15 +800,12 @@ final class Upstream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         case done(Error?)
     }
     weak var task: URLSessionDataTask?
-    private let anchors: [SecCertificate], store: Bool
+    private let anchors: [SecCertificate]
     private let condition = NSCondition()
     private var events: [Event] = [], buffered = 0, suspended = false
     private static let limit = 8 << 20
 
-    init(anchors: [SecCertificate], store: Bool) {
-        self.anchors = anchors
-        self.store = store
-    }
+    init(anchors: [SecCertificate]) { self.anchors = anchors }
 
     func next() -> Event {
         condition.lock()
@@ -862,12 +860,6 @@ final class Upstream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) { completionHandler(nil) }
-    func urlSession(
-        _ session: URLSession,
-        dataTask: URLSessionDataTask,
-        willCacheResponse proposedResponse: CachedURLResponse,
-        completionHandler: @escaping (CachedURLResponse?) -> Void
-    ) { completionHandler(store ? proposedResponse : nil) }
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
