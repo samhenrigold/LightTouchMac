@@ -534,8 +534,11 @@ extension String {
     }
 }
 
-/// Waits for the panel to light, `seconds` counted from the end of boot admission, as the app's boot budget is.
+/// Waits for the panel to light, `seconds` counted from the end of boot admission, as the app's boot budget is. A
+/// panel the guest turned off on the way (auto-lock, on a boot slower than its idle timer) is woken with Home
+/// (PanelWake), as a person would, and emits `wake`.
 @MainActor func waitLit(_ d: Device, _ threshold: Double, _ seconds: Double) async {
+    var wake = PanelWake()
     while true {
         if d.process.isDead { fail("\(d.name) died before it lit: \(d.deaths)") }
         if let error = d.bootError { fail("\(d.name) did not boot: \(error)") }
@@ -546,6 +549,10 @@ extension String {
         if litSeconds(admitted: d.admitted) > seconds {
             d.screenshot("never-lit")
             fail("\(d.name) never lit")
+        }
+        if wake.pressesHome(sleeping: d.displaySleeping) {
+            emit("wake", ["device": d.name, "seconds": litSeconds(admitted: d.admitted)])
+            await d.home()
         }
         try? await Task.sleep(for: .milliseconds(250))
     }
