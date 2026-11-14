@@ -1764,7 +1764,7 @@ nonisolated enum CydiaSources {
         try await Task.sleep(for: .seconds(1))
         // Through env, a missing tool isn't a run() failure: it reads as Substrate never loading.
         if syslog?.isRunning != true {
-            event["error"] = "no idevicesyslog on PATH (the vendor directory's work/*/prefix/bin)"
+            event["error"] = "no idevicesyslog in the vendor directory's work/*/prefix/bin: run scripts/vendor"
         }
         try await agent.put(
             probe[0],

@@ -46,6 +46,14 @@ func upToDate(_ tool: String) {
     builtDrivers.insert(tool)
 }
 
+/// The vendor directory's libimobiledevice tools (idevicesyslog, idevicecrashreport), which the driver runs by name.
+let vendorTools: URL? = vendorDirectory().flatMap { vendor in
+    let work = vendor.appendingPathComponent("work")
+    return ((try? FileManager.default.contentsOfDirectory(atPath: work.path)) ?? []).sorted().lazy
+        .map { work.appendingPathComponent("\($0)/prefix/bin") }
+        .first { FileManager.default.isExecutableFile(atPath: $0.appendingPathComponent("idevicesyslog").path) }
+}
+
 final class DriverProcess {
     let process = Process()
     let out: URL
@@ -56,7 +64,9 @@ final class DriverProcess {
         upToDate(tool)
         process.executableURL = binDirectory.appendingPathComponent(tool)
         process.arguments = arguments
-        process.environment = ProcessInfo.processInfo.environment.merging(environment) { $1 }
+        var merged = ProcessInfo.processInfo.environment.merging(environment) { $1 }
+        if let tools = vendorTools { merged["PATH"] = tools.path + ":" + (merged["PATH"] ?? "/usr/bin:/bin") }
+        process.environment = merged
         let h = FileHandle(forWritingAtPath: out.path)
         process.standardOutput = h
         process.standardError = h

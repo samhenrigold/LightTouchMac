@@ -124,7 +124,7 @@ struct SingleCheck: ParsableCommand {
         help: """
             The base was prepared with --jailbreak: Files reads the whole file system through afc2, Cydia launches \
             with the web proxy on (its front page through it, its sources refreshed, and on a phone a package \
-            installed through Cydia's pages), Substrate loads into SpringBoard (3.x to 6.x; idevicesyslog on PATH). \
+            installed through Cydia's pages), Substrate loads into SpringBoard (3.x to 6.x; the vendor directory's idevicesyslog). \
             Cydia's repositories are local ones the proxy serves (no internet) unless --network.
             """
     )
