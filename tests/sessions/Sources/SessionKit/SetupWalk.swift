@@ -12,8 +12,11 @@ public enum SetupPages {
         if b1 > 0.85, b2 > 0.85, gap > 0.9, left < 0.1, frame > 0.9, mid < 0.1 { return "set up" }
         if b1 > 0.85, gap > 0.7, left > 0.8, frame > 0.9, mid > 0.8 { return "list" }
         // a guessed country's language page (its few languages under the Welcome words) and country page (it and
-        // Show More over the moving world map): a short list on the right, the rest dark or animated
-        if b1 < 0.85, b2 > 0.7, gap > 0.85, left < 0.2 { return "list" }
+        // Show More over the moving world map): a short list on the right, the rest dark or animated. A boot lays the
+        // language page's English, Español and More out at one of two heights 20 px apart, its first row half in the
+        // first button column or filling it, so that column says nothing here; Set Up iPad (white there too) is
+        // taken above by its iPad art.
+        if b2 > 0.7, gap > 0.85, left < 0.2 { return "list" }
         if b1 > 0.85, b2 < 0.1, gap > 0.85 { return "location" }
         if b1 < 0.1, b2 < 0.1, left > 0.9, frame > 0.15, frame < 0.45 { return "diagnostics" }
         if b1 < 0.1, b2 < 0.1, left < 0.2, frame < 0.1, mid < 0.1, list > 0.9 { return "diagnostics" }  // 5.0 beta 1

@@ -57,10 +57,12 @@ struct SetupWalkTests {
     }
 
     /// Fingerprints measured off real Setup screenshots (9A5220p, 9A334, 9A405, 9B176, 9B206; the first three are
-    /// 9B206's language page with a guessed country, under the Welcome words, and its country page over the map).
+    /// 9B206's language page with a guessed country, under the Welcome words, and its country page over the map; the
+    /// next two 9A405's and 9B206's language page laid out 20 px higher, its English row filling the first column).
     static let measured: [(String?, [Double])] = [
         ("list", [0.55, 0.97, 1.0, 0.04, 0.0, 0.06, 0.0]), ("list", [0.55, 0.97, 1.0, 0.01, 0.04, 0.03, 0.01]),
         ("list", [0.0, 0.87, 1.0, 0.0, 0.43, 0.0, 0.0]),
+        ("list", [0.97, 0.97, 1.0, 0.0, 0.09, 0.11, 0.15]), ("list", [0.97, 0.97, 1.0, 0.0, 0.16, 0.04, 0.03]),
         ("list", [0.97, 0.92, 0.83, 0.92, 1.0, 0.95, 0.8]), ("list", [0.98, 0.92, 0.83, 0.92, 1.0, 0.96, 0.79]),
         ("location", [0.97, 0.0, 0.95, 0.05, 0.0, 0.34, 0.0]), ("wi-fi", [0.0, 0.0, 0.0, 0.28, 0.0, 0.0, 0.75]),
         ("set up", [0.93, 0.92, 0.99, 0.0, 1.0, 0.0, 0.0]), ("set up", [0.94, 0.92, 0.99, 0.0, 1.0, 0.0, 0.0]),
