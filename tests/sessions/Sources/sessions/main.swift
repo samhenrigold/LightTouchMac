@@ -19,7 +19,13 @@ struct Inputs: ParsableArguments {
     )
     var dylib: URL?
     @Option(transform: path) var usbmuxd: URL?
-    @Option(help: "The guest's HTTP client (default: the pinned qemu-ios's contrib/it-proxy/httpget).", transform: path)
+    @Option(
+        help: """
+            The guest's HTTP client (default: the pinned qemu-ios's contrib/it-proxy/httpget, or for iOS 10 its \
+            httpget-armv7, else the vendor directory's).
+            """,
+        transform: path
+    )
     var httpget: URL?
     @Option(
         help: "Where the run's logs, events, frames and overlays go (default: a temporary directory).",

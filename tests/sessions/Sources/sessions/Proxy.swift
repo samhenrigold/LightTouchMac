@@ -3,10 +3,15 @@ import HostRuntime
 import SessionKit
 
 /// contrib/it-proxy/httpget of the pinned qemu-ios checkout (armv6; the guest's own CFNetwork client), or --httpget.
-/// iOS 10 runs no armv6 code: its build for armv7 (httpget-armv7) there.
+/// iOS 10 runs no armv6 code: its build for armv7 (httpget-armv7) there, or the one scripts/vendor stages in the vendor
+/// directory's ipad-guest-tools when the checkout has none built.
 func httpget(_ args: Inputs, major: Int = 0) -> URL {
     let name = major >= 10 ? "httpget-armv7" : "httpget"
-    let url = args.httpget ?? checkout("qemu-ios").appendingPathComponent("contrib/it-proxy/" + name)
+    let built = checkout("qemu-ios").appendingPathComponent("contrib/it-proxy/" + name)
+    let staged = vendorDirectory()?.appendingPathComponent("work/guest/ipad-guest-tools/" + name)
+    let url =
+        args.httpget
+        ?? [built, staged].compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0.path) } ?? built
     guard FileManager.default.fileExists(atPath: url.path) else {
         die("no httpget at \(url.path) (contrib/it-proxy/build.sh, or --httpget)")
     }
