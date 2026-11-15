@@ -774,7 +774,10 @@ nonisolated enum WiFiProbe {
             (plain.scale, plain.match, plain.reference, plain.support, plain.loud)
         await d.wakeForShot("lock-sound")
         await d.slideToUnlock(1, agent: agent)
-        if let agent, s.lockdownTZ != nil {
+        // A board or version without VoiceOver (the iPod touch 2G, anything before 3.0) would only wait out every try.
+        let noVoiceOver = AccessibilityFeature.unavailableReason(board: d.profile, version: lock?.productVersion ?? "")
+        if let noVoiceOver { event["voiceOverOn"] = noVoiceOver }
+        if let agent, s.lockdownTZ != nil, noVoiceOver == nil {
             let guest = GuestServices(agent: agent)
             func on() async -> String {
                 guard
