@@ -786,8 +786,19 @@ nonisolated enum WiFiProbe {
                 else { return "unreadable" }
                 return on.map { "\($0)" }.sorted().joined(separator: ",")
             }
-            try? await d.services.setAccessibility(.voiceOver, on: true, tool: s.lockdownTZ)
-            try? await Task.sleep(for: .seconds(6))
+            func set(_ on: Bool) async -> String {
+                do {
+                    try await d.services.setAccessibility(.voiceOver, on: on, tool: s.lockdownTZ)
+                    return "ok"
+                } catch { return "\(error)" }
+            }
+            // lockdown-ax returns when notification_proxy answers: at once when it is running, at the 15 s deadline when
+            // launchd starts it cold (10.3.4, where the lockdown key alone switches VoiceOver). The preferences show the
+            // switch seconds later (5 s after a 0.5 s return), so a read 6 s after the return missed it: read until it
+            // shows, and switch again if it never does.
+            event["voiceOverSet"] = await SettingSwitch.apply(
+                set: { await set(true) }, took: { await on().contains("voiceOver") }
+            ).attempts
             event["voiceOverOn"] = await on()
             if (event["voiceOverOn"] as? String)?.contains("voiceOver") == true {
                 let screenChange = await systemFile(
@@ -807,9 +818,11 @@ nonisolated enum WiFiProbe {
                     (vo.scale, vo.match, vo.reference, vo.support, vo.loud)
             }
             // Off while locked: VoiceOver's slide to unlock is a double tap.
-            try? await d.services.setAccessibility(.voiceOver, on: false, tool: s.lockdownTZ)
-            try? await Task.sleep(for: .seconds(3))
+            event["voiceOverOffSet"] = await SettingSwitch.apply(
+                set: { await set(false) }, took: { await !on().contains("voiceOver") }
+            ).attempts
             event["voiceOverAfter"] = await on()
+            try? await Task.sleep(for: .seconds(3))  // VoiceOver's own exit, before the slide
             if event["voiceOverScale"] != nil {
                 await d.wakeForShot("lock-sound-voiceover")
                 await d.slideToUnlock(1, agent: agent)

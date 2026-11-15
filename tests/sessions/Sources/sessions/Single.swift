@@ -637,7 +637,10 @@ func judgeSystemSound(_ r: Report, _ d: String, events: Events, board: String) {
                 + "'\(e.string("voiceOverAfter") ?? "?")')"
         )
     } else {
-        r.note("\(d): no VoiceOver to run the lock sound under (\(e.string("voiceOverOn") ?? "no agent"))")
+        r.note(
+            "\(d): no VoiceOver to run the lock sound under (\(e.string("voiceOverOn") ?? "no agent"); switched: "
+                + "\(e["voiceOverSet"] as? [String] ?? []))"
+        )
     }
 }
 
