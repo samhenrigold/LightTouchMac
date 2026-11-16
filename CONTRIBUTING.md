@@ -41,6 +41,8 @@ minutes). After that, build the `LightTouchMac` scheme in Xcode. `scripts/vendor
 turns on the pre-commit formatter (`git config core.hooksPath scripts/hooks`, and `git config blame.ignoreRevsFile
 ':(optional).git-blame-ignore-revs'` so blame skips reformat commits).
 
+ANGLE needs Xcode's Metal Toolchain: `xcodebuild -downloadComponent MetalToolchain`.
+
 ## Building
 
 Open `LightTouchMac.xcodeproj` in Xcode and build the `LightTouchMac` scheme: the app, the device helper
