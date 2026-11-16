@@ -341,8 +341,9 @@ main() {
 
         step "Amore upload (draft)"
         # No --format json: amore 0.1 with it checks for a notarization profile before honoring --skip-notarization
-        # and refuses ("notarization_not_configured"), as the 10-22 release did.
-        amore release "$dmg" --draft --skip-notarization --non-interactive --release-notes "$(cat "$NOTES")" \
+        # and refuses ("notarization_not_configured"), as the 10-22 release did. --release-notes=: notes that start
+        # with "-" (a list) are otherwise read as an option ("Missing value for '--release-notes'", the 11-16 release).
+        amore release "$dmg" --draft --skip-notarization --non-interactive --release-notes="$(cat "$NOTES")" \
             > "$WORK/amore.json" 2>&1 || { tail -20 "$WORK/amore.json"; fail Amore "amore release --draft"; }
         # The id: from the upload's answer if it carries one, else from the CLI's cache of the app's releases (which
         # the list refreshes).
