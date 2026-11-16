@@ -49,6 +49,6 @@ check "remove leaves one with an untracked file" 'stays "$c" && [[ -f "$c/new-fi
 d="$(create ended)"
 json reason clear cwd "$d" | "$HOOK" session-end
 check "session-end leaves it for a reason not on the list" 'stays "$d"'
-json reason prompt_input_exit cwd "$d" | "$HOOK" session-end
+json reason prompt_input_exit cwd "$d" | (cd "$d" && .claude/hooks/worktree session-end)
 check "session-end takes it on exit" 'gone "$d"'
 exit $failed

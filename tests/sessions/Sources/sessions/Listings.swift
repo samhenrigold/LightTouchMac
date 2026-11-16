@@ -12,7 +12,7 @@ struct ListingsCheck: ParsableCommand {
             Each row is prepared with firmwarekit create --stop-after volumes (a fixed seed, en-US and no other \
             keyboard, so two runs of one tree write the same files), in parallel, and every volume image is listed \
             (VolumeListing: paths, owners, modes, flags, sizes, content hashes, link targets; no dates) and compared \
-            with tests/sessions/listings/ROW/IMAGE.txt.gz. A row whose IPSW isn't on this Mac is skipped, saying so. \
+            with tests/sessions/listings/ROW/IMAGE.txt.gz. A row whose IPSW is missing is reported; an incomplete gate exits 2. \
             --record writes what this tree makes, printing every change: a commit that re-records says why each \
             changed path changed. It can't see what only a boot shows; sessions affected says when to boot.
             """
@@ -182,6 +182,7 @@ func listings(_ args: ListingsCheck) -> Never {
         "\(rows.count - failed - skipped)/\(rows.count) rows as recorded"
         + (skipped > 0 ? ", \(skipped) skipped" : "") + " in \(Int(Date().timeIntervalSince(started))) s"
     let first = lines.first { $0.hasPrefix("FAIL") }.map { String($0.dropFirst(5)) + " " } ?? ""
-    print("\(failed == 0 ? "PASS" : "FAIL") \(first)(\(summary)) \(work.path)")
-    exit(failed == 0 ? 0 : 1)
+    let status = failed > 0 ? 1 : (skipped > 0 ? 2 : 0)
+    print("\(status == 0 ? "PASS" : "FAIL") \(first)(\(summary)) \(work.path)")
+    exit(Int32(status))
 }

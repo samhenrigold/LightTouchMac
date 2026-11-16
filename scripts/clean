@@ -2,7 +2,9 @@
 # Reclaim disk from old vendor builds, landed agent worktrees and stale scratch. Prints every decision; deletes only
 # with --yes.
 #
-#     scripts/clean [--yes] [--days N] [--snapshots]   everything below (N: scratch age, default 7)
+#     scripts/clean [--yes] --task NAME              one finished task, even when recent (no size scan)
+#     scripts/clean [--yes] --quick [--days N]        stale scratch and session tools only (no size scan)
+#     scripts/clean [--yes] [--no-size] [--days N] [--snapshots]   everything below (N: scratch age, default 7)
 #     scripts/clean [--yes] --worktree PATH            one managed worktree and what it owns, if it is safe to remove
 #                                                      (its session ended: no idle wait; the agent hooks)
 #
@@ -17,26 +19,34 @@
 #   removed when clean, and its branch kept.
 # Scratch (LTM_SCRATCH_ROOT, default ~/Developer/ltm-scratch.noindex): a task directory with nothing modified in N
 #   days, or whose `.worktree` file names a worktree that is gone.
+# Shared session tools (LTM_SESSIONS_TOOLS, default <scratch root>/.sessions-tools): unused for N days,
+#   unless open in a process. Only keyed tool directories and their interrupted staging copies.
 # DerivedData of this project whose workspace is gone.
 # --snapshots also asks Time Machine to thin local snapshots (tmutil thinlocalsnapshots).
 # Anything an open process holds (lsof) is kept.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-YES=0 DAYS=7 SNAPSHOTS=0 ONLY=""
+YES=0 DAYS=7 SNAPSHOTS=0 QUICK=0 NO_SIZE=0 ONLY="" TASK=""
+usage() { echo "usage: scripts/clean [--yes] [--no-size] [--days N] [--snapshots] [--quick | --task NAME | --worktree PATH]" >&2; exit 2; }
 while (($#)); do
     case "$1" in
         --yes) YES=1 ;;
-        --days) DAYS="$2"; shift ;;
+        --days) [[ ${2:-} =~ ^[1-9][0-9]*$ ]] || usage; DAYS="$2"; shift ;;
+        --quick) QUICK=1; NO_SIZE=1 ;;
+        --no-size) NO_SIZE=1 ;;
+        --task) [[ ${2:-} =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || usage; TASK="$2"; QUICK=1; NO_SIZE=1; shift ;;
         --snapshots) SNAPSHOTS=1 ;;
-        --worktree) ONLY="$(cd "$2" 2>/dev/null && pwd -P || echo "$2")"; shift ;;
-        *) echo "usage: scripts/clean [--yes] [--days N] [--snapshots] [--worktree PATH]" >&2; exit 2 ;;
+        --worktree) [[ -n ${2:-} ]] || usage; ONLY="$(cd "$2" 2>/dev/null && pwd -P || echo "$2")"; shift ;;
+        *) usage ;;
     esac
     shift
 done
+[[ -n "$ONLY" && $QUICK == 1 || $QUICK == 1 && $SNAPSHOTS == 1 ]] && usage
 VENDOR_ROOT="${LTM_VENDOR_ROOT:-$HOME/Developer/ltm-vendor.noindex}"
 SCRATCH_ROOT="${LTM_SCRATCH_ROOT:-$HOME/Developer/ltm-scratch.noindex}"
 WORKTREE_ROOT="${LTM_WORKTREE_ROOT:-$HOME/Developer/ltm-worktrees.noindex}"
+SESSION_TOOLS="${LTM_SESSIONS_TOOLS:-$SCRATCH_ROOT/.sessions-tools}"
 DERIVED="${LTM_DERIVED_DATA:-$HOME/Library/Developer/Xcode/DerivedData}"
 IDLE_HOURS="${LTM_CLEAN_IDLE_HOURS:-24}"
 main_of() { (cd "$1" && cd "$(git rev-parse --git-common-dir)/.." && pwd -P); }
@@ -50,16 +60,21 @@ QEMU_PIN="$(cd "$qemu_path" 2>/dev/null && pwd -P)"
 
 OPEN="$(mktemp "${TMPDIR:-/tmp}/ltm-clean.XXXXXX")"
 trap 'rm -f "$OPEN"' EXIT
-lsof -nP -Fn 2>/dev/null | sed -n 's/^n//p' | sort -u > "$OPEN"
+if ! lsof -nP -Fn 2>/dev/null | sed -n 's/^n//p' | sort -u > "$OPEN"; then
+    echo "error: could not inventory open files; nothing removed" >&2
+    exit 3
+fi
 is_open() { awk -v p="$1" 'index($0, p) == 1 && (length($0) == length(p) || substr($0, length(p) + 1, 1) == "/") { f = 1; exit } END { exit !f }' "$OPEN"; }
 
-total=0
+total=0 count=0 failed=0
 size() { du -sk "$1" 2>/dev/null | cut -f1; }
 # say keep|remove PATH WHY
 say() {
     if [[ $1 == remove ]]; then
-        local k; k="$(size "$2")"; total=$((total + ${k:-0}))
-        printf 'remove %8s  %s  (%s)\n' "$(( ${k:-0} / 1024 ))M" "$2" "$3"
+        count=$((count + 1))
+        local k="" label=""
+        if ((!NO_SIZE)); then k="$(size "$2")"; total=$((total + ${k:-0})); label="$(( ${k:-0} / 1024 ))M"; fi
+        printf 'remove %8s  %s  (%s)\n' "$label" "$2" "$3"
     else
         printf 'keep   %8s  %s  (%s)\n' "" "$2" "$3"
     fi
@@ -86,48 +101,69 @@ worktree_verdict() {
         || { echo "keep used in the last $IDLE_HOURS hours"; return; }
     echo "remove clean, landed and idle"
 }
-act() { ((YES)) && "$@"; }
+act() {
+    ((YES)) || return 0
+    "$@" || { failed=1; return 1; }
+}
+# Published preparation bases lock their directories (uchg and read-only). Ordinary scratch removes in one pass;
+# a locked base needs its own directories unlocked first, as DeviceStateStorage.removeTree does. Never follow links.
+remove_tree() {
+    rm -rf -- "$1" 2>/dev/null && return 0
+    find "$1" -type d -exec /bin/sh -c 'chflags nouchg "$@" && chmod u+rwx "$@"' _ {} + && rm -rf -- "$1"
+}
 
 live=()   # the checkouts of this repository that stay
 removed=()
-echo "== worktrees"
-for repo in "$LTM" "$QEMU"; do
-    [[ -n "$repo" ]] || continue
-    path="" branch="" locked=""
-    while IFS= read -r line; do
-        case "$line" in
-            "worktree "*) path="${line#worktree }"; branch="" locked="" ;;
-            "branch refs/heads/"*) branch="${line#branch refs/heads/}" ;;
-            locked*) locked=1 ;;
-            "")
-                if [[ "$path" == "$repo" || "$path/" == "$VENDOR_ROOT/"* ]]; then
-                    [[ "$repo" == "$LTM" ]] && live+=("$path")
-                elif [[ -z "$ONLY" || "$path" == "$ONLY" ]]; then
-                    verdict="$(worktree_verdict "$repo" "$path" "$locked")"
-                    say "${verdict%% *}" "$path" "${verdict#* }"
-                    if [[ "$verdict" == remove* ]]; then
-                        removed+=("$path")
-                        if [[ -d "$path" ]]; then
-                            act git -C "$repo" worktree remove "$path" && [[ -n "$branch" && "$verdict" != *abandoned* ]] \
-                                && act git -C "$repo" branch -q -D "$branch"
-                        else
-                            act git -C "$repo" worktree prune
+if ((!QUICK)); then
+    echo "== worktrees"
+    for repo in "$LTM" "$QEMU"; do
+        [[ -n "$repo" ]] || continue
+        path="" branch="" locked=""
+        while IFS= read -r line; do
+            case "$line" in
+                "worktree "*) path="${line#worktree }"; branch="" locked="" ;;
+                "branch refs/heads/"*) branch="${line#branch refs/heads/}" ;;
+                locked*) locked=1 ;;
+                "")
+                    if [[ "$path" == "$repo" || "$path/" == "$VENDOR_ROOT/"* ]]; then
+                        [[ "$repo" == "$LTM" ]] && live+=("$path")
+                    elif [[ -z "$ONLY" || "$path" == "$ONLY" ]]; then
+                        verdict="$(worktree_verdict "$repo" "$path" "$locked")"
+                        say "${verdict%% *}" "$path" "${verdict#* }"
+                        if [[ "$verdict" == remove* ]]; then
+                            if [[ -d "$path" ]]; then
+                                if ((!YES)) || git -C "$repo" worktree remove "$path"; then
+                                    removed+=("$path")
+                                    [[ -n "$branch" && "$verdict" != *abandoned* ]] && act git -C "$repo" branch -q -D "$branch"
+                                else
+                                    say keep "$path" "git worktree remove failed; owned scratch kept"
+                                    [[ "$repo" == "$LTM" ]] && live+=("$path")
+                                fi
+                            else
+                                removed+=("$path")
+                                act git -C "$repo" worktree prune
+                            fi
+                        elif [[ "$repo" == "$LTM" ]]; then
+                            live+=("$path")
                         fi
                     elif [[ "$repo" == "$LTM" ]]; then
                         live+=("$path")
                     fi
-                elif [[ "$repo" == "$LTM" ]]; then
-                    live+=("$path")
-                fi
-                ;;
-        esac
-    done < <(git -C "$repo" worktree list --porcelain)
-done
+                    ;;
+            esac
+        done < <(git -C "$repo" worktree list --porcelain)
+    done
+fi
 [[ -n "$ONLY" && ${#removed[@]} -eq 0 ]] && { echo "nothing removed: $ONLY is not a removable managed worktree"; exit 1; }
 gone() { local p; for p in "${removed[@]+"${removed[@]}"}"; do [[ "$1/" == "$p/"* ]] && return 0; done; [[ ! -e "$1" ]]; }
 
 echo "== scratch ($SCRATCH_ROOT)"
-for dir in "$SCRATCH_ROOT"/*/; do
+tasks=("$SCRATCH_ROOT"/*/)
+if [[ -n "$TASK" ]]; then
+    [[ ! -L "$SCRATCH_ROOT/$TASK" ]] || { echo "error: task is a symlink; nothing removed" >&2; exit 2; }
+    tasks=("$SCRATCH_ROOT/$TASK/")
+fi
+for dir in "${tasks[@]}"; do
     [[ -d "$dir" ]] || continue
     dir="${dir%/}" owner=""
     [[ -f "$dir/.worktree" ]] && owner="$(head -1 "$dir/.worktree")"
@@ -135,43 +171,62 @@ for dir in "$SCRATCH_ROOT"/*/; do
         [[ -n "$owner" && "$owner" == "$ONLY" ]] || continue
     fi
     if is_open "$dir"; then say keep "$dir" "open in a process"
-    elif [[ -n "$owner" ]] && gone "$owner"; then say remove "$dir" "its worktree $owner is gone"; act rm -rf "$dir"
-    elif [[ -z "$(find "$dir" -mtime "-$DAYS" -print -quit 2>/dev/null)" ]]; then say remove "$dir" "nothing modified in $DAYS days"; act rm -rf "$dir"
+    elif [[ -n "$TASK" ]]; then say remove "$dir" "explicit finished task"; act remove_tree "$dir"
+    elif [[ -n "$owner" ]] && gone "$owner"; then say remove "$dir" "its worktree $owner is gone"; act remove_tree "$dir"
+    elif [[ -z "$(find "$dir" -mtime "-$DAYS" -print -quit 2>/dev/null)" ]]; then say remove "$dir" "nothing modified in $DAYS days"; act remove_tree "$dir"
     else say keep "$dir" "modified in the last $DAYS days"
     fi
 done
 
-echo "== DerivedData"
-for dir in "$DERIVED"/*/; do
-    dir="${dir%/}"
-    workspace="$(plutil -extract WorkspacePath raw -o - "$dir/info.plist" 2>/dev/null)" || continue
-    case "$workspace" in *LightTouchMac* | *qemu-ios* | */tests/sessions*) ;; *) continue ;; esac
-    if [[ -n "$ONLY" ]]; then [[ "$workspace/" == "$ONLY/"* ]] || continue; fi
-    gone "$workspace" || continue
-    if is_open "$dir"; then say keep "$dir" "open in a process"; else say remove "$dir" "its workspace $workspace is gone"; act rm -rf "$dir"; fi
-done
-
-if [[ -z "$ONLY" ]]; then
-    echo "== vendor directories ($VENDOR_ROOT)"
-    keep=() why=()
-    for checkout in "${live[@]+"${live[@]}"}"; do
-        keep+=("$("$HERE/vendor-check" --key "$checkout" 2>/dev/null)"); why+=("the pins of $checkout")
-        ref="$(readlink "$checkout/build/vendor" 2>/dev/null)"
-        [[ -n "$ref" ]] && { keep+=("$(basename "$ref")"); why+=("named in $checkout"); }
-    done
-    newest="$(ls -t "$VENDOR_ROOT"/*/vendor.json 2>/dev/null | head -1)"
-    [[ -n "$newest" ]] && { keep+=("$(basename "$(dirname "$newest")")"); why+=("the newest"); }
-    pruned=0
-    for dir in "$VENDOR_ROOT"/*/; do
-        dir="${dir%/}" name="$(basename "${dir%/}")" reason=""
-        [[ "$name" =~ ^[0-9a-f]{12}$ ]] || continue
-        for i in "${!keep[@]}"; do [[ "${keep[i]}" == "$name" ]] && { reason="${why[i]}"; break; }; done
-        if [[ -n "$reason" ]]; then say keep "$dir" "$reason"
-        elif is_open "$dir"; then say keep "$dir" "open in a process"
-        else say remove "$dir" "no checkout's pins"; act rm -rf "$dir"; pruned=1
+if [[ -z "$ONLY" && -z "$TASK" ]]; then
+    echo "== shared session tools ($SESSION_TOOLS)"
+    for dir in "$SESSION_TOOLS"/*/; do
+        [[ -d "$dir" ]] || continue
+        dir="${dir%/}"
+        name="$(basename "$dir")"
+        [[ "$name" =~ ^[0-9a-f]{20}(\.partial-[0-9A-Fa-f]{8})?$ ]] || continue
+        if is_open "$dir"; then say keep "$dir" "open in a process"
+        elif [[ -n "$(find "$dir" -maxdepth 0 -mtime "-$DAYS" -print 2>/dev/null)" ]]; then
+            say keep "$dir" "used in the last $DAYS days"
+        else say remove "$dir" "unused for $DAYS days"; act remove_tree "$dir"
         fi
     done
-    ((pruned && YES)) && [[ -n "$QEMU" ]] && git -C "$QEMU" worktree prune
+fi
+
+if ((!QUICK)); then
+    echo "== DerivedData"
+    for dir in "$DERIVED"/*/; do
+        dir="${dir%/}"
+        workspace="$(plutil -extract WorkspacePath raw -o - "$dir/info.plist" 2>/dev/null)" || continue
+        case "$workspace" in *LightTouchMac* | *qemu-ios* | */tests/sessions*) ;; *) continue ;; esac
+        if [[ -n "$ONLY" ]]; then [[ "$workspace/" == "$ONLY/"* ]] || continue; fi
+        gone "$workspace" || continue
+        if is_open "$dir"; then say keep "$dir" "open in a process"; else say remove "$dir" "its workspace $workspace is gone"; act remove_tree "$dir"; fi
+    done
+
+    if [[ -z "$ONLY" ]]; then
+        echo "== vendor directories ($VENDOR_ROOT)"
+        keep=() why=()
+        for checkout in "${live[@]+"${live[@]}"}"; do
+            keep+=("$("$HERE/vendor-check" --key "$checkout" 2>/dev/null)"); why+=("the pins of $checkout")
+            ref="$(readlink "$checkout/build/vendor" 2>/dev/null)"
+            [[ -n "$ref" ]] && { keep+=("$(basename "$ref")"); why+=("named in $checkout"); }
+        done
+        newest="$(ls -t "$VENDOR_ROOT"/*/vendor.json 2>/dev/null | head -1)"
+        [[ -n "$newest" ]] && { keep+=("$(basename "$(dirname "$newest")")"); why+=("the newest"); }
+        pruned=0
+        for dir in "$VENDOR_ROOT"/*/; do
+            dir="${dir%/}" name="$(basename "${dir%/}")" reason=""
+            [[ "$name" =~ ^[0-9a-f]{12}$ ]] || continue
+            for i in "${!keep[@]}"; do [[ "${keep[i]}" == "$name" ]] && { reason="${why[i]}"; break; }; done
+            if [[ -n "$reason" ]]; then say keep "$dir" "$reason"
+            elif is_open "$dir"; then say keep "$dir" "open in a process"
+            else say remove "$dir" "no checkout's pins"; act remove_tree "$dir"; pruned=1
+            fi
+        done
+        ((pruned && YES)) && [[ -n "$QEMU" ]] && git -C "$QEMU" worktree prune
+    fi
+
 fi
 
 if ((SNAPSHOTS)); then
@@ -179,4 +234,10 @@ if ((SNAPSHOTS)); then
     tmutil listlocalsnapshots / 2>/dev/null | sed 's/^/    /'
     act tmutil thinlocalsnapshots / 999999999999 4
 fi
-printf '%s %dM\n' "$( ((YES)) && echo removed || echo "would remove (dry run; --yes to act)")" $((total / 1024))
+if ((NO_SIZE)); then
+    printf '%s %d directories (sizes skipped)\n' "$( ((YES)) && echo removed || echo 'would remove (dry run; --yes to act)')" "$count"
+else
+    printf '%s %dM\n' "$( ((YES)) && echo removed || echo 'would remove (dry run; --yes to act)')" $((total / 1024))
+fi
+
+((failed == 0)) || { echo "error: cleanup incomplete; see removal errors above" >&2; exit 3; }

@@ -28,7 +28,8 @@ struct Inputs: ParsableArguments {
     )
     var httpget: URL?
     @Option(
-        help: "Where the run's logs, events, frames and overlays go (default: a temporary directory).",
+        help:
+            "Where the run's files go (default: sessions-* under LTM_SCRATCH_ROOT or ~/Developer/ltm-scratch.noindex).",
         transform: path
     )
     var work: URL?

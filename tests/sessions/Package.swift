@@ -26,7 +26,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", exact: "1.8.2")
     ],
     targets: [
-        .target(name: "SessionKit"),
+        .target(name: "SessionKit", dependencies: [.product(name: "BuildSupport", package: "BuildTools")]),
         .executableTarget(
             name: "sessions",
             dependencies: [
@@ -63,6 +63,9 @@ let package = Package(
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        .testTarget(name: "SessionKitTests", dependencies: ["SessionKit"])
+        .testTarget(
+            name: "SessionKitTests",
+            dependencies: ["SessionKit", .product(name: "BuildSupport", package: "BuildTools")]
+        )
     ]
 )

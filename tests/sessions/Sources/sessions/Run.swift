@@ -145,8 +145,11 @@ nonisolated(unsafe) var disposableWork: URL?
 func workDirectory(_ args: Inputs, _ name: String) -> URL {
     let work =
         args.work
-        ?? FileManager.default.temporaryDirectory
-        .appendingPathComponent("ltm-\(name)-\(UUID().uuidString.prefix(8))")
+        ?? URL(
+            fileURLWithPath: ProcessInfo.processInfo.environment["LTM_SCRATCH_ROOT"]
+                ?? home.appendingPathComponent("Developer/ltm-scratch.noindex").path
+        )
+        .appendingPathComponent("sessions-\(name)-\(UUID().uuidString.prefix(8))")
     if !args.keepWork { prunedWork = work }
     if args.work == nil, !args.keepWork { disposableWork = work }
     try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)

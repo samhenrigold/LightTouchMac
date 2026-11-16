@@ -6,7 +6,9 @@ what to do and not do on a shared Mac.
 ## Files and processes
 
 - Scratch goes under one root: `~/Developer/ltm-scratch.noindex/<task>/`. Never `/tmp/<name>`. Delete your task's
-  directory when you are done; `scripts/clean` (a dry run; `--yes` acts) sweeps what is left.
+  directory when you are done: `scripts/clean --task TASK --yes`. `scripts/clean --quick` previews stale scratch and
+  shared tools without sizing or pin scans; `--yes` acts. Codex and Claude lifecycle hooks run that quick sweep in
+  the background at most once per ten minutes (CONTRIBUTING.md, Keeping development disk use bounded).
 - Worktrees live under `~/Developer/ltm-worktrees.noindex/<repository>/<name>` (the hooks in `.claude/settings.json`
   make them there, with the scratch directory `~/Developer/ltm-scratch.noindex/<name>/`); put a qemu-ios worktree
   you need beside them. When the session ends, a worktree that is clean with every commit on a remote is removed with

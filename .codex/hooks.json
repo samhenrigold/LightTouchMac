@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "\"$(git rev-parse --show-toplevel)/scripts/agent-cleanup\" stop", "timeout": 3}]}
+    ],
+    "SessionEnd": [
+      {"hooks": [{"type": "command", "command": "\"$(git rev-parse --show-toplevel)/scripts/agent-cleanup\" end", "timeout": 3}]}
+    ]
+  }
+}

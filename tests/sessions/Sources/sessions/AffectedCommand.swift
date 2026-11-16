@@ -1,4 +1,5 @@
 import ArgumentParser
+import BuildSupport
 import FirmwareSchema
 import Foundation
 import LightTouchCore
@@ -16,7 +17,7 @@ struct AffectedCheck: ParsableCommand {
             family: \(Affected.families.map { $0.row + ($0.create.isEmpty ? "" : " " + $0.create.joined(separator: " ")) }.joined(separator: ", ")). \
             With --run, the Unit plan and then those rows through sessions matrix: a fresh base from --bases \
             (DIR/ROW) when there is one, else prepared from its IPSW (the app's downloads and imports, or \
-            --ipsw-dir); a row with no IPSW here is skipped, saying so.
+            --ipsw-dir); missing firmware refuses --run (exit 2), so a partial gate cannot pass.
             """
     )
     @Argument(help: "The change, as git diff takes it.") var range: String
@@ -46,8 +47,14 @@ func localIPSW(_ row: String, dirs: [URL]) -> URL? {
 }
 
 func affected(_ args: AffectedCheck) -> Never {
-    let changed = output("/usr/bin/git", ["-C", repository.path, "diff", "--name-only", args.range])
-        .split(separator: "\n").map(String.init)
+    let diff: CommandResult
+    do {
+        diff = try Shell.run([
+            "/usr/bin/git", "-C", repository.path, "diff", "--name-only", "-z", args.range, "--"
+        ])
+    } catch { die("could not read the change: \(error)", code: 3) }
+    guard diff.succeeded else { die("git diff refused \(args.range): \(diff.error)") }
+    let changed = diff.output.split(separator: "\0").map(String.init)
     let plan = Affected.plan(paths: changed)
     print("changed: \(changed.count) paths (git diff --name-only \(args.range))")
     if !plan.nothing.isEmpty { print("nothing for: \(plan.nothing.joined(separator: ", "))") }
@@ -88,6 +95,9 @@ func affected(_ args: AffectedCheck) -> Never {
     }
     guard args.execute else { exit(0) }
 
+    guard skipped.isEmpty else {
+        die("incomplete affected gate; missing firmware for \(skipped.joined(separator: ", "))")
+    }
     let work = workDirectory(args.inputs, "affected")
     if needsUnit {
         let log = work.appendingPathComponent("unit.log")
@@ -104,11 +114,13 @@ func affected(_ args: AffectedCheck) -> Never {
         guard sessions(listings, args.inputs) == 0 else { exit(1) }
     }
     guard !jobs.isEmpty else {
-        print("PASS the Unit plan\(skipped.isEmpty ? "" : "; skipped \(skipped.joined(separator: ", "))") \(work.path)")
+        print("PASS \(needsUnit ? "the Unit plan" : "no checks required") \(work.path)")
         exit(0)
     }
     let file = work.appendingPathComponent("jobs.txt")
-    try? (jobs.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
+    do {
+        try (jobs.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
+    } catch { die("could not write the affected jobs: \(error)", code: 3) }
     var matrix = ["matrix", file.path, "--lanes", "\(args.lanes)", "--work", work.appendingPathComponent("matrix").path]
     if args.inputs.keepWork { matrix.append("--keep-work") }
     exit(sessions(matrix, args.inputs))

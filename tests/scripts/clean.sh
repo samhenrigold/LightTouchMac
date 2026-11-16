@@ -62,6 +62,19 @@ for name in landed dirty; do
     plutil -insert WorkspacePath -string "$W/$name/LightTouchMac.xcodeproj" "$D/LightTouchMac-$name/info.plist"
 done
 
+# Tool reuse touches the key directory even when every payload is old. Interrupted stages age out too.
+C="$S/.sessions-tools"
+for name in 11111111111111111111 22222222222222222222 33333333333333333333.partial-ABCDEF12 unrelated; do
+    mkdir -p "$C/$name" && touch "$C/$name/payload"
+done
+old "$C"
+touch "$C/22222222222222222222"
+mkdir -p "$C/44444444444444444444" && old "$C/44444444444444444444"
+# Keep one old tool in use with a process we own; lsof must protect it.
+(cd "$C/44444444444444444444" && exec sleep 120) &
+CACHE_HOLDER=$!; disown "$CACHE_HOLDER"
+trap '[[ -n "$HOLDER" ]] && kill "$HOLDER" 2>/dev/null; kill "$CACHE_HOLDER" 2>/dev/null; rm -rf "$T"' EXIT
+
 export LTM_VENDOR_ROOT="$V" LTM_SCRATCH_ROOT="$S" LTM_WORKTREE_ROOT="$T/managed" LTM_DERIVED_DATA="$D"
 out="$("$R/scripts/clean")"
 has() { grep -q "^$1 .* $2  (" <<<"$out"; }
@@ -82,6 +95,11 @@ check "fresh scratch is kept" 'has keep "$S/new-task"'
 check "scratch of a removed worktree is removed" 'has remove "$S/owned-task"'
 check "DerivedData of a removed worktree is removed" 'has remove "$D/LightTouchMac-landed"'
 check "DerivedData of a kept worktree is not listed" '! grep -q "LightTouchMac-dirty" <<<"$out"'
+check "unused shared tools are removed" 'has remove "$C/11111111111111111111"'
+check "recently reused tools are kept even with old payloads" 'has keep "$C/22222222222222222222"'
+check "interrupted tool staging is removed when old" 'has remove "$C/33333333333333333333.partial-ABCDEF12"'
+check "tools open in a process are kept" 'has keep "$C/44444444444444444444"'
+check "unknown files in the tools root are left alone" '! has remove "$C/unrelated"'
 check "a dry run removes nothing" '[[ -d "$W/landed" && -d "$V/dddddddddddd" && -d "$S/old-task" ]]'
 check "--worktree refuses a dirty one" '! "$R/scripts/clean" --worktree "$W/dirty" --yes >/dev/null && [[ -d "$W/dirty" ]]'
 
@@ -90,4 +108,48 @@ check "--yes removes the landed worktree and its branch" '[[ ! -d "$W/landed" ]]
 check "--yes keeps the dirty and unpushed worktrees" '[[ -f "$W/dirty/.gitignore" && -d "$W/unpushed" ]]'
 check "--yes removes the stale vendor directory and keeps the rest" '[[ ! -d "$V/dddddddddddd" && -d "$V/$key" && -d "$V/aaaaaaaaaaaa" && -d "$V/cccccccccccc" ]]'
 check "--yes removes the old and owned scratch and DerivedData" '[[ ! -d "$S/old-task" && ! -d "$S/owned-task" && -d "$S/new-task" && ! -d "$D/LightTouchMac-landed" ]]'
+check "--yes prunes only old unused session tools" '[[ ! -d "$C/11111111111111111111" && ! -d "$C/33333333333333333333.partial-ABCDEF12" && -d "$C/22222222222222222222" && -d "$C/44444444444444444444" && -d "$C/unrelated" ]]'
+# Fast cleanup does not size trees, hash vendor pins, or inspect worktrees/DerivedData.
+mkdir -p "$T/bin" "$S/finished" "$S/another-task"
+printf '#!/bin/sh\necho unexpected-du >&2\nexit 99\n' > "$T/bin/du"
+chmod +x "$T/bin/du"
+out="$(PATH="$T/bin:$PATH" "$R/scripts/clean" --task finished 2>&1)"
+check "task cleanup previews only its named task" 'has remove "$S/finished" && ! has remove "$S/another-task" && [[ -d "$S/finished" ]]'
+check "task cleanup skips sizing and other inventories" '! grep -qE "unexpected-du|== worktrees|== vendor|== DerivedData|== shared" <<<"$out"'
+PATH="$T/bin:$PATH" "$R/scripts/clean" --task finished --yes >/dev/null
+check "task cleanup removes recent owned work without touching another task" '[[ ! -d "$S/finished" && -d "$S/another-task" ]]'
+ln -s "$S/another-task" "$S/linked-task"
+check "task cleanup refuses symlinks and traversal" '! "$R/scripts/clean" --task linked-task --yes >/dev/null 2>&1 && ! "$R/scripts/clean" --task ../another-task --yes >/dev/null 2>&1 && [[ -d "$S/another-task" ]]'
+out="$(PATH="$T/bin:$PATH" "$R/scripts/clean" --quick 2>&1)"
+check "quick cleanup sweeps scratch and session tools without sizing" 'grep -q "== shared session tools" <<<"$out" && ! grep -qE "unexpected-du|== worktrees|== vendor|== DerivedData" <<<"$out"'
+mkdir -p "$S/open-task"
+(cd "$S/open-task" && exec sleep 120) &
+TASK_HOLDER=$!; disown "$TASK_HOLDER"
+trap '[[ -n "$HOLDER" ]] && kill "$HOLDER" 2>/dev/null; kill "$CACHE_HOLDER" "$TASK_HOLDER" 2>/dev/null; chflags -R -P nouchg "$T" 2>/dev/null; chmod -R u+w "$T"; rm -rf "$T"' EXIT
+out="$("$R/scripts/clean" --task open-task --yes)"
+check "task cleanup keeps an open directory" 'has keep "$S/open-task" && [[ -d "$S/open-task" ]]'
+g -C "$R" worktree add -q -b refused "$W/refused"
+mkdir -p "$S/refused-task"
+echo "$W/refused" > "$S/refused-task/.worktree"
+cat > "$T/bin/git" <<'GIT'
+#!/bin/bash
+[[ " $* " != *' worktree remove '* ]] || exit 1
+exec /usr/bin/git "$@"
+GIT
+chmod +x "$T/bin/git"
+check "a failed worktree removal preserves its owned scratch" '! PATH="$T/bin:$PATH" "$R/scripts/clean" --worktree "$W/refused" --yes --no-size >/dev/null 2>&1 && [[ -d "$S/refused-task" && -d "$W/refused" ]]'
+# Preparation publishes immutable, read-only directories. Cleanup must unlock only the selected task's tree.
+mkdir -p "$S/locked-task/base/nand" "$T/protected"
+touch "$S/locked-task/base/nand/image"
+ln -s "$T/protected" "$S/locked-task/elsewhere"
+chmod 555 "$S/locked-task/base/nand" "$S/locked-task/base"
+chflags uchg "$S/locked-task/base/nand" "$S/locked-task/base" "$T/protected"
+out="$("$R/scripts/clean" --task locked-task --yes)"
+check "cleanup removes immutable prepared bases" '[[ ! -d "$S/locked-task" ]]'
+check "unlocking a task never follows its symlinks" '(( $(stat -f %f "$T/protected") & 2 ))'
+chflags nouchg "$T/protected"
+printf '#!/bin/sh\nexit 1\n' > "$T/bin/lsof"
+chmod +x "$T/bin/lsof"
+check "failed process inventory prevents deletion" '! PATH="$T/bin:$PATH" "$R/scripts/clean" --task another-task --yes >/dev/null 2>&1 && [[ -d "$S/another-task" ]]'
+check "missing and invalid age arguments are refused" '! "$R/scripts/clean" --days 0 >/dev/null 2>&1 && ! "$R/scripts/clean" --days >/dev/null 2>&1'
 exit $failed

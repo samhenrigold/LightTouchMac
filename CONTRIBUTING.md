@@ -214,7 +214,8 @@ TEST_RUNNER_LTM_RELEASE_APP="path/to/Light Touch.app" xcodebuild test -skipMacro
 
 `sessions` builds the Debug helper, services worker and firmwarekit and boots them in an app's layout beside
 scripts/vendor's dylib, usbmuxd, SecureROMs and guest package, or a built app's (`--app`). A build is shared by every
-checkout through `~/Developer/ltm-scratch.noindex/.sessions-tools/<key>`, the key the committed trees it is built from
+checkout through `~/Developer/ltm-scratch.noindex/.sessions-tools/<key>`, keyed by its committed sources, manifests and
+build configuration (package test edits reuse the tools)
 (a checkout with uncommitted changes there builds its own, in the run's directory); `--dylib` takes a
 development build for the Debug helper (it is refused with `--app`, whose helper loads the app's own dylib). It prints one ok/FAIL line per check and exits 1 on any FAIL; logs, screenshots and the driver's
 events stay in `--work`. It judges the Home screen by the guest agent's frontmost app and screen where the base has an
@@ -232,6 +233,49 @@ directory and fails a run that touched the real `app.log`.
 | `swift test --package-path Packages/FirmwareKit` | Also runs FirmwareKit's suites alone. Optional corpus tests report real skips unless `FK_TEST_CORPUS=1` or `FK_REQUIRE_FIXTURES=1` selects them; selected missing inputs fail. Format/bake oracle checks compare against qemu-ios's imgtools through `FIRMWAREKIT_QEMU_IOS` |
 
 Every headless boot passes `-audio driver=none`. The checks are headless; none of them launch the app.
+
+## Keeping development disk use bounded
+
+Use the small cleanup during work, and retire each task's scratch when it ends:
+
+```sh
+scripts/clean --quick                 # preview stale scratch and shared session tools; no size scan
+scripts/clean --quick --yes           # apply those decisions (default age: 7 days; --days N changes it)
+scripts/clean --task TASK             # preview one finished task, even if recent
+scripts/clean --task TASK --yes       # remove only <scratch root>/TASK; refuses symlinks and keeps open files
+scripts/clean                         # full inventory, including vendor builds, worktrees and DerivedData
+```
+
+The fast commands skip vendor pin hashing, worktree enumeration, DerivedData and recursive disk sizing. Every mode
+keeps directories open in a process and refuses deletion if the process inventory fails. `--no-size` also skips
+sizing for full or `--worktree` cleanup. Git refusing a worktree removal keeps its owned scratch. Scratch removal also handles the immutable, read-only
+directories of published preparation bases without following their symlinks; removal failures exit 3. APFS clones share
+blocks, so the full inventory's size estimates aren't a promise of reclaimed space.
+
+Session runs default to `sessions-*` under `LTM_SCRATCH_ROOT` (default `~/Developer/ltm-scratch.noindex`), where these
+commands can find failed runs too. Passed runs keep only their small diagnostic files unless `--keep-work` is set.
+Shared tool cache directories record their last reuse; cleanup keeps recent and open ones and prunes old keys and
+interrupted staging directories. Starting a session never prunes another run's shared tools.
+
+Both repositories carry Codex (`.codex/hooks.json`) and Claude Code (`.claude/settings.json`) lifecycle hooks.
+`Stop` dispatches `scripts/agent-cleanup`: one background worker, at most one quick sweep per ten minutes. It does no
+build or disk-size scan, serializes concurrent calls, and caps its log under `<scratch root>/.agent-cleanup/`.
+`SessionEnd` also attempts `--worktree` cleanup for a managed checkout, preserving dirty, unpushed, locked and open
+worktrees. It runs the main checkout's cleaner from scratch, so its own script and working directory cannot keep the
+retiring worktree open. The qemu-ios hooks find this checkout through `LTM_APP_REPO` (default
+`~/Developer/LightTouchMac`); land this script before enabling those hooks. Hooks perform no vendor pruning.
+
+Codex requires the exact new or changed hook definitions to be reviewed and trusted through `/hooks`; project hooks
+also require a trusted project. See the [hook setup and trust contract](https://learn.chatgpt.com/docs/hooks).
+The path-filtered `Developer tools` GitHub Actions job checks cleanup and both agents' lifecycle behavior on a
+hosted Mac without vendor builds, SDK downloads, firmware or signing credentials. It cancels superseded runs.
+It checks the tooling contract; the Unit plan, affected boots and release gates still apply to product changes.
+No global Codex notification or hook configuration needs replacing. End hooks depend on the client delivering its
+session-end event; the per-turn sweep and manual commands work independently of it.
+
+`sessions affected RANGE --run` refuses invalid Git ranges and missing required boot firmware (exit 2). `sessions
+listings` also exits 2 if any requested firmware is missing. A partial gate must not report success. Check its CLI
+regression after building sessions with `tests/sessions/affected-test.sh tests/sessions/.build/debug/sessions`.
 
 ## Style
 

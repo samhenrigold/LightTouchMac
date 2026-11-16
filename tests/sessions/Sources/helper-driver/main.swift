@@ -646,8 +646,6 @@ Thread.detachNewThread {
             emit("reply", ["reply": "\(request(.orientation(Int(v[0]))))"])
         case "compass":  // compass DEGREES: the app's Compass Heading (qemu_ios_ui_compass)
             emit("reply", ["reply": "\(request(.compass(Int(v[0]))))", "compass": p[1]])
-        case "compass":  // compass DEGREES: the app's Compass Heading (qemu_ios_ui_compass)
-            emit("reply", ["reply": "\(request(.compass(Int(v[0]))))", "compass": p[1]])
         case "agent", "agentop":  // agent COMMAND: exec in the guest; agentop OP [ARGS]: an agent operation
             let command = (p[0] == "agent" ? ["exec"] : []) + p.dropFirst()
             let r = request(
@@ -728,7 +726,7 @@ Thread.detachNewThread {
                 (p.count > 1 ? p[1] : "").split(separator: ",").compactMap { Tweak(rawValue: String($0)) }
             )
             settings.written = tweaksWritten
-            let r = blocking {
+            let r = blocking { [settings] in
                 try await TweakApplier.apply(settings, version: baseVersion, guest: guest, again: tweaksApplied)
             }
             if case .success(let result) = r {
@@ -768,7 +766,9 @@ Thread.detachNewThread {
             var settings = TweakSettings()
             settings.statusBar = marketing
             settings.on = [.cleanStatusBar]
-            let r = blocking { try await TweakApplier.restoreStatusBar(settings, version: baseVersion, guest: guest) }
+            let r = blocking { [settings] in
+                try await TweakApplier.restoreStatusBar(settings, version: baseVersion, guest: guest)
+            }
             emit("sbrestore", ["posted": (try? r.get()) == true, "result": "\(r)"])
         case "ocr":  // ocr NAME: the picture as the window shows it, and every line Vision reads on it
             guard let r = rotationDriver else { fail("ocr: no board") }

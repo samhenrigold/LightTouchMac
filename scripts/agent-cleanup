@@ -1,0 +1,61 @@
+#!/bin/bash
+# Stop/SessionEnd adapter shared by Codex and Claude Code. The hook returns immediately; one background worker
+# sweeps stale scratch at most once per ten minutes. A terminal session also retires its safe managed worktree.
+# No builds, size scans, vendor pruning, process killing or transcript reads. LTM_AGENT_CLEANUP_SYNC=1 is for tests.
+set -uo pipefail
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+SCRATCH="${LTM_SCRATCH_ROOT:-$HOME/Developer/ltm-scratch.noindex}"
+STATE="$SCRATCH/.agent-cleanup"
+
+case "${1:-}" in
+    worker)
+        mode="$2" top="$3"
+        # Keep the log bounded while the worker's lock is held.
+        log="$STATE/cleanup.log"
+        if [[ -f "$log" && $(stat -f %z "$log") -gt 1048576 ]]; then tail -c 262144 "$log" > "$log.new"; mv "$log.new" "$log"; fi
+        exec >> "$log" 2>&1
+        echo "$(date '+%F %T') $mode $top"
+        if [[ "$mode" == end ]]; then
+            managed="${LTM_WORKTREE_ROOT:-$HOME/Developer/ltm-worktrees.noindex}"
+            case "$top/" in
+                "$managed/"* | */.claude/worktrees/*)
+                    "$HERE/scripts/clean" --worktree "$top" --yes --no-size || true ;;
+            esac
+        fi
+        if [[ ! -f "$STATE/last" || -z "$(find "$STATE/last" -mmin -10 -print 2>/dev/null)" ]]; then
+            "$HERE/scripts/clean" --quick --yes && touch "$STATE/last"
+        fi
+        exit 0 ;;
+    stop | end) mode="$1" ;;
+    *) echo 'usage: scripts/agent-cleanup stop|end (hook JSON on stdin)' >&2; exit 2 ;;
+esac
+input="$(cat)"
+field() { plutil -extract "$1" raw -o - - <<<"$input" 2>/dev/null; }
+cwd="$(field cwd)"
+[[ -n "$cwd" ]] || exit 0
+top="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)" || exit 0
+if [[ "$mode" == end ]]; then
+    # Codex currently reports other; Claude's clear/compact events keep the worktree for later work.
+    case "$(field reason)" in other | prompt_input_exit | logout) ;; *) mode=stop ;; esac
+fi
+# Always execute from the main checkout: a script or cwd inside the retiring worktree makes lsof keep it forever.
+main="$(cd "$HERE" && cd "$(git rev-parse --git-common-dir)/.." && pwd -P)" || exit 0
+runner="$main/scripts/agent-cleanup"
+[[ -x "$runner" ]] || exit 0
+mkdir -p "$STATE"
+cd "$SCRATCH" || exit 0
+# Keep the flock in the Perl parent while its worker runs. Stop skips overlapping sweeps; end queues so a
+# concurrent Stop cannot lose the only worktree-retirement request. Neither blocks the hook's caller.
+locked=(perl -MFcntl=:flock -e '
+    my ($path, $mode, @cmd) = @ARGV;
+    open(my $lock, ">>", $path) or exit 1;
+    flock($lock, LOCK_EX | ($mode eq "stop" ? LOCK_NB : 0)) or exit 0;
+    system @cmd;
+    exit($? == -1 ? 1 : $? >> 8);
+' "$STATE/lock" "$mode" /bin/bash "$runner" worker "$mode" "$top")
+if [[ "${LTM_AGENT_CLEANUP_SYNC:-}" == 1 ]]; then
+    "${locked[@]}"
+else
+    nohup "${locked[@]}" </dev/null >/dev/null 2>&1 &
+fi
+exit 0

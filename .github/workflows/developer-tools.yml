@@ -1,0 +1,50 @@
+name: Developer tools
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/developer-tools.yml'
+      - '.claude/**'
+      - '.codex/**'
+      - 'scripts/clean'
+      - 'scripts/agent-cleanup'
+      - 'scripts/vendor-check'
+      - 'tests/scripts/clean.sh'
+      - 'tests/scripts/agent-cleanup.sh'
+      - 'tests/scripts/worktree-hooks.sh'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/developer-tools.yml'
+      - '.claude/**'
+      - '.codex/**'
+      - 'scripts/clean'
+      - 'scripts/agent-cleanup'
+      - 'scripts/vendor-check'
+      - 'tests/scripts/clean.sh'
+      - 'tests/scripts/agent-cleanup.sh'
+      - 'tests/scripts/worktree-hooks.sh'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: developer-tools-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check cleanup and lifecycle behavior
+        shell: bash
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          bash tests/scripts/clean.sh
+          bash tests/scripts/agent-cleanup.sh
+          bash tests/scripts/worktree-hooks.sh

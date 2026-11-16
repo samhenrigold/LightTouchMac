@@ -189,13 +189,6 @@ struct Tools {
         // Another checkout may have published the same tree's tools meanwhile: either copy is the same build.
         if rename(staging.path, shared.path) != 0 { try? fm.removeItem(at: staging) }
         print("tools: built and shared as \(shared.path)")
-        // Each reuse touches its key's folder: one nobody has used for a week goes (scripts/clean skips dot folders).
-        let weekAgo = Date().addingTimeInterval(-7 * 86400)
-        for name in (try? fm.contentsOfDirectory(atPath: sharedTools.path)) ?? [] {
-            let old = sharedTools.appendingPathComponent(name)
-            let used = (try? fm.attributesOfItem(atPath: old.path)[.modificationDate] as? Date) ?? Date()
-            if used < weekAgo { try? fm.removeItem(at: old) }
-        }
         return shared.appendingPathComponent("Tools.app")
     }
 
@@ -236,21 +229,14 @@ struct Tools {
     /// sources, project and pins, the vendor directory, the sandbox setting, Local.xcconfig and the Xcode; nil when
     /// any of those sources has an uncommitted change (the build can't be named by its commit).
     static func sourceKey(vendor: URL) -> String? {
-        let paths = [
-            "LightTouchDevice", "LightTouchServices", "Packages", "Configuration", "LightTouchMac.xcodeproj",
-            "build-support"
-        ]
-        let git = ["-C", repository.path]
-        guard output("/usr/bin/git", git + ["status", "--porcelain", "--"] + paths).isEmpty else { return nil }
-        let trees = output("/usr/bin/git", git + ["rev-parse"] + paths.map { "HEAD:\($0)" })
-        guard trees.split(separator: "\n").count == paths.count else { return nil }
+        guard let trees = ToolSources.committedTree(in: repository) else { return nil }
         let local =
             (try? String(contentsOf: repository.appendingPathComponent("Configuration/Local.xcconfig"), encoding: .utf8))
             ?? ""
         let inputs = [
             trees, vendor.path, ProcessInfo.processInfo.environment["LTM_HELPER_SANDBOX"] ?? "YES", local,
             output("/usr/bin/xcodebuild", ["-version"]),
-            "layout 2"  // how bundle lays the tools out and signs them: a change here must not reuse an older bundle
+            "layout 3"  // how bundle lays the tools out and signs them: a change here must not reuse an older bundle
         ]
         return SHA256.hash(data: Data(inputs.joined(separator: "\n").utf8)).prefix(10)
             .map { String(format: "%02x", $0) }.joined()

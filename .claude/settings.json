@@ -1,18 +1,56 @@
 {
   "hooks": {
     "PreToolUse": [
-      {"matcher": "Bash", "hooks": [{"type": "command", "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-bash\""}]}
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-bash\""
+          }
+        ]
+      }
     ],
     "WorktreeCreate": [
-      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/worktree\" create"}]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/worktree\" create"
+          }
+        ]
+      }
     ],
     "WorktreeRemove": [
-      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/worktree\" remove"}]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/worktree\" remove"
+          }
+        ]
+      }
     ],
     "SessionEnd": [
       {
-        "matcher": "prompt_input_exit|logout",
-        "hooks": [{"type": "command", "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/worktree\" session-end"}]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR}/scripts/agent-cleanup\" end",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR}/scripts/agent-cleanup\" stop",
+            "timeout": 3
+          }
+        ]
       }
     ]
   }

@@ -22,7 +22,9 @@ mkdir -p "$SCRATCH"
 
 clean_detached() {  # the deletes can take minutes: run them past the hook's timeout, logged
     echo "$(date '+%F %T') $1: scripts/clean --worktree $2" >> "$LOG"
-    nohup "$HERE/scripts/clean" --worktree "$2" --yes >> "$LOG" 2>&1 < /dev/null &
+    local main
+    main="$(cd "$HERE" && cd "$(git rev-parse --git-common-dir)/.." && pwd -P)" || return
+    (cd "$SCRATCH" && nohup "$main/scripts/clean" --worktree "$2" --yes --no-size >> "$LOG" 2>&1 < /dev/null &)
 }
 
 case "${1:-}" in
