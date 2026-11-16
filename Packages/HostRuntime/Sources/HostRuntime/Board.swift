@@ -159,7 +159,9 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 abbreviatedName: "iPhone 4",
                 art: art("shell-iphone4", nil, (730, 1426), (48, 236, 640, 960), home: 140, inset: 52, ppi: 326)
             )
-        // Its image carries the guest agent from preparation (FirmwareKit's N42 recipe, SideloadTools).
+        // Its image carries the guest agent from preparation (FirmwareKit's N42 recipe, SideloadTools). Its art is the
+        // Xcode 4.6 Simulator's "iPhone (Retina 4-inch)" chrome_halfsize@2x.png cropped to the phone (x 1, y 2) and
+        // its screen filled with the iPhone 4's LCD tone, as shell-iphone4 is the "Retina 3.5-inch" one's.
         case .n42:
             return Facts(
                 soc: .s5l8950,
@@ -168,7 +170,7 @@ public enum Board: String, Sendable, CaseIterable, Codable {
                 marketingName: "iPhone 5",
                 abbreviatedName: "iPhone 5",
                 guestTools: true,
-                art: art("shell-iphone5", nil, (730, 1602), (48, 236, 640, 1136), home: 140, inset: 52, ppi: 326)
+                art: art("shell-iphone5", nil, (762, 1599), (65, 236, 640, 1136), home: 140, inset: 47, ppi: 326)
             )
         }
     }
