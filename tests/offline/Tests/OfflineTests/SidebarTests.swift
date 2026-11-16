@@ -639,7 +639,7 @@ extension SharedState {
         /// The Add Device sheet's split, in its own window never ordered in: devices on the left (only those with a
         /// shown build), the chosen device's versions on the right. Add, and Return in the versions list, hand over
         /// the picks across devices in catalog order, never an entry already added or one hidden by Show experimental;
-        /// an added row can't be picked by keyboard; letters type-select a device; the sheet resizes, autosaves its
+        /// an added row can be selected but adds nothing; letters type-select a device; the sheet resizes, autosaves its
         /// size and grows no toolbar. Renders (light and dark) go to the temporary directory.
         @Test func addDeviceSheetSplitsByDevice() throws {
             _ = NSApplication.shared
@@ -809,16 +809,31 @@ extension SharedState {
             if !addedIDs.isEmpty { fail("Add with nothing picked handed over \(addedIDs)") }
             try render(window, "stable-light")
 
-            // An added iPad version: Return on it adds nothing, the arrow skips it.
+            // An added iPad version: the arrow selects it like any row, and Return on it adds nothing.
             if let versions = tables.last {
+                let ipad = AddDeviceView.shown(
+                    AddDeviceView(
+                        catalog: catalog, added: [], downloaded: [], selection: [],
+                        onAdd: { _ in }, onCancel: {}
+                    ).groups, experimental: false
+                ).first { $0.id == "k48ap" }
                 window.makeFirstResponder(versions)
                 versions.keyDown(with: key(String(UnicodeScalar(NSDownArrowFunctionKey)!), 125, in: window))
                 versions.keyDown(with: key(String(UnicodeScalar(NSDownArrowFunctionKey)!), 125, in: window))
+                if versions.selectedRow != ipad?.entries.firstIndex(where: { $0.id == "k48ap-7B500" }) {
+                    fail("the arrow didn't select the added version: row \(versions.selectedRow)")
+                }
                 versions.keyDown(with: key("\r", 36, in: window))
                 if addedIDs.last.map({ $0.contains("k48ap-7B500") }) ?? false {
                     fail("an added version was picked: \(addedIDs)")
                 }
             }
+            // Only an added version selected: it shows selected, and Add hands over nothing.
+            addedIDs = []
+            (window, tables) = sheet(experimental: false, selection: ["k48ap-7B500"], device: "k48ap")
+            if tables.last?.selectedRow == -1 { fail("an added version can't be selected") }
+            pressAdd(window)
+            if !addedIDs.isEmpty { fail("Add with only an added version selected handed over \(addedIDs)") }
 
             // The sheet opens with the versions list focused, not the devices: its selection is the active one and
             // the arrow keys move through the versions and leave the device.

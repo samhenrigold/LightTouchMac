@@ -78,7 +78,7 @@ struct AddDeviceView: View {
     }
 
     /// What Add adds: the selected entries still shown, not already added and not coming soon, in catalog order,
-    /// whichever device they're under.
+    /// whichever device they're under. Every row can be selected; Add dims when none of the selection can be added.
     static func picked(_ groups: [Group], selection: Set<String>, added: Set<String>) -> [String] {
         groups.flatMap(\.entries).filter { $0.status != .comingSoon }.map(\.id)
             .filter { selection.contains($0) && !added.contains($0) }
@@ -153,7 +153,6 @@ struct AddDeviceView: View {
                         added: added.contains(entry.id),
                         downloaded: downloaded.contains(entry.id)
                     )
-                    .selectionDisabled(added.contains(entry.id) || entry.status == .comingSoon)
                 }
                 .contextMenu(
                     forSelectionType: String.self,
