@@ -21,25 +21,29 @@ struct CapturePreferencesTests {
             #expect(preferences.saveLocation == CapturePreferences.desktopDirectory)
             #expect(preferences.openFinderAfterCapture && preferences.soundEffectsEnabled)
             #expect(!preferences.copyOnCapture)
-            #expect(!preferences.recordsBezel, "recordings are the screen alone by default")
+            #expect(preferences.includesBezel, "captures include the bezel by default")
             _ = preferences.saveLocations
             _ = preferences.openInApplicationURL
             #expect(
                 defaults.dictionaryRepresentation().keys.filter {
                     $0.hasPrefix("capture")
                         || [
-                            "copyOnCapture", "recordDeviceBezel",
+                            "copyOnCapture",
                             "openFinderAfterCapture", "soundEffectsEnabled",
                             "openInApplicationPath"
                         ].contains($0)
                 }.isEmpty,
                 "reading writes nothing"
             )
-            // Screenshots with the bezel (an existing user's captureMode 0) don't put it in recordings.
-            defaults.set(0, forKey: "captureMode")
-            #expect(!preferences.recordsBezel)
-            preferences.recordsBezel = true
-            #expect(preferences.recordsBezel && defaults.integer(forKey: "captureMode") == 0)
+            // One choice for screenshots and recordings, in the screenshots' earlier key: an existing user's
+            // Capture Screen Only (captureMode 1) carries over, and recordings' own key is no longer read.
+            defaults.set(1, forKey: "captureMode")
+            defaults.set(true, forKey: "recordDeviceBezel")
+            #expect(!preferences.includesBezel)
+            preferences.includesBezel = true
+            #expect(preferences.includesBezel && defaults.integer(forKey: "captureMode") == 0)
+            preferences.includesBezel = false
+            #expect(!preferences.includesBezel && defaults.integer(forKey: "captureMode") == 1)
         }
     }
 

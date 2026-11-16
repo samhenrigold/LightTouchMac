@@ -52,8 +52,8 @@ extension MainWindowController {
         settingsWindow.window?.makeKeyAndOrderFront(nil)
     }
 
-    @objc func toggleCaptureScreenOnly(_ sender: Any?) { capture.toggleCaptureScreenOnly() }
-    @objc func toggleRecordDeviceBezel(_ sender: Any?) { capture.toggleRecordDeviceBezel() }
+    @objc func toggleIncludeDeviceBezel(_ sender: Any?) { capture.toggleIncludeDeviceBezel() }
+
     func installFileStatus() {
         fileStatus.isHidden = true
         startupStatus.isHidden = true

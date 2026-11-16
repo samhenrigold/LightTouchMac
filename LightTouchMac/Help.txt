@@ -28,7 +28,7 @@ Apps → Import Media accepts MP3, M4A, AAC and WAV audio, JPEG, PNG and HEIC ph
 # Screenshots and recordings
 Capture → Save Screenshot (⌘S) saves immediately. Save Screenshot As (⇧⌘S) lets you choose a location. Copy Screenshot copies it to the Clipboard; ⌘C does the same when the device screen has focus and no text is selected. Open Screenshot opens a new capture in Preview or your chosen app.
 
-Screenshots include the device, its motion, and the gradient. Turn on Capture → Capture Screen Only to capture just the screen. Recordings show just the screen; turn on Capture → Record Device Bezel to include the device and the gradient. View → Show/Hide Finger Dots controls touch indicators on the device and in captures.
+Screenshots and recordings include the device, its motion, and the gradient. Turn off Capture → Include Device Bezel to capture just the screen. View → Show/Hide Finger Dots controls touch indicators on the device and in captures.
 
 Recordings include device audio. Start/Stop Recording is ⌘R; Escape discards a recording (it asks first). The toolbar shows elapsed time while recording and progress while saving. If saving fails, choose another location; a recording that still can't be saved is shown in the Finder. Hiding or minimizing the app stops recording.
 

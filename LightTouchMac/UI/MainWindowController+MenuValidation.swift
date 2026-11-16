@@ -110,12 +110,14 @@ extension MainWindowController: NSMenuItemValidation {
         case #selector(eraseDevice(_:)): return selectedEntry.map { canPerform(.erase, for: $0) } ?? false
         case #selector(jailbreakDevice(_:)): return selectedEntry.map { canPerform(.jailbreak, for: $0) } ?? false
         case #selector(showTweaks(_:)): return selectedInstance != nil
-        case #selector(toggleCaptureScreenOnly(_:)):
-            menuItem.state = captureMode == 1 ? .on : .off
-            return !recording.isActive && !capture.screenshotBusy
-        case #selector(toggleRecordDeviceBezel(_:)):
-            menuItem.state = capturePreferences.recordsBezel ? .on : .off
-            return !recording.isActive
+        case #selector(toggleIncludeDeviceBezel(_:)):
+            // Dimmed and off while the window shows no bezel to include (View ▸ Device Bezels ▸ Off, Free-Form Screen).
+            let freeForm = deviceVC?.screen.isFreeForm == true
+            let shown = DisplayView.bezel != .off && !freeForm
+            menuItem.state = shown && capture.includesBezel ? .on : .off
+            menuItem.toolTip =
+                shown ? nil : freeForm ? "Free-Form Screen shows no bezel." : "View ▸ Device Bezels is Off."
+            return shown && !recording.isActive && !capture.screenshotBusy
         case #selector(toggleVerboseBoot(_:)):
             menuItem.state = EmulatorController.verboseBoot ? .on : .off
             return true

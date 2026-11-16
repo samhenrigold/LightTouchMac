@@ -31,7 +31,9 @@ import UniformTypeIdentifiers
 
     private var emulator: EmulatorController? { session()?.emulator }
     private var deviceVC: DeviceViewController? { session()?.workspace.deviceVC }
-    var captureMode: Int { UserDefaults.standard.integer(forKey: "captureMode") == 1 ? 1 : 0 }
+    /// Capture ▸ Include Device Bezel: screenshots and recordings show the canvas (the bezel, its motion and the
+    /// gradient) rather than the screen alone.
+    var includesBezel: Bool { capturePreferences.includesBezel }
 
     var availability: CaptureAvailability {
         var availability = CaptureAvailability()
@@ -107,7 +109,7 @@ import UniformTypeIdentifiers
         guard let workspace = session()?.workspace else { throw CaptureError.failed("No screen image is available.") }
         let deviceVC = workspace.deviceVC
         deviceVC.screen.endLiveText()
-        if captureMode == 0 { return try await workspace.canvasCapture.screenshot() }
+        if includesBezel { return try await workspace.canvasCapture.screenshot() }
         guard let image = deviceVC.screen.captureFrame() else {
             throw CaptureError.failed("No screen image is available.")
         }
@@ -181,12 +183,12 @@ import UniformTypeIdentifiers
                     NSWorkspace.shared.activateFileViewerSelecting([savedURL])
                 }
                 if !recording.isActive, action != .open {
-                    // With the bezel in the picture, a way to leave it out of the next ones (Capture Screen Only).
+                    // With the bezel in the picture, a way to leave it out of the next ones (Include Device Bezel).
                     captureStatus.showCapture(
                         title: action == .copy ? "Screenshot copied" : "Screenshot saved",
                         image: nsImage,
                         fileURL: savedURL,
-                        link: captureMode == 0 ? "Hide bezels for screenshots" : nil
+                        link: includesBezel ? "Hide bezel in captures" : nil
                     )
                     deviceVC?.updateStatusVisibility()
                 }
@@ -221,16 +223,11 @@ import UniformTypeIdentifiers
         return await panel.beginSheetModal(for: window) == .OK ? panel.url : nil
     }
 
-    /// Screen Only / Canvas: which of the two a screenshot takes, not while one runs.
-    func toggleCaptureScreenOnly() {
+    /// The canvas with the bezel (the default) or the screen alone, for screenshots and recordings alike; not while a
+    /// capture runs.
+    func toggleIncludeDeviceBezel() {
         guard !recording.isActive, !screenshotBusy else { return }
-        UserDefaults.standard.set(captureMode == 0 ? 1 : 0, forKey: "captureMode")
-    }
-
-    /// Screen alone (the default) or the canvas with the bezel: which a recording takes, not while one runs.
-    func toggleRecordDeviceBezel() {
-        guard !recording.isActive else { return }
-        capturePreferences.recordsBezel.toggle()
+        capturePreferences.includesBezel.toggle()
     }
 
     // MARK: - Where captures go
@@ -250,8 +247,8 @@ import UniformTypeIdentifiers
     private func installCaptureStatus() {
         captureStatus.isHidden = true
         captureStatus.onLink = { [weak self] in
-            guard let self, captureMode == 0 else { return }
-            toggleCaptureScreenOnly()
+            guard let self, includesBezel else { return }
+            toggleIncludeDeviceBezel()
             onChange()
         }
         captureStatus.onSecondary = { [weak self] in
@@ -292,7 +289,7 @@ import UniformTypeIdentifiers
         guard !recording.isActive, canStartRecording, let workspace = session()?.workspace else { return }
         let screen = workspace.deviceVC.screen
         screen.endLiveText()
-        let canvas = capturePreferences.recordsBezel
+        let canvas = includesBezel
         let source = workspace.canvasCapture
         let background = NSImage(named: "gradient")?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         let emulator = workspace.deviceVC.emulator

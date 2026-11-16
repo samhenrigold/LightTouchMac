@@ -104,11 +104,12 @@ public struct CapturePreferences {
         get { bool("copyOnCapture", default: false) }
         nonmutating set { defaults.set(newValue, forKey: "copyOnCapture") }
     }
-    /// Recordings show the bezel (the canvas) instead of the screen alone. Its own key, so the screenshots'
-    /// captureMode never changes what a recording shows.
-    public var recordsBezel: Bool {
-        get { bool("recordDeviceBezel", default: false) }
-        nonmutating set { defaults.set(newValue, forKey: "recordDeviceBezel") }
+    /// Screenshots and recordings show the bezel (the canvas) instead of the screen alone (Capture ▸ Include Device
+    /// Bezel). The screenshots' earlier key, captureMode (1 was Capture Screen Only), so a choice made there carries
+    /// over; recordings' own recordDeviceBezel is no longer read.
+    public var includesBezel: Bool {
+        get { defaults.integer(forKey: "captureMode") != 1 }
+        nonmutating set { defaults.set(newValue ? 0 : 1, forKey: "captureMode") }
     }
     public var openFinderAfterCapture: Bool {
         get { bool("openFinderAfterCapture", default: true) }

@@ -156,8 +156,7 @@ extension SharedState {
             Capture/Start Recording  ⌘r
             Capture/Discard Recording…  ⎋
             Capture/-
-            Capture/Capture Screen Only
-            Capture/Record Device Bezel
+            Capture/Include Device Bezel
             Window/Minimize  ⌘m
             Window/Zoom
             Window/-
@@ -312,7 +311,7 @@ extension SharedState {
                 capture.items.filter { !$0.isSeparatorItem }.map(\.title) == [
                     "Save Screenshot", "Save Screenshot As…", "Copy Screenshot", "Open Screenshot in Preview",
                     "Start Recording", "Discard Recording…",
-                    "Capture Screen Only", "Record Device Bezel"
+                    "Include Device Bezel"
                 ]
             )
             #expect(

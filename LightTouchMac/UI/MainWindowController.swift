@@ -54,7 +54,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     var canTakeScreenshot: Bool { capture.canTakeScreenshot }
     var canToggleRecording: Bool { capture.canToggleRecording }
     let fileStatus = CaptureStatusView()
-    var captureMode: Int { capture.captureMode }
     /// A phone's browser as the selected device (PhoneRemoteController).
     let phoneRemote = PhoneRemoteController()
     var hasFileTransfer: Bool { filesVC?.hasTransfer == true }
