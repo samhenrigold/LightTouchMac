@@ -39,9 +39,10 @@ MIN="-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
 export CFLAGS="$ARCH_FLAG$MIN -O2" CXXFLAGS="$ARCH_FLAG$MIN -O2" LDFLAGS="$ARCH_FLAG$MIN"
 export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" PKG_CONFIG_PATH=
 export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
-export CC="$(xcrun -f clang)" CXX="$(xcrun -f clang++)"
+source "$SRC/build-support/recipes/compiler-cache.sh"
+export CC="${COMPILER_CACHE}$(xcrun -f clang)" CXX="${COMPILER_CACHE}$(xcrun -f clang++)"
 export lt_cv_sys_max_cmd_len=131072
-unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH CCC_OVERRIDE_OPTIONS
 
 cat > "$PREFIX/lib/pkgconfig/zlib.pc" <<'EOF'
 prefix=/usr

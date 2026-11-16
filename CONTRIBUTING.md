@@ -45,6 +45,13 @@ ANGLE needs Xcode's Metal Toolchain: `xcodebuild -downloadComponent MetalToolcha
 
 ## Building
 
+For compiler caching, install `ccache` through Homebrew (`brew install ccache`). Native, static and ANGLE recipes
+use explicit compiler launchers when it is installed, including absolute Clang paths and Intel cross builds.
+`LTM_CCACHE=0` opts out when configuring a new build; `CCACHE_DISABLE=1` bypasses caching in an existing one.
+The cache is shared under the user's Homebrew ccache configuration; keep it bounded with `ccache --max-size=2G`.
+Product recipes disable source-path rewriting so `__FILE__` and macro prefix maps match an uncached compile.
+It only caches compilation: dependency pins, native validation, linking, signing and release gates still run.
+
 Open `LightTouchMac.xcodeproj` in Xcode and build the `LightTouchMac` scheme: the app, the device helper
 (`LightTouchDevice`), the services helper (`LightTouchServices`) and the preparer (`firmwarekit`, from
 `Packages/FirmwareKit/Sources/FirmwareKitCLI`). The app's one script phase stamps the build number
@@ -97,7 +104,12 @@ A release is an Xcode archive made by `scripts/ship`; nothing edits the bundle a
    (`Frameworks/`, `MacOS/`), the guest tools and the developer SSH payload packed into
    `Resources/Guest/guest.aar`, the SecureROMs (`Resources/Device/`), the licenses and `build-inputs.json`; with
    `--release` (which `scripts/ship` passes) also the built-in iPod (`Resources/Device/n72ap-7E18.itbase`, which only
-   an archive copies). A rerun with nothing changed builds nothing; with `--release`, one after a FirmwareKit or
+   an archive copies). Native outputs are shared separately under `<vendor root>/native/<native-key>/`: the thin builds, universal merge,
+   pinned QEMU source and ANGLE output. That key covers the emulator/usbmuxd commits, native recipes and checks,
+   dependency pins, native build-tool implementations and the selected Xcode/SDK. A packaging or release-check
+   change still gets a new final vendor directory, while reusing these native outputs through `work/native-cache`,
+   `work/native`, `work/universal` and `work/angle` symlinks. The vendor-root lock serializes publication and reuse.
+   A rerun with nothing changed builds nothing; with `--release`, one after a FirmwareKit or
    helper change only prepares the built-in iPod again. Every run writes HostRuntime's `MachineOptions.swift` (each
    board's -machine options, which a boot keeps to) from the vendored QEMU; commit it when it changed. Inputs:
    `ARMV6_SDK` (default `~/Developer/ipod2g-re/OldSDK/iPhoneOS3.1.3.sdk`), `IPAD_SDK`, `LTM_ASSETS` (the SecureROMs,
@@ -263,7 +275,9 @@ build or disk-size scan, serializes concurrent calls, and caps its log under `<s
 `SessionEnd` also attempts `--worktree` cleanup for a managed checkout, preserving dirty, unpushed, locked and open
 worktrees. It runs the main checkout's cleaner from scratch, so its own script and working directory cannot keep the
 retiring worktree open. The qemu-ios hooks find this checkout through `LTM_APP_REPO` (default
-`~/Developer/LightTouchMac`); land this script before enabling those hooks. Hooks perform no vendor pruning.
+`~/Developer/LightTouchMac`); land this script before enabling those hooks. Hooks perform no vendor pruning. Full cleanup also prunes unreferenced shared native caches after the retention
+window; references from retained vendor directories and open/recent caches protect them. Native cache files are
+counted once because vendor packages point to them rather than copying their build trees.
 
 Codex requires the exact new or changed hook definitions to be reviewed and trusted through `/hooks`; project hooks
 also require a trusted project. See the [hook setup and trust contract](https://learn.chatgpt.com/docs/hooks).

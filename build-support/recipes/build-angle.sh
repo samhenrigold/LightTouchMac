@@ -7,6 +7,8 @@
 #
 #     build-angle.sh CHECKOUT OUT-DIR
 set -euo pipefail
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH CCC_OVERRIDE_OPTIONS
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 CHECKOUT="${1:?usage: build-angle.sh checkout out-dir}"
 OUT="${2:?usage: build-angle.sh checkout out-dir}"
 HERE="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -43,6 +45,11 @@ ARGS='is_debug=false is_component_build=false angle_enable_metal=true angle_enab
 ARGS="$ARGS angle_enable_null=false angle_build_tests=false angle_build_all=false angle_has_frame_capture=false"
 ARGS="$ARGS angle_enable_perfetto=false angle_has_astc_encoder=false use_remoteexec=false use_siso=false"
 ARGS="$ARGS clang_use_chrome_plugins=false use_custom_libcxx=false use_lld=false mac_deployment_target=\"14.4\""
+# GN supports an explicit compiler launcher, including its bundled absolute Clang toolchain.
+if [[ ${LTM_CCACHE:-1} != 0 ]] && command -v ccache >/dev/null; then
+    ARGS="$ARGS cc_wrapper=\"ccache\""
+    export CCACHE_BASEDIR=""
+fi
 rm -rf "$OUT"
 mkdir -p "$OUT/licenses"
 SLICES=()

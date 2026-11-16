@@ -215,13 +215,31 @@ if ((!QUICK)); then
         newest="$(ls -t "$VENDOR_ROOT"/*/vendor.json 2>/dev/null | head -1)"
         [[ -n "$newest" ]] && { keep+=("$(basename "$(dirname "$newest")")"); why+=("the newest"); }
         pruned=0
+        native_refs=()
         for dir in "$VENDOR_ROOT"/*/; do
             dir="${dir%/}" name="$(basename "${dir%/}")" reason=""
             [[ "$name" =~ ^[0-9a-f]{12}$ ]] || continue
             for i in "${!keep[@]}"; do [[ "${keep[i]}" == "$name" ]] && { reason="${why[i]}"; break; }; done
+            if [[ -n "$reason" ]] || is_open "$dir"; then
+                say keep "$dir" "${reason:-open in a process}"
+                ref="$(readlink "$dir/work/native-cache" 2>/dev/null)"
+                [[ -z "$ref" ]] || native_refs+=("$(basename "$ref")")
+            else say remove "$dir" "no checkout's pins"; act remove_tree "$dir"; pruned=1
+            fi
+        done
+        echo "== shared native builds ($VENDOR_ROOT/native)"
+        for dir in "$VENDOR_ROOT/native"/*/; do
+            [[ -d "$dir" ]] || continue
+            dir="${dir%/}" name="$(basename "${dir%/}")" reason=""
+            [[ "$name" =~ ^[0-9a-f]{12}$ ]] || continue
+            for ref in "${native_refs[@]+"${native_refs[@]}"}"; do
+                [[ "$ref" != "$name" ]] || { reason="referenced by a retained vendor directory"; break; }
+            done
             if [[ -n "$reason" ]]; then say keep "$dir" "$reason"
             elif is_open "$dir"; then say keep "$dir" "open in a process"
-            else say remove "$dir" "no checkout's pins"; act remove_tree "$dir"; pruned=1
+            elif [[ -n "$(find "$dir" -maxdepth 0 -mtime "-$DAYS" -print 2>/dev/null)" ]]; then
+                say keep "$dir" "used in the last $DAYS days"
+            else say remove "$dir" "unreferenced and unused for $DAYS days"; act remove_tree "$dir"; pruned=1
             fi
         done
         ((pruned && YES)) && [[ -n "$QEMU" ]] && git -C "$QEMU" worktree prune

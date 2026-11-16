@@ -9,6 +9,12 @@ on:
       - 'scripts/clean'
       - 'scripts/agent-cleanup'
       - 'scripts/vendor-check'
+      - 'build-support/recipes/**'
+      - 'build-support/dependencies.json'
+      - 'build-support/patches/**'
+      - 'build-support/checks/**'
+      - 'Packages/BuildTools/**'
+      - 'tests/scripts/compiler-cache.sh'
       - 'tests/scripts/clean.sh'
       - 'tests/scripts/agent-cleanup.sh'
       - 'tests/scripts/worktree-hooks.sh'
@@ -21,6 +27,12 @@ on:
       - 'scripts/clean'
       - 'scripts/agent-cleanup'
       - 'scripts/vendor-check'
+      - 'build-support/recipes/**'
+      - 'build-support/dependencies.json'
+      - 'build-support/patches/**'
+      - 'build-support/checks/**'
+      - 'Packages/BuildTools/**'
+      - 'tests/scripts/compiler-cache.sh'
       - 'tests/scripts/clean.sh'
       - 'tests/scripts/agent-cleanup.sh'
       - 'tests/scripts/worktree-hooks.sh'
@@ -40,6 +52,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Install compiler cache
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install ccache
+      - name: Check native cache inputs and reuse
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          bash tests/scripts/compiler-cache.sh
+          swift test --package-path Packages/BuildTools --filter 'NativeCacheTests|VendorTests'
       - name: Check cleanup and lifecycle behavior
         shell: bash
         env:

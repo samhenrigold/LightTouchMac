@@ -55,13 +55,19 @@ else
 fi
 P="$ROOT/prefix"
 export MACOSX_DEPLOYMENT_TARGET=14.0
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 export CFLAGS="$ARCH_FLAG-O2 -mmacosx-version-min=14.0" CXXFLAGS="$ARCH_FLAG-O2 -mmacosx-version-min=14.0"
-export LDFLAGS="$ARCH_FLAG-mmacosx-version-min=14.0" CC=/usr/bin/clang CXX=/usr/bin/clang++
+source "$SRC/build-support/recipes/compiler-cache.sh"
+NATIVE_CC="$(xcrun -f clang)" NATIVE_CXX="$(xcrun -f clang++)"
+export LDFLAGS="$ARCH_FLAG-mmacosx-version-min=14.0" CC="${COMPILER_CACHE}$NATIVE_CC" CXX="${COMPILER_CACHE}$NATIVE_CXX"
+if [ "$ARCH" = x86_64 ]; then
+    QEMU_CROSS=(--cross-prefix= --cpu=x86_64 "--cc=$CC -arch x86_64" "--cxx=$CXX -arch x86_64" "--objcc=$CC -arch x86_64")
+fi
 export PKG_CONFIG_LIBDIR="$P/lib/pkgconfig" PKG_CONFIG_PATH=
 # Some Darwin libtool configure probes return an empty ARG_MAX. Avoid its
 # broken partial-link fallback (which loses private symbols).
 export lt_cv_sys_max_cmd_len=131072
-unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH CCC_OVERRIDE_OPTIONS
 [ -f "$STATIC/lib/libcrypto.a" ] || { echo "missing static prefix: $STATIC" >&2; exit 1; }
 fetch_group() {   # GROUP: its pinned archives into src/, from the caches when they have them
     local args=(sources fetch --group "$1" --destination "$ROOT/src")
@@ -113,9 +119,9 @@ if [ "$ARCH" = x86_64 ]; then
 MESON_CROSS=(--cross-file "$ROOT/x86_64-darwin.meson")
 cat > "$ROOT/x86_64-darwin.meson" <<EOF
 [binaries]
-c = ['/usr/bin/clang', '-arch', 'x86_64']
-cpp = ['/usr/bin/clang++', '-arch', 'x86_64']
-objc = ['/usr/bin/clang', '-arch', 'x86_64']
+c = [${COMPILER_CACHE_MESON}'$NATIVE_CC', '-arch', 'x86_64']
+cpp = [${COMPILER_CACHE_MESON}'$NATIVE_CXX', '-arch', 'x86_64']
+objc = [${COMPILER_CACHE_MESON}'$NATIVE_CC', '-arch', 'x86_64']
 pkg-config = '$(command -v pkg-config)'
 [host_machine]
 system = 'darwin'

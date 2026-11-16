@@ -41,7 +41,7 @@ public struct Vendor {
         """
 
     let root: URL
-    let environment = ProcessInfo.processInfo.environment
+    let environment: [String: String]
     var home: URL { files.homeDirectoryForCurrentUser }
     var vendorRoot: URL {
         url(
@@ -94,20 +94,16 @@ public struct Vendor {
     static let tools = [
         "Packages/BuildTools/Package.swift", "Packages/BuildTools/Sources"
     ]
-    static let staticKeyed = [
-        "build-support/recipes/build-static-deps.sh", "build-support/dependencies.json",
-        "build-support/patches/libplist-bin-limits.patch", "build-support/patches/libusbmuxd-inetcat-writes.patch",
-        "build-support/checks/inetcat-writes.c",
-        "Packages/BuildTools/Sources/BuildTools/DependencySources.swift",
-        "Packages/BuildTools/Sources/BuildTools/Records.swift"
-    ]
     // The built-in iPod is prepared again when any of these change (firmwarekit, the helper it boots).
     static let deviceSources = [
         "Packages/FirmwareKit/Sources", "Packages/FirmwareKit/Package.swift", "Packages/HostRuntime/Sources",
         "LightTouchDevice", "Packages/DeviceRuntime"
     ]
 
-    public init(root: URL) { self.root = root }
+    public init(root: URL, environment: [String: String] = ProcessInfo.processInfo.environment) {
+        self.root = root
+        self.environment = environment
+    }
 
     /// Whether firmwarekit's device.lock.json records `guestTools`, as given or through symlinks either way.
     static func preparedWith(_ guestTools: URL, lock: URL) -> Bool {
@@ -161,128 +157,6 @@ public struct Vendor {
     func say(_ line: String) {
         print("vendor: \(line)")
         fflush(stdout)
-    }
-
-    /// The environment children run with: this tool for the recipes' `scripts/ltm-build` calls.
-    func env(_ extra: [String: String] = [:]) -> [String: String] {
-        environment.merging(["LTM_BUILD_TOOL": Bundle.main.executablePath ?? ""]) { $1 }.merging(extra) { $1 }
-    }
-
-    /// The pinned qemu-ios commit, as a detached worktree of the checkout sources.json names.
-    func qemuTree(_ work: URL) throws -> URL {
-        let tree = work.appendingPathComponent("qemu-src")
-        let commit = pin("qemu-ios")["commit"] ?? ""
-        if !files.fileExists(atPath: tree.path) {
-            try run([
-                "/usr/bin/git", "-C", checkout("qemu-ios").path, "worktree", "add", "--detach", "-q", tree.path, commit
-            ])
-        }
-        guard try output(["git", "-C", tree.path, "rev-parse", "HEAD"]) == commit else {
-            throw ToolError("vendor: \(tree.path) is not at the pinned qemu-ios \(commit)")
-        }
-        return tree
-    }
-
-    /// ANGLE's universal libEGL and libGLESv2, headers and licenses (build-support/recipes/build-angle.sh), from gclient's checkout of
-    /// the pinned commit, cached under <vendor root>/angle-src/<commit>.
-    func angle(_ work: URL) throws -> URL {
-        let out = work.appendingPathComponent("angle")
-        if files.fileExists(atPath: out.appendingPathComponent("licenses/SOURCE.txt").path) { return out }
-        let packages =
-            (try readJSON(root.appendingPathComponent("build-support/dependencies.json"))["packages"]
-                as? [[String: Any]]) ?? []
-        guard let commit = packages.first(where: { $0["name"] as? String == "ANGLE" })?["version"] as? String else {
-            throw ToolError("vendor: no ANGLE package in build-support/dependencies.json")
-        }
-        let log = work.appendingPathComponent("logs/angle.log")
-        say("ANGLE \(commit.prefix(10)); log \(log.path)")
-        try files.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try run(
-            [
-                "/bin/bash", recipes.appendingPathComponent("build-angle.sh").path,
-                vendorRoot.appendingPathComponent("angle-src/\(commit)").path, out.path
-            ],
-            log: log,
-            environment: env(["LTM_ARCH": Self.archs.joined(separator: " ")])
-        )
-        return out
-    }
-
-    /// One build-package-native.sh root per slice (usbmuxd at its pin, the QEMU dylib, iBoot32Patcher), with the
-    /// static prefix cached per recipe, then merged into one universal root.
-    func native(_ work: URL, qemu: URL, angle: URL) throws -> URL {
-        let universal = work.appendingPathComponent("universal")
-        if files.fileExists(atPath: universal.appendingPathComponent("native-build.json").path),
-            files.fileExists(atPath: universal.appendingPathComponent("build/iBoot32Patcher/iBoot32Patcher").path)
-        {
-            return universal
-        }
-        let staticKey = String(try treeHash(Self.staticKeyed).prefix(12))
-        for arch in Self.archs {  // one at a time: both stage usbmuxd through a worktree of the same checkout
-            let slice = work.appendingPathComponent("native/\(arch)")
-            let staticRoot = vendorRoot.appendingPathComponent("static/\(staticKey)/\(arch)")
-            if files.fileExists(atPath: slice.appendingPathComponent("native-build.json").path) { continue }
-            let log = work.appendingPathComponent("logs/native-\(arch).log")
-            say("native \(arch) (dependencies, usbmuxd, QEMU); log \(log.path)")
-            remove(slice)
-            try files.createDirectory(at: slice.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let e = env([
-                "LTM_ARCH": arch, "QEMU_IOS_DIR": qemu.path, "USBMUXD_SOURCE_DIR": checkout("usbmuxd").path,
-                "USBMUXD_COMMIT": pin("usbmuxd")["commit"] ?? "",
-                "LTM_STATIC_DEPS": staticRoot.appendingPathComponent("prefix").path, "LTM_ANGLE": angle.path
-            ])
-            if !Self.staticComplete(staticRoot) {
-                remove(staticRoot)
-                try files.createDirectory(at: staticRoot.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try run(
-                    ["/bin/bash", recipes.appendingPathComponent("build-static-deps.sh").path, staticRoot.path],
-                    log: log,
-                    environment: e
-                )
-            }
-            try run(
-                ["/bin/bash", recipes.appendingPathComponent("build-package-native.sh").path, slice.path],
-                log: log,
-                environment: e
-            )
-        }
-        remove(universal)
-        try MergeNative.merge(output: universal, roots: Self.archs.map { work.appendingPathComponent("native/\($0)") })
-        try run(
-            [
-                "/bin/bash", recipes.appendingPathComponent("build-iboot32patcher.sh").path,
-                work.appendingPathComponent("native/arm64/src").path,
-                universal.appendingPathComponent("build/iBoot32Patcher").path
-            ],
-            log: work.appendingPathComponent("logs/universal.log"),
-            environment: env(["LTM_ARCH": Self.archs.joined(separator: " ")])
-        )
-        return universal
-    }
-
-    /// build-static-deps.sh writes static-build.json as its last step (atomically), so a static root without it is an
-    /// interrupted build, whatever libraries it already holds.
-    static func staticComplete(_ staticRoot: URL) -> Bool {
-        files.fileExists(atPath: staticRoot.appendingPathComponent("static-build.json").path)
-    }
-
-    /// Holds an exclusive flock on `<directory>/.lock` until the returned descriptor is closed (or the process exits):
-    /// concurrent runs share static/<key> and the vendor directories, so a second run waits for the first.
-    static func lock(_ directory: URL, waiting: () -> Void) throws -> Int32 {
-        try files.createDirectory(at: directory, withIntermediateDirectories: true)
-        let path = directory.appendingPathComponent(".lock").path
-        let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
-        guard fd >= 0 else { throw ToolError("vendor: cannot open \(path): \(String(cString: strerror(errno)))") }
-        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
-            waiting()
-            while flock(fd, LOCK_EX) != 0 {
-                guard errno == EINTR else {
-                    close(fd)
-                    throw ToolError("vendor: cannot lock \(path): \(String(cString: strerror(errno)))")
-                }
-            }
-        }
-        return fd
     }
 
     /// qemu-ios's guest export (contrib/export-guest-artifacts.sh, where its recipes are), checked for what the app and
@@ -886,8 +760,10 @@ public struct Vendor {
             let qemu = try qemuTree(work)
             let (guestRoot, manifest) = try guest(work, qemu: qemu)
             if rebuild {
-                let angle = try angle(work)
-                let universal = try native(work, qemu: qemu, angle: angle)
+                let nativeWork = try sharedNative(work)
+                let nativeQemu = try qemuTree(nativeWork)
+                let angle = try angle(nativeWork)
+                let universal = try native(nativeWork, qemu: nativeQemu, angle: angle)
                 let developer = try developerTools(work, qemu: qemu)
                 try binaries(vendor, universal: universal, qemu: qemu, angle: angle, work: work)
                 try resources(

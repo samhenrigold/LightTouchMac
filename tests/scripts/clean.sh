@@ -43,7 +43,15 @@ key="$("$R/scripts/vendor-check" --key "$R")"
 for name in "$key" aaaaaaaaaaaa bbbbbbbbbbbb cccccccccccc dddddddddddd; do
     mkdir -p "$V/$name" && echo '{}' > "$V/$name/vendor.json"
 done
+# Several vendor packages can refer to one shared native build. Only unreferenced, old caches retire.
+N="$V/native"
+for name in 111111111111 222222222222 333333333333; do mkdir -p "$N/$name"; done
+mkdir -p "$V/$key/work"
+ln -s "$N/111111111111" "$V/$key/work/native-cache"
+old "$N"
+touch "$N/333333333333"
 old "$V"
+touch "$N/333333333333"
 touch "$V/bbbbbbbbbbbb/vendor.json"
 mkdir -p "$W/dirty/build" && ln -s "$V/aaaaaaaaaaaa" "$W/dirty/build/vendor"
 (cd "$V/cccccccccccc" && exec sleep 60) &
@@ -90,6 +98,9 @@ check "a vendor directory a kept checkout names is kept" 'has keep "$V/aaaaaaaaa
 check "the newest vendor directory is kept" 'has keep "$V/bbbbbbbbbbbb"'
 check "a vendor directory open in a process is kept" 'has keep "$V/cccccccccccc"'
 check "a stale vendor directory is removed" 'has remove "$V/dddddddddddd"'
+check "a shared native build referenced by retained vendor stays" 'has keep "$N/111111111111"'
+check "an unreferenced old native build retires" 'has remove "$N/222222222222"'
+check "a recent shared native build stays for reuse" 'has keep "$N/333333333333"'
 check "old scratch is removed" 'has remove "$S/old-task"'
 check "fresh scratch is kept" 'has keep "$S/new-task"'
 check "scratch of a removed worktree is removed" 'has remove "$S/owned-task"'
@@ -108,6 +119,7 @@ check "--yes removes the landed worktree and its branch" '[[ ! -d "$W/landed" ]]
 check "--yes keeps the dirty and unpushed worktrees" '[[ -f "$W/dirty/.gitignore" && -d "$W/unpushed" ]]'
 check "--yes removes the stale vendor directory and keeps the rest" '[[ ! -d "$V/dddddddddddd" && -d "$V/$key" && -d "$V/aaaaaaaaaaaa" && -d "$V/cccccccccccc" ]]'
 check "--yes removes the old and owned scratch and DerivedData" '[[ ! -d "$S/old-task" && ! -d "$S/owned-task" && -d "$S/new-task" && ! -d "$D/LightTouchMac-landed" ]]'
+check "--yes prunes only unreferenced stale native builds" '[[ -d "$N/111111111111" && ! -d "$N/222222222222" && -d "$N/333333333333" ]]'
 check "--yes prunes only old unused session tools" '[[ ! -d "$C/11111111111111111111" && ! -d "$C/33333333333333333333.partial-ABCDEF12" && -d "$C/22222222222222222222" && -d "$C/44444444444444444444" && -d "$C/unrelated" ]]'
 # Fast cleanup does not size trees, hash vendor pins, or inspect worktrees/DerivedData.
 mkdir -p "$T/bin" "$S/finished" "$S/another-task"
