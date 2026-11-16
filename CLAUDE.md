@@ -52,6 +52,5 @@ what to do and not do on a shared Mac.
 
 - Repository style: one long message saying what changed and why, ending with `Checked:` and the evidence (test
   names, pass counts, what failed with the fix reverted).
-- No AI attribution: no tool or assistant names, no session or co-author trailers.
 - American spelling (license, behavior, color), but Apple's cancelled and cancellable.
 - The product is "Light Touch", two words, wherever a person reads it; `LightTouch` only in identifiers.
