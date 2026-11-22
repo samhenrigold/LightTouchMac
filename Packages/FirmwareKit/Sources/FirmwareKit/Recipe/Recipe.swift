@@ -313,7 +313,7 @@ public enum Recipe {
             })
                 ?? comp["UpdateRamDisk"] ?? comp["RestoreRamDisk"]
         else { throw FirmwareError(.unsupported, "\(c.e.id): no ramdisk") }
-        let name = String(update.dropLast(4)) + "-ramdisk.dmg"
+        let name = FirmwareDecryptor.ramdiskName(update)
         guard let from = c.recipe.keybagRamdiskFrom else { return (try c.decFile(name), name) }
         guard let sib = c.o.sibling, sib.entry.id == from else {
             throw FirmwareError(

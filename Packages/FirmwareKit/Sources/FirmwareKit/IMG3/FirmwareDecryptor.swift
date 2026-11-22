@@ -31,6 +31,12 @@ public enum FirmwareDecryptor {
         public var files: [String]
     }
 
+    /// The decryption cache's name for the ramdisk at `path` in the IPSW (018-1234-001.dmg: 018-1234-001-ramdisk.dmg):
+    /// its last component only, so a manifest's path never names a file outside the cache.
+    static func ramdiskName(_ path: String) -> String {
+        String((path as NSString).lastPathComponent.dropLast(4)) + "-ramdisk.dmg"
+    }
+
     public static func decrypt(ipsw url: URL, entry: FirmwareEntry, into dir: URL, rootfs: Bool = true) throws -> Result
     {
         let ipsw = IPSWArchive(url)
@@ -110,7 +116,7 @@ public enum FirmwareDecryptor {
                 FirmwareDiagnostics.write(Data("warning: \(entry.id): no key for \(c) (\(p)); skipped\n".utf8))
                 continue
             }
-            let out = String(p.dropLast(4)) + "-ramdisk.dmg"
+            let out = ramdiskName(p)
             try dec(p, plainTail: plainTail).write(to: dir.appendingPathComponent(out))
             files.append(out)
         }

@@ -145,4 +145,12 @@ struct GuestWrittenInputTests {
         #expect(count("tsettings") == 1)
         #expect(count("ran") == 0, "the guest's trigger ran on the host")
     }
+
+    /// The decryption cache names a ramdisk after its path in the IPSW's manifest: only its last component, so a
+    /// path with folders or ".." in it names a file in the cache, not beside or above it.
+    @Test func aRamdiskCacheNameIsOneComponent() {
+        #expect(FirmwareDecryptor.ramdiskName("018-1234-001.dmg") == "018-1234-001-ramdisk.dmg")
+        #expect(FirmwareDecryptor.ramdiskName("../../Library/x.dmg") == "x-ramdisk.dmg")
+        #expect(FirmwareDecryptor.ramdiskName("Firmware/dfu/y.dmg") == "y-ramdisk.dmg")
+    }
 }
