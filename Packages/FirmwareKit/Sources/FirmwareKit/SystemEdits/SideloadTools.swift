@@ -8,23 +8,20 @@ public enum SideloadTools {
         let nativeIOS9 =
             v.plist(at: "System/Library/CoreServices/SystemVersion.plist")?["ProductBuildVersion"] as? String
             == "13A344"
-        // iOS 8+ release installd ignores the configured helper while this
-        // empty dyld restriction marker is present. Older profiles are intact.
-        if SystemEdits.majorVersion(v) >= 8 {
-            let path = "usr/libexec/installd"
-            let before = try v.contents(at: path)
-            var after = try installationServiceAllowingHelper(before)
-            if nativeIOS9 { after = try installationServiceAllowingEnvironment(after) }
-            if after != before { try v.put(after, at: path, mode: 0o755) }
+        _ = try SystemEdits.installAppSync(
+            v, helper: helpers.appendingPathComponent(SystemEdits.Helpers.appsync),
+            cache: ["armv7s", "armv7"].map(SystemEdits.dyldCache).first(where: v.exists)
+                ?? SystemEdits.dyldCache("armv7"),
+            log: { _ in })
+        if nativeIOS9 {
+            let before = try v.contents(at: SystemEdits.installd)
+            let after = try installationServiceAllowingEnvironment(before)
+            if after != before { try v.put(after, at: SystemEdits.installd, mode: 0o755) }
         }
         try v.makeDirectory("usr/local/bin", mode: 0o755)
         // ltm-httpget: the harness's Wi-Fi check, baked in because the image's root is read-only and its sandbox
         // lets it_agent exec only what is on the system volume, so nothing the agent puts at run time can run.
-        for (name, path) in [
-            ("it_agent", "usr/local/bin/it_agent"),
-            ("httpget-armv7", "usr/local/bin/ltm-httpget"),
-            ("libappsync.dylib", "usr/lib/libappsync.dylib")
-        ] {
+        for (name, path) in [("it_agent", "usr/local/bin/it_agent"), ("httpget-armv7", "usr/local/bin/ltm-httpget")] {
             try v.put(contentsOf: helpers.appendingPathComponent(name), at: path, mode: 0o755)
         }
         if nativeIOS9 {
@@ -50,18 +47,9 @@ public enum SideloadTools {
         // There must only be one clipboard/agent owner.
         let old = "System/Library/LaunchDaemons/com.qemu.it-pbd.plist"
         if v.exists(old) { try v.remove(old) }
-        var patched = false
-        for name in ["com.apple.mobile.installd.plist", "com.apple.installd.plist"] {
-            let path = "System/Library/LaunchDaemons/" + name
-            guard v.exists(path) else { continue }
-            var job =
-                try PropertyListSerialization.propertyList(from: v.contents(at: path), format: nil) as! [String: Any]
-            var env = job["EnvironmentVariables"] as? [String: String] ?? [:]
-            var libs = (env["DYLD_INSERT_LIBRARIES"] ?? "").split(separator: ":").map(String.init)
-            if !libs.contains("/usr/lib/libappsync.dylib") { libs.append("/usr/lib/libappsync.dylib") }
-            env["DYLD_INSERT_LIBRARIES"] = libs.joined(separator: ":")
-            job["EnvironmentVariables"] = env
-            if nativeIOS9 {
+        // 13A344's launchd filters the job's DYLD_INSERT_LIBRARIES: appsync-launch sets it and execs installd.
+        if nativeIOS9, let job = SystemEdits.installdJobs.first(where: v.exists) {
+            try SystemEdits.rewritePlist(v, job) { job in
                 guard let arguments = job["ProgramArguments"] as? [String], !arguments.isEmpty else {
                     throw FirmwareError(.unsupported, "Installation service has no native arguments")
                 }
@@ -73,13 +61,6 @@ public enum SideloadTools {
                 }
                 job["ExecuteAllowed"] = true
             }
-            try v.put(PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0), at: path)
-            patched = true
-        }
-        guard patched else {
-            throw NSError(
-                domain: "Sideload", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "No supported installd job on this image"])
         }
         try LaunchdCache.refresh(
             v,

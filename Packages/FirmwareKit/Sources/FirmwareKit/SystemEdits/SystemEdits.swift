@@ -490,10 +490,15 @@ public enum SystemEdits {
         log(line)
         try v.makeDirectory((appsyncPath as NSString).deletingLastPathComponent)
         try v.put(contentsOf: helper, at: appsyncPath, mode: 0o644)  // host file
-        let job = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map { daemons + "/" + $0 }
-            .first { v.exists($0) }
+        let job = installdJobs.first { v.exists($0) }
         if let job {
             try rewritePlist(v, job) { dyldInsert($0, "/" + appsyncPath) }
+            // iOS 8+ release installd: dyld ignores DYLD_INSERT_LIBRARIES while its empty __RESTRICT marker is there.
+            if majorVersion(v) >= 8 {
+                let before = try v.contents(at: installd)
+                let after = try SideloadTools.installationServiceAllowingHelper(before)
+                if after != before { try v.put(after, at: installd, mode: 0o755) }
+            }
             return (line, (job as NSString).lastPathComponent)
         }
         // 2.x installs in the Lockdown-launched mobile_installation_proxy, before installd existed.
@@ -515,6 +520,8 @@ public enum SystemEdits {
     }
 
     static let lockdownServices = "System/Library/Lockdown/Services.plist"
+    static let installd = "usr/libexec/installd"
+    static let installdJobs = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map { daemons + "/" + $0 }
     static let afcd = "usr/libexec/afcd", afc2d = "usr/libexec/afc2d", afc2Job = daemons + "/com.apple.afc2.plist"
     /// afc2, as the jailbreaks of the time added it: a com.apple.afc2 lockdown service serving "/" as root, so the Mac
     /// can browse the whole file system over USB. Through 7.0 it is the stock afcd under old-style lockdown at "/".
