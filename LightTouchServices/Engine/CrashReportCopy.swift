@@ -15,6 +15,11 @@ nonisolated enum CrashReportCopy {
         var data = Data()
     }
 
+    /// What one pass takes, at most: the guest chooses how many reports it sends and how long they are, and a
+    /// running device is asked every minute. Past either, the pass stops with the whole reports it has.
+    static let maxReports = 256
+    static let maxBytes = 32 << 20
+
     /// Every report the agent has: the .plist, .log and .zip files (and the baseband's log-bb-*) in root's and
     /// mobile's CrashReporter folders, each sent with DLSendFile on a SendNewCrashLogs request, then
     /// CrashReportDoneCopying. Nothing is marked as sent (MarkCrashLogAsSent), which would delete it on the device.
@@ -66,6 +71,7 @@ nonisolated enum CrashReportCopy {
             ["CrashReportRequest": "SendNewCrashLogs", "FileDestPath": "CrashReporter"]
         ])
         var reports: [String: Report] = [:]
+        var received = 0
         reading: while true {
             let message = try receive()
             switch message.first as? String {
@@ -74,10 +80,16 @@ nonisolated enum CrashReportCopy {
                 guard message.count > 2, let info = message[2] as? [String: Any],
                     let path = info["DLFileDest"] as? String
                 else { continue }
+                let hunk = message[1] as? Data ?? Data()
+                received += hunk.count
+                guard received <= maxBytes, reports[path] != nil || reports.count < maxReports else {
+                    reports[path] = nil  // cut short
+                    break reading
+                }
                 let attributes = info["DLFileAttributesKey"] as? [String: Any]
                 var report = reports[path] ?? Report(path: path)
                 if info["DLFileOffsetKey"] as? Int == 0 { report.data = Data() }
-                report.data += message[1] as? Data ?? Data()
+                report.data += hunk
                 // The agent's dates count from 1970 where a plist's count from 2001: 31 years late as read (a report
                 // written at 18:17:20Z on 2026-10-20 reads 2057-10-20 18:17:20Z).
                 if let date = attributes?["ModificationTime"] as? Date {
