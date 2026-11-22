@@ -80,6 +80,11 @@ final class WebProxy: @unchecked Sendable {
     private var _localNetwork = true
     /// The egress is listening; without it URLSession has no way out and nothing is fetched.
     private let egressReady: Bool
+    /// The egress's loopback port, 0 without one.
+    let egressPort: UInt16
+    /// Egress connections served at once. Any local process can connect, and each is a thread waiting up to a minute
+    /// for its CONNECT before the secret is checked; URLSession's own stay well under this (the guest has 48).
+    static let egressConnections = 128
     /// The egress's credential: 128 random bits for this proxy's life, known only to its own URLSession.
     static let egressUser = "light-touch"
     private let egressAuthorization: String
@@ -118,6 +123,7 @@ final class WebProxy: @unchecked Sendable {
         let secret = (0..<4).map { _ in String(format: "%08x", arc4random()) }.joined()
         egressAuthorization = "Basic " + Data("\(Self.egressUser):\(secret)".utf8).base64EncodedString()
         let (egress, port) = Self.egressSocket()
+        egressPort = port
         if let port = NWEndpoint.Port(rawValue: port) {
             var proxy = ProxyConfiguration(httpCONNECTProxy: .hostPort(host: "127.0.0.1", port: port))
             proxy.applyCredential(username: Self.egressUser, password: secret)
@@ -133,7 +139,11 @@ final class WebProxy: @unchecked Sendable {
         where name.hasPrefix(config.lastPathComponent + ".archive-") {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
         }
-        if egress >= 0 { accepting(egress, name: "web-proxy-egress") { self.egress($0) } }
+        if egress >= 0 {
+            accepting(egress, name: "web-proxy-egress", limit: ConnectionLimit(capacity: Self.egressConnections)) {
+                self.egress($0)
+            }
+        }
     }
 
     /// Serves `path` (a Unix socket, owner-only) on a thread of its own; one thread per connection, at most 48

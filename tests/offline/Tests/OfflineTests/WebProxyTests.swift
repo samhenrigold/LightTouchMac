@@ -32,6 +32,42 @@ extension SharedState {
                     == true)
         }
 
+        /// The egress is loopback TCP any local process reaches, and each connection waits for its CONNECT (and the
+        /// secret) on a thread of its own: past egressConnections at once, one is closed unanswered.
+        @Test func theEgressServesNoMoreThanItsLimitAtOnce() throws {
+            let work = FileManager.default.temporaryDirectory.appendingPathComponent(
+                "ltm-web-proxy-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: work) }
+            let proxy = WebProxy(config: work.appendingPathComponent("web-proxy.conf"))
+            try #require(proxy.egressPort != 0)
+            func connect() throws -> Int32 {
+                let fd = socket(AF_INET, SOCK_STREAM, 0)
+                var address = sockaddr_in()
+                address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+                address.sin_family = sa_family_t(AF_INET)
+                address.sin_addr.s_addr = inet_addr("127.0.0.1")
+                address.sin_port = proxy.egressPort.bigEndian
+                let connected = withUnsafePointer(to: &address) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+                    }
+                }
+                try #require(fd >= 0 && connected)
+                var timeout = timeval(tv_sec: 2, tv_usec: 0)
+                setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+                return fd
+            }
+            // Accepted in order: once the last of the limit is being served, the next is the one closed.
+            let held = try (0..<WebProxy.egressConnections).map { _ in try connect() }
+            defer { for fd in held { close(fd) } }
+            Thread.sleep(forTimeInterval: 0.5)
+            let extra = try connect()
+            defer { close(extra) }
+            var byte: UInt8 = 0
+            #expect(read(extra, &byte, 1) == 0, "the connection past the limit was kept open")
+        }
+
         /// What the guest's end of a socket pair reads once the proxy has streamed `request` to the other.
         private func fetch(_ proxy: WebProxy, _ request: URLRequest) throws -> String {
             var pair: [Int32] = [-1, -1]
