@@ -15,6 +15,12 @@ extension SharedState {
             "881": "https://elsewhere.test/ipa/881", "882": "http://ia800.us.archive.org/ipa/882",
             "883": "file:///ipa/883"
         ]
+        /// Copies whose download_url is the store's own, which redirects: 884 and 885 where no download may come
+        /// from, 886 to the Internet Archive, as the live store does.
+        nonisolated static let redirects = [
+            "884": "https://elsewhere.test/ipa/884", "885": "file:///ipa/885",
+            "886": "https://ia800.us.archive.org/ipa/886"
+        ]
 
         /// tests/fixtures/catalog-server.py: one fixture app per ipa_id, its copy record, two versions and the archive.
         nonisolated static func fixtureServer(_ request: URLComponents) -> LegacyStoreStub.Reply {
@@ -61,6 +67,11 @@ extension SharedState {
                         ]
                     }
                 ])
+            }
+            if request.host == "catalog.test", path.hasPrefix("/ipa/"),
+                let to = redirects[String(path.dropFirst(5))]
+            {
+                return .redirect(URL(string: to)!)
             }
             if path.hasPrefix("/ipa/") {
                 return LegacyStoreStub.Reply(body: body, chunk: 4096, pause: path.hasSuffix("/777") ? 0.05 : 0)
@@ -112,6 +123,30 @@ extension SharedState {
                     task.cancel()
                     await #expect(throws: (any Error).self) { try await task.value }
                     #expect(scratch().isEmpty, "a failed or cancelled transfer owns no scratch directory")
+                }
+            }
+        }
+
+        /// Every hop of a download is held to acceptsDownload, not only the download_url the catalog names: a
+        /// redirect from the store to another host or scheme is not followed.
+        @Test func aRedirectOutsideTheAcceptedDownloadsIsRefused() async throws {
+            try await withTemporaryState { state in
+                try await LegacyStoreStub.serving(state: state, { Self.fixtureServer($0) }) {
+                    for id in ["884", "885"] {
+                        let copy = try await CatalogClient.compatibleCopy(Int(id)!)
+                        do {
+                            _ = try await CatalogClient.download(copy) { _ in }
+                            Issue.record("\(id)'s redirect was followed")
+                        } catch CatalogError.invalidCopy {}
+                    }
+                    #expect(LegacyStoreStub.requests.contains { $0.path == "/ipa/884" })
+                    #expect(
+                        !LegacyStoreStub.requests.contains { $0.host != "catalog.test" },
+                        "a refused redirect was followed: \(LegacyStoreStub.requests.map(\.string))"
+                    )
+                    let file = try await CatalogClient.download(try await CatalogClient.compatibleCopy(886)) { _ in }
+                    #expect(try Data(contentsOf: file) == Self.body)
+                    #expect(LegacyStoreStub.requests.last?.host == "ia800.us.archive.org")
                 }
             }
         }

@@ -23,11 +23,14 @@ nonisolated final class LegacyStoreStub: URLProtocol, @unchecked Sendable {
         var body = Data()
         var chunk = 0
         var pause: TimeInterval = 0
+        /// A 302 to this URL, in place of a body.
+        var location: URL?
         static func json(_ object: Any, status: Int = 200) -> Reply {
             Reply(status: status, body: try! JSONSerialization.data(withJSONObject: object))
         }
         static func file(_ url: URL) -> Reply { Reply(body: try! Data(contentsOf: url)) }
         static func error(_ status: Int) -> Reply { Reply(status: status, body: Data("{}".utf8)) }
+        static func redirect(_ url: URL) -> Reply { Reply(status: 302, location: url) }
     }
 
     private static let lock = NSLock()
@@ -80,6 +83,17 @@ nonisolated final class LegacyStoreStub: URLProtocol, @unchecked Sendable {
             return
         }
         let reply = respond(components)
+        if let location = reply.location {
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: reply.status,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": location.absoluteString, "Content-Length": "0"]
+            )!
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: location), redirectResponse: response)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         Thread.detachNewThread { [self] in
             let response = HTTPURLResponse(
                 url: request.url!,

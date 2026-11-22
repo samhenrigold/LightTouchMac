@@ -336,10 +336,19 @@ public enum CatalogClient {
                     throw CatalogError.invalidCopy("Legacy Store named a download Light Touch doesn’t accept.")
                 }
                 let delegate = CatalogDownloadProgress(report: progress)
-                let (temporary, response) = try await URLSession.shared.download(
-                    for: request(current.downloadURL),
-                    delegate: delegate
-                )
+                let temporary: URL
+                let response: URLResponse
+                do {
+                    (temporary, response) = try await URLSession.shared.download(
+                        for: request(current.downloadURL),
+                        delegate: delegate
+                    )
+                } catch let error where delegate.refusedRedirect != nil {
+                    log(
+                        "Legacy Store: refused a redirect to \(delegate.refusedRedirect?.absoluteString ?? "") (\(error))"
+                    )
+                    throw CatalogError.invalidCopy("Legacy Store named a download Light Touch doesn’t accept.")
+                }
                 defer { try? FileManager.default.removeItem(at: temporary) }
                 guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
                     throw CatalogError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
@@ -357,10 +366,14 @@ public enum CatalogClient {
     }
 }
 
-/// Immutable delegate; URLSession calls it off the main actor.
-nonisolated private final class CatalogDownloadProgress: NSObject, URLSessionDownloadDelegate {
+/// URLSession calls it off the main actor; the one thing it keeps is a refused redirect, under its lock.
+nonisolated private final class CatalogDownloadProgress: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     let report: @MainActor @Sendable (Double) -> Void
+    private let lock = NSLock()
+    private var refused: URL?
     init(report: @escaping @MainActor @Sendable (Double) -> Void) { self.report = report }
+    /// Where a redirect the download was cancelled at would have gone.
+    var refusedRedirect: URL? { lock.withLock { refused } }
     func urlSession(
         _ session: URLSession,
         downloadTask: URLSessionDownloadTask,
@@ -377,5 +390,23 @@ nonisolated private final class CatalogDownloadProgress: NSObject, URLSessionDow
             totalBytesExpectedToWrite > 0
             ? min(1, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)) : -1
         Task { @MainActor [report] in report(fraction) }
+    }
+    /// Every hop is held to acceptsDownload, as the download_url was: the store's 302 to archive.org passes, a
+    /// redirect anywhere else cancels the transfer, which download() reports as the copy refused. (Answering nil
+    /// alone made download(for:) trap in the tests' stub, which sends nothing after a refused redirect; and the
+    /// completion handler, not the async variant, whose thunk crashes Swift 6.4.2's SILGen.)
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        Task { @MainActor in
+            if let url = request.url, CatalogClient.acceptsDownload(url) { return completionHandler(request) }
+            lock.withLock { refused = request.url ?? URL(fileURLWithPath: "/") }
+            task.cancel()
+            completionHandler(nil)
+        }
     }
 }
