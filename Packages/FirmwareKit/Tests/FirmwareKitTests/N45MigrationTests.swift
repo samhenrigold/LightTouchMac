@@ -32,28 +32,30 @@ import Testing
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let image = root.appendingPathComponent("volume.img")
-        try await VolumeMount.makeHFS(image, size: 16 << 20, name: "SC step test")
         // What 1.x's configd writes there at first boot (measured on 1A543a): its own AirPort service on en0, and
         // no known networks.
-        try await VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { mount in
-            let sc = mount.appendingPathComponent(Self.scPrefs)
-            try fm.createDirectory(at: sc, withIntermediateDirectories: true)
+        try Fixtures.makeVolume(image, size: 16 << 20, name: "SC step test") { v in
+            try v.makeDirectory(Self.scPrefs)
             let service: [String: Any] = [
                 "Interface": ["DeviceName": "en0", "Hardware": "AirPort", "Type": "Ethernet"],
                 "UserDefinedName": "AirPort"
             ]
-            try PropertyListSerialization.data(
-                fromPropertyList: ["NetworkServices": ["CONFIGD": service]],
-                format: .xml,
-                options: 0
+            try v.put(
+                PropertyListSerialization.data(
+                    fromPropertyList: ["NetworkServices": ["CONFIGD": service]],
+                    format: .xml,
+                    options: 0
+                ),
+                at: Self.scPrefs + "/preferences.plist"
             )
-            .write(to: sc.appendingPathComponent("preferences.plist"))
-            try PropertyListSerialization.data(
-                fromPropertyList: ["JoinMode": "Automatic", "List of known networks": [Any]()],
-                format: .xml,
-                options: 0
+            try v.put(
+                PropertyListSerialization.data(
+                    fromPropertyList: ["JoinMode": "Automatic", "List of known networks": [Any]()],
+                    format: .xml,
+                    options: 0
+                ),
+                at: Self.scPrefs + "/com.apple.wifi.plist"
             )
-            .write(to: sc.appendingPathComponent("com.apple.wifi.plist"))
         }
         let dirs = [
             "private", "private/var", "private/var/root", N45Board.rootLibrary, N45Board.rootLibrary + "/Preferences",
@@ -160,25 +162,24 @@ import Testing
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let image = root.appendingPathComponent("volume.img")
-        try await VolumeMount.makeHFS(image, size: 16 << 20, name: "SC move test")
         let systemSC = "private/var/preferences/SystemConfiguration"
-        try await VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { mount in
-            let job = mount.appendingPathComponent(SystemEdits.daemons + "/com.apple.SpringBoard.plist")
-            try fm.createDirectory(at: job.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try PropertyListSerialization.data(
-                fromPropertyList: ["Label": "com.apple.SpringBoard", "UserName": "mobile"],
-                format: .xml,
-                options: 0
-            ).write(to: job)
+        try Fixtures.makeVolume(image, size: 16 << 20, name: "SC move test") { v in
+            try v.makeDirectory(SystemEdits.daemons)
+            try v.put(
+                PropertyListSerialization.data(
+                    fromPropertyList: ["Label": "com.apple.SpringBoard", "UserName": "mobile"],
+                    format: .xml,
+                    options: 0
+                ),
+                at: SystemEdits.daemons + "/com.apple.SpringBoard.plist"
+            )
             // what the recipe wrote before 44b92c0b
-            let sc = mount.appendingPathComponent(Self.scPrefs)
-            try fm.createDirectory(at: sc, withIntermediateDirectories: true)
-            try PropertyListSerialization.data(
-                fromPropertyList: N45Board.wifiKnownNetwork,
-                format: .xml,
-                options: 0
-            ).write(to: sc.appendingPathComponent("com.apple.wifi.plist"))
-            try fm.createDirectory(at: mount.appendingPathComponent(systemSC), withIntermediateDirectories: true)
+            try v.makeDirectory(Self.scPrefs)
+            try v.put(
+                PropertyListSerialization.data(fromPropertyList: N45Board.wifiKnownNetwork, format: .xml, options: 0),
+                at: Self.scPrefs + "/com.apple.wifi.plist"
+            )
+            try v.makeDirectory(systemSC)
         }
         try N45NAND.write(
             volume: image,

@@ -52,6 +52,16 @@ enum Fixtures {
         return u
     }
 
+    /// A journaled case-sensitive volume at `image` that `body` fills offline (HFSPlusWriter), for a test whose subject
+    /// is what is done to the volume afterwards: no attach or mount, which the host's disk arbitration serializes
+    /// across every test running (seconds each on a loaded Mac). New items are the host user's; set owners after.
+    static func makeVolume(_ image: URL, size: Int64, name: String, _ body: (HFSPlusWriter) throws -> Void) throws {
+        try HFSPlusWriter.makeHFS(image, size: size, name: name)
+        let w = try HFSPlusWriter(image)
+        try body(w)
+        try w.close()
+    }
+
     @discardableResult
     static func run(_ args: [String], env: [String: String] = [:]) throws -> (status: Int32, out: Data, err: String) {
         let p = Process()

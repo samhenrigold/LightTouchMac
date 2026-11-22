@@ -240,12 +240,10 @@ struct PreparedBaseTests {
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let image = root.appendingPathComponent("volume.img")
         let prefs = "private/var/mobile/Library/Preferences/.GlobalPreferences.plist"
-        try await VolumeMount.makeHFS(image, size: 16 << 20, name: "System")
-        try await VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { m in
-            let url = m.appendingPathComponent(prefs)
-            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Fixtures.makeVolume(image, size: 16 << 20, name: "System") { v in
+            try v.makeDirectory((prefs as NSString).deletingLastPathComponent)
             let global: [String: Any] = ["AppleLanguages": ["en", "fr", "uk"], "AppleLocale": "en_US"]
-            try PropertyListSerialization.data(fromPropertyList: global, format: .binary, options: 0).write(to: url)
+            try v.put(PropertyListSerialization.data(fromPropertyList: global, format: .binary, options: 0), at: prefs)
         }
         let hfs = try HFSPlusVolume(image)
         let nand = base.appendingPathComponent("nand")
@@ -260,13 +258,10 @@ struct PreparedBaseTests {
         let volume = try #require(
             VolumeRebuild.rebuild(base: nand, overlay: nil, into: root.appendingPathComponent("out")).first?.image
         )
-        let global = try await VolumeMount.withMounted(volume, at: root.appendingPathComponent("check")) { m in
-            try PropertyListSerialization.propertyList(
-                from: Data(contentsOf: m.appendingPathComponent(prefs)),
-                format: nil
-            )
-                as? [String: Any]
-        }
+        let check = try HFSPlusVolume(volume)
+        let global =
+            try PropertyListSerialization.propertyList(from: check.contents(check.record(at: prefs)), format: nil)
+            as? [String: Any]
         #expect(global?["AppleLanguages"] as? [String] == ["uk", "en", "fr"])
         #expect(global?["AppleLocale"] as? String == "uk_UA")
         let lock =

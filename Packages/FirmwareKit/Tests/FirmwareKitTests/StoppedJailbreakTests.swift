@@ -129,10 +129,17 @@ import Testing
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let image = root.appendingPathComponent("volume.img")
-        try await VolumeMount.makeHFS(image, size: 32 << 20, name: "Jailbreak test")
-        try await VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { mount in
-            for item in try fm.contentsOfDirectory(atPath: tree.path) {
-                try fm.copyItem(at: tree.appendingPathComponent(item), to: mount.appendingPathComponent(item))
+        try Fixtures.makeVolume(image, size: 32 << 20, name: "Jailbreak test") { v in
+            for path in try fm.subpathsOfDirectory(atPath: tree.path).sorted() {
+                let item = tree.appendingPathComponent(path)
+                let mode = try (fm.attributesOfItem(atPath: item.path)[.posixPermissions] as? NSNumber)?.uint16Value
+                if let target = try? fm.destinationOfSymbolicLink(atPath: item.path) {
+                    try v.makeSymlink(path, to: target)
+                } else if DevicePath.isDirectory(item) {
+                    try v.makeDirectory(path, mode: mode)
+                } else {
+                    try v.put(contentsOf: item, at: path, mode: mode)
+                }
             }
         }
         let hfs = try HFSPlusVolume(image)

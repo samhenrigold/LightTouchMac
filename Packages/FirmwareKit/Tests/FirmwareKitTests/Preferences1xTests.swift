@@ -23,22 +23,22 @@ import Testing
         let prefs = home + "/Library/Preferences"
         // Under seven logical blocks: the booted fixture remaps logical block 0 onto virtual block 30, logical block 7's
         // in the prepared store, so an edit there would land on block 0's pages.
-        try await VolumeMount.makeHFS(image, size: 6 << 20, name: "Prefs test")
-        try await VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { mount in
-            let job = mount.appendingPathComponent("System/Library/LaunchDaemons/com.apple.SpringBoard.plist")
-            try fm.createDirectory(at: job.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Fixtures.makeVolume(image, size: 6 << 20, name: "Prefs test") { v in
+            try v.makeDirectory("System/Library/LaunchDaemons")
             let jobPlist: [String: Any] =
                 mobile ? ["Label": "com.apple.SpringBoard", "UserName": "mobile"] : ["Label": "com.apple.SpringBoard"]
-            try PropertyListSerialization.data(fromPropertyList: jobPlist, format: .xml, options: 0).write(to: job)
-            for other in ["private/var/root/Library/Preferences", "private/var/mobile/Library/Preferences"] {
-                try fm.createDirectory(at: mount.appendingPathComponent(other), withIntermediateDirectories: true)
-            }
-            try PropertyListSerialization.data(
-                fromPropertyList: ["SBDisableIdleSleep": true],
-                format: .binary,
-                options: 0
+            try v.put(
+                PropertyListSerialization.data(fromPropertyList: jobPlist, format: .xml, options: 0),
+                at: "System/Library/LaunchDaemons/com.apple.SpringBoard.plist"
             )
-            .write(to: mount.appendingPathComponent(prefs + "/com.apple.springboard.plist"))
+            for other in ["private/var/root/Library/Preferences", "private/var/mobile/Library/Preferences"] {
+                try v.makeDirectory(other)
+            }
+            try v.put(
+                PropertyListSerialization.data(
+                    fromPropertyList: ["SBDisableIdleSleep": true], format: .binary, options: 0),
+                at: prefs + "/com.apple.springboard.plist"
+            )
         }
         let hfs = try HFSPlusVolume(image, writable: true)
         _ = try hfs.setOwner([home, home + "/Library", prefs], uid: uid, gid: uid, mode: 0o40755)

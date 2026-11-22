@@ -193,10 +193,9 @@ import Testing
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let image = root.appendingPathComponent("volume.img")
-        try await VolumeMount.makeHFS(image, size: 16 << 20, name: "Legacy edit test")
-        try await VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { mount in
-            try fm.createDirectory(at: mount.appendingPathComponent("Applications"), withIntermediateDirectories: true)
-            try Data("stock".utf8).write(to: mount.appendingPathComponent("Applications/Stock"))
+        try Fixtures.makeVolume(image, size: 16 << 20, name: "Legacy edit test") { v in
+            try v.makeDirectory("Applications")
+            try v.put(Data("stock".utf8), at: "Applications/Stock")
         }
         try HFSPlusVolume(image, writable: true).setOwner(
             ["Applications", "Applications/Stock"],

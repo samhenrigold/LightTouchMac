@@ -107,22 +107,22 @@ import Testing
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let image = root.appendingPathComponent("volume.img")
-        try await VolumeMount.makeHFS(image, size: 16 << 20, name: "Trust test")
-        try await VolumeMount.withMounted(image, at: root.appendingPathComponent("initial")) { mount in
-            let store = mount.appendingPathComponent(TrustStore1x.path)
-            try fm.createDirectory(at: store.deletingLastPathComponent(), withIntermediateDirectories: true)
-            var db: OpaquePointer?
-            #expect(sqlite3_open(store.path, &db) == SQLITE_OK)
-            #expect(
-                sqlite3_exec(
-                    db,
-                    "CREATE TABLE tsettings(sha1 BLOB NOT NULL DEFAULT '',subj BLOB NOT NULL DEFAULT '',tset BLOB,data BLOB,PRIMARY KEY(sha1));",
-                    nil,
-                    nil,
-                    nil
-                ) == SQLITE_OK
-            )
-            sqlite3_close(db)
+        let store = root.appendingPathComponent("TrustStore.sqlite3")
+        var db: OpaquePointer?
+        #expect(sqlite3_open(store.path, &db) == SQLITE_OK)
+        #expect(
+            sqlite3_exec(
+                db,
+                "CREATE TABLE tsettings(sha1 BLOB NOT NULL DEFAULT '',subj BLOB NOT NULL DEFAULT '',tset BLOB,data BLOB,PRIMARY KEY(sha1));",
+                nil,
+                nil,
+                nil
+            ) == SQLITE_OK
+        )
+        sqlite3_close(db)
+        try Fixtures.makeVolume(image, size: 16 << 20, name: "Trust test") { v in
+            try v.makeDirectory((TrustStore1x.path as NSString).deletingLastPathComponent)
+            try v.put(contentsOf: store, at: TrustStore1x.path)
         }
         try N45NAND.write(
             volume: image,
@@ -166,7 +166,7 @@ import Testing
         try HFSPlusVolume(rebuilt.image).contents(HFSPlusVolume(rebuilt.image).record(at: TrustStore1x.path)).write(
             to: check
         )
-        var db: OpaquePointer?
+        db = nil
         #expect(sqlite3_open(check.path, &db) == SQLITE_OK)
         defer { sqlite3_close(db) }
         var stmt: OpaquePointer?
