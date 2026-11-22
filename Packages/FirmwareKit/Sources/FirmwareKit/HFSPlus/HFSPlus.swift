@@ -703,8 +703,11 @@ public final class HFSPlusVolume {
         guard pread(fd, &jib, 52, off_t(Int(try be32(vh, 12)) * blockSize)) == 52, try be32(jib, 0) & 3 == 1 else {
             return nil
         }
-        let offset = Int(try be64(jib, 36))
-        let size = Int(try be64(jib, 44))
+        // The device wrote these: an offset or size past an Int trapped, and one past the volume sized a read by it.
+        let volume = totalBlocks * blockSize
+        guard let offset = Int(exactly: try be64(jib, 36)), let size = Int(exactly: try be64(jib, 44)),
+            size <= volume, offset <= volume - size
+        else { throw FirmwareError(.unsupported, "\(url.lastPathComponent): the journal lies outside the volume") }
         return size > 0 ? (offset, size, try be32(jib, 0) & 4 != 0) : nil
     }
 
