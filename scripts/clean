@@ -15,8 +15,9 @@
 #   process. `git worktree remove` without --force, then the branch. Also their scratch and DerivedData. A worktree
 #   whose scratch directory (<scratch root>/<worktree name>/) holds `.abandoned` may have commits on no remote: it is
 #   removed when clean, and its branch kept.
-# Scratch (LTM_SCRATCH_ROOT, default ~/Developer/ltm-scratch.noindex): a task directory with nothing modified in N
-#   days, or whose `.worktree` file names a worktree that is gone.
+# Scratch (LTM_SCRATCH_ROOT, default ~/Developer/ltm-scratch.noindex): a task directory whose `.worktree` file names a
+#   worktree that is gone, or with none and no file but .DS_Store modified in N days. One whose worktree is still
+#   there holds its markers (.worktree, .abandoned) and is kept with it.
 # DerivedData of this project whose workspace is gone.
 # --snapshots also asks Time Machine to thin local snapshots (tmutil thinlocalsnapshots).
 # Anything an open process holds (lsof) is kept.
@@ -126,6 +127,12 @@ done
 [[ -n "$ONLY" && ${#removed[@]} -eq 0 ]] && { echo "nothing removed: $ONLY is not a removable managed worktree"; exit 1; }
 gone() { local p; for p in "${removed[@]+"${removed[@]}"}"; do [[ "$1/" == "$p/"* ]] && return 0; done; [[ ! -e "$1" ]]; }
 
+# stale DIR: no file in DIR but Finder's .DS_Store (which also makes the folder it lands in new) modified in $DAYS
+# days; a DIR with no other file at all by its own age
+stale() {
+    [[ -z "$(find "$1" ! -type d ! -name .DS_Store -mtime "-$DAYS" -print -quit 2>/dev/null)" ]] || return 1
+    [[ -n "$(find "$1" ! -type d ! -name .DS_Store -print -quit 2>/dev/null)" ]] || [[ -z "$(find "$1" -maxdepth 0 -mtime "-$DAYS" 2>/dev/null)" ]]
+}
 echo "== scratch ($SCRATCH_ROOT)"
 for dir in "$SCRATCH_ROOT"/*/; do
     [[ -d "$dir" ]] || continue
@@ -136,7 +143,8 @@ for dir in "$SCRATCH_ROOT"/*/; do
     fi
     if is_open "$dir"; then say keep "$dir" "open in a process"
     elif [[ -n "$owner" ]] && gone "$owner"; then say remove "$dir" "its worktree $owner is gone"; act rm -rf "$dir"
-    elif [[ -z "$(find "$dir" -mtime "-$DAYS" -print -quit 2>/dev/null)" ]]; then say remove "$dir" "nothing modified in $DAYS days"; act rm -rf "$dir"
+    elif [[ -n "$owner" ]]; then say keep "$dir" "its worktree $owner is still there"
+    elif stale "$dir"; then say remove "$dir" "nothing modified in $DAYS days"; act rm -rf "$dir"
     else say keep "$dir" "modified in the last $DAYS days"
     fi
 done

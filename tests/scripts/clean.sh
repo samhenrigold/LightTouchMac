@@ -55,6 +55,13 @@ mkdir -p "$S/old-task" "$S/new-task" "$S/owned-task"
 touch "$S/old-task/f" "$S/new-task/f" "$S/owned-task/f"
 echo "$W/landed" > "$S/owned-task/.worktree"
 old "$S/old-task"
+# old work Finder has since shown (a fresh .DS_Store, and so a fresh directory, at each level), and an old directory
+# holding a kept worktree's markers
+mkdir -p "$S/finder-task/sub" "$S/kept-owner" && touch "$S/finder-task/sub/f"
+echo "$W/unpushed" > "$S/kept-owner/.worktree" && touch "$S/kept-owner/.abandoned"
+old "$S/finder-task" "$S/kept-owner"
+touch "$S/finder-task/.DS_Store" "$S/finder-task/sub/.DS_Store"
+mkdir "$S/empty-task"
 D="$T/DerivedData"
 for name in landed dirty; do
     mkdir -p "$D/LightTouchMac-$name"
@@ -80,6 +87,9 @@ check "a stale vendor directory is removed" 'has remove "$V/dddddddddddd"'
 check "old scratch is removed" 'has remove "$S/old-task"'
 check "fresh scratch is kept" 'has keep "$S/new-task"'
 check "scratch of a removed worktree is removed" 'has remove "$S/owned-task"'
+check "old scratch Finder has written .DS_Store into is removed" 'has remove "$S/finder-task"'
+check "a new empty scratch directory is kept" 'has keep "$S/empty-task"'
+check "old scratch of a kept worktree is kept, with its markers" 'has keep "$S/kept-owner"'
 check "DerivedData of a removed worktree is removed" 'has remove "$D/LightTouchMac-landed"'
 check "DerivedData of a kept worktree is not listed" '! grep -q "LightTouchMac-dirty" <<<"$out"'
 check "a dry run removes nothing" '[[ -d "$W/landed" && -d "$V/dddddddddddd" && -d "$S/old-task" ]]'
