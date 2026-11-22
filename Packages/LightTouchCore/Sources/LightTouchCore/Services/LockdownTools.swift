@@ -54,13 +54,15 @@ extension DeviceServices {
     /// guest agent, when there is one and it holds such a record), and a write that lands while locationd restarts
     /// (the guest package's it_prefs restarts it once Wi-Fi is up) is dropped, so the same write 5 s later takes.
     /// keepClock: leave the guest's clock alone (a dated device, lock machine rtc-epoch: the Mac's clock would expire it).
+    /// retryInterval: the wait before a write again without an agent (tests shorten it).
     public static func setTimeZone(
         _ identifier: String,
         keepClock: Bool = false,
         tool: String,
         socket: String,
         guest: GuestServices? = nil,
-        region: ClockRegion? = nil
+        region: ClockRegion? = nil,
+        retryInterval: Duration = .seconds(5)
     ) async throws -> String {
         try Task.checkCancellation()
         var kept: String
@@ -74,7 +76,7 @@ extension DeviceServices {
             if let agent, try await agent.forgetExternalTimeZone() {
                 logEvent("timezone: the device kept \(kept); cleared locationd's first zone, setting again")
             } else {
-                try await Task.sleep(for: .seconds(5))
+                try await Task.sleep(for: retryInterval)
             }
             do {
                 return try await lockdownTZ(

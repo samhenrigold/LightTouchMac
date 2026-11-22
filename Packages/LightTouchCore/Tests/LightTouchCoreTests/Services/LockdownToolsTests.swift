@@ -21,7 +21,7 @@ import Testing
         echo "$2"
         """
 
-    func run(_ dir: URL, drops: Int, guest: GuestServices?) async -> (
+    func run(_ dir: URL, drops: Int, guest: GuestServices?, retryInterval: Duration = .seconds(5)) async -> (
         result: Result<String, Error>, writes: Int, seconds: Double
     ) {
         let state = dir.appendingPathComponent("state-\(UUID().uuidString)").path
@@ -34,7 +34,8 @@ import Testing
                     "America/New_York",
                     tool: dir.appendingPathComponent("lockdown-tz").path,
                     socket: state,
-                    guest: guest
+                    guest: guest,
+                    retryInterval: retryInterval
                 )
             )
         } catch { result = .failure(error) }
@@ -79,7 +80,8 @@ import Testing
     @Test func aZoneTheDeviceKeepsIsGivenUpAfterFourWrites() async throws {
         try await withTemporaryDirectoryAsync { dir in
             try script(dir.appendingPathComponent("lockdown-tz"), Self.droppingTool)
-            let r = await run(dir, drops: 99, guest: nil)
+            // the five seconds are droppedWriteWithoutAnAgentIsWrittenAgainFiveSecondsLater's
+            let r = await run(dir, drops: 99, guest: nil, retryInterval: .milliseconds(50))
             guard case .failure(DeviceToolsError.zoneKept("US/Pacific")) = r.result else {
                 Issue.record("not zoneKept: \(r)")
                 return
