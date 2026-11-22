@@ -29,9 +29,10 @@ printf '{"qemu-ios": {"path": "%s"}}\n' "$T/qemu" > "$R/build-support/sources.js
 printf '.claude/\nbuild/\n' > "$R/.gitignore"
 g -C "$R" add -A && g -C "$R" commit -q -m pins && g -C "$R" push -q origin HEAD:main
 W="$R/.claude/worktrees"
-for name in landed dirty unpushed fresh locked; do g -C "$R" worktree add -q -b "$name" "$W/$name"; done
+for name in landed dirty unpushed fresh locked dropped; do g -C "$R" worktree add -q -b "$name" "$W/$name"; done
 g -C "$R" worktree add -q -b outside "$T/elsewhere"
 echo change >> "$W/dirty/.gitignore"
+echo change >> "$W/dropped/.gitignore"
 g -C "$W/unpushed" commit -q --allow-empty -m mine
 g -C "$R" worktree lock "$W/locked"
 for name in landed dirty unpushed locked; do old "$(git -C "$W/$name" rev-parse --absolute-git-dir)"; done
@@ -57,7 +58,7 @@ echo "$W/landed" > "$S/owned-task/.worktree"
 old "$S/old-task"
 # old work Finder has since shown (a fresh .DS_Store, and so a fresh directory, at each level), and an old directory
 # holding a kept worktree's markers
-mkdir -p "$S/finder-task/sub" "$S/kept-owner" && touch "$S/finder-task/sub/f"
+mkdir -p "$S/finder-task/sub" "$S/kept-owner" "$S/dropped" && touch "$S/finder-task/sub/f" "$S/dropped/.abandoned"
 echo "$W/unpushed" > "$S/kept-owner/.worktree" && touch "$S/kept-owner/.abandoned"
 old "$S/finder-task" "$S/kept-owner"
 touch "$S/finder-task/.DS_Store" "$S/finder-task/sub/.DS_Store"
@@ -76,6 +77,8 @@ check "a landed, clean, idle worktree is removed" 'has remove "$W/landed"'
 check "a landed qemu-ios worktree is removed" 'has remove "$T/qemu/.claude/worktrees/q-landed"'
 check "uncommitted changes keep a worktree" 'has keep "$W/dirty"'
 check "unpushed commits keep a worktree" 'has keep "$W/unpushed"'
+check "an abandoned worktree with uncommitted changes is kept, saying so and what to do" \
+    'grep -q "^keep .* $W/dropped  (abandoned, but with uncommitted or untracked changes: commit them .* or discard them (git -C $W/dropped reset --hard" <<<"$out"'
 check "recent use keeps a worktree" 'has keep "$W/fresh"'
 check "a lock keeps a worktree" 'has keep "$W/locked"'
 check "a worktree outside the managed paths is kept" 'has keep "$T/elsewhere"'

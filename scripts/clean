@@ -14,7 +14,8 @@
 #   untracked file, every commit on a remote, untouched for LTM_CLEAN_IDLE_HOURS (default 24) and open in no
 #   process. `git worktree remove` without --force, then the branch. Also their scratch and DerivedData. A worktree
 #   whose scratch directory (<scratch root>/<worktree name>/) holds `.abandoned` may have commits on no remote: it is
-#   removed when clean, and its branch kept.
+#   removed when clean, and its branch kept; with uncommitted changes it is kept, and its line says to commit or discard
+#   them.
 # Scratch (LTM_SCRATCH_ROOT, default ~/Developer/ltm-scratch.noindex): a task directory whose `.worktree` file names a
 #   worktree that is gone, or with none and no file but .DS_Store modified in N days. One whose worktree is still
 #   there holds its markers (.worktree, .abandoned) and is kept with it.
@@ -75,7 +76,11 @@ worktree_verdict() {
     [[ "$path" == "$QEMU_PIN" ]] && { echo "keep the pinned qemu-ios checkout"; return; }
     [[ -n "$locked" ]] && { echo "keep locked"; return; }
     [[ -d "$path" ]] || { echo "remove missing (prune)"; return; }
-    [[ -z "$(GIT_OPTIONAL_LOCKS=0 git -C "$path" status --porcelain 2>/dev/null)" ]] || { echo "keep uncommitted or untracked changes"; return; }
+    if [[ -n "$(GIT_OPTIONAL_LOCKS=0 git -C "$path" status --porcelain 2>/dev/null)" ]]; then
+        [[ -f "$SCRATCH_ROOT/$(basename "$path")/.abandoned" ]] \
+            && { echo "keep abandoned, but with uncommitted or untracked changes: commit them on its branch or discard them (git -C $path reset --hard && git -C $path clean -fd), and it goes"; return; }
+        echo "keep uncommitted or untracked changes"; return
+    fi
     is_open "$path" && { echo "keep open in a process"; return; }
     if [[ -n "$(git -C "$path" rev-list -n1 HEAD --not --remotes 2>/dev/null)" ]]; then
         [[ -f "$SCRATCH_ROOT/$(basename "$path")/.abandoned" ]] && { echo "remove abandoned (branch kept)"; return; }
