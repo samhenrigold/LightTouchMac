@@ -2,8 +2,8 @@
 # scripts/ship's logic that needs no Apple service: the next free tag, the notes check, the Xcode pin (the running build
 # against build-support/sources.json's, both ways, and --pin-xcode), the notary config (environment, file, mode,
 # partial keys), filling the IPSW cache (a local clone, a wrong copy refused, a download checked), pruning old
-# archives, the argument checks it makes before any work (and the deprecated scripts/release's hand-over), and
-# `ltm-build release`'s catalog, Amore id and appcast checks (a real Ed25519 signature, a tampered DMG).
+# archives and work directories (a failed run's too), the argument checks it makes before any work (and the deprecated
+# scripts/release's hand-over), and `ltm-build release`'s catalog, Amore id and appcast checks (a real Ed25519 signature, a tampered DMG).
 # Prints ok/FAIL per check; exits 1 on any FAIL.
 #     tests/scripts/ship.sh
 set -uo pipefail
@@ -90,6 +90,19 @@ mkdir -p "$T/rel"
 for n in 1 2 3; do mkdir -p "$T/rel/release-$n.xcarchive" "$T/rel/release-$n-export"; touch -t 20260101000$n "$T/rel/release-$n.xcarchive"; done
 check "a dry prune removes nothing" 'prune_releases "$T/rel" 2 1 | grep -q "remove $T/rel/release-1.xcarchive" && [[ -d "$T/rel/release-1-export" ]]'
 check "a prune keeps the newest two" 'prune_releases "$T/rel" 2 0 >/dev/null && [[ ! -e "$T/rel/release-1.xcarchive" && ! -e "$T/rel/release-1-export" && -d "$T/rel/release-2.xcarchive" && -d "$T/rel/release-3.xcarchive" ]]'
+# work directories, by the time in their names (the oldest touched last, as a strip would)
+for n in 1 2 3; do
+    w="$T/work/ship-abcdef01-2026010$n-120000"
+    mkdir -p "$w/dd/Build" "$w/boot.xcresult" && touch "$w/ship.log" "$w/static.log" "$w/app.json" "$w/submit.zip"
+done
+touch "$T/work/ship-abcdef01-20260101-120000"
+whole() { [[ -d "$1/dd" && -f "$1/submit.zip" ]]; }
+stripped() { [[ "$(ls "$1")" == "$(printf 'app.json\nship.log\nstatic.log')" ]]; }
+check "a dry work prune names the oldest and removes nothing" \
+    '[[ "$(prune_work "$T/work" 2 1)" == "strip  $T/work/ship-abcdef01-20260101-120000 "*"(dry run: not removed)" ]] && whole "$T/work/ship-abcdef01-20260101-120000"'
+check "a work prune keeps the newest whole and the rest's logs and JSON" \
+    'prune_work "$T/work" 2 0 >/dev/null && stripped "$T/work/ship-abcdef01-20260101-120000" && whole "$T/work/ship-abcdef01-20260102-120000" && whole "$T/work/ship-abcdef01-20260103-120000"'
+check "a stripped work directory isn't named again" '[[ -z "$(prune_work "$T/work" 2 0)" ]]'
 
 # arguments, refused before any work (exit 2)
 mkdir -p "$T/X.xcarchive"
@@ -105,6 +118,22 @@ check "the deprecated release hands its archive and notes to ship" \
     '[[ "$("$SRC/scripts/release" "$T/X.xcarchive" --amore --notes "$T/todo.md" --publish 2>&1)" == *"running scripts/ship --archive $T/X.xcarchive --notes $T/todo.md"*"FAIL preflight: the notes at $T/todo.md still have template text"* ]]'
 check "the Amore upload asks for no JSON (amore refuses --skip-notarization with it)" '! grep -E "amore release .*--draft" -A1 "$SRC/scripts/ship" | grep -q -- "--format json"'
 check "the deprecated release still needs an archive" 'refused "$SRC/scripts/release" --amore'
+
+# a run that fails prunes the work directories too (a dry run only names them): $T/repo, pushed, then changed
+git init -q --bare "$T/repo-origin.git"
+gq() { git -C "$T/repo" -c user.name=t -c user.email=t@t -c commit.gpgsign=false "$@"; }
+gq init -q -b main && gq add -A && gq commit -q -m ship && gq remote add origin "$T/repo-origin.git" && gq push -q origin main
+touch "$T/repo/changed"
+for n in 1 2 3; do w="$T/rel2/ship-abcdef01-2026010$n-120000"; mkdir -p "$w/dd" && touch "$w/ship.log" "$w/app.json"; done
+failed_ship() {
+    out="$(PATH="$T/xcode/bin:$PATH" LTM_RELEASE_DIR="$T/rel2" LTM_NOTARY_CONFIG=/none LTM_NOTARY_KEY="$T/key.p8" \
+        LTM_NOTARY_KEY_ID=K LTM_NOTARY_ISSUER=I "$T/repo/scripts/ship" --notes "$T/notes.md" "$@" 2>&1)"
+    [[ $? == 2 && "$(tail -1 <<<"$out")" == "FAIL preflight: the tree has changes (git status) "* ]]
+}
+check "a failed dry run names a work directory past the newest three and keeps it" \
+    'failed_ship --dry-run && [[ "$out" == *"strip  $T/rel2/ship-abcdef01-20260101-120000 to its logs and JSON (dry run: not removed)"* && -d "$T/rel2/ship-abcdef01-20260101-120000/dd" ]]'
+check "a failed run strips it, keeping its logs and JSON" \
+    'failed_ship && [[ ! -e "$T/rel2/ship-abcdef01-20260101-120000/dd" && -f "$T/rel2/ship-abcdef01-20260101-120000/ship.log" && -f "$T/rel2/ship-abcdef01-20260101-120000/app.json" && -d "$T/rel2/ship-abcdef01-20260103-120000/dd" ]]'
 
 # the Amore release's id: the upload's answer first, else this app's cached details
 printf 'Uploading…\n{"release":{"bundleVersion":1601,"id":"AAAAAAAA-0000-0000-0000-000000000001","downloadURL":"https://cdn/x.dmg"}}\n' > "$T/upload.json"

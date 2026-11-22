@@ -28,7 +28,8 @@
 # 7. GitHub: `gh release create v<version>-<YYYY.MM.DD>[b|c|…]` at the commit, with the notes, the zip and
 #    SHA256SUMS; the title defaults to "Light Touch — <Month day>" (with " (b)" and so on).
 # 8. one line in LTM_RELEASE_LOG (default <release directory>/releases.log): build, commit, tag, notarization ids,
-#    Amore id, the zip's SHA-256; then archives and exports beyond the newest two are removed.
+#    Amore id, the zip's SHA-256; then archives and exports beyond the newest two are removed, and the work
+#    directories beyond the newest three (below) lose all but their logs and JSON, as they do when a step fails.
 # --dry-run runs 1 to 5 without notarizing, stapling or the export-only checks, and prints what 6 to 8 would do;
 # LTM_RELEASE_SKIP_PREPARE=1 (dry runs only) also skips 5's prepare matrix. The helper is under the App Sandbox
 # (Configuration/Shared.xcconfig); LTM_HELPER_SANDBOX=NO archives it without, for debugging; 5 holds the helper and
@@ -39,7 +40,7 @@
 # $HOME allowed at the start of a path, mode 600; it may also set LTM_SIGN_IDENTITY). Never printed.
 #
 # Everything lands in LTM_RELEASE_DIR (default ~/Developer/ltm-int-rel); this run's log and work in
-# ship-<commit>-<time>/ there, kept. The last line is the verdict: `PASS released build N (tag) <log>` (exit 0),
+# ship-<commit>-<time>/ there, whole for the newest three runs. The last line is the verdict: `PASS released build N (tag) <log>` (exit 0),
 # or `FAIL <step>: <why> <log>`, exit 2 for preflight and 1 for a step.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -139,6 +140,20 @@ prune_releases() {
     done < <(ls -dt "$dir"/release-*.xcarchive 2>/dev/null)
 }
 
+# prune_work DIR KEEP DRY: past the newest KEEP ship-<commit>-<time> work directories in DIR (by the time in the name:
+# stripping one changes its mtime), removes all but their logs and JSON (ship.log, the notary answers): the
+# DerivedData, result bundles, zips and DMGs, 2 to 3 GB a run. Prints each one it strips; DRY 1 only prints.
+prune_work() {
+    local dir=$1 keep=$2 dry=$3 n=0 w
+    while IFS= read -r w; do
+        n=$((n + 1))
+        ((n > keep)) || continue
+        [[ -n "$(find "$w" -mindepth 1 -maxdepth 1 ! -name '*.log' ! -name '*.json' ! -name .DS_Store)" ]] || continue
+        echo "strip  $w to its logs and JSON$( ((dry)) && echo " (dry run: not removed)")"
+        ((dry)) || find "$w" -mindepth 1 -maxdepth 1 ! -name '*.log' ! -name '*.json' -exec rm -rf {} +
+    done < <(ls -d "$dir"/ship-* 2>/dev/null | awk -F- '{ print $(NF - 1) $NF " " $0 }' | sort -r | cut -d' ' -f2-)
+}
+
 # Sourced (tests/scripts/ship.sh): the functions only.
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
@@ -187,7 +202,7 @@ LOG="$WORK/ship.log"
 
 main() {
     set -e  # the pipeline into tee below runs main with errexit off
-    fail() { echo "FAIL $1: $2 $LOG"; exit "${3:-1}"; }
+    fail() { prune_work "$RELDIR" 3 "$DRY" || true; echo "FAIL $1: $2 $LOG"; exit "${3:-1}"; }
     step() { echo "== $*"; }
     echo "ship $SHA$( ((DRY)) && echo " (dry run)") into $RELDIR"
 
@@ -395,6 +410,7 @@ main() {
     entry="$(date -u +%Y-%m-%dT%H:%M:%SZ) build=$build commit=$SHA tag=$tag zip_sha256=$zip_sum notary=${notary_ids:-none} amore=${amore_id:-none}"
     if ((DRY)); then echo "would append to $record: $entry"; else echo "$entry" >> "$record"; fi
     prune_releases "$RELDIR" 2 "$DRY"
+    prune_work "$RELDIR" 3 "$DRY"
 
     if ((DRY)); then
         echo "PASS dry run build $build (would be $tag) $LOG"

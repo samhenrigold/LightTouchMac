@@ -144,10 +144,12 @@ A release is an Xcode archive made by `scripts/ship`; nothing edits the bundle a
    appcast's item for the build must carry the notes as its `<description>` and an `edSignature` of the CDN's DMG
    valid for the app's `SUPublicEDKey` (`scripts/ltm-build release`). Last, `gh release create
    v<version>-<YYYY.MM.DD>[b|c|…]` with the zip and SHA256SUMS, a line in `releases.log`, and only the newest two
-   archives and exports kept. Its work and log go in `~/Developer/ltm-int-rel` (`LTM_RELEASE_DIR`); it ends `PASS
-   released build N (tag) <log>`. `--dry-run` runs through the release's checks without notarizing, stapling or
-   uploading and prints what Amore, GitHub and the record would get; `LTM_RELEASE_SKIP_PREPARE=1` also skips the
-   prepare matrix, in a dry run only. The header of `scripts/ship` lists its settings. (`scripts/release ARCHIVE
+   archives and exports kept. Its work and log go in `~/Developer/ltm-int-rel` (`LTM_RELEASE_DIR`), one
+   `ship-<commit>-<time>` directory a run; past the newest three, a run that ends, passed or failed, strips them to
+   their logs and JSON (the DerivedData, result bundles, zips and DMGs are 2 to 3 GB a run; a dry run only names
+   them). It ends `PASS released build N (tag) <log>`. `--dry-run` runs through the release's checks without
+   notarizing, stapling or uploading and prints what Amore, GitHub and the record would get;
+   `LTM_RELEASE_SKIP_PREPARE=1` also skips the prepare matrix, in a dry run only. The header of `scripts/ship` lists its settings. (`scripts/release ARCHIVE
    --notes notes.md` still runs `scripts/ship --archive` for now; it is deprecated and goes after the next real
    release.)
 
