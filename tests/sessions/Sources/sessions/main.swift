@@ -36,7 +36,8 @@ struct Inputs: ParsableArguments {
         name: [.customLong("keep-work"), .customLong("keep")],
         help: """
             Keeps all of a passed run's work directory: by default only its logs, events and summary.txt stay \
-            (overlays, NAND copies, the guest archive and frames go). A failed run keeps everything.
+            (overlays, NAND copies, the guest archive and frames go). A failed run keeps everything but its NAND \
+            copies (a base's and an overlay's nand/).
             """
     )
     var keepWork = false

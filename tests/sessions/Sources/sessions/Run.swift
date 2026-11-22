@@ -136,7 +136,8 @@ func waitGone(_ pid: Int, _ seconds: Double) -> Double? {
     return nil
 }
 
-/// The work directory `finish` prunes to its logs when the run passes (WorkPrune): none with --keep-work.
+/// The work directory `finish` prunes to its logs when the run passes, and of its NAND copies when it fails
+/// (WorkPrune): none with --keep-work.
 nonisolated(unsafe) private var prunedWork: URL?
 /// A temporary work directory (no --work, no --keep-work), which a run that stops before it boots removes whole.
 nonisolated(unsafe) var disposableWork: URL?
@@ -165,7 +166,8 @@ func finish(_ report: Report, work: URL) -> Never {
     try? (report.lines + ["", verdict, ""]).joined(separator: "\n")
         .write(to: work.appendingPathComponent("summary.txt"), atomically: true, encoding: .utf8)
     let pruned = report.allPassed && work == prunedWork && prune(work)
-    print("\n\(pruned ? "logs" : "everything") kept in \(work.path)")
+    let dropped = !report.allPassed && work == prunedWork && dropNANDCopies(work)
+    print("\n\(pruned ? "logs" : dropped ? "everything but the NAND copies" : "everything") kept in \(work.path)")
     print(report.verdict(log: work.path))
     exit(report.allPassed ? 0 : 1)
 }
@@ -194,6 +196,20 @@ func prune(_ work: URL) -> Bool {
         print("could not prune \(work.path): \(error)")
         return false
     }
+}
+
+/// A failed run's NAND copies (WorkPrune.nandCopies) removed, the lock on a published base holding one cleared first
+/// (uchg on a directory refuses the removal of what is in it); whether any went.
+func dropNANDCopies(_ work: URL) -> Bool {
+    var dropped = false
+    for copy in WorkPrune.nandCopies(under: work) {
+        chflags(copy.deletingLastPathComponent().path, 0)
+        do {
+            try DeviceStateStorage.removeTree(copy)
+            dropped = true
+        } catch { print("could not remove \(copy.path): \(error)") }
+    }
+    return dropped
 }
 
 /// The base fields every session-driver config carries.
