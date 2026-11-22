@@ -103,7 +103,9 @@ public nonisolated enum SandboxExtension {
                 refused.append("\(grant.path) (missing)")
                 continue
             }
-            if let why = plantedLink(grant.path, under: writable) ?? deniedReason(real, grant.access, denied) {
+            if let why = writableLink(grant) ?? plantedLink(grant.path, under: writable)
+                ?? deniedReason(real, grant.access, denied)
+            {
                 refused.append("\(grant.path) (\(why))")
                 continue
             }
@@ -154,6 +156,16 @@ public nonisolated enum SandboxExtension {
 
     static func inside(_ path: String, _ root: String) -> Bool {
         path == root || path.hasPrefix(root.hasSuffix("/") ? root : root + "/")
+    }
+
+    /// A read-write grant that is itself a symlink: a single file granted (nor.bin) the helper can replace with a link
+    /// to anything, its folder not being one it writes, which plantedLink alone would then follow into a grant.
+    static func writableLink(_ grant: Grant) -> String? {
+        var info = stat()
+        guard grant.access == .readWrite, lstat(grant.path, &info) == 0, info.st_mode & S_IFMT == S_IFLNK else {
+            return nil
+        }
+        return "a symlink, granted read-write"
     }
 
     /// A symlink on `path` whose folder is inside one of `roots` (canonical), which the helper could have made.

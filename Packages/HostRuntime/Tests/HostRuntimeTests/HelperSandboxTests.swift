@@ -40,6 +40,28 @@ struct HelperSandboxTests {
         SandboxExtension.releaseAll()
     }
 
+    /// A file granted read-write on its own (the NOR) that the helper replaced with a link is refused, even to a
+    /// target inside the device's folder (its record), which the boot's path checks allow; read-only it is followed.
+    @Test func aWritableFileThatIsASymlinkIsRefused() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+        let device = root.appendingPathComponent("library/Devices/dev")
+        try fm.createDirectory(at: device.appendingPathComponent("overlay"), withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: device.appendingPathComponent("device.json"))
+        let nor = device.appendingPathComponent("nor.bin")
+        try fm.createSymbolicLink(at: nor, withDestinationURL: device.appendingPathComponent("device.json"))
+        let writable = SandboxExtension.Grant(nor, .readWrite)
+        let (tokens, refused) = SandboxExtension.issue(
+            [.init(device.appendingPathComponent("overlay"), .readWrite), writable],
+            to: .pid(getpid())
+        )
+        #expect(refused.count == 1 && refused[0].hasPrefix(writable.path + " (a symlink"), "\(refused)")
+        #expect(tokens.count == 1)
+        let (read, none) = SandboxExtension.issue([.init(nor, .read)], to: .pid(getpid()))
+        #expect(read.count == 1 && none.isEmpty, "\(none)")
+    }
+
     /// Tokens are bound to the process they were issued to.
     @Test func aTokenForAnotherProcessIsRefused() throws {
         let root = try scratch()
