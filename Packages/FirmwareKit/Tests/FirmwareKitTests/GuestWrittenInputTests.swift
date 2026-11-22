@@ -3,6 +3,7 @@
 
 import Foundation
 import HostRuntime
+import SQLite3
 import Testing
 
 @testable import FirmwareKit
@@ -111,5 +112,37 @@ struct GuestWrittenInputTests {
         try N72NAND.writeDurably(Data("a page".utf8), to: page)
         #expect(try Data(contentsOf: page) == Data("a page".utf8))
         #expect(try Data(contentsOf: host) == Data("the host's".utf8))
+    }
+
+    /// The 1.x trust store is the guest's SQLite database, which the unsandboxed preparer opens to add the web
+    /// proxy's anchor: a trigger the guest put on tsettings ran on the host with the row, and the schema may
+    /// call functions. With triggers and views off and the schema untrusted, the row goes in and nothing else runs.
+    @Test func aGuestTriggerOnTheTrustStoreDoesNotRun() throws {
+        let root = try Fixtures.tempDir("guest-truststore")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = root.appendingPathComponent("TrustStore.sqlite3")
+        var db: OpaquePointer?
+        #expect(sqlite3_open(store.path, &db) == SQLITE_OK)
+        let schema = """
+            CREATE TABLE tsettings(sha1 BLOB NOT NULL DEFAULT '',subj BLOB NOT NULL DEFAULT '',tset BLOB,data BLOB,
+                PRIMARY KEY(sha1));
+            CREATE TABLE ran(n INTEGER);
+            CREATE TRIGGER planted AFTER INSERT ON tsettings BEGIN INSERT INTO ran VALUES(1); END;
+            """
+        #expect(sqlite3_exec(db, schema, nil, nil, nil) == SQLITE_OK)
+        sqlite3_close(db)
+        try TrustStore1x.addAnchor(TrustStore1xTests.certificate, to: store)
+        #expect(sqlite3_open(store.path, &db) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+        func count(_ table: String) -> Int32 {
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+            guard sqlite3_prepare_v2(db, "SELECT count(*) FROM \(table)", -1, &stmt, nil) == SQLITE_OK,
+                sqlite3_step(stmt) == SQLITE_ROW
+            else { return -1 }
+            return sqlite3_column_int(stmt, 0)
+        }
+        #expect(count("tsettings") == 1)
+        #expect(count("ran") == 0, "the guest's trigger ran on the host")
     }
 }

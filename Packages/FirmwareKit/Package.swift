@@ -40,10 +40,11 @@ let package = Package(
             ]
         ),
         .target(name: "CActivation", cSettings: [.define("LT_ACTIVATION_LIBRARY")]),
+        .target(name: "CSQLiteDefense", linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(
             name: "FirmwareKit",
             dependencies: [
-                "CActivation", "FirmwareSchema",
+                "CActivation", "CSQLiteDefense", "FirmwareSchema",
                 .product(name: "HostRuntime", package: "HostRuntime"),
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
                 .product(name: "Subprocess", package: "swift-subprocess"),

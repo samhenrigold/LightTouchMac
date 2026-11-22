@@ -7,6 +7,7 @@
 // chain and Safari opens HTTPS through a TLS 1.0 relay; without it, 3 (deny).
 
 import BinaryParsing
+import CSQLiteDefense
 import Crypto
 import FirmwareSchema
 import Foundation
@@ -87,6 +88,10 @@ public enum TrustStore1x {
             throw FirmwareError(.unsupported, "\(name): not a trust store")
         }
         defer { sqlite3_close(db) }
+        // The guest wrote this database: its schema runs nothing here (no trigger, view or schema function).
+        guard lt_sqlite_defend(db) == SQLITE_OK else {
+            throw FirmwareError(.internal, "\(name): \(String(cString: sqlite3_errmsg(db)))")
+        }
         var stmt: OpaquePointer?
         guard
             sqlite3_prepare_v2(
