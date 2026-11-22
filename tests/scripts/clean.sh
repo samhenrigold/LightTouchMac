@@ -81,6 +81,14 @@ done
 export LTM_VENDOR_ROOT="$V" LTM_SCRATCH_ROOT="$S" LTM_WORKTREE_ROOT="$T/managed" LTM_DERIVED_DATA="$D"
 unset LTM_SESSIONS_TOOLS
 
+# JIT dumps: a helper's whose process has ended, a running one's (this shell's), one just written; and TMPDIR's
+C="$T/Containers/gold.samhenri.LightTouchMac.LightTouchDevice/Data/tmp"
+export LTM_CONTAINERS="$T/Containers" TMPDIR="$T/tmp"
+mkdir -p "$C" "$TMPDIR"
+true & ended=$!; wait "$ended"
+touch "$C/ltm-jit-$ended.bin" "$C/ltm-jit-$$.bin" "$TMPDIR/ltm-jit-$ended.bin"
+old "$C/ltm-jit-$ended.bin" "$C/ltm-jit-$$.bin"
+
 # sessions' shared tools: the main checkout's key (as tests/sessions' sourceKey makes it), old; another old; a fresh one
 tools="$(cd "$R" && {
     git rev-parse HEAD:LightTouchDevice HEAD:LightTouchServices HEAD:Packages HEAD:Configuration HEAD:LightTouchMac.xcodeproj \
@@ -115,6 +123,9 @@ check "a static prefix nothing names is removed" 'has remove "$V/static/44444444
 check "the sessions tools of a checkout's current tree are kept, however old" 'has keep "$S/.sessions-tools/$tools"'
 check "other sessions tools unused in N days are removed" 'has remove "$S/.sessions-tools/00000000000000000000"'
 check "sessions tools used lately are kept" 'has keep "$S/.sessions-tools/ffffffffffffffffffff"'
+check "an ended helper's JIT dump is removed" 'has remove "$C/ltm-jit-$ended.bin"'
+check "a running process's JIT dump is kept" 'has keep "$C/ltm-jit-$$.bin"'
+check "a JIT dump written lately is kept" 'has keep "$TMPDIR/ltm-jit-$ended.bin"'
 check "old scratch is removed" 'has remove "$S/old-task"'
 check "fresh scratch is kept" 'has keep "$S/new-task"'
 check "scratch of a removed worktree is removed" 'has remove "$S/owned-task"'
@@ -132,5 +143,6 @@ check "--yes keeps the dirty and unpushed worktrees" '[[ -f "$W/dirty/.gitignore
 check "--yes removes the stale vendor directory and keeps the rest" '[[ ! -d "$V/dddddddddddd" && -d "$V/$key" && -d "$V/aaaaaaaaaaaa" && -d "$V/cccccccccccc" ]]'
 check "--yes removes the stale static prefixes and sessions tools and keeps the rest" \
     '[[ ! -d "$V/static/222222222222" && ! -d "$V/static/444444444444" && -d "$V/static/111111111111" && -d "$V/static/333333333333" && ! -d "$S/.sessions-tools/00000000000000000000" && -d "$S/.sessions-tools/$tools" ]]'
+check "--yes removes the ended helper's JIT dump only" '[[ ! -e "$C/ltm-jit-$ended.bin" && -f "$C/ltm-jit-$$.bin" && -f "$TMPDIR/ltm-jit-$ended.bin" ]]'
 check "--yes removes the old and owned scratch and DerivedData" '[[ ! -d "$S/old-task" && ! -d "$S/owned-task" && -d "$S/new-task" && ! -d "$D/LightTouchMac-landed" ]]'
 exit $failed

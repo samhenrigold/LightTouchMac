@@ -23,6 +23,8 @@
 #   worktree that is gone, or with none and no file but .DS_Store modified in N days. One whose worktree is still
 #   there holds its markers (.worktree, .abandoned) and is kept with it.
 # DerivedData of this project whose workspace is gone.
+# JIT dumps (qemu-ios's LTM_JITDUMP): ltm-jit-<pid>.bin in the helpers' containers' tmp (LTM_CONTAINERS, default
+#   ~/Library/Containers) and TMPDIR whose process has ended and that nothing wrote in N days.
 # --snapshots also asks Time Machine to thin local snapshots (tmutil thinlocalsnapshots).
 # Anything an open process holds (lsof) is kept.
 set -uo pipefail
@@ -45,6 +47,7 @@ WORKTREE_ROOT="${LTM_WORKTREE_ROOT:-$HOME/Developer/ltm-worktrees.noindex}"
 DERIVED="${LTM_DERIVED_DATA:-$HOME/Library/Developer/Xcode/DerivedData}"
 IDLE_HOURS="${LTM_CLEAN_IDLE_HOURS:-24}"
 TOOLS="${LTM_SESSIONS_TOOLS:-$SCRATCH_ROOT/.sessions-tools}"
+CONTAINERS="${LTM_CONTAINERS:-$HOME/Library/Containers}"
 main_of() { (cd "$1" && cd "$(git rev-parse --git-common-dir)/.." && pwd -P); }
 LTM="$(main_of "$ROOT")"
 qemu_path="$(plutil -extract qemu-ios.path raw -o - "$ROOT/build-support/sources.json" 2>/dev/null)"
@@ -228,6 +231,19 @@ if [[ -z "$ONLY" ]]; then
         elif is_open "$dir"; then say keep "$dir" "open in a process"
         elif [[ -z "$(find "$dir" -maxdepth 0 -mtime "-$DAYS" 2>/dev/null)" ]]; then say remove "$dir" "unused in $DAYS days"; act rm -rf "$dir"
         else say keep "$dir" "used in the last $DAYS days"
+        fi
+    done
+
+    # qemu-ios's LTM_JITDUMP diagnostic writes $TMPDIR/ltm-jit-<pid>.bin (a helper's: its container's tmp) to be read
+    # after the run, so a dump outlives its process (1.2 GB from one helper's boots)
+    echo "== JIT dumps"
+    for f in "$CONTAINERS"/gold.samhenri.LightTouchMac*/Data/tmp/ltm-jit-*.bin "${TMPDIR:-/tmp}"/ltm-jit-*.bin; do
+        [[ -f "$f" ]] || continue
+        pid="${f##*/ltm-jit-}" pid="${pid%.bin}"
+        if [[ ! "$pid" =~ ^[0-9]+$ ]] || ps -p "$pid" > /dev/null; then say keep "$f" "process $pid is running"
+        elif is_open "$f"; then say keep "$f" "open in a process"
+        elif [[ -n "$(find "$f" -mtime "-$DAYS" 2>/dev/null)" ]]; then say keep "$f" "written in the last $DAYS days"
+        else say remove "$f" "process $pid has ended"; act rm -f "$f"
         fi
     done
 fi
