@@ -115,6 +115,7 @@ public enum StoppedVolumeEdit {
         else { throw FirmwareError(.unsupported, "invalid device metadata") }
         defer { withExtendedLifetime(owner) {} }
         let source = VolumeExport.ResolvedSource(owner: owner)
+        if let overlay = source.overlay { try refuseLinks(overlay) }  // before anything reads it
         if try VolumeRebuild.board(of: source.base) == .ipad {
             return (try StorageGeneration.begin(owner: owner), source, paths, bytes)
         }
@@ -561,8 +562,19 @@ public enum StoppedVolumeEdit {
         return value
     }
     private static func clone(_ source: URL, to destination: URL) throws {
-        guard clonefile(source.path, destination.path, 0) == 0 else {
+        try refuseLinks(source)
+        guard clonefile(source.path, destination.path, UInt32(CLONE_NOFOLLOW)) == 0 else {
             throw FirmwareError(.internal, "clone staging: \(String(cString: strerror(errno)))")
+        }
+    }
+    /// What a stopped edit reads and clones is the device's, and its sandboxed helper writes the overlay and the
+    /// NOR: a link there (or the overlay itself a link) would lead this unsandboxed edit's reads and writes out of
+    /// the device's folder, a host file into the guest or the guest's pages over a host file. None is taken.
+    private static func refuseLinks(_ url: URL) throws {
+        let walk = fm.enumerator(at: url, includingPropertiesForKeys: [.isSymbolicLinkKey])  // never enters a link
+        for item in [url] + (walk?.compactMap { $0 as? URL } ?? [])
+        where try item.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
+            throw FirmwareError(.unsupported, "\(item.path) is a link; a stopped edit takes none from the device")
         }
     }
     private static func makeWritable(_ directory: URL) throws {
