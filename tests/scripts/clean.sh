@@ -24,6 +24,7 @@ git init -q --bare "$T/origin.git"
 g clone -q "$T/origin.git" "$T/LightTouchMac" 2>/dev/null
 R="$T/LightTouchMac"
 mkdir -p "$R/scripts" "$R/build-support" "$R/LightTouchMac.xcodeproj" && touch "$R/LightTouchMac.xcodeproj/project.pbxproj"
+for dir in LightTouchDevice LightTouchServices Packages Configuration; do mkdir -p "$R/$dir" && echo "$dir" > "$R/$dir/f"; done
 cp "$SRC/scripts/clean" "$SRC/scripts/vendor-check" "$R/scripts/"
 printf '{"qemu-ios": {"path": "%s"}}\n' "$T/qemu" > "$R/build-support/sources.json"
 printf '.claude/\nbuild/\n' > "$R/.gitignore"
@@ -44,8 +45,15 @@ key="$("$R/scripts/vendor-check" --key "$R")"
 for name in "$key" aaaaaaaaaaaa bbbbbbbbbbbb cccccccccccc dddddddddddd; do
     mkdir -p "$V/$name" && echo '{}' > "$V/$name/vendor.json"
 done
+# static prefixes: one the pins' build names, one only the stale directory's does, the newest, and one nothing names
+native() { mkdir -p "$(dirname "$1")" && printf '{"sources": [{"path" : "%s/static/%s/arm64/src/libplist.tar.bz2"}]}\n' "$V" "$2" > "$1"; }
+native "$V/$key/work/native/arm64/native-build.json" 111111111111
+native "$V/dddddddddddd/work/universal/native-build.json" 222222222222
+for name in 111111111111 222222222222 333333333333 444444444444; do
+    mkdir -p "$V/static/$name/arm64" && echo '{}' > "$V/static/$name/arm64/static-build.json"
+done
 old "$V"
-touch "$V/bbbbbbbbbbbb/vendor.json"
+touch "$V/bbbbbbbbbbbb/vendor.json" "$V/static/333333333333/arm64/static-build.json"
 mkdir -p "$W/dirty/build" && ln -s "$V/aaaaaaaaaaaa" "$W/dirty/build/vendor"
 (cd "$V/cccccccccccc" && exec sleep 60) &
 HOLDER=$!; disown "$HOLDER"
@@ -71,6 +79,19 @@ for name in landed dirty; do
 done
 
 export LTM_VENDOR_ROOT="$V" LTM_SCRATCH_ROOT="$S" LTM_WORKTREE_ROOT="$T/managed" LTM_DERIVED_DATA="$D"
+unset LTM_SESSIONS_TOOLS
+
+# sessions' shared tools: the main checkout's key (as tests/sessions' sourceKey makes it), old; another old; a fresh one
+tools="$(cd "$R" && {
+    git rev-parse HEAD:LightTouchDevice HEAD:LightTouchServices HEAD:Packages HEAD:Configuration HEAD:LightTouchMac.xcodeproj \
+        HEAD:build-support
+    printf '\n%s\n%s\n\n' "$(scripts/vendor-check --print)" "${LTM_HELPER_SANDBOX:-YES}"
+    xcodebuild -version
+    printf '\nlayout 2'
+} | shasum -a 256 | cut -c1-20)"
+for name in "$tools" 00000000000000000000 ffffffffffffffffffff; do mkdir -p "$S/.sessions-tools/$name/Tools.app"; done
+old "$S/.sessions-tools"
+touch "$S/.sessions-tools/ffffffffffffffffffff"
 out="$("$R/scripts/clean")"
 has() { grep -q "^$1 .* $2  (" <<<"$out"; }
 check "a landed, clean, idle worktree is removed" 'has remove "$W/landed"'
@@ -87,6 +108,13 @@ check "a vendor directory a kept checkout names is kept" 'has keep "$V/aaaaaaaaa
 check "the newest vendor directory is kept" 'has keep "$V/bbbbbbbbbbbb"'
 check "a vendor directory open in a process is kept" 'has keep "$V/cccccccccccc"'
 check "a stale vendor directory is removed" 'has remove "$V/dddddddddddd"'
+check "a static prefix a kept vendor directory's build names is kept" 'has keep "$V/static/111111111111"'
+check "a static prefix only a removed vendor directory's build names is removed" 'has remove "$V/static/222222222222"'
+check "the newest static prefix is kept" 'has keep "$V/static/333333333333"'
+check "a static prefix nothing names is removed" 'has remove "$V/static/444444444444"'
+check "the sessions tools of a checkout's current tree are kept, however old" 'has keep "$S/.sessions-tools/$tools"'
+check "other sessions tools unused in N days are removed" 'has remove "$S/.sessions-tools/00000000000000000000"'
+check "sessions tools used lately are kept" 'has keep "$S/.sessions-tools/ffffffffffffffffffff"'
 check "old scratch is removed" 'has remove "$S/old-task"'
 check "fresh scratch is kept" 'has keep "$S/new-task"'
 check "scratch of a removed worktree is removed" 'has remove "$S/owned-task"'
@@ -102,5 +130,7 @@ check "--worktree refuses a dirty one" '! "$R/scripts/clean" --worktree "$W/dirt
 check "--yes removes the landed worktree and its branch" '[[ ! -d "$W/landed" ]] && ! git -C "$R" rev-parse -q --verify landed >/dev/null'
 check "--yes keeps the dirty and unpushed worktrees" '[[ -f "$W/dirty/.gitignore" && -d "$W/unpushed" ]]'
 check "--yes removes the stale vendor directory and keeps the rest" '[[ ! -d "$V/dddddddddddd" && -d "$V/$key" && -d "$V/aaaaaaaaaaaa" && -d "$V/cccccccccccc" ]]'
+check "--yes removes the stale static prefixes and sessions tools and keeps the rest" \
+    '[[ ! -d "$V/static/222222222222" && ! -d "$V/static/444444444444" && -d "$V/static/111111111111" && -d "$V/static/333333333333" && ! -d "$S/.sessions-tools/00000000000000000000" && -d "$S/.sessions-tools/$tools" ]]'
 check "--yes removes the old and owned scratch and DerivedData" '[[ ! -d "$S/old-task" && ! -d "$S/owned-task" && -d "$S/new-task" && ! -d "$D/LightTouchMac-landed" ]]'
 exit $failed

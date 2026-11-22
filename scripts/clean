@@ -8,7 +8,10 @@
 #
 # Vendor directories (LTM_VENDOR_ROOT, default ~/Developer/ltm-vendor.noindex): keeps the pin key of every remaining
 #   checkout of this repository (the release worktree's among them), any a build/vendor in one names, and the
-#   newest; removes the rest (and prunes their qemu-ios worktrees).
+#   newest; removes the rest (and prunes their qemu-ios worktrees). Their static/<key> prefixes: keeps those a kept
+#   vendor directory's native build names (work/.../native-build.json) and the newest; removes the rest.
+# tests/sessions' shared tools (LTM_SESSIONS_TOOLS, default <scratch root>/.sessions-tools/<key>): keeps the key of
+#   each remaining checkout's tree, and any used (its folder touched) in N days; removes the rest.
 # Worktrees of this repository and the pinned qemu-ios's: only managed ones (under a repository's .claude/worktrees
 #   or LTM_WORKTREE_ROOT, default ~/Developer/ltm-worktrees.noindex), and only when unlocked, with no uncommitted or
 #   untracked file, every commit on a remote, untouched for LTM_CLEAN_IDLE_HOURS (default 24) and open in no
@@ -41,6 +44,7 @@ SCRATCH_ROOT="${LTM_SCRATCH_ROOT:-$HOME/Developer/ltm-scratch.noindex}"
 WORKTREE_ROOT="${LTM_WORKTREE_ROOT:-$HOME/Developer/ltm-worktrees.noindex}"
 DERIVED="${LTM_DERIVED_DATA:-$HOME/Library/Developer/Xcode/DerivedData}"
 IDLE_HOURS="${LTM_CLEAN_IDLE_HOURS:-24}"
+TOOLS="${LTM_SESSIONS_TOOLS:-$SCRATCH_ROOT/.sessions-tools}"
 main_of() { (cd "$1" && cd "$(git rev-parse --git-common-dir)/.." && pwd -P); }
 LTM="$(main_of "$ROOT")"
 qemu_path="$(plutil -extract qemu-ios.path raw -o - "$ROOT/build-support/sources.json" 2>/dev/null)"
@@ -93,6 +97,19 @@ worktree_verdict() {
     echo "remove clean, landed and idle"
 }
 act() { ((YES)) && "$@"; }
+# tools_key CHECKOUT: the key tests/sessions shares the checkout's Debug tools under (Inputs.swift's sourceKey, which
+# this follows input for input), or nothing when what they're built from has uncommitted changes; $xcode is
+# `xcodebuild -version`
+tools_key() {
+    local paths=(LightTouchDevice LightTouchServices Packages Configuration LightTouchMac.xcodeproj build-support) trees
+    [[ -z "$(GIT_OPTIONAL_LOCKS=0 git -C "$1" status --porcelain -- "${paths[@]}" 2>/dev/null)" ]] || return 0
+    trees="$(git -C "$1" rev-parse "${paths[@]/#/HEAD:}" 2>/dev/null)" || return 0
+    {
+        printf '%s\n\n%s\n%s\n' "$trees" "$("$1/scripts/vendor-check" --print 2>/dev/null)" "${LTM_HELPER_SANDBOX:-YES}"
+        cat "$1/Configuration/Local.xcconfig" 2>/dev/null
+        printf '\n%s\n\nlayout 2' "$xcode"
+    } | shasum -a 256 | cut -c1-20
+}
 
 live=()   # the checkouts of this repository that stay
 removed=()
@@ -174,17 +191,45 @@ if [[ -z "$ONLY" ]]; then
     done
     newest="$(ls -t "$VENDOR_ROOT"/*/vendor.json 2>/dev/null | head -1)"
     [[ -n "$newest" ]] && { keep+=("$(basename "$(dirname "$newest")")"); why+=("the newest"); }
-    pruned=0
+    pruned=0 used=""
     for dir in "$VENDOR_ROOT"/*/; do
         dir="${dir%/}" name="$(basename "${dir%/}")" reason=""
         [[ "$name" =~ ^[0-9a-f]{12}$ ]] || continue
         for i in "${!keep[@]}"; do [[ "${keep[i]}" == "$name" ]] && { reason="${why[i]}"; break; }; done
         if [[ -n "$reason" ]]; then say keep "$dir" "$reason"
         elif is_open "$dir"; then say keep "$dir" "open in a process"
-        else say remove "$dir" "no checkout's pins"; act rm -rf "$dir"; pruned=1
+        else say remove "$dir" "no checkout's pins"; act rm -rf "$dir"; pruned=1; continue
         fi
+        # the static prefix its native build linked, which its native-build.json records by path
+        used+=" $(grep -ohE '/static/[0-9a-f]{12}/' "$dir"/work/native/*/native-build.json "$dir"/work/universal/native-build.json 2>/dev/null | cut -d/ -f3 | sort -u | tr '\n' ' ')"
     done
     ((pruned && YES)) && [[ -n "$QEMU" ]] && git -C "$QEMU" worktree prune
+
+    echo "== static prefixes ($VENDOR_ROOT/static)"
+    newest="$(ls -t "$VENDOR_ROOT"/static/*/*/static-build.json 2>/dev/null | head -1)"
+    newest="${newest%/*/static-build.json}"
+    for dir in "$VENDOR_ROOT"/static/*/; do
+        dir="${dir%/}" name="${dir##*/}"
+        [[ "$name" =~ ^[0-9a-f]{12}$ ]] || continue
+        if [[ "$used " == *" $name "* ]]; then say keep "$dir" "a kept vendor directory's native build"
+        elif [[ "$dir" == "$newest" ]]; then say keep "$dir" "the newest"
+        elif is_open "$dir"; then say keep "$dir" "open in a process"
+        else say remove "$dir" "no kept vendor directory's native build"; act rm -rf "$dir"
+        fi
+    done
+
+    echo "== sessions tools ($TOOLS)"
+    xcode="$(xcodebuild -version 2>/dev/null)" current=" "
+    for checkout in "${live[@]+"${live[@]}"}"; do current+="$(tools_key "$checkout") "; done
+    for dir in "$TOOLS"/*/; do
+        dir="${dir%/}"
+        [[ -d "$dir" ]] || continue
+        if [[ "$current" == *" ${dir##*/} "* ]]; then say keep "$dir" "a checkout's current tree"
+        elif is_open "$dir"; then say keep "$dir" "open in a process"
+        elif [[ -z "$(find "$dir" -maxdepth 0 -mtime "-$DAYS" 2>/dev/null)" ]]; then say remove "$dir" "unused in $DAYS days"; act rm -rf "$dir"
+        else say keep "$dir" "used in the last $DAYS days"
+        fi
+    done
 fi
 
 if ((SNAPSHOTS)); then

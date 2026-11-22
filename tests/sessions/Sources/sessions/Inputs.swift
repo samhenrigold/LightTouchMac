@@ -189,7 +189,7 @@ struct Tools {
         // Another checkout may have published the same tree's tools meanwhile: either copy is the same build.
         if rename(staging.path, shared.path) != 0 { try? fm.removeItem(at: staging) }
         print("tools: built and shared as \(shared.path)")
-        // Each reuse touches its key's folder: one nobody has used for a week goes (scripts/clean skips dot folders).
+        // Each reuse touches its key's folder: one nobody has used for a week goes (as scripts/clean also removes it).
         let weekAgo = Date().addingTimeInterval(-7 * 86400)
         for name in (try? fm.contentsOfDirectory(atPath: sharedTools.path)) ?? [] {
             let old = sharedTools.appendingPathComponent(name)
@@ -234,7 +234,8 @@ struct Tools {
 
     /// What the helper, services worker and firmwarekit are built from, as one hash: the committed trees of their
     /// sources, project and pins, the vendor directory, the sandbox setting, Local.xcconfig and the Xcode; nil when
-    /// any of those sources has an uncommitted change (the build can't be named by its commit).
+    /// any of those sources has an uncommitted change (the build can't be named by its commit). scripts/clean's
+    /// tools_key makes the same key to keep each checkout's tools: change the two together.
     static func sourceKey(vendor: URL) -> String? {
         let paths = [
             "LightTouchDevice", "LightTouchServices", "Packages", "Configuration", "LightTouchMac.xcodeproj",
