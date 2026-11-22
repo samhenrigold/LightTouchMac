@@ -1,4 +1,5 @@
 import Foundation
+import HostRuntime
 import HostServiceWire
 import Testing
 
@@ -60,6 +61,7 @@ struct AppInstallPipelineTests {
                 services: services,
                 agent: NoAgent(),
                 deviceOS: os,
+                soc: .s5l8930,
                 afcReadyTimeout: timeout
             )
             do {

@@ -6,6 +6,7 @@
 // the policy between them live here.
 
 import Foundation
+import HostRuntime
 import HostServiceClient
 import HostServiceWire
 import Subprocess
@@ -33,17 +34,21 @@ public struct AppInstallPipeline: Sendable {
         services: any AppInstallServices,
         agent: any InstallPlaceholderAgent,
         deviceOS: String = "3.1.3",
+        soc: Board.SoC,
         afcReadyTimeout: Duration = .seconds(300)
     ) {
         self.services = services
         self.agent = agent
         self.deviceOS = deviceOS
+        self.soc = soc
         self.afcReadyTimeout = afcReadyTimeout
     }
     public let services: any AppInstallServices
     public let agent: any InstallPlaceholderAgent
     /// The device's iOS version (its catalog entry), which MinimumOSVersion is checked against.
     public var deviceOS = "3.1.3"
+    /// The device's processor, which the app's binary is checked against (AppBinary).
+    public let soc: Board.SoC
     /// iOS 7 only: how long the first AFC request may keep timing out before the install gives up. 7.x
     /// starts afcd in launchd's throttled band, and early in a boot it can sit unscheduled behind ~100
     /// runnable daemon threads for minutes (qemu-ios docs/n90 debt 6); a request sent then goes unanswered.
@@ -80,6 +85,13 @@ public struct AppInstallPipeline: Sendable {
             throw DeviceError.preflight(
                 "“\(ipa.lastPathComponent)” isn’t an app archive (IPA)."
             )
+        }
+        // The binary itself, before the minutes of upload: an encrypted copy or one for another processor installs
+        // (AppSync answers for its signature) and then dies at launch with nothing said.
+        if let member = await AppMetadataCache.executableMember(of: ipa),
+            let problem = await AppBinary.problem(in: ipa, member: member, soc: soc)
+        {
+            throw DeviceError.preflight(problem)
         }
 
         do {

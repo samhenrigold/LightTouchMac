@@ -87,7 +87,10 @@ public protocol AppsHost: AnyObject {
     /// The install pipeline for this device (AppInstaller runs it, and raises
     /// a catalog download's placeholder through it).
     public var installPipeline: AppInstallPipeline {
-        get throws { AppInstallPipeline(services: try services, agent: host.guestAgent, deviceOS: host.iosVersion) }
+        get throws {
+            AppInstallPipeline(
+                services: try services, agent: host.guestAgent, deviceOS: host.iosVersion, soc: host.profile.soc)
+        }
     }
 
     /// Cheap in-process check that the USB bridge sees the guest (bounded and

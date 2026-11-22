@@ -16,8 +16,37 @@ public nonisolated enum ZipMembers {
         guard let archive = try? Archive(url: zip, accessMode: .read, pathEncoding: nil), let entry = archive[path],
             entry.type == .file, entry.uncompressedSize > 0, entry.uncompressedSize <= UInt64(limit)
         else { return nil }
+        // The declared size is the archive's word: the stream itself is held to `limit` too, or a member declared
+        // small could inflate until memory ran out.
+        struct OverLimit: Error {}
         var data = Data()
-        guard (try? archive.extract(entry, skipCRC32: false) { data.append($0) }) != nil else { return nil }
+        do {
+            _ = try archive.extract(entry, skipCRC32: false) { chunk in
+                guard data.count + chunk.count <= limit else { throw OverLimit() }
+                data.append(chunk)
+            }
+        } catch { return nil }
+        return data
+    }
+
+    /// `range` of the member's bytes (fewer where it ends sooner), or nil when it is missing or unreadable. Nothing
+    /// past the range is inflated, so the head of a large binary costs its head.
+    public static func data(_ zip: URL, _ path: String, range: Range<Int>) -> Data? {
+        guard let archive = try? Archive(url: zip, accessMode: .read, pathEncoding: nil), let entry = archive[path],
+            entry.type == .file
+        else { return nil }
+        struct Enough: Error {}
+        var data = Data()
+        var offset = 0
+        do {
+            _ = try archive.extract(entry, skipCRC32: true) { chunk in
+                let wanted = range.clamped(to: offset..<(offset + chunk.count))
+                data.append(chunk.dropFirst(wanted.lowerBound - offset).prefix(wanted.count))
+                offset += chunk.count
+                if offset >= range.upperBound { throw Enough() }
+            }
+        } catch is Enough {
+        } catch { return nil }
         return data
     }
 

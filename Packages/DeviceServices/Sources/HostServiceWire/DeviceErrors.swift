@@ -126,9 +126,9 @@ public nonisolated enum InstproxyError: Equatable, CustomStringConvertible, Coda
         // space against the archive before it uploads, so by the time installd
         // says this, space has been PROVEN. Blaming it sent people off
         // uninstalling their apps to fix something else entirely.
-        case .packageExtractionFailed:
-            return "the device refused the package — it may still be encrypted, "
-                + "or built for a different architecture"
+        // Nor "may still be encrypted, or built for a different architecture": the install reads the binary for
+        // both before it uploads (AppBinary).
+        case .packageExtractionFailed: return "the device couldn’t unpack the app’s archive; the file may be damaged"
         case .other(let c): return "code \(c)"
         }
     }

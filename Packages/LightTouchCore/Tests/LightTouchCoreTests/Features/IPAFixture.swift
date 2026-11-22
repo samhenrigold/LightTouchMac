@@ -3,15 +3,20 @@ import Foundation
 @testable import LightTouchCore
 
 /// A minimal app archive at `url`: Payload/<name>.app/Info.plist naming `bundleID`, plus any extra plist keys,
-/// zipped by the system's zip.
-func makeIPA(at url: URL, bundleID: String = "com.example.app", name: String = "X", info extra: [String: Any] = [:])
-    throws
-{
+/// and `executable` as its main binary when given, zipped by the system's zip.
+func makeIPA(
+    at url: URL, bundleID: String = "com.example.app", name: String = "X", info extra: [String: Any] = [:],
+    executable: Data? = nil
+) throws {
     let work = url.deletingLastPathComponent().appendingPathComponent(".ipa-" + UUID().uuidString, isDirectory: true)
     defer { try? FileManager.default.removeItem(at: work) }
     let app = work.appendingPathComponent("Payload/\(name).app", isDirectory: true)
     try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
-    let info = extra.merging(["CFBundleIdentifier": bundleID, "CFBundleName": name]) { a, _ in a }
+    var info = extra.merging(["CFBundleIdentifier": bundleID, "CFBundleName": name]) { a, _ in a }
+    if let executable {
+        info["CFBundleExecutable"] = name
+        try executable.write(to: app.appendingPathComponent(name))
+    }
     try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(
         to: app.appendingPathComponent("Info.plist")
     )
