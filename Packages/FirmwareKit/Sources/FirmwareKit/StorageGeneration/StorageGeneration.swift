@@ -346,7 +346,7 @@ public actor StorageGeneration {
                 if values.isDirectory == true {
                     try walk(child)
                 } else {
-                    hashes[String(child.path.dropFirst(root.path.count + 1))] = try Preparer.digest(child, SHA256())
+                    hashes[String(child.path.dropFirst(root.path.count + 1))] = try Self.sparseDigest(child)
                 }
             }
         }
@@ -393,6 +393,44 @@ public actor StorageGeneration {
         return object
     }
     static func hash(_ data: Data) -> String { Preparer.sha256(data) }
+    /// SHA-256 of a file's size and of each data extent's offset, length and bytes (SEEK_DATA/SEEK_HOLE), its holes
+    /// unread: they read as zeros, so the extents decide every byte. A NAND chip file is gigabytes of holes (an erased
+    /// page) around the megabytes the volumes use, and every publish certified the generation twice, reading all of it.
+    /// A filesystem without holes (or without SEEK_DATA) is read from there to the end as one extent.
+    static func sparseDigest(_ url: URL) throws -> String {
+        let fd = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { Darwin.close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        var sha = SHA256()
+        func add(_ value: off_t) { withUnsafeBytes(of: Int64(value).littleEndian) { sha.update(bufferPointer: $0) } }
+        add(info.st_size)
+        var buffer = [UInt8](repeating: 0, count: 1 << 22)
+        var at: off_t = 0
+        while at < info.st_size {
+            var start = lseek(fd, at, SEEK_DATA)
+            if start < 0 && errno == ENXIO { break }  // only a hole is left
+            var end = start < 0 ? -1 : lseek(fd, start, SEEK_HOLE)
+            if start < 0 || end <= start || end > info.st_size { (start, end) = (at, info.st_size) }
+            add(start)
+            add(end - start)
+            var offset = start
+            while offset < end {
+                let count = buffer.withUnsafeMutableBytes {
+                    pread(fd, $0.baseAddress, min($0.count, Int(end - offset)), offset)
+                }
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0 else {
+                    throw FirmwareError(.internal, "\(url.lastPathComponent) changed while it was read")
+                }
+                buffer.withUnsafeBytes { sha.update(bufferPointer: UnsafeRawBufferPointer(rebasing: $0.prefix(count))) }
+                offset += off_t(count)
+            }
+            at = end
+        }
+        return sha.finalize().hexString
+    }
     static func sync(_ url: URL) throws {
         let fd = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
         guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }

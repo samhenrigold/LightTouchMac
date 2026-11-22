@@ -123,6 +123,37 @@ struct StorageGenerationTests {
         try await resumed.close()
     }
 
+    /// The certificate's file digest reads a chip file's data extents, not its holes, so a 16 GiB store of a few
+    /// written pages takes well under a second, and a byte changed in an extent, a zero written into a hole (the
+    /// same bytes, laid out differently) or the size grown each change it.
+    @Test func sparseChipFilesAreCertifiedByTheirExtents() throws {
+        let dir = try Fixtures.tempDir("sparse-digest")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let chip = dir.appendingPathComponent("cs0.pages")
+        #expect(FileManager.default.createFile(atPath: chip.path, contents: nil))
+        let f = try FileHandle(forWritingTo: chip)
+        defer { try? f.close() }
+        func write(_ bytes: [UInt8], at offset: UInt64) throws {
+            try f.seek(toOffset: offset)
+            try f.write(contentsOf: bytes)
+            try f.synchronize()
+        }
+        try f.truncate(atOffset: 16 << 30)
+        for page in [0, 700, 1 << 20] { try write([UInt8](repeating: 0x5A, count: 4096), at: UInt64(page) * 4096) }
+        let start = ContinuousClock.now
+        let first = try StorageGeneration.sparseDigest(chip)
+        #expect(ContinuousClock.now - start < .seconds(2), "the holes were read")
+        #expect(try StorageGeneration.sparseDigest(chip) == first)
+        try write([0x5B], at: 700 * 4096 + 9)
+        let changed = try StorageGeneration.sparseDigest(chip)
+        #expect(changed != first)
+        try write([0], at: 8 << 30)
+        let filled = try StorageGeneration.sparseDigest(chip)
+        #expect(filled != changed)
+        try f.truncate(atOffset: (16 << 30) + 4096)
+        #expect(try StorageGeneration.sparseDigest(chip) != filled)
+    }
+
     @Test func wrongResumeCannotBypassPendingIntent() async throws {
         let device = try fixture()
         defer { try? FileManager.default.removeItem(at: device) }
