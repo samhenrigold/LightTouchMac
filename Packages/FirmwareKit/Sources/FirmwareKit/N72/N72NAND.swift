@@ -266,7 +266,9 @@ public enum N72NAND {
         let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let tmp = dir.appendingPathComponent(".\(url.lastPathComponent).tmp")
-        try data.write(to: tmp)
+        // The overlay is the helper's to write: a leftover, or a link planted at this name, goes, never written through.
+        try? FileManager.default.removeItem(at: tmp)
+        try data.write(to: tmp, options: .withoutOverwriting)
         let fd = open(tmp.path, O_RDONLY)
         defer { if fd >= 0 { close(fd) } }
         guard fd >= 0, fsync(fd) == 0, rename(tmp.path, url.path) == 0 else {

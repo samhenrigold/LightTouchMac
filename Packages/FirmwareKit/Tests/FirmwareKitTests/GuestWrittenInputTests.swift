@@ -93,4 +93,23 @@ struct GuestWrittenInputTests {
         }
         #expect(try Data(contentsOf: host) == Data("the host's".utf8))
     }
+
+    /// Boot admission writes the live overlay's pages and stamps with writeDurably, a temporary renamed over the
+    /// target: a link the helper planted at the temporary's name had the page written over the file it named.
+    @Test func aDurableWriteGoesNotThroughALinkAtItsTemporary() throws {
+        let fm = FileManager.default
+        let root = try Fixtures.tempDir("guest-durable-link")
+        defer { try? fm.removeItem(at: root) }
+        let host = root.appendingPathComponent("host-file")
+        try Data("the host's".utf8).write(to: host)
+        let page = root.appendingPathComponent("overlay/cs1/512.page")
+        try fm.createDirectory(at: page.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(
+            at: page.deletingLastPathComponent().appendingPathComponent(".512.page.tmp"),
+            withDestinationURL: host
+        )
+        try N72NAND.writeDurably(Data("a page".utf8), to: page)
+        #expect(try Data(contentsOf: page) == Data("a page".utf8))
+        #expect(try Data(contentsOf: host) == Data("the host's".utf8))
+    }
 }
