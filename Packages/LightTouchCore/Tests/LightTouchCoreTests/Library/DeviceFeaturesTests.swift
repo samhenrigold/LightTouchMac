@@ -23,10 +23,10 @@ struct DeviceFeaturesTests {
         // iPhone 4 7.1.2: a modem, a compass and a motor but no GPS.
         let n90 = Self.features("n90ap-11D257", guestPackage: true)
         #expect(n90.cellular && !n90.location && n90.compass && n90.vibration && n90.guestTools && n90.fileSystem)
-        // iPod touch 1.1.4: no apps, no free-form screen, no Skip Setup or Jailbreak; its store edits while stopped.
+        // iPod touch 1.1.4: no apps, no free-form screen, no Skip Setup, the 1.x Jailbreak; its store edits while stopped.
         let n45 = Self.features("n45ap-4A102")
         #expect(!n45.cellular && !n45.vibration && !n45.compass && !n45.appInstalls && !n45.freeFormScreen)
-        #expect(!n45.skipSetup && !n45.jailbreak && n45.fileSystem && n45.audio)
+        #expect(!n45.skipSetup && n45.jailbreak && n45.fileSystem && n45.audio)
         // iPad 3.2.2: a compass but no modem or motor; before iOS 5, no Skip Setup; SSH packaged for 7B500.
         let k48 = Self.features("k48ap-7B500")
         #expect(!k48.cellular && !k48.location && k48.compass && !k48.vibration && !k48.skipSetup && k48.developerTools)

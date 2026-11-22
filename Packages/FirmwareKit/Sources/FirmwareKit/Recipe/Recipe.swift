@@ -163,7 +163,7 @@ public enum Recipe {
             }
         )
         c.dec = dec
-        if recipe.options["jailbreak"] == true {
+        if recipe.options["jailbreak"] == true, !(board is N45Board) {  // 1.x: no Cydia (installJailbreak1x)
             // Cydia's bootstrap beside the decrypt cache, as the app's caches keep IPSW and Decrypted
             c.cydia = try SystemEdits.Cydia.bootstrap(
                 in: cacheRoot.deletingLastPathComponent().appendingPathComponent("Jailbreak"),

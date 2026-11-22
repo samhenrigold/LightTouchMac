@@ -59,7 +59,10 @@ public enum FirmwareCommand {
         @Flag(help: "Adds the GL fixture job to a test device.") public var glTest = false
         @Flag(help: "Seeds Setup Assistant's finished state (iOS 5 and later): the device starts at the Home screen.")
         public var skipSetup = false
-        @Flag(help: "Prepares the device jailbroken: afc2 (the whole file system over USB), Cydia and Substrate.")
+        @Flag(
+            help:
+                "Prepares the device jailbroken: afc2 (the whole file system over USB), Cydia and Substrate (on 1.x Installer.app, and SpringBoard lists every app)."
+        )
         public var jailbreak = false
         @Option(
             help:
@@ -200,8 +203,8 @@ public enum FirmwareCommand {
             case begin, mount, commit, discard, recover
             /// 1.x: --cert as a system anchor (begin, mount, the anchor row, commit).
             case trustAnchor = "trust-anchor"
-            /// 2.0 and later: what the jailbreak option adds (begin, mount, the edits, commit), Cydia's bootstrap kept
-            /// beside the decrypt cache --cache.
+            /// What the jailbreak option adds (begin, mount, the edits, commit): from 2.0 Cydia's bootstrap kept beside
+            /// the decrypt cache --cache; on 1.x Installer.app from the guest tools (--guest-tools).
             case jailbreak
             /// 1.x: --prefs, a plist array of {domain, key, value} (no value: remove the key), into the user's
             /// Preferences (begin, mount, the plists, commit).
@@ -215,6 +218,8 @@ public enum FirmwareCommand {
         @Option public var mountPoint: String? = nil
         @Option(help: "The decrypt cache, for jailbreak.") public var cache: String? = nil
         @Option(help: "A plist of preference changes, for preferences.") public var prefs: String? = nil
+        @Option(help: "Default: the app bundle's packed guest tools (jailbreak on 1.x: its Installer.app).")
+        public var guestTools: String? = nil
 
         public init() {}
         public init(
@@ -225,7 +230,8 @@ public enum FirmwareCommand {
             cert: URL? = nil,
             mountPoint: URL? = nil,
             cache: URL? = nil,
-            prefs: URL? = nil
+            prefs: URL? = nil,
+            guestTools: URL? = nil
         ) {
             self.device = device.path
             self.action = action
@@ -235,6 +241,7 @@ public enum FirmwareCommand {
             self.mountPoint = mountPoint?.path
             self.cache = cache?.path
             self.prefs = prefs?.path
+            self.guestTools = guestTools?.path
         }
 
         public var arguments: [String] {
@@ -242,7 +249,7 @@ public enum FirmwareCommand {
                 + options([
                     "device": device, "action": action.rawValue, "session": session,
                     "record-policy": recordPolicy.rawValue, "cert": cert, "mount-point": mountPoint, "cache": cache,
-                    "prefs": prefs
+                    "prefs": prefs, "guest-tools": guestTools
                 ])
         }
     }

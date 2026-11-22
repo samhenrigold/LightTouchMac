@@ -12,18 +12,18 @@ extension SharedState {
             NSApp.setActivationPolicy(.prohibited)
         }
 
-        /// Device ▸ Jailbreak…'s question: Substrate named only where the jailbreak installs it (iOS 3 to 6), Jailbreak
-        /// first. Each is rendered to LTM_RENDER_DIR when it's set.
+        /// Device ▸ Jailbreak…'s question: Substrate named only where the jailbreak installs it (iOS 3 to 6), Installer.app
+        /// in Cydia's place on iPhone OS 1, Jailbreak first. Each is rendered to LTM_RENDER_DIR when it's set.
         @Test func jailbreakAlertNamesWhatItAdds() throws {
             for (version, name, substrate) in [
                 ("4.2.1", "iPhone 4 (4.2.1)", true), ("7.1.2", "iPhone 4 (7.1.2)", false),
-                ("2.2.1", "iPod touch (2.2.1)", false)
+                ("2.2.1", "iPod touch (2.2.1)", false), ("1.1.4", "iPod touch (1.1.4)", false)
             ] {
                 let alert = JailbreakAlert.make(name: name, version: version)
                 #expect(alert.messageText == "Jailbreak \(name)?")
                 #expect(
                     alert.informativeText
-                        == "Adds Cydia\(substrate ? ", Substrate," : "") and afc2, which shows the whole file system "
+                        == "Adds \(version == "1.1.4" ? "Installer.app" : "Cydia\(substrate ? ", Substrate," : "")") and afc2, which shows the whole file system "
                         + "in Files. Erase All Content and Settings removes them.",
                     "\(version)"
                 )

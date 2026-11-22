@@ -336,6 +336,9 @@ func single(_ args: SingleCheck) -> Never {
                 + (afc2.bool("roundTrip") ? ", a file round trip in /private/var/root" : "")
                 + (afc2.string("error").map { ": \($0)" } ?? "")
         )
+    }
+    if args.jailbreak, base.major == 1 { jailbreak1x(r, events, d) }  // Jailbreak1x.swift
+    if args.jailbreak, base.major >= 2 {  // Cydia and Substrate
         let cydia = events.one("cydia", ["device": d])
         r.check(
             cydia.bool("onHome"),

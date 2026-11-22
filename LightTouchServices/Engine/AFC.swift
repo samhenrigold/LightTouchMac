@@ -266,6 +266,9 @@ extension DeviceServices {
                 let child = path.isEmpty ? name : path + "/" + name
                 var values: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
                 let rc = afc_get_file_info(client, child, &values)
+                // Gone since the listing, or a link to nothing: 1.x's afcd stats through links, and every 1.x root
+                // has /mach -> mach_kernel, which the device doesn't ship, so afc2 couldn't list "/" at all.
+                if rc == AFC_E_OBJECT_NOT_FOUND { continue }
                 guard rc.ok, let values else { throw DeviceError.afc(.init(code: rc.code)) }
                 defer { _ = afc_dictionary_free(values) }
                 var metadata: [String: String] = [:]

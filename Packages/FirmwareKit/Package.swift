@@ -71,7 +71,8 @@ let package = Package(
             name: "FirmwareKitTests",
             dependencies: [
                 "FirmwareKit", "FirmwareSchema", .product(name: "HostRuntime", package: "HostRuntime"),
-                .product(name: "Crypto", package: "swift-crypto")
+                .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
             ],
             exclude: ["iboot-trees"]  // KBootIBootTests reads them from the source tree
         )

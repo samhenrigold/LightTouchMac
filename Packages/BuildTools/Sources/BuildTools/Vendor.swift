@@ -17,7 +17,8 @@ public struct Vendor {
         (commit it when it changed; scripts/vendor-check fails the build while it differs).
 
         The pin hash covers build-support/sources.json (qemu-ios and usbmuxd commits), dependencies.json,
-        developer-disk-images.json, the patches, the recipes (build-support/recipes) and these tools
+        developer-disk-images.json, the 1.x jailbreak's Installer.app (build-support/jailbreak), the patches, the
+        recipes (build-support/recipes) and these tools
         (Packages/BuildTools). A run with the vendor directory complete only writes the
         machine options; with --release the built-in iPod is prepared again when FirmwareKit, the helper or the guest
         tools changed. Nothing here deletes a vendor directory. One run at a time: a second run waits for the first (a
@@ -605,6 +606,8 @@ public struct Vendor {
         remove(packed)
         try copy(guestRoot.appendingPathComponent("ipad-guest-tools"), packed.appendingPathComponent("guest-tools"))
         try copy(developer, packed.appendingPathComponent("developer-tools"))
+        // The 1.x jailbreak's Installer.app (FirmwareKit SystemEdits.InstallerApp, which checks its SHA-1).
+        try copy(root.appendingPathComponent("build-support/jailbreak"), packed.appendingPathComponent("jailbreak"))
         for name in Self.ipodTools {
             try copy(
                 guestRoot.appendingPathComponent("guest-tools/\(name)"),

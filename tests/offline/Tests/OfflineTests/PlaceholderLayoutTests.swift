@@ -108,7 +108,7 @@ extension SharedState {
                     let boxes = all(view).compactMap { $0 as? NSButton }.filter {
                         visible($0) && ["Skip Setup Assistant", "Jailbreak"].contains($0.title)
                     }
-                    let offered = [FirmwareJobs.offersSkipSetup(row.entry), FirmwareJobs.offersJailbreak(row.entry)]
+                    let offered = [FirmwareJobs.offersSkipSetup(row.entry), true]
                     let want: Int
                     switch row.state {
                     case .notDownloaded, .downloaded: want = offered.filter { $0 }.count

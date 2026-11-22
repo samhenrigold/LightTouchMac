@@ -3,12 +3,14 @@ import HostRuntime
 
 extension StoppedVolumeEdit {
     /// The jailbreak option on an existing, stopped device (firmwarekit edit --action jailbreak): the edits a
-    /// jailbroken preparation makes (SystemEdits.installJailbreak from `bootstrap`, Cydia.bootstrap's), in one stopped
-    /// edit, so the device keeps its apps and data. The new generation's lock says `jailbroken` (DeviceLock.jailbroken),
-    /// and on the K48 family its boot files carry the jailbroken boot-args (K48Board.jailbreakBootFiles).
+    /// jailbroken preparation makes (SystemEdits.installJailbreak from `bootstrap`, Cydia.bootstrap's; on 1.x
+    /// installJailbreak1x with the Installer.app beside `guestTools`, and no bootstrap fetched), in one stopped edit, so the device keeps its
+    /// apps and data. The new generation's lock says `jailbroken` (DeviceLock.jailbroken), and on the K48 family its
+    /// boot files carry the jailbroken boot-args (K48Board.jailbreakBootFiles).
     nonisolated(nonsending) public static func jailbreak(
         device: URL,
-        bootstrap: URL,
+        bootstrap: @autoclosure () throws -> URL,
+        guestTools: () throws -> URL? = { nil },
         policy: StorageRecordPolicy = .standalone,
         log: (String) -> Void = { _ in }
     ) async throws {
@@ -17,10 +19,20 @@ extension StoppedVolumeEdit {
             defer { withExtendedLifetime(owner) {} }
             return try DeviceLock.read(base: VolumeExport.ResolvedSource(owner: owner).base.deletingLastPathComponent())
         }()
-        guard let lock, (Int(lock.productVersion?.split(separator: ".").first ?? "") ?? 0) >= 2 else {
-            throw FirmwareError(.unsupported, "the jailbreak needs iPhone OS 2.0 or later")
+        guard let lock, let major = Int(lock.productVersion?.split(separator: ".").first ?? "") else {
+            throw FirmwareError(.unsupported, "the jailbreak: no iPhone OS version in the device's lock")
         }
         guard !lock.jailbroken else { throw FirmwareError(.unsupported, "this device is jailbroken already") }
+        if major < 2 {
+            guard let tools = try guestTools() else { throw FirmwareError(.internal, "jailbreak: no guest tools") }
+            return try await jailbreak1x(
+                device: device,
+                installer: SystemEdits.InstallerApp.bundled(guestTools: tools),
+                policy: policy,
+                log: log
+            )
+        }
+        let bootstrap = try bootstrap()
         let session = try await begin(device: device, policy: policy, log: log)
         do {
             guard let point = try await mount(device: device, id: session.id, policy: policy).mountPoint else {
@@ -42,6 +54,34 @@ extension StoppedVolumeEdit {
                 return ["jailbroken": true]
             }
             if let bootFile { log("\(bootFile): boot-args += \(K48Board.jailbreakBootArg)") }
+        } catch {
+            try? await discard(device: device, id: session.id, policy: policy)
+            throw error
+        }
+    }
+
+    /// 1.x (SystemEdits.installJailbreak1x): its files made root's, as the recipe owns them.
+    nonisolated(nonsending) static func jailbreak1x(
+        device: URL,
+        installer: URL,
+        policy: StorageRecordPolicy,
+        log: (String) -> Void
+    ) async throws {
+        let session = try await begin(device: device, policy: policy, log: log)
+        do {
+            guard let point = try await mount(device: device, id: session.id, policy: policy).mountPoint else {
+                throw FirmwareError(.internal, "jailbreak: the volume isn't mounted")
+            }
+            let jb = try SystemEdits.installJailbreak1x(
+                MountedVolume(root: URL(fileURLWithPath: point)),
+                installer: installer
+            )
+            jb.lines.forEach(log)
+            try await commit(device: device, id: session.id, policy: policy, log: log) { system, _ in
+                let volume = try HFSPlusVolume(system, writable: true)
+                if !jb.root.isEmpty { _ = try volume.setOwner(jb.root, uid: 0, gid: 0) }
+                return ["jailbroken": true]
+            }
         } catch {
             try? await discard(device: device, id: session.id, policy: policy)
             throw error

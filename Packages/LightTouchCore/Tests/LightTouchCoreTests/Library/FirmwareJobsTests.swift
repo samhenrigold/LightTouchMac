@@ -409,13 +409,13 @@ import os
         }
     }
 
-    /// Jailbreak is offered from iPhone OS 2.0 on: 1.0's afcd serves no path through afc2.
-    @Test func jailbreakIsOfferedFromIPhoneOS2() throws {
+    /// The jailbreak can be chosen on 1.x (no sandbox for Substrate to break) and where the sandbox patch resolves.
+    @Test func jailbreakWorksOn1xAndWhereTheSandboxPatchResolves() throws {
         let catalog = try FirmwareCatalog.load(from: LibraryFixtures.shippedCatalog)
-        for (id, offered) in [
-            ("m68ap-1A543a", false), ("n45ap-4B1", false), ("n72ap-5F138", true), ("n90ap-8C148", true)
+        for (id, works) in [
+            ("m68ap-1A543a", true), ("n45ap-4B1", true), ("n72ap-5F138", false), ("n90ap-8C148", true)
         ] {
-            #expect(FirmwareJobs.offersJailbreak(try #require(catalog.entry(id: id))) == offered, "\(id)")
+            #expect(FirmwareJobs.jailbreakWorks(try #require(catalog.entry(id: id))) == works, "\(id)")
         }
     }
 

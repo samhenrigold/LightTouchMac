@@ -91,24 +91,21 @@ import HostRuntime
     /// Settings ▸ General ▸ Prepare devices without mounting disk images (experimental; off unless turned on): each
     /// preparation started with it on edits the volumes in their images (firmwarekit --hfs writer), mounting nothing.
     public nonisolated static let withoutMountingKey = "ExperimentalPrepareWithoutMounting"
-    /// The jailbreak can be chosen where FirmwareKit's SandboxPatch lets Substrate's library into Safari's sandbox:
-    /// iOS 5 on, and iOS 4 on the ARMv7 boards. Elsewhere (iOS 3, the ARMv6 iPod touch 2G's iOS 4) the patch doesn't
-    /// resolve yet and Safari crashes at launch on a jailbroken device, so the checkbox is off and disabled.
+    /// The jailbreak can be chosen on iPhone OS 1.x (afc2 and SpringBoard listing every app: no sandbox, no
+    /// Substrate) and where FirmwareKit's SandboxPatch lets Substrate's library into Safari's sandbox: iOS 5 on, and
+    /// iOS 4 on the ARMv7 boards. Elsewhere (iOS 2 and 3, the ARMv6 iPod touch 2G's iOS 4) the patch doesn't resolve
+    /// yet and Safari crashes at launch on a jailbroken device, so the checkbox is off and disabled.
     public nonisolated static func jailbreakWorks(_ entry: FirmwareCatalog.Entry) -> Bool {
         let major = Int(entry.version.split(separator: ".").first ?? "") ?? 0
-        return major >= 5 || (major == 4 && Board(rawValue: entry.board)?.arch == "armv7")
+        return major == 1 || major >= 5 || (major == 4 && Board(rawValue: entry.board)?.arch == "armv7")
     }
     /// The preparation screen's Jailbreak checkbox for an entry.
     public func jailbreaks(_ id: String) -> Bool {
         guard let entry = catalog.entry(id: id) else { return false }
-        return Self.offersJailbreak(entry) && Self.jailbreakWorks(entry) && !keepsStock.contains(id)
+        return Self.jailbreakWorks(entry) && !keepsStock.contains(id)
     }
     public func setJailbreaks(_ id: String, _ on: Bool) {
         if on { keepsStock.remove(id) } else { keepsStock.insert(id) }
-    }
-    /// afc2 and Cydia from iPhone OS 2.0 on (FirmwareKit refuses the option on 1.x).
-    public nonisolated static func offersJailbreak(_ entry: FirmwareCatalog.Entry) -> Bool {
-        (Int(entry.version.split(separator: ".").first ?? "") ?? 0) >= 2
     }
     /// Setup Assistant runs on a fresh device from iOS 5 on; before that iTunes activated it.
     public static func offersSkipSetup(_ entry: FirmwareCatalog.Entry) -> Bool {

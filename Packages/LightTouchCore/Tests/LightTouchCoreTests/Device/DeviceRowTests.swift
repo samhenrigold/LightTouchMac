@@ -47,15 +47,15 @@ struct DeviceRowTests {
     ]
 
     /// Jailbreak…: a prepared device while it is stopped where the sandbox patch resolves, as the preparation's
-    /// checkbox allows it (FirmwareJobs.jailbreakWorks: iOS 5 on, iOS 4 on the ARMv7 boards; elsewhere Safari crashes
-    /// jailbroken).
+    /// checkbox allows it (FirmwareJobs.jailbreakWorks: 1.x, iOS 5 on, iOS 4 on the ARMv7 boards; elsewhere Safari
+    /// crashes jailbroken).
     @Test func jailbreakIsForAStoppedDeviceWhoseSandboxPatchResolves() throws {
         let m68 = try #require(catalog.entries.first { $0.board == "m68ap" })
         #expect(row(iPad5, instance: id).allows(.jailbreak, canDownload: false))
         #expect(row(iPad4, instance: id).allows(.jailbreak, canDownload: false), "4.x on an ARMv7 board")
         #expect(!row(iPod4, instance: id).allows(.jailbreak, canDownload: false), "4.x on the ARMv6 iPod touch 2G")
         #expect(!row(iPod, instance: id).allows(.jailbreak, canDownload: false), "3.x")
-        #expect(!row(m68, instance: id).allows(.jailbreak, canDownload: false), "1.x")
+        #expect(row(m68, instance: id).allows(.jailbreak, canDownload: false), "1.x: no Substrate to break Safari")
         #expect(!row(iPad5).allows(.jailbreak, canDownload: true), "not prepared")
         #expect(!row(iPad5, instance: id, session: .running).allows(.jailbreak, canDownload: false), "running")
     }

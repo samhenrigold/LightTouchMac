@@ -94,12 +94,12 @@ device), `FIRMWAREKIT_IBOOT_PATCHER`/`IBOOT32PATCHER` (another iBoot32Patcher; D
 
 A release is an Xcode archive made by `scripts/ship`; nothing edits the bundle after Xcode.
 
-1. **`scripts/vendor`**, once per pin change (`build-support/sources.json`, `dependencies.json`, the patches or the
-   recipes in `build-support/recipes`). It builds what Xcode can't, from the pins, into `~/Developer/ltm-vendor.noindex/<pin-hash>/`
+1. **`scripts/vendor`**, once per pin change (`build-support/sources.json`, `dependencies.json`, the patches, the
+   recipes in `build-support/recipes` or `build-support/jailbreak`, the 1.x jailbreak's Installer.app). It builds what Xcode can't, from the pins, into `~/Developer/ltm-vendor.noindex/<pin-hash>/`
    (`.noindex` keeps Spotlight out; `LTM_VENDOR_ROOT` moves it; only `scripts/clean` deletes one): the native dependencies, usbmuxd and QEMU for arm64 and
    x86_64, merged universal with final install names
    (`Frameworks/`, `MacOS/`), the guest tools and the developer SSH payload packed into
-   `Resources/Guest/guest.aar`, the SecureROMs (`Resources/Device/`), the licenses and `build-inputs.json`; with
+   `Resources/Guest/guest.aar` (with `build-support/jailbreak`), the SecureROMs (`Resources/Device/`), the licenses and `build-inputs.json`; with
    `--release` (which `scripts/ship` passes) also the built-in iPod (`Resources/Device/n72ap-7E18.itbase`, which only
    an archive copies). A rerun with nothing changed builds nothing; with `--release`, one after a FirmwareKit or
    helper change only prepares the built-in iPod again. Every run writes HostRuntime's `MachineOptions.swift` (each

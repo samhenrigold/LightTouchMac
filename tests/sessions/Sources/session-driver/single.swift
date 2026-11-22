@@ -1124,8 +1124,12 @@ nonisolated enum WiFiProbe {
         } catch {
             emit("afc2", ["device": d.name, "top": top, "error": "\(error)"])
         }
-        await cydia(d, proxyCA: proxyCA, itpack: s.proxyItpack, network: s.network == true)
-        await substrate(d)
+        if (lock?.productVersion ?? "").hasPrefix("1.") {
+            await installer1x(d)  // jailbreak1x.swift: Installer.app, not Cydia
+        } else {
+            await cydia(d, proxyCA: proxyCA, itpack: s.proxyItpack, network: s.network == true)
+            await substrate(d)
+        }
     }
     if s.install != false {
         await install(d)

@@ -38,14 +38,23 @@ import Foundation
             try emit(["changed": changed])
             return 0
         }
-        if command.action == .jailbreak {  // Cydia's bootstrap beside the decrypt cache, as create keeps it
+        if command.action == .jailbreak {  // Cydia's bootstrap beside the decrypt cache, as create keeps it (2.0 on)
             guard let cache = command.cache else { throw FirmwareError(.internal, "jailbreak requires --cache DIR") }
             try await StoppedVolumeEdit.jailbreak(
                 device: device,
-                bootstrap: SystemEdits.Cydia.bootstrap(
+                bootstrap: try SystemEdits.Cydia.bootstrap(
                     in: fileURL(cache).deletingLastPathComponent().appendingPathComponent("Jailbreak"),
                     log: log
                 ),
+                guestTools: {  // 1.x's Installer.app, as create finds the guest tools
+                    try command.guestTools.map(fileURL)
+                        ?? Bundle.main.executableURL.flatMap {
+                            try GuestArchive.unpacked(
+                                resources: $0.resolvingSymlinksInPath().deletingLastPathComponent()
+                                    .appendingPathComponent("../Resources").standardizedFileURL
+                            )?.appendingPathComponent("guest-tools")
+                        }
+                },
                 policy: policy,
                 log: log
             )

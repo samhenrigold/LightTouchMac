@@ -219,7 +219,7 @@ final class DevicePlaceholderViewController: NSViewController {
                 skipSetup.state = skipsSetup.get(entry.id) ? .on : .off
                 skipSetup.isHidden = false
             }
-            if row.state != .bundled, FirmwareJobs.offersJailbreak(entry), let jailbreaks {
+            if row.state != .bundled, let jailbreaks {
                 jailbreak.state = jailbreaks.get(entry.id) ? .on : .off
                 jailbreak.isEnabled = FirmwareJobs.jailbreakWorks(entry)
                 jailbreak.toolTip =

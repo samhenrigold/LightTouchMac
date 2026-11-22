@@ -24,7 +24,7 @@ public struct DeviceFeatures: Sendable, Equatable {
     public var freeFormScreen: Bool
     /// Prepared past Setup Assistant (FirmwareJobs.offersSkipSetup: iOS 5 and later; not the image the app ships).
     public var skipSetup: Bool
-    /// Prepared jailbroken (FirmwareJobs.offersJailbreak: iPhone OS 2.0 and later; not the image the app ships).
+    /// Prepared jailbroken (any build but the image the app ships).
     public var jailbreak: Bool
     /// Show File System edits the stopped device's store: every board (DeviceFilesystemEdits.canPerform).
     public var fileSystem: Bool
@@ -44,7 +44,7 @@ public struct DeviceFeatures: Sendable, Equatable {
         appInstalls = entry.managesApps
         freeFormScreen = board?.supportsFreeForm ?? false
         skipSetup = entry.bundled == nil && FirmwareJobs.offersSkipSetup(entry)
-        jailbreak = entry.bundled == nil && FirmwareJobs.offersJailbreak(entry)
+        jailbreak = entry.bundled == nil
         fileSystem = board != nil
         developerTools = GuestDeveloperTools.supports(build: entry.build)
         guestTools = (board?.hasGuestTools ?? false) || guestPackage

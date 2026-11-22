@@ -202,10 +202,6 @@ final class N45Board: Board {
                 piece: Self.onePiece
             )
         }
-        // 1.0's lockdownd starts an afc2 entry but its afcd answers no path (AFC object not found): no jailbreak on 1.x.
-        guard recipe.options["jailbreak"] != true else {
-            throw FirmwareError(.unsupported, "\(c.e.id): the jailbreak option needs iPhone OS 2.0 or later")
-        }
     }
 
     /// An IPSW kernelcache that is the restore environment's, not the system's.
@@ -322,9 +318,9 @@ final class N45Board: Board {
                 try v.makeDirectory(Self.rootLibrary + d)
                 owners.append((0, Self.rootLibrary + d))
             }
-            // An iPod's first iTunes handshake clears BrickState independently of activation.
-            // The 1G has no host USB transport yet. Seed the same persistent boolean on its fresh
-            // data volume; lockdownd owns the rest of this dictionary and preserves it on reboot.
+            // An iPod's first iTunes handshake clears BrickState independently of activation, and no iTunes ever
+            // connects here: seed the same persistent boolean on its fresh data volume; lockdownd owns the rest of
+            // this dictionary and preserves it on reboot.
             let ark = Self.rootLibrary + "/Lockdown/data_ark.plist"
             try v.put(
                 try PropertyListSerialization.data(fromPropertyList: ["-BrickState": false], format: .xml, options: 0),
@@ -369,6 +365,15 @@ final class N45Board: Board {
                 log: c.log
             )
             for (k, v) in report { derived[k] = v }
+            if recipe.options["jailbreak"] == true {
+                let jb = try SystemEdits.installJailbreak1x(
+                    v,
+                    installer: SystemEdits.InstallerApp.bundled(guestTools: c.o.guestTools)
+                )
+                jb.lines.forEach(c.log)
+                derived["jailbreak"] = jb.lines
+                owners += jb.root.map { (0, $0) }
+            }
             c.guestPackage = record
             owners += owned.map { (0, $0) }
             return (try SystemEdits.activate(v, log: c.log), removed)

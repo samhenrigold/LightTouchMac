@@ -21,7 +21,7 @@ pin_key() (
     shopt -s dotglob nullglob
     local names=(
         build-support/sources.json build-support/dependencies.json build-support/recipes
-        build-support/developer-disk-images.json build-support/checks
+        build-support/developer-disk-images.json build-support/checks build-support/jailbreak
         Packages/BuildTools/Package.swift Packages/BuildTools/Sources
         build-support/patches/*
     )
