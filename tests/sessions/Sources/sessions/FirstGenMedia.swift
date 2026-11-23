@@ -62,5 +62,11 @@ func judgeFirstGenMedia(_ r: Report, _ d: String, events: Events, wrongHash: Boo
             text.contains { $0.hasPrefix("Camera Roll") } && !text.contains("No Photos"),
             "\(d): \(e.string("stage") ?? "?"): Photos opens its Camera Roll (\(text.prefix(6).joined(separator: " | ")))"
         )
+        // the grid's first cell shows the photo's THM (the import's photos are colored; a cell without one is blank)
+        let colored = e["firstCellColored"] as? Double ?? 0
+        r.check(
+            colored > 0.5,
+            "\(d): \(e.string("stage") ?? "?"): the Camera Roll's first cell shows a thumbnail (\(Int(colored * 100))% colored)"
+        )
     }
 }

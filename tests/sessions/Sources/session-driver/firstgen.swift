@@ -1,5 +1,6 @@
 import Foundation
 import HostServiceClient
+import ImageIO
 import SessionKit
 
 @testable import LightTouchCore
@@ -141,6 +142,7 @@ import SessionKit
         seen += found.map(\.text)
         if attempt > 0, app == ["Photos"] {
             guard attempt == 1 else { break }
+            event["firstCellColored"] = coloredFraction(URL(fileURLWithPath: shot), x: 0.13, y: 0.22)
             // the album's first photo, opened full size
             await d.tap(0.13, 0.22)
             try? await Task.sleep(for: .seconds(5))
@@ -166,4 +168,28 @@ import SessionKit
     emit("firstGenScreen", event)
     await d.home()
     try? await Task.sleep(for: .seconds(4))
+}
+
+/// The share of a square around (`x`, `y`) (fractions of the screen; the grid's first cell, about a quarter of the
+/// width) that is colored rather than white, gray or black: a photo's thumbnail where a cell without one is blank.
+func coloredFraction(_ shot: URL, x: Double, y: Double) -> Double? {
+    guard let source = CGImageSourceCreateWithURL(shot as CFURL, nil),
+        let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else { return nil }
+    let side = image.width / 8
+    let rect = CGRect(
+        x: Int(x * Double(image.width)) - side / 2, y: Int(y * Double(image.height)) - side / 2, width: side,
+        height: side)
+    guard let crop = image.cropping(to: rect),
+        let context = CGContext(
+            data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    else { return nil }
+    context.draw(crop, in: CGRect(x: 0, y: 0, width: side, height: side))
+    guard let data = context.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
+    let colored = (0..<side * side).filter { i in
+        let rgb = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]]
+        return Int(rgb.max()!) - Int(rgb.min()!) > 60
+    }.count
+    return Double(colored) / Double(side * side)
 }

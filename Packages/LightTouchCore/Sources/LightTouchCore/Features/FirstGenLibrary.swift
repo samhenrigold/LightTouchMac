@@ -1,11 +1,13 @@
 // Media import on iPhone OS 1.x, which has no guest agent to commit through: everything goes over AFC into the Media
 // folder while the device runs. A song or video is copied under iTunes_Control/Music and added to the iTunesDB
-// (ITunesDB, signed with hash58 for the device, which 1.1.x checks); a photo becomes the next DCIM/100APPLE/IMG_NNNN.JPG,
-// the DCF group 1.x's Photos scans.
+// (ITunesDB, signed with hash58 for the device, which 1.1.x checks); a photo becomes the next DCIM/100APPLE/IMG_NNNN.JPG
+// with its IMG_NNNN.THM, the DCF group 1.x's Camera Roll scans.
 
+import CoreGraphics
 import Foundation
 import HostServiceClient
 import HostServiceWire
+import ImageIO
 
 public struct FirstGenLibrary: Sendable {
     public init(services: DeviceServices) { self.services = services }
@@ -122,8 +124,52 @@ public struct FirstGenLibrary: Sendable {
         }
         let number = (taken.max() ?? 0) + 1
         guard number <= 9999 else { throw DeviceToolsError.failed("Saved Photos is full.") }
-        let remote = Self.photos + "/" + String(format: "IMG_%04d.JPG", number)
-        _ = try await services.stageFile(image, remote: remote, progress: progress)
+        let name = Self.photos + "/" + String(format: "IMG_%04d", number)
+        // the thumbnail first: the Camera Roll reads the group as the JPG appears, and keeps a blank cell for one
+        // without its THM
+        let thumbnail = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-thm-" + UUID().uuidString)
+        try Self.cameraRollThumbnail(of: image).write(to: thumbnail)
+        defer { try? FileManager.default.removeItem(at: thumbnail) }
+        _ = try await services.stageFile(thumbnail, remote: name + ".THM") { _ in }
+        _ = try await services.stageFile(image, remote: name + ".JPG", progress: progress)
+    }
+
+    /// The Camera Roll's grid cell for a photo, its DCF group's THM: PhotoLibrary writes and reads it as a JPEG of
+    /// MLPhotoLibrary's format 1095, 75 by 75, cropped (the image's centered square).
+    nonisolated static func cameraRollThumbnail(of image: URL) throws -> Data {
+        let side = 75
+        guard let source = CGImageSourceCreateWithURL(image as CFURL, nil),
+            let full = CGImageSourceCreateImageAtIndex(source, 0, nil),
+            let square = full.cropping(
+                to: CGRect(
+                    x: (full.width - min(full.width, full.height)) / 2,
+                    y: (full.height - min(full.width, full.height)) / 2,
+                    width: min(full.width, full.height),
+                    height: min(full.width, full.height)
+                )
+            ),
+            let context = CGContext(
+                data: nil,
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            )
+        else { throw DeviceToolsError.failed("This photo couldn’t be read.") }
+        context.interpolationQuality = .high
+        context.draw(square, in: CGRect(x: 0, y: 0, width: side, height: side))
+        let data = NSMutableData()
+        guard let thumbnail = context.makeImage(),
+            let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil)
+        else { throw DeviceToolsError.failed("The photo couldn’t be prepared.") }
+        CGImageDestinationAddImage(
+            destination, thumbnail, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else {
+            throw DeviceToolsError.failed("The photo couldn’t be prepared.")
+        }
+        return data as Data
     }
 
     /// `path`'s bytes over AFC, or nil where there is no such file.
