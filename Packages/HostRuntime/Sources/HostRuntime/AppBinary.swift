@@ -1,11 +1,11 @@
 // What an .ipa's main binary says it runs on, read on the Mac before anything is sent: its 32-bit ARM slices and
 // whether each is still FairPlay-encrypted. AppSync makes installd take either kind, so an encrypted copy, or one
-// built only for a newer processor, would upload for minutes, install, and then die at launch with nothing said.
+// built only for a newer processor, would upload for minutes, install, and then die at launch with nothing said. An
+// iPhone OS 1.x package's Mach-Os are held to the same rule (FirmwareKit's Package1x).
 
 import Foundation
-import HostRuntime
 
-public nonisolated enum AppBinary {
+public enum AppBinary {
     /// One 32-bit ARM slice: its CPU_SUBTYPE_ARM_* (6 is v6, 9 v7, 11 v7s) and whether LC_ENCRYPTION_INFO's cryptid
     /// is set.
     public struct Slice: Equatable, Sendable {
@@ -19,11 +19,25 @@ public nonisolated enum AppBinary {
 
     private struct Unreadable: Error {}
 
+    /// Whether every processor here runs `slice`: anything older than ARMv7 (v6 and before), the only code the iPhone
+    /// and the first iPod touch run.
+    public static func isPreARMv7(_ slice: Slice) -> Bool { slice.subtype < 9 }
+
     /// The 32-bit ARM slices of the Mach-O that `read` gives byte ranges of (fewer bytes where it ends sooner):
     /// empty when it has none (64-bit only, or built for the Simulator), nil when it is no Mach-O this can read,
     /// whose verdict stays installd's.
     public static func slices(_ read: (Range<Int>) -> Data?) -> [Slice]? {
         try? parse(read)
+    }
+
+    /// `slices` of a whole file's `data`.
+    public static func slices(_ data: Data) -> [Slice]? {
+        slices { range in
+            range.lowerBound < data.count
+                ? data.subdata(
+                    in: (data.startIndex + range.lowerBound)..<(data.startIndex + min(range.upperBound, data.count)))
+                : nil
+        }
     }
 
     /// Why a device with the processor of `soc` can't run a binary with these slices, worded for the install's
@@ -39,7 +53,7 @@ public nonisolated enum AppBinary {
             }
         let taken =
             newestFirst.lazy.compactMap { subtype in slices.first { $0.subtype == subtype } }.first
-            ?? slices.first { $0.subtype < 9 }
+            ?? slices.first(where: isPreARMv7)
         guard let taken else {
             return slices.isEmpty
                 ? "“\(name)” has no 32-bit version, and this device runs only 32-bit apps."
@@ -50,17 +64,13 @@ public nonisolated enum AppBinary {
             : nil
     }
 
-    /// `problem` for the binary at `member` of the archive `ipa`, read off the caller's actor.
-    @concurrent public static func problem(in ipa: URL, member: String, soc: Board.SoC) async -> String? {
-        problem(slices { ZipMembers.data(ipa, member, range: $0) }, soc: soc, name: ipa.lastPathComponent)
-    }
-
     private static func parse(_ read: (Range<Int>) -> Data?) throws -> [Slice] {
         guard let head = read(0..<4096) else { throw Unreadable() }
         switch try word(head, 0, bigEndian: true) {
         case 0xcafe_babe:  // fat: big-endian entries of cputype, cpusubtype, offset, size, align
+            // a Java class shares the magic, with its version where the count is (45 and up)
             let count = Int(try word(head, 4, bigEndian: true))
-            guard count <= (head.count - 8) / 20 else { throw Unreadable() }
+            guard (1..<20).contains(count), count <= (head.count - 8) / 20 else { throw Unreadable() }
             return try (0..<count).compactMap { index in
                 guard try word(head, 8 + 20 * index, bigEndian: true) == 12 else { return nil }
                 return try thin(read, at: Int(try word(head, 16 + 20 * index, bigEndian: true)))

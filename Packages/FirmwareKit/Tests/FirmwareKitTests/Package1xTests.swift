@@ -1,4 +1,5 @@
 import Foundation
+import HostRuntime
 import Testing
 import ZIPFoundation
 
@@ -227,15 +228,33 @@ struct Package1xTests {
         #expect(!fm.fileExists(atPath: dir.appendingPathComponent("escape").path))
     }
 
-    @Test func armSubtypes() {
-        #expect(Package1x.armSubtypes(Self.machO(subtype: 6)) == [6])
-        #expect(Package1x.armSubtypes(Data("text".utf8)) == nil)
+    /// A member's Mach-O is read by AppBinary, the rule an IPA's preflight uses: fat or thin, a slice older than
+    /// ARMv7 is what the iPhone 2G and iPod touch run.
+    @Test func machOSlices() {
+        #expect(AppBinary.slices(Self.machO(subtype: 6)) == [AppBinary.Slice(subtype: 6, isEncrypted: false)])
+        #expect(AppBinary.slices(Data("text".utf8)) == nil)
+        // two entries (cputype, cpusubtype, offset, size, align), their thin headers at 64 and 128
         var fat = Data([0xCA, 0xFE, 0xBA, 0xBE, 0, 0, 0, 2])
-        for (cpu, sub) in [(12, 9), (12, 6)] as [(UInt32, UInt32)] {
-            for v in [cpu, sub, 0, 0, 0] { fat += withUnsafeBytes(of: v.bigEndian) { Data($0) } }
+        for (sub, offset) in [(9, 64), (6, 128)] as [(UInt32, UInt32)] {
+            for v in [12, sub, offset, 28, 0] as [UInt32] { fat += withUnsafeBytes(of: v.bigEndian) { Data($0) } }
         }
-        #expect(Package1x.armSubtypes(fat) == [9, 6])
-        #expect(Package1x.armSubtypes(Data([0xCA, 0xFE, 0xBA, 0xBE, 0, 0, 0, 0x32])) == nil, "a Java class")
+        fat += Data(count: 64 - fat.count) + Self.machO(subtype: 9)
+        fat += Data(count: 128 - fat.count) + Self.machO(subtype: 6)
+        #expect(AppBinary.slices(fat)?.map(\.subtype) == [9, 6])
+        #expect(AppBinary.slices(fat)?.contains(where: AppBinary.isPreARMv7) == true)
+        #expect(AppBinary.slices(Self.machO(subtype: 9))?.contains(where: AppBinary.isPreARMv7) == false)
+        let java = Data([0xCA, 0xFE, 0xBA, 0xBE, 0, 0, 0, 0x32]) + Data(count: 4088)
+        #expect(AppBinary.slices(java) == nil, "a Java class")
+    }
+
+    /// A Mach-O with no ARM code (BSDSubsystem 1.5's i386 nice) installs, with a warning that it won't run.
+    @Test func aMachOWithNoARMCodeIsWarnedOf() throws {
+        let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-i386-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: dir) }
+        var i386 = Self.machO(subtype: 3)
+        i386.replaceSubrange(4..<8, with: [7, 0, 0, 0])  // CPU_TYPE_X86
+        let package = try Package1x.load(try pxl(dir, members: [("app/nice", i386, 0o755)]))
+        #expect(package.warnings.contains { $0.contains("has no ARM code") }, "\(package.warnings)")
     }
 
     /// LTM_PACKAGE_ARCHIVE=DIR: every package in DIR loaded (read only), the accepted and refused counted.

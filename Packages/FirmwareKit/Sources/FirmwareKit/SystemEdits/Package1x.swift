@@ -30,6 +30,7 @@
 // package's Postflight and Preremove), which Package1x.uninstall follows.
 
 import Foundation
+import HostRuntime
 import Unrar
 import ZIPFoundation
 
@@ -136,10 +137,10 @@ public struct Package1x {
         }
         var warnings = notes
         for (path, item) in members.sorted(by: { $0.key < $1.key }) {
-            guard case .file(let data, _) = item, let subtypes = armSubtypes(data) else { continue }
-            if subtypes.isEmpty {  // BSDSubsystem 1.5's i386 nice: a mistake that can't run there either
+            guard case .file(let data, _) = item, let slices = AppBinary.slices(data) else { continue }
+            if slices.isEmpty {  // BSDSubsystem 1.5's i386 nice: a mistake that can't run there either
                 warnings.append("\(path) has no ARM code: it won't run")
-            } else if !subtypes.contains(where: { $0 < 9 }) {
+            } else if !slices.contains(where: AppBinary.isPreARMv7) {
                 throw refused("\(path) has no armv6 code (the iPhone 2G and iPod touch run armv6)")
             }
         }
@@ -345,23 +346,6 @@ public struct Package1x {
         }
         return out
     }
-
-    /// The ARM cpusubtypes of a Mach-O (thin or fat; [] when it has no ARM slice), or nil when `data` isn't one.
-    static func armSubtypes(_ data: Data) -> [UInt32]? {
-        let b = [UInt8](data.prefix(4096))
-        func le(_ o: Int) -> UInt32 {
-            o + 4 <= b.count ? (0..<4).reduce(0) { $0 | UInt32(b[o + $1]) << (8 * $1) } : 0
-        }
-        func be(_ o: Int) -> UInt32 { le(o).byteSwapped }
-        switch le(0) {
-        case 0xFEED_FACE, 0xFEED_FACF: return le(4) == 12 ? [le(8) & 0x00FF_FFFF] : []
-        case 0xBEBA_FECA:  // fat, big-endian; a Java class shares the magic, with a version where the count is
-            let count = Int(be(4))
-            guard (1..<20).contains(count) else { return nil }
-            return (0..<count).compactMap { k in be(8 + 20 * k) == 12 ? be(12 + 20 * k) & 0x00FF_FFFF : nil }
-        default: return nil
-        }
-    }
 }
 
 extension Package1x {
@@ -408,7 +392,7 @@ extension Package1x {
             try folder((path as NSString).deletingLastPathComponent, uid: uid)
             switch p.item {
             case .file(let data, let mode):
-                let machO = Self.armSubtypes(data) != nil
+                let machO = AppBinary.slices(data) != nil
                 try v.put(data, at: path, mode: machO ? mode & 0o7000 | 0o755 : mode == 0 ? 0o644 : mode)
             case .link(let target):
                 // where it points once the device's links on the way are followed (an earlier member's among
