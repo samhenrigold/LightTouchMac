@@ -24,6 +24,10 @@ struct WorkerGrantsTests {
             ).grants == [.init(URL(fileURLWithPath: "/x/song.m4a"), .read)]
         )
         #expect(
+            HostServiceOperation.syncLibraryFile(source: "/x/ltm-itunesdb-1", remote: "iTunes_Control/iTunes/iTunesDB")
+                .grants == [.init(URL(fileURLWithPath: "/x/ltm-itunesdb-1"), .read)]
+        )
+        #expect(
             HostServiceOperation.download(file, destination: "/x/.LightTouch-host-1/file", root: .media).grants
                 == [.init(URL(fileURLWithPath: "/x/.LightTouch-host-1"), .readWrite)]
         )

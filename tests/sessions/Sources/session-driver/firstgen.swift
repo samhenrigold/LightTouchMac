@@ -104,11 +104,19 @@ import SessionKit
             ($0.text.trimmingCharacters(in: .whitespaces), $0.x, $0.y)
         }
     }
+    /// Slides the lock screen open where `shown` is it (the panel slept and locked between checks).
+    func unlocked(_ shown: [(text: String, x: Double, y: Double)]) async -> Bool {
+        guard shown.contains(where: { $0.text.contains("slide to unlock") }) else { return false }
+        _ = await d.drag(0.18, 0.9, 0.92, 0.9)
+        try? await Task.sleep(for: .seconds(3))
+        return true
+    }
     // SpringBoard's "Sync in Progress" stays up a few seconds past syncDidFinish
     var home: [(text: String, x: Double, y: Double)] = []
     for attempt in 0..<6 {
         if attempt > 0 { try? await Task.sleep(for: .seconds(5)) }
         home = await d.wakeForShot("fg-\(stage)-home").map(labels) ?? []
+        if await unlocked(home) { continue }
         if !home.contains(where: { $0.text == "Sync in Progress" }) { break }
     }
     let dock = d.profile == .m68 && app.contains("iPod") ? (text: "iPod", x: 0.875, y: 0.985) : nil
@@ -121,7 +129,8 @@ import SessionKit
     for attempt in 0..<3 {
         await d.tap(icon.x, icon.y - 0.05)
         try? await Task.sleep(for: .seconds(12))
-        let up = d.screenshot("fg-\(stage)-launch\(attempt)").map(labels) ?? []
+        let up = await d.wakeForShot("fg-\(stage)-launch\(attempt)").map(labels) ?? []
+        if await unlocked(up) { continue }
         if !up.contains(where: { $0.text == "Settings" }) { break }
     }
     var seen: [String] = []

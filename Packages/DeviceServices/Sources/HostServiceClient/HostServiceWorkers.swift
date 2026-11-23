@@ -298,6 +298,7 @@ extension HostServiceOperation {
         switch self {
         case .install(let ipa, _, _): [.init(URL(fileURLWithPath: ipa), .read)]
         case .upload(let source, _, _, _, _, _): [.init(URL(fileURLWithPath: source), .read)]
+        case .syncLibraryFile(let source, _): [.init(URL(fileURLWithPath: source), .read)]
         case .download(_, let destination, _):
             [.init(URL(fileURLWithPath: destination).deletingLastPathComponent(), .readWrite)]
         case .crashReports(let copyTo?): [.init(URL(fileURLWithPath: copyTo), .readWrite)]
