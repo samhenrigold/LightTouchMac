@@ -98,7 +98,15 @@ func interfaceDegrees(frame: URL, scan: CGSize) -> Int? {
 
 /// Where Vision reads `word` on an image (top-left origin, 0...1): the first text equal to it, or nil.
 func findWord(_ word: String, in image: URL) -> (x: Double, y: Double)? {
-    TextReader.read(image).first { $0.text.trimmingCharacters(in: .whitespaces) == word }.map { ($0.x, $0.y) }
+    // Read again without language correction when that finds nothing: with it, Vision reads iOS 7's page dots and
+    // the label beside them as one line, "• Settings", centered between two icons (n90 11D257).
+    for correction in [true, false] {
+        let line = TextReader.read(image, languageCorrection: correction).first {
+            $0.text.trimmingCharacters(in: .whitespaces) == word
+        }
+        if let line { return (line.x, line.y) }
+    }
+    return nil
 }
 
 /// Every line Vision reads on an image, top to bottom.

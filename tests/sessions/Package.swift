@@ -59,6 +59,8 @@ let package = Package(
                 .product(name: "LightTouchCore", package: "LightTouchCore"),
                 .product(name: "HostRuntime", package: "HostRuntime"),
                 .product(name: "DeviceRuntime", package: "DeviceRuntime"),
+                .product(name: "HostServiceClient", package: "DeviceServices"),
+                .product(name: "HostServiceWire", package: "DeviceServices"),
                 parser
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]

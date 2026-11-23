@@ -2,6 +2,8 @@ import ArgumentParser
 import DeviceRuntime
 import Foundation
 import HostRuntime
+import HostServiceClient
+import HostServiceWire
 import IOSurface
 import LightTouchCore
 import SessionKit
@@ -55,6 +57,8 @@ struct Scenario: Decodable {
         var debugPort: String?
         /// A snapshot ("snapshot PATH") the boot resumes from (QEMU's -incoming), on the overlay as it was saved.
         var restore: String?
+        /// A usbmuxd the guest's USB reaches (USBMux's flags), for the `lockdown` step.
+        var usbmuxd: String?
     }
     var dylib: String?
     var board: String?
@@ -84,7 +88,7 @@ func preparedBoot(_ p: Scenario.Prepared, hardware: DeviceInfo?) throws -> BootC
     var config = try prepared.configuration(
         hardware: hardware,
         bootArgs: "amfi_allow_any_signature=1 cs_enforcement_disable=1",  // the app's default (DeviceOptions.bootArgs)
-        usbAddress: nil,
+        usbAddress: p.usbmuxd.map(startMux),
         wifi: true,
         guestPackage: try p.itpack.flatMap { pack -> String? in
             let lock = try? DeviceLock.read(base: URL(fileURLWithPath: p.base)) ?? nil
@@ -112,6 +116,30 @@ func preparedBoot(_ p: Scenario.Prepared, hardware: DeviceInfo?) throws -> BootC
     }
     if let socket = p.debugPort { config.argv += DebugPort.arguments(socket: socket) }
     return config
+}
+
+/// The usbmuxd `prepared.usbmuxd` starts, as session-driver's Mux (both ends Unix sockets in the temporary directory).
+var muxClient: String?
+func startMux(_ usbmuxd: String) -> String {
+    let base = NSTemporaryDirectory() + "ltm-mux-" + UUID().uuidString.prefix(8)
+    let client = base + "-c.sock"
+    let guest = base + "-g.sock"
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: usbmuxd)
+    process.arguments = ["-f", "-v", "-S", client, "-P", "NONE", "-C", "\(dumpDir)/usbmuxd-conf"]
+    process.environment = ProcessInfo.processInfo.environment.merging([
+        "USBMUXD_QEMU_ADDR": guest, "USBMUXD_QEMU_DELAY": "0"
+    ]) { $1 }
+    try? FileManager.default.createDirectory(atPath: "\(dumpDir)/usbmuxd-conf", withIntermediateDirectories: true)
+    FileManager.default.createFile(atPath: "\(dumpDir)/usbmuxd.log", contents: nil)
+    let log = FileHandle(forWritingAtPath: "\(dumpDir)/usbmuxd.log")
+    process.standardOutput = log
+    process.standardError = log
+    process.standardInput = FileHandle.nullDevice
+    do { try process.run() } catch { fail("usbmuxd: \(error)") }
+    emit("usbmuxd", ["pid": process.processIdentifier, "client": client, "guest": guest])
+    muxClient = "UNIX:" + client
+    return guest
 }
 
 let t0 = Date()
@@ -453,11 +481,13 @@ Thread.detachNewThread {
         // wake X0 Y0 X1 Y1 [SECONDS]: until the display is on and the agent says unlocked, at most SECONDS (60): Home
         // (then Sleep/Wake) while it sleeps, the unlock drag while locked, nothing while SpringBoard doesn't answer (a
         // respring) or its lock screen doesn't take the drag yet
+        // wake U0 V0 U1 V1 [S] | wake home [S]: until the agent says unlocked, the slide again (iOS 10: Home)
         case "wake":
+            let byHome = p.count > 1 && p[1] == "home"
             var tries = 0
             var lockedNow: Bool?
             let start = Date()
-            while Date().timeIntervalSince(start) < (v.count > 4 ? v[4] : 60) {
+            while Date().timeIntervalSince(start) < (byHome ? v.first ?? 60 : v.count > 4 ? v[4] : 60) {
                 tries += 1
                 if link.status?.displaySleeping == true {
                     let button = tries > 2 ? 1 : 0  // Home, then Sleep/Wake
@@ -473,6 +503,13 @@ Thread.detachNewThread {
                 }
                 guard locked else {
                     if link.status?.displaySleeping == false { break }
+                    continue
+                }
+                if byHome {
+                    link.send(.button(0, down: true))
+                    usleep(150_000)
+                    link.send(.button(0, down: false))
+                    usleep(3_000_000)
                     continue
                 }
                 link.send(.touch(slot: 0, phase: 0, x: v[0], y: v[1]))
@@ -852,6 +889,16 @@ Thread.detachNewThread {
                 "until",
                 ["condition": condition, "met": met, "seconds": Date().timeIntervalSince(start), "front": front]
             )
+        case "lockdown":  // lockdown SECONDS: until lockdown answers ProductType over prepared.usbmuxd
+            guard let client = muxClient else { fail("lockdown needs prepared.usbmuxd") }
+            let start = Date()
+            var type: String?
+            while type == nil, Date().timeIntervalSince(start) < v[0] {
+                type = try? blocking({ try await DeviceServices(clientSocket: client).lockdownValue("ProductType") })
+                    .get()
+                if type == nil { usleep(1_000_000) }
+            }
+            emit("usb", ["productType": type ?? "", "seconds": Date().timeIntervalSince(start)])
         case "waitagent":  // waitagent SECONDS: until the agent is alive
             let start = Date()
             while link.status?.agentStatus != 1, Date().timeIntervalSince(start) < v[0] { usleep(250_000) }
@@ -902,6 +949,16 @@ Thread.detachNewThread {
             close(s)
             emit("gdb", ["socket": p[1], "reply": text])
             guard text.contains("$T") || text.contains("$S") else { fail("the gdbstub didn't answer ?: \(text)") }
+        // clone SRC DST: an APFS clone (cp -cR), as the overlay stands while a snapshot's save holds the machine
+        // stopped (its storage synced on the stop): the guest's writes after the save aren't the snapshot's
+        case "clone":
+            let cp = Process()
+            cp.executableURL = URL(fileURLWithPath: "/bin/cp")
+            cp.arguments = ["-cR", p[1], p[2]]
+            do { try cp.run() } catch { fail("clone: \(error)") }
+            cp.waitUntilExit()
+            emit("clone", ["status": cp.terminationStatus])
+            if cp.terminationStatus != 0 { fail("clone \(p[1]) failed") }
         case "resume":
             link.send(.snapshotResume)
         case "pause", "unpause":  // the app's Pause and Resume (MachineOp.pause, .resume)
