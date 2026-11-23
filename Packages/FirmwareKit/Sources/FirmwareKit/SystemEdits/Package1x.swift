@@ -27,6 +27,7 @@
 // package's Postflight and Preremove), which Package1x.uninstall follows.
 
 import Foundation
+import Unrar
 import ZIPFoundation
 
 public struct Package1x {
@@ -68,6 +69,7 @@ public struct Package1x {
         var info: [String: Any] = [:]
         var placements: [Placement]
         var postflight: [[String]] = []
+        var notes: [String] = []
         if case .file(let data, _) = members["PxlPkg.plist"] {
             guard let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
             else { throw refused("PxlPkg.plist isn't a property list") }
@@ -103,13 +105,20 @@ public struct Package1x {
             try checkCommands(postflight, "postflight")
         } else if tops.count == 1, let app = tops.first, app.hasSuffix(".app") {
             placements = members.keys.sorted().map { Placement(path: "/Applications/" + $0, item: members[$0]!) }
-        } else if !tops.isEmpty, tops.isSubset(of: rootTops) {
-            placements = members.keys.sorted().map { Placement(path: "/" + $0, item: members[$0]!) }
+        } else if case let folders = tops.filter({ members[$0] == .folder }), !folders.isEmpty,
+            folders.isSubset(of: rootTops)
+        {
+            // a loose file beside the root's folders (aSMS's readme) has nowhere to go
+            let loose = tops.subtracting(folders)
+            placements = members.keys.sorted().filter { !loose.contains($0) }.map {
+                Placement(path: "/" + $0, item: members[$0]!)
+            }
+            notes = loose.sorted().map { "\($0) left out: a file beside the root's folders" }
         } else {
             throw refused(
                 "neither a PXL, one .app nor a root tree (its top: \(tops.sorted().prefix(4).joined(separator: ", ")))")
         }
-        var warnings: [String] = []
+        var warnings = notes
         for (path, item) in members.sorted(by: { $0.key < $1.key }) {
             guard case .file(let data, _) = item, let subtypes = armSubtypes(data) else { continue }
             if subtypes.isEmpty {  // BSDSubsystem 1.5's i386 nice: a mistake that can't run there either
@@ -209,9 +218,60 @@ public struct Package1x {
             }
             return out
         }
-        let archive: Archive
-        do { archive = try Archive(url: url, accessMode: .read) } catch {
-            throw refused("\(url.lastPathComponent) isn't a zip")
+        let head = (try? FileHandle(forReadingFrom: url).read(upToCount: 512)) ?? Data()
+        if head.starts(with: Array("Rar!".utf8)) {
+            // RAR keeps no modes or links: files, 0644 (a Mach-O is made 0755 as it installs)
+            let rar: Unrar.Archive
+            let entries: [Unrar.Entry]
+            do {
+                rar = try Unrar.Archive(fileURL: url)
+                entries = try rar.entries()
+            } catch { throw refused("\(url.lastPathComponent) isn't a readable RAR archive (\(error))") }
+            for entry in entries {
+                let name = entry.fileName.replacingOccurrences(of: "\\", with: "/")
+                guard !entry.encrypted else { throw refused("\(name) is encrypted") }
+                guard entry.uncompressedSize <= maxMember else { throw refused("\(name) is too large") }
+                if entry.directory {
+                    try add(name, .folder)
+                    continue
+                }
+                var data = Data()
+                do {
+                    try rar.extract(entry) { chunk, progress in
+                        data.append(chunk)
+                        if data.count > maxMember { progress.cancel() }
+                    }
+                } catch { throw refused("\(name) can't be read (\(error))") }
+                guard data.count <= maxMember else { throw refused("\(name) is too large") }
+                try add(name, .file(data, mode: 0o644))
+            }
+            return out
+        }
+        // a tar (.tgz, .tar.gz, .tar): ustar's magic at 257 once inflated
+        if head.starts(with: [0x1F, 0x8B]) || head.count > 262 && head[257..<262] == Data("ustar".utf8) {
+            let tar: TarArchive
+            do { tar = try TarArchive(Data(contentsOf: url), limit: maxTotal) } catch let e as FirmwareError {
+                throw refused("\(url.lastPathComponent): \(e.message)")
+            }
+            var files: [String: Data] = [:]
+            // TarArchive drops a leading / or ./ from each name, as tar does when it extracts
+            for m in tar.members where !m.path.isEmpty {
+                switch m.kind {
+                case .directory: try add(m.path, .folder)
+                case .file:
+                    files[m.path] = m.data
+                    try add(m.path, .file(m.data, mode: m.mode))
+                case .symlink: try add(m.path, .link(m.link))
+                case .hardLink:  // a copy of the file it names, as Package1x has no hard links
+                    guard let data = files[m.link] else { throw refused("\(m.path) links to \(m.link), not before it") }
+                    try add(m.path, .file(data, mode: m.mode))
+                }
+            }
+            return out
+        }
+        let archive: ZIPFoundation.Archive
+        do { archive = try ZIPFoundation.Archive(url: url, accessMode: .read) } catch {
+            throw refused("\(url.lastPathComponent) isn't a zip, a tar or a RAR archive")
         }
         for entry in archive {
             guard entry.uncompressedSize <= maxMember else { throw refused("\(entry.path) is too large") }
@@ -225,7 +285,7 @@ public struct Package1x {
                     data.append(chunk)
                     guard data.count <= maxMember else { throw refused("\(entry.path) is too large") }
                 }
-            } catch let e as Archive.ArchiveError { throw refused("\(entry.path) can't be read (\(e))") }
+            } catch let e as ZIPFoundation.Archive.ArchiveError { throw refused("\(entry.path) can't be read (\(e))") }
             if entry.type == .symlink {
                 try add(entry.path, .link(String(decoding: data, as: UTF8.self)))
             } else {

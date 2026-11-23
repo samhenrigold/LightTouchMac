@@ -27,8 +27,9 @@ struct TarArchive {
 
     init(contentsOf url: URL) throws { try self.init(try Data(contentsOf: url)) }
 
-    init(_ archive: Data) throws {
-        let bytes = archive.starts(with: [0x1F, 0x8B]) ? try Self.gunzip(archive) : archive
+    /// `limit`: the most a gzip-compressed archive may inflate to.
+    init(_ archive: Data, limit: Int = .max) throws {
+        let bytes = archive.starts(with: [0x1F, 0x8B]) ? try Self.gunzip(archive, limit: limit) : archive
         members = try parsing(bytes, "tar") { input in try Self.members(&input) }
     }
 
@@ -113,7 +114,7 @@ struct TarArchive {
         }
     }
 
-    static func gunzip(_ gz: Data) throws -> Data {
+    static func gunzip(_ gz: Data, limit: Int = .max) throws -> Data {
         var s = z_stream()
         guard inflateInit2_(&s, 16 + MAX_WBITS, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
             throw FirmwareError(.internal, "inflateInit2")
@@ -133,8 +134,10 @@ struct TarArchive {
                     status = inflate(&s, Z_NO_FLUSH)
                 }
                 out.append(contentsOf: buf.prefix(buf.count - Int(s.avail_out)))
+                if out.count > limit { status = Z_BUF_ERROR }
             }
         }
+        guard out.count <= limit else { throw FirmwareError(.unsupported, "tar: more than \(limit) bytes inflated") }
         guard status == Z_STREAM_END else { throw FirmwareError(.unsupported, "tar: bad gzip data") }
         return out
     }
