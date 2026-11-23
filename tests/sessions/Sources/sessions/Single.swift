@@ -49,6 +49,7 @@ func single(_ args: SingleCheck) -> Never {
     let homeReference = repository.appendingPathComponent("tests/sessions/matrix-refs/\(referenceID)-home.png")
     if FileManager.default.fileExists(atPath: homeReference.path) { single["homeReference"] = homeReference.path }
     if args.hostPowerGesture { single["hostPowerGesture"] = true }
+    if args.replug { single["replug"] = true }
     if let zone = args.secondZone { single["secondZone"] = zone }
     if let region = args.region { single["region"] = region }
     if let file = args.readFile { single["readFile"] = file }
@@ -243,6 +244,7 @@ func single(_ args: SingleCheck) -> Never {
         )
     }
     r.check(afc.count >= 4, "\(d): AFC checks ran (\(afc.count))")
+    if args.replug { judgeReplug(r, events, device: d) }
     if install {
         let inst = events.one("installed", ["device": d])
         r.check(

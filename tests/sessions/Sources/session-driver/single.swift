@@ -50,6 +50,9 @@ struct SingleConfig: Decodable {
     var install: Bool?
     /// Qualify the shared host gesture using generic virtual-time input; never GUI Stop.
     var hostPowerGesture: Bool?
+    /// After AFC: the cable (the helper's usbConnection) pulled until lockdown stops answering, then plugged until it
+    /// answers again, and one AFC round trip over the new link (`replug`).
+    var replug: Bool?
     /// Default migration is limited to the measured N72/5F138 shutdown gate.
     /// Explicit true/false remains available for qualification and comparison.
     func prefersHostPowerGesture(build: String?) -> Bool {
@@ -1098,6 +1101,8 @@ nonisolated enum WiFiProbe {
         try? FileManager.default.removeItem(at: local)
         try? FileManager.default.removeItem(at: back)
     }
+
+    if s.replug == true { await replug(d, slow: slow) }
 
     if s.jailbreak == true {  // the Files browser's own calls, as the app makes them for a jailbroken device
         var root = d.services

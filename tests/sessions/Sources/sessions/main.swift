@@ -174,6 +174,8 @@ struct SingleCheck: ParsableCommand {
     @Option(help: "lockdown-tz also sets LOCALE as the region, as the app sets the Mac's (ClockRegion.mac).")
     var region: String?
     @Flag(help: "Shut down with the host's power gesture (iPod/1G).") var hostPowerGesture = false
+    @Flag(help: "After AFC: the cable pulled (lockdown must go) and plugged back (lockdown and AFC must return).")
+    var replug = false
     @Option(help: "N boots, AFC at lockdown's first answer, then Stop.") var afcRace: Int?
     @Option(help: "Free-form Apply at WxH (as the panel scans) from Home: the frame, the dock row, a tap.")
     var panel: String?
