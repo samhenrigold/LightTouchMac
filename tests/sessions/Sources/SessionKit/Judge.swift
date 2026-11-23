@@ -70,7 +70,10 @@ public enum SessionJudge {
     /// agent's screen name), an agent that never answered, a frame that differs from its reference (matrix-refs) all
     /// fail; a build without an agent and without a reference is unknown (nil). Stock 2.x has no guest agent, so a
     /// known-good picture is its evidence; a lit Connect-to-iTunes screen alone never qualifies as home.
-    public static func home(lock: [String: Any], events: Events, entryID: String, references: URL) -> (
+    /// `judgesFrames`: false where no reference can hold the Home screen (a package run's icons and wallpaper).
+    public static func home(
+        lock: [String: Any], events: Events, entryID: String, references: URL, judgesFrames: Bool = true
+    ) -> (
         ok: Bool?, detail: String
     ) {
         let package = lock["guest_package"] as? [String: Any] ?? [:]
@@ -105,7 +108,7 @@ public enum SessionJudge {
         // own labels, so only the agent judges it.
         let language = derived.string("language").map { String($0.prefix { $0 != "," }) } ?? "en"
         var frames: [String: FrameCheck.Verdict] = [:]
-        for name in names where language == "en" {
+        for name in names where language == "en" && judgesFrames {
             let ref = references.appendingPathComponent("\(entryID)-\(name).png")
             if FileManager.default.fileExists(atPath: ref.path), let path = shots[name]?.string("path") {
                 frames[name] = FrameCheck.verdict(capture: URL(fileURLWithPath: path), reference: ref)

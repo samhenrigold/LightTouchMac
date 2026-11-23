@@ -68,11 +68,13 @@ func single(_ args: SingleCheck) -> Never {
     }
     if let hash = args.mediaHash { single["mediaHash"] = hash }
     if let managed { single["managed"] = managed.paths(state: work, logs: work).directory.path }
+    var packageApps: [String] = []
     if let managed, !args.package.isEmpty {  // Packages1x.swift
         let device = managed.paths(state: work, logs: work).directory
         let paths = installPackages1x(
             args.package, uninstall: args.uninstallPackages, device: device, tools: tools, work: work)
         single[args.uninstallPackages ? "packages1xGone" : "packages1x"] = paths
+        packageApps = paths.filter { $0.hasSuffix(".app") }
     }
     if args.skipSetup { single["skipSetup"] = true }
     if args.jailbreak { single["jailbreak"] = true }
@@ -179,13 +181,23 @@ func single(_ args: SingleCheck) -> Never {
         usb.string("productType") == base.productType,
         "\(d): lockdown over its usbmuxd: \(usb.string("productType") ?? "none")"
     )
+    // Packages installed (and kept) change Home by design, their icons and a theme's wallpaper: no frame reference
+    // holds it, so their labels on Home are checked instead (Packages1x.swift).
+    let packagesOnHome = !args.package.isEmpty && !args.uninstallPackages
     let home = SessionJudge.home(
         lock: base.lock,
         events: events,
         entryID: referenceID,
-        references: repository.appendingPathComponent("tests/sessions/matrix-refs")
+        references: repository.appendingPathComponent("tests/sessions/matrix-refs"),
+        judgesFrames: !packagesOnHome
     )
-    r.check(home.ok == true, "\(d): usable Home screen: \(home.detail)")
+    if packagesOnHome {
+        r.note("\(d): Home's frame reference skipped: the installed packages change Home")
+        r.check(home.ok != false, "\(d): usable Home screen: \(home.detail)")
+        packageLabels1x(r, events, d, apps: packageApps)
+    } else {
+        r.check(home.ok == true, "\(d): usable Home screen: \(home.detail)")
+    }
     let top = SessionJudge.backlightTop(board: base.board, base: base.url, productVersion: base.version)
     for h in events.find("home", ["device": d]) {
         let level = h.int("backlight") ?? -1

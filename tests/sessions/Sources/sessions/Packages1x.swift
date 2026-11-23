@@ -61,3 +61,17 @@ func packages1x(_ r: Report, _ events: Events, _ d: String) {
     }
     r.check(events.any("package1x"), "\(d): the installed packages were looked for")
 }
+
+/// Each installed app's label shows on Home, read off the Home screenshot.
+// shortcut: the label is taken to be the .app folder's name, not its CFBundleDisplayName; read the app's Info.plist
+// when a package's two differ.
+func packageLabels1x(_ r: Report, _ events: Events, _ d: String, apps: [String]) {
+    let shot = events.find("screenshot").compactMap { $0.string("path") }.last {
+        URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent == "home"
+    }
+    let text = shot.map { TextReader.read(URL(fileURLWithPath: $0)).map(\.text) } ?? []
+    for app in apps {
+        let label = URL(fileURLWithPath: app).deletingPathExtension().lastPathComponent
+        r.check(text.contains { $0.contains(label) }, "\(d): Home shows \(label)'s label (read: \(text))")
+    }
+}
