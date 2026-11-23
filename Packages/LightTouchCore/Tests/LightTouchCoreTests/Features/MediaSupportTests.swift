@@ -37,6 +37,12 @@ struct MediaSupportTests {
             "n90ap-11D201", "n90ap-11D257"
         ].map { ($0, all) }
     )
+    /// iPhone OS 1.x through FirstGenLibrary (`sessions single --media` with a song and a movie, and on the iPhone a
+    /// photo, each shown in Music, Videos or the Camera Roll): the iPod touch's Photos lists only iTunes' photo
+    /// database, not DCIM.
+    static let firstGeneration: [String: Set<String>] = [
+        "m68ap-1A543a": all, "n45ap-4A102": ["Music", "Videos"]
+    ]
     static let nouns = ["Music": "music", "Videos": "videos", "Photos": "photos"]
 
     struct Entry: Decodable {
@@ -55,7 +61,10 @@ struct MediaSupportTests {
             )
         ).entries
         #expect(entries.count > 10)
-        #expect(Set(Self.verified.keys).isSubset(of: Set(entries.map(\.id))), "a verified firmware left the catalog")
+        #expect(
+            Set(Self.verified.keys).union(Self.firstGeneration.keys).isSubset(of: Set(entries.map(\.id))),
+            "a verified firmware left the catalog"
+        )
         for entry in entries {
             let firmware = MediaSupport.Firmware(
                 version: entry.version,
@@ -63,7 +72,7 @@ struct MediaSupportTests {
                 media: entry.media ?? [],
                 prerelease: entry.prerelease != nil
             )
-            let want = Self.verified[entry.id] ?? []
+            let want = Self.verified[entry.id] ?? Self.firstGeneration[entry.id] ?? []
             for destination in ["Music", "Videos", "Photos"] {
                 #expect(
                     MediaSupport.supports(destination, on: firmware) == want.contains(destination),

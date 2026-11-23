@@ -26,8 +26,10 @@ extension DeviceServices {
     public func activationState() async -> String? { try? await lockdownValue("ActivationState") }
 
     /// Stock lockdown reads share the same endpoint, timeout and error contract.
-    public func lockdownValue(_ key: String) async throws -> String? {
-        guard case .string(let state) = try await remote(.lockdownValue(key), seconds: Timeouts.query) else {
+    /// A string as it is, data as lowercase hex, a number in decimal; `domain` as lockdownd names one.
+    public func lockdownValue(_ key: String, domain: String? = nil) async throws -> String? {
+        guard case .string(let state) = try await remote(.lockdownValue(key, domain: domain), seconds: Timeouts.query)
+        else {
             return nil
         }
         return state
@@ -142,6 +144,12 @@ extension DeviceServices {
             ), let path
         else { throw DeviceError.unavailable }
         return path
+    }
+
+    /// iPhone OS 1.x: `source` written to `remote` in the Media folder as iTunes syncs (syncWillStart, the sync lock,
+    /// syncDidFinish), so a running Music loads its library again.
+    public func syncLibraryFile(_ source: URL, remote: String) async throws {
+        _ = try await self.remote(.syncLibraryFile(source: source.path, remote: remote), seconds: Timeouts.stage)
     }
 
     /// Startup cleanup of uploads an earlier session left in PublicStaging and LightTouch/.

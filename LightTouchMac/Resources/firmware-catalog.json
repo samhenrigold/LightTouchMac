@@ -897,6 +897,7 @@
   "build": "4A102",
   "released": "2008-02-26",
   "status": "experimental",
+  "media": ["Music", "Videos"],
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-4312.20080226.Btu45/iPod1,1_1.1.4_4A102_Restore.ipsw", "sha1": "c148d1eb1c979bb6434175411d4a372103a4fdd2", "bytes": 173519589, "mirrors": [{"url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod1,1_1.1.4_4A102_Restore.ipsw", "sha1": "c148d1eb1c979bb6434175411d4a372103a4fdd2", "bytes": 173519589}]},
   "keys": {
    "rootfs": {"file": "022-3893-4.dmg", "key": "d0a0c0977bd4b6350b256d6650ec9eca419b6f961f593e74b7e5b93e010b698ca6cca1fe"}
@@ -5648,6 +5649,7 @@
   "build": "1A543a",
   "released": "2007-06-29",
   "status": "experimental",
+  "media": ["Music", "Photos", "Videos"],
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPhone/061-3538.20070629.B7vXa/iPhone1,1_1.0_1A543a_Restore.ipsw", "sha1": "fb8bb3ee2e9a997affbb97868599f2995c78209c", "bytes": 95604348, "mirrors": [{"url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPhone1,1_1.0_1A543a_Restore.ipsw", "sha1": "fb8bb3ee2e9a997affbb97868599f2995c78209c", "bytes": 95604348}]},
   "keys": {
    "rootfs": {"file": "694-5262-39.dmg", "key": "28c909fc6d322fa18940f03279d70880e59a4507998347c70d5b8ca7ef090ecccc15e82d"}

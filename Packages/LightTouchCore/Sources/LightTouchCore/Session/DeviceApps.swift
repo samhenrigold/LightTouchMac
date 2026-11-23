@@ -132,6 +132,14 @@ public protocol AppsHost: AnyObject {
     ) async throws {
         guard canQueueInstall else { throw DeviceToolsError.failed("The device is not ready for media import.") }
         try await holdingDevice {
+            // iPhone OS 1.x has no guest agent: its libraries are written over AFC alone.
+            if host.iosVersion.hasPrefix("1.") {
+                return try await FirstGenLibrary(services: try services).add(
+                    media,
+                    progress: progress,
+                    willCommit: willCommit
+                )
+            }
             let device = MediaImport(services: try services, guest: host.guest)
             try await device.stage(media, progress: progress)
             try Task.checkCancellation()

@@ -62,12 +62,15 @@ public nonisolated struct HostServiceEndpoint: Hashable, Codable, Sendable {
 
 public nonisolated enum HostServiceOperation: Codable, Sendable {
     case attachment, apps, archives, freeSpace, installReady, homeOrder, orientation
-    case lockdownValue(String)
+    /// `domain`: nil for lockdownd's own keys, else one such as "com.apple.mobile.iTunes".
+    case lockdownValue(String, domain: String? = nil)
     case uninstall(String)
     case install(ipa: String, staged: String, bundleID: String)
     /// `replace`: publish over an existing file at `remote` (as `reuse` does, through a private name and a rename).
     case upload(source: String, remote: String, reuse: Bool, replace: Bool, allowEmpty: Bool, root: AFCRoot)
     case sweep
+    /// iPhone OS 1.x: `source` written to `remote` (of the Media folder) inside an iTunes sync's notifications and lock.
+    case syncLibraryFile(source: String, remote: String)
     case remove(String)
     case files(String, root: AFCRoot)
     case download(DeviceFile, destination: String, root: AFCRoot)

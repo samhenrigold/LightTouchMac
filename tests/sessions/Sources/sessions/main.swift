@@ -129,6 +129,8 @@ struct SingleCheck: ParsableCommand {
     var media: [URL] = []
     @Option(help: "Where itmedia and itphoto are (default: the pinned qemu-ios's contrib/it-media).", transform: path)
     var mediaTools: URL?
+    @Option(help: "iPhone OS 1.x: the iTunesDB signed wrong (another device's hash58) or none after the import.")
+    var mediaHash: String?
     @Flag(help: "The base was prepared with --skip-setup: no Setup page, Setup's answers from the Mac.")
     var skipSetup = false
     @Option(help: "The base was prepared with create --language TAG: the guest's language and region are TAG's.")

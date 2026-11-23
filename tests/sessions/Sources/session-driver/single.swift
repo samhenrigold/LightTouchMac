@@ -115,6 +115,8 @@ struct SingleConfig: Decodable {
     /// libraries are read back before, after and at every later Home (`mediaImport`, `mediaCount`).
     var media: [String]?
     var mediaTools: String?
+    /// iPhone OS 1.x (firstgen.swift): the iTunesDB signed "wrong" (for another device) or "none" after the import.
+    var mediaHash: String?
     /// An app device made for the base (`--managed`: State/Devices/<uuid> under the run's state): every boot goes
     /// through the app's boot admission and builds from its record (Device.instance).
     var managed: String?
@@ -626,6 +628,9 @@ nonisolated enum WiFiProbe {
             // Music loads (and checks) the library; on 4.x it deleted one whose signature didn't hold.
             if !mediaTitles.isEmpty { await openMusic(d, agent: guestAgent) }
             await mediaCounts(d, agent: guestAgent, generation: generation, stage: "music", titles: mediaTitles)
+        }
+        if let media = s.media, !asks, (lock?.productVersion ?? "").hasPrefix("1.") {
+            await firstGenMedia(d, files: media, generation: generation, hash: s.mediaHash, titles: &mediaTitles)
         }
         if let argv = s.spawn, generation == 1, asks {
             let output: String

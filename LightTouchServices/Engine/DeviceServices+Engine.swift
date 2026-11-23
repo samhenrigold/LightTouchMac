@@ -70,7 +70,7 @@ extension DeviceServices {
     }
 
     /// Stock lockdown reads share the same endpoint, timeout and error contract.
-    func lockdownValue(_ key: String) async throws -> String? {
+    func lockdownValue(_ key: String, domain: String? = nil) async throws -> String? {
         try await run(Timeouts.query, "lockdown " + key) { device in
             var client: OpaquePointer?
             let rc = lockdownd_client_new_with_handshake(device, &client, "LightTouchMac")
@@ -78,10 +78,15 @@ extension DeviceServices {
             defer { _ = lockdownd_client_free(client) }
 
             var value: plist_t?
-            let vr = lockdownd_get_value(client, nil, key, &value)
+            let vr = lockdownd_get_value(client, domain, key, &value)
             guard vr.ok, let value else { throw DeviceError.lockdown(vr.code) }
             defer { plist_free(value) }
-            return IMobileDevice.decode(value) as? String
+            switch IMobileDevice.decode(value) {
+            case let text as String: return text
+            case let data as Data: return data.map { String(format: "%02x", $0) }.joined()
+            case let number as NSNumber: return number.stringValue
+            default: return nil
+            }
         }
     }
 }

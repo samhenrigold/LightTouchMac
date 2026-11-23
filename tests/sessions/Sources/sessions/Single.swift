@@ -65,6 +65,7 @@ func single(_ args: SingleCheck) -> Never {
         single["mediaTools"] =
             (args.mediaTools ?? checkout("qemu-ios").appendingPathComponent("contrib/it-media")).path
     }
+    if let hash = args.mediaHash { single["mediaHash"] = hash }
     if let managed { single["managed"] = managed.paths(state: work, logs: work).directory.path }
     if let managed, !args.package.isEmpty {  // Packages1x.swift
         let device = managed.paths(state: work, logs: work).directory
@@ -504,7 +505,11 @@ func single(_ args: SingleCheck) -> Never {
         )
     }
     judgeSystemSound(r, d, events: events, board: base.board)
-    if !args.media.isEmpty { judgeMedia(r, d, events: events, reboot: args.reboot, major: base.major) }
+    if !args.media.isEmpty, base.major == 1 {
+        judgeFirstGenMedia(r, d, events: events, wrongHash: args.mediaHash == "wrong")
+    } else if !args.media.isEmpty {
+        judgeMedia(r, d, events: events, reboot: args.reboot, major: base.major)
+    }
     if let file = args.readFile {
         let reads = events.find("fileRead", ["device": d])
         r.check(!reads.isEmpty && reads.allSatisfy { $0.bool("found") }, "\(d): the guest agent reads back \(file)")

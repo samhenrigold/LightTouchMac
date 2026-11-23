@@ -81,7 +81,7 @@ nonisolated func logEvent(_ message: String) {
         case .apps: return .apps(try await service.installedApps())
         case .archives: return .strings(try await service.archivedApps())
         case .freeSpace: return .integer(try await service.freeSpaceBytes())
-        case .lockdownValue(let key): return .string(try await service.lockdownValue(key))
+        case .lockdownValue(let key, let domain): return .string(try await service.lockdownValue(key, domain: domain))
         case .installReady: return .boolean(await service.installProxyReady())
         case .homeOrder: return .strings(try await service.homeScreenOrder())
         case .orientation: return .integer(Int64(try await service.interfaceOrientation()))
@@ -106,6 +106,9 @@ nonisolated func logEvent(_ message: String) {
             )
         case .sweep:
             await service.sweepStaging()
+            return .none
+        case .syncLibraryFile(let source, let remote):
+            try await service.syncLibraryFile(URL(fileURLWithPath: source), remote: remote)
             return .none
         case .remove(let path):
             await service.removeStaged(path)
