@@ -6,7 +6,9 @@ import SessionKit
 let binDirectory = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath().deletingLastPathComponent()
 
 /// Every pid the drivers report starting (helpers, usbmuxds), killed if still alive when a run ends; never a lookup by name.
-func killLeftovers(_ events: Events, pidFile: URL? = nil) {
+/// A pid is killed only while it still names a process the run started (LeftoverProcess, `since` the driver's start):
+/// one that exited leaves its pid to any other process, another agent's helper among them.
+func killLeftovers(_ events: Events, since: Date, pidFile: URL? = nil) {
     var pids = Set(
         events.all.filter { ["hello", "booted", "usbmuxd", "connected", "hold"].contains($0.string("event") ?? "") }
             .compactMap { $0.int("pid") ?? $0.int("helperPid") }
@@ -14,7 +16,7 @@ func killLeftovers(_ events: Events, pidFile: URL? = nil) {
     if let pidFile, let text = try? String(contentsOf: pidFile, encoding: .utf8) {
         pids.formUnion(text.split(whereSeparator: \.isNewline).compactMap { Int($0) })
     }
-    for pid in pids where pid > 0 && kill(pid_t(pid), 0) == 0 {
+    for pid in pids where LeftoverProcess.isOurs(pid_t(pid), since: since) {
         kill(pid_t(pid), SIGKILL)
         print("  (killed leftover \(pid))")
     }
@@ -57,6 +59,8 @@ let vendorTools: URL? = vendorDirectory().flatMap { vendor in
 final class DriverProcess {
     let process = Process()
     let out: URL
+    /// Just before the driver started: no process it started is older (killLeftovers).
+    let started = Date()
 
     init(_ tool: String, _ arguments: [String], out: URL, environment: [String: String] = [:]) {
         self.out = out
@@ -119,7 +123,7 @@ func sessionDriver(_ config: [String: Any], work: URL, timeout: Double, environm
     )
     let status = d.wait(timeout + 10)
     let events = d.events
-    killLeftovers(events, pidFile: work.appendingPathComponent("pids"))
+    killLeftovers(events, since: d.started, pidFile: work.appendingPathComponent("pids"))
     for fail in events.find("fail") { print("  driver: \(fail.string("why") ?? "")") }
     return (events, status)
 }

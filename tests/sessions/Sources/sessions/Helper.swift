@@ -40,7 +40,7 @@ final class HelperDriver {
     @discardableResult
     func finish(_ seconds: Double) -> Int32? {
         let status = driver.wait(seconds)
-        killLeftovers(events)
+        killLeftovers(events, since: driver.started)
         return status
     }
 }
@@ -145,7 +145,7 @@ func helperChecks(_ args: HelperCheck) -> Never {
     kill(a.driver.pid, SIGKILL)
     a.driver.process.waitUntilExit()
     r.check(holder > 0 && waitGone(holder, 60) != nil, "the holder exits after its parent dies")
-    killLeftovers(a.events)
+    killLeftovers(a.events, since: a.driver.started)
     let c = HelperDriver(
         "lease-c",
         tools: tools,
