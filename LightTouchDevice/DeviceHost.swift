@@ -23,7 +23,11 @@ final class DeviceHost: @unchecked Sendable {
 
     private let pumpQueue = DispatchQueue(label: "LightTouch.frames", qos: .userInteractive)
     private var pump: DispatchSourceTimer?
-    private var ticks = 0
+    /// The emulator's frame callback (qemu_ios_ui_attach) adds to it on the QEMU thread; suspended unless frames go
+    /// out as they come (`byCallback`), so a hidden device's guest frames wake nothing.
+    private let frameSignal: DispatchSourceUserDataAdd
+    // pumpQueue: frames go out on the emulator's callback, not the tick.
+    private var byCallback = false
     private var frameSerial: UInt64 = 0
     private var guestPasteboardSerial: UInt64 = 0
     private var agentReportSerial: UInt64 = 0
@@ -54,6 +58,8 @@ final class DeviceHost: @unchecked Sendable {
         self.qemu = qemu
         self.status = status
         ring = FrameRingWriter(status: status)
+        frameSignal = DispatchSource.makeUserDataAddSource(queue: pumpQueue)
+        frameSignal.setEventHandler { [weak self] in self?.takeFrame() }
         status[.guestPackageSupported] = qemu.guestPackageReport != nil ? 1 : 0
     }
 
@@ -74,11 +80,12 @@ final class DeviceHost: @unchecked Sendable {
 
     // MARK: - Pump
 
-    /// Frames at the panel's refresh (BootConfig.refreshHz: 60 Hz, 120 with the experimental setting; 30 under
-    /// serious thermal pressure or Low Power Mode) while the app shows the screen and the guest's display is on
-    /// (or was just touched) and the machine isn't paused; otherwise 4 Hz, enough for the status block and a hidden
-    /// device's first frames. Status at 20 Hz live, every tick otherwise; the heartbeat on every tick (also before
-    /// boot). A new rate starts with a tick at once, so a screen shown again gets its frame then.
+    /// While the app shows the screen and the guest's display is on (or was just touched) and the machine isn't
+    /// paused, each frame goes out as the emulator finishes it (its frame callback), and the tick runs at 30 Hz, the
+    /// rate the app reads the status at; under serious thermal pressure or Low Power Mode the tick takes the frames
+    /// instead, at its 30 Hz. Otherwise the tick runs at 4 Hz, enough for the status block and a hidden device's
+    /// first frames. Status and the heartbeat on every tick (the heartbeat also before boot). A new rate starts with
+    /// a tick at once, so a screen shown again gets its frame then.
     func startPump() {
         let timer = DispatchSource.makeTimerSource(queue: pumpQueue)
         timer.setEventHandler { [weak self] in self?.tick() }
@@ -126,10 +133,12 @@ final class DeviceHost: @unchecked Sendable {
     private func pace(force: Bool = false) {
         let now = DispatchTime.now().uptimeNanoseconds
         let next = screenVisible && !paused && (displayOn || now &- lastInput < 2_000_000_000)
-        // Live, a frame per panel refresh (60 Hz, or the experimental 120); 30 under pressure.
-        let hz = stateLock.withLock { bootConfig?.refreshHz } ?? 60
-        let interval = next ? (constrained ? 1.0 / 30 : 1.0 / Double(hz)) : 0.25
+        let interval = next ? 1.0 / 30 : 0.25
         holdActivity(live: next)
+        if next && !constrained != byCallback {
+            byCallback.toggle()
+            if byCallback { frameSignal.resume() } else { frameSignal.suspend() }
+        }
         guard force || interval != pumpInterval else { return }
         live = next
         pumpInterval = interval
@@ -151,11 +160,9 @@ final class DeviceHost: @unchecked Sendable {
     }
 
     private func tick() {
-        ticks += 1
         status.bumpHeartbeat()
         guard booted else { return }
-        if !live || ticks % 3 == 0 { refreshStatus() }
-        // Every tick, not at the status rate: a buzz's start and end are worth a frame's latency.
+        refreshStatus()
         if let vibrator = qemu.vibrator {
             var pulses: UInt64 = 0
             status[.vibrating] = vibrator(&pulses) ? 1 : 0
@@ -166,6 +173,11 @@ final class DeviceHost: @unchecked Sendable {
             displayOn = on
             pace()
         }  // the latter: input's 2 s running out
+        if !byCallback { takeFrame() }
+    }
+
+    /// pumpQueue: the emulator's newest frame into the ring, if it is new.
+    private func takeFrame() {
         var pixels: UnsafeRawPointer?
         var w: Int32 = 0
         var h: Int32 = 0
@@ -181,6 +193,8 @@ final class DeviceHost: @unchecked Sendable {
         // A new ring's surfaces read as in use until the app has taken their Mach ports.
         if ring.publish({ FrameRingWriter.copy(pixels, width: Int(w), height: Int(h), into: $0) }) {
             frameSerial = serial
+        } else if byCallback {
+            pumpQueue.asyncAfter(deadline: .now() + .milliseconds(4)) { [weak self] in self?.frameSignal.add(data: 1) }
         }
     }
 
@@ -272,7 +286,14 @@ final class DeviceHost: @unchecked Sendable {
             argv = DebugPort.replacingSocket(in: argv, withListener: listener)
         }
         pumpQueue.async { [self] in pace() }
-        qemu.attach(nil, nil)
+        // On the QEMU thread, with the BQL held: only a signal to the pump.
+        qemu.attach(
+            { opaque in
+                guard let opaque else { return }
+                Unmanaged<DeviceHost>.fromOpaque(opaque).takeUnretainedValue().frameSignal.add(data: 1)
+            },
+            Unmanaged.passUnretained(self).toOpaque()
+        )
         status[.qemuState] = QemuState.running.rawValue
         // A sandboxed helper's QEMU dials its USB bridge, which gets each connection to usbmuxd from the app.
         if let usbBridge { argv = BootRecipe.replacingUSBAddress(in: argv, with: usbBridge.address) }

@@ -94,7 +94,11 @@ final class Qemu: @unchecked Sendable {
         (@convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32).self
     )
     lazy var deviceInfoAt = sym("qemu_ios_device_info_at", (@convention(c) (Int32) -> UnsafeRawPointer?).self)
-    lazy var attach = sym("qemu_ios_ui_attach", (@convention(c) (UnsafeRawPointer?, UnsafeRawPointer?) -> Void).self)
+    /// The callback runs on the QEMU thread, with the BQL held, for each new frame; the host outlives QEMU.
+    lazy var attach = sym(
+        "qemu_ios_ui_attach",
+        (@convention(c) ((@convention(c) (UnsafeMutableRawPointer?) -> Void)?, UnsafeMutableRawPointer?) -> Void).self
+    )
     lazy var frame = sym(
         "qemu_ios_ui_frame",
         (@convention(c) (

@@ -1049,7 +1049,7 @@ Thread.detachNewThread {
             var frame: Double?
             while Date().timeIntervalSince(start) < 1, tick == nil || frame == nil {
                 let ms = Date().timeIntervalSince(start) * 1000
-                if tick == nil, (link.status?.heartbeat ?? 0) &- h0 >= 3 { tick = ms }
+                if tick == nil, (link.status?.heartbeat ?? 0) &- h0 >= 2 { tick = ms }
                 if frame == nil, (link.status?.frameSerial ?? 0) != f0 { frame = ms }
                 usleep(500)
             }

@@ -197,10 +197,10 @@ func helperChecks(_ args: HelperCheck) -> Never {
 /// frame ring, the slider (unlocked), ⌘→ (the guest's chord: 3.1.3's Home screen doesn't turn, and the frame keeps
 /// the panel's scan), a battery request, then the parent SIGKILLed:
 /// hard halt. `meddle`: the app's DeviceFileWatch on the overlay sees its NOR unlinked under the
-/// running helper (the app's notice); SIGTERM halts the helper. `power`: the pump at 60 Hz before boot (30 with the host
-/// constrained); shown 60 Hz with an idle-sleep assertion, hidden at most 5 Hz and none, back to 60 Hz within 100 ms,
-/// paused at most 5 Hz and none, resumed 60 Hz, the guest's display asleep at most 5 Hz, woken 60 Hz again. `--only a,b`
-/// picks cases.
+/// running helper (the app's notice); SIGTERM halts the helper. `power`: the pump's tick at 30 Hz before boot, the host
+/// free or constrained (frames come on the emulator's callback, or with the constrained host's tick); shown 30 Hz with
+/// an idle-sleep assertion, hidden at most 5 Hz and none, back to 30 Hz within 100 ms, paused at most 5 Hz and none,
+/// resumed 30 Hz, the guest's display asleep at most 5 Hz, woken 30 Hz again. `--only a,b` picks cases.
 func helperBoot(_ args: HelperBootCheck) -> Never {
     let base = Base(args.base, args.inputs)
     guard base.board == "n72ap" else { die("helper-boot boots an n72ap base") }
@@ -336,8 +336,8 @@ func helperBoot(_ args: HelperBootCheck) -> Never {
     if only.contains("power") {
         print("power")
         for (name, env, low, high) in [
-            ("power-free", [String: String](), 50.0, 65.0),
-            ("power-constrained", ["LTM_HOST_CONSTRAINED": "1"], 25, 33)
+            ("power-free", [String: String](), 25.0, 35.0),
+            ("power-constrained", ["LTM_HOST_CONSTRAINED": "1"], 25, 35)
         ] {
             let d = HelperDriver(
                 name,
@@ -382,19 +382,19 @@ func helperBoot(_ args: HelperBootCheck) -> Never {
             guard let x = s[label], let hz = x.double("hz") else { return false }
             return low <= hz && hz <= high && x.bool("preventsIdleSleep") == holds
         }
-        r.check(rate("shown", 50, 65, holds: true), "power: shown, 60 Hz, holds off idle sleep")
+        r.check(rate("shown", 25, 35, holds: true), "power: shown, 30 Hz, holds off idle sleep")
         r.check(rate("hidden", 0.5, 5, holds: false), "power: hidden, at most 5 Hz, lets the Mac idle-sleep")
         r.check(
             s["asleep"]?.bool("displaySleeping") == true && rate("asleep", 0.5, 5, holds: false),
             "power: the guest's display asleep, at most 5 Hz, lets the Mac idle-sleep"
         )
-        r.check(rate("woken", 50, 65, holds: true), "power: woken by the power button, 60 Hz again")
+        r.check(rate("woken", 25, 35, holds: true), "power: woken by the power button, 30 Hz again")
         r.check(rate("paused", 0.5, 5, holds: false), "power: paused, at most 5 Hz, lets the Mac idle-sleep")
-        r.check(rate("resumed", 50, 65, holds: true), "power: resumed, 60 Hz again")
+        r.check(rate("resumed", 25, 35, holds: true), "power: resumed, 30 Hz again")
         let ticks = d.events.find("visible").filter { $0.bool("on") }.prefix(5).compactMap { $0.double("tickMs") }
         r.check(
             ticks.count == 5 && ticks.allSatisfy { 0 <= $0 && $0 < 100 },
-            "power: shown again, back at 60 Hz within 100 ms (\(ticks) ms)"
+            "power: shown again, back at 30 Hz within 100 ms (\(ticks) ms)"
         )
     }
     finish(r, work: work)
