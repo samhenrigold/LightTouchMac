@@ -3,8 +3,8 @@ import Testing
 
 @testable import FirmwareKit
 
-/// iPhone OS 1.x packages beyond PXL and one-app zips (Package1x): a .tgz root tree
-/// and a RAR.
+/// iPhone OS 1.x packages beyond PXL and one-app zips (Package1x): a .tgz root tree, a RAR, a folder holding one app,
+/// and Installer-era zips of SummerBoard themes and wallpapers.
 struct Package1xFormatsTests {
     let fm = FileManager.default
     let t = Package1xTests()
@@ -80,5 +80,66 @@ struct Package1xFormatsTests {
         #expect(members.keys.allSatisfy { !$0.contains("\\") && $0.hasPrefix("アーカイブ") })
         let error = #expect(throws: FirmwareError.self) { try Package1x.load(rar) }
         #expect(error?.message.contains("neither a PXL") == true, "a folder of text files has nowhere to go")
+    }
+
+    @Test func aFolderHoldingOneAppIsTheApp() throws {
+        let dir = scratch("wrapped")
+        defer { try? fm.removeItem(at: dir) }
+        let package = try Package1x.load(
+            t.zip(
+                dir, "anySIM-1.1p.zip",
+                [
+                    (
+                        "anySIM-1.1p/anySIM.app/Info.plist",
+                        try Package1xTests.plist(["CFBundleIdentifier": "com.anysim"]), 0o644
+                    ),
+                    ("anySIM-1.1p/anySIM.app/anySIM", Package1xTests.machO(subtype: 6), 0o755)
+                ]
+            )
+        )
+        #expect(package.identifier == "com.anysim")
+        #expect(
+            package.placements.map(\.path).sorted() == [
+                "/Applications/anySIM.app", "/Applications/anySIM.app/Info.plist", "/Applications/anySIM.app/anySIM"
+            ])
+    }
+
+    /// Where SummerBoard's PXL themes and OSXWallpaperPack put theirs; from 1.1.3 that is mobile's home.
+    @Test func themesAndWallpapersGoWhereSummerBoardLooks() throws {
+        let dir = scratch("themes")
+        defer { try? fm.removeItem(at: dir) }
+        let png = Data("png".utf8)
+        let package = try Package1x.load(
+            t.zip(
+                dir, "bleachsb.zip",
+                [
+                    ("Bleach/Dock.png", png, 0o644), ("Bleach/Icons/Phone.png", png, 0o644),
+                    ("Themes/Red/Icons/Mail.png", png, 0o644), ("Wallpaper/Bleach.png", png, 0o644)
+                ]
+            )
+        )
+        let r = try t.root(dir.appendingPathComponent("root"), mobile: true)
+        _ = try package.install(MountedVolume(root: r))
+        let home = r.appendingPathComponent("private/var/mobile/Library")
+        for path in [
+            "SummerBoard/Themes/Bleach/Dock.png", "SummerBoard/Themes/Bleach/Icons/Phone.png",
+            "SummerBoard/Themes/Red/Icons/Mail.png", "Wallpaper/Bleach.png"
+        ] {
+            #expect(fm.fileExists(atPath: home.appendingPathComponent(path).path), "\(path)")
+        }
+        // where the destination isn't clear: an icon pack, ThemeBuilder's image pack, a wallpaper folder of folders
+        for members in [
+            [("Icon Pack/Phone.png", png, UInt16(0o644))],
+            [
+                ("Dock/Pack/Leopard.png", png, 0o644), ("Icons/Pack/Apple.png", png, 0o644),
+                ("Wallpaper/Pack/x.png", png, 0o644)
+            ],
+            [("Bleach/Dock.png", png, 0o644), ("readme.txt", png, 0o644)]
+        ] as [[(String, Data?, UInt16)]] {
+            let error = #expect(throws: FirmwareError.self) {
+                try Package1x.load(t.zip(scratch("unclear"), "unclear.zip", members))
+            }
+            #expect(error?.message.contains("neither a PXL") == true)
+        }
     }
 }

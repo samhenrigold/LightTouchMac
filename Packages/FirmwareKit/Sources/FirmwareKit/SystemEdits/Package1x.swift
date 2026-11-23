@@ -7,6 +7,9 @@
 //   Foo.app  a zip whose one top-level item is Foo.app (the Installer-era archives), or the folder itself: to
 //            /Applications/Foo.app.
 //   root     a zip whose top-level folders are all the root's (Applications, usr, …): at /.
+//   themes   a zip of SummerBoard themes and wallpapers (themePlacements): where SummerBoard looks.
+//
+// Each may also be a .tgz, a .tar or a RAR, and a folder holding only Foo.app is Foo.app.
 //
 // The package is untrusted. A member is refused outside the package (an absolute name, "." or "..", empty), larger
 // than `maxMember` (all of it larger than `maxTotal`), or a link that is absolute or climbs out of the package; a
@@ -64,8 +67,19 @@ public struct Package1x {
     /// The package at `url` (.pxl, .zip or a .app folder), validated; throws FirmwareError(.unsupported) saying why
     /// it is refused.
     public static func load(_ url: URL) throws -> Package1x {
-        let members = try Self.members(url)
-        let tops = Set(members.keys.map { String($0.split(separator: "/")[0]) })
+        var members = try Self.members(url)
+        var tops = Set(members.keys.map { String($0.split(separator: "/")[0]) })
+        // a folder holding only Foo.app (anySIM-1.1p/anySIM.app): Foo.app
+        if tops.count == 1, let top = tops.first, !top.hasSuffix(".app"), members[top] == .folder,
+            case let inner = Set(members.keys.filter { $0.hasPrefix(top + "/") }.map { $0.split(separator: "/")[1] }),
+            inner.count == 1, let app = inner.first, app.hasSuffix(".app")
+        {
+            members = Dictionary(
+                uniqueKeysWithValues: members.filter { $0.key != top }.map {
+                    (String($0.key.dropFirst(top.count + 1)), $0.value)
+                })
+            tops = [String(app)]
+        }
         var info: [String: Any] = [:]
         var placements: [Placement]
         var postflight: [[String]] = []
@@ -114,6 +128,8 @@ public struct Package1x {
                 Placement(path: "/" + $0, item: members[$0]!)
             }
             notes = loose.sorted().map { "\($0) left out: a file beside the root's folders" }
+        } else if let themes = themePlacements(members, tops) {
+            placements = themes
         } else {
             throw refused(
                 "neither a PXL, one .app nor a root tree (its top: \(tops.sorted().prefix(4).joined(separator: ", ")))")
@@ -140,6 +156,40 @@ public struct Package1x {
         return Package1x(
             identifier: identifier, name: name, info: info, placements: placements, postflight: postflight,
             warnings: warnings)
+    }
+
+    static let summerBoardThemes = "/var/root/Library/SummerBoard/Themes/"
+    static let wallpapers = "/var/root/Library/Wallpaper/"
+
+    /// An Installer-era zip of SummerBoard themes and wallpapers, placed where SummerBoard's PXL themes and
+    /// OSXWallpaperPack put them: each top folder a theme (Dock.png, Wallpaper.png, StatusBar.png or Icons/ in it),
+    /// or Themes/ holding themes, to SummerBoard's Themes; Wallpaper/'s files to root's Library/Wallpaper. Nil for
+    /// anything else (an icon pack, ThemeBuilder's image pack), whose place isn't clear.
+    static func themePlacements(_ members: [String: Item], _ tops: Set<String>) -> [Placement]? {
+        func isTheme(_ folder: String) -> Bool {
+            members[folder] == .folder
+                && (["Dock.png", "Wallpaper.png", "StatusBar.png"].contains { members[folder + "/" + $0] != nil }
+                    || members[folder + "/Icons"] == .folder)
+        }
+        func under(_ folder: String) -> [String] { members.keys.filter { $0.hasPrefix(folder + "/") }.sorted() }
+        var out: [Placement] = []
+        for top in tops.sorted() {
+            if top == "Wallpaper", members[top] == .folder,
+                under(top).allSatisfy({ !$0.dropFirst(10).contains("/") && members[$0] != .folder })
+            {
+                out += under(top).map { Placement(path: wallpapers + $0.dropFirst(10), item: members[$0]!) }
+            } else if top == "Themes", members[top] == .folder,
+                case let names = Set(under(top).map { String($0.split(separator: "/")[1]) }),
+                !names.isEmpty, names.allSatisfy({ isTheme("Themes/" + $0) })
+            {
+                out += under(top).map { Placement(path: summerBoardThemes + $0.dropFirst(7), item: members[$0]!) }
+            } else if isTheme(top) {
+                out += ([top] + under(top)).map { Placement(path: summerBoardThemes + $0, item: members[$0]!) }
+            } else {
+                return nil
+            }
+        }
+        return out.isEmpty ? nil : out
     }
 
     static func refused(_ why: String) -> FirmwareError { FirmwareError(.unsupported, "the package: \(why)") }

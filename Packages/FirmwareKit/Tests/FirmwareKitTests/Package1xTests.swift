@@ -207,7 +207,7 @@ struct Package1xTests {
                 try pxl(dir, files: [["source": "notes.txt", "destination": "/Applications/up/escape"]])
             case "postflight out":
                 try pxl(dir, files: app, postflight: [["/bin/cp", "/Applications/Edit.app/Edit", "/dev/x"]])
-            default: try zip(dir, "themes.zip", [("Black Wood/Dock.png", Data("png".utf8), 0o644)])
+            default: try zip(dir, "icons.zip", [("Icon Pack/Phone.png", Data("png".utf8), 0o644)])
             }
         let said: [String: String] = [
             "member ..": "is outside the package", "member absolute": "is outside the package",
