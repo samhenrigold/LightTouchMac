@@ -11,7 +11,7 @@ import Testing
     /// higher USN supersedes one system page, a lower-USN copy elsewhere does not, and the base is untouched.
     @Test func iPadStoreAndOverlay() async throws {
         let dir = try Fixtures.tempDir("rebuild-ipad")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let ps = 4096
         let geo = K48NAND.Geometry.selfcheck
         var mbr = [UInt8](repeating: 0, count: ps * 63)
@@ -84,7 +84,7 @@ import Testing
     /// iPod: the overlay's page wins over the base's, an erased block reads blank, and absent pages are holes.
     @Test func iPodOverlay() throws {
         let dir = try Fixtures.tempDir("rebuild-ipod")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let base = dir.appendingPathComponent("base")
         let ovl = dir.appendingPathComponent("overlay")
         let blocks = 600
@@ -132,7 +132,7 @@ import Testing
             try FixtureRequirements.missing(#"VolumeRebuildTests.swift: Fixtures.exists(base)"#)
         }
         let dir = try Fixtures.tempDir("rebuild-base")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let t0 = Date()
         let vols = try VolumeRebuild.rebuild(base: base, overlay: nil, into: dir)
         print(
@@ -202,8 +202,8 @@ import Testing
         let overlay = URL(fileURLWithPath: g.overlay)
         let before = try digest(base).merging(try digest(overlay)) { a, _ in a }
         let out = root.appendingPathComponent("rebuild")
-        try? FileManager.default.removeItem(at: out)
-        defer { try? FileManager.default.removeItem(at: out) }
+        TemporaryTrees.remove(out)
+        defer { TemporaryTrees.remove(out) }
         let t0 = Date()
         // After an unclean stop the journal must be replayed first: the export pipeline's fsck -fy + mount.
         let vols =
@@ -244,7 +244,7 @@ import Testing
         #expect(g.deleted.allSatisfy { listing[$0] == nil }, "deleted files present")
         for ipa in g.ipas {
             let dir = try Fixtures.tempDir("ipa")
-            defer { try? FileManager.default.removeItem(at: dir) }
+            defer { TemporaryTrees.remove(dir) }
             _ = try Fixtures.run(["/usr/bin/unzip", "-q", ipa.ipa, "-d", dir.path])
             let payload = dir.appendingPathComponent("Payload/\(ipa.app)")
             let installed = listing.keys.filter { $0.contains("mobile/Applications/") && $0.hasSuffix("/\(ipa.app)") }

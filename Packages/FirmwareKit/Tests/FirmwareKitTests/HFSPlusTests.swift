@@ -175,7 +175,7 @@ enum HFSOracle {
     /// and lookups use the host's form, so the stopped edit can restore its metadata.
     @Test func slashInCatalogName() async throws {
         let dir = try Fixtures.tempDir("hfs-colon")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let image = dir.appendingPathComponent("v.img")
         try await VolumeMount.makeHFS(image, size: 8 << 20, name: "Colon")
         try await VolumeMount.withMounted(image, at: dir.appendingPathComponent("m")) { root in

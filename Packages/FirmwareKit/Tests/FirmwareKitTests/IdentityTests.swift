@@ -141,7 +141,7 @@ struct IdentityTests {
     @Test func k48LockCarriesWifiMAC() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let any = dir.appendingPathComponent("file")
         for n in ["file", "iBoot.bin", "gid-blobs.bin", "nor.bin", "kboot.bin"] {
             try Data(n.utf8).write(to: dir.appendingPathComponent(n))

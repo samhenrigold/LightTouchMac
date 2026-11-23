@@ -10,7 +10,7 @@ struct K48NANDExtentsTests {
     private func withFile(size: Int, _ body: (Int32) throws -> Void) throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-extents-\(UUID().uuidString)")
         try Data(repeating: 1, count: size).write(to: url)
-        defer { try? FileManager.default.removeItem(at: url) }
+        defer { TemporaryTrees.remove(url) }
         let fd = open(url.path, O_RDONLY)
         #expect(fd >= 0)
         defer { close(fd) }

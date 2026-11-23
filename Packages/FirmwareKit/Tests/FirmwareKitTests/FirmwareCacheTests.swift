@@ -7,7 +7,7 @@ import Testing
 struct FirmwareCacheTests {
     @Test func pruningCannotDeleteActiveReadersOrReplaceLockInode() throws {
         let root = try Fixtures.tempDir("cache-lease")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let file = root.appendingPathComponent("result")
         try Data("cached".utf8).write(to: file)
         func reader() throws {
@@ -29,7 +29,7 @@ struct FirmwareCacheTests {
     /// The app prunes one IPSW's results once its device is prepared: the other IPSWs' stay.
     @Test func pruningOneIPSWKeepsTheOthers() throws {
         let root = try Fixtures.tempDir("cache-ipsw")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let pruned = String(repeating: "a", count: 40)
         let kept = String(repeating: "b", count: 40)
         func result(_ sha1: String) throws -> URL {

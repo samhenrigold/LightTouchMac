@@ -61,7 +61,7 @@ import Testing
             let mnt = fm.homeDirectoryForCurrentUser.appendingPathComponent(
                 "Library/Caches/FirmwareKitTests-\(UUID().uuidString)"
             )
-            defer { try? fm.removeItem(at: mnt) }
+            defer { TemporaryTrees.remove(mnt) }
             let logs = { (root: URL) in
                 (try? fm.contentsOfDirectory(atPath: root.appendingPathComponent(".fseventsd").path)) ?? []
             }

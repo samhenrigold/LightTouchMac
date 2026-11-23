@@ -10,7 +10,7 @@ import Testing
     /// (its identity has the IMEI) and other boards are left alone.
     @Test func iPhoneIMEIStep() throws {
         let root = try Fixtures.tempDir("iphone-imei")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let base = root.appendingPathComponent("base")
         let marker = root.appendingPathComponent(FirmwareWire.migratedRecipeFile)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -21,7 +21,7 @@ import Testing
             ])
             .write(to: base.appendingPathComponent("device.lock.json"))
             try identity.json().write(to: base.appendingPathComponent("identity.json"))
-            try? FileManager.default.removeItem(at: marker)
+            TemporaryTrees.remove(marker)
         }
         try write(board: "n90ap", version: 1, identity: ident)
         #expect(try FirmwareBootAdmission.iPhoneIMEI(base: base, marker: marker))
@@ -64,7 +64,7 @@ import Testing
 
     @Test func admissionDoesNotInspectOrConvertFirmwareAndRawRequiresOptIn() async throws {
         let f = try fixture()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         let result = try await FirmwareBootAdmission.admit(device: f.device)
         #expect(!result.changed)
         #expect(result.record == f.record)
@@ -82,7 +82,7 @@ import Testing
 
     @Test func preparationBorrowsAuthorityThroughPublicationAndRefreshedPaths() async throws {
         let f = try fixture()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         let result = try await FirmwareBootAdmission.admit(
             device: f.device,
             prepare: { owner in
@@ -111,7 +111,7 @@ import Testing
     /// A record a newer build wrote (a storage format this build doesn't know) is refused before any step runs.
     @Test func aNewerRecordFormatIsRefused() async throws {
         let f = try fixture()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         let url = f.device.appendingPathComponent(DeviceRecord.name)
         var record = try DeviceRecord.object(f.record)
         record["format"] = DeviceRecord.currentFormat + 1
@@ -124,7 +124,7 @@ import Testing
 
     @Test func liveAndPendingStorageRefuseAdmission() async throws {
         let f = try fixture()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         let lease = try StorageLease(f.device.appendingPathComponent("work/lease"))
         await #expect(throws: (any Error).self) { try await FirmwareBootAdmission.admit(device: f.device) }
         lease.close()
@@ -137,7 +137,7 @@ import Testing
 
     @Test func cancellationLeavesRecordAndIntentUntouched() async throws {
         let f = try fixture()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
             return try await FirmwareBootAdmission.admit(device: f.device)

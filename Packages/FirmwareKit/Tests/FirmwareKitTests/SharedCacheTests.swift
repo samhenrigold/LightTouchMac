@@ -49,6 +49,7 @@ enum Fixtures {
         let u = FileManager.default.temporaryDirectory.appendingPathComponent("fk-\(tag)-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
         TestDirectories.current?.add(u)
+        TemporaryTrees.remember(u)
         return u
     }
 
@@ -121,7 +122,7 @@ enum Fixtures {
     static let shared: URL = {
         let u = FileManager.default.temporaryDirectory.appendingPathComponent("fk-fixtures-\(getpid())")
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
-        atexit { try? FileManager.default.removeItem(at: Fixtures.shared) }
+        atexit { TemporaryTrees.remove(Fixtures.shared) }
         return u
     }()
     static func sharedFile(_ build: String, _ rel: String) -> URL {
@@ -171,7 +172,7 @@ enum Fixtures {
             try FixtureRequirements.missing(#"SharedCacheTests.swift: Fixtures.hasRootfs(build)"#)
         }
         let dir = try Fixtures.tempDir("dsc5")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let cache = try Fixtures.cache(build, to: dir)
         let dry = try AppSyncCachePatch.patchCache(at: cache, apply: false)
         #expect(dry.contains("0022fff7 -> 00207047"))  // the thunk word, becoming movs r0,#0 ; bx lr
@@ -192,7 +193,7 @@ enum Fixtures {
             try FixtureRequirements.missing(#"SharedCacheTests.swift: Fixtures.hasRootfs("9B206")"#)
         }
         let dir = try Fixtures.tempDir("dsc-refuse")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let cache = try Fixtures.cache("9B206", to: dir)
         let (va, _) = try DyldSharedCache(contentsOf: cache).findSymbol(AppSyncCachePatch.target)
         let off = try DyldSharedCache(contentsOf: cache).fileOffset(of: va)!
@@ -211,7 +212,7 @@ enum Fixtures {
             try FixtureRequirements.missing(#"SharedCacheTests.swift: Fixtures.hasRootfs("9B206")"#)
         }
         let dir = try Fixtures.tempDir("dsc-fit")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let root = dir.appendingPathComponent("root")
         let rel = SystemEdits.dyldCache("armv7")
         #expect(FitCheck.appSyncCache(FitCheck.Firmware(root: root, arch: "armv7")) == nil)
@@ -242,7 +243,7 @@ enum Fixtures {
             try FixtureRequirements.missing(#"SharedCacheTests.swift: Fixtures.hasRootfs(build)"#)
         }
         let dir = try Fixtures.tempDir("dsc")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let mine = try Fixtures.cache(build, to: dir)
         let stock = try Oracle.sha256(file: mine)
         _ = try AppSyncCachePatch.patchCache(at: mine, apply: false)

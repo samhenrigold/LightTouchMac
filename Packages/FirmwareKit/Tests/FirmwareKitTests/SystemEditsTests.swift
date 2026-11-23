@@ -97,7 +97,7 @@ enum K48Oracle {
     /// com.apple.timed switches, which on 6.x and 7.x would drop lockdown's zone; its ark says unbricked.
     @Test func datedLeavesTimedAlone() throws {
         let skeleton = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-dated-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: skeleton) }
+        defer { TemporaryTrees.remove(skeleton) }
         var o = SystemEdits.Options()
         o.dated = true
         try SystemEdits.seedData(skeleton, o, productMajor: 7, dataArk: ["-ActivationState": "Unactivated"]) { _ in }
@@ -131,7 +131,7 @@ enum K48Oracle {
     /// /private/var skeleton, merged with what is there; the Mac's language moved first. Nothing before iOS 5.
     @Test(arguments: [4, 5, 6, 7, 8]) func finishedSetupSeedsWhatSetupWrites(major: Int) throws {
         let skeleton = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-setup-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: skeleton) }
+        defer { TemporaryTrees.remove(skeleton) }
         let global = skeleton.appendingPathComponent(SystemEdits.globalPreferences)
         try FileManager.default.createDirectory(
             at: global.deletingLastPathComponent(),
@@ -279,7 +279,7 @@ enum K48Oracle {
 
         // Every prepared device, Skip Setup or not: the firmware's list with the language first, and the region.
         let skeleton = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-lang-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: skeleton) }
+        defer { TemporaryTrees.remove(skeleton) }
         let global = skeleton.appendingPathComponent(SystemEdits.globalPreferences)
         try FileManager.default.createDirectory(
             at: global.deletingLastPathComponent(),
@@ -322,7 +322,7 @@ enum K48Oracle {
     @Test func deviceLocaleIsTheMacsWhereTheFirmwareHasTheRegionFormat() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("ltm-icu-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let icu = root.appendingPathComponent("usr/share/icu")
         try fm.createDirectory(at: icu, withIntermediateDirectories: true)
         #expect(SystemEdits.regionFormats(MountedVolume(root: root)) == nil, "no ICU data")
@@ -400,7 +400,7 @@ enum K48Oracle {
     @Test func keyboardsAreTheLanguagesThenTheMacsTheFirmwareHas() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("ltm-kb-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         /// A TextInput directory of `bundles` (name: supported modes) and 5.x+'s language defaults.
         func catalog(
             _ name: String,

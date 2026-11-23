@@ -134,7 +134,7 @@ struct K48NANDTests {
         (true, "219fe8ceb8e5a1dc"), (false, "6bf30b844fe046c4")
     ]) func storeBytesAreUnchanged(whitening: Bool, recorded: String) async throws {
         let dir = try Fixtures.tempDir("nand-bytes")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let ps = 4096
         var mbr = [UInt8](repeating: 0, count: ps * 63)
         mbr[510] = 0x55
@@ -175,7 +175,7 @@ struct K48NANDTests {
     )
     func syntheticStore(whitening: Bool) async throws {
         let dir = try Fixtures.tempDir("nand")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let ps = 4096
         var mbr = [UInt8](repeating: 0, count: ps * 63)
         mbr[510] = 0x55
@@ -248,7 +248,7 @@ struct K48NANDTests {
             )
         }
         let dir = try Fixtures.tempDir("nand-full")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let mine = dir.appendingPathComponent("swift")
         let t0 = Date()
         let res = try await K48NAND.build(

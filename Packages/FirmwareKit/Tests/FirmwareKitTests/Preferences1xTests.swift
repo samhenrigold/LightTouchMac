@@ -14,7 +14,7 @@ import Testing
     func writesIntoTheUserSpringBoardRunsAs(mobile: Bool, formatOne: Bool) async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("prefs1x-edit")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let device = root.appendingPathComponent("device")
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -115,7 +115,7 @@ import Testing
 
     @Test func refusesABoardWithGuestTools() async throws {
         let root = try Fixtures.tempDir("prefs1x-refuse")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         try DeviceRecord.data(["id": UUID().uuidString, "board": "n72ap"]).write(
             to: root.appendingPathComponent(DeviceRecord.name)
         )

@@ -41,7 +41,7 @@ struct DiskImageConcurrencyTests {
     @Test func cancellingActualToolReapsItsChild() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let pidFile = dir.appendingPathComponent("pid")
         let tool = Task {
             try await DiskImage.exec([

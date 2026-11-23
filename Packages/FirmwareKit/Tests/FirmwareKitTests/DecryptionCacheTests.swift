@@ -47,7 +47,7 @@ struct DecryptionCacheTests {
             "decrypt-cache-test-" + UUID().uuidString
         )
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         do {
             let identity = DecryptionCache.Identity(ipsw: "fixture", entry: try Oracle.entry("k48ap-7B500"))
             final class Count: @unchecked Sendable {

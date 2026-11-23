@@ -81,7 +81,7 @@ import Testing
 
     @Test func recipe1MigratesToRecipe2PagesOnceThroughAdmission() async throws {
         let f = try device()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         // The fixture is the shipped layout: its GPT pages hash to the pre-0b43f26 references.
         let legacy = Dictionary(
             uniqueKeysWithValues: LegacyPreparationGoldens.n72Metadata.map {
@@ -131,7 +131,7 @@ import Testing
     /// Write, then mark: a crash after the pages leaves them exact; the next start only marks.
     @Test func interruptedBeforeTheMarkIsMarkedNextTime() async throws {
         let f = try device()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         _ = try await FirmwareBootAdmission.admit(device: f.device)
         let marker = f.device.appendingPathComponent(FirmwareWire.migratedRecipeFile)
         try FileManager.default.removeItem(at: marker)
@@ -144,7 +144,7 @@ import Testing
     /// Erase deletes the overlay; the marker stays and the next start writes the pages again.
     @Test func erasedOverlayGetsThePagesAgain() async throws {
         let f = try device()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         _ = try await FirmwareBootAdmission.admit(device: f.device)
         let pages = try files(f.overlay)
         try FileManager.default.removeItem(at: f.overlay)
@@ -154,7 +154,7 @@ import Testing
 
     @Test func recipe2BaseIsLeftAlone() async throws {
         let f = try device(recipe: 2, exactBase: true)
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         #expect(try await !FirmwareBootAdmission.admit(device: f.device).changed)
         #expect(try files(f.overlay).isEmpty)
         #expect(
@@ -167,7 +167,7 @@ import Testing
     /// A running device (its helper holds the lease) is never touched.
     @Test func runningDeviceIsNotMigrated() async throws {
         let f = try device()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         let lease = try StorageLease(f.device.appendingPathComponent("work/lease"))
         await #expect(throws: (any Error).self) { try await FirmwareBootAdmission.admit(device: f.device) }
         lease.close()
@@ -182,7 +182,7 @@ import Testing
     /// A GPT the guest (or anything else) rewrote is neither layout: left alone.
     @Test func unknownGPTIsLeftAlone() async throws {
         let f = try device()
-        defer { try? FileManager.default.removeItem(at: f.root) }
+        defer { TemporaryTrees.remove(f.root) }
         try FileManager.default.createDirectory(
             at: f.overlay.appendingPathComponent("cs2"),
             withIntermediateDirectories: true

@@ -27,7 +27,7 @@ import Testing
     @Test func admissionWritesRootsSystemConfiguration() async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("n45-sc-step")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let device = root.appendingPathComponent("device")
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
@@ -157,7 +157,7 @@ import Testing
     @Test func admissionMovesTheMisplacedPreferences() async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("n45-sc-move")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let device = root.appendingPathComponent("device")
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)

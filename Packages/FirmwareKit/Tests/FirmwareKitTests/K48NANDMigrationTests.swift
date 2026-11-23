@@ -132,7 +132,7 @@ struct K48NANDMigrationTests {
     }
 
     func volumes(_ store: URL, _ overlay: URL?, _ work: URL) throws -> [String: String] {
-        defer { try? FileManager.default.removeItem(at: work) }
+        defer { TemporaryTrees.remove(work) }
         return try Dictionary(
             uniqueKeysWithValues: VolumeRebuild.rebuild(base: store, overlay: overlay, into: work).map {
                 ($0.name, try Preparer.digest($0.image, SHA256()))

@@ -39,7 +39,7 @@ import Testing
     @Test func refusesIMG3Firmware() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         func check(_ id: String) throws {
             let o = Preparer.Options(entry: try Oracle.entry(id), ipsw: dir, out: dir, helper: nil, guestTools: dir)
             try N45Board(o).check(Recipe.Context(o, recipe: o.entry.recipe!, emit: { _ in }))
@@ -117,7 +117,7 @@ import Testing
     @Test func storeLayout() throws {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("n45-store-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let pp = N45NAND.page
         let ps = N45NAND.pagesPerSuperblock
@@ -552,7 +552,7 @@ import Testing
     @Test func iPhoneStoreLayout() throws {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("m68-store-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let pp = N45NAND.page
         let ps = N45NAND.superblock(4)

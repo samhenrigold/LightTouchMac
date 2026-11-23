@@ -55,7 +55,7 @@ struct MalformedInputTests {
     /// An encrcdsa header whose data offset has its top bit set: converting it to an Int trapped.
     @Test func anEncryptedImageOffsetPastAnIntIsRefused() throws {
         let dir = try Fixtures.tempDir("malformed-encrcdsa")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         var header = [UInt8](repeating: 0, count: 0x100)
         header.replaceSubrange(0..<8, with: Array("encrcdsa".utf8))
         header.replaceSubrange(52..<56, with: [0, 0, 0x10, 0])  // 4 KiB chunks
@@ -237,7 +237,7 @@ struct MalformedInputTests {
     @Test(arguments: [(UInt32(4096), UInt32(0x10_0000)), (0xFFFF_FFFF, 0xFFFF_FFFF)])
     func aLegacyVolumeHeaderClaimingMoreThanTheFTLMapsIsRefused(_ size: UInt32, _ blocks: UInt32) throws {
         let dir = try Fixtures.tempDir("malformed-n45-header")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let (base, overlay) = try Self.legacyDevice(claiming: size, blocks, in: dir)
         #expect(throws: FirmwareError.self) {
             try VolumeRebuild.rebuild(base: base, overlay: overlay, into: dir.appendingPathComponent("out"))
@@ -248,7 +248,7 @@ struct MalformedInputTests {
     /// block instead.
     @Test func aLegacyLogOffsetPastItsBlockIsRefused() throws {
         let dir = try Fixtures.tempDir("malformed-n45-log")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let (base, _) = try N45FTLTests.prepared(dir)
         let overlay = dir.appendingPathComponent("overlay")
         try N45FTLTests.booted(overlay, base)
@@ -265,7 +265,7 @@ struct MalformedInputTests {
     /// wrote a volume of that size.
     @Test func aGuestMBRPlacingAPartitionPastTheExportIsRefused() async throws {
         let dir = try Fixtures.tempDir("malformed-k48-mbr")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let geo = K48NAND.Geometry.selfcheck
         let ps = geo.pageSize
         func mbr(_ count: Int) -> [UInt8] {

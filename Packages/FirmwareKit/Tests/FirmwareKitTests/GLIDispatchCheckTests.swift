@@ -12,7 +12,7 @@ struct GLIDispatchCheckTests {
         )
         #expect(GLIDispatch.fields(in: Data("no encode".utf8)) == nil)
         let dir = try Fixtures.tempDir("gles-names")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try Data("GLES_FN(glFoo,  foo,  0, 1, 0)\n".utf8).write(
             to: dir.appendingPathComponent(SystemEdits.Helpers.glesNames)
         )
@@ -36,7 +36,7 @@ struct GLIDispatchCheckTests {
             )
         }
         let dir = try Fixtures.tempDir("gli")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let cache = try DyldSharedCache(contentsOf: try Fixtures.cache(build, to: dir))
         let line = SystemEdits.glesSanity(cache.data, helpers: Self.names)
         print("\(build): \(line)")
@@ -55,7 +55,7 @@ struct GLIDispatchCheckTests {
             )
         }
         let dir = try Fixtures.tempDir("caogl")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let m = dir.appendingPathComponent("mnt")
         let helpers = dir.appendingPathComponent("helpers")
         let at = m.appendingPathComponent(SystemEdits.dyldCache("armv7"))

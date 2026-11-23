@@ -41,12 +41,12 @@ struct DevicePathTests {
                 guard up > 0 else { return false }
                 let dir = u.deletingLastPathComponent()
                 try fm.createDirectory(at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? fm.removeItem(at: dir)
+                TemporaryTrees.remove(dir)
                 try fm.createSymbolicLink(atPath: dir.path, withDestinationPath: folder.path)
                 return true
             }
             try fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? fm.removeItem(at: u)
+            TemporaryTrees.remove(u)
             switch link {
             case .absolute: try fm.createSymbolicLink(atPath: u.path, withDestinationPath: canary.path)
             case .relative:

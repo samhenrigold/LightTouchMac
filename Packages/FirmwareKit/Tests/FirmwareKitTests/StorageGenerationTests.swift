@@ -30,7 +30,7 @@ struct StorageGenerationTests {
 
     @Test func intentAndLeaseBlockAnotherOwnerUntilDiscard() async throws {
         let device = try fixture()
-        defer { try? FileManager.default.removeItem(at: device) }
+        defer { TemporaryTrees.remove(device) }
         func stoppedOwner() async throws -> UUID {
             let edit = try StorageGeneration.begin(device: device)
             #expect(throws: FirmwareError.self) { try StorageGeneration.begin(device: device) }
@@ -54,7 +54,7 @@ struct StorageGenerationTests {
     @Test(arguments: [StorageGeneration.Checkpoint.ready, .recordPublished])
     func recoveryAfterOwnerExit(at interruption: StorageGeneration.Checkpoint) async throws {
         let device = try fixture()
-        defer { try? FileManager.default.removeItem(at: device) }
+        defer { TemporaryTrees.remove(device) }
         let id: UUID
         let expected: Data
         do {
@@ -88,7 +88,7 @@ struct StorageGenerationTests {
 
     @Test func changedRecordOrIdentityCannotBePublished() async throws {
         let device = try fixture()
-        defer { try? FileManager.default.removeItem(at: device) }
+        defer { TemporaryTrees.remove(device) }
         let edit = try StorageGeneration.begin(device: device)
         let data = try await candidate(edit)
         var record = try DeviceRecord.object(data)
@@ -100,7 +100,7 @@ struct StorageGenerationTests {
     }
     @Test func damagedReadyGenerationCannotReplaceOriginal() async throws {
         let device = try fixture()
-        defer { try? FileManager.default.removeItem(at: device) }
+        defer { TemporaryTrees.remove(device) }
         let id: UUID
         do {
             let edit = try StorageGeneration.begin(device: device)
@@ -128,7 +128,7 @@ struct StorageGenerationTests {
     /// same bytes, laid out differently) or the size grown each change it.
     @Test func sparseChipFilesAreCertifiedByTheirExtents() throws {
         let dir = try Fixtures.tempDir("sparse-digest")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let chip = dir.appendingPathComponent("cs0.pages")
         #expect(FileManager.default.createFile(atPath: chip.path, contents: nil))
         let f = try FileHandle(forWritingTo: chip)
@@ -156,7 +156,7 @@ struct StorageGenerationTests {
 
     @Test func wrongResumeCannotBypassPendingIntent() async throws {
         let device = try fixture()
-        defer { try? FileManager.default.removeItem(at: device) }
+        defer { TemporaryTrees.remove(device) }
         let original = try Data(contentsOf: device.appendingPathComponent(DeviceRecord.name))
         func start() async throws -> UUID {
             let edit = try StorageGeneration.begin(device: device)
@@ -195,7 +195,7 @@ struct StorageGenerationTests {
     @Test(arguments: [false, true])
     func publicationSuspensionRetainsLeaseAndRevalidates(_ cancel: Bool) async throws {
         let device = try fixture()
-        defer { try? FileManager.default.removeItem(at: device) }
+        defer { TemporaryTrees.remove(device) }
         let original = try Data(contentsOf: device.appendingPathComponent(DeviceRecord.name))
         let edit = try StorageGeneration.begin(device: device)
         let candidate = try await candidate(edit)
@@ -228,7 +228,7 @@ struct StorageGenerationTests {
 
     @Test func closedTransactionRejectsEveryStorageOperationAndReleasesRetainedOwner() async throws {
         let device = try fixture()
-        defer { try? FileManager.default.removeItem(at: device) }
+        defer { TemporaryTrees.remove(device) }
         let edit = try StorageGeneration.begin(device: device)
         let candidate = try await candidate(edit)
         try await edit.close()
@@ -243,7 +243,7 @@ struct StorageGenerationTests {
 
     @Test func explicitlyClosedSharedAliasCannotConferTransactionAuthority() async throws {
         let device = try fixture()
-        defer { try? FileManager.default.removeItem(at: device) }
+        defer { TemporaryTrees.remove(device) }
         let owner = try OwnedStorageRecord.acquire(device: device)
         let edit = try StorageGeneration.begin(owner: owner)
         let original = try Data(contentsOf: device.appendingPathComponent(DeviceRecord.name))

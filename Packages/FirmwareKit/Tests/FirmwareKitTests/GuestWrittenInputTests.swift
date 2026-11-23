@@ -29,7 +29,7 @@ struct GuestWrittenInputTests {
     @Test(arguments: outside)
     func aJournalOutsideTheVolumeIsRefused(_ offset: UInt64, _ size: UInt64) throws {
         let dir = try Fixtures.tempDir("guest-journal")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let fine = try Self.journaledVolume(offset: 8192, size: 512 << 10, in: dir)
         #expect(try HFSPlusVolume(fine).journal()?.size == 512 << 10)
         let image = try Self.journaledVolume(offset: offset, size: size, in: dir)
@@ -73,7 +73,7 @@ struct GuestWrittenInputTests {
     func aStoppedEditRefusesALinkInTheOverlay(_ plant: Plant) async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("guest-overlay-link")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let host = root.appendingPathComponent("host-file")
         try Data("the host's".utf8).write(to: host)
         let device = try await Self.legacyDevice(in: root) { overlay in
@@ -100,7 +100,7 @@ struct GuestWrittenInputTests {
     @Test func aDurableWriteGoesNotThroughALinkAtItsTemporary() throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("guest-durable-link")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let host = root.appendingPathComponent("host-file")
         try Data("the host's".utf8).write(to: host)
         let page = root.appendingPathComponent("overlay/cs1/512.page")
@@ -119,7 +119,7 @@ struct GuestWrittenInputTests {
     /// call functions. With triggers and views off and the schema untrusted, the row goes in and nothing else runs.
     @Test func aGuestTriggerOnTheTrustStoreDoesNotRun() throws {
         let root = try Fixtures.tempDir("guest-truststore")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let store = root.appendingPathComponent("TrustStore.sqlite3")
         var db: OpaquePointer?
         #expect(sqlite3_open(store.path, &db) == SQLITE_OK)

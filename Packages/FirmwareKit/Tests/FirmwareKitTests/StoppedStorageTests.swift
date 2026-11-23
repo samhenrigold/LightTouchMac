@@ -7,7 +7,7 @@ import Testing
 struct StoppedStorageTests {
     @Test func runningHelperRefusesExportBeforeCreatingOutput() async throws {
         let dir = try Fixtures.tempDir("storage-lease")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let path = dir.appendingPathComponent("work/lease")
         try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
         // Exactly the flags used by LightTouchDevice, on an independent descriptor.
@@ -24,7 +24,7 @@ struct StoppedStorageTests {
 
     @Test func releasedLeaseIsReusableAndPendingEditRefusesAccess() throws {
         let dir = try Fixtures.tempDir("storage-edit")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         do {
             let lease = try OwnedStorageRecord.acquire(device: dir, allowRaw: true)
             #expect(throws: FirmwareError.self) { try OwnedStorageRecord.acquire(device: dir, allowRaw: true) }
@@ -43,7 +43,7 @@ struct StoppedStorageTests {
 
     @Test func failedRebuildRemovesOnlyOwnedOutput() async throws {
         let dir = try Fixtures.tempDir("storage-export-failure")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let out = dir.appendingPathComponent("export")
         let source = VolumeExport.Source(base: dir.appendingPathComponent("missing"), overlay: nil)
         await #expect(throws: (any Error).self) { try await VolumeExport.export(source, out: out) }
@@ -57,7 +57,7 @@ struct StoppedStorageTests {
 
     @Test func exportCannotStageInsideItsSource() async throws {
         let dir = try Fixtures.tempDir("storage-source")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let out = dir.appendingPathComponent("export")
         await #expect(throws: FirmwareError.self) {
             try await VolumeExport.export(.init(base: dir, overlay: nil), out: out)
@@ -68,7 +68,7 @@ struct StoppedStorageTests {
 
     @Test func malformedOrForeignManifestNeverDeletesDirectory() async throws {
         let dir = try Fixtures.tempDir("storage-manifest")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         await #expect(throws: (any Error).self) { try await VolumeExport.unmount(out: dir) }
         #expect(FileManager.default.fileExists(atPath: dir.path))
         try Data("not json".utf8).write(to: VolumeExport.manifest(dir))

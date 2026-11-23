@@ -46,7 +46,7 @@ enum FitFixture {
         let raw = dir.appendingPathComponent("\(name).hfs")
         let out = dir.appendingPathComponent(name)
         try await UDIF.extractRootfs(dmg: dmg, to: raw)
-        defer { try? FileManager.default.removeItem(at: raw) }
+        defer { TemporaryTrees.remove(raw) }
         let v = try HFSPlusVolume(raw)
         var queue = files
         var seen = Set<String>()
@@ -77,7 +77,7 @@ enum FitFixture {
         guard let dmg = dmgs[id], Oracle.exists(dmg) else { return [] }
         let raw = dir.appendingPathComponent("list.hfs")
         try await UDIF.extractRootfs(dmg: dmg, to: raw)
-        defer { try? FileManager.default.removeItem(at: raw) }
+        defer { TemporaryTrees.remove(raw) }
         return try HFSPlusVolume(raw).paths().map(\.path).filter { p in
             let c = p.split(separator: "/")
             return c.count == 5 && FitCheck.frameworkDirs.contains(c[0..<3].joined(separator: "/"))

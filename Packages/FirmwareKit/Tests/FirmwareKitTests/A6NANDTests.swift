@@ -12,7 +12,7 @@ struct A6NANDTests {
     }
     @Test func createsErasedSparseBanksAndRefusesOverwrite() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         try A6NAND.create(at: root)
         let h = try FileHandle(forReadingFrom: root.appendingPathComponent("bus1-ce0.pages"))
         defer { try? h.close() }

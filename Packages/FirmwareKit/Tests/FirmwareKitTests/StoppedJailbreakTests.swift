@@ -45,7 +45,7 @@ import Testing
 
     @Test func typeinMovesToSubstrateOnlyWhenAsked() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-jb-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let bootstrap = try CydiaInstallTests().bootstrap(in: dir)
         let plain = try firmware(in: dir.appendingPathComponent("plain"), version: "4.2.1")
         let r = try SystemEdits.installJailbreak(
@@ -76,7 +76,7 @@ import Testing
 
     @Test func kbootTakesTheJailbrokenBootArgsOnce() throws {
         let base = fm.temporaryDirectory.appendingPathComponent("ltm-jb-kboot-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: base) }
+        defer { TemporaryTrees.remove(base) }
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         // An image whose boot_args sit at +0x1000 (command line 56 bytes in), then the K48KBOOT trailer.
         var image = [UInt8](repeating: 0xAA, count: 0x2000)
@@ -98,7 +98,7 @@ import Testing
 
     @Test func patchedIBootGrowsItsBootArgsIntoTheCertificateText() throws {
         let base = fm.temporaryDirectory.appendingPathComponent("ltm-jb-iboot-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: base) }
+        defer { TemporaryTrees.remove(base) }
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let text = "Reliance on this certificate by any party assumes acceptance of the then applicable standard terms"
         let before =
@@ -121,7 +121,7 @@ import Testing
     /// published generation has Cydia (cydo set-user-ID root), afc2, the user's file, and a lock that says jailbroken.
     @Test func existingDeviceKeepsItsFilesAndSaysJailbroken() async throws {
         let root = try Fixtures.tempDir("stopped-jailbreak")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let bootstrap = try CydiaInstallTests().bootstrap(in: root.appendingPathComponent("bootstrap"))
         let tree = try firmware(in: root.appendingPathComponent("tree"), version: "3.1.3")
         try JailbreakTests.put(Data("saved game".utf8), tree, "private/var/mobile/Media/user.txt")

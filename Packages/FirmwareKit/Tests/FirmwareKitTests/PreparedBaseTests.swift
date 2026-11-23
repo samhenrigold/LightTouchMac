@@ -70,7 +70,7 @@ struct PreparedBaseTests {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("prepared-base-\(UUID().uuidString)")
         defer {
             _ = try? Process.run(URL(fileURLWithPath: "/bin/chmod"), arguments: ["-R", "u+w", tmp.path]).waitUntilExit()
-            try? FileManager.default.removeItem(at: tmp)
+            TemporaryTrees.remove(tmp)
         }
         let template = tmp.appendingPathComponent("template")
         let blob = tmp.appendingPathComponent("base.itbase")
@@ -173,7 +173,7 @@ struct PreparedBaseTests {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("prepared-base-\(UUID().uuidString)")
         defer {
             _ = try? Process.run(URL(fileURLWithPath: "/bin/chmod"), arguments: ["-R", "u+w", tmp.path]).waitUntilExit()
-            try? FileManager.default.removeItem(at: tmp)
+            TemporaryTrees.remove(tmp)
         }
         // a page in each of two chunks of cs0, and one on cs2
         let pages: [N72NAND.Page: UInt8] = [
@@ -235,7 +235,7 @@ struct PreparedBaseTests {
     @Test func unpackedBaseTakesTheLanguage() async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("prepared-base-language")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let base = root.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
         let image = root.appendingPathComponent("volume.img")

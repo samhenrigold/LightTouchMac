@@ -12,7 +12,7 @@ struct BasebandFirmwareTests {
             components: BuildComponents.load(ipsw, board: "n42ap"), board: "n42ap")
         let payloads = try BasebandFirmware.expandedMav5Assets(ipsw.read(members[0]))
         let image = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".hfs")
-        defer { try? FileManager.default.removeItem(at: image) }
+        defer { TemporaryTrees.remove(image) }
         try HFSPlusWriter.makeHFS(image, size: 128 << 20, name: "ModemAssets", journaled: false)
         let writer = try HFSPlusWriter(image)
         writer.owner = (0, 0)
@@ -63,7 +63,7 @@ struct BasebandFirmwareTests {
         let ipsw = IPSWArchive(URL(fileURLWithPath: source))
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let volume = MountedVolume(root: root)
         let paths = try BasebandFirmware.installMav5(from: ipsw, board: "n42ap", system: volume)
         #expect(paths.count == 2)
@@ -87,7 +87,7 @@ struct BasebandFirmwareTests {
         let source = try #require(ProcessInfo.processInfo.environment["FIRMWAREKIT_MAV5_IPSW"])
         let ipsw = IPSWArchive(URL(fileURLWithPath: source))
         let image = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".hfs")
-        defer { try? FileManager.default.removeItem(at: image) }
+        defer { TemporaryTrees.remove(image) }
         try HFSPlusWriter.makeHFS(image, size: 64 << 20, name: "ModemAssets", journaled: false)
         let writer = try HFSPlusWriter(image)
         writer.owner = (0, 0)

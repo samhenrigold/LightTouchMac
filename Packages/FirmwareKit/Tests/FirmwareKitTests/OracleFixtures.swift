@@ -180,7 +180,7 @@ enum Oracle {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("FirmwareKitTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         TestDirectories.current?.add(dir)
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         return try body(dir)
     }
 
@@ -188,7 +188,7 @@ enum Oracle {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("FirmwareKitTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         TestDirectories.current?.add(dir)
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         return try await body(dir)
     }
 

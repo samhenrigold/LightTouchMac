@@ -65,7 +65,7 @@ import Testing
 
     @Test func addsAnAnchorRowAsTheStockRowsAre() throws {
         let store = FileManager.default.temporaryDirectory.appendingPathComponent("ts-\(UUID()).sqlite3")
-        defer { try? FileManager.default.removeItem(at: store) }
+        defer { TemporaryTrees.remove(store) }
         var db: OpaquePointer?
         #expect(sqlite3_open(store.path, &db) == SQLITE_OK)
         #expect(
@@ -102,7 +102,7 @@ import Testing
     @Test func trustsThroughAStoppedEdit() async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("trust1x-edit")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let device = root.appendingPathComponent("device")
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)

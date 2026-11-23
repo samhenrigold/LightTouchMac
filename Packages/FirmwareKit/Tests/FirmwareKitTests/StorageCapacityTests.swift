@@ -39,7 +39,7 @@ struct StorageCapacityTests {
 
     @Test func existingDestinationCapacityIsReadable() throws {
         let dir = try Fixtures.tempDir("capacity")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         #expect(try StorageCapacity.available(at: dir) >= 0)
         try StorageCapacity.require(0, at: dir)
     }

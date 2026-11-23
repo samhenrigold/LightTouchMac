@@ -25,7 +25,7 @@ struct JailbreakTests {
 
     @Test(arguments: 0..<3) func afc2ServesTheRootBesideTheStockService(era: Int) throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-afc2-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let services = root.appendingPathComponent(SystemEdits.lockdownServices)
         try FileManager.default.createDirectory(
             at: services.deletingLastPathComponent(),
@@ -55,7 +55,7 @@ struct JailbreakTests {
 
     @Test func afc2NeedsTheStockService() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-afc2-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let services = root.appendingPathComponent(SystemEdits.lockdownServices)
         try FileManager.default.createDirectory(
             at: services.deletingLastPathComponent(),
@@ -86,7 +86,7 @@ struct JailbreakTests {
     /// made from afcd's own without its user.
     @Test func afc2On71IsAnAfcdCopyAtTheRoot() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-afc2-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let stockJob: [String: Any] = [
             "Label": "com.apple.afcd", "MachServices": ["com.apple.afcd": true], "EnableTransactions": true,
             "ProgramArguments": ["/usr/libexec/afcd"], "UserName": "mobile"
@@ -144,7 +144,7 @@ struct JailbreakTests {
     /// An afcd with neither --lockdown nor the 7.1 strings is refused rather than given an entry that cannot run.
     @Test func afc2NeedsAnAfcdItKnows() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-afc2-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         try Self.put(
             try PropertyListSerialization.data(
                 fromPropertyList: ["com.apple.afc": Self.stockAFC[2]],
@@ -270,7 +270,7 @@ struct CydiaInstallTests {
 
     @Test func cydiaLandsBesideTheFirmwaresOwnFiles() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-cydia-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let m = try firmware(in: dir, prefs: nil)
         let r = try SystemEdits.installCydia(MountedVolume(root: m), bootstrap: try bootstrap(in: dir))
         let cydia = m.appendingPathComponent("Applications/Cydia.app/Cydia")
@@ -305,7 +305,7 @@ struct CydiaInstallTests {
     /// set-user-ID bit: tar, not root, drops it, so the catalog gets the archive's mode.
     @Test func cydoKeepsItsSetUserIDMode() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-cydia-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let m = try firmware(in: dir, prefs: nil)
         let r = try SystemEdits.installCydia(MountedVolume(root: m), bootstrap: try bootstrap(in: dir))
         #expect(r.modes.map(\.path) == ["usr/libexec/cydia/cydo"])
@@ -331,7 +331,7 @@ struct CydiaInstallTests {
     /// none of the dead ones (apt.modmyi.com, cydia.zodttd.com, repo666.ultrasn0w.com) is ever refreshed.
     @Test func cydiasSourcesAreTheOnesThatAnswerToday() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-cydia-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let m = try firmware(in: dir, prefs: nil)
         let r = try SystemEdits.installCydia(MountedVolume(root: m), bootstrap: try bootstrap(in: dir))
         let u = m.appendingPathComponent("private/var/lib/cydia/metadata.plist")
@@ -356,7 +356,7 @@ struct CydiaInstallTests {
 
     @Test func theFirmwaresSpringBoardPreferencesGainTheKey() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-cydia-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let m = try firmware(in: dir, prefs: ["SBAutoLockTime": 60])
         let r = try SystemEdits.installCydia(MountedVolume(root: m), bootstrap: try bootstrap(in: dir))
         let prefs = try springBoard(m)
@@ -371,7 +371,7 @@ struct CydiaInstallTests {
     @Test(arguments: ["3.1.3", "4.2.1", "5.1.1", "6.1.6", "7.1.2"])
     func substrateAndHTTPatchByVersion(_ version: String) throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-cydia-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let m = try firmware(in: dir, prefs: nil, version: version)
         let r = try SystemEdits.installCydia(MountedVolume(root: m), bootstrap: try bootstrap(in: dir))
         let major = Int(version.prefix(1)) ?? 0
@@ -398,7 +398,7 @@ struct CydiaInstallTests {
 
     @Test func aBootstrapOfOtherBytesIsRefused() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-cydia-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         #expect(throws: FirmwareError.self) {
             try SystemEdits.Cydia.bootstrap(in: dir) { _, file in try Data("not freeze.tar".utf8).write(to: file) }
         }

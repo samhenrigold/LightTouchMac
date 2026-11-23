@@ -7,7 +7,7 @@ struct A6RestoreStreamTests {
     private func temporary(_ body: (URL) throws -> Void) throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         try body(root)
     }
     private func little(_ b: Data, _ offset: Int, _ count: Int) -> UInt64 {

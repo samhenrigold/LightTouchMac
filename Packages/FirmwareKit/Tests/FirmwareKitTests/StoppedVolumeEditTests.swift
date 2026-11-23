@@ -14,7 +14,7 @@ import Testing
         let root = try Fixtures.tempDir("stopped-native-edit")
         defer {
             if ProcessInfo.processInfo.environment["FK_KEEP_EDIT_FIXTURE"] == nil {
-                try? fm.removeItem(at: root)
+                TemporaryTrees.remove(root)
             } else {
                 print("stopped-edit fixture retained: \(root.path)")
             }
@@ -143,7 +143,7 @@ import Testing
     @Test(arguments: [true, false]) func dataVolumeEdit(whitening: Bool) async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("stopped-yaftl-edit")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let geo = K48NAND.Geometry.selfcheck
         let mbr = root.appendingPathComponent("mbr.bin")
         try K48NAND.makeMBR(geometry: geo, systemMiB: 8).write(to: mbr)

@@ -54,7 +54,7 @@ struct A6FirstBootTests {
     func stagesFreshVolumesAndRegistersActualPaths() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let system = root.appendingPathComponent("system.img")
         let data = root.appendingPathComponent("data.img")
         for file in [system, data] { try HFSPlusWriter.makeHFS(file, size: 16 << 20, journaled: false) }

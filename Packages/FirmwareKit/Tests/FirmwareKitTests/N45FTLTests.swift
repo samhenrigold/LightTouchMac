@@ -133,7 +133,7 @@ import Testing
     /// A fresh store reads back as its volume, through the prepared context.
     @Test func preparedStore() throws {
         let dir = try Fixtures.tempDir("n45ftl-prepared")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let (base, vol) = try Self.prepared(dir)
         #expect(try VolumeRebuild.board(of: base) == .legacy)
         let ftl = try N45FTL(base: base, overlay: nil)
@@ -146,7 +146,7 @@ import Testing
     /// A booted overlay: the moved context, the remapped block and the log page win; the rest is the base's.
     @Test func bootedOverlay() throws {
         let dir = try Fixtures.tempDir("n45ftl-booted")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let (base, vol) = try Self.prepared(dir)
         let ovl = dir.appendingPathComponent("overlay")
         try Self.booted(ovl, base)
@@ -175,7 +175,7 @@ import Testing
     /// The context block not ending in the context (an unclean stop) is refused, not guessed at.
     @Test func uncleanRefused() throws {
         let dir = try Fixtures.tempDir("n45ftl-unclean")
-        defer { try? FileManager.default.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let (base, _) = try Self.prepared(dir)
         let ovl = dir.appendingPathComponent("overlay")
         try Self.booted(ovl, base, clean: false)
@@ -188,7 +188,7 @@ import Testing
     @Test func stoppedEditInPlace() async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("n45ftl-edit")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let device = root.appendingPathComponent("device")
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)

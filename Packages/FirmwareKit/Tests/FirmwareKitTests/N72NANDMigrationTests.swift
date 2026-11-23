@@ -108,7 +108,7 @@ struct N72NANDMigrationTests {
     }
 
     func volume(_ base: URL, _ overlay: URL?, _ work: URL) throws -> String {
-        defer { try? FileManager.default.removeItem(at: work) }
+        defer { TemporaryTrees.remove(work) }
         return try Preparer.digest(VolumeRebuild.rebuild(base: base, overlay: overlay, into: work)[0].image, SHA256())
     }
 
