@@ -72,6 +72,7 @@ import SessionKit
             \.artist)
     } catch { read["error"] = "\(error)" }
     read["photos"] = (try? await d.services.files(in: FirstGenLibrary.photos).map(\.name).sorted()) ?? []
+    read["libraryPhotos"] = (try? await library.libraryPhotos().count) ?? 0
     emit("firstGenLibrary", read)
     let songs = titles.filter { !movies.contains($0) }
     if !songs.isEmpty || movies.isEmpty {
@@ -84,7 +85,9 @@ import SessionKit
         await firstGenScreen(d, app: app, stage: "videos\(generation)", titles: videos, tabs: ["Videos", "Movies"])
     }
     if files.contains(where: { PreparedMedia.destination(forExtension: ($0 as NSString).pathExtension) == "Photos" }) {
-        await firstGenScreen(d, app: ["Photos"], stage: "photos\(generation)", titles: [])
+        // the iPhone's Camera Roll, the iPod touch's iTunes library
+        await firstGenScreen(
+            d, app: ["Photos"], stage: "photos\(generation)", titles: [], tabs: ["Camera Roll", "Photo Library"])
     }
 }
 

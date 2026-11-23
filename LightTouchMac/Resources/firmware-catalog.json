@@ -897,7 +897,7 @@
   "build": "4A102",
   "released": "2008-02-26",
   "status": "experimental",
-  "media": ["Music", "Videos"],
+  "media": ["Music", "Photos", "Videos"],
   "source": {"kind": "ipsw", "url": "https://secure-appldnld.apple.com/iPod/SBML/osx/bundles/061-4312.20080226.Btu45/iPod1,1_1.1.4_4A102_Restore.ipsw", "sha1": "c148d1eb1c979bb6434175411d4a372103a4fdd2", "bytes": 173519589, "mirrors": [{"url": "https://archive.org/download/iOS_Firmware_Exhibit_Collection/iPod1,1_1.1.4_4A102_Restore.ipsw", "sha1": "c148d1eb1c979bb6434175411d4a372103a4fdd2", "bytes": 173519589}]},
   "keys": {
    "rootfs": {"file": "022-3893-4.dmg", "key": "d0a0c0977bd4b6350b256d6650ec9eca419b6f961f593e74b7e5b93e010b698ca6cca1fe"}

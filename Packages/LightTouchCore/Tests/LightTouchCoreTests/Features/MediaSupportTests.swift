@@ -37,12 +37,9 @@ struct MediaSupportTests {
             "n90ap-11D201", "n90ap-11D257"
         ].map { ($0, all) }
     )
-    /// iPhone OS 1.x through FirstGenLibrary (`sessions single --media` with a song and a movie, and on the iPhone a
-    /// photo, each shown in Music, Videos or the Camera Roll): the iPod touch's Photos lists only iTunes' photo
-    /// database, not DCIM.
-    static let firstGeneration: [String: Set<String>] = [
-        "m68ap-1A543a": all, "n45ap-4A102": ["Music", "Videos"]
-    ]
+    /// iPhone OS 1.x through FirstGenLibrary (`sessions single --media` with a song, a movie and a photo, each shown
+    /// in Music, Videos or Photos: the iPhone's Camera Roll, the iPod touch's Photo Library, iTunes' Photo Database).
+    static let firstGeneration: [String: Set<String>] = ["m68ap-1A543a": all, "n45ap-4A102": all]
     static let nouns = ["Music": "music", "Videos": "videos", "Photos": "photos"]
 
     struct Entry: Decodable {

@@ -1,7 +1,8 @@
 // Media import on iPhone OS 1.x, which has no guest agent to commit through: everything goes over AFC into the Media
 // folder while the device runs. A song or video is copied under iTunes_Control/Music and added to the iTunesDB
-// (ITunesDB, signed with hash58 for the device, which 1.1.x checks); a photo becomes the next DCIM/100APPLE/IMG_NNNN.JPG
-// with its IMG_NNNN.THM, the DCF group 1.x's Camera Roll scans.
+// (ITunesDB, signed with hash58 for the device, which 1.1.x checks). On the iPhone a photo becomes the next
+// DCIM/100APPLE/IMG_NNNN.JPG with its IMG_NNNN.THM, the DCF group its Camera Roll scans; the iPod touch's Photos lists
+// only iTunes' photo library, so there it goes into Photos/Photo Database (PhotoDatabase) with its thumbnails.
 
 import CoreGraphics
 import Foundation
@@ -15,6 +16,7 @@ public struct FirstGenLibrary: Sendable {
 
     static let database = "iTunes_Control/iTunes/iTunesDB"
     static let photos = "DCIM/100APPLE"
+    static let photoDatabase = "Photos/Photo Database"
 
     /// `willCommit`: the file is on the device, and the library write, which isn't cancelled, starts.
     public func add(
@@ -28,8 +30,13 @@ public struct FirstGenLibrary: Sendable {
         case .video(let video):
             try await addTrack(video.video, id: video.id, metadata: video.metadata, movie: true, progress, willCommit)
         case .photo(let photo):
-            try await addPhoto(photo.image, progress: progress)
-            willCommit()
+            // the iPhone's camera fills DCIM, which its Camera Roll shows; the iPod touch has neither
+            if try await services.lockdownValue("DeviceClass", domain: nil) == "iPod" {
+                try await addLibraryPhoto(photo.image, willCommit)
+            } else {
+                try await addPhoto(photo.image, progress: progress)
+                willCommit()
+            }
         }
     }
 
@@ -105,10 +112,46 @@ public struct FirstGenLibrary: Sendable {
     func publish(_ database: Data, signing: Bool = true) async throws {
         var database = database
         if signing, let id = try await fireWireID() { database = ITunesDB.signed(database, fireWireID: id) }
-        let local = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-itunesdb-" + UUID().uuidString)
-        try database.write(to: local)
+        try await sync(database, to: Self.database)
+    }
+
+    /// `data` written to `remote` as iTunes syncs a library file (syncLibraryFile).
+    private func sync(_ data: Data, to remote: String) async throws {
+        let local = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-library-" + UUID().uuidString)
+        try data.write(to: local)
         defer { try? FileManager.default.removeItem(at: local) }
-        try await services.syncLibraryFile(local, remote: Self.database)
+        try await services.syncLibraryFile(local, remote: remote)
+    }
+
+    /// The images the device's Photo Database lists; none where it has none yet.
+    public func libraryPhotos() async throws -> [PhotoDatabase.Image] {
+        guard let data = try await download(Self.photoDatabase) else { return [] }
+        return try PhotoDatabase.images(in: data)
+    }
+
+    /// A photo added to iTunes' photo library: its thumbnails in each format, each in its own .ithmb under
+    /// Photos/Thumbs, then the database with it added.
+    private func addLibraryPhoto(_ image: URL, _ willCommit: () -> Void) async throws {
+        // A database this can't read is never replaced: that would lose the photos it lists.
+        var images = try await libraryPhotos()
+        let id = (images.map(\.id).max() ?? PhotoDatabase.firstID - 1) + 1
+        guard let source = CGImageSourceCreateWithURL(image as CFURL, nil),
+            let picture = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        else { throw DeviceToolsError.failed("This photo couldn’t be read.") }
+        var thumbnails: [PhotoDatabase.Thumbnail] = []
+        for format in PhotoDatabase.photoFormats {
+            let name = "F\(format.id)_\(id).ithmb"
+            let (pixels, thumbnail) = try PhotoDatabase.pixels(
+                of: picture, in: format, file: ":Thumbs:" + name, offset: 0)
+            let local = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-ithmb-" + UUID().uuidString)
+            try pixels.write(to: local)
+            defer { try? FileManager.default.removeItem(at: local) }
+            _ = try await services.stageFile(local, remote: "Photos/Thumbs/" + name, replace: true) { _ in }
+            thumbnails.append(thumbnail)
+        }
+        images.append(PhotoDatabase.Image(id: id, thumbnails: thumbnails))
+        willCommit()
+        try await sync(PhotoDatabase.make(images), to: Self.photoDatabase)
     }
 
     /// The FairPlayID lockdown keeps for iTunes, whose first 8 bytes key hash58.

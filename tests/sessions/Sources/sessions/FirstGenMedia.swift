@@ -24,10 +24,12 @@ func judgeFirstGenMedia(_ r: Report, _ d: String, events: Events, wrongHash: Boo
     r.check(!reads.isEmpty, "\(d): the iTunesDB was read back")
     for e in reads {
         let listed = e["titles"] as? [String] ?? []
-        let originals = (e["photos"] as? [String] ?? []).filter { $0.uppercased().hasSuffix(".JPG") }.count
+        let originals =
+            (e["photos"] as? [String] ?? []).filter { $0.uppercased().hasSuffix(".JPG") }.count
+            + (e.int("libraryPhotos") ?? 0)
         r.check(
             titles.allSatisfy(listed.contains) && originals >= photos && !e.has("error"),
-            "\(d): boot \(e.int("generation") ?? 0): the iTunesDB lists \(listed), DCIM holds \(originals) photos"
+            "\(d): boot \(e.int("generation") ?? 0): the iTunesDB lists \(listed), DCIM and the Photo Database \(originals) photos"
                 + (e.string("error").map { ": \($0)" } ?? "")
         )
     }
@@ -55,18 +57,20 @@ func judgeFirstGenMedia(_ r: Report, _ d: String, events: Events, wrongHash: Boo
             "\(d): \(e.string("stage") ?? "?"): Artists shows \(shown) of the tagged songs' \(want)"
         )
     }
-    // the iPhone's Camera Roll is DCIM (the iPod touch's Photos on 1.x lists only what iTunes syncs, not DCIM)
+    // the iPhone's Camera Roll is DCIM; the iPod touch's Photos lists only iTunes' Photo Database, its Photo Library
     for e in screens where photos > 0 && e.string("stage")?.hasPrefix("photos") == true {
         let text = e["text"] as? [String] ?? []
         r.check(
-            text.contains { $0.hasPrefix("Camera Roll") } && !text.contains("No Photos"),
-            "\(d): \(e.string("stage") ?? "?"): Photos opens its Camera Roll (\(text.prefix(6).joined(separator: " | ")))"
+            text.contains { $0.hasPrefix("Camera Roll") || $0.hasPrefix("Photo Library") }
+                && !text.contains("No Photos"),
+            "\(d): \(e.string("stage") ?? "?"): Photos opens its Camera Roll or Photo Library (\(text.prefix(6).joined(separator: " | ")))"
         )
-        // the grid's first cell shows the photo's THM (the import's photos are colored; a cell without one is blank)
+        // the grid's first cell shows the photo's thumbnail, its THM or 3011 (the import's photos are colored; a cell
+        // without one is blank)
         let colored = e["firstCellColored"] as? Double ?? 0
         r.check(
             colored > 0.5,
-            "\(d): \(e.string("stage") ?? "?"): the Camera Roll's first cell shows a thumbnail (\(Int(colored * 100))% colored)"
+            "\(d): \(e.string("stage") ?? "?"): the album's first cell shows a thumbnail (\(Int(colored * 100))% colored)"
         )
     }
 }
