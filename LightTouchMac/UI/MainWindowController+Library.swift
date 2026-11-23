@@ -94,7 +94,6 @@ extension MainWindowController {
             attachWorkspace()
         }
         noInspector.managesApps = entry?.managesApps ?? false
-        noInspector.major = entry?.major ?? 2
         let count = library.selectedEntries.count
         multipleSelected.text = "\(count) Devices"
         if session == nil { showDetail(entry != nil ? placeholder : count > 1 ? multipleSelected : nothingSelected) }

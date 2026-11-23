@@ -141,10 +141,9 @@ struct FirmwareCatalogTests {
         )
     }
 
-    /// Apps to manage from iPhone OS 2.0 through iOS 9; none on 1.x, and none on iOS 10+ (gated: installd's
-    /// signature check isn't bypassed on 10.x yet).
+    /// Apps to manage from iPhone OS 2.0 through iOS 10; none on 1.x.
     @Test(arguments: [
-        ("1.0", false), ("1.1.5", false), ("2.0", true), ("6.1.6", true), ("9.3.5", true), ("10.3.4", false)
+        ("1.0", false), ("1.1.5", false), ("2.0", true), ("6.1.6", true), ("9.3.5", true), ("10.3.4", true)
     ])
     func managesAppsFromiPhoneOS2(_ version: String, _ manages: Bool) throws {
         var entry = try JSONDecoder().decode(FirmwareCatalog.Entry.self, from: Data(Self.raw.utf8))

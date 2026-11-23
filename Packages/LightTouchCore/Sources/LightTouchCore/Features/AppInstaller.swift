@@ -416,11 +416,10 @@ public enum AppInstaller {
         placeholderRaised: Bool = false
     ) async {
         // The one refusal for every install entry point (drop, Apps inspector, store): a firmware that
-        // doesn't manage apps (iOS 10+, where installd's signature check isn't bypassed yet). iPhone OS 1
-        // has no installation service and never reaches here.
+        // doesn't manage apps. iPhone OS 1 has no installation service and never reaches here.
         guard FirmwareCatalog.Entry.managesApps(major: FirmwareCatalog.Entry.major(of: emulator.iosVersion)) else {
             job.failed = true
-            job.status = "App installs aren’t supported on iOS 10 yet."
+            job.status = "App installs aren’t supported on iPhone OS 1."
             NotificationCenter.default.post(name: .ltmInstallProgress, object: job)
             return
         }

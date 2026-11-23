@@ -12,7 +12,7 @@ func single(_ args: SingleCheck) -> Never {
     let work = workDirectory(args.inputs, "single")
     let tools = Tools.resolve(args.inputs, work: work)
     let d = base.driverBoard
-    // The shared rule: 1.x has no installation_proxy, and iOS 10+ installs aren't supported yet.
+    // The shared rule: 1.x has no installation_proxy.
     let install = !args.noInstall && FirmwareCatalog.Entry.managesApps(major: base.major)
     // iOS 10 runs no armv6 code: the harness app's armv7 build there
     let ipa =
