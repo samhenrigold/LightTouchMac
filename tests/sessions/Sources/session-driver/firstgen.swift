@@ -62,16 +62,19 @@ import SessionKit
     }
     var read: [String: Any] = ["device": d.name, "generation": generation]
     var movies: Set<String> = []
+    var artists: [String] = []
     do {
         let tracks = try await library.tracks()
         read["titles"] = tracks.map(\.title)
         movies = Set(tracks.filter { $0.mediaType == ITunesDB.Track.movie }.map(\.title))
+        artists = tracks.filter { titles.contains($0.title) && $0.mediaType == ITunesDB.Track.audio }.compactMap(
+            \.artist)
     } catch { read["error"] = "\(error)" }
     read["photos"] = (try? await d.services.files(in: FirstGenLibrary.photos).map(\.name).sorted()) ?? []
     emit("firstGenLibrary", read)
     let songs = titles.filter { !movies.contains($0) }
     if !songs.isEmpty || movies.isEmpty {
-        await firstGenScreen(d, app: ["iPod", "Music"], stage: "music\(generation)", titles: songs)
+        await firstGenScreen(d, app: ["iPod", "Music"], stage: "music\(generation)", titles: songs, artists: artists)
     }
     // the iPod touch's Videos app, the iPhone's iPod's Videos tab
     let videos = titles.filter(movies.contains)
@@ -92,7 +95,8 @@ import SessionKit
     app: [String],
     stage: String,
     titles: [String],
-    tabs: [String] = ["Songs", "Camera Roll", "Saved Photos"]
+    tabs: [String] = ["Songs", "Camera Roll", "Saved Photos"],
+    artists: [String] = []
 ) async {
     var event: [String: Any] = ["device": d.name, "app": app[0], "stage": stage]
     func labels(_ shot: String) -> [(text: String, x: Double, y: Double)] {
@@ -113,13 +117,18 @@ import SessionKit
         emit("firstGenScreen", event)
         return
     }
-    // the label sits under its icon
-    await d.tap(icon.x, icon.y - 0.05)
-    try? await Task.sleep(for: .seconds(12))
+    // the label sits under its icon; a tap as the sync screen goes away can land on nothing, so again while Home is up
+    for attempt in 0..<3 {
+        await d.tap(icon.x, icon.y - 0.05)
+        try? await Task.sleep(for: .seconds(12))
+        let up = d.screenshot("fg-\(stage)-launch\(attempt)").map(labels) ?? []
+        if !up.contains(where: { $0.text == "Settings" }) { break }
+    }
     var seen: [String] = []
+    var found: [(text: String, x: Double, y: Double)] = []
     for attempt in 0..<3 {
         guard let shot = d.screenshot("fg-\(stage)-\(app[0])-\(attempt)") else { break }
-        let found = labels(shot)
+        found = labels(shot)
         seen += found.map(\.text)
         if attempt > 0, app == ["Photos"] {
             guard attempt == 1 else { break }
@@ -137,6 +146,14 @@ import SessionKit
     }
     event["text"] = seen
     event["shows"] = titles.filter { title in seen.contains { $0.contains(title) } }
+    // the tagged songs' artists, on the Artists tab
+    if !artists.isEmpty, let tab = found.first(where: { $0.text == "Artists" }) {
+        await d.tap(tab.x, tab.y)
+        try? await Task.sleep(for: .seconds(5))
+        let listed = d.screenshot("fg-\(stage)-artists").map(labels)?.map(\.text) ?? []
+        event["artists"] = artists
+        event["artistsShown"] = artists.filter { artist in listed.contains { $0.contains(artist) } }
+    }
     emit("firstGenScreen", event)
     await d.home()
     try? await Task.sleep(for: .seconds(4))

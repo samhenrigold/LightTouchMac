@@ -45,9 +45,6 @@ public struct FirstGenLibrary: Sendable {
         _ progress: @escaping @Sendable (Double) -> Void,
         _ willCommit: () -> Void
     ) async throws {
-        let properties =
-            (try? PropertyListSerialization.propertyList(from: Data(contentsOf: metadata), format: nil))
-            as? [String: Any] ?? [:]
         let suffix = file.pathExtension.lowercased()
         // The content ID names the file, so a second import of the same song is the same file.
         let name = "LT" + id.replacingOccurrences(of: "-", with: "").prefix(12).uppercased() + "." + suffix
@@ -57,32 +54,49 @@ public struct FirstGenLibrary: Sendable {
         _ = try await services.stageFile(file, remote: remote, reuseIdentical: true, progress: progress)
         let location = ":" + remote.replacingOccurrences(of: "/", with: ":")
         tracks.removeAll { $0.location == location }
+        tracks.append(
+            try Self.track(
+                file,
+                metadata: metadata,
+                id: (tracks.map(\.id).max() ?? 99) + 1,
+                location: location,
+                movie: movie
+            )
+        )
+        willCommit()
+        try await publish(ITunesDB.make(tracks, databaseID: UInt64.random(in: 1...UInt64.max)))
+    }
+
+    /// The database's track for a prepared file: its title, artist, album, genre and length from the metadata
+    /// PreparedMedia staged beside it (MediaSong's tags, MediaVideo's title), the file's own name for a title it lacks.
+    nonisolated static func track(_ file: URL, metadata: URL, id: UInt32, location: String, movie: Bool) throws
+        -> ITunesDB.Track
+    {
+        let properties =
+            try PropertyListSerialization.propertyList(from: Data(contentsOf: metadata), format: nil) as? [String: Any]
+            ?? [:]
         let bytes = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         let (type, kind): (String, String) =
-            switch suffix {
+            switch file.pathExtension.lowercased() {
             case "mp3": ("MP3 ", "MPEG audio file")
             case "wav": ("WAV ", "WAV audio file")
             case "m4v", "mp4", "mov": ("M4V ", "MPEG-4 video file")
             default: ("M4A ", "AAC audio file")
             }
-        tracks.append(
-            ITunesDB.Track(
-                id: (tracks.map(\.id).max() ?? 99) + 1,
-                persistentID: UInt64.random(in: 1...UInt64.max),
-                title: properties["title"] as? String ?? file.deletingPathExtension().lastPathComponent,
-                location: location,
-                fileType: type,
-                kind: kind,
-                bytes: UInt32(clamping: bytes),
-                milliseconds: UInt32(clamping: Int((properties["duration_ms"] as? Double) ?? 0)),
-                mediaType: movie ? ITunesDB.Track.movie : ITunesDB.Track.audio,
-                artist: properties["artist"] as? String,
-                album: properties["album"] as? String,
-                genre: properties["genre"] as? String
-            )
+        return ITunesDB.Track(
+            id: id,
+            persistentID: UInt64.random(in: 1...UInt64.max),
+            title: properties["title"] as? String ?? file.deletingPathExtension().lastPathComponent,
+            location: location,
+            fileType: type,
+            kind: kind,
+            bytes: UInt32(clamping: bytes),
+            milliseconds: UInt32(clamping: Int((properties["duration_ms"] as? Double) ?? 0)),
+            mediaType: movie ? ITunesDB.Track.movie : ITunesDB.Track.audio,
+            artist: properties["artist"] as? String,
+            album: properties["album"] as? String,
+            genre: properties["genre"] as? String
         )
-        willCommit()
-        try await publish(ITunesDB.make(tracks, databaseID: UInt64.random(in: 1...UInt64.max)))
     }
 
     /// Writes the database, signed for this device where lockdown names its FireWire ID (`signing`).

@@ -47,6 +47,14 @@ func judgeFirstGenMedia(_ r: Report, _ d: String, events: Events, wrongHash: Boo
         )
     }
     r.check(!boots.isEmpty, "\(d): Music was opened after the import")
+    for e in screens where e.has("artists") {
+        let want = e["artists"] as? [String] ?? []
+        let shown = e["artistsShown"] as? [String] ?? []
+        r.check(
+            wrongHash ? shown.isEmpty : Set(shown) == Set(want),
+            "\(d): \(e.string("stage") ?? "?"): Artists shows \(shown) of the tagged songs' \(want)"
+        )
+    }
     // the iPhone's Camera Roll is DCIM (the iPod touch's Photos on 1.x lists only what iTunes syncs, not DCIM)
     for e in screens where photos > 0 && e.string("stage")?.hasPrefix("photos") == true {
         let text = e["text"] as? [String] ?? []
