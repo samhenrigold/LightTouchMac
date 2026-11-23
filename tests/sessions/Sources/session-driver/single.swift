@@ -86,6 +86,8 @@ struct SingleConfig: Decodable {
     /// The base was prepared with firmwarekit create --jailbreak: Files through afc2 lists "/", reads the build's
     /// SystemVersion.plist and round-trips a file in root's home (`afc2`).
     var jailbreak: Bool?
+    /// Device paths a stopped edit's packages installed (sessions --package): afc2 must list each (packages1x.swift).
+    var packages1x: [String]?
     /// With `jailbreak`: Cydia's sources and front page from the internet, its install bc from Cydia/Telesphoreo;
     /// without, from the local repositories the web proxy serves (CydiaFixture), installing its package.
     var network: Bool?
@@ -1131,6 +1133,7 @@ nonisolated enum WiFiProbe {
             await substrate(d)
         }
     }
+    if let paths = s.packages1x { await packages1x(d, paths) }
     if s.install != false {
         await install(d)
         await appFiles(d, agent: agent || (a4 && offered) || lockAgent, jailbreak: s.jailbreak == true)

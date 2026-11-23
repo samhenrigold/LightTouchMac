@@ -215,6 +215,37 @@ extension MainWindowController {
         selectedEntry.map { perform(.jailbreak, for: $0) }
     }
 
+    /// Install Package… (iPhone OS 1.x, stopped): a .pxl, an Installer-era .zip or an .app into the device, its
+    /// progress in the device area (DeviceFilesystemEdits.install(package:)). The device boots with it.
+    func canInstallPackage(_ entry: FirmwareCatalog.Entry) -> Bool {
+        guard DeviceFeatures.installsPackages(entry), let instance = host.instance(for: entry),
+            host.row(for: entry).allows(.openFilesystem, canDownload: FirmwareJobs.shared.canDownload)
+        else { return false }
+        return DeviceFilesystemEdits.shared.canInstallPackage(instance)
+    }
+    @objc func installPackage(_ sender: Any?) {
+        guard let entry = selectedEntry, canInstallPackage(entry), let window, window.attachedSheet == nil else {
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.zip, .applicationBundle] + [UTType(filenameExtension: "pxl")].compactMap { $0 }
+        panel.message = "Choose an iPhone OS 1 package: a .pxl, an Installer .zip or an app."
+        panel.prompt = "Install"
+        panel.beginSheetModal(for: window) { [weak self] response in
+            // Asked again on the answer: the device may have started while the panel was up.
+            guard response == .OK, let self, let url = panel.url, canInstallPackage(entry),
+                let instance = host.instance(for: entry)
+            else { return }
+            DeviceFilesystemEdits.shared.install(
+                package: url,
+                entry: entry,
+                instance: instance,
+                library: host.library,
+                releaseStopped: { [host] in await host.releaseStopped(for: entry) }
+            )
+        }
+    }
+
     /// Jailbreak…: asked, then the stopped device's edit, its progress in the device area (DeviceFilesystemEdits).
     private func confirmJailbreak(_ entry: FirmwareCatalog.Entry) {
         guard let window, window.attachedSheet == nil else { return }

@@ -53,6 +53,7 @@ import LightTouchCore
     @objc func findCatalog(_ sender: Any?) {}
     @objc func importIPSW(_ sender: Any?) {}
     @objc func installApp(_ sender: Any?) {}
+    @objc func installPackage(_ sender: Any?) {}
     @objc func openScreenshot(_ sender: Any?) {}
     @objc func pasteToGuest(_ sender: Any?) {}
     @objc func resetMotion(_ sender: Any?) {}

@@ -107,6 +107,58 @@ public final class DeviceFilesystemEdits {
         default: return false
         }
     }
+    /// Install Package… on a stopped iPhone OS 1.x device (DeviceFeatures.installsPackages): nothing else in flight.
+    public func canInstallPackage(_ instance: DeviceInstance) -> Bool {
+        preparer != nil && !busy.contains(instance.id) && instance.profile != nil && pending(instance) == nil
+    }
+
+    /// The iPhone OS 1.x package at `url` (.pxl, an Installer-era .zip or an .app) into the stopped device
+    /// (firmwarekit edit --action install-package, FirmwareKit's Package1x), from a copy in the device's work folder,
+    /// where firmwarekit reads it. A package it refuses says why.
+    public func install(
+        package url: URL,
+        entry: FirmwareCatalog.Entry,
+        instance: DeviceInstance,
+        library: DeviceLibrary,
+        releaseStopped: @escaping () async -> Bool
+    ) {
+        guard let executable = preparer, canInstallPackage(instance) else { return }
+        activity[instance.id] = "Installing \(url.deletingPathExtension().lastPathComponent)…"
+        Task {
+            // under its own name: a package without an identifier is named for its file
+            let folder = paths(instance).work.appendingPathComponent("package-\(UUID().uuidString)")
+            let copy = folder.appendingPathComponent(url.lastPathComponent)
+            defer {
+                try? FileManager.default.removeItem(at: folder)
+                activity[instance.id] = nil
+                library.reload()
+                NotificationCenter.default.post(name: DeviceLibrary.didChangeNotification, object: library)
+            }
+            do {
+                guard await releaseStopped() else {
+                    throw DeviceToolsError.failed("Shut down the device before installing a package.")
+                }
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try FileManager.default.copyItem(at: url, to: copy)
+                _ = try await FirmwareTool.run(
+                    FirmwareCommand.Edit(
+                        device: paths(instance).directory,
+                        action: .installPackage,
+                        recordPolicy: .managed,
+                        package: copy
+                    ),
+                    executable: executable
+                )
+            } catch {
+                if "\(error)".contains("was not shut down cleanly"), let onUncleanShutdown {
+                    onUncleanShutdown(entry)
+                } else {
+                    presentError(error)
+                }
+            }
+        }
+    }
+
     /// `releaseStopped`: the session host lets go of the stopped device (false: it is running).
     public func perform(
         _ action: DeviceAction,

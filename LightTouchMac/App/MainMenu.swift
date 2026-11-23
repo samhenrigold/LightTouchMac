@@ -300,6 +300,7 @@ enum MainMenuBuilder {
         // Kept at the bottom, away from routine input.
         menu.addItem(.separator())
         menu.addItem(item("Jailbreak…", #selector(MainWindowController.jailbreakDevice(_:))))
+        menu.addItem(item("Install Package…", #selector(MainWindowController.installPackage(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
         return menu
     }

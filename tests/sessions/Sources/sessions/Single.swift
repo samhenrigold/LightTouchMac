@@ -24,7 +24,7 @@ func single(_ args: SingleCheck) -> Never {
     let before = SessionJudge.tree(base.url)
     // The driver's state is the work directory (LTM_STATE_DIR), so the device is under its Devices/.
     var managed: DeviceInstance?
-    if args.managed || !args.expectAdmission.isEmpty {
+    if args.managed || !args.expectAdmission.isEmpty || !args.package.isEmpty {
         do {
             let catalog = try FirmwareCatalog.load(
                 from: repository.appendingPathComponent("LightTouchMac/Resources/firmware-catalog.json")
@@ -66,6 +66,10 @@ func single(_ args: SingleCheck) -> Never {
             (args.mediaTools ?? checkout("qemu-ios").appendingPathComponent("contrib/it-media")).path
     }
     if let managed { single["managed"] = managed.paths(state: work, logs: work).directory.path }
+    if let managed, !args.package.isEmpty {  // Packages1x.swift
+        let device = managed.paths(state: work, logs: work).directory
+        single["packages1x"] = installPackages1x(args.package, device: device, tools: tools, work: work)
+    }
     if args.skipSetup { single["skipSetup"] = true }
     if args.jailbreak { single["jailbreak"] = true }
     if args.network { single["network"] = true }
@@ -341,6 +345,7 @@ func single(_ args: SingleCheck) -> Never {
         )
     }
     if args.jailbreak, base.major == 1 { jailbreak1x(r, events, d) }  // Jailbreak1x.swift
+    if !args.package.isEmpty { packages1x(r, events, d) }  // Packages1x.swift
     if args.jailbreak, base.major >= 2 {  // Cydia and Substrate
         let cydia = events.one("cydia", ["device": d])
         r.check(

@@ -51,6 +51,14 @@ public struct DeviceFeatures: Sendable, Equatable {
     }
 }
 
+extension DeviceFeatures {
+    /// Install Package…: iPhone OS 1.x packages (.pxl, an Installer-era .zip, an .app) from the Mac into the stopped
+    /// device (FirmwareKit Package1x), on the iPhone and iPod touch's first iPhone OS; apps from 2.0 install as IPAs.
+    public static func installsPackages(_ entry: FirmwareCatalog.Entry) -> Bool {
+        entry.major == 1 && entry.profile?.soc == .s5l8900
+    }
+}
+
 extension GuestPackage {
     /// Whether a device of `firmware` runs the guest agent: baked into its image (Board.hasGuestTools, only the iPod
     /// touch 2G) or from a guest package at boot (the iPhones and iPads), as DeviceFeatures.guestTools says.

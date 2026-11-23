@@ -61,6 +61,20 @@ import Foundation
             try emit(["jailbroken": true])
             return 0
         }
+        if command.action == .installPackage {  // begin, mount, the package's files, commit
+            guard let package = command.package else {
+                throw FirmwareError(.internal, "install-package requires --package")
+            }
+            let done = try await StoppedVolumeEdit.installPackage1x(
+                device: device,
+                package: fileURL(package),
+                policy: policy,
+                log: log
+            )
+            struct Installed: Encodable { let identifier: String, apps: [String], files: [String] }
+            try emit(Installed(identifier: done.identifier, apps: done.apps, files: done.files))
+            return 0
+        }
         guard let session = command.session.flatMap(UUID.init(uuidString:)) else {
             throw FirmwareError(.internal, "edit requires its --session UUID")
         }
@@ -83,7 +97,7 @@ import Foundation
         case .recover:
             try await StoppedVolumeEdit.recover(device: device, id: session, policy: policy)
             try emit(["recovered": session.uuidString])
-        case .begin, .trustAnchor, .jailbreak, .preferences: break
+        case .begin, .trustAnchor, .jailbreak, .preferences, .installPackage: break
         }
         return 0
     } catch {

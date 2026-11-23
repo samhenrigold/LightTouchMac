@@ -209,6 +209,9 @@ public enum FirmwareCommand {
             /// 1.x: --prefs, a plist array of {domain, key, value} (no value: remove the key), into the user's
             /// Preferences (begin, mount, the plists, commit).
             case preferences
+            /// 1.x: --package, a .pxl, an Installer-era .zip or an .app (FirmwareKit Package1x), installed (begin, mount,
+            /// its files, commit).
+            case installPackage = "install-package"
         }
         @Option public var device: String
         @Option public var action: Action
@@ -218,6 +221,7 @@ public enum FirmwareCommand {
         @Option public var mountPoint: String? = nil
         @Option(help: "The decrypt cache, for jailbreak.") public var cache: String? = nil
         @Option(help: "A plist of preference changes, for preferences.") public var prefs: String? = nil
+        @Option(help: "A .pxl, .zip or .app, for install-package.") public var package: String? = nil
         @Option(help: "Default: the app bundle's packed guest tools (jailbreak on 1.x: its Installer.app).")
         public var guestTools: String? = nil
 
@@ -231,7 +235,8 @@ public enum FirmwareCommand {
             mountPoint: URL? = nil,
             cache: URL? = nil,
             prefs: URL? = nil,
-            guestTools: URL? = nil
+            guestTools: URL? = nil,
+            package: URL? = nil
         ) {
             self.device = device.path
             self.action = action
@@ -242,6 +247,7 @@ public enum FirmwareCommand {
             self.cache = cache?.path
             self.prefs = prefs?.path
             self.guestTools = guestTools?.path
+            self.package = package?.path
         }
 
         public var arguments: [String] {
@@ -249,7 +255,7 @@ public enum FirmwareCommand {
                 + options([
                     "device": device, "action": action.rawValue, "session": session,
                     "record-policy": recordPolicy.rawValue, "cert": cert, "mount-point": mountPoint, "cache": cache,
-                    "prefs": prefs, "guest-tools": guestTools
+                    "prefs": prefs, "guest-tools": guestTools, "package": package
                 ])
         }
     }

@@ -151,6 +151,14 @@ struct SingleCheck: ParsableCommand {
             """
     )
     var network = false
+    @Option(
+        help: """
+            1.x, with --jailbreak: a .pxl, .zip or .app installed into the stopped device before it boots \
+            (repeatable; implies --managed); afc2 must list what it installed.
+            """,
+        transform: path
+    )
+    var package: [URL] = []
     @Option(help: "Install a newer build of the same app over it; its data must stay.", transform: path)
     var upgradeIPA: URL?
     @Option(help: "With --reboot: boot 2 asks for TZ.") var secondZone: String?
