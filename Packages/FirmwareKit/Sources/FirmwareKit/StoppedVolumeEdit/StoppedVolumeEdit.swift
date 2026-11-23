@@ -205,7 +205,8 @@ public enum StoppedVolumeEdit {
     }
 
     /// `amend`: after the volumes' metadata is settled and before the store is built, with the system volume's image
-    /// and the generation's (writable) base; the members it returns go into the generation's lock. YaFTL and N72 only.
+    /// and the generation's (writable) base; the members it returns go into the generation's lock. On a 1.x (legacy
+    /// FTL) store the base keeps its boot files: only the lock takes the members.
     nonisolated(nonsending) public static func commit(
         device: URL,
         id: UUID,
@@ -230,7 +231,13 @@ public enum StoppedVolumeEdit {
                 )
             }
             if (try? VolumeRebuild.board(of: edit.base.appendingPathComponent("nand"))) == .legacy {
-                guard amend == nil else { throw FirmwareError(.unsupported, "this edit needs a YaFTL or N72 store") }
+                if let amend {  // the 1.x jailbreak's lock member (StoppedVolumeEdit.jailbreak1x)
+                    let lockURL = edit.base.appendingPathComponent("device.lock.json")
+                    var lock = try object(lockURL)
+                    try makeWritable(edit.base)
+                    lock.merge(try amend(session.image, edit.base)) { $1 }
+                    try StorageGeneration.write(try DeviceLock(json: lock).data(), to: lockURL)
+                }
                 try await commitLegacy(edit: edit, image: session.image, log: log)
                 return
             }

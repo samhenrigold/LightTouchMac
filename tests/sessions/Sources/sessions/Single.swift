@@ -32,6 +32,7 @@ func single(_ args: SingleCheck) -> Never {
             managed = try ManagedDevice.make(base: base.url, state: work, catalog: catalog)
         } catch { die("can't make a device for \(base.url.path): \(error)") }
         print("managed: \(managed!.paths(state: work, logs: work).directory.path)")
+        if args.jailbreak { jailbreakStopped(managed!, base: base, tools: tools, work: work) }  // Jailbreak1x.swift
         for step in args.expectAdmission where ManagedDevice.done(step, managed!, state: work) {
             if work == disposableWork { try? DeviceStateStorage.removeTree(work) }
             die("\(base.url.path) doesn't need admission step \(step.rawValue)")
@@ -43,7 +44,9 @@ func single(_ args: SingleCheck) -> Never {
         "launch": args.launch, "reboot": args.reboot, "install": install,
         "httpget": httpget(args.inputs, major: base.major).path
     ]
-    let homeReference = repository.appendingPathComponent("tests/sessions/matrix-refs/\(base.entryID)-home.png")
+    // A jailbroken Home has its own reference where one is recorded (ROW+jailbreak, as listings name the row).
+    let referenceID = jailbrokenReference(base.entryID, args.jailbreak) ?? base.entryID  // Jailbreak1x.swift
+    let homeReference = repository.appendingPathComponent("tests/sessions/matrix-refs/\(referenceID)-home.png")
     if FileManager.default.fileExists(atPath: homeReference.path) { single["homeReference"] = homeReference.path }
     if args.hostPowerGesture { single["hostPowerGesture"] = true }
     if let zone = args.secondZone { single["secondZone"] = zone }
@@ -171,7 +174,7 @@ func single(_ args: SingleCheck) -> Never {
     let home = SessionJudge.home(
         lock: base.lock,
         events: events,
-        entryID: base.entryID,
+        entryID: referenceID,
         references: repository.appendingPathComponent("tests/sessions/matrix-refs")
     )
     r.check(home.ok == true, "\(d): usable Home screen: \(home.detail)")

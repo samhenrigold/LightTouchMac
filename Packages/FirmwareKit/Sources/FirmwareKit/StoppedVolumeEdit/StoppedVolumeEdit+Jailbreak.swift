@@ -60,7 +60,8 @@ extension StoppedVolumeEdit {
         }
     }
 
-    /// 1.x (SystemEdits.installJailbreak1x): its files made root's, as the recipe owns them.
+    /// 1.x (SystemEdits.installJailbreak1x): its files made root's, as the recipe owns them, and the lock's
+    /// `jailbroken` through the 1.x commit's amend.
     nonisolated(nonsending) static func jailbreak1x(
         device: URL,
         installer: URL,
@@ -69,13 +70,11 @@ extension StoppedVolumeEdit {
     ) async throws {
         let session = try await begin(device: device, policy: policy, log: log)
         do {
-            guard let point = try await mount(device: device, id: session.id, policy: policy).mountPoint else {
-                throw FirmwareError(.internal, "jailbreak: the volume isn't mounted")
+            // the session image edited in place, as Preferences1x edits it
+            let point = session.image.deletingLastPathComponent().appendingPathComponent("jailbreak-mount")
+            let jb = try await VolumeMount.withVolume(session.image, at: point) { v in
+                try SystemEdits.installJailbreak1x(v, installer: installer)
             }
-            let jb = try SystemEdits.installJailbreak1x(
-                MountedVolume(root: URL(fileURLWithPath: point)),
-                installer: installer
-            )
             jb.lines.forEach(log)
             try await commit(device: device, id: session.id, policy: policy, log: log) { system, _ in
                 let volume = try HFSPlusVolume(system, writable: true)
