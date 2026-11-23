@@ -302,7 +302,7 @@ nonisolated public enum PreparationChanges {
         ),
         Change(
             serial: 19,
-            commit: "appsync-wide",
+            commit: "acca3ddf",
             landed: "2026-11-22T22:00:00Z",
             boards: ["n42ap"],
             versions: ["10"],
