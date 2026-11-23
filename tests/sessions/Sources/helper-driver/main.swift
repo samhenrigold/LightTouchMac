@@ -483,12 +483,34 @@ Thread.detachNewThread {
             }
             usleep(300_000)
             link.send(.touch(slot: 0, phase: 2, x: v[2], y: v[3]))
+        // motion LABEL U0 V0 U1 V1: a drag as the window shows the picture, the finger moved every 16 ms for 0.64 s and
+        // held 1 s, recording when each frame reached the ring
+        case "motion":
+            guard let r = rotationDriver else { fail("motion: no board") }
+            let (a, b) = onMain { (r.touchPoint(shown: v[0], v[1]), r.touchPoint(shown: v[2], v[3])) }
+            let frames = recordFrames {
+                link.send(.touch(slot: 0, phase: 0, x: a.0, y: a.1))
+                usleep(16_000)
+                for i in 1...40 {
+                    let f = Double(i) / 40
+                    link.send(.touch(slot: 0, phase: 1, x: a.0 + (b.0 - a.0) * f, y: a.1 + (b.1 - a.1) * f))
+                    usleep(16_000)
+                }
+                link.send(.touch(slot: 0, phase: 2, x: b.0, y: b.1))
+                usleep(1_000_000)
+            }
+            emit("motion", ["label": p[1], "frameTimes": frames.times])
         // wake X0 Y0 X1 Y1 [SECONDS]: until the display is on and the agent says unlocked, at most SECONDS (60): Home
         // (then Sleep/Wake) while it sleeps, the unlock drag while locked, nothing while SpringBoard doesn't answer (a
-        // respring) or its lock screen doesn't take the drag yet
+        // respring) or its lock screen doesn't take the drag yet; wakeshown: the drag as the window shows the picture
         // wake U0 V0 U1 V1 [S] | wake home [S]: until the agent says unlocked, the slide again (iOS 10: Home)
-        case "wake":
+        case "wake", "wakeshown":
             let byHome = p.count > 1 && p[1] == "home"
+            var v = v
+            if p[0] == "wakeshown", !byHome, let r = rotationDriver {
+                let (a, b) = onMain { (r.touchPoint(shown: v[0], v[1]), r.touchPoint(shown: v[2], v[3])) }
+                v = [a.0, a.1, b.0, b.1] + v.dropFirst(4)
+            }
             var tries = 0
             var lockedNow: Bool?
             let start = Date()

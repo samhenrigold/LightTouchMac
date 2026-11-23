@@ -85,7 +85,7 @@ struct Sessions: ParsableCommand {
             HelperBootCheck.self, PhoneCheck.self, RotationCheck.self, KeyboardCheck.self, FlickCheck.self,
             ScrollTopCheck.self, MatrixCheck.self, AffectedCheck.self, ListingsCheck.self, ResumeCheck.self,
             TweaksCheck.self, RespringCheck.self, ClipboardCheck.self, ToldCheck.self, BasesCheck.self,
-            ReprepareCheck.self
+            ReprepareCheck.self, PerfCheck.self
         ]
     )
 }
@@ -343,6 +343,18 @@ struct ScrollTopCheck: ParsableCommand {
     @OptionGroup var inputs: Inputs
 
     func run() { scrollTopCheck(self) }
+}
+
+struct PerfCheck: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "perf",
+        abstract: "The helper's CPU at a still Home screen, and frames/s while Home pages are dragged (3.0 on)."
+    )
+    @Argument var base: String
+    @Option(help: "Drags there and back.") var rounds = 5
+    @OptionGroup var inputs: Inputs
+
+    func run() { perfCheck(self) }
 }
 
 struct FlickCheck: ParsableCommand {
