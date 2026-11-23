@@ -27,9 +27,10 @@ what to do and not do on a shared Mac.
   vendor directory or the machine options it writes are missing or stale; run what it says.
 - Before `sessions`: `swift build --package-path tests/sessions`, then `swift run --package-path tests/sessions
   sessions …`.
-- The device helper is sandboxed in every build (`LTM_HELPER_SANDBOX`, CONTRIBUTING.md, Building); `sessions` and
-  `firmwarekit` from a Terminal without Full Disk Access make macOS ask once for the app group's container.
-  `LTM_HELPER_SANDBOX=NO` builds it unsandboxed for debugging.
+- The device helper, the services worker and the usbmuxd it becomes are sandboxed in every build
+  (`LTM_HELPER_SANDBOX`, CONTRIBUTING.md, Building); `sessions` and `firmwarekit` from a Terminal without Full Disk
+  Access make macOS ask once for each app group's container. `LTM_HELPER_SANDBOX=NO` builds them unsandboxed for
+  debugging.
 - Unit tests: `xcodebuild test -project LightTouchMac.xcodeproj -scheme LightTouchMac -testPlan Unit -skipMacroValidation`, or
   `swift test --package-path Packages/<Package>` for one package. Tests live in `Packages/*/Tests`, `tests/offline`
   and `tests/sessions` (CONTRIBUTING.md, Gates); the scripts' shell tests in `tests/scripts`.
