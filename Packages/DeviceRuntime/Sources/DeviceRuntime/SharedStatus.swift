@@ -261,8 +261,15 @@ nonisolated public final class FrameRingWriter: @unchecked Sendable {
 
     /// Copy tightly packed BGRA rows into the surface's (padded) rows, with the
     /// alpha byte forced opaque: iBoot and the iPod's framebuffer leave it 0,
-    /// and the app's layer shows the surface as is (a copy ignored it).
-    public static func copy(_ pixels: UnsafeRawPointer, width: Int, height: Int, into surface: IOSurface) {
+    /// and the app's layer shows the surface as is (a copy ignored it). Pixels
+    /// already `opaque` (an emulator of C API 2.6 on) are only copied.
+    public static func copy(
+        _ pixels: UnsafeRawPointer,
+        width: Int,
+        height: Int,
+        into surface: IOSurface,
+        opaque: Bool = false
+    ) {
         let rowBytes = width * 4
         let dst = surface.baseAddress
         if surface.bytesPerRow == rowBytes {
@@ -270,6 +277,7 @@ nonisolated public final class FrameRingWriter: @unchecked Sendable {
         } else {
             for y in 0..<height { memcpy(dst + y * surface.bytesPerRow, pixels + y * rowBytes, rowBytes) }
         }
+        guard !opaque else { return }
         // The 4th byte of each pixel. A pointer, not a Range: unoptimized (the Debug helper), iterating a Range
         // costs 50 ms an iPad frame, which held its frames to 19 a second; the pointer's operations inline anyway.
         let alpha = UInt32(0xFF00_0000).littleEndian

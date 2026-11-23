@@ -191,7 +191,8 @@ final class DeviceHost: @unchecked Sendable {
         // A frame that found no free surface is taken again next tick: the emulator republishes only
         // changed pixels, so a dropped frame would otherwise stay off screen until the guest draws.
         // A new ring's surfaces read as in use until the app has taken their Mach ports.
-        if ring.publish({ FrameRingWriter.copy(pixels, width: Int(w), height: Int(h), into: $0) }) {
+        let opaque = qemu.framesOpaque
+        if ring.publish({ FrameRingWriter.copy(pixels, width: Int(w), height: Int(h), into: $0, opaque: opaque) }) {
             frameSerial = serial
         } else if byCallback {
             pumpQueue.asyncAfter(deadline: .now() + .milliseconds(4)) { [weak self] in self?.frameSignal.add(data: 1) }

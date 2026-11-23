@@ -20,6 +20,8 @@ final class Qemu: @unchecked Sendable {
     /// The libqemu-arm.dylib C API major version this helper binds.
     static let apiMajor: UInt32 = 2
     let path: String
+    /// API 2.6: qemu_ios_ui_frame's pixels come opaque, so the helper's copy need not force alpha.
+    let framesOpaque: Bool
     private let handle: UnsafeMutableRawPointer
 
     /// Candidates in order; the first that loads wins.
@@ -57,6 +59,7 @@ final class Qemu: @unchecked Sendable {
             )
         }
         self.handle = handle
+        framesOpaque = version & 0xffff >= 6
         var info = Dl_info()
         if let p = dlsym(handle, "qemu_ios_main"), dladdr(p, &info) != 0, let name = info.dli_fname {
             self.path = String(cString: name)

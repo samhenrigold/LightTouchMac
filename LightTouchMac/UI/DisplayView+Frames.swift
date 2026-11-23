@@ -60,8 +60,8 @@ extension DisplayView {
         if emulator?.rotationDegrees != lastRotation { needsLayout = true }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // The helper forces the alpha byte opaque (FrameRingWriter.copy): iBoot
-        // and the iPod's framebuffer leave it 0, which a layer would honor.
+        // The frame is opaque (the emulator's from C API 2.6, else FrameRingWriter.copy forces it): iBoot
+        // and the iPod's framebuffer leave the alpha byte 0, which a layer would honor.
         contentLayer.contents = frame.surface
         // The frame and its geometry go up in one transaction (layout would put the bounds and turn up a pass later).
         if geometryChanged { layoutContent() }

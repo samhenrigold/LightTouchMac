@@ -11,8 +11,9 @@ extension SharedState {
     /// The helper's pieces that need no emulator: the libqemu binding's API check and the frame surface's colors.
     @Suite struct HelperTests {
         /// The helper loads only a libqemu-arm.dylib whose C API major version is its own (qemu_ios_api_version(),
-        /// major << 16 | minor): fake 2.0 and 2.7 dylibs load; 1.2, 3.0 and one without the symbol (from before the
-        /// version) are refused with a message naming both versions.
+        /// major << 16 | minor): fake 2.0, 2.5, 2.6 and 2.7 dylibs load, and those from 2.6 on are taken at their word
+        /// that their frames are opaque; 1.2, 3.0 and one without the symbol (from before the version) are refused with
+        /// a message naming both versions.
         @Test func qemuAPIVersion() throws {
             let work = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "ltm-api-version-\(UUID().uuidString)"
@@ -20,7 +21,8 @@ extension SharedState {
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: work) }
             for (name, version) in [
-                ("v2_0", "(2u << 16)"), ("v2_7", "(2u << 16) | 7u"), ("v1_2", "(1u << 16) | 2u"),
+                ("v2_0", "(2u << 16)"), ("v2_5", "(2u << 16) | 5u"), ("v2_6", "(2u << 16) | 6u"),
+                ("v2_7", "(2u << 16) | 7u"), ("v1_2", "(1u << 16) | 2u"),
                 ("v3_0", "(3u << 16)"), ("none", nil)
             ] {
                 let source = work.appendingPathComponent("\(name).c")
@@ -38,10 +40,15 @@ extension SharedState {
                 cc.waitUntilExit()
                 try #require(cc.terminationStatus == 0)
             }
-            for (name, loads) in [("v2_0", true), ("v2_7", true), ("v1_2", false), ("v3_0", false), ("none", false)] {
+            let opaque = ["v2_0": false, "v2_5": false, "v2_6": true, "v2_7": true]
+            for (name, loads) in [
+                ("v2_0", true), ("v2_5", true), ("v2_6", true), ("v2_7", true), ("v1_2", false), ("v3_0", false),
+                ("none", false)
+            ] {
                 do {
-                    _ = try Qemu(path: work.appendingPathComponent("\(name).dylib").path)
+                    let qemu = try Qemu(path: work.appendingPathComponent("\(name).dylib").path)
                     #expect(loads, "\(name) loaded")
+                    #expect(qemu.framesOpaque == opaque[name], "\(name)")
                 } catch {
                     let text = "\(error)"
                     let want = ["v1_2": "has C API 1.2", "v3_0": "has C API 3.0"][name] ?? "has C API 0.0"
