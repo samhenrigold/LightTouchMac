@@ -64,6 +64,7 @@ func judgeFirstGenMedia(_ r: Report, _ d: String, events: Events, wrongHash: Boo
         r.check(
             colored > 0.5,
             "\(d): \(e.string("stage") ?? "?"): Now Playing shows the song's cover (\(Int(colored * 100))% colored)"
+                + (e.string("nowPlayingError").map { ": \($0)" } ?? "")
         )
     }
     // the iPhone's Camera Roll is DCIM; the iPod touch's Photos lists only iTunes' Photo Database, its Photo Library

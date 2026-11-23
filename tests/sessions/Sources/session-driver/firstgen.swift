@@ -180,14 +180,28 @@ import SessionKit
     if let song = nowPlaying, let tab = found.filter({ $0.text == "Songs" }).max(by: { $0.y < $1.y }) {
         await d.tap(tab.x, tab.y)
         try? await Task.sleep(for: .seconds(5))
-        let rows = d.screenshot("fg-\(stage)-songs").map(labels) ?? []
+        let songs = d.screenshot("fg-\(stage)-songs")
+        let rows = songs.map(labels) ?? []
         if let row = rows.first(where: { $0.text.contains(song) }) {
             await d.tap(row.x, row.y)
-            try? await Task.sleep(for: .seconds(6))
-            event["nowPlayingColored"] =
-                d.screenshot("fg-\(stage)-nowplaying").flatMap {
-                    coloredFraction(URL(fileURLWithPath: $0), x: 0.5, y: 0.45)
-                } ?? 0
+            // Now Playing slides in over seconds on a loaded host: read it once the screen has left the Songs list
+            // and two shots a second apart match
+            let list = songs.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }
+            var last: Data?
+            var settled: String?
+            for _ in 0..<20 where settled == nil {
+                try? await Task.sleep(for: .seconds(1))
+                guard let shot = d.screenshot("fg-\(stage)-nowplaying") else { continue }
+                let frame = try? Data(contentsOf: URL(fileURLWithPath: shot))
+                if frame != nil, frame != list, frame == last { settled = shot }
+                last = frame
+            }
+            if let settled {
+                event["nowPlayingColored"] = coloredFraction(URL(fileURLWithPath: settled), x: 0.5, y: 0.45) ?? 0
+            } else {
+                event["nowPlayingColored"] = 0.0
+                event["nowPlayingError"] = "Now Playing didn't open and settle within 20 s of tapping \(song)"
+            }
         } else {
             event["nowPlayingColored"] = 0.0
         }
