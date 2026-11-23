@@ -11,8 +11,11 @@ struct Package1xEscapeTests {
     let fm = FileManager.default
     let t = Package1xTests()
 
+    /// A temporary tree, removed when the test process exits if the test doesn't remove it first.
     func scratch(_ name: String) -> URL {
-        fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-\(name)-\(UUID().uuidString)")
+        let url = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-\(name)-\(UUID().uuidString)")
+        TemporaryTrees.remember(url)
+        return url
     }
 
     /// A ustar archive of `members` in order (a nil data a folder, a "->" prefix a link to the rest), written by
@@ -46,7 +49,7 @@ struct Package1xEscapeTests {
     @Test(arguments: ["/etc/passwd", "../../..", "../../../private"])
     func aTarLinkOutOfThePackageIsRefused(_ target: String) throws {
         let dir = scratch("tar-link")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("p.tar")
         try Self.ustar([("usr/bin/x", Data("x".utf8), 0o755), ("usr/bin/out", Data(("->" + target).utf8), 0o755)])
@@ -74,7 +77,7 @@ struct Package1xEscapeTests {
         let fixture: Set<String> = ["var", "etc", "Applications/dev", "Applications/up"]  // the root's own links
         for format in ["zip", "tar"] {
             let dir = scratch("planted-\(format)")
-            defer { try? fm.removeItem(at: dir) }
+            defer { TemporaryTrees.remove(dir) }
             let entries: [(String, Data?, UInt16)] =
                 [("Edit.app/Info.plist", try Package1xTests.plist(["CFBundleIdentifier": "com.example.edit"]), 0o644)]
                 + members.map { name, link in
@@ -127,7 +130,7 @@ struct Package1xEscapeTests {
 
     @Test func aStoredRAR4IsRead() throws {
         let dir = scratch("rar4")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("p.rar")
         try Self.rar4([("Edit.app\\Info.plist", Data("plist".utf8))]).write(to: url)
@@ -137,7 +140,7 @@ struct Package1xEscapeTests {
     @Test(arguments: ["..\\..\\escape", "Edit.app\\..\\..\\escape", "\\escape", "/escape", "Edit.app/../../escape"])
     func aRARNameOutOfThePackageIsRefused(_ name: String) throws {
         let dir = scratch("rar-name")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("p.rar")
         try Self.rar4([("Edit.app\\Info.plist", Data("plist".utf8)), (name, Data("x".utf8))]).write(to: url)
@@ -149,7 +152,7 @@ struct Package1xEscapeTests {
     /// A zip member that says it is 16 bytes and inflates past maxMember: refused while it streams.
     @Test func aZipMemberLargerThanItSaysIsRefused() throws {
         let dir = scratch("zip-bomb")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let deflated = try (Data(count: Package1x.maxMember + 1) as NSData).compressed(using: .zlib) as Data
         func le<T: FixedWidthInteger>(_ v: T) -> [UInt8] { withUnsafeBytes(of: v.littleEndian) { Array($0) } }

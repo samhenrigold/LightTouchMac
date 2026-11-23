@@ -117,7 +117,7 @@ struct Jailbreak1xTests {
     @Test(arguments: [true, false])
     func aRootGetsAFC2TheSpringBoardPatchAndInstaller(displayOrder: Bool) throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-jb1x-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let root = try firmware(
             dir.appendingPathComponent("root"), springBoard: Self.springBoard(), displayOrder: displayOrder)
         let installer = try SystemEdits.InstallerApp.bundled(
@@ -155,7 +155,7 @@ struct Jailbreak1xTests {
 
     @Test func theInstallerIsThePinnedOne() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-jb1x-pin-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let tools = try guestTools(dir)
         try Data("other".utf8).write(to: dir.appendingPathComponent("jailbreak/" + SystemEdits.InstallerApp.zip.name))
         #expect(throws: FirmwareError.self) { try SystemEdits.InstallerApp.bundled(guestTools: tools) }
@@ -165,7 +165,7 @@ struct Jailbreak1xTests {
 
     @Test func aZipMemberOutsideTheBundleIsRefused() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-jb1x-bad-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let plist = dir.appendingPathComponent("Info.plist")
         try Data("<plist/>".utf8).write(to: plist)

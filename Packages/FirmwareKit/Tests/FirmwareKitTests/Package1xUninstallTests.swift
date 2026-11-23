@@ -30,7 +30,7 @@ struct Package1xUninstallTests {
     @Test(arguments: [false, true])
     func anUninstallLeavesTheRootAsItWas(mobile: Bool) throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-rm-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let r = try t.root(dir.appendingPathComponent("root"), mobile: mobile)
         try JailbreakTests.put(Data("mine".utf8), r, "Library/LaunchDaemons/com.example.d.plist")
         let before = tree(r)
@@ -80,7 +80,7 @@ struct Package1xUninstallTests {
 
     @Test func whatItDidntMakeAndWhatIsPermanentStay() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-rm-keep-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let r = try t.root(dir.appendingPathComponent("root"), mobile: false)
         let v = MountedVolume(root: r)
         _ = try Package1x.load(t.pxl(dir)).install(v)  // notes.txt permanent
@@ -100,7 +100,7 @@ struct Package1xUninstallTests {
     @Test(arguments: ["/dev/x", "/Applications/dev/x", "/Applications/../dev", "/Library/PXL/DB"])
     func aReceiptOutsideTheRootsIsRefused(_ file: String) throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-rm-bad-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let r = try t.root(dir.appendingPathComponent("volume/root"), mobile: false)
         try JailbreakTests.put(Data("dev".utf8), dir.appendingPathComponent("volume"), "dev/x")
         try JailbreakTests.put(Data("keep".utf8), r, "Applications/Keep.app/Keep")
@@ -117,7 +117,7 @@ struct Package1xUninstallTests {
 
     @Test func aPreremoveThatRunsAToolIsRefused() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-rm-tool-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let r = try t.root(dir.appendingPathComponent("root"), mobile: false)
         let receipt: [String: Any] = [
             "CFBundleIdentifier": "tool", "RDPxlPackagePreremove": [["/usr/bin/springpatch", "-u"]],

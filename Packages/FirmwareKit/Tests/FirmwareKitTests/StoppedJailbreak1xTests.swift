@@ -11,7 +11,7 @@ import Testing
     @Test func aStopped1xDeviceIsJailbrokenAndSaysSo() async throws {
         let fm = FileManager.default
         let root = try Fixtures.tempDir("jailbreak1x-edit")
-        defer { try? fm.removeItem(at: root) }
+        defer { TemporaryTrees.remove(root) }
         let device = root.appendingPathComponent("device")
         let base = device.appendingPathComponent("base")
         try fm.createDirectory(at: base, withIntermediateDirectories: true)

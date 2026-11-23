@@ -106,7 +106,7 @@ struct Package1xTests {
     @Test(arguments: [false, true])
     func aPXLInstallsItsFilesItsAppOnHomeAndItsReceipt(mobile: Bool) throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let r = try root(dir.appendingPathComponent("root"), mobile: mobile)
         let package = try Package1x.load(
             pxl(
@@ -149,7 +149,7 @@ struct Package1xTests {
 
     @Test func overwriteFalseKeepsWhatIsThere() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-keep-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let r = try root(dir.appendingPathComponent("root"), mobile: false)
         try JailbreakTests.put(Data("mine".utf8), r, "Library/LaunchDaemons/com.example.d.plist")
         _ = try Package1x.load(pxl(dir)).install(MountedVolume(root: r))
@@ -160,7 +160,7 @@ struct Package1xTests {
 
     @Test func anInstallerZipAndAnAppFolderGoToApplications() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-app-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let r = try root(dir.appendingPathComponent("root"), mobile: true)
         let members: [(String, Data?, UInt16)] = [
             ("Respring.app/Info.plist", try Self.plist(["CFBundleIdentifier": "com.example.respring"]), 0o644),
@@ -188,7 +188,7 @@ struct Package1xTests {
     ])
     func aPackageIsRefused(_ why: String) throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-bad-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let r = try root(dir.appendingPathComponent("volume/root"), mobile: false)
         let app: [[String: Any]] = [["source": "app", "destination": "/Applications/Edit.app"]]
         let url: URL =
@@ -250,7 +250,7 @@ struct Package1xTests {
     /// A Mach-O with no ARM code (BSDSubsystem 1.5's i386 nice) installs, with a warning that it won't run.
     @Test func aMachOWithNoARMCodeIsWarnedOf() throws {
         let dir = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-i386-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         var i386 = Self.machO(subtype: 3)
         i386.replaceSubrange(4..<8, with: [7, 0, 0, 0])  // CPU_TYPE_X86
         let package = try Package1x.load(try pxl(dir, members: [("app/nice", i386, 0o755)]))

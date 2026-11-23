@@ -9,8 +9,11 @@ struct Package1xFormatsTests {
     let fm = FileManager.default
     let t = Package1xTests()
 
+    /// A temporary tree, removed when the test process exits if the test doesn't remove it first.
     func scratch(_ name: String) -> URL {
-        fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-\(name)-\(UUID().uuidString)")
+        let url = fm.temporaryDirectory.appendingPathComponent("ltm-pkg1x-\(name)-\(UUID().uuidString)")
+        TemporaryTrees.remember(url)
+        return url
     }
 
     /// `/usr/bin/tar -czf` of `folder`'s contents (names ./…, as aSMS's are).
@@ -25,7 +28,7 @@ struct Package1xFormatsTests {
     /// aSMS's shape: a daemon, a tool and a readme beside them.
     @Test func aTgzRootTreeInstallsWithoutItsReadme() throws {
         let dir = scratch("tgz")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let pkg = dir.appendingPathComponent("pkg")
         try JailbreakTests.put(Data("<plist/>".utf8), pkg, "Library/LaunchDaemons/com.example.sms.plist")
         try JailbreakTests.put(Package1xTests.machO(subtype: 6), pkg, "usr/bin/sms")
@@ -43,7 +46,7 @@ struct Package1xFormatsTests {
 
     @Test func aTgzThatInflatesTooFarOrClimbsOutIsRefused() throws {
         let dir = scratch("tgz-bad")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let big = dir.appendingPathComponent("big")
         try JailbreakTests.put(Data(count: 2 << 20), big, "usr/zeros")
         let gz = try Data(contentsOf: tgz(big, dir.appendingPathComponent("big.tgz")))
@@ -66,7 +69,7 @@ struct Package1xFormatsTests {
     /// folders.
     @Test func aRARIsReadAsItsMembers() throws {
         let dir = scratch("rar")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let rar = dir.appendingPathComponent("archive.rar")
         try Data(
@@ -84,7 +87,7 @@ struct Package1xFormatsTests {
 
     @Test func aFolderHoldingOneAppIsTheApp() throws {
         let dir = scratch("wrapped")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let package = try Package1x.load(
             t.zip(
                 dir, "anySIM-1.1p.zip",
@@ -107,7 +110,7 @@ struct Package1xFormatsTests {
     /// Where SummerBoard's PXL themes and OSXWallpaperPack put theirs; from 1.1.3 that is mobile's home.
     @Test func themesAndWallpapersGoWhereSummerBoardLooks() throws {
         let dir = scratch("themes")
-        defer { try? fm.removeItem(at: dir) }
+        defer { TemporaryTrees.remove(dir) }
         let png = Data("png".utf8)
         let package = try Package1x.load(
             t.zip(
