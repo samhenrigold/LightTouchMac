@@ -4,7 +4,9 @@
 // started ahead of the QEMU thread and its address handed over (usb-tcp-addr).
 // Both ends are Unix sockets in the per-user temporary directory, owner-only (a sandboxed helper can't reach it:
 // DeviceLink's USB bridge hands it each connection):
-// no loopback port any local process could reach, and no free-port race.
+// no loopback port any local process could reach, and no free-port race. With the services under the App Sandbox
+// (HostRuntime ServicesSandbox) they are in the services' app group container instead, and the daemon runs in the
+// services worker's sandbox, granted only its device's usbmuxd-conf.
 //
 // Spawned with swift-subprocess. The daemon is kept alive inside a detached
 // task; cancelling that task makes Subprocess run its teardown (SIGTERM), which
@@ -13,6 +15,7 @@
 
 import Foundation
 import HostRuntime
+import HostServiceWire
 import Observation
 import Subprocess
 import System
@@ -33,9 +36,13 @@ import System
 
         /// Fresh socket paths under the per-user temporary directory (a Unix socket path stays under 104 bytes), where no
         /// sandboxed helper reaches either: a sandboxed helper's QEMU gets each connection to the guest socket from
-        /// the app (DeviceLink's USB bridge), so another device's helper can't take either path.
-        public static func make() -> (session: Session, client: String) {
-            let base = NSTemporaryDirectory() + "ltm-mux-" + UUID().uuidString.prefix(8)
+        /// the app (DeviceLink's USB bridge), so another device's helper can't take either path. `sandboxed`: the
+        /// services run under the App Sandbox, and the paths are in this process's folder of their group's container
+        /// (ServicesSandbox), which no device helper reaches either.
+        public static func make(sandboxed: Bool = false) -> (session: Session, client: String) {
+            let base =
+                ServicesSandbox.socketFolder(sandboxed: sandboxed) + (sandboxed ? "mux-" : "ltm-mux-")
+                + UUID().uuidString.prefix(8)
             return (Session(clientSocket: "UNIX:" + base + "-c.sock", guestAddress: base + "-g.sock"), base + "-c.sock")
         }
         public var paths: [String] { [String(clientSocket.dropFirst("UNIX:".count)), guestAddress] }
@@ -54,8 +61,8 @@ import System
     /// is given up (the emulator redials a lost bridge every few seconds); a boot's ensureRunning() starts over.
     static let restartLimit = 3
     private var restarts = 0
-    /// This start()'s sockets and device paths, kept for a restart.
-    private var launched: (session: Session, paths: DeviceInstance.Paths)?
+    /// This start()'s sockets, device paths and services worker (whose sandbox the daemon runs in), kept for a restart.
+    private var launched: (session: Session, paths: DeviceInstance.Paths, worker: String?)?
 
     /// The fork ships in the bundle; a dev build falls back to the checkout
     /// (see qemu-ios' usbmuxd-qemu). LTM_USBMUXD names another build for a Debug
@@ -141,9 +148,10 @@ import System
         // else's process.
         reapStaleDaemon(pidFile)
 
-        let session = Session.make().session
+        let worker = HostServiceResources.executable
+        let session = Session.make(sandboxed: worker.map(ServicesSandbox.isSandboxed) ?? false).session
         restarts = 0
-        launch(session, paths: paths)
+        launch(session, paths: paths, worker: worker)
         return session
     }
 
@@ -153,20 +161,36 @@ import System
         guard session == nil, let launched else { return }
         logEvent("usbmux: starting the daemon again for the new boot")
         restarts = 0
-        launch(launched.session, paths: launched.paths)
+        launch(launched.session, paths: launched.paths, worker: launched.worker)
     }
 
-    private func launch(_ session: Session, paths: DeviceInstance.Paths) {
+    /// How a daemon runs: `binary` itself, or, with `worker` under the App Sandbox, the worker's usbmuxd operation,
+    /// which takes `grants` (tokens the spawner writes to its standard input: SandboxExtension.standardInput) and
+    /// becomes `binary` in the worker's sandbox. `grants` is nil for an unsandboxed daemon.
+    public nonisolated static func command(
+        binary: String,
+        worker: String?,
+        clientSocket: String,
+        conf: String
+    ) -> (executable: String, arguments: [String], grants: [SandboxExtension.Grant]?) {
+        let arguments = ["-f", "-v", "-S", clientSocket, "-P", "NONE", "-C", conf]
+        guard let worker, ServicesSandbox.isSandboxed(worker) else { return (binary, arguments, nil) }
+        let conf = SandboxExtension.Grant(URL(fileURLWithPath: conf), .readWrite)
+        return (worker, ["usbmuxd", binary] + arguments, [conf] + ServicesSandbox.loadGrants(binary))
+    }
+
+    private func launch(_ session: Session, paths: DeviceInstance.Paths, worker: String?) {
         let clientSocket = String(session.clientSocket.dropFirst("UNIX:".count))
         let guestAddress = session.guestAddress
         // A dead daemon leaves its socket files behind.
         for path in session.paths { unlink(path) }
         self.session = session
-        launched = (session, paths)
+        launched = (session, paths, worker)
 
         let binary = binaryOverride ?? Self.binary
         let conf = Self.conf(paths.usbmuxConf)
         let logURL = paths.logs.appendingPathComponent("usbmuxd.log")
+        let command = Self.command(binary: binary, worker: worker, clientSocket: clientSocket, conf: conf)
         daemonTask = Task.detached {
             do {
                 // The app drains a pipe to a bounded writer. Giving the child
@@ -190,12 +214,14 @@ import System
                     capture?.flush()
                     try? fallback?.close()
                 }
+                // Standard input carries a sandboxed daemon's grants, then ends; an unsandboxed one's just ends.
+                var ends: [Int32] = [-1, -1]
+                guard pipe(&ends) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                _ = fcntl(ends[1], F_SETFD, FD_CLOEXEC)
+                let grantsEnd = FileHandle(fileDescriptor: ends[1], closeOnDealloc: true)
                 _ = try await run(
-                    .path(FilePath(binary)),
-                    arguments: [
-                        "-f", "-v", "-S", clientSocket, "-P", "NONE",
-                        "-C", conf
-                    ],
+                    .path(FilePath(command.executable)),
+                    arguments: Arguments(command.arguments),
                     environment: .inherit.updating([
                         "USBMUXD_QEMU_ADDR": guestAddress,
                         // Enumeration has a bounded early-boot probe and retries.
@@ -203,10 +229,19 @@ import System
                         // device restored from a snapshot.
                         "USBMUXD_QEMU_DELAY": "0"
                     ]),
-                    input: .none,
+                    input: .fileDescriptor(FileDescriptor(rawValue: ends[0]), closeAfterSpawningProcess: true),
                     output: .fileDescriptor(log, closeAfterSpawningProcess: false),
                     error: .fileDescriptor(log, closeAfterSpawningProcess: false)
                 ) { execution in
+                    if let grants = command.grants {
+                        let (data, refused) = SandboxExtension.standardInput(
+                            grants,
+                            for: execution.processIdentifier.value
+                        )
+                        if !refused.isEmpty { logEvent("usbmux: grants refused: \(refused)") }
+                        try? grantsEnd.write(contentsOf: data)
+                    }
+                    try? grantsEnd.close()
                     // Record the pid so stop() can kill it synchronously — an
                     // app quit runs cleanup faster than the async teardown can.
                     // The pid file is what lets the NEXT launch reap this
@@ -255,7 +290,7 @@ import System
             restarts += 1
             logEvent("usbmux: daemon exited unexpectedly; starting it again (\(restarts) of \(Self.restartLimit))")
             AppReports.failed("Services.usbmuxdExited", nil, ["restarts": "\(restarts)"])
-            launch(session, paths: launched.paths)
+            launch(session, paths: launched.paths, worker: launched.worker)
             return
         }
         logEvent("usbmux: daemon exited unexpectedly; app management disabled")

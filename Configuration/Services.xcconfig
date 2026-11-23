@@ -1,7 +1,10 @@
 // The LightTouchServices helper target, on top of Shared.xcconfig (the project's settings).
 
 PRODUCT_BUNDLE_IDENTIFIER = gold.samhenri.LightTouchMac.LightTouchServices
-CODE_SIGN_ENTITLEMENTS = Configuration/Tool.entitlements
+// LTM_HELPER_SANDBOX (Shared.xcconfig) picks the sandboxed or the empty entitlements. A sandboxed command-line tool
+// needs its Info.plist in its binary (its bundle identifier names its container).
+CODE_SIGN_ENTITLEMENTS = $(LTM_SERVICES_ENTITLEMENTS_$(LTM_HELPER_SANDBOX))
+CREATE_INFOPLIST_SECTION_IN_BINARY = YES
 SKIP_INSTALL = YES
 ENABLE_DEBUG_DYLIB = NO
 SWIFT_OBJC_BRIDGING_HEADER = LightTouchServices/Lockdown/Lockdown.h

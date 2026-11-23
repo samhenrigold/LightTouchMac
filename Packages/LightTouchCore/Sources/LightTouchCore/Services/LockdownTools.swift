@@ -5,6 +5,7 @@
 // (LightTouchServices/Lockdown).
 
 import Foundation
+import HostRuntime
 import HostServiceWire
 import Subprocess
 import System
@@ -120,7 +121,12 @@ extension DeviceServices {
         if try await Self.lockdownChild(tool, ["lockdown-mcinstall", "--installed"], socket: clientSocket).status == 0 {
             return false
         }
-        let offered = try await Self.lockdownChild(tool, ["lockdown-mcinstall", certificate], socket: clientSocket)
+        let offered = try await Self.lockdownChild(
+            tool,
+            ["lockdown-mcinstall", certificate],
+            socket: clientSocket,
+            reads: [certificate]
+        )
         guard offered.status == 0 else {
             logEvent("proxy: offering the certificate profile failed: \(offered.error)")
             AppReports.failed("Network.proxyProfileFailed", nil, report.merging(["status": "\(offered.status)"]) { $1 })
@@ -139,6 +145,7 @@ extension DeviceServices {
             tool,
             ["lockdown-ddi", image.path, image.path + ".signature"],
             socket: clientSocket,
+            reads: [image.path, image.path + ".signature"],
             timeout: 600  // ~20 MB over the emulated USB
         )
         let said = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,11 +156,13 @@ extension DeviceServices {
     }
 
     /// One of the lockdown child tools, pointed at this device's usbmuxd: its
-    /// status and the first KB of each stream.
+    /// status and the first KB of each stream. `reads`: the files it sends, which a sandboxed one is granted
+    /// read-only on its standard input (HostRuntime ServicesSandbox), and nothing else.
     static func lockdownChild(
         _ tool: String,
         _ arguments: [String],
         socket: String,
+        reads: [String] = [],
         timeout: TimeInterval = Timeouts.query
     ) async throws
         -> (status: Int32, output: String, error: String)
@@ -162,16 +171,29 @@ extension DeviceServices {
         // The existing subprocess library owns spawn, output draining and reaping.
         // Cancellation (including the deadline) tears down the child before this
         // returns, so a replaced boot cannot leave a timezone writer running.
+        let grants =
+            ServicesSandbox.isSandboxed(tool)
+            ? reads.map { SandboxExtension.Grant(URL(fileURLWithPath: $0), .read) } : nil
         let result = try await withThrowingTaskGroup(of: (Int32, String, String).self) { group in
             group.addTask {
                 let child = try await Subprocess.run(
                     .path(FilePath(tool)),
                     arguments: Arguments(arguments),
                     environment: .inherit.updating(["USBMUXD_SOCKET_ADDRESS": socket]),
-                    input: .none,
+                    input: .inputWriter,
                     output: .string(limit: 1024),
                     error: .string(limit: 1024)
-                )
+                ) { execution in
+                    if let grants {
+                        let (data, refused) = SandboxExtension.standardInput(
+                            grants,
+                            for: execution.processIdentifier.value
+                        )
+                        if !refused.isEmpty { logEvent("lockdown: grants refused: \(refused)") }
+                        _ = try? await execution.standardInputWriter.write(Array(data))
+                    }
+                    try? await execution.standardInputWriter.finish()
+                }
                 let status: Int32 =
                     switch child.terminationStatus {
                     case .exited(let code): code

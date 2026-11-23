@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- The services helper under the App Sandbox (LTM_HELPER_SANDBOX = YES, Configuration/Shared.xcconfig, the default):
+     the worker, its lockdown children and the usbmuxd it becomes (HostRuntime ServicesSandbox). No network and no
+     file exceptions: whoever spawns it grants each file (SandboxExtension). The services' own app group: the folder
+     its device's Unix sockets are in, which no device helper reaches; the app is signed with it too
+     (LightTouchMac-Sandbox.entitlements). -->
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>SM75355Y6R.ltm.services</string>
+    </array>
+</dict>
+</plist>

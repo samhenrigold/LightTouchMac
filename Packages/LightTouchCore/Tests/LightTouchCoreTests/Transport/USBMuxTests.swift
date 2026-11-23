@@ -1,4 +1,5 @@
 import Foundation
+import HostRuntime
 import Testing
 
 @testable import LightTouchCore
@@ -102,6 +103,39 @@ struct USBMuxTests {
             await eventually("the orphan exited") { StorageLocations.daemonIdentity(orphan) == nil }
             #expect(owned.isRunning && FileManager.default.fileExists(atPath: runningPID.path))
             #expect(!FileManager.default.fileExists(atPath: crashedPID.path))
+        }
+    }
+
+    /// With the services worker under the App Sandbox the daemon is the worker's usbmuxd operation, granted only its
+    /// device's usbmuxd-conf; with an unsandboxed one (LTM_HELPER_SANDBOX=NO) it runs itself, granted nothing.
+    @Test func theDaemonRunsInASandboxedWorkersSandbox() async throws {
+        try await withScratchDirectory { directory in
+            let plain = USBMux.command(binary: "/x/usbmuxd", worker: "/usr/bin/true", clientSocket: "/s", conf: "/c")
+            #expect(plain.executable == "/x/usbmuxd" && plain.grants == nil)
+            #expect(plain.arguments == ["-f", "-v", "-S", "/s", "-P", "NONE", "-C", "/c"])
+            #expect(USBMux.command(binary: "/x/usbmuxd", worker: nil, clientSocket: "/s", conf: "/c").grants == nil)
+
+            let source = directory.appendingPathComponent("worker.c")
+            try "int main(void) { return 0; }\n".write(to: source, atomically: true, encoding: .utf8)
+            let worker = directory.appendingPathComponent("LightTouchServices")
+            try LibraryFixtures.run("/usr/bin/cc", ["-o", worker.path, source.path])
+            let entitlements = directory.appendingPathComponent("sandbox.entitlements")
+            try (["com.apple.security.app-sandbox": true] as NSDictionary).write(to: entitlements)
+            try LibraryFixtures.run(
+                "/usr/bin/codesign",
+                ["-f", "-s", "-", "--entitlements", entitlements.path, worker.path]
+            )
+            let conf = directory.appendingPathComponent("conf")
+            let sandboxed = USBMux.command(
+                binary: "/x/usbmuxd",
+                worker: worker.path,
+                clientSocket: "/s",
+                conf: conf.path
+            )
+            #expect(sandboxed.executable == worker.path)
+            #expect(sandboxed.arguments == ["usbmuxd", "/x/usbmuxd"] + plain.arguments.dropLast() + [conf.path])
+            #expect(sandboxed.grants?.first == SandboxExtension.Grant(conf, .readWrite))
+            #expect(sandboxed.grants?.dropFirst().allSatisfy { $0.access == .read } == true)
         }
     }
 }

@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import HostRuntime
 import HostServiceWire
 
 /// stdout is exclusively the typed service protocol; logs go to stderr.
@@ -16,7 +17,20 @@ nonisolated func logEvent(_ message: String) {
             "lockdown-ddi": ltm_lockdown_ddi, "lockdown-ax": ltm_lockdown_ax
         ]
         if let name = args.first, let operation = operations[name] {
+            // a sandboxed child's grants (the files it sends), from its spawner, before it opens anything
+            let refused = SandboxExtension.consumeStandardInput().refused
+            if !refused.isEmpty { logEvent("\(name): grants refused: \(refused)") }
             exit(operation(CommandLine.argc - 1, CommandLine.unsafeArgv + 1))
+        }
+        // usbmuxd PATH ARGS…: this device's usbmuxd in this process's sandbox (USBMux): takes the spawner's grants
+        // (its usbmuxd-conf), then becomes PATH, which inherits the sandbox and the grants.
+        if args.count >= 2, args[0] == "usbmuxd" {
+            let refused = SandboxExtension.consumeStandardInput().refused
+            if !refused.isEmpty { logEvent("usbmuxd: grants refused: \(refused)") }
+            let argv = args.dropFirst().map { strdup($0) } + [nil]
+            execv(args[1], argv)
+            logEvent("usbmuxd: can't run \(args[1]): \(String(cString: strerror(errno)))")
+            exit(127)
         }
         guard args.count == 6, args[0] == "--socket", args[2] == "--udid", args[4] == "--session",
             let session = UUID(uuidString: args[5]),
@@ -43,9 +57,12 @@ nonisolated func logEvent(_ message: String) {
             let emit: @Sendable (HostServiceEvent.Payload) -> Void = { payload in
                 writer.send(HostServiceEvent(id: request.id, session: session, payload: payload))
             }
+            // this request's grants alone (HostServiceWorkers), given back once it is done
+            SandboxExtension.consume(request.tokens ?? [])
             do { emit(.result(try await execute(request.operation, service: service, emit: emit))) } catch {
                 emit(.failure(HostServiceFailure(error)))
             }
+            SandboxExtension.releaseAll()
         }
     }
 

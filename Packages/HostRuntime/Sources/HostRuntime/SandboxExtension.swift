@@ -1,5 +1,6 @@
 // A sandboxed LightTouchDevice's files, granted by the unsandboxed process that spawns it (the app's DeviceLink,
-// firmwarekit's one-shots, the harness). Everything that issues or takes a grant is here.
+// firmwarekit's one-shots, the harness), and a sandboxed LightTouchServices' (ServicesSandbox). Everything that
+// issues or takes a grant is here.
 //
 // - libsystem_sandbox's file extensions (SPI, every symbol and flag looked up at run time; WebKit's and Chromium's
 //   helpers take their files the same way). A missing symbol or flag issues nothing, so a sandboxed boot fails at
@@ -90,8 +91,10 @@ public nonisolated enum SandboxExtension {
             let call = unsafeBitCast(s, to: IssueToPID.self)
             issue = { call($0.rawValue, $1, flags, pid) }
         }
-        let writable = (grants.filter { $0.access == .readWrite }.map(\.path) + [HelperSandbox.groupContainer.path])
-            .compactMap(canonical)
+        let writable =
+            (grants.filter { $0.access == .readWrite }.map(\.path) + [
+                HelperSandbox.groupContainer.path, ServicesSandbox.container.path
+            ]).compactMap(canonical)
         let denied = Set(deny.compactMap { canonical($0.path) })
         var tokens: [String] = []
         var refused: [String] = []

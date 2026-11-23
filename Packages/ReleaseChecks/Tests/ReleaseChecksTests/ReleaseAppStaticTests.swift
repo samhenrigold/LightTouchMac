@@ -23,8 +23,9 @@ struct ReleaseAppStaticTests {
         #expect(result.succeeded, "\(result.error)")
     }
 
-    /// The helper's entitlements are exactly its build's (LightTouchDevice-Sandbox.entitlements, unless the release was
-    /// built with LTM_HELPER_SANDBOX=NO), and the app carries the helper's app group exactly when the helper does.
+    /// The helpers' entitlements are exactly their build's (LightTouchDevice-Sandbox and LightTouchServices-Sandbox,
+    /// unless the release was built with LTM_HELPER_SANDBOX=NO), and the app carries their app groups exactly when they
+    /// do. usbmuxd has none of its own: it runs in the services helper's sandbox.
     @Test func everyExecutableIsHardenedUniversalAndEntitledAsDeclared() throws {
         let sandbox = helperSandbox
         func entitlements(_ name: String) throws -> NSDictionary {
@@ -34,6 +35,7 @@ struct ReleaseAppStaticTests {
             ) as! NSDictionary
         }
         let qemu = try entitlements(sandbox ? "LightTouchDevice-Sandbox" : "LightTouchDevice")
+        let services = sandbox ? try entitlements("LightTouchServices-Sandbox") : NSDictionary()
         let appEntitlements: NSDictionary =
             sandbox
             ? try entitlements("LightTouchMac-Sandbox")
@@ -64,6 +66,7 @@ struct ReleaseAppStaticTests {
             let want: NSDictionary =
                 switch binary.lastPathComponent {
                 case "LightTouchDevice": qemu
+                case "LightTouchServices": services
                 case "LightTouch": appEntitlements
                 // as Sparkle signs it; the export keeps it
                 case "Autoupdate": ["com.apple.application-identifier": "org.sparkle-project.Sparkle.Autoupdate"]

@@ -19,16 +19,20 @@ VENDOR_DIR = $(SRCROOT)/build/vendor
 // "Build Number" phase at every build; this is only what the helpers' embedded Info.plists carry.
 CURRENT_PROJECT_VERSION = 1
 
-// The device helper under the App Sandbox: YES signs LightTouchDevice with LightTouchDevice-Sandbox.entitlements
-// (-Sandbox-Debug in Debug) and the app with LightTouchMac-Sandbox.entitlements (the helper's app group). Nothing else
-// reads it: at run time the app, firmwarekit and the harness look at the helper's own signature (HostRuntime
-// HelperSandbox). On in Debug and Release; for debugging without it, LTM_HELPER_SANDBOX = NO in Local.xcconfig, or
+// The device and services helpers under the App Sandbox: YES signs LightTouchDevice with
+// LightTouchDevice-Sandbox.entitlements (-Sandbox-Debug in Debug), LightTouchServices with
+// LightTouchServices-Sandbox.entitlements (usbmuxd runs in its sandbox) and the app with
+// LightTouchMac-Sandbox.entitlements (both helpers' app groups). Nothing else reads it: at run time the app, firmwarekit
+// and the harness look at the helpers' own signatures (HostRuntime HelperSandbox, ServicesSandbox). On in Debug and
+// Release; for debugging without it, LTM_HELPER_SANDBOX = NO in Local.xcconfig, or
 // `xcodebuild … LTM_HELPER_SANDBOX=NO` (`LTM_HELPER_SANDBOX=NO scripts/ship` or `sessions`).
 LTM_HELPER_SANDBOX = YES
 LTM_HELPER_ENTITLEMENTS_NO = Configuration/LightTouchDevice.entitlements
 LTM_HELPER_ENTITLEMENTS_YES = Configuration/LightTouchDevice-Sandbox.entitlements
 LTM_HELPER_DEBUG_ENTITLEMENTS_NO = Configuration/LightTouchDevice-Debug.entitlements
 LTM_HELPER_DEBUG_ENTITLEMENTS_YES = Configuration/LightTouchDevice-Sandbox-Debug.entitlements
+LTM_SERVICES_ENTITLEMENTS_NO = Configuration/Tool.entitlements
+LTM_SERVICES_ENTITLEMENTS_YES = Configuration/LightTouchServices-Sandbox.entitlements
 LTM_APP_ENTITLEMENTS_NO =
 LTM_APP_ENTITLEMENTS_YES = Configuration/LightTouchMac-Sandbox.entitlements
 

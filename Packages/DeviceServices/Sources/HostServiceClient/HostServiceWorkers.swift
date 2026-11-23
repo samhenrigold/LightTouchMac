@@ -1,4 +1,5 @@
 import Foundation
+import HostRuntime
 import HostServiceWire
 import Subprocess
 import System
@@ -83,7 +84,7 @@ actor HostServiceWorker {
     private var pending: [UUID: Pending] = [:]
     private var active: UUID?
     private var process: Task<Void, Never>?
-    private var channel: AsyncStream<Data>.Continuation?
+    private var channel: AsyncStream<HostServiceRequest>.Continuation?
     private var generation = UUID()
     private var closing = false
     private var deferred: (Pending, Error)?
@@ -130,7 +131,7 @@ actor HostServiceWorker {
         guard !closing, pending[id] != nil else { return }
         queued.removeFirst()
         active = id
-        do { channel?.yield(try JSONEncoder().encode(next.request) + Data([10])) } catch { finish(id, .failure(error)) }
+        channel?.yield(next.request)
     }
 
     private func launch() {
@@ -146,12 +147,13 @@ actor HostServiceWorker {
             closing = false
             return
         }
-        let (stream, continuation) = AsyncStream<Data>.makeStream()
+        let (stream, continuation) = AsyncStream<HostServiceRequest>.makeStream()
         channel = continuation
         let token = UUID()
         generation = token
         let endpoint = endpoint
         let staging = HostServiceResources.stagingSession
+        let sandboxed = ServicesSandbox.isSandboxed(executable)
         process = Task { [weak self] in
             var failure: Error = DeviceError.notAttached
             do {
@@ -171,7 +173,16 @@ actor HostServiceWorker {
                 ) { execution in
                     try await withThrowingTaskGroup(of: Void.self) { group in
                         group.addTask {
-                            for await bytes in stream { _ = try await execution.standardInputWriter.write(bytes) }
+                            let pid = execution.processIdentifier.value
+                            for await var request in stream {
+                                // the unreaped worker's own grants for this request (ServicesSandbox)
+                                if sandboxed {
+                                    let grants = request.operation.grants
+                                    request.tokens = SandboxExtension.issue(grants, to: .pid(pid)).tokens
+                                }
+                                let bytes = try JSONEncoder().encode(request) + Data([10])
+                                _ = try await execution.standardInputWriter.write(bytes)
+                            }
                             try await execution.standardInputWriter.finish()
                         }
                         group.addTask {
@@ -277,4 +288,20 @@ extension DeviceServices {
         return try await worker.request(operation, seconds: seconds, progress: progress)
     }
     public func stopWorker() async { await HostServiceWorkers.shared.stop(endpoint: endpoint) }
+}
+
+extension HostServiceOperation {
+    /// What a sandboxed worker may open for this request and nothing else (HostRuntime ServicesSandbox): the file it
+    /// uploads or installs, read-only; the folder a download (DeviceServices.download's private staging folder, which
+    /// the app quarantines and publishes from) or a crash report copy is written into, read-write.
+    var grants: [SandboxExtension.Grant] {
+        switch self {
+        case .install(let ipa, _, _): [.init(URL(fileURLWithPath: ipa), .read)]
+        case .upload(let source, _, _, _, _, _): [.init(URL(fileURLWithPath: source), .read)]
+        case .download(_, let destination, _):
+            [.init(URL(fileURLWithPath: destination).deletingLastPathComponent(), .readWrite)]
+        case .crashReports(let copyTo?): [.init(URL(fileURLWithPath: copyTo), .readWrite)]
+        default: []
+        }
+    }
 }

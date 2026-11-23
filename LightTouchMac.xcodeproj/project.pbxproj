@@ -11,6 +11,7 @@
 		A1D0C0DE32000000000000002 /* LightTouchServices in Embed Device Helper */ = {isa = PBXBuildFile; fileRef = A1D0C0DE32000000000000001 /* LightTouchServices */; };
 		A1D0C0DE35000000000000003 /* HostRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002 /* HostRuntime */; };
 		A1D0C0DE35000000000000004 /* HostRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002 /* HostRuntime */; };
+		A1D0C0DE35000000000000005 /* HostRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE35000000000000002 /* HostRuntime */; };
 		A1D0C0DE36000000000000003 /* DeviceRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE36000000000000002 /* DeviceRuntime */; };
 		A1D0C0DE36000000000000004 /* DeviceRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE36000000000000002 /* DeviceRuntime */; };
 		A1D0C0DE37000000000000003 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0C0DE37000000000000002 /* ZIPFoundation */; };
@@ -208,6 +209,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				A1D0C0DE3B000000000000014 /* HostServiceWire in Frameworks */,
+				A1D0C0DE35000000000000005 /* HostRuntime in Frameworks */,
 			);
 		};
 		A1D0C0DE3A000000000000007 /* Frameworks */ = {
@@ -346,6 +348,7 @@
 			name = LightTouchServices;
 			packageProductDependencies = (
 				A1D0C0DE3B000000000000004 /* HostServiceWire */,
+				A1D0C0DE35000000000000002 /* HostRuntime */,
 			);
 			productName = LightTouchServices;
 			productReference = A1D0C0DE32000000000000001 /* LightTouchServices */;

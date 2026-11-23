@@ -32,10 +32,14 @@ public nonisolated struct HostServiceRequest: Codable, Sendable {
     public let id: UUID
     public let session: UUID
     public let operation: HostServiceOperation
-    public init(id: UUID, session: UUID, operation: HostServiceOperation) {
+    /// A sandboxed worker's grants for this request alone (HostRuntime ServicesSandbox): sandbox extension tokens only
+    /// it can take, taken before the operation and given back after. Never logged.
+    public var tokens: [String]?
+    public init(id: UUID, session: UUID, operation: HostServiceOperation, tokens: [String]? = nil) {
         self.id = id
         self.session = session
         self.operation = operation
+        self.tokens = tokens
     }
 }
 

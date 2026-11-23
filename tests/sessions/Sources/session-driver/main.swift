@@ -6,6 +6,7 @@ import HostRuntime
 import HostServiceClient
 import HostServiceWire
 import IOSurface
+import LightTouchCore
 import SessionKit
 
 @testable import LightTouchCore
@@ -93,17 +94,26 @@ logEvent("session-driver: \(config.work)")
 final class Mux {
     let clientSocket: String, guestAddress: String
     let process = Process()
+    /// Whether the daemon runs in the services worker's sandbox (USBMux.command).
+    let sandboxed: Bool
     init(name: String) throws {
-        // As USBMux.Session.make: both ends Unix sockets in the per-user temporary directory.
-        let base = NSTemporaryDirectory() + "ltm-mux-" + UUID().uuidString.prefix(8)
-        clientSocket = "UNIX:" + base + "-c.sock"
-        guestAddress = base + "-g.sock"
+        // As USBMux.start: both ends Unix sockets in the per-user temporary directory, or with the services worker
+        // under the App Sandbox in its group's container, and the daemon in the worker's sandbox.
+        let worker = HostServiceResources.executable
+        let session = USBMux.Session.make(sandboxed: worker.map(ServicesSandbox.isSandboxed) ?? false).session
+        clientSocket = session.clientSocket
+        guestAddress = session.guestAddress
         let conf = work.appendingPathComponent("\(name)/usbmuxd-conf")
         try FileManager.default.createDirectory(at: conf, withIntermediateDirectories: true)
-        process.executableURL = URL(fileURLWithPath: config.usbmuxd)
-        process.arguments = [
-            "-f", "-v", "-S", String(clientSocket.dropFirst("UNIX:".count)), "-P", "NONE", "-C", conf.path
-        ]
+        let command = USBMux.command(
+            binary: config.usbmuxd,
+            worker: worker,
+            clientSocket: String(clientSocket.dropFirst("UNIX:".count)),
+            conf: conf.path
+        )
+        sandboxed = command.grants != nil
+        process.executableURL = URL(fileURLWithPath: command.executable)
+        process.arguments = command.arguments
         process.environment = ProcessInfo.processInfo.environment.merging([
             "USBMUXD_QEMU_ADDR": guestAddress, "USBMUXD_QEMU_DELAY": "0"
         ]) { $1 }
@@ -119,8 +129,15 @@ final class Mux {
         log.seekToEndOfFile()
         process.standardOutput = log
         process.standardError = log
-        process.standardInput = FileHandle.nullDevice
+        let grants = Pipe()
+        process.standardInput = grants
         try process.run()
+        if let wanted = command.grants {
+            let (data, refused) = SandboxExtension.standardInput(wanted, for: process.processIdentifier)
+            if !refused.isEmpty { emit("usbmuxd-grants-refused", ["device": name, "paths": refused]) }
+            grants.fileHandleForWriting.write(data)
+        }
+        try grants.fileHandleForWriting.close()
         try "\(process.processIdentifier)\n".appendLine(to: work.appendingPathComponent("pids"))
         emit(
             "usbmuxd",
@@ -131,6 +148,8 @@ final class Mux {
         process.terminate()
         process.waitUntilExit()
         for path in [String(clientSocket.dropFirst("UNIX:".count)), guestAddress] { unlink(path) }
+        // the services container's pid folder (ServicesSandbox.socketFolder), once it is empty
+        if sandboxed { rmdir((guestAddress as NSString).deletingLastPathComponent) }
     }
 }
 
@@ -281,6 +300,14 @@ extension String {
                 emit("sandbox", ["device": self.name, "sandboxed": sandboxed])
                 if sandboxed != HelperSandbox.enabled {
                     fail("the helper is \(sandboxed ? "" : "not ")sandboxed but its signature says otherwise")
+                }
+                // usbmuxd too, in the services worker's sandbox exactly when the worker's signature asks for one
+                if let mux = self.mux {
+                    let muxed = sandboxCheck(mux.process.processIdentifier)
+                    emit("usbmuxd-sandbox", ["device": self.name, "sandboxed": muxed])
+                    if muxed != mux.sandboxed {
+                        fail("usbmuxd is \(muxed ? "" : "not ")sandboxed but the services worker's says otherwise")
+                    }
                 }
                 emit(
                     "hello",

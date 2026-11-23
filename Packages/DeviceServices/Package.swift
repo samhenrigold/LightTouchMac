@@ -13,13 +13,17 @@ let package = Package(
         .library(name: "HostServiceWire", type: .static, targets: ["HostServiceWire"]),
         .library(name: "HostServiceClient", type: .static, targets: ["HostServiceClient"])
     ],
-    dependencies: [.package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "1.0.2")],
+    dependencies: [
+        .package(path: "../HostRuntime"),
+        .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "1.0.2")
+    ],
     targets: [
         .target(name: "HostServiceWire"),
         .target(
             name: "HostServiceClient",
             dependencies: [
                 "HostServiceWire",
+                .product(name: "HostRuntime", package: "HostRuntime"),
                 .product(name: "Subprocess", package: "swift-subprocess")
             ]
         ),
