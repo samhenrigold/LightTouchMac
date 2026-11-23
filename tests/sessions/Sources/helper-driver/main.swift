@@ -71,7 +71,9 @@ func preparedBoot(_ p: Scenario.Prepared, hardware: DeviceInfo?) throws -> BootC
         board: board,
         base: URL(fileURLWithPath: p.base),
         overlay: overlay,
-        writableNOR: overlay.appendingPathComponent("nor.bin"),
+        // As the app's preparation: a private NOR copy where the base has one (the iPhone 5's has none).
+        writableNOR: FileManager.default.fileExists(atPath: p.base + "/nor.bin")
+            ? overlay.appendingPathComponent("nor.bin") : nil,
         storageKey: nil,
         bootrom: BootRecipe.bootrom(
             board.bootrom,
