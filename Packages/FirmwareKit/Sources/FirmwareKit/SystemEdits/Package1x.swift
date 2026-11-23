@@ -411,6 +411,20 @@ extension Package1x {
                 let machO = Self.armSubtypes(data) != nil
                 try v.put(data, at: path, mode: machO ? mode & 0o7000 | 0o755 : mode == 0 ? 0o644 : mode)
             case .link(let target):
+                // where it points once the device's links on the way are followed (an earlier member's among
+                // them): inside the volume and the folders a package may write, as a file there would be
+                var to = path.split(separator: "/").dropLast().map(String.init)
+                for c in target.split(separator: "/") where c != "." {
+                    guard c == ".." else {
+                        to.append(String(c))
+                        continue
+                    }
+                    guard to.popLast() != nil else { throw Self.refused("\(p.path) links outside the volume") }
+                }
+                let resolved = try Self.resolve(v, to, followLast: true)
+                guard let top = resolved.split(separator: "/").first, Self.roots.contains(String(top)) else {
+                    throw Self.refused("\(p.path) links outside the folders a package may write (/\(resolved))")
+                }
                 try v.remove(path)
                 try v.makeSymlink(path, to: target)
             case .folder: break
