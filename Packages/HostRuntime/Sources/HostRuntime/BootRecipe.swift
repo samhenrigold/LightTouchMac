@@ -317,9 +317,14 @@ public nonisolated enum BootRecipe {
 
     /// `-drive` takes its own comma escaping (as -M does). No -m: the machine's 128 MiB.
     /// `netdev`: the explicit wifi0 (with the web proxy's guestfwd), if any; without one the machine makes its own.
-    public static func iPod1G(_ d: IPod1G, hardware: DeviceInfo, serial: String, audio: [String], netdev: String?)
-        -> BootConfig
-    {
+    public static func iPod1G(
+        _ d: IPod1G,
+        hardware: DeviceInfo,
+        serial: String,
+        audio: [String],
+        netdev: String?,
+        restore: [String] = []
+    ) -> BootConfig {
         let machine =
             "\(hardware.machine),bootrom=\(escape(d.bootrom)),iboot=\(escape(d.iBoot))"
             + ",nand=\(escape(d.nand))" + (d.overlay.isEmpty ? "" : ",nand-overlay=\(escape(d.overlay))")
@@ -337,7 +342,7 @@ public nonisolated enum BootRecipe {
                 ? [
                     "-netdev",
                     netdev.map { $0.replacingOccurrences(of: "id=wifi0", with: "id=cell0") } ?? "user,id=cell0,lan=off"
-                ] : [])
+                ] : []) + restore
         return BootConfig(argv: argv, machine: hardware.machine)
     }
 

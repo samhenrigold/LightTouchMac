@@ -373,7 +373,8 @@ public struct PreparedDeviceBoot {
                 hardware: hardware,
                 serial: serial,
                 audio: audio,
-                netdev: netdev
+                netdev: netdev,
+                restore: restore
             )
         case .s5l8720:
             config = BootRecipe.iPod(

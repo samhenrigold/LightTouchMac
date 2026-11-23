@@ -105,6 +105,27 @@ struct BootTests {
         }
     }
 
+    /// A snapshot's restore reaches every board's command line: the original iPhone's and iPod touch 1G's recipe took
+    /// none, so a resume of one cold-booted it.
+    @Test func restoreReachesEachBoardsCommandLine() throws {
+        for board in [Board.m68, .n72, .n88, .k48, .n81, .n90] {
+            let f = try Fixture(board: board, strategy: board == .m68 ? "iboot" : board == .n72 ? "bootrom" : "kboot")
+            defer { try? FileManager.default.removeItem(at: f.root) }
+            let argv = try f.prepare(board).configuration(
+                bootArgs: "",
+                usbAddress: nil,
+                wifi: true,
+                guestPackage: nil,
+                serial: "null",
+                audio: [],
+                netdev: "user,id=wifi0",
+                restore: ["-incoming", "file:/s"]
+            ).argv
+            let at = argv.firstIndex(of: "-incoming")
+            #expect(at.map { argv[$0 + 1] } == "file:/s", "\(board)")
+        }
+    }
+
     @Test func carrierSettingsReachRadioBoards() throws {
         var carrier = CarrierSettings()
         carrier.carrier = "Panel"
