@@ -122,32 +122,109 @@ public final class DeviceFilesystemEdits {
         library: DeviceLibrary,
         releaseStopped: @escaping () async -> Bool
     ) {
-        guard let executable = preparer, canInstallPackage(instance) else { return }
-        activity[instance.id] = "Installing \(url.deletingPathExtension().lastPathComponent)…"
+        // under its own name: a package without an identifier is named for its file
+        let folder = paths(instance).work.appendingPathComponent("package-\(UUID().uuidString)")
+        let copy = folder.appendingPathComponent(url.lastPathComponent)
+        packageEdit(
+            "Installing \(url.deletingPathExtension().lastPathComponent)…",
+            .installPackage,
+            entry: entry,
+            instance: instance,
+            library: library,
+            releaseStopped: releaseStopped,
+            package: copy
+        ) {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: url, to: copy)
+        } cleanup: {
+            try? FileManager.default.removeItem(at: folder)
+        }
+    }
+
+    /// A package Install Package… put in a 1.x device, as its receipt names it.
+    public struct InstalledPackage: Decodable, Sendable, Equatable {
+        public let identifier: String
+        public let name: String
+        public let version: String?
+    }
+
+    /// The packages installed in the stopped 1.x device, from their receipts (firmwarekit edit --action
+    /// list-packages); nil, the error shown, when they can't be read.
+    public func installedPackages(
+        entry: FirmwareCatalog.Entry,
+        instance: DeviceInstance,
+        library: DeviceLibrary,
+        releaseStopped: @escaping () async -> Bool
+    ) async -> [InstalledPackage]? {
+        await withCheckedContinuation { done in
+            var out: Data?
+            packageEdit(
+                "Reading the installed packages…", .listPackages, entry: entry, instance: instance, library: library,
+                releaseStopped: releaseStopped, output: { out = $0 }
+            ) {
+            } cleanup: {
+                done.resume(returning: out.flatMap { try? JSONDecoder().decode([InstalledPackage].self, from: $0) })
+            }
+        }
+    }
+
+    /// The package `identifier` out of the stopped 1.x device, as its receipt says (firmwarekit edit --action
+    /// uninstall-package).
+    public func uninstall(
+        package: InstalledPackage,
+        entry: FirmwareCatalog.Entry,
+        instance: DeviceInstance,
+        library: DeviceLibrary,
+        releaseStopped: @escaping () async -> Bool
+    ) {
+        packageEdit(
+            "Uninstalling \(package.name)…", .uninstallPackage, entry: entry, instance: instance, library: library,
+            releaseStopped: releaseStopped, identifier: package.identifier
+        ) {
+        } cleanup: {
+        }
+    }
+
+    /// One package edit of the stopped device, `activity` in the device area meanwhile: `prepare`, firmwarekit, its
+    /// stdout to `output`, then `cleanup`. A failure is shown (an unclean shutdown offered to be fixed).
+    private func packageEdit(
+        _ activity: String,
+        _ action: FirmwareCommand.Edit.Action,
+        entry: FirmwareCatalog.Entry,
+        instance: DeviceInstance,
+        library: DeviceLibrary,
+        releaseStopped: @escaping () async -> Bool,
+        package: URL? = nil,
+        identifier: String? = nil,
+        output: @escaping (Data) -> Void = { _ in },
+        prepare: @escaping () throws -> Void,
+        cleanup: @escaping () -> Void
+    ) {
+        guard let executable = preparer, canInstallPackage(instance) else { return cleanup() }
+        self.activity[instance.id] = activity
         Task {
-            // under its own name: a package without an identifier is named for its file
-            let folder = paths(instance).work.appendingPathComponent("package-\(UUID().uuidString)")
-            let copy = folder.appendingPathComponent(url.lastPathComponent)
             defer {
-                try? FileManager.default.removeItem(at: folder)
-                activity[instance.id] = nil
+                self.activity[instance.id] = nil
                 library.reload()
                 NotificationCenter.default.post(name: DeviceLibrary.didChangeNotification, object: library)
+                cleanup()
             }
             do {
                 guard await releaseStopped() else {
-                    throw DeviceToolsError.failed("Shut down the device before installing a package.")
+                    throw DeviceToolsError.failed("Shut down the device before installing or uninstalling a package.")
                 }
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                try FileManager.default.copyItem(at: url, to: copy)
-                _ = try await FirmwareTool.run(
-                    FirmwareCommand.Edit(
-                        device: paths(instance).directory,
-                        action: .installPackage,
-                        recordPolicy: .managed,
-                        package: copy
-                    ),
-                    executable: executable
+                try prepare()
+                output(
+                    try await FirmwareTool.run(
+                        FirmwareCommand.Edit(
+                            device: paths(instance).directory,
+                            action: action,
+                            recordPolicy: .managed,
+                            package: package,
+                            identifier: identifier
+                        ),
+                        executable: executable
+                    )
                 )
             } catch {
                 if "\(error)".contains("was not shut down cleanly"), let onUncleanShutdown {

@@ -75,6 +75,19 @@ import Foundation
             try emit(Installed(identifier: done.identifier, apps: done.apps, files: done.files))
             return 0
         }
+        if command.action == .uninstallPackage {  // begin, mount, its preremove and files, commit
+            guard let identifier = command.identifier else {
+                throw FirmwareError(.internal, "uninstall-package requires --identifier")
+            }
+            try await StoppedVolumeEdit.uninstallPackage1x(
+                device: device, identifier: identifier, policy: policy, log: log)
+            try emit(["uninstalled": identifier])
+            return 0
+        }
+        if command.action == .listPackages {  // begin, mount, the receipts, discard
+            try emit(try await StoppedVolumeEdit.installedPackages1x(device: device, policy: policy, log: log))
+            return 0
+        }
         guard let session = command.session.flatMap(UUID.init(uuidString:)) else {
             throw FirmwareError(.internal, "edit requires its --session UUID")
         }
@@ -97,7 +110,7 @@ import Foundation
         case .recover:
             try await StoppedVolumeEdit.recover(device: device, id: session, policy: policy)
             try emit(["recovered": session.uuidString])
-        case .begin, .trustAnchor, .jailbreak, .preferences, .installPackage: break
+        case .begin, .trustAnchor, .jailbreak, .preferences, .installPackage, .uninstallPackage, .listPackages: break
         }
         return 0
     } catch {

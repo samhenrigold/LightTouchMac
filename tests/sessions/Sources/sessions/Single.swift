@@ -68,7 +68,9 @@ func single(_ args: SingleCheck) -> Never {
     if let managed { single["managed"] = managed.paths(state: work, logs: work).directory.path }
     if let managed, !args.package.isEmpty {  // Packages1x.swift
         let device = managed.paths(state: work, logs: work).directory
-        single["packages1x"] = installPackages1x(args.package, device: device, tools: tools, work: work)
+        let paths = installPackages1x(
+            args.package, uninstall: args.uninstallPackages, device: device, tools: tools, work: work)
+        single[args.uninstallPackages ? "packages1xGone" : "packages1x"] = paths
     }
     if args.skipSetup { single["skipSetup"] = true }
     if args.jailbreak { single["jailbreak"] = true }

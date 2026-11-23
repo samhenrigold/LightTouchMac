@@ -212,6 +212,11 @@ public enum FirmwareCommand {
             /// 1.x: --package, a .pxl, an Installer-era .zip or an .app (FirmwareKit Package1x), installed (begin, mount,
             /// its files, commit).
             case installPackage = "install-package"
+            /// 1.x: --identifier, a package install-package installed, removed as its receipt says (begin, mount, its
+            /// preremove and files, commit).
+            case uninstallPackage = "uninstall-package"
+            /// 1.x: the packages installed, from their receipts (begin, mount, read, discard).
+            case listPackages = "list-packages"
         }
         @Option public var device: String
         @Option public var action: Action
@@ -222,6 +227,7 @@ public enum FirmwareCommand {
         @Option(help: "The decrypt cache, for jailbreak.") public var cache: String? = nil
         @Option(help: "A plist of preference changes, for preferences.") public var prefs: String? = nil
         @Option(help: "A .pxl, .zip or .app, for install-package.") public var package: String? = nil
+        @Option(help: "A package's identifier, for uninstall-package.") public var identifier: String? = nil
         @Option(help: "Default: the app bundle's packed guest tools (jailbreak on 1.x: its Installer.app).")
         public var guestTools: String? = nil
 
@@ -236,7 +242,8 @@ public enum FirmwareCommand {
             cache: URL? = nil,
             prefs: URL? = nil,
             guestTools: URL? = nil,
-            package: URL? = nil
+            package: URL? = nil,
+            identifier: String? = nil
         ) {
             self.device = device.path
             self.action = action
@@ -248,6 +255,7 @@ public enum FirmwareCommand {
             self.prefs = prefs?.path
             self.guestTools = guestTools?.path
             self.package = package?.path
+            self.identifier = identifier
         }
 
         public var arguments: [String] {
@@ -255,7 +263,8 @@ public enum FirmwareCommand {
                 + options([
                     "device": device, "action": action.rawValue, "session": session,
                     "record-policy": recordPolicy.rawValue, "cert": cert, "mount-point": mountPoint, "cache": cache,
-                    "prefs": prefs, "guest-tools": guestTools, "package": package
+                    "prefs": prefs, "guest-tools": guestTools, "package": package,
+                    "identifier": identifier
                 ])
         }
     }

@@ -159,6 +159,13 @@ struct SingleCheck: ParsableCommand {
         transform: path
     )
     var package: [URL] = []
+    @Flag(
+        help: """
+            With --package: each uninstalled again (firmwarekit edit --action uninstall-package) before the boot; \
+            afc2 must list none of what it installed, and Home is the jailbroken one.
+            """
+    )
+    var uninstallPackages = false
     @Option(help: "Install a newer build of the same app over it; its data must stay.", transform: path)
     var upgradeIPA: URL?
     @Option(help: "With --reboot: boot 2 asks for TZ.") var secondZone: String?

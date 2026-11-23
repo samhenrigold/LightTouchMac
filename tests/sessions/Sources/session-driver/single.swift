@@ -88,6 +88,8 @@ struct SingleConfig: Decodable {
     var jailbreak: Bool?
     /// Device paths a stopped edit's packages installed (sessions --package): afc2 must list each (packages1x.swift).
     var packages1x: [String]?
+    /// What the packages installed, uninstalled again before the boot: afc2 must list none of it.
+    var packages1xGone: [String]?
     /// With `jailbreak`: Cydia's sources and front page from the internet, its install bc from Cydia/Telesphoreo;
     /// without, from the local repositories the web proxy serves (CydiaFixture), installing its package.
     var network: Bool?
@@ -1134,6 +1136,7 @@ nonisolated enum WiFiProbe {
         }
     }
     if let paths = s.packages1x { await packages1x(d, paths) }
+    if let paths = s.packages1xGone { await packages1x(d, paths, gone: true) }
     if s.install != false {
         await install(d)
         await appFiles(d, agent: agent || (a4 && offered) || lockAgent, jailbreak: s.jailbreak == true)

@@ -301,6 +301,7 @@ enum MainMenuBuilder {
         menu.addItem(.separator())
         menu.addItem(item("Jailbreak…", #selector(MainWindowController.jailbreakDevice(_:))))
         menu.addItem(item("Install Package…", #selector(MainWindowController.installPackage(_:))))
+        menu.addItem(item("Uninstall Package…", #selector(MainWindowController.uninstallPackage(_:))))
         menu.addItem(item("Erase All Content and Settings…", #selector(MainWindowController.eraseDevice(_:))))
         return menu
     }

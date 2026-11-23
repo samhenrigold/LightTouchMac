@@ -109,7 +109,8 @@ extension MainWindowController: NSMenuItemValidation {
                 ?? false
         case #selector(eraseDevice(_:)): return selectedEntry.map { canPerform(.erase, for: $0) } ?? false
         case #selector(jailbreakDevice(_:)): return selectedEntry.map { canPerform(.jailbreak, for: $0) } ?? false
-        case #selector(installPackage(_:)): return selectedEntry.map(canInstallPackage) ?? false
+        case #selector(installPackage(_:)), #selector(uninstallPackage(_:)):
+            return selectedEntry.map(canInstallPackage) ?? false
         case #selector(showTweaks(_:)): return selectedInstance != nil
         case #selector(toggleIncludeDeviceBezel(_:)):
             // Dimmed and off while the window shows no bezel to include (View ▸ Device Bezels ▸ Off, Free-Form Screen).

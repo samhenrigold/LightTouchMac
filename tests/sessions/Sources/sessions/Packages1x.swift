@@ -6,9 +6,11 @@ import Foundation
 import SessionKit
 
 /// The packages into the stopped `device`, in order; the device paths the boot must list: each app, the receipt
-/// and the package's first file. Dies when one is refused.
-func installPackages1x(_ packages: [URL], device: URL, tools: Tools, work: URL) -> [String] {
+/// and the package's first file. With `uninstall`, each is uninstalled again afterwards, last first, and the boot
+/// must list none of them. Dies when one is refused.
+func installPackages1x(_ packages: [URL], uninstall: Bool, device: URL, tools: Tools, work: URL) -> [String] {
     var expected: [String] = []
+    var identifiers: [String] = []
     for package in packages {
         let log = work.appendingPathComponent("install-\(package.lastPathComponent).log")
         let out = work.appendingPathComponent("install-\(package.lastPathComponent).json")
@@ -28,16 +30,33 @@ func installPackages1x(_ packages: [URL], device: URL, tools: Tools, work: URL) 
         print("installed \(done.identifier): \(done.apps.joined(separator: ", ")) (\(done.files.count) items)")
         let first = done.files.first { !$0.hasSuffix("/") && !done.apps.contains($0) }
         expected += done.apps + ["/Library/PXL/DB/\(done.identifier).plist"] + (first.map { [$0] } ?? [])
+        identifiers.append(done.identifier)
+    }
+    guard uninstall else { return expected }
+    for identifier in identifiers.reversed() {
+        let log = work.appendingPathComponent("uninstall-\(identifier).log")
+        let status = run(
+            tools.firmwarekit.path,
+            [
+                "edit", "--device", device.path, "--action", "uninstall-package", "--identifier", identifier,
+                "--record-policy", "managed"
+            ],
+            log: log
+        )
+        guard status == 0 else { die("uninstall-package \(identifier) exited \(status) (\(log.path))", code: 1) }
+        print("uninstalled \(identifier)")
     }
     return expected
 }
 
-/// afc2 lists every path `installPackages1x` named.
+/// afc2 lists every path `installPackages1x` named (none, once uninstalled).
 func packages1x(_ r: Report, _ events: Events, _ d: String) {
     for e in events.find("package1x", ["device": d]) {
+        let gone = e.bool("gone")
         r.check(
-            e.bool("found"),
-            "\(d): afc2 lists \(e.string("path") ?? "?")" + (e.string("error").map { ": \($0)" } ?? "")
+            e.bool("found") != gone && e.string("error") == nil,
+            "\(d): afc2 \(gone ? "doesn't list" : "lists") \(e.string("path") ?? "?")"
+                + (e.string("error").map { ": \($0)" } ?? "")
         )
     }
     r.check(events.any("package1x"), "\(d): the installed packages were looked for")

@@ -23,7 +23,8 @@
 // were written for 1.0 to 1.1.2's /var/root. Every .app put in /Applications is in 1.0's DisplayOrder.plist
 // (SystemEdits.registerDisplayIdentifier), and SpringBoard 1.1 to 1.1.2's allowlist is turned off as the jailbreak
 // does (SpringBoardAllowlist), so its icon is on Home. What was installed is kept where pxldaemon keeps it,
-// /Library/PXL/DB/<identifier>.plist (RDPxlPackageInstalledFiles, and the package's Postflight and Preremove).
+// /Library/PXL/DB/<identifier>.plist (RDPxlPackageInstalledFiles, each file it wrote over marked replaced, and the
+// package's Postflight and Preremove), which Package1x.uninstall follows.
 
 import Foundation
 import ZIPFoundation
@@ -98,15 +99,8 @@ public struct Package1x {
                 }
             }
             guard !placements.isEmpty else { throw refused("PxlPkg.plist installs nothing") }
-            postflight = (plist["RDPxlPackagePostflight"] as? [Any] ?? []).reversed().map {
-                ($0 as? [Any] ?? []).compactMap { $0 as? String }  // a dict there is an option (createsFile)
-            }
-            for argv in postflight where !argv.isEmpty {
-                let tool = (argv[0] as NSString).lastPathComponent
-                guard satisfiedByBoot.contains(tool) || fileCommands.contains(tool) else {
-                    throw refused("its postflight runs \(argv[0]), which a stopped device can't run")
-                }
-            }
+            postflight = commands(plist["RDPxlPackagePostflight"])
+            try checkCommands(postflight, "postflight")
         } else if tops.count == 1, let app = tops.first, app.hasSuffix(".app") {
             placements = members.keys.sorted().map { Placement(path: "/Applications/" + $0, item: members[$0]!) }
         } else if !tops.isEmpty, tops.isSubset(of: rootTops) {
@@ -272,30 +266,16 @@ extension Package1x {
     /// The package onto the mounted 1.x system volume `v`.
     func install(_ v: any VolumeFiles) throws -> Installed {
         var done = Installed()
-        let mobile = N45Board.springBoardUser(v).uid == 501
-        /// The volume path for device path `path` and its owner: root's home is mobile's from 1.1.3.
-        func place(_ path: String, followLast: Bool) throws -> (path: String, uid: UInt32) {
-            var parts = try Self.absolute(path)
-            var uid: UInt32 = 0
-            if mobile {
-                let home =
-                    parts.starts(with: ["private", "var", "root"]) ? 3 : parts.starts(with: ["var", "root"]) ? 2 : 0
-                if home > 0 {
-                    parts = ["private", "var", "mobile"] + parts.dropFirst(home)
-                    uid = 501
-                }
-            }
-            let resolved = try Self.resolve(v, parts, followLast: followLast)
-            guard resolved.isEmpty || Self.roots.contains(String(resolved.split(separator: "/")[0])) else {
-                throw Self.refused("\(path) is outside the folders a package may write (/\(resolved))")
-            }
-            return (resolved, uid)
-        }
-        func record(_ path: String, uid: UInt32, folder: Bool = false, permanent: Bool = false) {
+        let place = Self.placer(v)
+        /// `replaced`: the path was there before (a file the package overwrote), which an uninstall leaves.
+        func record(
+            _ path: String, uid: UInt32, folder: Bool = false, permanent: Bool = false, replaced: Bool = false
+        ) {
             done.owners[uid, default: []].append(path)
             var entry: [String: Any] = ["file": "/" + path]
             if folder { entry["directory"] = true }
             if permanent { entry["permanent"] = true }
+            if replaced { entry["replaced"] = true }
             done.receipt.append(entry)
         }
         /// mkdir -p, each new folder recorded.
@@ -307,13 +287,14 @@ extension Package1x {
             record(path, uid: uid, folder: true, permanent: permanent)
         }
         for p in placements {
-            let (path, uid) = try place(p.path, followLast: p.item == .folder)
+            let (path, uid) = try place(p.path, p.item == .folder)
             if p.item == .folder {
                 try folder(path, uid: uid, permanent: p.permanent)
                 continue
             }
             guard !path.isEmpty, !v.isDirectory(path) else { throw Self.refused("\(p.path) is a folder there") }
-            if !p.overwrite, v.exists(path) { continue }
+            let existed = v.exists(path) || v.isSymlink(path)
+            if !p.overwrite, existed { continue }
             try folder((path as NSString).deletingLastPathComponent, uid: uid)
             switch p.item {
             case .file(let data, let mode):
@@ -324,14 +305,14 @@ extension Package1x {
                 try v.makeSymlink(path, to: target)
             case .folder: break
             }
-            record(path, uid: uid, permanent: p.permanent)
+            record(path, uid: uid, permanent: p.permanent, replaced: existed)
         }
         done.lines.append("\(name): \(placements.count) items")
         done.lines += warnings
         for argv in postflight where !argv.isEmpty {
-            let (line, written) = try run(argv, v, place: place)
+            let (line, written) = try Self.run(argv, v, place: place)
             done.lines.append(line)
-            for (path, uid) in written { record(path, uid: uid) }
+            for w in written { record(w.path, uid: w.uid, replaced: w.replaced) }
         }
         // the apps it put in /Applications: on Home
         done.apps = Array(
@@ -379,13 +360,53 @@ extension Package1x {
         return done
     }
 
-    /// One postflight command (`load` allowed only these): launchctl's left to the boot, the file commands made.
-    /// Returns its log line and the paths it wrote.
-    private func run(
+    /// The volume path for device path `path` on `v` and its owner (root's home is mobile's from 1.1.3), refused
+    /// outside `roots`.
+    static func placer(_ v: any VolumeFiles) -> (String, Bool) throws -> (path: String, uid: UInt32) {
+        let mobile = N45Board.springBoardUser(v).uid == 501
+        return { path, followLast in
+            var parts = try absolute(path)
+            var uid: UInt32 = 0
+            if mobile {
+                let home =
+                    parts.starts(with: ["private", "var", "root"]) ? 3 : parts.starts(with: ["var", "root"]) ? 2 : 0
+                if home > 0 {
+                    parts = ["private", "var", "mobile"] + parts.dropFirst(home)
+                    uid = 501
+                }
+            }
+            let resolved = try resolve(v, parts, followLast: followLast)
+            guard resolved.isEmpty || roots.contains(String(resolved.split(separator: "/")[0])) else {
+                throw refused("\(path) is outside the folders a package may write (/\(resolved))")
+            }
+            return (resolved, uid)
+        }
+    }
+
+    /// Refuses a postflight or preremove that runs anything but launchctl and the file commands.
+    static func checkCommands(_ commands: [[String]], _ what: String) throws {
+        for argv in commands where !argv.isEmpty {
+            let tool = (argv[0] as NSString).lastPathComponent
+            guard satisfiedByBoot.contains(tool) || fileCommands.contains(tool) else {
+                throw refused("its \(what) runs \(argv[0]), which a stopped device can't run")
+            }
+        }
+    }
+
+    /// pxldaemon's argv list as it runs them (last first); a dict in an argv is an option (createsFile).
+    static func commands(_ list: Any?) -> [[String]] {
+        (list as? [Any] ?? []).reversed().map { ($0 as? [Any] ?? []).compactMap { $0 as? String } }
+    }
+
+    typealias Written = (path: String, uid: UInt32, replaced: Bool)
+
+    /// One postflight or preremove command (`checkCommands` allowed only these): launchctl's left to the boot, the
+    /// file commands made. Returns its log line and the paths it wrote.
+    static func run(
         _ argv: [String],
         _ v: any VolumeFiles,
         place: (String, Bool) throws -> (path: String, uid: UInt32)
-    ) throws -> (String, [(String, UInt32)]) {
+    ) throws -> (String, [Written]) {
         let tool = (argv[0] as NSString).lastPathComponent
         let flags = argv.dropFirst().filter { $0.hasPrefix("-") }.joined()
         let args = Array(argv.dropFirst().filter { !$0.hasPrefix("-") })
@@ -405,7 +426,9 @@ extension Package1x {
             guard v.exists(from) else { return ("postflight \(said): no \(args[0]), as it fails there", []) }
             let to = try target(from)
             guard !v.isDirectory(to.path) else { throw Self.refused("its postflight \(said) would replace a folder") }
+            let existed = v.exists(to.path)
             if tool == "mv" {
+                if existed { try v.remove(to.path) }  // as mv replaces a file
                 try v.rename(from, to: to.path)
             } else if v.isFile(from) {
                 let mode = try v.item(at: from)?.mode ?? 0o644
@@ -413,7 +436,7 @@ extension Package1x {
             } else {
                 throw Self.refused("its postflight \(said) copies a folder or link")
             }
-            return ("postflight \(said)", [(to.path, to.uid)])
+            return ("postflight \(said)", [(to.path, to.uid, existed)])
         case "rm":
             for arg in args {
                 // pxldaemon passes argv as is (no shell), so rm sees a "*" as a name, which isn't there
@@ -429,7 +452,7 @@ extension Package1x {
             guard Self.staysInside(to.path, args[0]) else { throw Self.refused("its postflight \(said) links outside") }
             guard !v.exists(to.path) else { return ("postflight \(said): there already", []) }  // as ln fails
             try v.makeSymlink(to.path, to: args[0])
-            return ("postflight \(said)", [(to.path, to.uid)])
+            return ("postflight \(said)", [(to.path, to.uid, false)])
         case "chmod":
             guard args.count == 2, let mode = UInt16(args[0], radix: 8), mode <= 0o7777 else {
                 throw Self.refused("its postflight \(said) isn't chmod OCTAL PATH")

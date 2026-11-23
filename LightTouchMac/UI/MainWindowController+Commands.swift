@@ -246,6 +246,59 @@ extension MainWindowController {
         }
     }
 
+    /// Uninstall Package… (iPhone OS 1.x, stopped): the packages their receipts name, read from the device, one
+    /// chosen and removed as its receipt says (DeviceFilesystemEdits.uninstall(package:)).
+    @objc func uninstallPackage(_ sender: Any?) {
+        guard let entry = selectedEntry, canInstallPackage(entry), let window, window.attachedSheet == nil,
+            let instance = host.instance(for: entry)
+        else { return }
+        let edits = DeviceFilesystemEdits.shared
+        Task { [weak self] in
+            guard let self,
+                let packages = await edits.installedPackages(
+                    entry: entry,
+                    instance: instance,
+                    library: host.library,
+                    releaseStopped: { [host] in await host.releaseStopped(for: entry) }
+                ),
+                window.attachedSheet == nil
+            else { return }
+            let alert = NSAlert()
+            guard !packages.isEmpty else {
+                alert.messageText = "No packages are installed"
+                alert.informativeText = "Packages installed with Install Package… are listed here."
+                alert.beginSheetModal(for: window) { _ in }
+                return
+            }
+            alert.messageText = "Uninstall a package from \(name(entry))?"
+            alert.informativeText = "The files it installed are removed. Files it replaced and files it keeps stay."
+            let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 26), pullsDown: false)
+            for package in packages {  // one item each, even with the same title
+                popup.menu?.addItem(
+                    withTitle: package.version.map { "\(package.name) \($0)" } ?? package.name,
+                    action: nil,
+                    keyEquivalent: ""
+                )
+            }
+            alert.accessoryView = popup
+            alert.addButton(withTitle: "Uninstall")
+            alert.addButton(withTitle: "Cancel")
+            alert.beginSheetModal(for: window) { [weak self] response in
+                // Asked again on the answer: the device may have started while the question was up.
+                guard response == .alertFirstButtonReturn, let self, canInstallPackage(entry),
+                    let instance = host.instance(for: entry)
+                else { return }
+                edits.uninstall(
+                    package: packages[popup.indexOfSelectedItem],
+                    entry: entry,
+                    instance: instance,
+                    library: host.library,
+                    releaseStopped: { [host] in await host.releaseStopped(for: entry) }
+                )
+            }
+        }
+    }
+
     /// Jailbreak…: asked, then the stopped device's edit, its progress in the device area (DeviceFilesystemEdits).
     private func confirmJailbreak(_ entry: FirmwareCatalog.Entry) {
         guard let window, window.attachedSheet == nil else { return }
