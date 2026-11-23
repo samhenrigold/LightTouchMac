@@ -28,24 +28,26 @@ func flickCheck(_ args: FlickCheck) -> Never {
     let slide = iPad ? "dragshown 0.36 0.935 0.8 0.935" : "dragshown 0.18 0.9 0.92 0.9"
     // The swipe starts mid-screen; the window shows the screen about 576 points wide (iPad) or 400 (iPhone, iPod).
     let at = iPad ? "0.5 0.45 576" : "0.5 0.45 400"
-    var scenario = preparedScenario(
+    var prepared: [String: Any] = [:]
+    if args.refreshHz != 60 { prepared["refreshHz"] = args.refreshHz }
+    if args.angle { prepared["angle"] = true }
+    let scenario = homeScenario(
         base,
         tools: tools,
         work: work,
         name: "flick",
-        steps: [
-            // As `sessions rotation`: the second slide is a page swipe on the Home screen, so Home after it.
+        inputs: args.inputs,
+        // As `sessions rotation`: the second slide is a page swipe on the Home screen, so Home after it. A resumed
+        // Home screen is on its first page, as the unlock left it.
+        cold: [
             "boot", "lit 0.03 300", "wait 5", "button 0", "wait 2", slide, "wait 4", "button 0", "wait 2", slide,
-            "wait 4", "button 0", "wait 3",
-            // The first page, then Home on it shows the page left of it.
-            "dump page", "button 0", "wait 3", "dump left", "button 0", "wait 3"
-        ] + args.kinds.split(separator: ",").map { "flicks \($0) \(args.runs) \(at)" } + ["quit", "expectExit 60"]
+            "wait 4", "button 0", "wait 3"
+        ],
+        // The first page, then Home on it shows the page left of it.
+        steps: ["dump page", "button 0", "wait 3", "dump left", "button 0", "wait 3"]
+            + args.kinds.split(separator: ",").map { "flicks \($0) \(args.runs) \(at)" } + ["quit", "expectExit 60"],
+        prepared: prepared
     )
-    if args.refreshHz != 60 || args.angle, var prepared = scenario["prepared"] as? [String: Any] {
-        if args.refreshHz != 60 { prepared["refreshHz"] = args.refreshHz }
-        if args.angle { prepared["angle"] = true }
-        scenario["prepared"] = prepared
-    }
     let d = HelperDriver("flick", tools: tools, work: work, scenario: scenario)
     r.check(d.finish(1200) == 0, "flick: scenario completed")
     let flicks = d.events.find("flick")

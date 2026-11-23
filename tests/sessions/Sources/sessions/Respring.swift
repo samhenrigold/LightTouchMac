@@ -35,8 +35,8 @@ func respringCheck(_ args: RespringCheck) -> Never {
     // Home while the display sleeps and the slide while the agent says locked, until neither (helper-driver's wake).
     let wake = [unlock.replacingOccurrences(of: "drag", with: "wake")]
     let list = "spawn /bin/launchctl list"
-    var steps = ["boot", "lit 0.1 400", "waitagent 240"] + wake + ["wait 10"]
-    steps += closeApp + ["sample stock 3", list]
+    let cold = ["boot", "lit 0.1 400", "waitagent 240"] + wake + ["wait 10"]
+    var steps = closeApp + ["sample stock 3", list]
     // The key, then SpringBoard alone (what Respring did before)
     steps += [
         "defaults com.apple.UIKit UIAnimationDragCoefficient int 10", "spawn /bin/launchctl stop com.apple.SpringBoard",
@@ -52,11 +52,18 @@ func respringCheck(_ args: RespringCheck) -> Never {
         "wait 5",
         "quit", "expectExit 60"
     ]
-    var s = preparedScenario(base, tools: tools, work: work, name: "respring", steps: steps)
-    var prepared = s["prepared"] as? [String: Any] ?? [:]
-    prepared["itpack"] =
-        tools.guest.appendingPathComponent("guest-tools/\(base.armv7 ? "armv7" : "armv6").itpack").path
-    s["prepared"] = prepared
+    let s = homeScenario(
+        base,
+        tools: tools,
+        work: work,
+        name: "respring",
+        inputs: args.inputs,
+        cold: cold,
+        steps: steps,
+        prepared: [
+            "itpack": tools.guest.appendingPathComponent("guest-tools/\(base.armv7 ? "armv7" : "armv6").itpack").path
+        ]
+    )
 
     let d = HelperDriver("respring", tools: tools, work: work, scenario: s)
     r.check(d.finish(1200) == 0, "scenario completed")

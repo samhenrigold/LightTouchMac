@@ -26,23 +26,21 @@ func clipboardCheck(_ args: ClipboardCheck) -> Never {
     let fromMac = "Pasted from the Mac: é ✓ 漢字"
     let remote = "/var/tmp/it_pbtool"
     let wake = "wake 0.18 0.9 0.92 0.9"  // Home, then the lock screen's slider
-    var scenario = preparedScenario(
+    let scenario = homeScenario(
         base,
         tools: tools,
         work: work,
         name: "clipboard",
+        inputs: args.inputs,
+        // Awake and unlocked for each turn: a sleeping guest runs no agent (the text waits for it).
+        cold: ["boot", "waitagent 900", "wait 50", wake],
         steps: [
-            // Awake and unlocked for each turn: a sleeping guest runs no agent (the text waits for it).
-            "boot", "waitagent 900", "wait 50", wake, "agentput \(tool.path) \(remote)",
-            "guestpb \(remote) set \(fromGuest)", "wait 4",
+            "agentput \(tool.path) \(remote)", "guestpb \(remote) set \(fromGuest)", "wait 4",
             "hostpb \(fromMac)", "wait 4", wake, "guestpb \(remote) get", "wait 2",
             "quit", "expectExit 60"
-        ]
+        ],
+        prepared: ["itpack": itpack.path]
     )
-    if var prepared = scenario["prepared"] as? [String: Any] {
-        prepared["itpack"] = itpack.path
-        scenario["prepared"] = prepared
-    }
     let d = HelperDriver("clipboard", tools: tools, work: work, scenario: scenario)
     r.check(d.finish(1500) == 0, "clipboard: scenario completed")
     let alive = d.events.one("waitagent")["alive"] as? Bool == true

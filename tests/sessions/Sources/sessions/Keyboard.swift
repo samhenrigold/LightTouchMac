@@ -28,16 +28,20 @@ func keyboardCheck(_ args: KeyboardCheck) -> Never {
         "keyboard",
         tools: tools,
         work: work,
-        scenario: preparedScenario(
+        scenario: homeScenario(
             base,
             tools: tools,
             work: work,
             name: "keyboard",
-            steps: [
-                // As rotation: Home (two slides; on Home the second is a page swipe). Notes' + (top right) opens a
-                // new note with the insertion point in it; Home saves it, and the agent reads Notes' store back.
+            inputs: args.inputs,
+            // As rotation: Home (two slides; on Home the second is a page swipe). Notes' + (top right) opens a new
+            // note with the insertion point in it; Home saves it, and the agent reads Notes' store back.
+            cold: [
                 "boot", "lit 0.03 300", "wait 5", "button 0", "wait 2", slide, "wait 4", "button 0", "wait 2", slide,
-                "wait 4", "agentop launch com.apple.mobilenotes", "wait 10", "tapshown 0.92 0.088", "wait 4",
+                "wait 4"
+            ],
+            steps: [
+                "agentop launch com.apple.mobilenotes", "wait 10", "tapshown 0.92 0.088", "wait 4",
                 "keys \(word)", "wait 2", "button 0", "wait 6",
                 "agentget notes.sqlite /var/mobile/Library/Notes/notes.sqlite",
                 "agentget notes.sqlite-wal /var/mobile/Library/Notes/notes.sqlite-wal",

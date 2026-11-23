@@ -59,6 +59,8 @@ struct Scenario: Decodable {
         var restore: String?
         /// A usbmuxd the guest's USB reaches (USBMux's flags), for the `lockdown` step.
         var usbmuxd: String?
+        /// The saving boot's command line (SnapshotKey.normalized): a restore whose own differs is refused, stale.
+        var argv: [String]?
     }
     var dylib: String?
     var board: String?
@@ -343,7 +345,10 @@ Thread.detachNewThread {
             do { boot = try scenario.boot ?? preparedBoot(scenario.prepared!, hardware: hardware) } catch {
                 fail("boot configuration: \(error)")
             }
-            emit("argv", ["argv": boot.argv])
+            emit("argv", ["argv": boot.argv, "normalized": SnapshotKey.normalized(argv: boot.argv, device: dumpDir)])
+            if let saved = scenario.prepared?.argv, saved != SnapshotKey.normalized(argv: boot.argv, device: dumpDir) {
+                fail("stale snapshot: this boot's machine options differ from the ones it was saved with")
+            }
             bootAt = Date()
             guard case .success(.ok(true)) = request(.boot(boot)) else { fail("boot refused") }
         case "wait":

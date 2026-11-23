@@ -49,6 +49,14 @@ struct Inputs: ParsableArguments {
             """
     )
     var allowStale = false
+    @Flag(
+        help: """
+            Checks that need only a booted, unlocked Home screen (clipboard, flick, keyboard, scrolltop, respring) \
+            resume a cached snapshot of one instead of booting cold; it is taken on first use and keyed by the base's \
+            lock, the dylib, the helper and the guest package (HomeSnapshot.swift). Every other check boots cold.
+            """
+    )
+    var fromSnapshot = false
 
     func validate() throws {
         if app != nil, dylib != nil {
