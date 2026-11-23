@@ -5,10 +5,12 @@ import Foundation
 /// missed regression costs more than a matrix.
 public enum Affected {
     /// One row per board family, the rows that between them cover every recipe family, each with the create flags it
-    /// is prepared with (the 5.1 iPod touch also jailbroken: Cydia, Substrate, afc2).
-    public static let families: [(row: String, create: [String])] = [
-        ("m68ap-1A543a", []), ("n45ap-4A102", []), ("n72ap-7E18", []), ("k48ap-7B500", []),
-        ("n81ap-9B176", ["--jailbreak"]), ("n88ap-10B500", []), ("n90ap-11D257", []), ("n42ap-14G61", [])
+    /// is prepared with (the 5.1 iPod touch also jailbroken: Cydia, Substrate, afc2) and the flags its sessions single
+    /// adds (the first-generation boards also pull and replug the cable, whose usb-attached only they set at run time).
+    public static let families: [(row: String, create: [String], check: [String])] = [
+        ("m68ap-1A543a", [], ["--replug"]), ("n45ap-4A102", [], ["--replug"]), ("n72ap-7E18", [], []),
+        ("k48ap-7B500", [], []), ("n81ap-9B176", ["--jailbreak"], []), ("n88ap-10B500", [], []),
+        ("n90ap-11D257", [], []), ("n42ap-14G61", [], [])
     ]
 
     public struct Plan: Equatable {

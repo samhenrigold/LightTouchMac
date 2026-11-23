@@ -13,7 +13,7 @@ struct AffectedCheck: ParsableCommand {
             Documentation needs nothing; the app target's code, tests and scripts the Unit plan; preparation code \
             for one board family (FirmwareKit's K48, N45, N72, KBoot) that family's rows; anything else (the rest of \
             FirmwareKit, the helper, the emulator's pin, guest code, the drivers, a path no rule names) a boot of every \
-            family: \(Affected.families.map { $0.row + ($0.create.isEmpty ? "" : " " + $0.create.joined(separator: " ")) }.joined(separator: ", ")). \
+            family: \(Affected.families.map { ([$0.row] + $0.create + $0.check).joined(separator: " ") }.joined(separator: ", ")). \
             With --run, the Unit plan and then those rows through sessions matrix: a fresh base from --bases \
             (DIR/ROW) when there is one, else prepared from its IPSW (the app's downloads and imports, or \
             --ipsw-dir); a row with no IPSW here is skipped, saying so.
@@ -68,19 +68,22 @@ func affected(_ args: AffectedCheck) -> Never {
     if rows.isEmpty { print("boot: none") }
     var jobs: [String] = []
     var skipped: [String] = []
-    for (row, create) in rows {
+    for (row, create, check) in rows {
+        // a row's own check flags replace the prepared ones matrix would add; these rows are prepared with none
+        let single = check.isEmpty ? "" : " -- single " + check.joined(separator: " ")
         let board = String(row.prefix { $0 != "-" })
-        let reason = "\(row)\(create.isEmpty ? "" : " " + create.joined(separator: " ")) (\(plan.reasons[board] ?? ""))"
+        let reason =
+            "\(row)\(create.isEmpty ? "" : " " + create.joined(separator: " "))\(single) (\(plan.reasons[board] ?? ""))"
         if let base = args.bases?.appendingPathComponent(row),
             let lock = (try? Data(contentsOf: base.appendingPathComponent("device.lock.json")))
                 .flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }),
             PreparationChanges.verdict(lock: lock, catalog: catalogEntries).stale.isEmpty
         {
             print("boot: \(reason) on \(base.path)")
-            jobs.append("\(row) \(base.path)")
+            jobs.append("\(row) \(base.path)\(single)")
         } else if let ipsw = localIPSW(row, dirs: args.ipswDir) {
             print("boot: \(reason), prepared from \(ipsw.path)")
-            jobs.append("\(row) --id \(row) --ipsw \(ipsw.path) \(create.joined(separator: " "))")
+            jobs.append("\(row) --id \(row) --ipsw \(ipsw.path) \(create.joined(separator: " "))\(single)")
         } else {
             print("boot: \(reason) SKIPPED: no IPSW for it on this Mac")
             skipped.append(row)
