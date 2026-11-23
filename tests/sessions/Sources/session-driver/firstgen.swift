@@ -41,6 +41,7 @@ import SessionKit
                 fields["destination"] = media.destination
                 fields["title"] = media.title
                 if media.destination != "Photos" { titles.append(media.title) }
+                if case .song(let song) = media, song.artwork != nil { firstGenCovered.append(song.title) }
                 try await library.add(media) { _ in }
                 fields["ok"] = true
             } catch {
@@ -76,7 +77,9 @@ import SessionKit
     emit("firstGenLibrary", read)
     let songs = titles.filter { !movies.contains($0) }
     if !songs.isEmpty || movies.isEmpty {
-        await firstGenScreen(d, app: ["iPod", "Music"], stage: "music\(generation)", titles: songs, artists: artists)
+        await firstGenScreen(
+            d, app: ["iPod", "Music"], stage: "music\(generation)", titles: songs, artists: artists,
+            nowPlaying: firstGenCovered.first)
     }
     // the iPod touch's Videos app, the iPhone's iPod's Videos tab
     let videos = titles.filter(movies.contains)
@@ -91,6 +94,9 @@ import SessionKit
     }
 }
 
+/// The imported songs whose tags carry a cover, every boot's (Now Playing must show it).
+@MainActor var firstGenCovered: [String] = []
+
 /// One app opened from its Home icon (the first of `app`'s labels on the screen; the iPhone's dock label "iPod", which
 /// the reader misses on the dock, at its dock slot; a tab named "Songs" tapped where the first screen doesn't show a
 /// title, or another of `tabs`; Photos' first album opened), its screen read, then Home. Emits `firstGenScreen`.
@@ -100,7 +106,8 @@ import SessionKit
     stage: String,
     titles: [String],
     tabs: [String] = ["Songs", "Camera Roll", "Saved Photos"],
-    artists: [String] = []
+    artists: [String] = [],
+    nowPlaying: String? = nil
 ) async {
     var event: [String: Any] = ["device": d.name, "app": app[0], "stage": stage]
     func labels(_ shot: String) -> [(text: String, x: Double, y: Double)] {
@@ -167,6 +174,23 @@ import SessionKit
         let listed = d.screenshot("fg-\(stage)-artists").map(labels)?.map(\.text) ?? []
         event["artists"] = artists
         event["artistsShown"] = artists.filter { artist in listed.contains { $0.contains(artist) } }
+    }
+    // a song with a cover, played from the Songs tab: Now Playing's middle is its art
+    // the tab bar's "Songs", not the list's title
+    if let song = nowPlaying, let tab = found.filter({ $0.text == "Songs" }).max(by: { $0.y < $1.y }) {
+        await d.tap(tab.x, tab.y)
+        try? await Task.sleep(for: .seconds(5))
+        let rows = d.screenshot("fg-\(stage)-songs").map(labels) ?? []
+        if let row = rows.first(where: { $0.text.contains(song) }) {
+            await d.tap(row.x, row.y)
+            try? await Task.sleep(for: .seconds(6))
+            event["nowPlayingColored"] =
+                d.screenshot("fg-\(stage)-nowplaying").flatMap {
+                    coloredFraction(URL(fileURLWithPath: $0), x: 0.5, y: 0.45)
+                } ?? 0
+        } else {
+            event["nowPlayingColored"] = 0.0
+        }
     }
     emit("firstGenScreen", event)
     await d.home()

@@ -1,5 +1,6 @@
 // The binary iTunesDB ("mhbd") that iPhone OS 1.x's Music and Videos read (MusicLibrary's ReadDulcimerDB), where
-// 2.x on have a guest agent to add through MusicLibrary itself: tracks and the master playlist, no artwork, in the
+// 2.x on have a guest agent to add through MusicLibrary itself: tracks and the master playlist, each track's artwork
+// by its ArtworkDB image's ID (PhotoDatabase), in the
 // layout libgpod documents (src/itdb_itunesdb.c, db-itunes-parser.h). 1.1.x's MusicLibrary also checks hash58
 // (libgpod's itdb_hash58.c): an HMAC-SHA1 of the database keyed from the device's FireWire ID (lockdown's
 // com.apple.mobile.iTunes FairPlayID).
@@ -23,7 +24,8 @@ public nonisolated enum ITunesDB {
             mediaType: UInt32 = Self.audio,
             artist: String? = nil,
             album: String? = nil,
-            genre: String? = nil
+            genre: String? = nil,
+            artwork: UInt32? = nil
         ) {
             self.id = id
             self.persistentID = persistentID
@@ -37,6 +39,7 @@ public nonisolated enum ITunesDB {
             self.artist = artist
             self.album = album
             self.genre = genre
+            self.artwork = artwork
         }
         public var id: UInt32
         public var persistentID: UInt64
@@ -54,6 +57,8 @@ public nonisolated enum ITunesDB {
         public var artist: String?
         public var album: String?
         public var genre: String?
+        /// Its cover's image in the ArtworkDB (libgpod's mhii_link; the image's song ID is this track's persistent ID).
+        public var artwork: UInt32?
 
         public static let audio: UInt32 = 1
         public static let movie: UInt32 = 2
@@ -214,8 +219,12 @@ public nonisolated enum ITunesDB {
         let milliseconds = try UInt32(parsingLittleEndian: &s)
         try s.seek(toAbsoluteOffset: start + 0x70)
         let persistentID = try UInt64(parsingLittleEndian: &s)
+        try s.seek(toAbsoluteOffset: start + 0xA4)
+        let hasArtwork = try UInt8(parsing: &s) == 1
         try s.seek(toAbsoluteOffset: start + 0xD0)
         let mediaType = try UInt32(parsingLittleEndian: &s)
+        try s.seek(toAbsoluteOffset: start + 0x160)
+        let artwork = try UInt32(parsingLittleEndian: &s)
         var strings: [UInt32: String] = [:]
         try s.seek(toAbsoluteOffset: start + header)
         for _ in 0..<mhods {
@@ -250,7 +259,8 @@ public nonisolated enum ITunesDB {
             mediaType: mediaType,
             artist: strings[4],
             album: strings[3],
-            genre: strings[5]
+            genre: strings[5],
+            artwork: hasArtwork && artwork != 0 ? artwork : nil
         )
     }
 
@@ -281,6 +291,12 @@ public nonisolated enum ITunesDB {
         // libgpod's movie_flag: video before the media type (0xD0) was read
         put(UInt8(track.mediaType == Track.audio ? 0 : 1), at: 0xB1)
         put(track.mediaType, at: 0xD0)
+        if let artwork = track.artwork {
+            // libgpod's artwork_count and has_artwork (1; 2 is none), then mhii_link; artwork_size (0x80) left 0
+            put(UInt16(1), at: 0x7C)
+            put(UInt8(1), at: 0xA4)
+            put(artwork, at: 0x160)
+        }
         return chunk("mhit", 0x184, raw: Data(fields), body: mhods.reduce(Data(), +))
     }
 

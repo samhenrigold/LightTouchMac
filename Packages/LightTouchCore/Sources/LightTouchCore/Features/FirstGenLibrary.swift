@@ -1,6 +1,6 @@
 // Media import on iPhone OS 1.x, which has no guest agent to commit through: everything goes over AFC into the Media
 // folder while the device runs. A song or video is copied under iTunes_Control/Music and added to the iTunesDB
-// (ITunesDB, signed with hash58 for the device, which 1.1.x checks). On the iPhone a photo becomes the next
+// (ITunesDB, signed with hash58 for the device, which 1.1.x checks), a song's cover to the ArtworkDB. On the iPhone a photo becomes the next
 // DCIM/100APPLE/IMG_NNNN.JPG with its IMG_NNNN.THM, the DCF group its Camera Roll scans; the iPod touch's Photos lists
 // only iTunes' photo library, so there it goes into Photos/Photo Database (PhotoDatabase) with its thumbnails.
 
@@ -17,6 +17,7 @@ public struct FirstGenLibrary: Sendable {
     static let database = "iTunes_Control/iTunes/iTunesDB"
     static let photos = "DCIM/100APPLE"
     static let photoDatabase = "Photos/Photo Database"
+    static let artworkDatabase = "iTunes_Control/Artwork/ArtworkDB"
 
     /// `willCommit`: the file is on the device, and the library write, which isn't cancelled, starts.
     public func add(
@@ -26,7 +27,9 @@ public struct FirstGenLibrary: Sendable {
     ) async throws {
         switch media {
         case .song(let song):
-            try await addTrack(song.audio, id: song.id, metadata: song.metadata, movie: false, progress, willCommit)
+            try await addTrack(
+                song.audio, id: song.id, metadata: song.metadata, movie: false, artwork: song.artwork, progress,
+                willCommit)
         case .video(let video):
             try await addTrack(video.video, id: video.id, metadata: video.metadata, movie: true, progress, willCommit)
         case .photo(let photo):
@@ -51,6 +54,7 @@ public struct FirstGenLibrary: Sendable {
         id: String,
         metadata: URL,
         movie: Bool,
+        artwork: URL? = nil,
         _ progress: @escaping @Sendable (Double) -> Void,
         _ willCommit: () -> Void
     ) async throws {
@@ -60,20 +64,61 @@ public struct FirstGenLibrary: Sendable {
         let remote = "iTunes_Control/Music/F00/" + name
         // A database this can't read is never replaced: that would lose the songs it lists.
         var tracks = try await self.tracks()
+        var covers = try await artworkImages()
         _ = try await services.stageFile(file, remote: remote, reuseIdentical: true, progress: progress)
         let location = ":" + remote.replacingOccurrences(of: "/", with: ":")
         tracks.removeAll { $0.location == location }
-        tracks.append(
-            try Self.track(
-                file,
-                metadata: metadata,
-                id: (tracks.map(\.id).max() ?? 99) + 1,
-                location: location,
-                movie: movie
-            )
+        var track = try Self.track(
+            file,
+            metadata: metadata,
+            id: (tracks.map(\.id).max() ?? 99) + 1,
+            location: location,
+            movie: movie
         )
+        // a replaced song's cover goes with it
+        covers.removeAll { cover in !tracks.contains { $0.persistentID == cover.songID } }
+        if let artwork {
+            let id = (covers.map(\.id).max() ?? PhotoDatabase.firstArtworkID - 1) + 1
+            let thumbnails = try await stageThumbnails(
+                of: artwork, in: PhotoDatabase.artworkFormats, folder: "iTunes_Control/Artwork", prefix: ":", id: id)
+            covers.append(PhotoDatabase.Image(id: id, songID: track.persistentID, thumbnails: thumbnails))
+            track.artwork = id
+        }
+        tracks.append(track)
         willCommit()
+        if artwork != nil || !covers.isEmpty {
+            try await sync(
+                PhotoDatabase.make(covers, formats: PhotoDatabase.artworkFormats, album: false),
+                to: Self.artworkDatabase)
+        }
         try await publish(ITunesDB.make(tracks, databaseID: UInt64.random(in: 1...UInt64.max)))
+    }
+
+    /// The covers the device's ArtworkDB holds; none where it has none yet.
+    public func artworkImages() async throws -> [PhotoDatabase.Image] {
+        guard let data = try await download(Self.artworkDatabase) else { return [] }
+        return try PhotoDatabase.images(in: data)
+    }
+
+    /// `image` in each of `formats`, each in its own .ithmb (F<format>_<id>.ithmb) in `folder`, which the database
+    /// names with `prefix`: the thumbnail records.
+    private func stageThumbnails(
+        of image: URL, in formats: [PhotoDatabase.Format], folder: String, prefix: String, id: UInt32
+    ) async throws -> [PhotoDatabase.Thumbnail] {
+        guard let source = CGImageSourceCreateWithURL(image as CFURL, nil),
+            let picture = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        else { throw DeviceToolsError.failed("This image couldn’t be read.") }
+        var thumbnails: [PhotoDatabase.Thumbnail] = []
+        for format in formats {
+            let name = "F\(format.id)_\(id).ithmb"
+            let (pixels, thumbnail) = try PhotoDatabase.pixels(of: picture, in: format, file: prefix + name, offset: 0)
+            let local = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-ithmb-" + UUID().uuidString)
+            try pixels.write(to: local)
+            defer { try? FileManager.default.removeItem(at: local) }
+            _ = try await services.stageFile(local, remote: folder + "/" + name, replace: true) { _ in }
+            thumbnails.append(thumbnail)
+        }
+        return thumbnails
     }
 
     /// The database's track for a prepared file: its title, artist, album, genre and length from the metadata
@@ -135,20 +180,8 @@ public struct FirstGenLibrary: Sendable {
         // A database this can't read is never replaced: that would lose the photos it lists.
         var images = try await libraryPhotos()
         let id = (images.map(\.id).max() ?? PhotoDatabase.firstID - 1) + 1
-        guard let source = CGImageSourceCreateWithURL(image as CFURL, nil),
-            let picture = CGImageSourceCreateImageAtIndex(source, 0, nil)
-        else { throw DeviceToolsError.failed("This photo couldn’t be read.") }
-        var thumbnails: [PhotoDatabase.Thumbnail] = []
-        for format in PhotoDatabase.photoFormats {
-            let name = "F\(format.id)_\(id).ithmb"
-            let (pixels, thumbnail) = try PhotoDatabase.pixels(
-                of: picture, in: format, file: ":Thumbs:" + name, offset: 0)
-            let local = FileManager.default.temporaryDirectory.appendingPathComponent("ltm-ithmb-" + UUID().uuidString)
-            try pixels.write(to: local)
-            defer { try? FileManager.default.removeItem(at: local) }
-            _ = try await services.stageFile(local, remote: "Photos/Thumbs/" + name, replace: true) { _ in }
-            thumbnails.append(thumbnail)
-        }
+        let thumbnails = try await stageThumbnails(
+            of: image, in: PhotoDatabase.photoFormats, folder: "Photos/Thumbs", prefix: ":Thumbs:", id: id)
         images.append(PhotoDatabase.Image(id: id, thumbnails: thumbnails))
         willCommit()
         try await sync(PhotoDatabase.make(images), to: Self.photoDatabase)

@@ -57,6 +57,15 @@ func judgeFirstGenMedia(_ r: Report, _ d: String, events: Events, wrongHash: Boo
             "\(d): \(e.string("stage") ?? "?"): Artists shows \(shown) of the tagged songs' \(want)"
         )
     }
+    // a song's cover, on Now Playing (the import's covers are colored; a song without one shows a gray note); with
+    // the database signed for another device Music lists no song to play
+    for e in screens where !wrongHash && e.has("nowPlayingColored") {
+        let colored = e["nowPlayingColored"] as? Double ?? 0
+        r.check(
+            colored > 0.5,
+            "\(d): \(e.string("stage") ?? "?"): Now Playing shows the song's cover (\(Int(colored * 100))% colored)"
+        )
+    }
     // the iPhone's Camera Roll is DCIM; the iPod touch's Photos lists only iTunes' Photo Database, its Photo Library
     for e in screens where photos > 0 && e.string("stage")?.hasPrefix("photos") == true {
         let text = e["text"] as? [String] ?? []

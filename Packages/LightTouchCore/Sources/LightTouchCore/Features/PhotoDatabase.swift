@@ -1,7 +1,7 @@
-// iTunes' image database ("mhfd"), which iPhone OS 1.1's MusicLibrary reads (ReadITImageDB) for Photos (Media's
-// Photos/Photo Database, MLPhotoLibrary): each image's thumbnails as raw pixels in .ithmb files beside it, one per
-// format, in the layout libgpod documents (src/db-artwork-writer.c, db-itunes-parser.h, ithumb-writer.c). 1.1's Photos
-// lists only this library, not DCIM.
+// iTunes' image database ("mhfd"), which iPhone OS 1.x's MusicLibrary reads (ReadITImageDB) for Photos (Media's
+// Photos/Photo Database, MLPhotoLibrary) and for Music's covers (iTunes_Control/Artwork/ArtworkDB): each image's
+// thumbnails as raw pixels in .ithmb files beside it, one per format, in the layout libgpod documents
+// (src/db-artwork-writer.c, db-itunes-parser.h, ithumb-writer.c). 1.1's Photos lists only this library, not DCIM.
 
 import BinaryParsing
 import CoreGraphics
@@ -31,6 +31,15 @@ public nonisolated enum PhotoDatabase {
         Format(id: 3008, width: 640, height: 480, cropped: false)
     ]
 
+    /// The cover formats MusicLibrary's GetPurplePredefinediTunesFormat lays out plainly (libgpod's
+    /// ipod_touch_1_cover_art_info; 3001 to 3003 are stored in its recursive tiling and left out): Now Playing's 320,
+    /// the lists' 55 and 88. Music takes the best of those a cover has (bestImageInstance).
+    public static let artworkFormats = [
+        Format(id: 3005, width: 320, height: 320, cropped: true),
+        Format(id: 3006, width: 55, height: 55, cropped: true),
+        Format(id: 3007, width: 88, height: 88, cropped: true)
+    ]
+
     /// One image's copy in one format: where in which .ithmb (`file` as the database names it, ":Thumbs:F3004_1.ithmb")
     /// and the picture's size inside the format's, padding included.
     public struct Thumbnail: Sendable, Equatable {
@@ -45,15 +54,26 @@ public nonisolated enum PhotoDatabase {
     }
 
     public struct Image: Sendable, Equatable {
+        public init(id: UInt32, songID: UInt64? = nil, thumbnails: [Thumbnail]) {
+            self.id = id
+            self.songID = songID ?? UInt64(id) + 2
+            self.thumbnails = thumbnails
+        }
         public var id: UInt32
+        /// A cover's track (its persistent ID); a photo's is libgpod's ID + 2.
+        public var songID: UInt64
         public var thumbnails: [Thumbnail]
     }
 
     /// libgpod's first photo ID (itdb_photodb_write); albums are numbered from 0x64 past the photos.
     public static let firstID: UInt32 = 0x40
 
-    /// The database: every image (mhsd 1), the master album "Photo Library" holding them all (2), the formats (3).
-    public static func make(_ images: [Image], formats: [Format] = photoFormats) -> Data {
+    /// libgpod's first cover ID (ipod_artwork_db_set_ids).
+    public static let firstArtworkID: UInt32 = 0x64
+
+    /// The database: every image (mhsd 1), the master album "Photo Library" holding them all (2; none in an
+    /// ArtworkDB, `album` false), the formats (3).
+    public static func make(_ images: [Image], formats: [Format] = photoFormats, album hasAlbum: Bool = true) -> Data {
         let items = images.map(mhii).reduce(Data(), +)
         let list = chunk("mhsd", 0x60, [1], body: chunk("mhli", 0x5C, [UInt32(images.count)], hasTotal: false) + items)
         // mhba: mhods, members, its ID, two unknowns, type 1 (the master), the slideshow's settings, previous album
@@ -61,12 +81,14 @@ public nonisolated enum PhotoDatabase {
         album += Data([1, 0, 0, 0, 0, 0]) + Data(count: 24) + le(UInt32(0x64))
         let members = images.map { chunk("mhia", 40, [0, $0.id]) }.reduce(Data(), +)
         let master = chunk("mhba", 0x94, raw: album, body: name("Photo Library") + members)
-        let albums = chunk("mhsd", 0x60, [2], body: chunk("mhla", 0x5C, [1], hasTotal: false) + master)
+        let albums = chunk(
+            "mhsd", 0x60, [2],
+            body: chunk("mhla", 0x5C, [hasAlbum ? 1 : 0], hasTotal: false) + (hasAlbum ? master : Data()))
         let files = formats.map { chunk("mhif", 0x7C, [0, $0.id, UInt32($0.imageSize)]) }.reduce(Data(), +)
         let list3 = chunk(
             "mhsd", 0x60, [3], body: chunk("mhlf", 0x5C, [UInt32(formats.count)], hasTotal: false) + files)
         // past every record ID, the album's too: MLPhotoLibrary looks up only albums below it
-        let next = max((images.map(\.id).max() ?? firstID - 1) + 1, 0x65 + UInt32(images.count))
+        let next = max((images.map(\.id).max() ?? firstID - 1) + 1, hasAlbum ? 0x65 + UInt32(images.count) : 0)
         // mhfd: unknown, 2 (iTunes 4.9 on), three lists, unknown, the next ID, then 2 in the first flag byte (0x30)
         let header = le(UInt32(0)) + le(UInt32(2)) + le(UInt32(3)) + le(UInt32(0)) + le(next) + Data(count: 16)
         return chunk("mhfd", 0x84, raw: header + Data([2]), body: list + albums + list3)
@@ -185,6 +207,7 @@ public nonisolated enum PhotoDatabase {
         guard tag == "mhii", total >= header else { throw invalid }
         let children = try Int(parsing: &s, storedAsLittleEndian: UInt32.self)
         let id = try UInt32(parsingLittleEndian: &s)
+        let songID = try UInt64(parsingLittleEndian: &s)
         var thumbnails: [Thumbnail] = []
         try s.seek(toAbsoluteOffset: start + header)
         for _ in 0..<children {
@@ -198,7 +221,7 @@ public nonisolated enum PhotoDatabase {
             try s.seek(toAbsoluteOffset: at + length)
         }
         try s.seek(toAbsoluteOffset: start + total)
-        return Image(id: id, thumbnails: thumbnails)
+        return Image(id: id, songID: songID, thumbnails: thumbnails)
     }
 
     private static func mhni(_ s: inout ParserSpan) throws(ParsingError) -> Thumbnail {
@@ -248,8 +271,8 @@ public nonisolated enum PhotoDatabase {
     // MARK: - Writing
 
     private static func mhii(_ image: Image) -> Data {
-        // children, its ID, the "song ID" libgpod gives a photo (its ID + 2), then rating, dates and size, all 0
-        let fields = le(UInt32(image.thumbnails.count)) + le(image.id) + le(UInt64(image.id) + 2)
+        // children, its ID, its song ID, then rating, dates and size, all 0
+        let fields = le(UInt32(image.thumbnails.count)) + le(image.id) + le(image.songID)
         let thumbnails = image.thumbnails.map { thumbnail in
             var fields = le(UInt32(1)) + le(thumbnail.format) + le(thumbnail.offset) + le(thumbnail.size)
             fields += le(thumbnail.verticalPadding) + le(thumbnail.horizontalPadding)
