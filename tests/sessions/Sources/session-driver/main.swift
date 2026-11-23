@@ -303,7 +303,10 @@ extension String {
                 }
                 // usbmuxd too, in the services worker's sandbox exactly when the worker's signature asks for one
                 if let mux = self.mux {
-                    let muxed = sandboxCheck(mux.process.processIdentifier)
+                    // a first reading may come before the worker's exec into usbmuxd has its sandbox (SandboxReading)
+                    let muxed = SandboxReading.settled(expected: mux.sandboxed) {
+                        sandboxCheck(mux.process.processIdentifier)
+                    }
                     emit("usbmuxd-sandbox", ["device": self.name, "sandboxed": muxed])
                     if muxed != mux.sandboxed {
                         fail("usbmuxd is \(muxed ? "" : "not ")sandboxed but the services worker's says otherwise")
