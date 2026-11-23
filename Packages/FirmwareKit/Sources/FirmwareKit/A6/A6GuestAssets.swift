@@ -16,7 +16,7 @@ public enum A6GuestAssets {
     private static let paths = [
         "System/Library/Frameworks/OpenGLES.framework/OpenGLES",
         "usr/local/bin/it_agent", "usr/local/bin/ltm-httpget",
-        "usr/lib/libappsync.dylib", "usr/libexec/installd",
+        "usr/lib/libappsync.dylib", "usr/libexec/installd", "usr/libexec/amfid",
         "System/Library/Caches/com.apple.xpcd/xpcd_cache.dylib",
         sharedCachePath
     ]
@@ -26,6 +26,7 @@ public enum A6GuestAssets {
         let volume = try HFSPlusVolume(system)
         var assets: [Asset] = []
         var hashes = Set<Data>()
+        var amfid: [Data]?
         // 13A344's qualified preparation needs only the edited cache's exact
         // identity. Do not broaden that recipe to unrelated support binaries.
         let kernelHash = Preparer.sha256(kernel)
@@ -44,6 +45,7 @@ public enum A6GuestAssets {
             let bytes = try volume.contents(volume.record(at: path))
             let directories = try verifiedCodeDirectories(bytes)
             hashes.formUnion(directories)
+            if path == amfidPath { amfid = directories }
             assets.append(
                 Asset(
                     path: path, sha256: Preparer.sha256(bytes),
@@ -67,7 +69,29 @@ public enum A6GuestAssets {
                         codeDirectories: directories.map(\.hexString)))
             }
         }
-        return Result(kernel: try registering(hashes, in: kernel), assets: assets)
+        var prepared = try registering(hashes, in: kernel)
+        if kernelHash == "bbc90ec2bd9ce1cc43c6a98b47d39348d63443b5d6c22293f23a1f43bebe4b46",
+            let amfid
+        {
+            guard amfid.count == 1 else { throw invalid("\(amfidPath) has \(amfid.count) code directories") }
+            prepared = try pinningAMFID(amfid[0], in: prepared)
+        }
+        return Result(kernel: prepared, assets: assets)
+    }
+
+    private static let amfidPath = "usr/libexec/amfid"
+    /// Where 14G61's AMFI keeps amfid's code directory hash, which it holds every answer's sender to
+    /// (_validateCodeDirectoryHashInDaemon: "unable to verify audit token came from amfid"), and the stock one there.
+    private static let amfidPin = 0x7b_1ec6, stockAMFID = "0b6d92f2aefd26b0e656bbd8da52cc6af9197470"
+
+    /// The 14G61 kernel with AMFI's amfid pin set to `cdhash`, the staged amfid's (AppSync links into it).
+    static func pinningAMFID(_ cdhash: Data, in kernel: Data) throws -> Data {
+        guard cdhash.count == 20, kernel.count >= amfidPin + 20,
+            kernel.subdata(in: amfidPin..<(amfidPin + 20)).hexString == stockAMFID
+        else { throw invalid("AMFI's amfid pin differs") }
+        var result = kernel
+        result.replaceSubrange(amfidPin..<(amfidPin + 20), with: cdhash)
+        return result
     }
 
     private static func invalid(_ detail: String) -> FirmwareError {

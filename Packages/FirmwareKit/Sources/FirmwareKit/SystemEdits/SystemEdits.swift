@@ -492,12 +492,22 @@ public enum SystemEdits {
         try v.put(contentsOf: helper, at: appsyncPath, mode: 0o644)  // host file
         let job = installdJobs.first { v.exists($0) }
         if let job {
-            try rewritePlist(v, job) { dyldInsert($0, "/" + appsyncPath) }
-            // iOS 8+ release installd: dyld ignores DYLD_INSERT_LIBRARIES while its empty __RESTRICT marker is there.
-            if majorVersion(v) >= 8 {
-                let before = try v.contents(at: installd)
-                let after = try SideloadTools.installationServiceAllowingHelper(before)
-                if after != before { try v.put(after, at: installd, mode: 0o755) }
+            let major = majorVersion(v)
+            func edit(_ path: String, _ change: (Data) throws -> Data) throws {
+                let before = try v.contents(at: path)
+                let after = try change(before)
+                if after != before { try v.put(after, at: path, mode: 0o755) }
+            }
+            if major >= 10 {
+                // The environment reaches neither dyld nor, there, amfid, which the kernel asks about every app.
+                for path in [installd, amfid] {
+                    try edit(path) { try SideloadTools.installationServiceLinking($0, library: "/" + appsyncPath) }
+                }
+            } else {
+                try rewritePlist(v, job) { dyldInsert($0, "/" + appsyncPath) }
+                // iOS 8+ release installd: dyld ignores DYLD_INSERT_LIBRARIES while its empty __RESTRICT marker is
+                // there.
+                if major >= 8 { try edit(installd, SideloadTools.installationServiceAllowingHelper) }
             }
             return (line, (job as NSString).lastPathComponent)
         }
@@ -520,7 +530,7 @@ public enum SystemEdits {
     }
 
     static let lockdownServices = "System/Library/Lockdown/Services.plist"
-    static let installd = "usr/libexec/installd"
+    static let installd = "usr/libexec/installd", amfid = "usr/libexec/amfid"
     static let installdJobs = ["com.apple.mobile.installd.plist", "com.apple.installd.plist"].map { daemons + "/" + $0 }
     static let afcd = "usr/libexec/afcd", afc2d = "usr/libexec/afc2d", afc2Job = daemons + "/com.apple.afc2.plist"
     /// afc2, as the jailbreaks of the time added it: a com.apple.afc2 lockdown service serving "/" as root, so the Mac

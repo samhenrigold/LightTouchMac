@@ -80,9 +80,36 @@ struct SideloadInsertionTests {
             return Data()
         }
         #expect(try entitlementBlob(before) == entitlementBlob(after))
+        let linked = try SideloadTools.installationServiceLinking(after, library: "/" + SystemEdits.appsyncPath)
+        #expect(linked.count == after.count && linked != after)
+        #expect(try entitlementBlob(linked) == entitlementBlob(after))
         if let path = ProcessInfo.processInfo.environment["FK_SIDELOAD_INSTALLD_OUTPUT"] {
-            try after.write(to: URL(fileURLWithPath: path), options: .withoutOverwriting)
+            try linked.write(to: URL(fileURLWithPath: path), options: .withoutOverwriting)
         }
     }
 
+    @Test func linksTheHelperInTheHeaderPaddingAndSignsAgain() throws {
+        var bytes = ActivationTests.syntheticMachO()
+        bytes[4] = 12  // CPU_TYPE_ARM
+        let before = Data(bytes)
+        let after = try SideloadTools.installationServiceLinking(before, library: "/usr/lib/libappsync.dylib")
+        func word(_ offset: Int) -> Int { (0..<4).reduce(0) { $0 | Int(after[offset + $1]) << ($1 * 8) } }
+        #expect(word(16) == 2 && word(20) == 16 + 52)
+        #expect(word(44) == 0xC && word(48) == 52 && word(52) == 24)
+        #expect(String(decoding: after[68..<93], as: UTF8.self) == "/usr/lib/libappsync.dylib" && after[93] == 0)
+        #expect(after.count == before.count && after[256...] != before[256...])
+        #expect(
+            after[(ActivationTests.cd + 52)..<(ActivationTests.cd + 72)]
+                == Data(Insecure.SHA1.hash(data: after[0..<256])))
+        #expect(try SideloadTools.installationServiceLinking(after, library: "/usr/lib/libappsync.dylib") == after)
+    }
+
+    @Test func refusesToLinkOverHeaderBytesInUse() throws {
+        var bytes = ActivationTests.syntheticMachO()
+        bytes[4] = 12
+        bytes[90] = 1
+        #expect(throws: FirmwareError.self) {
+            try SideloadTools.installationServiceLinking(Data(bytes), library: "/usr/lib/libappsync.dylib")
+        }
+    }
 }

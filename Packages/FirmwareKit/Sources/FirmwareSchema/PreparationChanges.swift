@@ -299,6 +299,17 @@ nonisolated public enum PreparationChanges {
                 its sandbox patch left sb_evaluate's action byte empty, so the kernel kills a sandboxed daemon that \
                 switches profiles on exec: BTServer restarts all session on the boards that keep it
                 """
+        ),
+        Change(
+            serial: 19,
+            commit: "appsync-wide",
+            landed: "2026-11-22T22:00:00Z",
+            boards: ["n42ap"],
+            versions: ["10"],
+            what: """
+                installd and amfid don't link AppSync (launchd and dyld drop DYLD_INSERT_LIBRARIES there), so an app \
+                neither installs nor runs
+                """
         )
     ]
 }

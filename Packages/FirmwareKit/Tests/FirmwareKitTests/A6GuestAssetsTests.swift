@@ -149,4 +149,22 @@ struct A6GuestAssetsTests {
             #expect((0x484..<0x884).contains(i) || (0x6fd4..<0x2160d).contains(i) || (0x23b0..<0x23b8).contains(i))
         }
     }
+
+    /// AMFI takes amfid's answers only from the amfid whose code directory hash it pins: the staged amfid's replaces
+    /// the stock one there, and only where the stock one is.
+    @Test func pinsTheStagedAMFID() throws {
+        let pin = 0x7b_1ec6
+        var kernel = Data(count: pin + 64)
+        kernel.replaceSubrange(
+            pin..<(pin + 20),
+            with: Data([
+                0x0b, 0x6d, 0x92, 0xf2, 0xae, 0xfd, 0x26, 0xb0, 0xe6, 0x56, 0xbb, 0xd8, 0xda, 0x52, 0xcc, 0x6a,
+                0xf9, 0x19, 0x74, 0x70
+            ]))
+        let staged = Data(repeating: 0xa5, count: 20)
+        let pinned = try A6GuestAssets.pinningAMFID(staged, in: kernel)
+        #expect(pinned.subdata(in: pin..<(pin + 20)) == staged)
+        #expect(pinned.prefix(pin) == kernel.prefix(pin) && pinned.suffix(44) == kernel.suffix(44))
+        #expect(throws: FirmwareError.self) { try A6GuestAssets.pinningAMFID(staged, in: pinned) }
+    }
 }
