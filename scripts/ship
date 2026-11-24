@@ -254,7 +254,7 @@ main() {
         rm -rf "$archive"
         xcodebuild archive -skipMacroValidation -onlyUsePackageVersionsFromResolvedFile -project "$ROOT/LightTouchMac.xcodeproj" \
             -scheme LightTouchMac -configuration Release -destination 'generic/platform=macOS' -archivePath "$archive" \
-            LTM_HELPER_SANDBOX="${LTM_HELPER_SANDBOX:-YES}" \
+            -allowProvisioningUpdates LTM_HELPER_SANDBOX="${LTM_HELPER_SANDBOX:-YES}" \
             > "$WORK/archive.log" 2>&1 \
             || { grep -E "error:" "$WORK/archive.log" | head -20; fail archive "xcodebuild archive (its log: $WORK/archive.log)"; }
     fi
@@ -263,7 +263,7 @@ main() {
     local out app
     out="$(dirname "$archive")/$(basename "$archive" .xcarchive)-export"
     rm -rf "$out"
-    xcodebuild -exportArchive -archivePath "$archive" -exportPath "$out" \
+    xcodebuild -exportArchive -archivePath "$archive" -exportPath "$out" -allowProvisioningUpdates \
         -exportOptionsPlist "$ROOT/Configuration/ExportOptions.plist" > "$WORK/export.log" 2>&1 \
         || { tail -20 "$WORK/export.log"; fail export "xcodebuild -exportArchive (its log: $WORK/export.log)"; }
     app="$(find "$out" -maxdepth 1 -name '*.app' | head -1)"

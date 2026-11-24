@@ -16,6 +16,13 @@ INFOPLIST_KEY_NSViewGestureRecognizerIsExclusive = NO
 CODE_SIGN_ENTITLEMENTS = $(LTM_APP_ENTITLEMENTS_$(LTM_HELPER_SANDBOX))
 ENABLE_APP_SANDBOX = NO
 REGISTER_APP_GROUPS = YES
+// Release: Xcode manages the app's profile, so the Developer ID export embeds one that authorizes the app groups.
+// Without it macOS ignores them ("is ignored because of invalid application signature or incorrect provisioning
+// profile") and the app can't make the services' sockets in SM75355Y6R.ltm.services. The tools stay manual.
+CODE_SIGN_STYLE[config=Release] = Automatic
+CODE_SIGN_IDENTITY[config=Release] = Apple Development
+// Xcode embeds no profile in an unsandboxed Mac app unless told to; app groups alone don't make it.
+PROVISIONING_PROFILE_REQUIRED[config=Release] = YES
 AUTOMATION_APPLE_EVENTS = NO
 ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO
 ENABLE_RESOURCE_ACCESS_CALENDARS = NO

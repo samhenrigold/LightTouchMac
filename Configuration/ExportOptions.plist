@@ -10,6 +10,11 @@
 	<string>manual</string>
 	<key>signingCertificate</key>
 	<string>Developer ID Application</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>gold.samhenri.LightTouchMac</key>
+		<string>Light Touch Developer ID</string>
+	</dict>
 	<key>destination</key>
 	<string>export</string>
 </dict>
