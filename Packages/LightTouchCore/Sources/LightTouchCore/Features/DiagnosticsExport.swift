@@ -177,7 +177,9 @@ nonisolated extension DiagnosticsExport {
             self.names = names
         }
         public static var current: HostIdentity {
-            let host = ProcessInfo.processInfo.hostName
+            // gethostname, not ProcessInfo.hostName: that one resolves the name (mDNS), which asks for Local Network
+            var buffer = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
+            let host = gethostname(&buffer, buffer.count) == 0 ? String(cString: buffer) : ""
             return HostIdentity(
                 home: NSHomeDirectory(),
                 names: [NSUserName(), NSFullUserName(), host, host.replacingOccurrences(of: ".local", with: "")]
