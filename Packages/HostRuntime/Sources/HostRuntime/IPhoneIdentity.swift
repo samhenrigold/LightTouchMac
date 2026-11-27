@@ -21,6 +21,26 @@ public enum IPhoneIdentity {
             .map { String(format: "%02x", $0) }.joined()
     }
 
+    /// iPhone 5 (n42ap) hashes the decimal ECID instead of the IMEI: SHA1(serial + decimal(ECID) + Wi-Fi MAC + BT MAC).
+    public static func ecidUDID(serial: String, ecid: UInt64, wifiMAC: String, btMAC: String) -> String {
+        Insecure.SHA1.hash(data: Data((serial + String(ecid) + wifiMAC.lowercased() + btMAC.lowercased()).utf8))
+            .map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The ECID-based UDID from a base's identity.json (used for n42ap, including bases prepared before it was recorded).
+    public static func ecidUDID(from identity: [String: Any]) -> String? {
+        guard let serial = identity["serial-number"] as? String, let wifi = identity["wifi-mac"] as? String,
+            let bt = identity["bt-mac"] as? String
+        else { return nil }
+        let ecid: UInt64? =
+            if let hex = identity["unique-chip-id"] as? String {
+                UInt64(hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex, radix: 16)
+            } else {
+                (identity["seed"] as? String).map(UnitSeed.ecid(seed:))
+            }
+        return ecid.map { ecidUDID(serial: serial, ecid: $0, wifiMAC: wifi, btMAC: bt) }
+    }
+
     /// The Luhn check digit of a digit string (an IMEI's fifteenth).
     public static func luhn(_ digits: String) -> Int {
         let sum = digits.reversed().enumerated().reduce(0) { s, e in

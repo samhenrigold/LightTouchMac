@@ -81,7 +81,7 @@ final class N42Board: Board {
     func identity(seed: String) throws -> UnitIdentity {
         let ident = try UnitIdentity.synthesize(
             seed: seed, storage: recipe.storage, modelNumber: KBoot.Board.n42.modelNumber
-        ).addingIMEI(seed: seed)
+        ).addingIMEI(seed: seed, usesECIDForUDID: true)
         self.ident = ident
         return ident
     }

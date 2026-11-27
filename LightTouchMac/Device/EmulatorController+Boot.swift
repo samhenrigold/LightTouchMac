@@ -137,9 +137,17 @@ extension EmulatorController {
 
     /// Storage preparation and argv assembly are shared with headless callers.
     /// DeviceProcess already holds the storage lease when this hello callback runs.
-    /// The UDID the guest reports: the record's, or for an iPhone base prepared before its identity carried an IMEI
-    /// (n90/n88 recipe 1) the one its seed-derived IMEI makes; DeviceLock.machineOptions passes that IMEI to the modem.
+    /// The UDID the guest reports: for iPhone 5 (n42ap), the ECID-based UDID (including bases prepared before it was
+    /// recorded); for older kboot iPhones prepared before their identity carried an IMEI (n90/n88 recipe 1), the one
+    /// their seed-derived IMEI makes; otherwise the record's.
     var guestUDID: String? {
+        if profile == .n42,
+            let data = try? Data(contentsOf: instance.paths.base.appendingPathComponent("identity.json")),
+            let identity = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let udid = IPhoneIdentity.ecidUDID(from: identity)
+        {
+            return udid
+        }
         if profile.kbootPhone,
             let data = try? Data(contentsOf: instance.paths.base.appendingPathComponent("identity.json")),
             let identity = try? JSONSerialization.jsonObject(with: data) as? [String: Any], identity["imei"] == nil,

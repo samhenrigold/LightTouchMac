@@ -24,6 +24,12 @@ struct BootTests {
                     btMAC: "02:11:22:33:44:67"
                 )
         )
+        // iPhone 5 (n42ap) hashes decimal ECID instead of IMEI
+        let n42Identity: [String: Any] = [
+            "serial-number": "ZVWXKD7XCTJ", "unique-chip-id": "0x38d732dceb",
+            "wifi-mac": "02:ea:03:a4:7b:c4", "bt-mac": "02:ea:03:a4:7b:c5"
+        ]
+        #expect(IPhoneIdentity.ecidUDID(from: n42Identity) == "923f4573c7e2696822e7fe89d75495ea9e61ca18")
         for (board, machine) in [(Board.n90, "iPhone-4"), (.n88, "n88"), (.k48, "ipad1")] {
             let f = try Fixture(board: board, strategy: "kboot", identity: identity)
             defer { try? FileManager.default.removeItem(at: f.root) }

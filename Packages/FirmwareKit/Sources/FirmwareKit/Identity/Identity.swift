@@ -153,25 +153,28 @@ public struct UnitIdentity: Equatable, Sendable {
     }
 
     /// This identity with an iPhone's IMEI (IPhoneIdentity.imei: TAC 00000000, a serial from the seed, its Luhn digit)
-    /// after the serial, and the UDID the baseband's IMEI makes: SHA1(serial + IMEI + Wi-Fi MAC + BT MAC).
-    public func addingIMEI(seed: String) -> UnitIdentity {
+    /// after the serial, and the UDID the device reports over USB: SHA1(serial + IMEI + Wi-Fi MAC + BT MAC), or on
+    /// iPhone 5 (`usesECIDForUDID: true`) SHA1(serial + decimal(ECID) + Wi-Fi MAC + BT MAC).
+    public func addingIMEI(seed: String, usesECIDForUDID: Bool = false) -> UnitIdentity {
         var id = self
         let imei = IPhoneIdentity.imei(seed: seed)
         id.fields.removeAll { $0.key == "udid" || $0.key == "imei" }
         id.fields.insert(("imei", .string(imei)), at: 1)
-        id.fields.append(
-            (
-                "udid",
-                .string(
-                    IPhoneIdentity.udid(
-                        serial: id.synthesized("serial-number"),
-                        imei: imei,
-                        wifiMAC: id.synthesized("wifi-mac"),
-                        btMAC: id.synthesized("bt-mac")
-                    )
-                )
+        let udid =
+            usesECIDForUDID
+            ? IPhoneIdentity.ecidUDID(
+                serial: id.synthesized("serial-number"),
+                ecid: UnitSeed.ecid(seed: seed),
+                wifiMAC: id.synthesized("wifi-mac"),
+                btMAC: id.synthesized("bt-mac")
             )
-        )
+            : IPhoneIdentity.udid(
+                serial: id.synthesized("serial-number"),
+                imei: imei,
+                wifiMAC: id.synthesized("wifi-mac"),
+                btMAC: id.synthesized("bt-mac")
+            )
+        id.fields.append(("udid", .string(udid)))
         return id
     }
 
