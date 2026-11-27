@@ -22,11 +22,27 @@ public nonisolated enum ServicesSandbox {
     /// The services' app group (Configuration/LightTouchServices-Sandbox.entitlements); the app is in it too.
     public static let group = "SM75355Y6R.ltm.services"
 
-    /// The group's container, whether or not it exists yet.
+    /// The group's container, whether or not it exists yet. Resolving through `containerURL` lets macOS grant an
+    /// entitled, non-sandboxed app access to the protected group container without `secinitd`.
     public static var container: URL {
-        URL(fileURLWithPath: HelperSandbox.realHome, isDirectory: true).appendingPathComponent(
-            "Library/Group Containers/\(group)",
-            isDirectory: true
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)
+            ?? URL(fileURLWithPath: HelperSandbox.realHome, isDirectory: true).appendingPathComponent(
+                "Library/Group Containers/\(group)",
+                isDirectory: true
+            )
+    }
+
+    /// Ensures the per-process socket folder inside `container` exists before `usbmuxd` binds `socketPath`. Called from
+    /// inside sandboxed `LightTouchServices` so unentitled spawners (like `sessions` under `xcodebuild test`) don't
+    /// need container write permission.
+    public static func prepareSocketFolder(forSocketPath socketPath: String, in container: URL = container) {
+        let folder = URL(fileURLWithPath: socketPath).deletingLastPathComponent().standardizedFileURL
+        let root = container.standardizedFileURL
+        guard folder.deletingLastPathComponent().path == root.path else { return }
+        try? FileManager.default.createDirectory(
+            at: folder,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
         )
     }
 

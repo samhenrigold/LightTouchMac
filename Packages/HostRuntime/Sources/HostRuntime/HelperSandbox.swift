@@ -52,12 +52,14 @@ public nonisolated enum HelperSandbox {
         lock.withLock { current = value }
     }
 
-    /// The app group's container, whether or not it exists yet.
+    /// The app group's container, whether or not it exists yet. Resolving through `containerURL` lets macOS grant an
+    /// entitled, non-sandboxed app access to the protected group container without `secinitd`.
     public static var groupContainer: URL {
-        URL(fileURLWithPath: realHome, isDirectory: true).appendingPathComponent(
-            "Library/Group Containers/\(appGroup)",
-            isDirectory: true
-        )
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+            ?? URL(fileURLWithPath: realHome, isDirectory: true).appendingPathComponent(
+                "Library/Group Containers/\(appGroup)",
+                isDirectory: true
+            )
     }
 
     /// A Unix socket path for `name`, "ltm-<name>" in the per-user temporary directory, where no sandboxed helper

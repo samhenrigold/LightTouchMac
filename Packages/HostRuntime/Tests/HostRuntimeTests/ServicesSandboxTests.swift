@@ -20,6 +20,29 @@ struct ServicesSandboxTests {
         #expect(ServicesSandbox.container.path.hasSuffix("/Library/Group Containers/\(ServicesSandbox.group)"))
     }
 
+    /// `prepareSocketFolder` creates only a direct child folder inside the services container (0700) and ignores paths
+    /// outside it.
+    @Test func prepareSocketFolderCreatesOnlyDirectContainerChildren() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ss-\(UUID().uuidString)")
+        let container = root.appendingPathComponent("container", isDirectory: true)
+        let outside = root.appendingPathComponent("outside", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let insideSocket = container.appendingPathComponent("12345/mux-1-c.sock").path
+        ServicesSandbox.prepareSocketFolder(forSocketPath: insideSocket, in: container)
+        let folder = container.appendingPathComponent("12345").path
+        let mode = try FileManager.default.attributesOfItem(atPath: folder)[.posixPermissions] as? Int
+        #expect(mode == 0o700)
+
+        let outsideSocket = outside.appendingPathComponent("12345/mux-1-c.sock").path
+        ServicesSandbox.prepareSocketFolder(forSocketPath: outsideSocket, in: container)
+        #expect(!FileManager.default.fileExists(atPath: outside.path))
+
+        let nestedSocket = container.appendingPathComponent("12345/nested/mux-1-c.sock").path
+        ServicesSandbox.prepareSocketFolder(forSocketPath: nestedSocket, in: container)
+        #expect(!FileManager.default.fileExists(atPath: container.appendingPathComponent("12345/nested").path))
+    }
+
     /// The tokens a spawner writes to a child's standard input are its grants as JSON, which only that pid takes.
     @Test func standardInputCarriesTokensOnlyThatProcessTakes() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ss-\(UUID().uuidString)")

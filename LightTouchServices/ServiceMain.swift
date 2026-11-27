@@ -27,6 +27,9 @@ nonisolated func logEvent(_ message: String) {
         if args.count >= 2, args[0] == "usbmuxd" {
             let refused = SandboxExtension.consumeStandardInput().refused
             if !refused.isEmpty { logEvent("usbmuxd: grants refused: \(refused)") }
+            if let socketFlag = args.firstIndex(of: "-S"), socketFlag + 1 < args.count {
+                ServicesSandbox.prepareSocketFolder(forSocketPath: args[socketFlag + 1])
+            }
             let argv = args.dropFirst().map { strdup($0) } + [nil]
             execv(args[1], argv)
             logEvent("usbmuxd: can't run \(args[1]): \(String(cString: strerror(errno)))")
