@@ -36,10 +36,18 @@ struct ReleaseAppStaticTests {
         }
         let qemu = try entitlements(sandbox ? "LightTouchDevice-Sandbox" : "LightTouchDevice")
         let services = sandbox ? try entitlements("LightTouchServices-Sandbox") : NSDictionary()
-        let appEntitlements: NSDictionary =
+        let appBase: [String: Any] =
             sandbox
-            ? try entitlements("LightTouchMac-Sandbox")
+            ? try entitlements("LightTouchMac-Sandbox") as! [String: Any]
             : ["com.apple.security.personal-information.location": true]
+        // Release embeds the Developer ID provisioning profile (Configuration/App.xcconfig, ExportOptions.plist) so
+        // macOS honors the app's group entitlements; Xcode adds these two profile-bound keys when signing with it.
+        var appExpected = appBase
+        if FileManager.default.fileExists(atPath: contents.appendingPathComponent("embedded.provisionprofile").path) {
+            appExpected["com.apple.application-identifier"] = "SM75355Y6R.gold.samhenri.LightTouchMac"
+            appExpected["com.apple.developer.team-identifier"] = "SM75355Y6R"
+        }
+        let appEntitlements = NSDictionary(dictionary: appExpected)
         let binaries = ReleaseApp.binaries(in: app)
         #expect(binaries.count > 5)
         let resources = binaries.filter { $0.path.hasPrefix(contents.appendingPathComponent("Resources").path + "/") }
